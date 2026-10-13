@@ -60,9 +60,7 @@ export function ProjectIconPickerDialog({
   const [color, setColor] = useState<ProjectIconColor>(
     current && current.kind !== "emoji" ? current.color : automatic.color,
   );
-  const [letters, setLetters] = useState(
-    current?.kind === "monogram" ? current.text : automatic.monogram,
-  );
+  const [letters, setLetters] = useState(current?.kind === "monogram" ? current.text : automatic.monogram);
   const [emoji, setEmoji] = useState(current?.kind === "emoji" ? current.emoji : "💻");
   const [query, setQuery] = useState("");
   const [customEmoji, setCustomEmoji] = useState("");
@@ -177,11 +175,7 @@ export function ProjectIconPickerDialog({
             </>
           ) : mode === "monogram" ? (
             <div className="flex items-center gap-4 py-2">
-              <ProjectMonogram
-                text={validMonogram ? monogram : automatic.monogram}
-                color={color}
-                className="size-12"
-              />
+              <ProjectMonogram text={validMonogram ? monogram : automatic.monogram} color={color} className="size-12" />
               <div className="flex-1 space-y-2">
                 <label htmlFor="project-monogram" className="text-sm font-medium">
                   Letters
@@ -221,9 +215,7 @@ export function ProjectIconPickerDialog({
                 </div>
               </ScrollArea>
               <div>
-                <div className="mb-2 text-xs font-medium text-muted-foreground">
-                  Or paste any emoji
-                </div>
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Or paste any emoji</div>
                 <Input
                   value={customEmoji}
                   aria-label="Custom emoji"

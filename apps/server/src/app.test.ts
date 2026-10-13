@@ -7,7 +7,9 @@ describe("app", () => {
     const res = await h.request("/api/health");
     expect(res.status).toBe(200);
     const tables = h.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
-    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["projects", "tasks", "plan_steps", "task_links"]));
+    expect(tables.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["projects", "tasks", "plan_steps", "task_links"]),
+    );
   });
 
   it("rejects foreign hosts and origins", async () => {

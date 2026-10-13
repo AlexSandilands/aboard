@@ -38,7 +38,9 @@ export function PaletteEmptyState({ children }: { children: ReactNode }) {
 
 export function PaletteResults(props: { groups: ReadonlyArray<PaletteGroup>; emptyStateMessage?: ReactNode }) {
   if (props.groups.every((group) => group.items.length === 0)) {
-    return props.emptyStateMessage === undefined ? null : <PaletteEmptyState>{props.emptyStateMessage}</PaletteEmptyState>;
+    return props.emptyStateMessage === undefined ? null : (
+      <PaletteEmptyState>{props.emptyStateMessage}</PaletteEmptyState>
+    );
   }
   let index = 0;
   return (

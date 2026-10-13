@@ -13,7 +13,8 @@ const RESTING_SURFACE = "bg-transparent shadow-none";
 const HOVER_SURFACE =
   "hover:!bg-black/[0.035] data-pressed:!bg-black/[0.035] data-popup-open:!bg-black/[0.035] dark:hover:!bg-white/[0.08] dark:data-pressed:!bg-white/[0.08] dark:data-popup-open:!bg-white/[0.08]";
 const ROW_SURFACE = `${RESTING_SURFACE} ${HOVER_SURFACE}`;
-const CONTROL = "h-8 min-w-0 rounded-lg border-transparent gap-2.5 px-2.5 text-left text-[13px] font-medium text-foreground/80";
+const CONTROL =
+  "h-8 min-w-0 rounded-lg border-transparent gap-2.5 px-2.5 text-left text-[13px] font-medium text-foreground/80";
 
 const parts = {
   /** Full-width row: icon + label. */

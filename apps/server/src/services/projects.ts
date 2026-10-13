@@ -115,7 +115,8 @@ export function createProjectsService(core: Core): ProjectsService {
         }
         if (input.icon !== undefined) next.icon = input.icon;
         if (input.collapsed !== undefined) next.collapsed = input.collapsed;
-        if (input.archived !== undefined) next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;
+        if (input.archived !== undefined)
+          next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;
         repos.projects.update(next);
         fx.project(id);
         // Clients drop an archived lane's tasks; unarchiving must send them back.

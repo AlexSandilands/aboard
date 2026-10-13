@@ -66,9 +66,9 @@ describe("projects", () => {
     s.projects.update(project.id, { archived: true });
     events.length = 0;
     s.projects.update(project.id, { archived: false });
-    expect(events.filter((e) => e.type === "task.upserted").map((e) => e.type === "task.upserted" && e.task.id)).toEqual([
-      task.id,
-    ]);
+    expect(
+      events.filter((e) => e.type === "task.upserted").map((e) => e.type === "task.upserted" && e.task.id),
+    ).toEqual([task.id]);
   });
 
   it("reorders lanes", () => {
@@ -98,7 +98,10 @@ describe("links", () => {
     expect(thread).toMatchObject({ kind: "t3_thread", url: "t3code://threads/env/th%201" });
     expect(s.links.add(task.id, { value: "t3code://threads/env/th%201" }, "agent").id).toBe(thread.id);
     expect(s.links.add(task.id, { value: "https://github.com/acme/app/pull/12" }, "agent").id).toBe(pr.id);
-    expect(s.links.add(task.id, { value: "https://example.com/x", kind: "pr" }, "agent")).toMatchObject({ kind: "pr", ref: null });
+    expect(s.links.add(task.id, { value: "https://example.com/x", kind: "pr" }, "agent")).toMatchObject({
+      kind: "pr",
+      ref: null,
+    });
     expect(codeOf(() => s.links.add(task.id, { value: "hello" }, "agent"))).toBe("VALIDATION");
     expect(s.tasks.summary(task.id).links).toHaveLength(4);
     expect(s.tasks.detail(task.id).events.filter((e) => e.type === "link_added")).toHaveLength(4);
@@ -130,7 +133,12 @@ describe("links", () => {
 describe("settings", () => {
   it("never returns the token", () => {
     const { services: s } = createTestHarness();
-    expect(s.settings.get()).toEqual({ jiraBaseUrl: null, githubPolling: true, t3LinkTarget: "desktop", t3TokenSet: false });
+    expect(s.settings.get()).toEqual({
+      jiraBaseUrl: null,
+      githubPolling: true,
+      t3LinkTarget: "desktop",
+      t3TokenSet: false,
+    });
     const updated = s.settings.update({ t3Token: "secret", githubPolling: false });
     expect(updated).toMatchObject({ t3TokenSet: true, githubPolling: false });
     expect(JSON.stringify(updated)).not.toContain("secret");

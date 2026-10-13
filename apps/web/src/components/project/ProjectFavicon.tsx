@@ -7,9 +7,7 @@ import { cn } from "~/lib/utils";
 import { ProjectMonogram } from "./ProjectMonogram";
 import { projectIconColorClassName } from "./projectIconColors";
 
-const DynamicIcon = lazy(() =>
-  import("lucide-react/dynamic").then((module) => ({ default: module.DynamicIcon })),
-);
+const DynamicIcon = lazy(() => import("lucide-react/dynamic").then((module) => ({ default: module.DynamicIcon })));
 
 function DynamicProjectIconFallback() {
   return <FolderCodeIcon className="size-full text-inherit" />;
@@ -20,11 +18,7 @@ function DynamicProjectIconFallback() {
  * monogram derived from the title when it has none. Always pass the saved title, not a
  * display label, so the derived monogram stays stable across surfaces.
  */
-export function ProjectFavicon(input: {
-  title: string;
-  icon: ProjectIcon | null;
-  className?: string | undefined;
-}) {
+export function ProjectFavicon(input: { title: string; icon: ProjectIcon | null; className?: string | undefined }) {
   const { icon, title } = input;
   if (icon?.kind === "monogram") {
     return <ProjectMonogram text={icon.text} color={icon.color} className={input.className} />;
@@ -47,11 +41,7 @@ export function ProjectFavicon(input: {
     return (
       <span
         aria-hidden="true"
-        className={cn(
-          "inline-flex size-3.5 shrink-0 items-center justify-center",
-          colorClassName,
-          input.className,
-        )}
+        className={cn("inline-flex size-3.5 shrink-0 items-center justify-center", colorClassName, input.className)}
       >
         <Suspense fallback={<DynamicProjectIconFallback />}>
           <DynamicIcon
@@ -65,13 +55,7 @@ export function ProjectFavicon(input: {
   }
   if (title.trim().length > 0) {
     const identity = deriveProjectIdentity(title);
-    return (
-      <ProjectMonogram
-        text={identity.monogram}
-        color={identity.color}
-        className={input.className}
-      />
-    );
+    return <ProjectMonogram text={identity.monogram} color={identity.color} className={input.className} />;
   }
   return <FolderCodeIcon className={cn("size-3.5 shrink-0 text-icon-muted", input.className)} />;
 }

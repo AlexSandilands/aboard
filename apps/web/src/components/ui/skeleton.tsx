@@ -16,14 +16,8 @@ const skeletonVariants = cva("bg-muted-foreground/15 motion-safe:animate-skeleto
   defaultVariants: { shape: "block" },
 });
 
-function Skeleton({
-  className,
-  shape,
-  ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof skeletonVariants>) {
-  return (
-    <div className={cn(skeletonVariants({ shape }), className)} data-slot="skeleton" {...props} />
-  );
+function Skeleton({ className, shape, ...props }: React.ComponentProps<"div"> & VariantProps<typeof skeletonVariants>) {
+  return <div className={cn(skeletonVariants({ shape }), className)} data-slot="skeleton" {...props} />;
 }
 
 export { Skeleton };

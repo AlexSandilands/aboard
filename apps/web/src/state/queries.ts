@@ -51,7 +51,10 @@ export function useTaskDetail(taskId: string | null | undefined) {
 }
 
 export function useSettings() {
-  return useQuery({ queryKey: queryKeys.settings, queryFn: ({ signal }) => api<AppSettings>("/api/settings", { signal }) });
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: ({ signal }) => api<AppSettings>("/api/settings", { signal }),
+  });
 }
 
 export function useIntegrationsStatus(enabled = true) {
@@ -102,7 +105,9 @@ export function useBoardEvents() {
     });
     source.onmessage = (message) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
-      queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) => (board ? applyBoardEvent(board, event) : board));
+      queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
+        board ? applyBoardEvent(board, event) : board,
+      );
       // The server pairs every task.upserted with a task.detail_changed, so detail only listens to the latter.
       if (event.type === "task.detail_changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });

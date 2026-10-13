@@ -81,7 +81,9 @@ function PlanEditorBody({
   const hasPlan = task.phases.some((p) => p.steps.length > 0);
   const [mode, setMode] = useState(initialMode);
   const [text, setText] = useState("");
-  const [outline, setOutline] = useState<OutlinePhase[]>(() => (hasPlan ? outlineFromPhases(task.phases) : emptyOutline()));
+  const [outline, setOutline] = useState<OutlinePhase[]>(() =>
+    hasPlan ? outlineFromPhases(task.phases) : emptyOutline(),
+  );
   const parsed = useMemo(() => (text.trim() ? parsePlanMarkdown(text) : null), [text]);
   const setPlan = useSetPlan();
 
@@ -144,8 +146,9 @@ function PlanEditorBody({
               <div className="mb-1.5 text-2xs font-medium text-muted-foreground">Preview</div>
               {!text.trim() ? (
                 <p className="text-xs text-muted-foreground">
-                  Use <code className="font-mono">## headings</code> for phases and <code className="font-mono">- [ ]</code> list
-                  items for steps. <code className="font-mono">[x]</code> marks a step done.
+                  Use <code className="font-mono">## headings</code> for phases and{" "}
+                  <code className="font-mono">- [ ]</code> list items for steps. <code className="font-mono">[x]</code>{" "}
+                  marks a step done.
                 </p>
               ) : parsed ? (
                 <PlanPreview plan={parsed} />
@@ -216,7 +219,9 @@ function OutlineEditor({ outline, onChange }: { outline: OutlinePhase[]; onChang
       {outline.map((phase, pi) => (
         <div key={phase.key} className="rounded-xl border border-border/60 bg-card/40 p-2">
           <div className="flex items-center gap-1.5">
-            <span className="w-5 shrink-0 text-center font-mono text-2xs text-muted-foreground/60 tabular-nums">{pi + 1}</span>
+            <span className="w-5 shrink-0 text-center font-mono text-2xs text-muted-foreground/60 tabular-nums">
+              {pi + 1}
+            </span>
             <Input
               aria-label={`Phase ${pi + 1} title`}
               size="sm"

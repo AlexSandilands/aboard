@@ -46,9 +46,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       id: phase.id,
       title: phase.title,
       position: phase.position,
-      steps: (stepsByPhase.get(phase.id) ?? []).map(
-        ({ taskId: _taskId, ...step }): PlanStep => step,
-      ),
+      steps: (stepsByPhase.get(phase.id) ?? []).map(({ taskId: _taskId, ...step }): PlanStep => step),
     }));
     const links = linksByTask.get(record.id) ?? [];
     const note = notes.get(record.id);

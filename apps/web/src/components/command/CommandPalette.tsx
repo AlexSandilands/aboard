@@ -207,12 +207,21 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
 
   const board = useBoard();
   const projects = useMemo(
-    () => (board.data?.projects ?? []).filter((p) => p.archivedAt === null).sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0)),
+    () =>
+      (board.data?.projects ?? [])
+        .filter((p) => p.archivedAt === null)
+        .sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0)),
     [board.data?.projects],
   );
-  const projectById = useMemo(() => new Map((board.data?.projects ?? []).map((p) => [p.id, p])), [board.data?.projects]);
+  const projectById = useMemo(
+    () => new Map((board.data?.projects ?? []).map((p) => [p.id, p])),
+    [board.data?.projects],
+  );
   const tasks = useMemo(
-    () => (board.data?.tasks ?? []).filter((t) => t.archivedAt === null).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    () =>
+      (board.data?.tasks ?? [])
+        .filter((t) => t.archivedAt === null)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [board.data?.tasks],
   );
   const t3Detected = board.data?.integrations.t3.detected ?? false;
@@ -282,7 +291,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         onSuccess: (project) => {
           // Re-adding an archived project's folder restores that project (with its tasks).
           const restored = project.createdAt !== project.updatedAt;
-          toastManager.add({ type: "success", title: restored ? "Project restored" : "Project added", description: project.title });
+          toastManager.add({
+            type: "success",
+            title: restored ? "Project restored" : "Project added",
+            description: project.title,
+          });
           closePalette();
         },
         onError: (error) => {
@@ -308,7 +321,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           toastManager.add({ type: "success", title: "Project added", description: project.title });
           closePalette();
         },
-        onError: (error) => toastManager.add({ type: "error", title: "Couldn't add project", description: error.message }),
+        onError: (error) =>
+          toastManager.add({ type: "error", title: "Couldn't add project", description: error.message }),
       },
     );
   }
@@ -370,7 +384,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   // ── Items ──────────────────────────────────────────────────────────────
 
   const t3Badge = (
-    <SetupBadge label="Not detected" hint="Start T3 Code to import its projects. Open Settings for details." onClick={openSettings} />
+    <SetupBadge
+      label="Not detected"
+      hint="Start T3 Code to import its projects. Open Settings for details."
+      onClick={openSettings}
+    />
   );
 
   function taskItem(task: TaskSummary): PaletteItem {
@@ -478,7 +496,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         const groups: PaletteGroup[] = [{ value: "actions", label: "Actions", items: filterItems(actions, query) }];
         if (query.trim()) {
           groups.push({ value: "tasks", label: "Tasks", items: filterItems(tasks.map(taskItem), query).slice(0, 8) });
-          groups.push({ value: "projects", label: "Projects", items: filterItems(projects.map(projectJumpItem), query).slice(0, 6) });
+          groups.push({
+            value: "projects",
+            label: "Projects",
+            items: filterItems(projects.map(projectJumpItem), query).slice(0, 6),
+          });
         }
         return groups;
       }
@@ -577,23 +599,27 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           ? [...projects.filter((p) => p.id === preferredId), ...projects.filter((p) => p.id !== preferredId)]
           : projects;
         const flow = view.flow;
-        const items = ordered.map(
-          (project): PaletteItem => ({
-            value: `pick:${project.id}`,
-            title: project.title,
-            description:
-              project.id === preferredId
-                ? search.project === project.id
-                  ? "Current filter"
-                  : "Last used"
-                : (project.workspaceRoot ?? undefined),
-            searchTerms: [project.workspaceRoot ?? ""],
-            icon: projectIcon(project),
-            submenu: true,
-            run: () => pushView({ kind: "title", flow, projectId: project.id }),
-          }),
-        );
-        return [{ value: "projects", label: flow === "idea" ? "New idea in…" : "New task in…", items: filterItems(items, query) }];
+        const items = ordered.map((project): PaletteItem => ({
+          value: `pick:${project.id}`,
+          title: project.title,
+          description:
+            project.id === preferredId
+              ? search.project === project.id
+                ? "Current filter"
+                : "Last used"
+              : (project.workspaceRoot ?? undefined),
+          searchTerms: [project.workspaceRoot ?? ""],
+          icon: projectIcon(project),
+          submenu: true,
+          run: () => pushView({ kind: "title", flow, projectId: project.id }),
+        }));
+        return [
+          {
+            value: "projects",
+            label: flow === "idea" ? "New idea in…" : "New task in…",
+            items: filterItems(items, query),
+          },
+        ];
       }
       case "go-to-task": {
         const limit = (items: PaletteItem[]) => (query.trim() ? items : items.slice(0, 50));
@@ -690,7 +716,9 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           onClick={submitFolder}
         />
       );
-      inputClassName = hasHighlightedFolder ? "*:data-[slot=autocomplete-input]:pe-30!" : "*:data-[slot=autocomplete-input]:pe-24!";
+      inputClassName = hasHighlightedFolder
+        ? "*:data-[slot=autocomplete-input]:pe-30!"
+        : "*:data-[slot=autocomplete-input]:pe-24!";
       if (browse.error) {
         preamble = (
           <div role="alert" className="px-4 py-3 text-sm text-muted-foreground">
@@ -704,7 +732,12 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           </div>
         );
       }
-      emptyStateMessage = browse.error || browse.isPending ? undefined : browse.resolved.ok ? "Press Enter to add this folder." : browse.resolved.reason;
+      emptyStateMessage =
+        browse.error || browse.isPending
+          ? undefined
+          : browse.resolved.ok
+            ? "Press Enter to add this folder."
+            : browse.resolved.reason;
       break;
     }
     case "import-t3":

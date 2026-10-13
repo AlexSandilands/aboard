@@ -2,13 +2,7 @@
 "use client";
 
 import { Toast } from "@base-ui/react/toast";
-import {
-  useState,
-  type CSSProperties,
-  type ComponentPropsWithoutRef,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useState, type CSSProperties, type ComponentPropsWithoutRef, type KeyboardEvent, type ReactNode } from "react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -25,11 +19,7 @@ import { Button, buttonVariants } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import {
-  buildVisibleToastLayout,
-  hasVisibleToastAction,
-  shouldHideCollapsedToastContent,
-} from "./toast.logic";
+import { buildVisibleToastLayout, hasVisibleToastAction, shouldHideCollapsedToastContent } from "./toast.logic";
 
 type ToastButtonVariant =
   | "default"
@@ -128,8 +118,7 @@ function CopyErrorButton({ text }: { text: string }) {
 }
 
 /** Scrollable cap for long expandable lists (~10rem); keeps the toast from growing without bound. */
-const toastExpandablePanelClassName =
-  "mt-2 max-h-40 min-h-0 overflow-y-auto overscroll-contain pr-0.5 select-text";
+const toastExpandablePanelClassName = "mt-2 max-h-40 min-h-0 overflow-y-auto overscroll-contain pr-0.5 select-text";
 
 function ToastExpandableSection({
   children,
@@ -150,7 +139,11 @@ function ToastExpandableSection({
         onClick={() => setOpen((prev) => !prev)}
         type="button"
       >
-        {open ? <ChevronUpIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} /> : <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />}
+        {open ? (
+          <ChevronUpIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
+        ) : (
+          <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
+        )}
         {open ? collapseLabel : expandLabel}
       </button>
       {open ? <div className={toastExpandablePanelClassName}>{children}</div> : null}
@@ -230,9 +223,19 @@ function ToastDescriptionAndExpandable({
               data-slot="toast-description"
             />
           </div>
-          {open ? <ChevronUpIcon aria-hidden
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80" strokeWidth={2.25} /> : <ChevronDownIcon aria-hidden
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80" strokeWidth={2.25} />}
+          {open ? (
+            <ChevronUpIcon
+              aria-hidden
+              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80"
+              strokeWidth={2.25}
+            />
+          ) : (
+            <ChevronDownIcon
+              aria-hidden
+              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80"
+              strokeWidth={2.25}
+            />
+          )}
         </TooltipTrigger>
         <TooltipPopup side="top">{open ? collapseLabel : expandLabel}</TooltipPopup>
       </Tooltip>
@@ -260,10 +263,8 @@ function deriveToastBodyDescriptor(toast: {
   readonly data?: ToastData | undefined;
 }): ToastBodyDescriptor {
   const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
-  const stackedActionLayout =
-    hasVisibleToastAction(toast.actionProps) && toast.data?.actionLayout === "stacked-end";
-  const actionVariant: NonNullable<ToastData["actionVariant"]> =
-    toast.data?.actionVariant ?? "default";
+  const stackedActionLayout = hasVisibleToastAction(toast.actionProps) && toast.data?.actionLayout === "stacked-end";
+  const actionVariant: NonNullable<ToastData["actionVariant"]> = toast.data?.actionVariant ?? "default";
   const secondaryActionVariant: NonNullable<ToastData["secondaryActionVariant"]> =
     toast.data?.secondaryActionVariant ?? "outline";
   const copyErrorText =
@@ -273,10 +274,7 @@ function deriveToastBodyDescriptor(toast: {
   const hasAdditionalActions = (toast.data?.additionalActions?.length ?? 0) > 0;
   const hasSecondaryAction = toast.data?.secondaryActionProps !== undefined;
   const hasTrailingControls =
-    copyErrorText !== null ||
-    hasVisibleToastAction(toast.actionProps) ||
-    hasAdditionalActions ||
-    hasSecondaryAction;
+    copyErrorText !== null || hasVisibleToastAction(toast.actionProps) || hasAdditionalActions || hasSecondaryAction;
   const inlineContentEndPad = hasTrailingControls ? "pr-6" : "pr-10";
   return {
     Icon,
@@ -311,23 +309,14 @@ function ToastBodyContent({
   const additionalActions = toastData?.additionalActions ?? [];
   const secondaryActionProps = toastData?.secondaryActionProps;
   const leadingIcon = toastData?.leadingIcon;
-  const { className: secondaryActionClassName, ...secondaryActionRest } =
-    secondaryActionProps ?? {};
+  const { className: secondaryActionClassName, ...secondaryActionRest } = secondaryActionProps ?? {};
 
   return (
     <>
-      <div
-        className={cn(
-          "flex min-h-0 min-w-0 flex-col gap-0.5",
-          stackedActionLayout ? "pr-5" : "flex-1",
-        )}
-      >
+      <div className={cn("flex min-h-0 min-w-0 flex-col gap-0.5", stackedActionLayout ? "pr-5" : "flex-1")}>
         <div className="flex min-w-0 gap-2">
           {leadingIcon ? (
-            <div
-              className="flex h-lh w-4 shrink-0 items-center justify-center"
-              data-slot="toast-icon"
-            >
+            <div className="flex h-lh w-4 shrink-0 items-center justify-center" data-slot="toast-icon">
               {leadingIcon}
             </div>
           ) : Icon ? (
@@ -347,12 +336,7 @@ function ToastBodyContent({
         />
       </div>
       {hasTrailingControls ? (
-        <div
-          className={cn(
-            "flex items-center gap-1.5",
-            stackedActionLayout ? "w-full justify-end" : "shrink-0",
-          )}
-        >
+        <div className={cn("flex items-center gap-1.5", stackedActionLayout ? "w-full justify-end" : "shrink-0")}>
           {copyErrorText !== null ? <CopyErrorButton text={copyErrorText} /> : null}
           {additionalActions.map(({ id, props: { className, ...props } }) => (
             <Button
@@ -387,14 +371,7 @@ function ToastBodyContent({
   );
 }
 
-
-type ToastPosition =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
+type ToastPosition = "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
 interface ToastProviderProps extends Toast.Provider.Props {
   position?: ToastPosition;
@@ -436,10 +413,7 @@ function Toasts({ position }: { position: ToastPosition }) {
         }
       >
         {visibleToastLayout.items.map(({ toast, visibleIndex, offsetY }) => {
-          const hideCollapsedContent = shouldHideCollapsedToastContent(
-            visibleIndex,
-            visibleToastLayout.items.length,
-          );
+          const hideCollapsedContent = shouldHideCollapsedToastContent(visibleIndex, visibleToastLayout.items.length);
           const bodyDescriptor = deriveToastBodyDescriptor(toast);
           const { stackedActionLayout, inlineContentEndPad } = bodyDescriptor;
 
@@ -467,9 +441,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                 // `height: auto` on this node; an old `min-height` from `--toast-height` blocks shrinking,
                 // so `recalculateHeight` keeps the inflated value after an expandable closes.
                 // Behind + collapsed: fixed peek. Otherwise natural height (expand/collapse, hover stack).
-                visibleIndex > 0
-                  ? "not-data-expanded:h-(--toast-calc-height) data-expanded:h-auto"
-                  : "h-auto",
+                visibleIndex > 0 ? "not-data-expanded:h-(--toast-calc-height) data-expanded:h-auto" : "h-auto",
                 // Define offset-y variable
                 "data-[position*=top]:[--toast-calc-offset-y:calc(var(--toast-offset-y)+var(--toast-index)*var(--toast-gap)+var(--toast-swipe-movement-y))]",
                 "data-[position*=bottom]:[--toast-calc-offset-y:calc(var(--toast-offset-y)*-1+var(--toast-index)*var(--toast-gap)*-1+var(--toast-swipe-movement-y))]",
@@ -520,9 +492,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                   aria-label="Dismiss notification"
                   className={toastCornerOrbClass}
                   data-slot="toast-close"
-                  onClick={() =>
-                    handleToastDismissClick(toastManager, toast.id, toast.data?.onClose)
-                  }
+                  onClick={() => handleToastDismissClick(toastManager, toast.id, toast.data?.onClose)}
                   type="button"
                 >
                   <XIcon className="size-3" strokeWidth={2.25} />
@@ -536,8 +506,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                   stackedActionLayout
                     ? "flex flex-col gap-2 py-2.5 pr-3.5"
                     : cn("py-3", "flex items-center justify-between gap-1.5", inlineContentEndPad),
-                  hideCollapsedContent &&
-                    "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
+                  hideCollapsedContent && "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}
               >
                 <ToastBodyContent

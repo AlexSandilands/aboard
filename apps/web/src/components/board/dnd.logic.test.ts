@@ -32,7 +32,11 @@ describe("computeDrop", () => {
   });
 
   it("ignores reordering inside Done", () => {
-    const input = base({ task: { id: "a", projectId: "p", status: "done" }, target: { projectId: "p", status: "done" }, overTaskId: "c" });
+    const input = base({
+      task: { id: "a", projectId: "p", status: "done" },
+      target: { projectId: "p", status: "done" },
+      overTaskId: "c",
+    });
     expect(computeDrop(input)).toEqual({ kind: "noop" });
   });
 
@@ -60,8 +64,16 @@ describe("computeDrop", () => {
 
 describe("readDragData", () => {
   it("accepts task and cell data and rejects anything else", () => {
-    expect(readDragData({ type: "cell", projectId: "p", status: "idea" })).toEqual({ type: "cell", projectId: "p", status: "idea" });
-    expect(readDragData({ type: "task", projectId: "p", status: "done", sortable: {} })).toEqual({ type: "task", projectId: "p", status: "done" });
+    expect(readDragData({ type: "cell", projectId: "p", status: "idea" })).toEqual({
+      type: "cell",
+      projectId: "p",
+      status: "idea",
+    });
+    expect(readDragData({ type: "task", projectId: "p", status: "done", sortable: {} })).toEqual({
+      type: "task",
+      projectId: "p",
+      status: "done",
+    });
     expect(readDragData({ type: "other", projectId: "p", status: "idea" })).toBeNull();
     expect(readDragData(undefined)).toBeNull();
   });

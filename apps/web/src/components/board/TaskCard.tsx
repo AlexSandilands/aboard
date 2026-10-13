@@ -47,7 +47,10 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
             <span className="sr-only">{ATTENTION_LABELS[attention.kind]}</span>
           </span>
         ) : null}
-        <span className="ml-auto shrink-0 tabular-nums text-secondary-label" title={new Date(task.updatedAt).toLocaleString()}>
+        <span
+          className="ml-auto shrink-0 tabular-nums text-secondary-label"
+          title={new Date(task.updatedAt).toLocaleString()}
+        >
           {formatElapsedDurationLabel(task.updatedAt)}
         </span>
       </div>
@@ -59,7 +62,13 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
 });
 
 /** A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. */
-export const SortableTaskCard = memo(function SortableTaskCard({ task, selected }: { task: TaskSummary; selected: boolean }) {
+export const SortableTaskCard = memo(function SortableTaskCard({
+  task,
+  selected,
+}: {
+  task: TaskSummary;
+  selected: boolean;
+}) {
   const { openTask, suppressClickRef } = useBoardContext();
   const data: DragData = { type: "task", projectId: task.projectId, status: task.status };
   // Archived cards (Show archived) open in the panel but can't be dragged; unarchive first.

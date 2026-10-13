@@ -102,7 +102,11 @@ export interface PlansService {
   addSteps(phaseId: string, steps: PlanStepInput[], actor: string, opts?: { afterStepId?: string }): PlanStep[];
   /** Sets started_at on first in_progress, completed_at on done/skipped (cleared when reopened). */
   updateStep(stepId: string, patch: StepPatch, actor: string): PlanStep;
-  moveStep(stepId: string, to: { phaseId?: string; beforeId?: string | null; afterId?: string | null }, actor: string): PlanStep;
+  moveStep(
+    stepId: string,
+    to: { phaseId?: string; beforeId?: string | null; afterId?: string | null },
+    actor: string,
+  ): PlanStep;
   deleteStep(stepId: string, actor: string): void;
   /** Accepts a step id or a 1-based "phase.step" label like "2.3". */
   resolveStepId(taskId: string, ref: string): string;

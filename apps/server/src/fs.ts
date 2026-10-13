@@ -44,7 +44,10 @@ function isDirectory(dir: string, entry: Dirent): boolean {
  * Lists the sub-directories of `rawPath` for the folder picker: hidden (dot) directories are
  * skipped, `~` expands to the home directory, and on Windows "/" lists the drive roots.
  */
-export function browseDirectory(rawPath: string | undefined, platform: NodeJS.Platform = process.platform): FsBrowseResult {
+export function browseDirectory(
+  rawPath: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+): FsBrowseResult {
   const trimmed = (rawPath ?? "").trim();
   if (platform === "win32" && (trimmed === "/" || trimmed === "\\")) return listDrives();
 

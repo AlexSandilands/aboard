@@ -112,7 +112,10 @@ describe("classifyLink", () => {
       kind: "pr",
       ref: { host: "github.com", repo: "acme/app", number: 42 },
     });
-    expect(classifyLink("https://dev.azure.com/org/proj/_git/repo/pullrequest/7")).toMatchObject({ kind: "pr", ref: null });
+    expect(classifyLink("https://dev.azure.com/org/proj/_git/repo/pullrequest/7")).toMatchObject({
+      kind: "pr",
+      ref: null,
+    });
     expect(classifyLink("ABC-123", { jiraBaseUrl: "https://jira.example.com/" })).toEqual({
       kind: "jira",
       key: "ABC-123",

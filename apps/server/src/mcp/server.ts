@@ -18,7 +18,8 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task or link.`;
 
 /** Generic HTTP client user agents that say nothing about which agent is calling. */
-const GENERIC_AGENTS = /^(node|undici|node-fetch|axios|python|python-httpx|aiohttp|go-http-client|reqwest|curl|mozilla|okhttp)$/i;
+const GENERIC_AGENTS =
+  /^(node|undici|node-fetch|axios|python|python-httpx|aiohttp|go-http-client|reqwest|curl|mozilla|okhttp)$/i;
 
 /**
  * Stateless mode has no session, so the initialize request's clientInfo is not available on later
@@ -47,7 +48,11 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
 
 const methodNotAllowed = () =>
   new Response(
-    JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed. This MCP server is stateless; use POST." }, id: null }),
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Method not allowed. This MCP server is stateless; use POST." },
+      id: null,
+    }),
     { status: 405, headers: { "content-type": "application/json", allow: "POST" } },
   );
 

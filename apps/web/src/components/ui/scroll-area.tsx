@@ -13,9 +13,7 @@ function getVirtualizedScrollFadeClassName({ top, bottom }: { top: boolean; bott
     top &&
       bottom &&
       "[--virtualized-scroll-fade-mask:linear-gradient(to_bottom,transparent,black_var(--fade-size),black_calc(100%-var(--fade-size)),transparent)]",
-    top &&
-      !bottom &&
-      "[--virtualized-scroll-fade-mask:linear-gradient(to_bottom,transparent,black_var(--fade-size))]",
+    top && !bottom && "[--virtualized-scroll-fade-mask:linear-gradient(to_bottom,transparent,black_var(--fade-size))]",
     !top &&
       bottom &&
       "[--virtualized-scroll-fade-mask:linear-gradient(to_bottom,black_calc(100%-var(--fade-size)),transparent)]",
@@ -65,8 +63,7 @@ function ScrollArea({
           scrollFade && scrollFadePadding && "scroll-p-[var(--fade-size)]",
           scrollFade && !scrollFadePadding && "has-focus-visible:mask-none",
           scrollbarGutter && "scrollbar-gutter-stable",
-          hideScrollbars &&
-            "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          hideScrollbars && "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
         data-slot="scroll-area-viewport"
       >
@@ -83,11 +80,7 @@ function ScrollArea({
   );
 }
 
-function ScrollBar({
-  className,
-  orientation = "vertical",
-  ...props
-}: ScrollAreaPrimitive.Scrollbar.Props) {
+function ScrollBar({ className, orientation = "vertical", ...props }: ScrollAreaPrimitive.Scrollbar.Props) {
   return (
     <ScrollAreaPrimitive.Scrollbar
       className={cn(

@@ -34,10 +34,7 @@ function DialogBackdrop({
   return (
     <DialogPrimitive.Backdrop
       forceRender
-      className={cn(
-        variant === "media" ? DIALOG_MEDIA_BACKDROP_CLASS : DIALOG_BACKDROP_CLASS,
-        className,
-      )}
+      className={cn(variant === "media" ? DIALOG_MEDIA_BACKDROP_CLASS : DIALOG_BACKDROP_CLASS, className)}
       data-slot="dialog-backdrop"
       {...props}
     />
@@ -47,10 +44,7 @@ function DialogBackdrop({
 function DialogViewport({ className, ...props }: DialogPrimitive.Viewport.Props) {
   return (
     <DialogPrimitive.Viewport
-      className={cn(
-        "fixed inset-0 z-50 grid grid-rows-[1fr_auto_1fr] justify-items-center p-4",
-        className,
-      )}
+      className={cn("fixed inset-0 z-50 grid grid-rows-[1fr_auto_1fr] justify-items-center p-4", className)}
       data-slot="dialog-viewport"
       {...props}
     />
@@ -76,8 +70,7 @@ function DialogPopup({
       <DialogViewport
         className={cn(
           bottomStickOnMobile && "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
-          variant === "media" &&
-            "z-[60] grid-rows-1 place-items-center px-4 py-6 [-webkit-app-region:no-drag]",
+          variant === "media" && "z-[60] grid-rows-1 place-items-center px-4 py-6 [-webkit-app-region:no-drag]",
         )}
       >
         <DialogPrimitive.Popup

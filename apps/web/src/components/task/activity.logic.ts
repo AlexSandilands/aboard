@@ -32,7 +32,12 @@ export interface ActivityContext {
 
 const STATUS_LABEL = new Map<string, string>(TASK_STATUSES.map((s) => [s.value, s.label]));
 const FIELD_LABEL: Record<string, string> = { title: "title", description: "description", planContext: "plan context" };
-const LINK_KIND_LABEL: Record<string, string> = { pr: "a pull request", jira: "a Jira issue", t3_thread: "a T3 Code thread", url: "a link" };
+const LINK_KIND_LABEL: Record<string, string> = {
+  pr: "a pull request",
+  jira: "a Jira issue",
+  t3_thread: "a T3 Code thread",
+  url: "a link",
+};
 
 const str = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
 const num = (value: unknown): number | null => (typeof value === "number" ? value : null);
@@ -76,7 +81,9 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const phases = num(p.phases);
       return line(
         "plan",
-        steps !== null && phases !== null ? `set the plan (${plural(phases, "phase")}, ${plural(steps, "step")})` : "set the plan",
+        steps !== null && phases !== null
+          ? `set the plan (${plural(phases, "phase")}, ${plural(steps, "step")})`
+          : "set the plan",
       );
     }
     case "phase_added":

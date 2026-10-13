@@ -184,10 +184,7 @@ function AutocompleteListVirtualized({ className, ...props }: AutocompletePrimit
 function AutocompleteEmpty({ className, ...props }: AutocompletePrimitive.Empty.Props) {
   return (
     <AutocompletePrimitive.Empty
-      className={cn(
-        "not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm",
-        className,
-      )}
+      className={cn("not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm", className)}
       data-slot="autocomplete-empty"
       {...props}
     />
@@ -225,17 +222,9 @@ function AutocompleteCollection({ ...props }: AutocompletePrimitive.Collection.P
   return <AutocompletePrimitive.Collection data-slot="autocomplete-collection" {...props} />;
 }
 
-function AutocompleteTrigger({
-  className,
-  children,
-  ...props
-}: AutocompletePrimitive.Trigger.Props) {
+function AutocompleteTrigger({ className, children, ...props }: AutocompletePrimitive.Trigger.Props) {
   return (
-    <AutocompletePrimitive.Trigger
-      className={className}
-      data-slot="autocomplete-trigger"
-      {...props}
-    >
+    <AutocompletePrimitive.Trigger className={className} data-slot="autocomplete-trigger" {...props}>
       {children}
     </AutocompletePrimitive.Trigger>
   );

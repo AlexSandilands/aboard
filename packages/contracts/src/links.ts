@@ -17,10 +17,7 @@ const JIRA_BROWSE = /\/browse\/([A-Z][A-Z0-9_]+-\d+)(?:[/?#]|$)/;
  * Infers link kind from user/agent input: GitHub/ADO/Bitbucket PR URLs, Jira keys or
  * /browse/ URLs, t3code:// thread deep links, otherwise a plain URL.
  */
-export function classifyLink(
-  value: string,
-  opts: { jiraBaseUrl?: string | null } = {},
-): ClassifiedLink | null {
+export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null } = {}): ClassifiedLink | null {
   const input = value.trim();
   if (!input) return null;
 

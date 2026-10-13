@@ -89,20 +89,12 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
           gradientUnits="userSpaceOnUse"
         >
           <stop style={{ stopColor: "var(--stage-night-glow-highlight)" }} stopOpacity="0.4" />
-          <stop
-            offset="0.5"
-            style={{ stopColor: "var(--stage-night-glow-secondary)" }}
-            stopOpacity="0.16"
-          />
+          <stop offset="0.5" style={{ stopColor: "var(--stage-night-glow-secondary)" }} stopOpacity="0.16" />
           <stop offset="1" style={{ stopColor: "var(--stage-night-bottom)" }} stopOpacity="0" />
         </radialGradient>
         <linearGradient id={cloudId} x1="0" y1="60" x2="288" y2="96" gradientUnits="userSpaceOnUse">
           <stop style={{ stopColor: "var(--stage-night-highlight)" }} stopOpacity="0.5" />
-          <stop
-            offset="0.52"
-            style={{ stopColor: "var(--stage-night-secondary)" }}
-            stopOpacity="0.62"
-          />
+          <stop offset="0.52" style={{ stopColor: "var(--stage-night-secondary)" }} stopOpacity="0.62" />
           <stop offset="1" style={{ stopColor: "var(--stage-night-tertiary)" }} stopOpacity="0.5" />
         </linearGradient>
         <filter id={softId} x="-24" y="-24" width="336" height="144" filterUnits="userSpaceOnUse">
@@ -111,13 +103,7 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
         <pattern id={starsId} width="288" height="96" patternUnits="userSpaceOnUse">
           <g style={{ fill: "var(--stage-night-line)" }}>
             {NIGHTLY_STARS.map((star) => (
-              <circle
-                key={`${star.cx}-${star.cy}`}
-                cx={star.cx}
-                cy={star.cy}
-                r={star.r}
-                fillOpacity={star.opacity}
-              />
+              <circle key={`${star.cx}-${star.cy}`} cx={star.cx} cy={star.cy} r={star.r} fillOpacity={star.opacity} />
             ))}
           </g>
           <g

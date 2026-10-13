@@ -38,7 +38,9 @@ export function deriveCurrentStep(phases: ReadonlyArray<PlanPhase>): CurrentStep
       flat.forEach((e, i) => {
         if (isStepComplete(e.step.status)) lastDone = i;
       });
-      return flat.slice(lastDone + 1).find((e) => e.step.status === "todo") ?? flat.find((e) => e.step.status === "todo");
+      return (
+        flat.slice(lastDone + 1).find((e) => e.step.status === "todo") ?? flat.find((e) => e.step.status === "todo")
+      );
     })();
   if (!pick) return null;
   return {

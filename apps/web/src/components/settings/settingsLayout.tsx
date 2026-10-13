@@ -70,7 +70,9 @@ export function SettingsRow({
           <div className="flex min-h-5 items-center gap-1.5">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
           </div>
-          {description ? <p className="max-w-xl text-xs leading-normal text-muted-foreground/80">{description}</p> : null}
+          {description ? (
+            <p className="max-w-xl text-xs leading-normal text-muted-foreground/80">{description}</p>
+          ) : null}
           {status ? <div className="pt-0.5 text-xs text-muted-foreground">{status}</div> : null}
         </div>
         {control ? (
@@ -117,7 +119,9 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
 export function CommandSnippet({ command }: { command: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1 rounded-lg border border-border/60 bg-muted/40 py-1 ps-2.5 pe-1">
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-foreground/90">{command}</code>
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-foreground/90">
+        {command}
+      </code>
       <CopyButton text={command} label="Copy command" />
     </div>
   );

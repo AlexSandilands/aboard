@@ -16,10 +16,22 @@ export interface LinkRow {
 
 /** Maps a task_links row to the contract's discriminated TaskLink. */
 export function toLink(r: LinkRow): TaskLink {
-  const base = { id: r.id, taskId: r.task_id, url: r.url, label: r.label, syncedAt: r.synced_at, createdAt: r.created_at };
+  const base = {
+    id: r.id,
+    taskId: r.task_id,
+    url: r.url,
+    label: r.label,
+    syncedAt: r.synced_at,
+    createdAt: r.created_at,
+  };
   switch (r.kind) {
     case "pr":
-      return { ...base, kind: "pr", ref: parseJson<PrRef>(r.ref_json), snapshot: parseJson<PrSnapshot>(r.snapshot_json) };
+      return {
+        ...base,
+        kind: "pr",
+        ref: parseJson<PrRef>(r.ref_json),
+        snapshot: parseJson<PrSnapshot>(r.snapshot_json),
+      };
     case "jira":
       return { ...base, kind: "jira", ref: parseJson<{ key: string }>(r.ref_json) ?? { key: r.url } };
     case "t3_thread":

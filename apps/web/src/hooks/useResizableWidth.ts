@@ -1,11 +1,5 @@
 // Adapted from T3 Code (MIT) — see NOTICE.
-import {
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
 import { useResizeDrag } from "./useResizeDrag";

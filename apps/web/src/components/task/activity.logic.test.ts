@@ -28,20 +28,27 @@ describe("describeEvent", () => {
   });
 
   it("names steps by their current index label, falling back to the logged title", () => {
-    expect(describeEvent(event("step_updated", { stepId: "s1", title: "old", from: "in_progress", to: "done" }), ctx).text).toBe(
-      "completed 1.2 Write migrations",
+    expect(
+      describeEvent(event("step_updated", { stepId: "s1", title: "old", from: "in_progress", to: "done" }), ctx).text,
+    ).toBe("completed 1.2 Write migrations");
+    expect(
+      describeEvent(event("step_updated", { stepId: "gone", title: "Old step", to: "in_progress" }), ctx).text,
+    ).toBe("started Old step");
+    expect(describeEvent(event("step_updated", { stepId: "s1", title: "x" }), ctx).text).toBe(
+      "edited 1.2 Write migrations",
     );
-    expect(describeEvent(event("step_updated", { stepId: "gone", title: "Old step", to: "in_progress" }), ctx).text).toBe(
-      "started Old step",
-    );
-    expect(describeEvent(event("step_updated", { stepId: "s1", title: "x" }), ctx).text).toBe("edited 1.2 Write migrations");
   });
 
   it("quotes notes and summarises plans", () => {
-    expect(describeEvent(event("note", { text: "Handover: tests pass" }), ctx)).toMatchObject({ icon: "note", quote: "Handover: tests pass" });
+    expect(describeEvent(event("note", { text: "Handover: tests pass" }), ctx)).toMatchObject({
+      icon: "note",
+      quote: "Handover: tests pass",
+    });
     expect(describeEvent(event("plan_set", { phases: 2, steps: 1 }), ctx).text).toBe("set the plan (2 phases, 1 step)");
     expect(describeEvent(event("moved_project", { to: "p2" }), ctx).text).toBe("moved to project storefront");
-    expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe("edited the title, plan context");
+    expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
+      "edited the title, plan context",
+    );
   });
 
   it("falls back to the event name for unknown types", () => {
@@ -51,17 +58,31 @@ describe("describeEvent", () => {
 
 describe("links logic", () => {
   it("previews the detected link kind", () => {
-    expect(describeLinkInput(classifyLink("https://github.com/acme/app/pull/12"))?.label).toBe("Pull request acme/app#12");
+    expect(describeLinkInput(classifyLink("https://github.com/acme/app/pull/12"))?.label).toBe(
+      "Pull request acme/app#12",
+    );
     expect(describeLinkInput(classifyLink("ABC-12"))?.label).toBe("Jira issue ABC-12");
     expect(describeLinkInput(classifyLink("https://www.example.com/x"))?.label).toBe("Link to example.com");
     expect(describeLinkInput(classifyLink("not a link"))).toBeNull();
   });
 
   it("builds Jira hrefs from the stored URL or the configured base", () => {
-    const base = { id: "l", taskId: "t", label: null, syncedAt: null, createdAt: "", kind: "jira" as const, ref: { key: "ABC-1" } };
-    expect(jiraHref({ ...base, url: "ABC-1" }, "https://jira.example.com/")).toBe("https://jira.example.com/browse/ABC-1");
+    const base = {
+      id: "l",
+      taskId: "t",
+      label: null,
+      syncedAt: null,
+      createdAt: "",
+      kind: "jira" as const,
+      ref: { key: "ABC-1" },
+    };
+    expect(jiraHref({ ...base, url: "ABC-1" }, "https://jira.example.com/")).toBe(
+      "https://jira.example.com/browse/ABC-1",
+    );
     expect(jiraHref({ ...base, url: "ABC-1" }, null)).toBeNull();
-    expect(jiraHref({ ...base, url: "https://j.example.com/browse/ABC-1" }, null)).toBe("https://j.example.com/browse/ABC-1");
+    expect(jiraHref({ ...base, url: "https://j.example.com/browse/ABC-1" }, null)).toBe(
+      "https://j.example.com/browse/ABC-1",
+    );
   });
 
   it("hides idle thread status", () => {

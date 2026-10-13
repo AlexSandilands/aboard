@@ -61,12 +61,7 @@ function EmptyMedia({
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof emptyMediaVariants>) {
   return (
-    <div
-      className={cn("relative mb-6", className)}
-      data-slot="empty-media"
-      data-variant={variant}
-      {...props}
-    >
+    <div className={cn("relative mb-6", className)} data-slot="empty-media" data-variant={variant} {...props}>
       {variant === "icon" && (
         <>
           <div
@@ -91,9 +86,7 @@ function EmptyMedia({
 }
 
 function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div className={cn("font-semibold text-xl", className)} data-slot="empty-title" {...props} />
-  );
+  return <div className={cn("font-semibold text-xl", className)} data-slot="empty-title" {...props} />;
 }
 
 function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
@@ -112,10 +105,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
 function EmptyContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex w-full min-w-0 max-w-sm flex-col items-center gap-4 text-balance text-sm",
-        className,
-      )}
+      className={cn("flex w-full min-w-0 max-w-sm flex-col items-center gap-4 text-balance text-sm", className)}
       data-slot="empty-content"
       {...props}
     />

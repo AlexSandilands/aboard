@@ -16,7 +16,17 @@ import {
 } from "./plan.logic";
 
 function step(id: string, phaseId: string, status: StepStatus = "todo"): PlanStep {
-  return { id, phaseId, title: id.toUpperCase(), notes: null, status, position: id, startedAt: null, completedAt: null, updatedAt: "" };
+  return {
+    id,
+    phaseId,
+    title: id.toUpperCase(),
+    notes: null,
+    status,
+    position: id,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: "",
+  };
 }
 
 function phase(id: string, steps: Array<[string, StepStatus?]>): PlanPhase {
@@ -73,8 +83,24 @@ describe("railSegmentTone", () => {
 
 describe("isPhaseOpenByDefault", () => {
   it("opens the current phase and collapses finished ones", () => {
-    expect(isPhaseOpenByDefault(phase("a", [["s1", "done"], ["s2", "done"]]), null)).toBe(false);
-    expect(isPhaseOpenByDefault(phase("a", [["s1", "done"], ["s2", "skipped"]]), "s2")).toBe(true);
+    expect(
+      isPhaseOpenByDefault(
+        phase("a", [
+          ["s1", "done"],
+          ["s2", "done"],
+        ]),
+        null,
+      ),
+    ).toBe(false);
+    expect(
+      isPhaseOpenByDefault(
+        phase("a", [
+          ["s1", "done"],
+          ["s2", "skipped"],
+        ]),
+        "s2",
+      ),
+    ).toBe(true);
     expect(isPhaseOpenByDefault(phase("a", [["s1", "todo"]]), "other")).toBe(true);
     expect(isPhaseOpenByDefault(phase("a", []), null)).toBe(true);
   });
@@ -124,7 +150,13 @@ describe("placementOf", () => {
 });
 
 describe("optimistic patches", () => {
-  const base = detail([phase("a", [["a1", "done"], ["a2", "todo"]]), phase("b", [["b1", "todo"]])]);
+  const base = detail([
+    phase("a", [
+      ["a1", "done"],
+      ["a2", "todo"],
+    ]),
+    phase("b", [["b1", "todo"]]),
+  ]);
 
   it("re-derives progress and the current step after a status change", () => {
     const next = patchStep(base, "a2", { status: "in_progress" });
@@ -147,7 +179,15 @@ describe("planInputFromOutline", () => {
   it("keeps ids, drops blank steps and empty phases", () => {
     expect(
       planInputFromOutline([
-        { key: "1", id: "p1", title: " Build ", steps: [{ key: "2", id: "s1", title: "One" }, { key: "3", title: "  " }] },
+        {
+          key: "1",
+          id: "p1",
+          title: " Build ",
+          steps: [
+            { key: "2", id: "s1", title: "One" },
+            { key: "3", title: "  " },
+          ],
+        },
         { key: "4", title: "Empty", steps: [{ key: "5", title: "" }] },
       ]),
     ).toEqual({ phases: [{ id: "p1", title: "Build", steps: [{ id: "s1", title: "One" }] }] });
@@ -165,7 +205,17 @@ describe("planInputFromOutline", () => {
           ],
         },
       ]),
-    ).toEqual({ phases: [{ title: "A", steps: [{ id: "s1", title: "Kept" }, { title: "Pasted", status: "done" }] }] });
+    ).toEqual({
+      phases: [
+        {
+          title: "A",
+          steps: [
+            { id: "s1", title: "Kept" },
+            { title: "Pasted", status: "done" },
+          ],
+        },
+      ],
+    });
   });
 
   it("names untitled phases and returns null without steps", () => {

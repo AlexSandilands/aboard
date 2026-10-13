@@ -1,7 +1,14 @@
 import type { AppSettings, PrSnapshot, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
-import { createGithubIntegration, GhError, GhPrJson, mapPrSnapshot, type GithubServices, type RunGh } from "./github.ts";
+import {
+  createGithubIntegration,
+  GhError,
+  GhPrJson,
+  mapPrSnapshot,
+  type GithubServices,
+  type RunGh,
+} from "./github.ts";
 
 const pr = (overrides: Partial<GhPrJson> = {}): GhPrJson =>
   GhPrJson.parse({
@@ -44,7 +51,11 @@ describe("mapPrSnapshot", () => {
 
   it.each([
     ["empty rollup", [], "none"],
-    ["all checks green", [checkRun("COMPLETED", "SUCCESS"), checkRun("COMPLETED", "SKIPPED"), statusContext("SUCCESS")], "passing"],
+    [
+      "all checks green",
+      [checkRun("COMPLETED", "SUCCESS"), checkRun("COMPLETED", "SKIPPED"), statusContext("SUCCESS")],
+      "passing",
+    ],
     ["neutral counts as passing", [checkRun("COMPLETED", "NEUTRAL")], "passing"],
     ["one in progress", [checkRun("COMPLETED", "SUCCESS"), checkRun("IN_PROGRESS", "")], "pending"],
     ["queued check run", [checkRun("QUEUED", "")], "pending"],
@@ -62,7 +73,17 @@ describe("mapPrSnapshot", () => {
 });
 
 function prLink(id: string, url: string, ref: { host: string; repo: string; number: number } | null): TaskLink {
-  return { id, taskId: "t1", kind: "pr", url, label: null, syncedAt: null, createdAt: "2026-01-01T00:00:00Z", ref, snapshot: null };
+  return {
+    id,
+    taskId: "t1",
+    kind: "pr",
+    url,
+    label: null,
+    syncedAt: null,
+    createdAt: "2026-01-01T00:00:00Z",
+    ref,
+    snapshot: null,
+  };
 }
 
 function fakeServices(links: TaskLink[], settings: Partial<AppSettings> = {}) {
@@ -110,12 +131,28 @@ describe("github poller", () => {
   const ghOk = (args: string[]) => {
     if (args[0] !== "pr") return "ok";
     const number = Number(args[2]!.split("/").at(-1));
-    return JSON.stringify({ number, title: `PR ${number}`, state: "OPEN", isDraft: false, reviewDecision: "APPROVED", mergeable: "MERGEABLE", statusCheckRollup: [checkRun("COMPLETED", "SUCCESS")], headRefName: "b", updatedAt: null });
+    return JSON.stringify({
+      number,
+      title: `PR ${number}`,
+      state: "OPEN",
+      isDraft: false,
+      reviewDecision: "APPROVED",
+      mergeable: "MERGEABLE",
+      statusCheckRollup: [checkRun("COMPLETED", "SUCCESS")],
+      headRefName: "b",
+      updatedAt: null,
+    });
   };
 
   it("polls only github.com PR links, with concurrency 4", async () => {
     const links = [
-      ...Array.from({ length: 9 }, (_, i) => prLink(`l${i}`, `https://github.com/o/r/pull/${i + 1}/files`, { host: "github.com", repo: "o/r", number: i + 1 })),
+      ...Array.from({ length: 9 }, (_, i) =>
+        prLink(`l${i}`, `https://github.com/o/r/pull/${i + 1}/files`, {
+          host: "github.com",
+          repo: "o/r",
+          number: i + 1,
+        }),
+      ),
       prLink("ado", "https://dev.azure.com/x/_git/y/pullrequest/5", null),
     ];
     const { services, snapshots } = fakeServices(links);
@@ -126,7 +163,13 @@ describe("github poller", () => {
     expect(snapshots.get("l0")).toMatchObject({ title: "PR 1", checks: "passing", reviewDecision: "approved" });
     expect(snapshots.has("ado")).toBe(false);
     const prCalls = gh.calls.filter((c) => c[0] === "pr");
-    expect(prCalls[0]).toEqual(["pr", "view", "https://github.com/o/r/pull/1", "--json", expect.stringContaining("statusCheckRollup")]);
+    expect(prCalls[0]).toEqual([
+      "pr",
+      "view",
+      "https://github.com/o/r/pull/1",
+      "--json",
+      expect.stringContaining("statusCheckRollup"),
+    ]);
     expect(gh.maxInFlight()).toBeLessThanOrEqual(4);
     expect(github.status()).toEqual({ available: true, authenticated: true, error: null });
   });
@@ -148,7 +191,10 @@ describe("github poller", () => {
 
   it("reports gh missing", async () => {
     const { services } = fakeServices([]);
-    const github = createGithubIntegration({ services: () => services, runGh: fakeGh(() => new GhError("gh CLI not found", true)).runGh });
+    const github = createGithubIntegration({
+      services: () => services,
+      runGh: fakeGh(() => new GhError("gh CLI not found", true)).runGh,
+    });
     expect(await github.checkStatus()).toEqual({ available: false, authenticated: false, error: "gh CLI not found" });
   });
 
@@ -158,7 +204,9 @@ describe("github poller", () => {
       prLink("good", "https://github.com/o/r/pull/2", { host: "github.com", repo: "o/r", number: 2 }),
     ];
     const { services, snapshots } = fakeServices(links);
-    const gh = fakeGh((args) => (args[2]?.endsWith("/404") ? new GhError("Could not resolve to a PullRequest", false) : ghOk(args)));
+    const gh = fakeGh((args) =>
+      args[2]?.endsWith("/404") ? new GhError("Could not resolve to a PullRequest", false) : ghOk(args),
+    );
     const { log, warnings } = silentLog();
     const github = createGithubIntegration({ services: () => services, runGh: gh.runGh, log });
     await github.pollAll();

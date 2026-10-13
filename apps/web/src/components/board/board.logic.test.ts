@@ -45,7 +45,9 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
   return {
     projects,
     tasks,
-    integrations: { t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null } },
+    integrations: {
+      t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
+    },
   };
 }
 
@@ -55,7 +57,18 @@ describe("matchesTaskSearch", () => {
   const jira = task("t", {
     number: 42,
     title: "Fix login redirect",
-    links: [{ id: "l", taskId: "t", url: "", label: null, syncedAt: null, createdAt: "", kind: "jira", ref: { key: "ABC-123" } }],
+    links: [
+      {
+        id: "l",
+        taskId: "t",
+        url: "",
+        label: null,
+        syncedAt: null,
+        createdAt: "",
+        kind: "jira",
+        ref: { key: "ABC-123" },
+      },
+    ],
   });
 
   it("matches title, number and Jira key", () => {
@@ -103,10 +116,23 @@ describe("buildLanes", () => {
   it("filters to tasks with a PR link", () => {
     const withPr = task("pr", {
       links: [
-        { id: "l", taskId: "pr", url: "", label: null, syncedAt: null, createdAt: "", kind: "pr", ref: null, snapshot: null },
+        {
+          id: "l",
+          taskId: "pr",
+          url: "",
+          label: null,
+          syncedAt: null,
+          createdAt: "",
+          kind: "pr",
+          ref: null,
+          snapshot: null,
+        },
       ],
     });
-    const lanes = buildLanes(board([withPr, task("none"), task("q-none", { projectId: "q" })]), { ...noFilters, hasPrOnly: true });
+    const lanes = buildLanes(board([withPr, task("none"), task("q-none", { projectId: "q" })]), {
+      ...noFilters,
+      hasPrOnly: true,
+    });
     expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
     expect(lanes[0]!.cells.idea).toEqual([withPr]);
   });
@@ -137,8 +163,14 @@ describe("reuseUnchangedLanes", () => {
 
 describe("attentionTasks", () => {
   it("puts errors first", () => {
-    const warn = task("warn", { updatedAt: "2026-03-01", attention: [{ kind: "pr_conflict", severity: "warning", message: "" }] });
-    const err = task("err", { updatedAt: "2026-01-01", attention: [{ kind: "thread_failed", severity: "error", message: "" }] });
+    const warn = task("warn", {
+      updatedAt: "2026-03-01",
+      attention: [{ kind: "pr_conflict", severity: "warning", message: "" }],
+    });
+    const err = task("err", {
+      updatedAt: "2026-01-01",
+      attention: [{ kind: "thread_failed", severity: "error", message: "" }],
+    });
     expect(attentionTasks([warn, task("calm"), err]).map((t) => t.id)).toEqual(["err", "warn"]);
   });
 });

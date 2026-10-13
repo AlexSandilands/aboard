@@ -3,7 +3,9 @@ import { useRef, useState } from "react";
 import { Textarea } from "~/components/ui/textarea";
 
 const SAVE_HINT =
-  typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "⌘Enter to save · Esc to cancel" : "Ctrl+Enter to save · Esc to cancel";
+  typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
+    ? "⌘Enter to save · Esc to cancel"
+    : "Ctrl+Enter to save · Esc to cancel";
 
 /**
  * Markdown textarea that saves on blur or Ctrl/⌘+Enter and cancels on Esc.

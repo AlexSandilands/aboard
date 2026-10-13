@@ -124,7 +124,12 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
   const task = detail.data;
   return (
     <>
-      <TaskPanelHeader task={task} projects={projects} onClose={onClose} onOpenPlanEditor={() => openEditor("outline")} />
+      <TaskPanelHeader
+        task={task}
+        projects={projects}
+        onClose={onClose}
+        onOpenPlanEditor={() => openEditor("outline")}
+      />
       <div className="min-h-0 flex-1">
         <ScrollArea scrollFade>
           <TaskPanelBody task={task} projects={projects} onOpenEditor={openEditor} />

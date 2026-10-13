@@ -110,7 +110,11 @@ function eventText(event: TaskEvent): string {
 }
 
 /** Full "where was I" rendering of a task. */
-export function renderTaskDetail(task: TaskDetail, project: Project | undefined, opts: { events?: number } = {}): string {
+export function renderTaskDetail(
+  task: TaskDetail,
+  project: Project | undefined,
+  opts: { events?: number } = {},
+): string {
   const lines: string[] = [];
   lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);

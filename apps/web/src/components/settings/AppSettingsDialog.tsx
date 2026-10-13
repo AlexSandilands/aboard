@@ -36,9 +36,7 @@ export function AppSettingsDialog() {
   const setOpen = useDialogs((s) => s.setAppSettingsOpen);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogPopup className="max-w-2xl">
-        {open ? <AppSettingsBody /> : null}
-      </DialogPopup>
+      <DialogPopup className="max-w-2xl">{open ? <AppSettingsBody /> : null}</DialogPopup>
     </Dialog>
   );
 }
@@ -61,7 +59,9 @@ function AppSettingsBody() {
             <JiraSection settings={settings.data} />
           </>
         ) : (
-          <p className="px-4 text-sm text-muted-foreground">{settings.error ? settings.error.message : "Loading settings..."}</p>
+          <p className="px-4 text-sm text-muted-foreground">
+            {settings.error ? settings.error.message : "Loading settings..."}
+          </p>
         )}
         <AgentsSection />
         <ArchivedProjectsSection />
@@ -112,7 +112,9 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
   const test = useMutation({
     mutationFn: () => api<T3IntegrationStatus>("/api/integrations/t3/test", { method: "POST", body: {} }),
     onSuccess: (t3) => {
-      queryClient.setQueryData<IntegrationsStatus>(queryKeys.integrations, (current) => (current ? { ...current, t3 } : current));
+      queryClient.setQueryData<IntegrationsStatus>(queryKeys.integrations, (current) =>
+        current ? { ...current, t3 } : current,
+      );
       void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
     },
   });
@@ -176,7 +178,9 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-foreground/80">Token saved</span>
               {live?.liveStatus === "ok" ? <span className="text-success-foreground">Connected</span> : null}
-              {live?.liveStatus === "error" ? <span className="text-destructive-foreground">{live.error ?? "Connection failed"}</span> : null}
+              {live?.liveStatus === "error" ? (
+                <span className="text-destructive-foreground">{live.error ?? "Connection failed"}</span>
+              ) : null}
             </span>
           ) : null
         }
@@ -198,7 +202,12 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
                 }
               }}
             />
-            <Button size="sm" variant="outline" disabled={!token.trim() || updateSettings.isPending} onClick={saveToken}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!token.trim() || updateSettings.isPending}
+              onClick={saveToken}
+            >
               Save
             </Button>
           </>
@@ -208,7 +217,12 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
           <CommandSnippet command={T3_TOKEN_COMMAND} />
           {settings.t3TokenSet ? (
             <div className="flex items-center justify-end gap-2">
-              <Button size="xs" variant="ghost" disabled={updateSettings.isPending} onClick={() => updateSettings.mutate({ t3Token: null })}>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={updateSettings.isPending}
+                onClick={() => updateSettings.mutate({ t3Token: null })}
+              >
                 Clear token
               </Button>
               <Button size="xs" variant="outline" disabled={test.isPending || !detected} onClick={() => test.mutate()}>
@@ -223,7 +237,13 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
   );
 }
 
-function GithubSection({ settings, status }: { settings: AppSettings; status: IntegrationsStatus["github"] | undefined }) {
+function GithubSection({
+  settings,
+  status,
+}: {
+  settings: AppSettings;
+  status: IntegrationsStatus["github"] | undefined;
+}) {
   const updateSettings = useUpdateSettings();
   const description =
     status === undefined
@@ -339,7 +359,9 @@ function ArchivedProjectsSection() {
               <span className="truncate">{project.title}</span>
             </span>
           }
-          description={project.workspaceRoot ? <span className="break-all font-mono">{project.workspaceRoot}</span> : undefined}
+          description={
+            project.workspaceRoot ? <span className="break-all font-mono">{project.workspaceRoot}</span> : undefined
+          }
           control={
             <Button
               size="sm"

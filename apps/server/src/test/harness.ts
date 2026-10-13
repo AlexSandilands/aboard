@@ -12,7 +12,11 @@ export function createTestHarness() {
     const { json, ...rest } = init ?? {};
     return app.request(path, {
       ...rest,
-      headers: { host: "127.0.0.1:4317", ...(json !== undefined ? { "content-type": "application/json" } : {}), ...rest.headers },
+      headers: {
+        host: "127.0.0.1:4317",
+        ...(json !== undefined ? { "content-type": "application/json" } : {}),
+        ...rest.headers,
+      },
       ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
     });
   };

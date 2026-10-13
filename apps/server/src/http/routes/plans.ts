@@ -29,7 +29,10 @@ export function registerPlanRoutes(app: Hono, { services }: AppContext): void {
   app.post(
     "/api/phases/:id/steps",
     handle(async (c) => {
-      const body = await parseBody(c, z.object({ steps: z.array(PlanStepInput).min(1), afterStepId: z.string().optional() }));
+      const body = await parseBody(
+        c,
+        z.object({ steps: z.array(PlanStepInput).min(1), afterStepId: z.string().optional() }),
+      );
       const steps = services.plans.addSteps(idParam(c), body.steps, actorOf(c), { afterStepId: body.afterStepId });
       return c.json(steps, 201);
     }),

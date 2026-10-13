@@ -120,9 +120,7 @@ const SAMPLE_ICONS: ReadonlyArray<{ title: string; icon: ProjectIcon }> = [
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-border/60 bg-card/40">
-      <h2 className="border-b border-border/65 px-4 py-2 text-xs font-medium text-muted-foreground">
-        {title}
-      </h2>
+      <h2 className="border-b border-border/65 px-4 py-2 text-xs font-medium text-muted-foreground">{title}</h2>
       <div className="flex flex-wrap items-start gap-3 p-4">{children}</div>
     </section>
   );
@@ -416,11 +414,7 @@ export function StyleGallery() {
 
         <Section title="Switch, toggle group, kbd, separator">
           <Switch checked={switchOn} onCheckedChange={setSwitchOn} aria-label="Switch" />
-          <ToggleGroup
-            aria-label="View"
-            value={[segment]}
-            onValueChange={(next) => setSegment(next[0] ?? segment)}
-          >
+          <ToggleGroup aria-label="View" value={[segment]} onValueChange={(next) => setSegment(next[0] ?? segment)}>
             <Toggle value="board">Board</Toggle>
             <Toggle value="list">List</Toggle>
             <Toggle value="graph">Graph</Toggle>
@@ -488,9 +482,7 @@ export function StyleGallery() {
                 key={type}
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  toastManager.add({ type, title: `A ${type} toast`, description: "Toast body text." })
-                }
+                onClick={() => toastManager.add({ type, title: `A ${type} toast`, description: "Toast body text." })}
               >
                 Toast: {type}
               </Button>

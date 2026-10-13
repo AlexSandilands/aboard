@@ -51,9 +51,7 @@ export function taskSearchTerms(task: { number: number; title: string }, project
 
 /** Whether the typed text is a filesystem path the folder browser should list. */
 export function isPathQuery(value: string): boolean {
-  return (
-    value.startsWith("~") || value.startsWith("/") || value.startsWith("\\") || /^[a-zA-Z]:/.test(value)
-  );
+  return value.startsWith("~") || value.startsWith("/") || value.startsWith("\\") || /^[a-zA-Z]:/.test(value);
 }
 
 /** At the palette root only an unambiguous path prefix starts browsing ("a:" could be a title). */
@@ -97,7 +95,9 @@ export function splitBrowseQuery(value: string): { directory: string; leaf: stri
 export function filterBrowseEntries<T extends { name: string }>(entries: ReadonlyArray<T>, leaf: string): T[] {
   const lower = leaf.toLowerCase();
   const showHidden = leaf.startsWith(".");
-  return entries.filter((entry) => entry.name.toLowerCase().startsWith(lower) && (showHidden || !entry.name.startsWith(".")));
+  return entries.filter(
+    (entry) => entry.name.toLowerCase().startsWith(lower) && (showHidden || !entry.name.startsWith(".")),
+  );
 }
 
 /** The entry named exactly `leaf`, preferring a case-sensitive match. */

@@ -1,9 +1,20 @@
 import { z } from "zod";
 import { StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
-import { actorField, planFromArgs, planInputFields, run, taskField, taskResult, type ToolRegistrar } from "../shared.ts";
+import {
+  actorField,
+  planFromArgs,
+  planInputFields,
+  run,
+  taskField,
+  taskResult,
+  type ToolRegistrar,
+} from "../shared.ts";
 
-const stepField = z.string().min(1).describe('Step reference: the "phase.step" label from get_task (e.g. "2.3") or the step id.');
+const stepField = z
+  .string()
+  .min(1)
+  .describe('Step reference: the "phase.step" label from get_task (e.g. "2.3") or the step id.');
 
 /** Plan tools: set_plan, add_steps, update_step. */
 export const registerPlanTools: ToolRegistrar = (server, { services, actor }) => {
@@ -68,7 +79,9 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
           if (!found) {
             throw new AppError(
               "NOT_FOUND",
-              phases.length === 0 ? "This task has no phases yet. Pass newPhase, or use set_plan." : `Phase not found: ${ref}`,
+              phases.length === 0
+                ? "This task has no phases yet. Pass newPhase, or use set_plan."
+                : `Phase not found: ${ref}`,
             );
           }
           phaseId = found.id;

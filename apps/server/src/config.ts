@@ -28,7 +28,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),
     token: env[brandEnv("TOKEN")] || null,
-    webDist: env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
+    webDist:
+      env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
   };

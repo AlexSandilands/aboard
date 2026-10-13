@@ -115,11 +115,16 @@ describe("resolveSubmitPath", () => {
     expect(resolveSubmitPath("~/nope", listing)).toEqual({ ok: false, reason: 'No folder named "nope"' });
     expect(resolveSubmitPath("hello", listing).ok).toBe(false);
     expect(resolveSubmitPath("~/", undefined).ok).toBe(false);
-    expect(resolveSubmitPath("/", { path: "/", parentPath: null, entries: [{ name: "C:", fullPath: "C:\\" }] }).ok).toBe(false);
+    expect(
+      resolveSubmitPath("/", { path: "/", parentPath: null, entries: [{ name: "C:", fullPath: "C:\\" }] }).ok,
+    ).toBe(false);
   });
   it("handles POSIX listings", () => {
     const posix = { path: "/home/a", parentPath: "/home", entries: [{ name: "src", fullPath: "/home/a/src" }] };
-    expect(resolveSubmitPath("/home/a/src/", { ...posix, path: "/home/a/src", entries: [] })).toEqual({ ok: true, path: "/home/a/src" });
+    expect(resolveSubmitPath("/home/a/src/", { ...posix, path: "/home/a/src", entries: [] })).toEqual({
+      ok: true,
+      path: "/home/a/src",
+    });
     expect(resolveSubmitPath("/home/a/src", posix)).toEqual({ ok: true, path: "/home/a/src" });
   });
 });

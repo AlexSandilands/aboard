@@ -26,7 +26,9 @@ const codeOf = (fn: () => unknown): string | undefined => {
 describe("plans", () => {
   it("rejects plans that would leave a non-idea task without steps", () => {
     const { s, task } = setup();
-    expect(codeOf(() => s.plans.setPlan(task.id, { phases: [{ title: "Empty", steps: [] }] }, "user"))).toBe("PLAN_REQUIRED");
+    expect(codeOf(() => s.plans.setPlan(task.id, { phases: [{ title: "Empty", steps: [] }] }, "user"))).toBe(
+      "PLAN_REQUIRED",
+    );
     const [a, b] = task.phases[0]!.steps;
     s.plans.deleteStep(a!.id, "user");
     expect(codeOf(() => s.plans.deleteStep(b!.id, "user"))).toBe("PLAN_REQUIRED");

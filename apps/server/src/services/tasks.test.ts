@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
 
-const plan = (...titles: string[]): PlanInput => ({ phases: [{ title: "Build", steps: titles.map((title) => ({ title })) }] });
+const plan = (...titles: string[]): PlanInput => ({
+  phases: [{ title: "Build", steps: titles.map((title) => ({ title })) }],
+});
 
 function setup() {
   const h = createTestHarness();
@@ -43,7 +45,11 @@ describe("tasks", () => {
     const moved = s.tasks.move(idea.id, { status: "in_progress" }, "agent");
     expect(moved.status).toBe("in_progress");
     const detail = s.tasks.detail(idea.id);
-    expect(detail.events.at(-1)).toMatchObject({ type: "status_changed", actor: "agent", payload: { from: "idea", to: "in_progress" } });
+    expect(detail.events.at(-1)).toMatchObject({
+      type: "status_changed",
+      actor: "agent",
+      payload: { from: "idea", to: "in_progress" },
+    });
   });
 
   it("derives progress, step statuses and current step in summaries", () => {
@@ -53,7 +59,13 @@ describe("tasks", () => {
       title: "T",
       plan: {
         phases: [
-          { title: "One", steps: [{ title: "a", status: "done" }, { title: "b", status: "skipped" }] },
+          {
+            title: "One",
+            steps: [
+              { title: "a", status: "done" },
+              { title: "b", status: "skipped" },
+            ],
+          },
           { title: "Two", steps: [{ title: "c" }, { title: "d", status: "blocked" }] },
         ],
       },
@@ -80,10 +92,17 @@ describe("tasks", () => {
     const target = s.tasks.create({ projectId: project.id, title: "existing", plan: plan("x") });
     s.tasks.move(target.id, { status: "review" }, "user");
     s.tasks.move(b, { status: "review" }, "user");
-    expect(s.tasks.summaries({ projectId: project.id, status: "review" }).map((t) => t.title)).toEqual(["existing", "b"]);
+    expect(s.tasks.summaries({ projectId: project.id, status: "review" }).map((t) => t.title)).toEqual([
+      "existing",
+      "b",
+    ]);
 
     s.tasks.move(a, { status: "review", beforeId: target.id }, "user");
-    expect(s.tasks.summaries({ projectId: project.id, status: "review" }).map((t) => t.title)).toEqual(["a", "existing", "b"]);
+    expect(s.tasks.summaries({ projectId: project.id, status: "review" }).map((t) => t.title)).toEqual([
+      "a",
+      "existing",
+      "b",
+    ]);
     expectCode(() => s.tasks.move(c, { beforeId: "nope" }, "user"), "VALIDATION");
   });
 

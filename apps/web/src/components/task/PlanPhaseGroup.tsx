@@ -94,7 +94,12 @@ export function PlanPhaseGroup({
             </span>
           </CollapsibleTrigger>
         )}
-        <span className={cn("shrink-0 text-2xs tabular-nums", complete ? "text-success-foreground" : "text-muted-foreground")}>
+        <span
+          className={cn(
+            "shrink-0 text-2xs tabular-nums",
+            complete ? "text-success-foreground" : "text-muted-foreground",
+          )}
+        >
           {done}/{steps.length}
         </span>
         <StepSegments statuses={statuses} />

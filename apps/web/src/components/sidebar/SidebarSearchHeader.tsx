@@ -1,6 +1,14 @@
 // Layout adapted from T3 Code (SidebarThreadHeader.tsx and the project scope combobox in Sidebar.tsx), MIT — see NOTICE.
 import type { Project } from "@repo/contracts";
-import { FolderIcon, FolderPlusIcon, ListFilterIcon, SearchIcon, SettingsIcon, SquarePenIcon, XIcon } from "lucide-react";
+import {
+  FolderIcon,
+  FolderPlusIcon,
+  ListFilterIcon,
+  SearchIcon,
+  SettingsIcon,
+  SquarePenIcon,
+  XIcon,
+} from "lucide-react";
 import { useMemo, useRef, useState, type RefObject } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
@@ -69,7 +77,10 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
         {projects.length > 0 ? (
           <>
             <ProjectScopeCombobox projects={projects} selectedId={projectFilter} anchorRef={searchFieldRef} />
-            <SidebarHeaderIconButton label="Add project" onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}>
+            <SidebarHeaderIconButton
+              label="Add project"
+              onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}
+            >
               <FolderPlusIcon />
             </SidebarHeaderIconButton>
           </>
@@ -106,7 +117,10 @@ function ProjectScopeCombobox({
   const [open, setOpen] = useState(false);
   const setProjectFilter = useSetProjectFilter();
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const items = useMemo<ScopeItem[]>(() => [ALL_PROJECTS, ...projects.map((p) => ({ value: p.id, label: p.title }))], [projects]);
+  const items = useMemo<ScopeItem[]>(
+    () => [ALL_PROJECTS, ...projects.map((p) => ({ value: p.id, label: p.title }))],
+    [projects],
+  );
   const selectedProject = selectedId ? (projectById.get(selectedId) ?? null) : null;
   const selectedItem = items.find((item) => item.value === selectedProject?.id) ?? ALL_PROJECTS;
 
@@ -140,7 +154,11 @@ function ProjectScopeCombobox({
           <ListFilterIcon className="size-4" />
         )}
       </ComboboxTrigger>
-      <ComboboxPopup align="start" anchor={anchorRef} className="max-w-[min(18rem,var(--available-width))] overflow-hidden">
+      <ComboboxPopup
+        align="start"
+        anchor={anchorRef}
+        className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
+      >
         <ComboboxSearchInput aria-label="Search projects" placeholder="Search projects..." />
         <ComboboxEmpty>No matching projects.</ComboboxEmpty>
         <ComboboxList>

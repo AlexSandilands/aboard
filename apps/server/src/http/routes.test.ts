@@ -57,7 +57,10 @@ describe("REST", () => {
       json: { phases: [{ title: "One", steps: [{ title: "a" }] }] },
     });
     expect(planned.status).toBe(200);
-    const moved = await h.request(`/api/tasks/${h.task.number}/move`, { method: "POST", json: { status: "in_progress" } });
+    const moved = await h.request(`/api/tasks/${h.task.number}/move`, {
+      method: "POST",
+      json: { status: "in_progress" },
+    });
     expect(((await moved.json()) as { status: string }).status).toBe("in_progress");
     expect((await h.request(`/api/tasks/${h.task.id}`, { method: "DELETE" })).status).toBe(204);
     const board = (await (await h.request("/api/board")).json()) as { tasks: unknown[]; projects: unknown[] };

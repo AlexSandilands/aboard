@@ -110,9 +110,7 @@ export function createPlansRepo(sql: Sql) {
         .map(toStep);
     },
     stepsInPhase(phaseId: string): StepRecord[] {
-      return sql
-        .all<StepRow>("SELECT * FROM plan_steps WHERE phase_id = ? ORDER BY position, id", phaseId)
-        .map(toStep);
+      return sql.all<StepRow>("SELECT * FROM plan_steps WHERE phase_id = ? ORDER BY position, id", phaseId).map(toStep);
     },
     countSteps(taskId: string): number {
       return Number(sql.get<{ n: number }>("SELECT COUNT(*) AS n FROM plan_steps WHERE task_id = ?", taskId)?.n ?? 0);

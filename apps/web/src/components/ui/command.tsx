@@ -63,11 +63,7 @@ function CommandDialogPopup({
       <CommandDialogBackdrop onPointerDown={onBackdropPointerDown} />
       <CommandDialogViewport>
         <CommandDialogPrimitive.Popup
-          className={cn(
-            DIALOG_POPUP_CLASS,
-            "pointer-events-auto max-h-105 max-w-xl text-foreground",
-            className,
-          )}
+          className={cn(DIALOG_POPUP_CLASS, "pointer-events-auto max-h-105 max-w-xl text-foreground", className)}
           data-slot="command-dialog-popup"
           {...props}
         >
@@ -83,22 +79,10 @@ function Command({
   keepHighlight = true,
   ...props
 }: React.ComponentProps<typeof Autocomplete>) {
-  return (
-    <Autocomplete
-      autoHighlight={autoHighlight}
-      inline
-      keepHighlight={keepHighlight}
-      open
-      {...props}
-    />
-  );
+  return <Autocomplete autoHighlight={autoHighlight} inline keepHighlight={keepHighlight} open {...props} />;
 }
 
-function CommandInput({
-  className,
-  placeholder,
-  ...props
-}: React.ComponentProps<typeof AutocompleteInput>) {
+function CommandInput({ className, placeholder, ...props }: React.ComponentProps<typeof AutocompleteInput>) {
   return (
     <div className="px-[var(--command-shell-inset)] py-1.5 [&_[data-slot=autocomplete-start-addon]]:ps-[calc(var(--command-shell-inset)+0.0625rem)]">
       <AutocompleteInput
@@ -127,10 +111,7 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Autoco
 }
 
 // Pair with a LegendList child; the list owns scrolling and spacing.
-function CommandListVirtualized({
-  className,
-  ...props
-}: React.ComponentProps<typeof AutocompleteListVirtualized>) {
+function CommandListVirtualized({ className, ...props }: React.ComponentProps<typeof AutocompleteListVirtualized>) {
   return (
     <AutocompleteListVirtualized
       className={cn("flex max-h-[inherit] flex-col", className)}
@@ -140,13 +121,8 @@ function CommandListVirtualized({
   );
 }
 
-function CommandListHeading({
-  className,
-  ...props
-}: React.ComponentProps<typeof AutocompleteListHeading>) {
-  return (
-    <AutocompleteListHeading className={className} data-slot="command-group-label" {...props} />
-  );
+function CommandListHeading({ className, ...props }: React.ComponentProps<typeof AutocompleteListHeading>) {
+  return <AutocompleteListHeading className={className} data-slot="command-group-label" {...props} />;
 }
 
 function CommandPanel({ className, ...props }: React.ComponentProps<"div">) {
@@ -165,13 +141,8 @@ function CommandGroup({ className, ...props }: React.ComponentProps<typeof Autoc
   return <AutocompleteGroup className={className} data-slot="command-group" {...props} />;
 }
 
-function CommandGroupLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof AutocompleteGroupLabel>) {
-  return (
-    <AutocompleteGroupLabel className={className} data-slot="command-group-label" {...props} />
-  );
+function CommandGroupLabel({ className, ...props }: React.ComponentProps<typeof AutocompleteGroupLabel>) {
+  return <AutocompleteGroupLabel className={className} data-slot="command-group-label" {...props} />;
 }
 
 function CommandCollection({ ...props }: React.ComponentProps<typeof AutocompleteCollection>) {
@@ -205,10 +176,7 @@ function CommandItem({
 function CommandShortcut({ className, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd
-      className={cn(
-        "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest",
-        className,
-      )}
+      className={cn("ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest", className)}
       data-slot="command-shortcut"
       {...props}
     />
@@ -228,10 +196,7 @@ function CommandFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CommandFooterAction({
-  className,
-  ...props
-}: Omit<React.ComponentProps<typeof Button>, "size" | "variant">) {
+function CommandFooterAction({ className, ...props }: Omit<React.ComponentProps<typeof Button>, "size" | "variant">) {
   return (
     <Button
       {...props}

@@ -27,7 +27,9 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
 const board = (tasks: TaskSummary[]): BoardSnapshot => ({
   projects: [],
   tasks,
-  integrations: { t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null } },
+  integrations: {
+    t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
+  },
 });
 
 describe("applyBoardEvent", () => {
@@ -35,7 +37,10 @@ describe("applyBoardEvent", () => {
     const b = board([task("a", "idea", "a0")]);
     const updated = applyBoardEvent(b, { type: "task.upserted", task: task("a", "planned", "a0") });
     expect(updated.tasks[0]?.status).toBe("planned");
-    const archived = applyBoardEvent(b, { type: "task.upserted", task: { ...task("a", "idea", "a0"), archivedAt: "x" } });
+    const archived = applyBoardEvent(b, {
+      type: "task.upserted",
+      task: { ...task("a", "idea", "a0"), archivedAt: "x" },
+    });
     expect(archived.tasks).toHaveLength(0);
   });
 });

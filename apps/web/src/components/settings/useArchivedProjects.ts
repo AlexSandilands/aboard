@@ -22,7 +22,8 @@ export function useArchivedProjects(enabled: boolean) {
 export function useUnarchiveProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api<Project>(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: { archived: false } }),
+    mutationFn: (id: string) =>
+      api<Project>(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: { archived: false } }),
     // The server republishes the lane's tasks; refetching the board too covers a missed event.
     // Also used by the archive toast's Undo.
     onSuccess: () =>
@@ -30,6 +31,7 @@ export function useUnarchiveProject() {
         queryClient.invalidateQueries({ queryKey: archivedKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.board }),
       ]),
-    onError: (error) => toastManager.add({ type: "error", title: "Couldn't restore project", description: error.message }),
+    onError: (error) =>
+      toastManager.add({ type: "error", title: "Couldn't restore project", description: error.message }),
   });
 }

@@ -61,9 +61,7 @@ export function PlanTimeline({
               {task.progress.done}/{task.progress.total}
             </span>
             <Menu>
-              <MenuTrigger
-                render={<Button variant="ghost-muted" size="icon-xs" aria-label="Plan actions" />}
-              >
+              <MenuTrigger render={<Button variant="ghost-muted" size="icon-xs" aria-label="Plan actions" />}>
                 <EllipsisIcon />
               </MenuTrigger>
               <MenuPopup align="end">
@@ -183,9 +181,7 @@ function PlanPhases({ task, actions }: { task: TaskDetail; actions: PlanActions 
               currentStepId={currentStepId}
               open={openPhases[phase.id] ?? isPhaseOpenByDefault(phase, currentStepId)}
               onOpenChange={(open) => setOpenPhases((current) => ({ ...current, [phase.id]: open }))}
-              dropHighlight={
-                drag?.overPhaseHeader === phase.id && phaseOfStep(drag.order, drag.stepId) !== phase.id
-              }
+              dropHighlight={drag?.overPhaseHeader === phase.id && phaseOfStep(drag.order, drag.stepId) !== phase.id}
               actions={actions}
             />
           );

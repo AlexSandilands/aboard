@@ -40,7 +40,9 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
             .map((s) => [s, tasks.filter((t) => t.status === s).length] as const)
             .filter(([, n]) => n > 0)
             .map(([s, n]) => `${statusLabel(s as TaskStatus)} ${n}`);
-          lines.push(`${projectLabel(project)} — ${counts.length ? counts.join(", ") : "no tasks"}  [id: ${project.id}]`);
+          lines.push(
+            `${projectLabel(project)} — ${counts.length ? counts.join(", ") : "no tasks"}  [id: ${project.id}]`,
+          );
           for (const t of tasks.filter((t) => t.attention.length > 0)) {
             lines.push(`  ! #${t.number} ${t.title}: ${t.attention.map((a) => a.message).join("; ")}`);
           }
@@ -49,7 +51,9 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           const project = findProject(services, args);
           lines.push("");
           if (!project) {
-            lines.push(`No project for ${args.workspacePath ?? args.projectId} yet — it is created on first create_idea/create_task.`);
+            lines.push(
+              `No project for ${args.workspacePath ?? args.projectId} yet — it is created on first create_idea/create_task.`,
+            );
           } else {
             const open = active.filter((t) => t.projectId === project.id && t.status !== "done");
             lines.push(`Open tasks in ${project.title}:`);
@@ -125,10 +129,16 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           const projectIds = [...new Set(shown.map((t) => t.projectId))];
           for (const id of projectIds) {
             lines.push(`${projectLabel(projects.get(id))}:`);
-            lines.push(renderTaskGroups(shown.filter((t) => t.projectId === id), "  "));
+            lines.push(
+              renderTaskGroups(
+                shown.filter((t) => t.projectId === id),
+                "  ",
+              ),
+            );
           }
         }
-        if (tasks.length > shown.length) lines.push(`(${tasks.length - shown.length} more — narrow the filter or raise limit)`);
+        if (tasks.length > shown.length)
+          lines.push(`(${tasks.length - shown.length} more — narrow the filter or raise limit)`);
         return textResult(lines.join("\n"), {
           tasks: shown.map((t) => ({ taskId: t.id, number: t.number, title: t.title, status: t.status })),
         });
@@ -145,15 +155,23 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         "handover notes. ALWAYS call this before resuming work on an existing task.",
       inputSchema: {
         task: taskField,
-        events: z.number().int().min(0).max(100).optional().describe("How many recent activity entries to show (default 10)."),
+        events: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .optional()
+          .describe("How many recent activity entries to show (default 10)."),
       },
       annotations: { readOnlyHint: true },
     },
     (args) =>
       run(() => {
         const task = services.tasks.detail(services.tasks.resolveId(args.task));
-        return textResult(renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 }), taskStructured(task));
+        return textResult(
+          renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 }),
+          taskStructured(task),
+        );
       }),
   );
 };
-

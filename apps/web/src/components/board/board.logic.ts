@@ -1,4 +1,11 @@
-import { TASK_STATUSES, type AttentionReason, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
+import {
+  TASK_STATUSES,
+  type AttentionReason,
+  type BoardSnapshot,
+  type Project,
+  type TaskStatus,
+  type TaskSummary,
+} from "@repo/contracts";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** Done shows only the most recently finished tasks until the lane is expanded. */
@@ -58,7 +65,11 @@ function emptyCells(): Record<TaskStatus, TaskSummary[]> {
  * filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
  * (Show archived) join their lanes; the snapshot's copy wins if a task is in both.
  */
-export function buildLanes(board: BoardSnapshot, filters: BoardFilters, archived: ReadonlyArray<TaskSummary> = []): Lane[] {
+export function buildLanes(
+  board: BoardSnapshot,
+  filters: BoardFilters,
+  archived: ReadonlyArray<TaskSummary> = [],
+): Lane[] {
   const scoped = filters.projectId && board.projects.some((p) => p.id === filters.projectId) ? filters.projectId : null;
   const filtering = filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly;
   const byProject = new Map<string, Record<TaskStatus, TaskSummary[]>>();
@@ -140,6 +151,7 @@ export function attentionTasks(tasks: ReadonlyArray<TaskSummary>): TaskSummary[]
 /** Open (not Done) task counts per project, for the sidebar project list. */
 export function openTaskCounts(tasks: ReadonlyArray<TaskSummary>): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const task of tasks) if (task.status !== "done") counts.set(task.projectId, (counts.get(task.projectId) ?? 0) + 1);
+  for (const task of tasks)
+    if (task.status !== "done") counts.set(task.projectId, (counts.get(task.projectId) ?? 0) + 1);
   return counts;
 }

@@ -15,10 +15,7 @@ export function hasVisibleToastAction(actionProps: unknown): boolean {
   return children != null && children !== false && children !== "";
 }
 
-export function shouldHideCollapsedToastContent(
-  visibleToastIndex: number,
-  visibleToastCount: number,
-): boolean {
+export function shouldHideCollapsedToastContent(visibleToastIndex: number, visibleToastCount: number): boolean {
   // Keep the front-most toast readable even if Base UI marks it as "behind"
   // due to toasts hidden by thread filtering.
   if (visibleToastCount <= 1) return false;
@@ -61,34 +58,32 @@ export function buildVisibleToastLayout<TToast extends object>(
   let liveIndex = 0;
   let liveOffsetY = 0;
 
-  const items: VisibleToastLayoutItem<TToast & ToastWithLayoutProps>[] = visibleToasts.map(
-    (toast) => {
-      const height = normalizeToastHeight(toast.height);
+  const items: VisibleToastLayoutItem<TToast & ToastWithLayoutProps>[] = visibleToasts.map((toast) => {
+    const height = normalizeToastHeight(toast.height);
 
-      if (toast.transitionStatus === "ending") {
-        const item = {
-          toast,
-          visibleIndex: fullIndex,
-          offsetY: fullOffsetY,
-        };
-        fullOffsetY += height;
-        fullIndex += 1;
-        return item;
-      }
-
+    if (toast.transitionStatus === "ending") {
       const item = {
         toast,
-        visibleIndex: liveIndex,
-        offsetY: liveOffsetY,
+        visibleIndex: fullIndex,
+        offsetY: fullOffsetY,
       };
-
       fullOffsetY += height;
       fullIndex += 1;
-      liveOffsetY += height;
-      liveIndex += 1;
       return item;
-    },
-  );
+    }
+
+    const item = {
+      toast,
+      visibleIndex: liveIndex,
+      offsetY: liveOffsetY,
+    };
+
+    fullOffsetY += height;
+    fullIndex += 1;
+    liveOffsetY += height;
+    liveIndex += 1;
+    return item;
+  });
 
   // Frontmost height should reflect the first non-ending (live) toast so the
   // stack sizes to what's actually staying on screen.

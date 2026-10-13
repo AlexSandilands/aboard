@@ -44,8 +44,7 @@ function SelectTrigger({
   children,
   icon,
   ...props
-}: SelectPrimitive.Trigger.Props &
-  VariantProps<typeof selectTriggerVariants> & { icon?: React.ReactNode }) {
+}: SelectPrimitive.Trigger.Props & VariantProps<typeof selectTriggerVariants> & { icon?: React.ReactNode }) {
   return (
     <SelectPrimitive.Trigger
       className={cn(selectTriggerVariants({ size, variant }), className)}

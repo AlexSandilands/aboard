@@ -7,7 +7,9 @@ import type { Services } from "./services/types.ts";
 import type { AppContext } from "./app.ts";
 
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
-export function createContext(config: Pick<Config, "dbPath" | "port" | "token" | "t3Home" | "pollers">): AppContext & { db: Db } {
+export function createContext(
+  config: Pick<Config, "dbPath" | "port" | "token" | "t3Home" | "pollers">,
+): AppContext & { db: Db } {
   const db = openDatabase(config.dbPath);
   const bus = new EventBus();
   let services: Services | null = null;

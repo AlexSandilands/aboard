@@ -1,4 +1,12 @@
-import { CreateTaskInput, LinkInput, MoveTaskInput, PlanInput, TaskStatus, UpdateTaskInput , ACTOR_HEADER } from "@repo/contracts";
+import {
+  CreateTaskInput,
+  LinkInput,
+  MoveTaskInput,
+  PlanInput,
+  TaskStatus,
+  UpdateTaskInput,
+  ACTOR_HEADER,
+} from "@repo/contracts";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -65,8 +73,14 @@ export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
   app.post(
     "/api/tasks/:id/phases",
     handle(async (c) => {
-      const body = await parseBody(c, z.object({ title: z.string().trim().min(1), afterPhaseId: z.string().optional() }));
-      return c.json(services.plans.addPhase(taskId(c), body.title, actorOf(c), { afterPhaseId: body.afterPhaseId }), 201);
+      const body = await parseBody(
+        c,
+        z.object({ title: z.string().trim().min(1), afterPhaseId: z.string().optional() }),
+      );
+      return c.json(
+        services.plans.addPhase(taskId(c), body.title, actorOf(c), { afterPhaseId: body.afterPhaseId }),
+        201,
+      );
     }),
   );
   app.post(

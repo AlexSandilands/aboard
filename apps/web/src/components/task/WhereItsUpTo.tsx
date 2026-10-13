@@ -1,5 +1,12 @@
 import type { TaskDetail } from "@repo/contracts";
-import { CheckIcon, ChevronRightIcon, CircleCheckIcon, ListTodoIcon, MessageSquareQuoteIcon, PlayIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  CircleCheckIcon,
+  ListTodoIcon,
+  MessageSquareQuoteIcon,
+  PlayIcon,
+} from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
@@ -28,7 +35,11 @@ export function WhereItsUpTo({
 
   let heading: { label: string; tone: string; icon: ReactNode };
   if (total === 0) {
-    heading = { label: "No plan yet", tone: "text-muted-foreground", icon: <ListTodoIcon className="size-4 text-muted-foreground" /> };
+    heading = {
+      label: "No plan yet",
+      tone: "text-muted-foreground",
+      icon: <ListTodoIcon className="size-4 text-muted-foreground" />,
+    };
   } else if (!current) {
     heading = {
       label: "Done — all steps complete",
@@ -52,7 +63,10 @@ export function WhereItsUpTo({
           <span className="ms-auto flex shrink-0 items-center gap-2">
             <StepSegments statuses={task.stepStatuses} className="w-24" />
             <span
-              className={cn("text-xs tabular-nums", done === total ? "text-success-foreground" : "text-muted-foreground")}
+              className={cn(
+                "text-xs tabular-nums",
+                done === total ? "text-success-foreground" : "text-muted-foreground",
+              )}
             >
               {done}/{total}
             </span>
@@ -103,7 +117,9 @@ export function WhereItsUpTo({
             <span className="min-w-0 truncate">{task.lastNote.actor}</span>
             <span className="ms-auto shrink-0">{formatRelativeTimeLabel(task.lastNote.at)}</span>
           </div>
-          <p className="mt-1 line-clamp-3 text-xs whitespace-pre-wrap text-foreground/80 wrap-anywhere">{task.lastNote.text}</p>
+          <p className="mt-1 line-clamp-3 text-xs whitespace-pre-wrap text-foreground/80 wrap-anywhere">
+            {task.lastNote.text}
+          </p>
         </div>
       ) : null}
     </div>
@@ -128,7 +144,10 @@ function ClampedMarkdown({ text }: { text: string }) {
 
   return (
     <div className="mt-1.5">
-      <div ref={ref} className={cn(!expanded && "max-h-[4.5rem] overflow-hidden", !expanded && overflows && "mask-b-from-50%")}>
+      <div
+        ref={ref}
+        className={cn(!expanded && "max-h-[4.5rem] overflow-hidden", !expanded && overflows && "mask-b-from-50%")}
+      >
         <Markdown size="xs">{text}</Markdown>
       </div>
       {overflows || expanded ? (

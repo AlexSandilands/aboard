@@ -36,7 +36,10 @@ export function eventsUrl(): string {
 }
 
 /** JSON fetch against the server. Throws ApiError with the server's error code. */
-export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
+export async function api<T>(
+  path: string,
+  init?: { method?: string; body?: unknown; signal?: AbortSignal },
+): Promise<T> {
   const token = authToken();
   const headers: Record<string, string> = {};
   if (init?.body !== undefined) headers["content-type"] = "application/json";

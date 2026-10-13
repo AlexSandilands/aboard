@@ -27,7 +27,8 @@ export function useCloseTask() {
 export function useSetProjectFilter() {
   const navigate = useNavigate();
   return useCallback(
-    (projectId: string | null) => navigate({ to: "/", search: (prev) => ({ ...prev, project: projectId ?? undefined }) }),
+    (projectId: string | null) =>
+      navigate({ to: "/", search: (prev) => ({ ...prev, project: projectId ?? undefined }) }),
     [navigate],
   );
 }

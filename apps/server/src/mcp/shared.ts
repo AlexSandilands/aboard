@@ -81,7 +81,9 @@ export async function run(
       return errorResult(`${error.code}: ${error.message}${hint ? `\n${hint}` : ""}`);
     }
     if (error instanceof z.ZodError) {
-      return errorResult(`VALIDATION: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
+      return errorResult(
+        `VALIDATION: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`,
+      );
     }
     console.error("[mcp] tool failed", error);
     return errorResult(`INTERNAL: ${error instanceof Error ? error.message : "unexpected error"}`);
@@ -133,7 +135,10 @@ export function safeProject(services: Services, id: string): Project | undefined
 /** Mutating tools answer with a one-line confirmation plus the task's new state. */
 export function taskResult(services: Services, taskId: string, headline: string): CallToolResult {
   const task = services.tasks.detail(taskId);
-  return textResult(`${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`, taskStructured(task));
+  return textResult(
+    `${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`,
+    taskStructured(task),
+  );
 }
 
 /** set_plan / create_task accept a structured plan or markdown; returns null when neither was given. */

@@ -1,7 +1,14 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { PlanStep, StepStatus } from "@repo/contracts";
-import { ChevronRightIcon, EllipsisIcon, GripVerticalIcon, NotebookPenIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  EllipsisIcon,
+  GripVerticalIcon,
+  NotebookPenIcon,
+  PencilIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
@@ -96,12 +103,21 @@ export function PlanStepRow({
 
         <div className="relative flex w-6 shrink-0 justify-center">
           {prevStatus ? (
-            <span aria-hidden className={cn("absolute top-0 left-1/2 h-1.5 w-px -translate-x-1/2", RAIL_TONE[railSegmentTone(prevStatus, step.status)])} />
+            <span
+              aria-hidden
+              className={cn(
+                "absolute top-0 left-1/2 h-1.5 w-px -translate-x-1/2",
+                RAIL_TONE[railSegmentTone(prevStatus, step.status)],
+              )}
+            />
           ) : null}
           {nextStatus ? (
             <span
               aria-hidden
-              className={cn("absolute top-[26px] bottom-0 left-1/2 w-px -translate-x-1/2", RAIL_TONE[railSegmentTone(step.status, nextStatus)])}
+              className={cn(
+                "absolute top-[26px] bottom-0 left-1/2 w-px -translate-x-1/2",
+                RAIL_TONE[railSegmentTone(step.status, nextStatus)],
+              )}
             />
           ) : null}
           <StepNode step={step} onCycle={() => setStatus(cycleStepStatus(step.status))} />
@@ -188,7 +204,9 @@ export function PlanStepRow({
             }}
             className={cn(
               "flex size-6 items-center justify-center rounded-md text-muted-foreground/70 outline-none hover:bg-black/[0.035] hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:hover:bg-white/[0.08]",
-              !hasNotes && !expanded && "opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+              !hasNotes &&
+                !expanded &&
+                "opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
             )}
           >
             <ChevronRightIcon className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
@@ -250,7 +268,9 @@ function StepNode({ step, onCycle }: { step: PlanStep; onCycle: () => void }) {
       <TooltipPopup side="left">
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">{STEP_STATUS_LABELS[step.status]}</span>
-          {step.startedAt ? <span className="text-muted-foreground">Started {formatRelativeTimeLabel(step.startedAt)}</span> : null}
+          {step.startedAt ? (
+            <span className="text-muted-foreground">Started {formatRelativeTimeLabel(step.startedAt)}</span>
+          ) : null}
           {step.completedAt ? (
             <span className="text-muted-foreground">
               {step.status === "skipped" ? "Skipped" : "Completed"} {formatRelativeTimeLabel(step.completedAt)}

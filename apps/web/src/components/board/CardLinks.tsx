@@ -54,7 +54,11 @@ export function CardLinks({ links }: { links: ReadonlyArray<TaskLink> }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
       {links.map((link) =>
-        link.kind === "pr" ? <PrChip key={link.id} link={link} /> : link.kind === "t3_thread" ? <ThreadButton key={link.id} link={link} /> : null,
+        link.kind === "pr" ? (
+          <PrChip key={link.id} link={link} />
+        ) : link.kind === "t3_thread" ? (
+          <ThreadButton key={link.id} link={link} />
+        ) : null,
       )}
     </div>
   );
@@ -93,7 +97,9 @@ function ThreadButton({ link }: { link: Extract<TaskLink, { kind: "t3_thread" }>
   const status = link.snapshot ? THREAD_STATUS[link.snapshot.status] : null;
   return (
     <Tooltip>
-      <TooltipTrigger render={<a href={target.href} aria-label={target.label} className={chipClassName} {...linkHandlers} />}>
+      <TooltipTrigger
+        render={<a href={target.href} aria-label={target.label} className={chipClassName} {...linkHandlers} />}
+      >
         <MessagesSquareIcon aria-hidden className="size-3.5 shrink-0" />
         {status ? <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", status.dot)} /> : null}
       </TooltipTrigger>

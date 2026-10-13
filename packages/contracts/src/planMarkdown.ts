@@ -30,7 +30,11 @@ export function parsePlanMarkdown(markdown: string): PlanInput | null {
     .map((m) => m[1]!.length);
   let phaseLevel = headingLevels.length ? Math.min(...headingLevels) : 0;
   // A lone top-level heading followed by deeper headings is a document title.
-  if (phaseLevel && headingLevels.filter((l) => l === phaseLevel).length === 1 && headingLevels.some((l) => l > phaseLevel)) {
+  if (
+    phaseLevel &&
+    headingLevels.filter((l) => l === phaseLevel).length === 1 &&
+    headingLevels.some((l) => l > phaseLevel)
+  ) {
     phaseLevel = Math.min(...headingLevels.filter((l) => l > phaseLevel));
   }
 

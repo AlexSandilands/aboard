@@ -35,7 +35,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "created automatically if the board doesn't know it yet.",
       inputSchema: {
         title: z.string().min(1).describe("Short imperative title."),
-        description: z.string().optional().describe("Markdown: what and why, enough context for someone picking it up later."),
+        description: z
+          .string()
+          .optional()
+          .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
         actor: actorField,
       },
@@ -84,7 +87,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         requireProjectRef(args);
         const plan = planFromArgs(args);
         if (!plan) {
-          throw new AppError("VALIDATION", "create_task needs a plan (phases or markdown). Use create_idea for unplanned work.");
+          throw new AppError(
+            "VALIDATION",
+            "create_task needs a plan (phases or markdown). Use create_idea for unplanned work.",
+          );
         }
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
         const links: LinkInput[] = [
@@ -152,7 +158,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         title: z.string().min(1).optional(),
         description: z.string().optional().describe("Replaces the description (markdown)."),
         planContext: z.string().optional().describe("Replaces the plan context (markdown)."),
-        moveToProjectId: z.string().optional().describe("Moves the task to this project. Omit unless you mean to move it."),
+        moveToProjectId: z
+          .string()
+          .optional()
+          .describe("Moves the task to this project. Omit unless you mean to move it."),
         moveToWorkspacePath: z
           .string()
           .optional()

@@ -91,26 +91,20 @@ function Alert({
         className={cn(
           "flex gap-2",
           controlAlignment === "first-line" ? "items-start" : "items-center",
-          controlAlignment === "first-line" &&
-            action.length > 0 &&
-            "min-h-7 pt-1 sm:min-h-6 sm:pt-0.5",
+          controlAlignment === "first-line" && action.length > 0 && "min-h-7 pt-1 sm:min-h-6 sm:pt-0.5",
         )}
       >
         {icon.length > 0 && (
           <div
             className={cn(
               "flex shrink-0 items-center justify-center",
-              controlAlignment === "first-line"
-                ? "h-lh w-4 [&>svg]:size-4"
-                : "size-4 [&>svg]:size-full",
+              controlAlignment === "first-line" ? "h-lh w-4 [&>svg]:size-4" : "size-4 [&>svg]:size-full",
             )}
           >
             {icon}
           </div>
         )}
-        {content.length > 0 && (
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</div>
-        )}
+        {content.length > 0 && <div className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</div>}
         {action.length > 0 && (
           <div
             className={cn(

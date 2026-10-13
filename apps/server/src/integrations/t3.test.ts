@@ -26,14 +26,23 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function makeT3Home(opts: { runtime?: boolean; projects?: Array<[string, string, string, string | null, string | null]> } = {}) {
+function makeT3Home(
+  opts: { runtime?: boolean; projects?: Array<[string, string, string, string | null, string | null]> } = {},
+) {
   const home = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3home-`));
   tempDirs.push(home);
   mkdirSync(join(home, "userdata"));
   if (opts.runtime !== false) {
     writeFileSync(
       join(home, "userdata", "server-runtime.json"),
-      JSON.stringify({ version: 1, pid: 1, host: "127.0.0.1", port: 3773, origin: ORIGIN, startedAt: "2026-10-12T22:36:33.817Z" }),
+      JSON.stringify({
+        version: 1,
+        pid: 1,
+        host: "127.0.0.1",
+        port: 3773,
+        origin: ORIGIN,
+        startedAt: "2026-10-12T22:36:33.817Z",
+      }),
     );
   }
   if (opts.projects) {
@@ -59,7 +68,8 @@ afterEach(() => {
   for (const db of openDbs.splice(0)) db.close();
 });
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 const thread = (overrides: Partial<ShellThread> & { id: string }): ShellThread =>
   ShellThread.parse({
@@ -77,13 +87,21 @@ describe("mapThreadSnapshot", () => {
   it.each<[string, Partial<ShellThread>, T3ThreadSnapshot["status"]]>([
     ["approval request", { status: "running", pendingRuntimeRequest: { kind: "command" } }, "approval"],
     ["user input request", { status: "running", pendingRuntimeRequest: { kind: "user_input" } }, "input"],
-    ["auth refresh is not an approval", { status: "running", pendingRuntimeRequest: { kind: "auth_refresh" } }, "working"],
+    [
+      "auth refresh is not an approval",
+      { status: "running", pendingRuntimeRequest: { kind: "auth_refresh" } },
+      "working",
+    ],
     ["running", { status: "running" }, "working"],
     ["queued", { status: "queued" }, "working"],
     ["activity run status wins", { status: "completed", activityRunStatus: "starting" }, "working"],
     ["idle shell status", { status: "idle" }, "waiting"],
     ["subagent holds completion", { status: "completed", pendingBackgroundTasks: [{ kind: "subagent" }] }, "waiting"],
-    ["left-running command does not hold", { status: "completed", pendingBackgroundTasks: [{ kind: "command" }] }, "done"],
+    [
+      "left-running command does not hold",
+      { status: "completed", pendingBackgroundTasks: [{ kind: "command" }] },
+      "done",
+    ],
     ["failed", { status: "failed" }, "failed"],
     ["usage limited is failed", { status: "failed", lastErrorClass: "usage_limit" }, "failed"],
     ["completed", { status: "completed" }, "done"],
@@ -100,9 +118,17 @@ describe("mapThreadSnapshot", () => {
 
 describe("parseT3Icon", () => {
   it("accepts valid icons and drops invalid ones", () => {
-    expect(parseT3Icon('{"kind":"lucide","name":"rocket","color":"blue"}')).toEqual({ kind: "lucide", name: "rocket", color: "blue" });
+    expect(parseT3Icon('{"kind":"lucide","name":"rocket","color":"blue"}')).toEqual({
+      kind: "lucide",
+      name: "rocket",
+      color: "blue",
+    });
     expect(parseT3Icon({ kind: "emoji", emoji: "🚀" })).toEqual({ kind: "emoji", emoji: "🚀" });
-    expect(parseT3Icon('{"kind":"lucide","name":"folder","color":"red","monogramText":"TB"}')).toEqual({ kind: "monogram", text: "TB", color: "red" });
+    expect(parseT3Icon('{"kind":"lucide","name":"folder","color":"red","monogramText":"TB"}')).toEqual({
+      kind: "monogram",
+      text: "TB",
+      color: "red",
+    });
     expect(parseT3Icon('{"kind":"lucide","name":"Bad Name","color":"blue"}')).toBeNull();
     expect(parseT3Icon('{"kind":"hologram"}')).toBeNull();
     expect(parseT3Icon("not json")).toBeNull();
@@ -117,7 +143,12 @@ describe("discoverT3", () => {
       urls.push(url);
       return json({ environmentId: ENV_ID, label: "MY-PC", platform: { os: "windows", arch: "x64" } });
     };
-    expect(await discoverT3(home, fetchFn)).toEqual({ detected: true, origin: ORIGIN, environmentId: ENV_ID, label: "MY-PC" });
+    expect(await discoverT3(home, fetchFn)).toEqual({
+      detected: true,
+      origin: ORIGIN,
+      environmentId: ENV_ID,
+      label: "MY-PC",
+    });
     expect(urls).toEqual([`${ORIGIN}/.well-known/t3/environment`]);
   });
 
@@ -208,10 +239,17 @@ const SHELL_FIXTURE = {
     },
   ],
   threads: [
-    { ...thread({ id: "th-run", status: "running", title: "Build integrations" }), archivedAt: null, deletedAt: null, itemCount: 3 },
+    {
+      ...thread({ id: "th-run", status: "running", title: "Build integrations" }),
+      archivedAt: null,
+      deletedAt: null,
+      itemCount: 3,
+    },
     { ...thread({ id: "th-ask", status: "running", pendingRuntimeRequest: { kind: "user_input" } }), archivedAt: null },
   ],
-  archivedThreads: [{ ...thread({ id: "th-old", status: "completed", title: "Old" }), archivedAt: "2026-02-01T00:00:00.000Z" }],
+  archivedThreads: [
+    { ...thread({ id: "th-old", status: "completed", title: "Old" }), archivedAt: "2026-02-01T00:00:00.000Z" },
+  ],
 };
 
 function t3Fetch(opts: { shellStatus?: number; onShell?: (init: RequestInit | undefined) => void } = {}): FetchFn {
@@ -219,7 +257,9 @@ function t3Fetch(opts: { shellStatus?: number; onShell?: (init: RequestInit | un
     if (url.endsWith("/.well-known/t3/environment")) return json({ environmentId: ENV_ID, label: "MY-PC" });
     if (url.endsWith("/api/orchestration/shell")) {
       opts.onShell?.(init);
-      return opts.shellStatus && opts.shellStatus !== 200 ? json({ _tag: "EnvironmentAuthInvalidError" }, opts.shellStatus) : json(SHELL_FIXTURE);
+      return opts.shellStatus && opts.shellStatus !== 200
+        ? json({ _tag: "EnvironmentAuthInvalidError" }, opts.shellStatus)
+        : json(SHELL_FIXTURE);
     }
     return json({}, 404);
   };
@@ -234,13 +274,26 @@ describe("T3 integration", () => {
     const t3 = createT3Integration({ t3Home: makeT3Home(), bus, services: () => services, fetch: t3Fetch() });
     expect(t3.status().detected).toBe(false);
     const status = await t3.discover();
-    expect(status).toEqual({ detected: true, origin: ORIGIN, environmentId: ENV_ID, label: "MY-PC", liveStatus: "off", error: null });
+    expect(status).toEqual({
+      detected: true,
+      origin: ORIGIN,
+      environmentId: ENV_ID,
+      label: "MY-PC",
+      liveStatus: "off",
+      error: null,
+    });
     await t3.discover();
     expect(events.filter((e) => e.type === "integrations.changed")).toHaveLength(1);
   });
 
   it("polls the shell with bearer + protocol headers and updates matching thread links", async () => {
-    const links = [threadLink("l-run", "th-run"), threadLink("l-ask", "th-ask"), threadLink("l-old", "th-old"), threadLink("l-other", "th-run", "other-env"), threadLink("l-gone", "missing")];
+    const links = [
+      threadLink("l-run", "th-run"),
+      threadLink("l-ask", "th-ask"),
+      threadLink("l-old", "th-old"),
+      threadLink("l-other", "th-run", "other-env"),
+      threadLink("l-gone", "missing"),
+    ];
     const { services, snapshots } = fakeServices({ token: "tok", links });
     let headers: Record<string, string> = {};
     const t3 = createT3Integration({
@@ -261,17 +314,34 @@ describe("T3 integration", () => {
 
   it("reports a rejected token", async () => {
     const { services } = fakeServices({ token: "bad" });
-    const t3 = createT3Integration({ t3Home: makeT3Home(), bus: new EventBus(), services: () => services, fetch: t3Fetch({ shellStatus: 401 }), log: { warn: () => {} } });
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch({ shellStatus: 401 }),
+      log: { warn: () => {} },
+    });
     expect(await t3.test()).toMatchObject({ detected: true, liveStatus: "error", error: "Token rejected" });
   });
 
   it("lists projects from the shell when a token works, marking existing ones", async () => {
     const existing = fakeServices({ token: "tok" });
     existing.services.projects.create({ title: "Mine", workspaceRoot: "c:/code/acme/" });
-    const t3 = createT3Integration({ t3Home: makeT3Home(), bus: new EventBus(), services: () => existing.services, fetch: t3Fetch() });
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => existing.services,
+      fetch: t3Fetch(),
+    });
     const candidates = await t3.listProjects();
     expect(candidates).toEqual([
-      { t3ProjectId: "t3-p1", title: "Acme", workspaceRoot: "C:\\Code\\acme", icon: { kind: "lucide", name: "kanban", color: "violet" }, existingProjectId: "proj-1" },
+      {
+        t3ProjectId: "t3-p1",
+        title: "Acme",
+        workspaceRoot: "C:\\Code\\acme",
+        icon: { kind: "lucide", name: "kanban", color: "violet" },
+        existingProjectId: "proj-1",
+      },
       { t3ProjectId: "t3-p2", title: "T3 Code", workspaceRoot: "C:/Code/t3code", icon: null, existingProjectId: null },
     ]);
     const created = await t3.importProjects(["t3-p1", "t3-p2", "unknown"]);
@@ -303,10 +373,18 @@ describe("T3 sqlite import", () => {
     const { services } = fakeServices({ token: null });
     const t3 = createT3Integration({ t3Home: home, bus: new EventBus(), services: () => services, fetch: t3Fetch() });
     const candidates = await t3.listProjects();
-    expect(candidates.map((c) => [c.t3ProjectId, c.existingProjectId])).toEqual([["a", null], ["b", null]]);
+    expect(candidates.map((c) => [c.t3ProjectId, c.existingProjectId])).toEqual([
+      ["a", null],
+      ["b", null],
+    ]);
     const created = await t3.importProjects(["a"]);
     expect(created).toHaveLength(1);
-    expect(created[0]).toMatchObject({ title: "Alpha", workspaceRoot: "C:\\Work\\alpha", icon: { kind: "emoji", emoji: "🧪" }, t3ProjectId: "a" });
+    expect(created[0]).toMatchObject({
+      title: "Alpha",
+      workspaceRoot: "C:\\Work\\alpha",
+      icon: { kind: "emoji", emoji: "🧪" },
+      t3ProjectId: "a",
+    });
     expect((await t3.listProjects())[0]!.existingProjectId).toBe(created[0]!.id);
   });
 

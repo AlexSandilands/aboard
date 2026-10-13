@@ -13,11 +13,22 @@ const SEGMENT_TONE: Record<StepStatus, string> = {
 };
 
 /** Per-step segments for short plans, one continuous done-fraction bar for long ones. */
-export function TaskSegments({ steps, done, total }: { steps: ReadonlyArray<StepStatus>; done: number; total: number }) {
+export function TaskSegments({
+  steps,
+  done,
+  total,
+}: {
+  steps: ReadonlyArray<StepStatus>;
+  done: number;
+  total: number;
+}) {
   if (steps.length > MAX_SEGMENTS) {
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
     return (
-      <span aria-hidden className="relative flex h-[3px] w-16 shrink-0 overflow-hidden rounded-full bg-muted-foreground/25">
+      <span
+        aria-hidden
+        className="relative flex h-[3px] w-16 shrink-0 overflow-hidden rounded-full bg-muted-foreground/25"
+      >
         <span className="h-full rounded-full bg-success" style={{ width: `${percent}%` }} />
       </span>
     );
@@ -43,7 +54,10 @@ export function TaskProgressLine({ task }: { task: TaskSummary }) {
         {task.progress.done}/{task.progress.total}
       </span>
       {task.currentStep ? (
-        <span className="min-w-0 flex-1 truncate text-secondary-label" title={`${task.currentStep.phaseTitle} › ${task.currentStep.title}`}>
+        <span
+          className="min-w-0 flex-1 truncate text-secondary-label"
+          title={`${task.currentStep.phaseTitle} › ${task.currentStep.title}`}
+        >
           {task.currentStep.title}
         </span>
       ) : null}

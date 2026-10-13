@@ -179,7 +179,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       // The card's own cell needs no highlight.
       if (!source || !target || (target.projectId === source.projectId && target.status === source.status)) return null;
       const invalid = target.projectId !== source.projectId;
-      if (current && current.projectId === target.projectId && current.status === target.status && current.invalid === invalid) return current;
+      if (
+        current &&
+        current.projectId === target.projectId &&
+        current.status === target.status &&
+        current.invalid === invalid
+      )
+        return current;
       return { projectId: target.projectId, status: target.status, invalid };
     });
   };
@@ -195,7 +201,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     const cellTasks = lane ? lane.cells[target.status].filter((t) => !t.archivedAt) : [];
     const overTaskId = target.type === "task" && cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
     const activeRect = active.rect.current.translated;
-    const placeAfter = activeRect ? activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2 : false;
+    const placeAfter = activeRect
+      ? activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2
+      : false;
     const result = computeDrop({
       task,
       target,
@@ -231,7 +239,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       const collapsed = !project.collapsed;
       // Optimistic: the server's project.upserted event confirms it.
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) =>
-        current ? { ...current, projects: current.projects.map((p) => (p.id === project.id ? { ...p, collapsed } : p)) } : current,
+        current
+          ? { ...current, projects: current.projects.map((p) => (p.id === project.id ? { ...p, collapsed } : p)) }
+          : current,
       );
       updateProject.mutate(
         { id: project.id, collapsed },
@@ -267,7 +277,11 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => (
-                <div key={value} role="columnheader" className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
+                <div
+                  key={value}
+                  role="columnheader"
+                  className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
+                >
                   {label}
                   <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
                 </div>
@@ -298,7 +312,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             <DragOverlay>{activeTask ? <TaskCardOverlay task={activeTask} /> : null}</DragOverlay>
           </DndContext>
           {lanes.length === 0 ? (
-            <p className="ps-(--workspace-gutter-start) pt-6 text-sm text-muted-foreground">No tasks match the current filters.</p>
+            <p className="ps-(--workspace-gutter-start) pt-6 text-sm text-muted-foreground">
+              No tasks match the current filters.
+            </p>
           ) : null}
         </div>
       </div>

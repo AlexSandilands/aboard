@@ -134,9 +134,7 @@ function MenuCheckboxItem({
       checked={checked}
       className={cn(
         "grid min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center gap-2 rounded-sm py-1 ps-2 text-base text-foreground outline-none data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-        variant === "switch"
-          ? "grid-cols-[1fr_auto] gap-4 pe-1.5"
-          : "grid-cols-[1rem_minmax(0,1fr)] pe-4",
+        variant === "switch" ? "grid-cols-[1fr_auto] gap-4 pe-1.5" : "grid-cols-[1rem_minmax(0,1fr)] pe-4",
         className,
       )}
       data-slot="menu-checkbox-item"
@@ -202,11 +200,7 @@ function MenuRadioItem({
   );
 }
 
-function MenuRadioItemIndicator({
-  className,
-  children,
-  ...props
-}: MenuPrimitive.RadioItemIndicator.Props) {
+function MenuRadioItemIndicator({ className, children, ...props }: MenuPrimitive.RadioItemIndicator.Props) {
   return (
     <MenuPrimitive.RadioItemIndicator
       aria-hidden
@@ -252,10 +246,7 @@ function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
 function MenuShortcut({ className, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd
-      className={cn(
-        "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest",
-        className,
-      )}
+      className={cn("ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest", className)}
       data-slot="menu-shortcut"
       {...props}
     />

@@ -43,28 +43,51 @@ function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, o
     mutationFn: fn,
     onError: (error) => {
       if (opts?.silent) return;
-      toastManager.add({ type: "error", title: "Something went wrong", description: error instanceof Error ? error.message : String(error) });
+      toastManager.add({
+        type: "error",
+        title: "Something went wrong",
+        description: error instanceof Error ? error.message : String(error),
+      });
     },
   });
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────
 
-export const useCreateProject = (opts?: MutationOpts) => useApiMutation((input: CreateProjectInput) => api<Project>("/api/projects", { body: input }), opts);
+export const useCreateProject = (opts?: MutationOpts) =>
+  useApiMutation((input: CreateProjectInput) => api<Project>("/api/projects", { body: input }), opts);
 export const useUpdateProject = (opts?: MutationOpts) =>
-  useApiMutation(({ id, ...input }: UpdateProjectInput & { id: string }) => api<Project>(`/api/projects/${enc(id)}`, { method: "PATCH", body: input }), opts);
-export const useReorderProjects = (opts?: MutationOpts) => useApiMutation((ids: string[]) => api<void>("/api/projects/reorder", { body: { ids } }), opts);
-export const useDeleteProject = (opts?: MutationOpts) => useApiMutation((id: string) => api<void>(`/api/projects/${enc(id)}`, { method: "DELETE" }), opts);
+  useApiMutation(
+    ({ id, ...input }: UpdateProjectInput & { id: string }) =>
+      api<Project>(`/api/projects/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+export const useReorderProjects = (opts?: MutationOpts) =>
+  useApiMutation((ids: string[]) => api<void>("/api/projects/reorder", { body: { ids } }), opts);
+export const useDeleteProject = (opts?: MutationOpts) =>
+  useApiMutation((id: string) => api<void>(`/api/projects/${enc(id)}`, { method: "DELETE" }), opts);
 export const useImportT3Projects = (opts?: MutationOpts) =>
-  useApiMutation((t3ProjectIds: string[]) => api<Project[]>("/api/integrations/t3/import", { body: { t3ProjectIds } }), opts);
+  useApiMutation(
+    (t3ProjectIds: string[]) => api<Project[]>("/api/integrations/t3/import", { body: { t3ProjectIds } }),
+    opts,
+  );
 
 // ── Tasks ────────────────────────────────────────────────────────────────
 
-export const useCreateTask = (opts?: MutationOpts) => useApiMutation((input: CreateTaskInput) => api<TaskDetail>("/api/tasks", { body: input }), opts);
+export const useCreateTask = (opts?: MutationOpts) =>
+  useApiMutation((input: CreateTaskInput) => api<TaskDetail>("/api/tasks", { body: input }), opts);
 export const useUpdateTask = (opts?: MutationOpts) =>
-  useApiMutation(({ id, ...input }: UpdateTaskInput & { id: string }) => api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }), opts);
+  useApiMutation(
+    ({ id, ...input }: UpdateTaskInput & { id: string }) =>
+      api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
 export const useAddNote = (opts?: MutationOpts) =>
-  useApiMutation(({ taskId, text }: { taskId: string; text: string }) => api<unknown>(`/api/tasks/${enc(taskId)}/notes`, { body: { text } }), opts);
+  useApiMutation(
+    ({ taskId, text }: { taskId: string; text: string }) =>
+      api<unknown>(`/api/tasks/${enc(taskId)}/notes`, { body: { text } }),
+    opts,
+  );
 
 /**
  * Moves a task (status and/or order) with an optimistic board update, rolled back on error.
@@ -74,7 +97,8 @@ export const useAddNote = (opts?: MutationOpts) =>
 export function useMoveTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...input }: MoveTaskInput & { id: string }) => api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
+    mutationFn: ({ id, ...input }: MoveTaskInput & { id: string }) =>
+      api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
     onMutate: async ({ id, status, beforeId, afterId }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.board });
       const previous = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
@@ -88,7 +112,11 @@ export function useMoveTask() {
     onError: (error, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(queryKeys.board, context.previous);
       if (!isPlanRequired(error)) {
-        toastManager.add({ type: "error", title: "Couldn't move task", description: error instanceof Error ? error.message : String(error) });
+        toastManager.add({
+          type: "error",
+          title: "Couldn't move task",
+          description: error instanceof Error ? error.message : String(error),
+        });
       }
     },
   });
@@ -101,35 +129,58 @@ export function isPlanRequired(error: unknown): boolean {
 // ── Plans ────────────────────────────────────────────────────────────────
 
 export const useSetPlan = (opts?: MutationOpts) =>
-  useApiMutation(({ taskId, plan }: { taskId: string; plan: PlanInput }) => api<TaskDetail>(`/api/tasks/${enc(taskId)}/plan`, { method: "PUT", body: plan }), opts);
+  useApiMutation(
+    ({ taskId, plan }: { taskId: string; plan: PlanInput }) =>
+      api<TaskDetail>(`/api/tasks/${enc(taskId)}/plan`, { method: "PUT", body: plan }),
+    opts,
+  );
 export const useAddPhase = (opts?: MutationOpts) =>
-  useApiMutation(({ taskId, title, afterPhaseId }: { taskId: string; title: string; afterPhaseId?: string }) =>
-    api<PlanPhase>(`/api/tasks/${enc(taskId)}/phases`, { body: { title, afterPhaseId } }),
+  useApiMutation(
+    ({ taskId, title, afterPhaseId }: { taskId: string; title: string; afterPhaseId?: string }) =>
+      api<PlanPhase>(`/api/tasks/${enc(taskId)}/phases`, { body: { title, afterPhaseId } }),
     opts,
   );
 export const useUpdatePhase = (opts?: MutationOpts) =>
-  useApiMutation(({ phaseId, title }: { phaseId: string; title: string }) => api<PlanPhase>(`/api/phases/${enc(phaseId)}`, { method: "PATCH", body: { title } }), opts);
-export const useDeletePhase = (opts?: MutationOpts) => useApiMutation((phaseId: string) => api<void>(`/api/phases/${enc(phaseId)}`, { method: "DELETE" }), opts);
+  useApiMutation(
+    ({ phaseId, title }: { phaseId: string; title: string }) =>
+      api<PlanPhase>(`/api/phases/${enc(phaseId)}`, { method: "PATCH", body: { title } }),
+    opts,
+  );
+export const useDeletePhase = (opts?: MutationOpts) =>
+  useApiMutation((phaseId: string) => api<void>(`/api/phases/${enc(phaseId)}`, { method: "DELETE" }), opts);
 export const useAddSteps = (opts?: MutationOpts) =>
-  useApiMutation(({ phaseId, steps, afterStepId }: { phaseId: string; steps: PlanStepInput[]; afterStepId?: string }) =>
-    api<PlanStep[]>(`/api/phases/${enc(phaseId)}/steps`, { body: { steps, afterStepId } }),
+  useApiMutation(
+    ({ phaseId, steps, afterStepId }: { phaseId: string; steps: PlanStepInput[]; afterStepId?: string }) =>
+      api<PlanStep[]>(`/api/phases/${enc(phaseId)}/steps`, { body: { steps, afterStepId } }),
     opts,
   );
 export const useUpdateStep = (opts?: MutationOpts) =>
-  useApiMutation(({ stepId, ...patch }: StepPatch & { stepId: string }) => api<PlanStep>(`/api/steps/${enc(stepId)}`, { method: "PATCH", body: patch }), opts);
-export const useMoveStep = (opts?: MutationOpts) =>
-  useApiMutation(({ stepId, ...to }: { stepId: string; phaseId?: string; beforeId?: string | null; afterId?: string | null }) =>
-    api<PlanStep>(`/api/steps/${enc(stepId)}/move`, { body: to }),
+  useApiMutation(
+    ({ stepId, ...patch }: StepPatch & { stepId: string }) =>
+      api<PlanStep>(`/api/steps/${enc(stepId)}`, { method: "PATCH", body: patch }),
     opts,
   );
-export const useDeleteStep = (opts?: MutationOpts) => useApiMutation((stepId: string) => api<void>(`/api/steps/${enc(stepId)}`, { method: "DELETE" }), opts);
+export const useMoveStep = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ stepId, ...to }: { stepId: string; phaseId?: string; beforeId?: string | null; afterId?: string | null }) =>
+      api<PlanStep>(`/api/steps/${enc(stepId)}/move`, { body: to }),
+    opts,
+  );
+export const useDeleteStep = (opts?: MutationOpts) =>
+  useApiMutation((stepId: string) => api<void>(`/api/steps/${enc(stepId)}`, { method: "DELETE" }), opts);
 
 // ── Links ────────────────────────────────────────────────────────────────
 
 export const useAddLink = (opts?: MutationOpts) =>
-  useApiMutation(({ taskId, ...input }: LinkInput & { taskId: string }) => api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }), opts);
-export const useRemoveLink = (opts?: MutationOpts) => useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }), opts);
-export const useRefreshLink = (opts?: MutationOpts) => useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }), opts);
+  useApiMutation(
+    ({ taskId, ...input }: LinkInput & { taskId: string }) =>
+      api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }),
+    opts,
+  );
+export const useRemoveLink = (opts?: MutationOpts) =>
+  useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }), opts);
+export const useRefreshLink = (opts?: MutationOpts) =>
+  useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }), opts);
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -138,6 +189,11 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: (input: UpdateSettingsInput) => api<AppSettings>("/api/settings", { method: "PATCH", body: input }),
     onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
-    onError: (error) => toastManager.add({ type: "error", title: "Couldn't save settings", description: error instanceof Error ? error.message : String(error) }),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save settings",
+        description: error instanceof Error ? error.message : String(error),
+      }),
   });
 }

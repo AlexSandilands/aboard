@@ -65,10 +65,4 @@ function GroupSeparator({
   );
 }
 
-export {
-  Group,
-  Group as ButtonGroup,
-  GroupSeparator,
-  GroupSeparator as ButtonGroupSeparator,
-  groupVariants,
-};
+export { Group, Group as ButtonGroup, GroupSeparator, GroupSeparator as ButtonGroupSeparator, groupVariants };

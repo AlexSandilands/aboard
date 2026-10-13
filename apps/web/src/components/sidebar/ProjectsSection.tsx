@@ -11,7 +11,13 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { BoardSnapshot, Project } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,7 +70,9 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
     queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) =>
       current ? { ...current, projects: arrayMove(current.projects, from, to) } : current,
     );
-    reorderProjects.mutate(nextIds, { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.board }) });
+    reorderProjects.mutate(nextIds, {
+      onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.board }),
+    });
   };
 
   const handleSelect = (projectId: string) => {
@@ -82,7 +90,11 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
       {!expanded ? null : projects.length === 0 ? (
         <div className="flex flex-col items-start gap-2 px-2 py-2">
           <p className="text-xs text-sidebar-muted-foreground">Projects become swimlanes on the board.</p>
-          <Button variant="outline" size="xs" onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}
+          >
             <FolderPlusIcon />
             Add a project
           </Button>
@@ -132,13 +144,19 @@ const SortableProjectRow = memo(function SortableProjectRow({
   active: boolean;
   onSelect: (projectId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: project.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
+    id: project.id,
+  });
   const openSettings = () => useDialogs.getState().openProjectSettings(project.id);
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn("group/menu-item relative rounded-md", isDragging && "z-20 opacity-80", isOver && !isDragging && "ring-1 ring-inset ring-primary/40")}
+      className={cn(
+        "group/menu-item relative rounded-md",
+        isDragging && "z-20 opacity-80",
+        isOver && !isDragging && "ring-1 ring-inset ring-primary/40",
+      )}
       data-sidebar="menu-item"
       data-slot="sidebar-menu-item"
     >

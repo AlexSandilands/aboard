@@ -84,7 +84,17 @@ export function usePlanActions(taskId: string) {
         mutateDeletePhase(phaseId, { onError });
       },
     };
-  }, [queryClient, taskId, mutateUpdateStep, mutateMoveStep, mutateDeleteStep, mutateAddSteps, mutateAddPhase, mutateUpdatePhase, mutateDeletePhase]);
+  }, [
+    queryClient,
+    taskId,
+    mutateUpdateStep,
+    mutateMoveStep,
+    mutateDeleteStep,
+    mutateAddSteps,
+    mutateAddPhase,
+    mutateUpdatePhase,
+    mutateDeletePhase,
+  ]);
 }
 
 export type PlanActions = ReturnType<typeof usePlanActions>;

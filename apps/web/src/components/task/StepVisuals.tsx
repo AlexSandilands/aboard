@@ -20,7 +20,10 @@ export function StepSegments({ statuses, className }: { statuses: ReadonlyArray<
   if (statuses.length > MAX_SEGMENTS) {
     const done = statuses.filter((s) => s === "done" || s === "skipped").length;
     return (
-      <span aria-hidden className={cn("flex h-[3px] w-10 shrink-0 overflow-hidden rounded-full bg-muted-foreground/25", className)}>
+      <span
+        aria-hidden
+        className={cn("flex h-[3px] w-10 shrink-0 overflow-hidden rounded-full bg-muted-foreground/25", className)}
+      >
         <span className="h-full rounded-full bg-success" style={{ width: `${(done / statuses.length) * 100}%` }} />
       </span>
     );

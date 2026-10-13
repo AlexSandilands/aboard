@@ -8,13 +8,7 @@ import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Input, type InputProps } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import {
-  Sheet,
-  SheetDescription,
-  SheetHeader,
-  SheetPopup,
-  SheetTitle,
-} from "~/components/ui/sheet";
+import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "~/components/ui/sheet";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
@@ -147,16 +141,7 @@ function SidebarProvider({
       state,
       toggleSidebar,
     }),
-    [
-      state,
-      open,
-      setOpen,
-      isMobile,
-      openMobile,
-      mobileSheetMounted,
-      setMobileSheetElement,
-      toggleSidebar,
-    ],
+    [state, open, setOpen, isMobile, openMobile, mobileSheetMounted, setMobileSheetElement, toggleSidebar],
   );
 
   return (
@@ -370,23 +355,17 @@ function SidebarRail({
     const rail = event.currentTarget;
     const wrapper = rail.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
     const sidebarRoot = rail.closest<HTMLElement>("[data-slot='sidebar']");
-    const sidebarContainer = sidebarRoot?.querySelector<HTMLElement>(
-      "[data-slot='sidebar-container']",
-    );
+    const sidebarContainer = sidebarRoot?.querySelector<HTMLElement>("[data-slot='sidebar-container']");
     if (!wrapper || !sidebarRoot || !sidebarContainer) return null;
 
     const side = sidebarInstance?.side ?? "left";
-    let width = clampSidebarWidth(
-      sidebarContainer.getBoundingClientRect().width,
-      resolvedResizable,
-    );
+    let width = clampSidebarWidth(sidebarContainer.getBoundingClientRect().width, resolvedResizable);
     // Drag frames write width to the gap and container only. Changing the
     // inherited --sidebar-width on the wrapper restyles the whole app, so it is
     // written once when the drag commits.
-    const widthTargets = [
-      sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"),
-      sidebarContainer,
-    ].filter((element): element is HTMLElement => element !== null);
+    const widthTargets = [sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"), sidebarContainer].filter(
+      (element): element is HTMLElement => element !== null,
+    );
     const setTargetWidth = (value: number) => {
       widthTargets.forEach((element) => {
         element.style.setProperty("width", `${value}px`);
@@ -621,10 +600,7 @@ function SidebarContent({
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]",
-        className,
-      )}
+      className={cn("relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]", className)}
       data-sidebar="group"
       data-slot="sidebar-group"
       {...props}
@@ -663,8 +639,7 @@ const sidebarMenuButtonVariants = cva(
     },
     variants: {
       size: {
-        default:
-          "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
+        default: "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
         icon: "size-8 justify-center rounded-[var(--control-radius)] p-0",
         lg: "h-12 rounded-lg p-2 text-sm group-data-[collapsible=icon]:p-0!",
         sm: "h-7 rounded-lg p-2 text-xs",
@@ -720,12 +695,7 @@ function SidebarMenuButton({
   return (
     <Tooltip>
       <TooltipTrigger render={buttonElement as React.ReactElement<Record<string, unknown>>} />
-      <TooltipPopup
-        align="center"
-        hidden={state !== "collapsed" || isMobile}
-        side="right"
-        {...tooltip}
-      />
+      <TooltipPopup align="center" hidden={state !== "collapsed" || isMobile} side="right" {...tooltip} />
     </Tooltip>
   );
 }

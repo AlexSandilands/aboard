@@ -38,7 +38,11 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; withDb?: boolean } = {}) 
   let services: Services | null = null;
   const integrations = createIntegrations(
     { config: { t3Home, pollers: false }, bus, services: () => services! },
-    { log: { warn: () => {} }, ...(opts.runGh ? { runGh: opts.runGh } : {}), ...(opts.fetch ? { fetch: opts.fetch } : {}) },
+    {
+      log: { warn: () => {} },
+      ...(opts.runGh ? { runGh: opts.runGh } : {}),
+      ...(opts.fetch ? { fetch: opts.fetch } : {}),
+    },
   );
   services = createServices({ db: openDatabase(":memory:"), bus, t3Status: () => integrations.t3Status() });
   return { services, integrations, events };
@@ -67,7 +71,9 @@ describe("createIntegrations with real services", () => {
     const link = services.links.add(task.id, { value: "https://github.com/o/r/pull/5" }, "user");
     events.length = 0;
     await integrations.refreshLink(link.id);
-    expect(services.links.get(link.id)).toMatchObject({ snapshot: { title: "Fix it", checks: "failing", mergeable: "conflicting" } });
+    expect(services.links.get(link.id)).toMatchObject({
+      snapshot: { title: "Fix it", checks: "failing", mergeable: "conflicting" },
+    });
     expect(services.tasks.summary(task.id).attention.map((a) => a.kind)).toEqual([
       "pr_checks_failing",
       "pr_changes_requested",
@@ -82,7 +88,17 @@ describe("createIntegrations with real services", () => {
         ? Response.json({ environmentId: ENV_ID, label: "box" })
         : Response.json({
             projects: [],
-            threads: [{ id: "th1", projectId: "p", title: "Agent thread", status: "running", latestRunId: "r", activeProviderThreadId: null, pendingRuntimeRequest: { kind: "permission" } }],
+            threads: [
+              {
+                id: "th1",
+                projectId: "p",
+                title: "Agent thread",
+                status: "running",
+                latestRunId: "r",
+                activeProviderThreadId: null,
+                pendingRuntimeRequest: { kind: "permission" },
+              },
+            ],
             archivedThreads: [],
           });
     const { services, integrations } = setup({ fetch: fetchFn });
@@ -106,12 +122,25 @@ describe("createIntegrations with real services", () => {
     ]);
     const created = await integrations.importT3Projects(["t3-a", "t3-b"]);
     expect(created).toHaveLength(1);
-    expect(created[0]).toMatchObject({ title: "Alpha", t3ProjectId: "t3-a", icon: { kind: "monogram", text: "AL", color: "teal" } });
-    expect(services.projects.list().map((p) => p.title).sort()).toEqual(["Alpha", "Mine"]);
+    expect(created[0]).toMatchObject({
+      title: "Alpha",
+      t3ProjectId: "t3-a",
+      icon: { kind: "monogram", text: "AL", color: "teal" },
+    });
+    expect(
+      services.projects
+        .list()
+        .map((p) => p.title)
+        .sort(),
+    ).toEqual(["Alpha", "Mine"]);
   });
 
   it("start() is a no-op when pollers are disabled", () => {
-    const { integrations } = setup({ runGh: async () => { throw new Error("should not spawn"); } });
+    const { integrations } = setup({
+      runGh: async () => {
+        throw new Error("should not spawn");
+      },
+    });
     integrations.start();
     integrations.stop();
   });

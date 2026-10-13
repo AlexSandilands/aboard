@@ -32,7 +32,14 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
           <h1 className="truncate text-sm font-medium">{scopedProject.title}</h1>
           <Tooltip>
             <TooltipTrigger
-              render={<Button variant="ghost-muted" size="icon-micro" aria-label="Show all projects" onClick={() => void setProjectFilter(null)} />}
+              render={
+                <Button
+                  variant="ghost-muted"
+                  size="icon-micro"
+                  aria-label="Show all projects"
+                  onClick={() => void setProjectFilter(null)}
+                />
+              }
             >
               <XIcon />
             </TooltipTrigger>
@@ -48,7 +55,9 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
             <TooltipTrigger
               render={
                 <MenuTrigger
-                  render={<Button variant={filtered ? "secondary" : "ghost-muted"} size="icon-sm" aria-label="Filter board" />}
+                  render={
+                    <Button variant={filtered ? "secondary" : "ghost-muted"} size="icon-sm" aria-label="Filter board" />
+                  }
                 />
               }
             >

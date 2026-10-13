@@ -23,7 +23,9 @@ import { useUnarchiveProject } from "./useArchivedProjects";
 
 // The picker pulls in lucide's full icon index; load it only when someone picks an icon.
 const ProjectIconPickerDialog = lazy(() =>
-  import("~/components/project/ProjectIconPickerDialog").then((module) => ({ default: module.ProjectIconPickerDialog })),
+  import("~/components/project/ProjectIconPickerDialog").then((module) => ({
+    default: module.ProjectIconPickerDialog,
+  })),
 );
 
 /** Project settings, opened from the sidebar gear via useDialogs().openProjectSettings(id). */
@@ -121,7 +123,11 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
                   <ProjectFavicon title={project.title} icon={project.icon} className="size-5" />
                 </span>
                 {project.icon ? (
-                  <Button size="sm" variant="ghost" onClick={() => updateProject.mutate({ id: project.id, icon: null })}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => updateProject.mutate({ id: project.id, icon: null })}
+                  >
                     Reset
                   </Button>
                 ) : null}
@@ -144,7 +150,11 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
               browsing ? null : (
                 <>
                   {project.workspaceRoot ? (
-                    <Button size="sm" variant="ghost" onClick={() => updateProject.mutate({ id: project.id, workspaceRoot: null })}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => updateProject.mutate({ id: project.id, workspaceRoot: null })}
+                    >
                       Clear
                     </Button>
                   ) : null}

@@ -32,7 +32,9 @@ export function SidebarBrandRow() {
   return (
     <div className="relative flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 ps-4 pe-2">
       <SidebarStageBackdrop />
-      <span className="relative z-10 min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-white">{BRAND.name}</span>
+      <span className="relative z-10 min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-white">
+        {BRAND.name}
+      </span>
       <div className="relative z-10 flex items-center">
         <BackdropIconButton label={`Switch to ${nextTheme} theme`} onClick={() => setTheme(nextTheme)}>
           {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}

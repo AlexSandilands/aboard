@@ -26,6 +26,7 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    and key decisions in `context`. Markdown checklists work too:
    ```markdown
    ## Phase 1: Data
+
    - [ ] Add migration for links table
    - [ ] Repository + tests
    ```

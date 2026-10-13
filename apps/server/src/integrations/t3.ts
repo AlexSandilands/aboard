@@ -129,7 +129,9 @@ const NOT_DETECTED: Discovery = { detected: false, origin: null, environmentId: 
 export async function discoverT3(t3Home: string, fetchFn: FetchFn): Promise<Discovery> {
   let origin: string;
   try {
-    const runtime = RuntimeFile.safeParse(JSON.parse(readFileSync(join(t3Home, "userdata", "server-runtime.json"), "utf8")));
+    const runtime = RuntimeFile.safeParse(
+      JSON.parse(readFileSync(join(t3Home, "userdata", "server-runtime.json"), "utf8")),
+    );
     if (!runtime.success) return NOT_DETECTED;
     origin = runtime.data.origin.replace(/\/+$/, "");
   } catch {
@@ -142,7 +144,12 @@ export async function discoverT3(t3Home: string, fetchFn: FetchFn): Promise<Disc
     if (!response.ok) return NOT_DETECTED;
     const descriptor = EnvironmentDescriptor.safeParse(await response.json());
     if (!descriptor.success) return NOT_DETECTED;
-    return { detected: true, origin, environmentId: descriptor.data.environmentId, label: descriptor.data.label ?? null };
+    return {
+      detected: true,
+      origin,
+      environmentId: descriptor.data.environmentId,
+      label: descriptor.data.label ?? null,
+    };
   } catch {
     return NOT_DETECTED;
   }
@@ -202,7 +209,12 @@ export function readT3ProjectsFromSqlite(t3Home: string): T3SqliteProject[] {
           `SELECT project_id, title, workspace_root, ${iconColumn} AS project_icon_json
            FROM projection_projects WHERE deleted_at IS NULL ORDER BY created_at ASC`,
         )
-        .all() as Array<{ project_id: string; title: string; workspace_root: string; project_icon_json: string | null }>;
+        .all() as Array<{
+        project_id: string;
+        title: string;
+        workspace_root: string;
+        project_icon_json: string | null;
+      }>;
       return rows.map((row) => ({
         t3ProjectId: row.project_id,
         title: row.title,
@@ -266,7 +278,10 @@ export function createT3Integration(deps: {
   const fetchFn: FetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
   const log = deps.log ?? console;
   let discovery: Discovery = NOT_DETECTED;
-  let live: { liveStatus: T3IntegrationStatus["liveStatus"]; error: string | null } = { liveStatus: "off", error: null };
+  let live: { liveStatus: T3IntegrationStatus["liveStatus"]; error: string | null } = {
+    liveStatus: "off",
+    error: null,
+  };
   let discovered = false;
   let discovering: Promise<T3IntegrationStatus> | null = null;
   let polling: Promise<void> | null = null;
@@ -384,7 +399,10 @@ export function createT3Integration(deps: {
       const key = project.workspaceKey ?? (project.workspaceRoot ? normalizeWorkspaceKey(project.workspaceRoot) : null);
       if (key) existing.set(key, project.id);
     }
-    return source.map((p) => ({ ...p, existingProjectId: existing.get(normalizeWorkspaceKey(p.workspaceRoot)) ?? null }));
+    return source.map((p) => ({
+      ...p,
+      existingProjectId: existing.get(normalizeWorkspaceKey(p.workspaceRoot)) ?? null,
+    }));
   };
 
   return {

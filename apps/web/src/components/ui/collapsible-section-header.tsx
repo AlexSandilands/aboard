@@ -38,16 +38,11 @@ export function CollapsibleSectionHeader({
       <span className="shrink-0">{children}</span>
       <span aria-hidden className={cn("h-px min-w-2 flex-1", tones[tone].line)} />
       {accessory}
-      <ChevronDownIcon
-        aria-hidden
-        className={cn("size-3 shrink-0 transition-transform", !expanded && "rotate-180")}
-      />
+      <ChevronDownIcon aria-hidden className={cn("size-3 shrink-0 transition-transform", !expanded && "rotate-180")} />
     </button>
   );
 }
 
 export function SectionHeaderStatus({ children }: { children: ReactNode }) {
-  return (
-    <span className="shrink-0 text-3xs leading-none text-destructive-foreground">{children}</span>
-  );
+  return <span className="shrink-0 text-3xs leading-none text-destructive-foreground">{children}</span>;
 }

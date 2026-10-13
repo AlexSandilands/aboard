@@ -19,10 +19,7 @@ export function ProjectMonogram({
   // in with [&_svg]:-mx-0.5 to trim the padding stroke icons carry, and this
   // tile has no such padding.
   return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-flex size-4 shrink-0 items-center justify-center", className)}
-    >
+    <span aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center", className)}>
       <svg
         viewBox="0 0 16 16"
         className={cn(

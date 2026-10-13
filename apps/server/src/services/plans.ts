@@ -35,7 +35,10 @@ export interface PlansModule {
 }
 
 /** Plan phases and steps, including the plan gate. */
-export function createPlans(core: Core, deps: { task: (id: string) => TaskRecord; detail: (id: string) => ReturnType<PlansService["setPlan"]> }): PlansModule {
+export function createPlans(
+  core: Core,
+  deps: { task: (id: string) => TaskRecord; detail: (id: string) => ReturnType<PlansService["setPlan"]> },
+): PlansModule {
   const { repos } = core;
 
   const phaseOrThrow = (id: string): PhaseRecord => {
@@ -63,7 +66,13 @@ export function createPlans(core: Core, deps: { task: (id: string) => TaskRecord
   };
   const touchTask = (task: TaskRecord, now: string) => repos.tasks.update({ ...task, updatedAt: now });
 
-  const newStep = (taskId: string, phaseId: string, input: PlanInput["phases"][number]["steps"][number], position: string, now: string): StepRecord =>
+  const newStep = (
+    taskId: string,
+    phaseId: string,
+    input: PlanInput["phases"][number]["steps"][number],
+    position: string,
+    now: string,
+  ): StepRecord =>
     withStatus(
       {
         id: randomUUID(),
@@ -95,7 +104,14 @@ export function createPlans(core: Core, deps: { task: (id: string) => TaskRecord
       const existingPhase = phaseInput.id ? oldPhases.get(phaseInput.id) : undefined;
       const phase: PhaseRecord = existingPhase
         ? { ...existingPhase, title: phaseInput.title, position: phaseKeys[pi]!, updatedAt: now }
-        : { id: randomUUID(), taskId: task.id, title: phaseInput.title, position: phaseKeys[pi]!, createdAt: now, updatedAt: now };
+        : {
+            id: randomUUID(),
+            taskId: task.id,
+            title: phaseInput.title,
+            position: phaseKeys[pi]!,
+            createdAt: now,
+            updatedAt: now,
+          };
       if (existingPhase) repos.plans.updatePhase(phase);
       else repos.plans.insertPhase(phase);
       keptPhases.add(phase.id);

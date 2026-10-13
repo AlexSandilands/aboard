@@ -378,7 +378,7 @@ export const FsBrowseResult = z.object({
 });
 export type FsBrowseResult = z.infer<typeof FsBrowseResult>;
 
-export const ApiErrorCode =z.enum(["NOT_FOUND", "PLAN_REQUIRED", "VALIDATION", "CONFLICT", "INTERNAL"]);
+export const ApiErrorCode = z.enum(["NOT_FOUND", "PLAN_REQUIRED", "VALIDATION", "CONFLICT", "INTERNAL"]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 
 export const ApiErrorBody = z.object({

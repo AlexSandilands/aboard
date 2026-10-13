@@ -70,10 +70,7 @@ function ComboboxInput({
         data-slot="combobox-input"
         render={
           <Input
-            className={cn(
-              "has-disabled:opacity-100",
-              unstyled && "rounded-none bg-transparent text-sm",
-            )}
+            className={cn("has-disabled:opacity-100", unstyled && "rounded-none bg-transparent text-sm")}
             nativeInput
             size={sizeValue}
             unstyled={unstyled}
@@ -215,10 +212,7 @@ function ComboboxItem({
 function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
   return (
     <ComboboxPrimitive.Empty
-      className={cn(
-        "not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm",
-        className,
-      )}
+      className={cn("not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm", className)}
       data-slot="combobox-empty"
       {...props}
     />
@@ -258,10 +252,7 @@ function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
 function ComboboxStatus({ className, ...props }: ComboboxPrimitive.Status.Props) {
   return (
     <ComboboxPrimitive.Status
-      className={cn(
-        "px-3 py-2 font-medium text-muted-foreground text-xs empty:m-0 empty:p-0",
-        className,
-      )}
+      className={cn("px-3 py-2 font-medium text-muted-foreground text-xs empty:m-0 empty:p-0", className)}
       data-slot="combobox-status"
       {...props}
     />

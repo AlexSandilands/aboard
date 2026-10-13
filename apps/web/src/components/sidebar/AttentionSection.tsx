@@ -10,7 +10,13 @@ import { ATTENTION_LABELS, attentionTasks, topAttention } from "~/components/boa
 import { useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 
 /** "Needs attention": every task with an attention reason, errors first. Hidden when empty. */
-export function AttentionSection({ tasks, projects }: { tasks: ReadonlyArray<TaskSummary>; projects: ReadonlyArray<Project> }) {
+export function AttentionSection({
+  tasks,
+  projects,
+}: {
+  tasks: ReadonlyArray<TaskSummary>;
+  projects: ReadonlyArray<Project>;
+}) {
   const [expanded, setExpanded] = useState(true);
   const flagged = useMemo(() => attentionTasks(tasks), [tasks]);
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
@@ -66,7 +72,9 @@ const AttentionRow = memo(function AttentionRow({
         aria-label={`#${task.number} ${task.title}: ${reason.message}`}
         className={cn(
           "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          selected ? "bg-sidebar-row-selected text-sidebar-foreground" : "bg-transparent text-sidebar-foreground hover:bg-sidebar-row-hover",
+          selected
+            ? "bg-sidebar-row-selected text-sidebar-foreground"
+            : "bg-transparent text-sidebar-foreground hover:bg-sidebar-row-hover",
         )}
         onClick={() => onOpen(task.id)}
         onKeyDown={(event) => {
@@ -78,8 +86,15 @@ const AttentionRow = memo(function AttentionRow({
         <div className="relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)">
           <div className="flex h-5 min-w-0 items-center gap-1.5">
             {project ? <ProjectFavicon title={project.title} icon={project.icon} className="size-4 shrink-0" /> : null}
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-label">{project?.title ?? ""}</span>
-            <span className={cn("ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium", ATTENTION_TONE[reason.severity])}>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-label">
+              {project?.title ?? ""}
+            </span>
+            <span
+              className={cn(
+                "ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium",
+                ATTENTION_TONE[reason.severity],
+              )}
+            >
               <AttentionIcon severity={reason.severity} className="size-4" />
               {ATTENTION_LABELS[reason.kind]}
             </span>

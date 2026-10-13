@@ -138,7 +138,9 @@ function LinkRow({
         >
           <TicketIcon className={PANEL_ICON_CLASS} />
           <span className="shrink-0 font-mono text-xs">{link.ref.key}</span>
-          {link.label ? <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{link.label}</span> : null}
+          {link.label ? (
+            <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{link.label}</span>
+          ) : null}
         </RowWithMenu>
       );
     }
