@@ -145,7 +145,9 @@ describe("events", () => {
     expect(events.map((e) => e.type)).toEqual(["task.upserted", "task.detail_changed"]);
 
     events.length = 0;
-    expect(() => s.tasks.create({ projectId: project.id, title: "Bad", links: [{ value: "not a link" }] })).toThrow();
+    expect(() => s.tasks.create({ projectId: project.id, title: "Bad", links: [{ value: "not a link" }] })).toThrow(
+      "Not a recognisable link",
+    );
     expect(events).toEqual([]);
     expect(s.tasks.summaries({ projectId: project.id })).toHaveLength(1);
   });

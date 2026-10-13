@@ -93,6 +93,7 @@ function InputGroupAddon({
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
   return (
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- mouse convenience that forwards focus to the input; keyboard users reach the input directly
     <div
       className={cn(inputGroupAddonVariants({ align, inset }), className)}
       data-align={align}

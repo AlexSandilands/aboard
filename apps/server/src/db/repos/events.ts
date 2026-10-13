@@ -11,7 +11,7 @@ interface EventRow {
 }
 
 const toEvent = (r: EventRow): TaskEvent => ({
-  id: Number(r.id),
+  id: r.id,
   taskId: r.task_id,
   at: r.at,
   actor: r.actor,
@@ -54,4 +54,3 @@ export function createEventsRepo(sql: Sql) {
     },
   };
 }
-export type EventsRepo = ReturnType<typeof createEventsRepo>;

@@ -180,6 +180,7 @@ function RowWithMenu({
 }) {
   return (
     <PanelSplitGroup>
+      {/* oxlint-disable-next-line jsx-a11y/anchor-has-content -- Base UI's render prop receives PanelControl's children */}
       <PanelControl part="fill" title={title} render={href ? <a {...linkProps(href)} /> : <div />}>
         {children}
       </PanelControl>

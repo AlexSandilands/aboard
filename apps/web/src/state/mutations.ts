@@ -1,7 +1,6 @@
 import type {
   AppSettings,
   BoardSnapshot,
-  CreateProjectInput,
   CreateTaskInput,
   LinkInput,
   MoveTaskInput,
@@ -54,8 +53,6 @@ function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, o
 
 // ── Projects ─────────────────────────────────────────────────────────────
 
-export const useCreateProject = (opts?: MutationOpts) =>
-  useApiMutation((input: CreateProjectInput) => api<Project>("/api/projects", { body: input }), opts);
 export const useUpdateProject = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateProjectInput & { id: string }) =>

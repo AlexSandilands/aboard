@@ -86,7 +86,7 @@ export function renderTaskGroups(tasks: ReadonlyArray<TaskSummary>, indent = "")
 
 function eventText(event: TaskEvent): string {
   const p = event.payload;
-  const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : undefined);
+  const str = (k: string) => (typeof p[k] === "string" ? p[k] : undefined);
   let what: string;
   switch (event.type) {
     case "note":

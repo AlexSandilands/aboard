@@ -67,7 +67,7 @@ function subscribe(listener: () => void) {
 }
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, readTheme, () => "dark" as Theme);
+  const theme = useSyncExternalStore(subscribe, readTheme, () => "dark");
   const resolvedTheme = useSyncExternalStore(
     subscribe,
     () => resolve(readTheme()),

@@ -176,6 +176,7 @@ function PlanPreview({ plan }: { plan: PlanInput }) {
     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/40 p-3">
       {plan.context ? <p className="line-clamp-2 text-xs text-muted-foreground">{plan.context}</p> : null}
       {plan.phases.map((phase, pi) => (
+        // oxlint-disable-next-line react/no-array-index-key -- read-only preview of a parsed draft; items have no ids
         <div key={pi}>
           <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground/85">
             <span className="font-mono text-2xs text-muted-foreground/60 tabular-nums">{pi + 1}</span>
@@ -183,6 +184,7 @@ function PlanPreview({ plan }: { plan: PlanInput }) {
           </div>
           <ol className="mt-1 flex flex-col gap-1 ps-4">
             {phase.steps.map((step, si) => (
+              // oxlint-disable-next-line react/no-array-index-key -- read-only preview of a parsed draft; items have no ids
               <li key={si} className="flex items-start gap-2">
                 <span className="flex h-5 shrink-0 items-center">
                   <StepStatusGlyph status={step.status ?? "todo"} size="sm" />

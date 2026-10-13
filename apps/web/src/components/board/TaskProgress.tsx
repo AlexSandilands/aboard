@@ -36,6 +36,7 @@ export function TaskSegments({
   return (
     <span aria-hidden className={cn("flex shrink-0 items-center gap-0.5", steps.length > 6 ? "w-16" : "w-10")}>
       {steps.map((status, index) => (
+        // oxlint-disable-next-line react/no-array-index-key -- segments are positional; a step's index is its identity here
         <span key={index} className={cn("h-[3px] min-w-0 flex-1 rounded-full", SEGMENT_TONE[status])} />
       ))}
     </span>

@@ -41,7 +41,7 @@ export function PlanPhaseGroup({
   const [renaming, setRenaming] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const droppable = useDroppable({ id: `${PHASE_DROP_PREFIX}${phase.id}` });
+  const { setNodeRef } = useDroppable({ id: `${PHASE_DROP_PREFIX}${phase.id}` });
 
   const statuses = steps.map((s) => s.status);
   const done = statuses.filter((s) => s === "done" || s === "skipped").length;
@@ -54,7 +54,7 @@ export function PlanPhaseGroup({
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div
-        ref={droppable.setNodeRef}
+        ref={setNodeRef}
         className={cn(
           "group/row flex h-8 min-w-0 items-center gap-1.5 rounded-lg pe-1",
           HOVER_SURFACE,

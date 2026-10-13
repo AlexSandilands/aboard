@@ -58,6 +58,7 @@ function Tooltip<Payload>(props: TooltipPrimitive.Root.Props<Payload>) {
         onOpenChange={(open, details) => {
           props.onOpenChange?.(open, details);
           if (!open && !details.isCanceled && hovered.current?.actionsRef === actionsRef) {
+            // oxlint-disable-next-line react/immutability -- `hovered` is a context-provided ref, mutated in an event handler
             hovered.current = null;
           }
         }}
@@ -78,6 +79,7 @@ function TooltipTrigger(props: TooltipPrimitive.Trigger.Props) {
       {...props}
       onMouseEnter={(event) => {
         props.onMouseEnter?.(event);
+        // oxlint-disable-next-line react/immutability -- `hovered` is a context-provided ref, mutated in an event handler
         hovered.current = { trigger: event.currentTarget, actionsRef };
       }}
     />

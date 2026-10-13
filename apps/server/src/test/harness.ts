@@ -10,13 +10,12 @@ export function createTestHarness() {
   ctx.bus.subscribe((e) => events.push(e));
   const request = (path: string, init?: RequestInit & { json?: unknown }) => {
     const { json, ...rest } = init ?? {};
+    const headers = new Headers(rest.headers);
+    if (!headers.has("host")) headers.set("host", "127.0.0.1:4317");
+    if (json !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
     return app.request(path, {
       ...rest,
-      headers: {
-        host: "127.0.0.1:4317",
-        ...(json !== undefined ? { "content-type": "application/json" } : {}),
-        ...rest.headers,
-      },
+      headers,
       ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
     });
   };

@@ -89,6 +89,9 @@ export const SortableTaskCard = memo(function SortableTaskCard({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
       {...listeners}
+      // Restates dnd-kit's defaults so the card's semantics are visible statically.
+      role="button"
+      tabIndex={0}
       aria-label={`#${task.number} ${task.title}`}
       aria-current={selected || undefined}
       data-task-card={task.id}

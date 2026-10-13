@@ -131,16 +131,19 @@ function ClampedMarkdown({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!element || expanded) return;
+    if (!element || !contentRef.current || expanded) return;
     const check = () => setOverflows(element.scrollHeight > element.clientHeight + 1);
     check();
+    // The clamped box keeps its height as the text changes; observing the content catches that.
     const observer = new ResizeObserver(check);
     observer.observe(element);
+    observer.observe(contentRef.current);
     return () => observer.disconnect();
-  }, [text, expanded]);
+  }, [expanded]);
 
   return (
     <div className="mt-1.5">
@@ -148,7 +151,9 @@ function ClampedMarkdown({ text }: { text: string }) {
         ref={ref}
         className={cn(!expanded && "max-h-[4.5rem] overflow-hidden", !expanded && overflows && "mask-b-from-50%")}
       >
-        <Markdown size="xs">{text}</Markdown>
+        <div ref={contentRef}>
+          <Markdown size="xs">{text}</Markdown>
+        </div>
       </div>
       {overflows || expanded ? (
         <span className="text-xs">

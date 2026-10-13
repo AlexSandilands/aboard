@@ -27,7 +27,10 @@ describe("fs browse", () => {
   it("lists drive roots for / on Windows", () => {
     const drives = browseDirectory("/", "win32");
     expect(drives.parentPath).toBeNull();
-    if (process.platform === "win32") expect(drives.entries.length).toBeGreaterThan(0);
+  });
+
+  it.runIf(process.platform === "win32")("finds at least one drive on a Windows host", () => {
+    expect(browseDirectory("/", "win32").entries.length).toBeGreaterThan(0);
   });
 
   it("maps missing folders and files to API errors", async () => {

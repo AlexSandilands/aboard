@@ -122,7 +122,7 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
+    return isMobile ? setOpenMobile((value) => !value) : setOpen((value) => !value);
   }, [isMobile, setOpen]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
@@ -415,11 +415,12 @@ function SidebarRail({
     // Toggling the sidebar cancels a drag so the inline width never pins a
     // collapsed sidebar open.
   }, String(open));
+  const refreshResize = resize.refresh;
   React.useLayoutEffect(() => {
     latestResizable.current = resolvedResizable;
     // Bounds follow the window; keep an active drag's inline width inside them.
-    resize.refresh();
-  }, [resolvedResizable]);
+    refreshResize();
+  }, [resolvedResizable, refreshResize]);
 
   const handleClick = React.useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {

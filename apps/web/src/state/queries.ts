@@ -103,7 +103,7 @@ export function useBoardEvents() {
       }
       connectedOnce = true;
     });
-    source.onmessage = (message) => {
+    source.addEventListener("message", (message) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
         board ? applyBoardEvent(board, event) : board,
@@ -119,7 +119,7 @@ export function useBoardEvents() {
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
       }
-    };
+    });
     return () => source.close();
   }, [queryClient]);
 }

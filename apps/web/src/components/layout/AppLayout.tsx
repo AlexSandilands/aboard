@@ -1,5 +1,5 @@
 import { storageKey } from "@repo/contracts";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { Board } from "~/components/board/Board";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { CommandPalette } from "~/components/command/CommandPalette";
@@ -57,33 +57,32 @@ export function AppLayout() {
  */
 function useGlobalKeybindings(panelOpen: boolean, closePanel: () => unknown) {
   const projectFilter = useProjectFilter();
-  const latest = useRef({ panelOpen, closePanel, projectFilter });
-  latest.current = { panelOpen, closePanel, projectFilter };
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.isComposing) return;
+    const palette = usePalette.getState();
+    const modifier = event.metaKey || event.ctrlKey;
+    if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (!palette.open) palette.openPalette();
+      return;
+    }
+    const dialogs = useDialogs.getState();
+    const overlayOpen = palette.open || dialogs.appSettingsOpen || dialogs.projectSettingsId !== null;
+    if (overlayOpen || isEditableTarget(event.target) || isInsidePopup(event.target)) return;
+    if (event.key === "Escape" && panelOpen) {
+      event.preventDefault();
+      closePanel();
+      return;
+    }
+    if (!modifier && !event.altKey && (event.key === "n" || event.key === "N") && !event.shiftKey) {
+      event.preventDefault();
+      palette.openPalette({ kind: "new-idea", projectId: projectFilter ?? undefined });
+    }
+  });
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
-      const palette = usePalette.getState();
-      const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        if (!palette.open) palette.openPalette();
-        return;
-      }
-      const dialogs = useDialogs.getState();
-      const overlayOpen = palette.open || dialogs.appSettingsOpen || dialogs.projectSettingsId !== null;
-      if (overlayOpen || isEditableTarget(event.target) || isInsidePopup(event.target)) return;
-      if (event.key === "Escape" && latest.current.panelOpen) {
-        event.preventDefault();
-        latest.current.closePanel();
-        return;
-      }
-      if (!modifier && !event.altKey && (event.key === "n" || event.key === "N") && !event.shiftKey) {
-        event.preventDefault();
-        palette.openPalette({ kind: "new-idea", projectId: latest.current.projectFilter ?? undefined });
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const listener = (event: KeyboardEvent) => onKeyDown(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
   }, []);
 }

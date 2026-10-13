@@ -40,10 +40,6 @@ export function isPhaseOpenByDefault(phase: PlanPhase, currentStepId: string | n
   return true;
 }
 
-export function phaseProgress(phase: PlanPhase): { done: number; total: number } {
-  return { done: phase.steps.filter((s) => isStepComplete(s.status)).length, total: phase.steps.length };
-}
-
 /** "1.2"-style labels for every step, keyed by id. */
 export function stepIndexLabels(phases: ReadonlyArray<PlanPhase>): Map<string, { label: string; title: string }> {
   const map = new Map<string, { label: string; title: string }>();

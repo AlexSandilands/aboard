@@ -25,7 +25,7 @@ import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
-import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER, type Lane } from "./board.logic";
+import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER } from "./board.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
@@ -127,15 +127,17 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const moveTask = useMoveTask();
   const updateProject = useUpdateProject();
 
-  const previousLanesRef = useRef<Lane[]>([]);
-  const lanes = useMemo(() => {
-    const next = reuseUnchangedLanes(
-      previousLanesRef.current,
-      buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly }, archivedTasks),
-    );
-    previousLanesRef.current = next;
-    return next;
-  }, [board, projectFilter, search, attentionOnly, hasPrOnly, archivedTasks]);
+  const builtLanes = useMemo(
+    () => buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly }, archivedTasks),
+    [board, projectFilter, search, attentionOnly, hasPrOnly, archivedTasks],
+  );
+  // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
+  const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });
+  let lanes = stableLanes.lanes;
+  if (stableLanes.built !== builtLanes) {
+    lanes = reuseUnchangedLanes(stableLanes.lanes, builtLanes);
+    setStableLanes({ built: builtLanes, lanes });
+  }
   const counts = useMemo(() => columnCounts(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
   const selectedProjectId = selectedTaskId
@@ -190,6 +192,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     });
   };
 
+  const openPlanEditor = (taskId: string) => {
+    void openTask(taskId).then(() => usePanel.getState().requestPlanEditor());
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     endDrag();
     const { active, over } = event;
@@ -225,7 +231,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
               children: "Write plan",
               onClick: () => {
                 toastManager.close(toastId);
-                void openTask(task.id).then(() => usePanel.getState().requestPlanEditor());
+                openPlanEditor(task.id);
               },
             },
           });

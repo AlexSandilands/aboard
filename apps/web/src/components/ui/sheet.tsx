@@ -101,7 +101,11 @@ function SheetPopup({
             className,
           )}
           data-slot="sheet-popup"
-          style={{ ...transitionStyle, ...style }}
+          style={
+            typeof style === "function"
+              ? (state) => ({ ...transitionStyle, ...style(state) })
+              : { ...transitionStyle, ...style }
+          }
           {...props}
         >
           {children}

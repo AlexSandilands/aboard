@@ -57,7 +57,7 @@ export function PlanStepRow({
   /** Called on any edit, so the parent can pin the phase open. */
   onInteract: () => void;
 }) {
-  const sortable = useSortable({ id: step.id });
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: step.id });
   const [expanded, setExpanded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -75,9 +75,9 @@ export function PlanStepRow({
 
   return (
     <li
-      ref={sortable.setNodeRef}
-      style={{ transform: CSS.Translate.toString(sortable.transform), transition: sortable.transition }}
-      className={cn("group/step relative", sortable.isDragging && "z-10 opacity-40")}
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn("group/step relative", isDragging && "z-10 opacity-40")}
     >
       <div
         className={cn(
@@ -93,8 +93,8 @@ export function PlanStepRow({
       >
         <button
           type="button"
-          {...sortable.attributes}
-          {...sortable.listeners}
+          {...attributes}
+          {...listeners}
           aria-label={`Reorder ${label} ${step.title}`}
           className="mt-1.5 flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/70 opacity-0 outline-none group-hover/step:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing pointer-coarse:opacity-100"
         >

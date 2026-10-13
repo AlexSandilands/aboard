@@ -109,6 +109,9 @@ const BADGE_VARIANTS = [
 ] as const;
 const FRUITS = ["Apple", "Banana", "Cherry", "Dragonfruit", "Elderberry"];
 const PROJECT_NAMES = ["storefront", "t3code", "shop tools", "acme", "a2b"];
+// Sample timestamps for the duration/relative-time labels, fixed at module load.
+const SAMPLE_STARTED_AT = new Date(Date.now() - 23 * 3600_000).toISOString();
+const SAMPLE_UPDATED_AT = new Date(Date.now() - 5 * 60_000).toISOString();
 const SAMPLE_ICONS: ReadonlyArray<{ title: string; icon: ProjectIcon }> = [
   { title: "Rocket", icon: { kind: "lucide", name: "rocket", color: "violet" } },
   { title: "Server", icon: { kind: "lucide", name: "server", color: "emerald" } },
@@ -324,8 +327,7 @@ export function StyleGallery() {
           <span className="text-xs text-diff-addition-foreground">+12</span>
           <span className="text-xs text-diff-deletion-foreground">-4</span>
           <span className="text-2xs text-muted-foreground">
-            {formatElapsedDurationLabel(new Date(Date.now() - 23 * 3600_000).toISOString())} ·{" "}
-            {formatRelativeTimeLabel(new Date(Date.now() - 5 * 60_000).toISOString())}
+            {formatElapsedDurationLabel(SAMPLE_STARTED_AT)} · {formatRelativeTimeLabel(SAMPLE_UPDATED_AT)}
           </span>
         </Section>
 

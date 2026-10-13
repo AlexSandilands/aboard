@@ -15,7 +15,9 @@ export function createSql(db: Db) {
     return stmt;
   };
   return {
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- caller declares the row shape (a cast at the SQLite boundary)
     all: <T>(sql: string, ...params: SQLInputValue[]) => prepare(sql).all(...params) as unknown as T[],
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- caller declares the row shape (a cast at the SQLite boundary)
     get: <T>(sql: string, ...params: SQLInputValue[]) => prepare(sql).get(...params) as unknown as T | undefined,
     run: (sql: string, ...params: SQLInputValue[]) => prepare(sql).run(...params),
     insert(table: string, row: Row): void {

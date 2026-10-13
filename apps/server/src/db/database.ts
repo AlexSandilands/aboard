@@ -1,9 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 export type Db = DatabaseSync;
-export type SqlParams = Record<string, SQLInputValue>;
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
 
@@ -56,6 +55,7 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- caller declares the stored JSON shape (a cast at the DB boundary)
 export function parseJson<T>(value: unknown): T | null {
   if (typeof value !== "string" || value === "") return null;
   return JSON.parse(value) as T;

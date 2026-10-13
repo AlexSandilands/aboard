@@ -43,7 +43,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           lines.push(
             `${projectLabel(project)} — ${counts.length ? counts.join(", ") : "no tasks"}  [id: ${project.id}]`,
           );
-          for (const t of tasks.filter((t) => t.attention.length > 0)) {
+          for (const t of tasks.filter((task) => task.attention.length > 0)) {
             lines.push(`  ! #${t.number} ${t.title}: ${t.attention.map((a) => a.message).join("; ")}`);
           }
         }

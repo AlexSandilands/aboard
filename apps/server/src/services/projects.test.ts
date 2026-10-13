@@ -1,7 +1,11 @@
 import type { PrSnapshot } from "@repo/contracts";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
+import { repositoryRootOf } from "./projects.ts";
 
 const codeOf = (fn: () => unknown): string | undefined => {
   try {
@@ -148,11 +152,7 @@ describe("settings", () => {
 });
 
 describe("repositoryRootOf", () => {
-  it("walks up to the nearest .git directory", async () => {
-    const { mkdtempSync, mkdirSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const { tmpdir } = await import("node:os");
-    const { repositoryRootOf } = await import("./projects.ts");
+  it("walks up to the nearest .git directory", () => {
     const root = mkdtempSync(join(tmpdir(), "tb-repo-"));
     mkdirSync(join(root, ".git"));
     mkdirSync(join(root, "apps", "web"), { recursive: true });

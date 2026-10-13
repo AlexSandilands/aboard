@@ -80,7 +80,7 @@ export function createPlans(
         phaseId,
         title: input.title,
         notes: input.notes ?? null,
-        status: "todo" as StepStatus,
+        status: "todo",
         position,
         startedAt: null,
         completedAt: null,

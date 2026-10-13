@@ -104,7 +104,7 @@ function CopyErrorButton({ text }: { text: string }) {
             onClick={() => {
               void navigator.clipboard.writeText(text).then(() => {
                 setIsCopied(true);
-                window.setTimeout(() => setIsCopied(false), 1500);
+                return window.setTimeout(() => setIsCopied(false), 1500);
               });
             }}
           />

@@ -15,12 +15,3 @@ export interface Integrations {
   /** Re-runs T3 discovery + a live-status request and returns the resulting status. */
   testT3(): Promise<T3IntegrationStatus>;
 }
-
-export const DISABLED_T3_STATUS: T3IntegrationStatus = {
-  detected: false,
-  origin: null,
-  environmentId: null,
-  label: null,
-  liveStatus: "off",
-  error: null,
-};

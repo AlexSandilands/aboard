@@ -67,7 +67,9 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       currentStep: deriveCurrentStep(phases),
       links,
       attention: deriveAttention(phases, links),
-      lastNote: note ? { text: String(note.payload.text ?? ""), actor: note.actor, at: note.at } : null,
+      lastNote: note
+        ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
+        : null,
     };
     result.set(record.id, { record, summary, phases });
   }

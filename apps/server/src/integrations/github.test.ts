@@ -162,8 +162,7 @@ describe("github poller", () => {
     expect(snapshots.size).toBe(9);
     expect(snapshots.get("l0")).toMatchObject({ title: "PR 1", checks: "passing", reviewDecision: "approved" });
     expect(snapshots.has("ado")).toBe(false);
-    const prCalls = gh.calls.filter((c) => c[0] === "pr");
-    expect(prCalls[0]).toEqual([
+    expect(gh.calls.find((c) => c[0] === "pr")).toEqual([
       "pr",
       "view",
       "https://github.com/o/r/pull/1",

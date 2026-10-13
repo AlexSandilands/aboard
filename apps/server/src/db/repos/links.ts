@@ -83,4 +83,3 @@ export function createLinksRepo(sql: Sql) {
     },
   };
 }
-export type LinksRepo = ReturnType<typeof createLinksRepo>;

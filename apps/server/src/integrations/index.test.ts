@@ -136,12 +136,15 @@ describe("createIntegrations with real services", () => {
   });
 
   it("start() is a no-op when pollers are disabled", () => {
+    let spawned = 0;
     const { integrations } = setup({
       runGh: async () => {
+        spawned += 1;
         throw new Error("should not spawn");
       },
     });
     integrations.start();
     integrations.stop();
+    expect(spawned).toBe(0);
   });
 });

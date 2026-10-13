@@ -16,4 +16,3 @@ export function createSettingsRepo(sql: Sql) {
     },
   };
 }
-export type SettingsRepo = ReturnType<typeof createSettingsRepo>;

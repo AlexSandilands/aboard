@@ -113,7 +113,7 @@ export function createPlansRepo(sql: Sql) {
       return sql.all<StepRow>("SELECT * FROM plan_steps WHERE phase_id = ? ORDER BY position, id", phaseId).map(toStep);
     },
     countSteps(taskId: string): number {
-      return Number(sql.get<{ n: number }>("SELECT COUNT(*) AS n FROM plan_steps WHERE task_id = ?", taskId)?.n ?? 0);
+      return sql.get<{ n: number }>("SELECT COUNT(*) AS n FROM plan_steps WHERE task_id = ?", taskId)?.n ?? 0;
     },
     insertPhase(p: PhaseRecord): void {
       sql.insert("plan_phases", { ...phaseRow(p) });
@@ -135,4 +135,3 @@ export function createPlansRepo(sql: Sql) {
     },
   };
 }
-export type PlansRepo = ReturnType<typeof createPlansRepo>;

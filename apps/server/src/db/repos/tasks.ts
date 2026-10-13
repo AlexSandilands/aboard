@@ -36,7 +36,7 @@ interface TaskRow {
 
 const toRecord = (r: TaskRow): TaskRecord => ({
   id: r.id,
-  number: Number(r.number),
+  number: r.number,
   projectId: r.project_id,
   title: r.title,
   description: r.description,
@@ -124,7 +124,7 @@ export function createTasksRepo(sql: Sql) {
         .map(toRecord);
     },
     nextNumber(): number {
-      return Number(sql.get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1;
+      return (sql.get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1;
     },
     insert(t: TaskRecord): void {
       sql.insert("tasks", { ...toRow(t) });
@@ -134,4 +134,3 @@ export function createTasksRepo(sql: Sql) {
     },
   };
 }
-export type TasksRepo = ReturnType<typeof createTasksRepo>;

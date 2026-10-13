@@ -2,10 +2,6 @@
 // Relative-time helpers only; wall-clock formatting is not needed here.
 
 export type RelativeTimeParts = { value: string; suffix: string | null };
-export type RelativeTimeState =
-  | { status: "missing" }
-  | { status: "invalid" }
-  | { status: "relative"; value: string; suffix: string | null };
 
 export function parseTimestampDate(isoDate: string): Date | null {
   const date = new Date(isoDate);
@@ -36,13 +32,6 @@ export function formatRelativeTimeLabel(isoDate: string) {
   const relative = formatRelativeTime(isoDate);
   if (!relative) return "";
   return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
-}
-
-export function getRelativeTimeState(isoDate: string | null): RelativeTimeState {
-  if (!isoDate) return { status: "missing" };
-  const relative = formatRelativeTime(isoDate);
-  if (!relative) return { status: "invalid" };
-  return { status: "relative", ...relative };
 }
 
 /** Compact elapsed duration since an ISO instant, without an "ago" suffix ("23h"). */

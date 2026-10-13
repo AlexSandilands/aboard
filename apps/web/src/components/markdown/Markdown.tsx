@@ -7,7 +7,11 @@ import { cn } from "~/lib/utils";
 const remarkPlugins = [remarkGfm];
 
 const components: Components = {
-  a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+  a: ({ node: _node, children, ...props }) => (
+    <a {...props} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
   table: ({ node: _node, ...props }) => (
     <div className="markdown-table-container">
       <table {...props} />

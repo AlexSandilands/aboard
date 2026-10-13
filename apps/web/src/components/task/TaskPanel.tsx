@@ -84,11 +84,14 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
 
   // The board asks for the plan editor after a PLAN_REQUIRED drop; it opens once the detail loads.
   const planEditorRequest = usePanel((s) => s.planEditorRequest);
-  useEffect(() => {
-    if (planEditorRequest <= handledPlanEditorRequest) return;
-    handledPlanEditorRequest = planEditorRequest;
+  const [seenPlanEditorRequest, setSeenPlanEditorRequest] = useState(handledPlanEditorRequest);
+  if (planEditorRequest > seenPlanEditorRequest) {
+    setSeenPlanEditorRequest(planEditorRequest);
     setEditor((e) => ({ open: true, mode: "outline", session: e.session + 1 }));
-  }, [planEditorRequest]);
+  }
+  useEffect(() => {
+    handledPlanEditorRequest = Math.max(handledPlanEditorRequest, seenPlanEditorRequest);
+  }, [seenPlanEditorRequest]);
 
   if (detail.isPending) return <PanelSkeleton />;
   if (detail.isError && !detail.data) {

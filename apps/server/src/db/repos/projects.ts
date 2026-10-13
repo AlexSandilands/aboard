@@ -24,7 +24,7 @@ const toProject = (r: ProjectRow): Project => ({
   icon: parseJson<ProjectIcon>(r.icon_json),
   t3ProjectId: r.t3_project_id,
   position: r.position,
-  collapsed: Number(r.collapsed) !== 0,
+  collapsed: r.collapsed !== 0,
   archivedAt: r.archived_at,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -76,4 +76,3 @@ export function createProjectsRepo(sql: Sql) {
     },
   };
 }
-export type ProjectsRepo = ReturnType<typeof createProjectsRepo>;

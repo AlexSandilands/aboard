@@ -31,6 +31,7 @@ export function StepSegments({ statuses, className }: { statuses: ReadonlyArray<
   return (
     <span aria-hidden className={cn("flex w-10 shrink-0 items-center gap-0.5", className)}>
       {statuses.map((status, index) => (
+        // oxlint-disable-next-line react/no-array-index-key -- segments are positional; a step's index is its identity here
         <span key={index} className={cn("h-[3px] min-w-0 flex-1 rounded-full", SEGMENT_TONE[status])} />
       ))}
     </span>
