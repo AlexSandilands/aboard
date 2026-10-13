@@ -1,0 +1,78 @@
+# Taskboard
+
+A local kanban board for juggling work across many projects, built for working with coding agents.
+Agents log ideas, write structured plans and move tasks along over MCP; the board updates live.
+Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with it when it's running.
+
+- **Swimlane per project**, columns **Ideas → Planned → In Progress → Review → Done**.
+- **Plans first:** ideas can be rough, but a task can't leave Ideas until it has a plan.
+  Plans are phases of steps; the detail panel shows exactly where a task is up to.
+- **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
+  conversation), any URL. Failing checks, requested changes and blocked steps surface under
+  **Needs attention**.
+
+## Run it
+
+Requires Node 24+ and pnpm.
+
+```sh
+pnpm install
+pnpm start        # builds the web app and serves everything on http://127.0.0.1:4317
+pnpm dev          # development: server on 4317, Vite on http://127.0.0.1:5317
+```
+
+Data lives in `~/.taskboard/taskboard.sqlite` (override with `TASKBOARD_HOME`). The server only
+listens on 127.0.0.1. Set `TASKBOARD_TOKEN` to require a bearer token on the API and MCP endpoint.
+
+## Connect your agents
+
+The MCP endpoint is `http://127.0.0.1:4317/mcp`.
+
+```sh
+claude mcp add --transport http taskboard http://127.0.0.1:4317/mcp
+codex mcp add taskboard --url http://127.0.0.1:4317/mcp
+```
+
+Then give your agent the workflow:
+
+- **Claude Code:** copy `skills/taskboard` to `~/.claude/skills/taskboard`.
+- **Other agents:** paste `skills/taskboard/AGENTS-snippet.md` into your `AGENTS.md` / `CLAUDE.md`.
+
+Agents identify the project by passing their working directory, so there's nothing to configure
+per repo. Unknown folders become new projects automatically.
+
+## T3 Code integration (optional)
+
+When T3 Code is running, Taskboard detects it automatically.
+
+- **Thread links:** agents inside T3 Code attach their thread to the task. The card and detail
+  panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
+  choose in Settings).
+- **Import projects:** command palette → *Add project → From T3 Code*. Read-only; Taskboard never
+  writes to T3 Code's data.
+- **Live thread status:** mint a read-only token and paste it in Settings → T3 Code:
+  ```sh
+  t3 auth session issue --scopes orchestration:read --token-only
+  ```
+  Linked threads then show whether they're working, waiting for input, or done.
+
+## Keyboard
+
+| Key | Action |
+|---|---|
+| `Ctrl/Cmd K` | Command palette |
+| `N` | New idea |
+| `Esc` | Close the detail panel |
+
+## Development
+
+```sh
+pnpm test        # all packages
+pnpm typecheck
+```
+
+Layout: `packages/contracts` (shared zod schemas and helpers), `apps/server` (Hono, `node:sqlite`,
+REST, SSE, MCP, integrations), `apps/web` (React, Tailwind v4, Base UI). Design notes live in
+`docs/`.
+
+UI primitives and design tokens are adapted from T3 Code under the MIT license — see `NOTICE`.

@@ -212,7 +212,8 @@ export function readT3ProjectsFromSqlite(t3Home: string): T3SqliteProject[] {
       db.close();
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // Windows can briefly hold SQLite file handles after close; retry instead of failing.
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

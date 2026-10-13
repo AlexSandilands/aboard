@@ -15,13 +15,19 @@ function expandPath(raw: string): string {
   return resolve(path);
 }
 
+let driveCache: { at: number; result: FsBrowseResult } | null = null;
+
+/** Probing unmapped drive letters is slow on Windows (seconds), so results are cached for a minute. */
 function listDrives(): FsBrowseResult {
+  if (driveCache && Date.now() - driveCache.at < 60_000) return driveCache.result;
   const entries: FsBrowseResult["entries"] = [];
   for (let code = 65; code <= 90; code++) {
     const root = `${String.fromCharCode(code)}:\\`;
     if (existsSync(root)) entries.push({ name: root.slice(0, 2), fullPath: root });
   }
-  return { path: DRIVES_PATH, parentPath: null, entries };
+  const result = { path: DRIVES_PATH, parentPath: null, entries };
+  driveCache = { at: Date.now(), result };
+  return result;
 }
 
 function isDirectory(dir: string, entry: Dirent): boolean {
