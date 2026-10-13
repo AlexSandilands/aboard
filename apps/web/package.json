@@ -19,6 +19,7 @@
     "@tanstack/react-router": "^1.170.44",
     "@taskboard/contracts": "workspace:*",
     "class-variance-authority": "^0.7.1",
+    "fractional-indexing": "^4.0.0",
     "lucide-react": "^0.564.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
