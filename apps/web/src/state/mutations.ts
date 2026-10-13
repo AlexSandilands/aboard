@@ -33,7 +33,12 @@ import { queryKeys } from "./queries";
 
 const enc = encodeURIComponent;
 
-function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, opts?: { silent?: boolean }) {
+/** Pass `{ silent: true }` when the caller handles errors itself (avoids a duplicate toast). */
+export interface MutationOpts {
+  silent?: boolean;
+}
+
+function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, opts?: MutationOpts) {
   return useMutation({
     mutationFn: fn,
     onError: (error) => {
@@ -45,21 +50,21 @@ function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, o
 
 // ── Projects ─────────────────────────────────────────────────────────────
 
-export const useCreateProject = () => useApiMutation((input: CreateProjectInput) => api<Project>("/api/projects", { body: input }));
-export const useUpdateProject = () =>
-  useApiMutation(({ id, ...input }: UpdateProjectInput & { id: string }) => api<Project>(`/api/projects/${enc(id)}`, { method: "PATCH", body: input }));
-export const useReorderProjects = () => useApiMutation((ids: string[]) => api<void>("/api/projects/reorder", { body: { ids } }));
-export const useDeleteProject = () => useApiMutation((id: string) => api<void>(`/api/projects/${enc(id)}`, { method: "DELETE" }));
-export const useImportT3Projects = () =>
-  useApiMutation((t3ProjectIds: string[]) => api<Project[]>("/api/integrations/t3/import", { body: { t3ProjectIds } }));
+export const useCreateProject = (opts?: MutationOpts) => useApiMutation((input: CreateProjectInput) => api<Project>("/api/projects", { body: input }), opts);
+export const useUpdateProject = (opts?: MutationOpts) =>
+  useApiMutation(({ id, ...input }: UpdateProjectInput & { id: string }) => api<Project>(`/api/projects/${enc(id)}`, { method: "PATCH", body: input }), opts);
+export const useReorderProjects = (opts?: MutationOpts) => useApiMutation((ids: string[]) => api<void>("/api/projects/reorder", { body: { ids } }), opts);
+export const useDeleteProject = (opts?: MutationOpts) => useApiMutation((id: string) => api<void>(`/api/projects/${enc(id)}`, { method: "DELETE" }), opts);
+export const useImportT3Projects = (opts?: MutationOpts) =>
+  useApiMutation((t3ProjectIds: string[]) => api<Project[]>("/api/integrations/t3/import", { body: { t3ProjectIds } }), opts);
 
 // ── Tasks ────────────────────────────────────────────────────────────────
 
-export const useCreateTask = () => useApiMutation((input: CreateTaskInput) => api<TaskDetail>("/api/tasks", { body: input }));
-export const useUpdateTask = () =>
-  useApiMutation(({ id, ...input }: UpdateTaskInput & { id: string }) => api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }));
-export const useAddNote = () =>
-  useApiMutation(({ taskId, text }: { taskId: string; text: string }) => api<unknown>(`/api/tasks/${enc(taskId)}/notes`, { body: { text } }));
+export const useCreateTask = (opts?: MutationOpts) => useApiMutation((input: CreateTaskInput) => api<TaskDetail>("/api/tasks", { body: input }), opts);
+export const useUpdateTask = (opts?: MutationOpts) =>
+  useApiMutation(({ id, ...input }: UpdateTaskInput & { id: string }) => api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }), opts);
+export const useAddNote = (opts?: MutationOpts) =>
+  useApiMutation(({ taskId, text }: { taskId: string; text: string }) => api<unknown>(`/api/tasks/${enc(taskId)}/notes`, { body: { text } }), opts);
 
 /**
  * Moves a task (status and/or order) with an optimistic board update, rolled back on error.
@@ -95,33 +100,36 @@ export function isPlanRequired(error: unknown): boolean {
 
 // ── Plans ────────────────────────────────────────────────────────────────
 
-export const useSetPlan = () =>
-  useApiMutation(({ taskId, plan }: { taskId: string; plan: PlanInput }) => api<TaskDetail>(`/api/tasks/${enc(taskId)}/plan`, { method: "PUT", body: plan }));
-export const useAddPhase = () =>
+export const useSetPlan = (opts?: MutationOpts) =>
+  useApiMutation(({ taskId, plan }: { taskId: string; plan: PlanInput }) => api<TaskDetail>(`/api/tasks/${enc(taskId)}/plan`, { method: "PUT", body: plan }), opts);
+export const useAddPhase = (opts?: MutationOpts) =>
   useApiMutation(({ taskId, title, afterPhaseId }: { taskId: string; title: string; afterPhaseId?: string }) =>
     api<PlanPhase>(`/api/tasks/${enc(taskId)}/phases`, { body: { title, afterPhaseId } }),
+    opts,
   );
-export const useUpdatePhase = () =>
-  useApiMutation(({ phaseId, title }: { phaseId: string; title: string }) => api<PlanPhase>(`/api/phases/${enc(phaseId)}`, { method: "PATCH", body: { title } }));
-export const useDeletePhase = () => useApiMutation((phaseId: string) => api<void>(`/api/phases/${enc(phaseId)}`, { method: "DELETE" }));
-export const useAddSteps = () =>
+export const useUpdatePhase = (opts?: MutationOpts) =>
+  useApiMutation(({ phaseId, title }: { phaseId: string; title: string }) => api<PlanPhase>(`/api/phases/${enc(phaseId)}`, { method: "PATCH", body: { title } }), opts);
+export const useDeletePhase = (opts?: MutationOpts) => useApiMutation((phaseId: string) => api<void>(`/api/phases/${enc(phaseId)}`, { method: "DELETE" }), opts);
+export const useAddSteps = (opts?: MutationOpts) =>
   useApiMutation(({ phaseId, steps, afterStepId }: { phaseId: string; steps: PlanStepInput[]; afterStepId?: string }) =>
     api<PlanStep[]>(`/api/phases/${enc(phaseId)}/steps`, { body: { steps, afterStepId } }),
+    opts,
   );
-export const useUpdateStep = () =>
-  useApiMutation(({ stepId, ...patch }: StepPatch & { stepId: string }) => api<PlanStep>(`/api/steps/${enc(stepId)}`, { method: "PATCH", body: patch }));
-export const useMoveStep = () =>
+export const useUpdateStep = (opts?: MutationOpts) =>
+  useApiMutation(({ stepId, ...patch }: StepPatch & { stepId: string }) => api<PlanStep>(`/api/steps/${enc(stepId)}`, { method: "PATCH", body: patch }), opts);
+export const useMoveStep = (opts?: MutationOpts) =>
   useApiMutation(({ stepId, ...to }: { stepId: string; phaseId?: string; beforeId?: string | null; afterId?: string | null }) =>
     api<PlanStep>(`/api/steps/${enc(stepId)}/move`, { body: to }),
+    opts,
   );
-export const useDeleteStep = () => useApiMutation((stepId: string) => api<void>(`/api/steps/${enc(stepId)}`, { method: "DELETE" }));
+export const useDeleteStep = (opts?: MutationOpts) => useApiMutation((stepId: string) => api<void>(`/api/steps/${enc(stepId)}`, { method: "DELETE" }), opts);
 
 // ── Links ────────────────────────────────────────────────────────────────
 
-export const useAddLink = () =>
-  useApiMutation(({ taskId, ...input }: LinkInput & { taskId: string }) => api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }));
-export const useRemoveLink = () => useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }));
-export const useRefreshLink = () => useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }));
+export const useAddLink = (opts?: MutationOpts) =>
+  useApiMutation(({ taskId, ...input }: LinkInput & { taskId: string }) => api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }), opts);
+export const useRemoveLink = (opts?: MutationOpts) => useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }), opts);
+export const useRefreshLink = (opts?: MutationOpts) => useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }), opts);
 
 // ── Settings ─────────────────────────────────────────────────────────────
 

@@ -1,4 +1,12 @@
-/** Project settings + app settings dialogs, driven by useDialogs(). Placeholder — implemented by the palette work package. */
+import { AppSettingsDialog } from "./AppSettingsDialog";
+import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
+
+/** Project settings + app settings dialogs, driven by useDialogs(). Mounted once at the root. */
 export function AppDialogs() {
-  return null;
+  return (
+    <>
+      <ProjectSettingsDialog />
+      <AppSettingsDialog />
+    </>
+  );
 }

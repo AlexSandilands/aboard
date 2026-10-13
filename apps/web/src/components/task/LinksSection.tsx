@@ -1,0 +1,400 @@
+import {
+  classifyLink,
+  type AppSettings,
+  type T3IntegrationStatus,
+  type TaskDetail,
+  type TaskLink,
+} from "@taskboard/contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDownIcon,
+  CircleCheckIcon,
+  CircleDashedIcon,
+  CircleXIcon,
+  CopyIcon,
+  EllipsisIcon,
+  ExternalLinkIcon,
+  GitPullRequestArrowIcon,
+  GlobeIcon,
+  MessagesSquareIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  TicketIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  type LucideIcon,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { t3LinkTargets } from "~/lib/t3Links";
+import { cn } from "~/lib/utils";
+import { useAddLink, useRefreshLink, useRemoveLink } from "~/state/mutations";
+import { queryKeys, useBoard, useSettings } from "~/state/queries";
+import { copyToClipboard } from "./InlineInput";
+import { describeLinkInput, hostnameOf, isWebUrl, jiraHref, threadStatusPresentation } from "./links.logic";
+import {
+  PANEL_ICON_CLASS,
+  PANEL_LABEL_CLASS,
+  PanelControl,
+  PanelSplitGroup,
+  PanelSplitSeparator,
+  ROW_HOVER_ACTION_CLASS,
+} from "./PanelControl";
+import { TaskSection } from "./TaskSection";
+
+const T3_UNDETECTED: T3IntegrationStatus = {
+  detected: false,
+  origin: null,
+  environmentId: null,
+  label: null,
+  liveStatus: "off",
+  error: null,
+};
+
+// PR state colours from T3 (pullRequest/pullRequestIcons.tsx).
+const PR_STATE: Record<"open" | "draft" | "closed" | "merged", { label: string; tone: string }> = {
+  open: { label: "Open", tone: "text-emerald-600 dark:text-emerald-300/90" },
+  draft: { label: "Draft", tone: "text-zinc-500 dark:text-zinc-400/80" },
+  closed: { label: "Closed", tone: "text-red-600 dark:text-red-300/90" },
+  merged: { label: "Merged", tone: "text-violet-600 dark:text-violet-300/90" },
+};
+
+export const LINK_KIND_ICON: Record<TaskLink["kind"], LucideIcon> = {
+  pr: GitPullRequestArrowIcon,
+  jira: TicketIcon,
+  t3_thread: MessagesSquareIcon,
+  url: GlobeIcon,
+};
+
+/** Anchor props: web URLs open in a new tab, app deep links (t3code://) in place. */
+const linkProps = (href: string) => (isWebUrl(href) ? { href, target: "_blank", rel: "noreferrer" } : { href });
+
+function openHref(href: string) {
+  if (isWebUrl(href)) window.open(href, "_blank", "noreferrer");
+  else window.location.assign(href);
+}
+
+export function LinksSection({ task }: { task: TaskDetail }) {
+  const board = useBoard().data;
+  const settings = useSettings().data;
+  const queryClient = useQueryClient();
+  const { mutate: removeLink } = useRemoveLink();
+  const t3 = board?.integrations.t3 ?? T3_UNDETECTED;
+
+  const remove = (linkId: string) => {
+    queryClient.setQueryData<TaskDetail>(queryKeys.task(task.id), (detail) =>
+      detail ? { ...detail, links: detail.links.filter((l) => l.id !== linkId) } : detail,
+    );
+    removeLink(linkId, { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) }) });
+  };
+
+  return (
+    <TaskSection title="Links">
+      <div className="flex flex-col gap-0.5">
+        {task.links.map((link) => (
+          <LinkRow key={link.id} link={link} t3={t3} settings={settings} onRemove={() => remove(link.id)} />
+        ))}
+        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} />
+      </div>
+    </TaskSection>
+  );
+}
+
+function LinkRow({
+  link,
+  t3,
+  settings,
+  onRemove,
+}: {
+  link: TaskLink;
+  t3: T3IntegrationStatus;
+  settings: AppSettings | undefined;
+  onRemove: () => void;
+}) {
+  switch (link.kind) {
+    case "t3_thread":
+      return <T3ThreadRow link={link} t3={t3} settings={settings} onRemove={onRemove} />;
+    case "pr":
+      return <PullRequestRow link={link} onRemove={onRemove} />;
+    case "jira": {
+      const href = jiraHref(link, settings?.jiraBaseUrl);
+      return (
+        <RowWithMenu
+          href={href}
+          title={href ?? link.ref.key}
+          menu={
+            <>
+              <MenuItem onClick={() => copyToClipboard(link.ref.key, "Jira key")}>
+                <CopyIcon />
+                Copy key
+              </MenuItem>
+              <RemoveItem onRemove={onRemove} />
+            </>
+          }
+        >
+          <TicketIcon className={PANEL_ICON_CLASS} />
+          <span className="shrink-0 font-mono text-xs">{link.ref.key}</span>
+          {link.label ? <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{link.label}</span> : null}
+        </RowWithMenu>
+      );
+    }
+    case "url":
+      return (
+        <RowWithMenu
+          href={link.url}
+          title={link.url}
+          menu={
+            <>
+              <MenuItem onClick={() => copyToClipboard(link.url, "URL")}>
+                <CopyIcon />
+                Copy URL
+              </MenuItem>
+              <RemoveItem onRemove={onRemove} />
+            </>
+          }
+        >
+          <GlobeIcon className={PANEL_ICON_CLASS} />
+          <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{link.label ?? hostnameOf(link.url) ?? link.url}</span>
+        </RowWithMenu>
+      );
+  }
+}
+
+/** A link row whose actions live in a menu revealed on hover. */
+function RowWithMenu({
+  href,
+  title,
+  menu,
+  children,
+}: {
+  href: string | null;
+  title: string;
+  menu: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <PanelSplitGroup>
+      <PanelControl part="fill" title={title} render={href ? <a {...linkProps(href)} /> : <div />}>
+        {children}
+      </PanelControl>
+      <RowMenu>{menu}</RowMenu>
+    </PanelSplitGroup>
+  );
+}
+
+function RowMenu({ children }: { children: ReactNode }) {
+  return (
+    <Menu>
+      <MenuTrigger
+        render={<PanelControl part="icon" aria-label="Link actions" className={cn("me-1", ROW_HOVER_ACTION_CLASS)} />}
+      >
+        <EllipsisIcon className="size-3.5" />
+      </MenuTrigger>
+      <MenuPopup align="end">{children}</MenuPopup>
+    </Menu>
+  );
+}
+
+function RemoveItem({ onRemove }: { onRemove: () => void }) {
+  return (
+    <>
+      <MenuSeparator />
+      <MenuItem variant="destructive" onClick={onRemove}>
+        <Trash2Icon />
+        Remove link
+      </MenuItem>
+    </>
+  );
+}
+
+function T3ThreadRow({
+  link,
+  t3,
+  settings,
+  onRemove,
+}: {
+  link: Extract<TaskLink, { kind: "t3_thread" }>;
+  t3: T3IntegrationStatus;
+  settings: AppSettings | undefined;
+  onRemove: () => void;
+}) {
+  const targets = t3LinkTargets(link.ref, t3, settings);
+  const status = link.snapshot ? threadStatusPresentation(link.snapshot.status) : null;
+  const title = link.snapshot?.title ?? link.label;
+  return (
+    <PanelSplitGroup>
+      <PanelControl part="primary" title={targets.primary.label} render={<a {...linkProps(targets.primary.href)} />}>
+        <MessagesSquareIcon className={PANEL_ICON_CLASS} />
+        <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span>
+        <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{title}</span>
+        {status ? (
+          <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
+            <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
+            {status.label}
+          </span>
+        ) : null}
+      </PanelControl>
+      <PanelSplitSeparator />
+      <Menu>
+        <MenuTrigger render={<PanelControl part="secondary" aria-label="More thread actions" />}>
+          <ChevronDownIcon className={PANEL_ICON_CLASS} />
+        </MenuTrigger>
+        <MenuPopup align="end">
+          {targets.secondary ? (
+            <MenuItem onClick={() => openHref(targets.secondary!.href)}>
+              <ExternalLinkIcon />
+              {targets.secondary.label}
+            </MenuItem>
+          ) : null}
+          <MenuItem onClick={() => copyToClipboard(link.ref.threadId, "thread id")}>
+            <CopyIcon />
+            Copy thread id
+          </MenuItem>
+          <RemoveItem onRemove={onRemove} />
+        </MenuPopup>
+      </Menu>
+    </PanelSplitGroup>
+  );
+}
+
+function PullRequestRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "pr" }>; onRemove: () => void }) {
+  const { mutate: refresh, isPending: refreshing } = useRefreshLink();
+  const snapshot = link.snapshot;
+  const state = snapshot ? PR_STATE[snapshot.state] : null;
+  const title = snapshot?.title ?? link.label ?? (link.ref ? link.ref.repo : (hostnameOf(link.url) ?? link.url));
+  return (
+    <RowWithMenu
+      href={link.url}
+      title={state ? `${state.label} pull request · ${link.url}` : link.url}
+      menu={
+        <>
+          {link.ref ? (
+            <MenuItem disabled={refreshing} onClick={() => refresh(link.id)}>
+              <RefreshCwIcon />
+              Refresh
+            </MenuItem>
+          ) : null}
+          <MenuItem onClick={() => copyToClipboard(link.url, "URL")}>
+            <CopyIcon />
+            Copy URL
+          </MenuItem>
+          <RemoveItem onRemove={onRemove} />
+        </>
+      }
+    >
+      <GitPullRequestArrowIcon className={cn("size-4 shrink-0", state?.tone ?? "text-muted-foreground")} />
+      {link.ref ? <span className="shrink-0 tabular-nums text-muted-foreground">#{link.ref.number}</span> : null}
+      <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
+      {snapshot ? (
+        <span className="flex shrink-0 items-center gap-1.5 text-xs font-normal">
+          {snapshot.mergeable === "conflicting" ? (
+            <Hint label="Merge conflicts">
+              <TriangleAlertIcon className="size-3.5 text-warning" />
+            </Hint>
+          ) : null}
+          {snapshot.checks === "passing" ? (
+            <Hint label="Checks passing">
+              <CircleCheckIcon className="size-3.5 text-success" />
+            </Hint>
+          ) : snapshot.checks === "failing" ? (
+            <Hint label="Checks failing">
+              <CircleXIcon className="size-3.5 text-destructive-foreground" />
+            </Hint>
+          ) : snapshot.checks === "pending" ? (
+            <Hint label="Checks running">
+              <CircleDashedIcon className="size-3.5 text-warning" />
+            </Hint>
+          ) : null}
+          {snapshot.reviewDecision === "approved" ? (
+            <span className="text-success-foreground">Approved</span>
+          ) : snapshot.reviewDecision === "changes_requested" ? (
+            <span className="text-warning-foreground">Changes requested</span>
+          ) : snapshot.reviewDecision === "review_required" ? (
+            <span className="text-muted-foreground">Review required</span>
+          ) : null}
+        </span>
+      ) : null}
+    </RowWithMenu>
+  );
+}
+
+function Hint({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex" aria-label={label} />}>{children}</TooltipTrigger>
+      <TooltipPopup>{label}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function AddLinkPopover({ taskId, jiraBaseUrl }: { taskId: string; jiraBaseUrl: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const { mutate: addLink, isPending } = useAddLink();
+  const classified = classifyLink(value, { jiraBaseUrl });
+  const preview = describeLinkInput(classified);
+  const PreviewIcon = preview ? LINK_KIND_ICON[preview.kind] : null;
+
+  const submit = () => {
+    if (!classified || isPending) return;
+    addLink(
+      { taskId, value: value.trim() },
+      {
+        onSuccess: () => {
+          setValue("");
+          setOpen(false);
+        },
+      },
+    );
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setValue("");
+      }}
+    >
+      <PopoverTrigger render={<PanelControl part="row" tone="muted" />}>
+        <PlusIcon className={PANEL_ICON_CLASS} />
+        <span className={PANEL_LABEL_CLASS}>Add link</span>
+      </PopoverTrigger>
+      <PopoverPopup align="start" width="md" padding="compact">
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <Input
+            autoFocus
+            aria-label="Link"
+            size="sm"
+            value={value}
+            placeholder="Paste a PR, Jira key, T3 thread or URL"
+            onChange={(event) => setValue(event.currentTarget.value)}
+          />
+          <div className="flex min-h-5 items-center gap-1.5 text-xs text-muted-foreground">
+            {preview && PreviewIcon ? (
+              <>
+                <PreviewIcon className="size-3.5 shrink-0" />
+                <span className="min-w-0 truncate text-foreground/80">{preview.label}</span>
+                <span className="ms-auto shrink-0">Enter to add</span>
+              </>
+            ) : value.trim() ? (
+              <span>Not recognised. Paste a full URL or a Jira key like ABC-123.</span>
+            ) : (
+              <span>Detects GitHub PRs, Jira keys, T3 Code threads and URLs.</span>
+            )}
+          </div>
+        </form>
+      </PopoverPopup>
+    </Popover>
+  );
+}

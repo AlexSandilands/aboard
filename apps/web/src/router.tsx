@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { z } from "zod";
+import { AppLayout } from "./components/layout/AppLayout.tsx";
 import { StyleGallery } from "./dev/StyleGallery.tsx";
 
 /** Board search params: `task` opens the detail panel, `project` scopes the board. */
@@ -15,11 +16,7 @@ export const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   validateSearch: (search) => BoardSearch.parse(search),
-  component: function BoardPlaceholder() {
-    return (
-      <div className="flex h-dvh items-center justify-center text-sm text-neutral-400">Taskboard — shell coming up</div>
-    );
-  },
+  component: AppLayout,
 });
 
 const galleryRoute = createRoute({
