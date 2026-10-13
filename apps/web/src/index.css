@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Placeholder — replaced by the full T3 Code design-system port (see docs/STYLE_REFERENCE.md). */
+@custom-variant dark (&:is(.dark, .dark *));

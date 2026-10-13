@@ -1,0 +1,22 @@
+{
+  "name": "@taskboard/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@taskboard/contracts": "workspace:*",
+    "fractional-indexing": "^4.0.0",
+    "hono": "^4.13.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}
