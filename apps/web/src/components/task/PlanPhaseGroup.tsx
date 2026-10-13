@@ -1,6 +1,6 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { PlanPhase, PlanStep } from "@taskboard/contracts";
+import type { PlanPhase, PlanStep } from "@repo/contracts";
 import { ChevronRightIcon, EllipsisIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 

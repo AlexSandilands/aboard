@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from "@taskboard/contracts";
+import { ACTOR_HEADER, type ApiErrorBody } from "@repo/contracts";
 import type { Context } from "hono";
 import { z } from "zod";
 import { AppError, httpStatusFor } from "../errors.ts";
@@ -52,8 +52,8 @@ export function parseQuery<S extends z.ZodType>(c: Context, schema: S): z.infer<
   return parsed.data;
 }
 
-/** Actor for REST writes: the `x-taskboard-actor` header, else "user". */
-export const actorOf = (c: Context): string => c.req.header("x-taskboard-actor")?.trim() || "user";
+/** Actor for REST writes: the `ACTOR_HEADER` header, else "user". */
+export const actorOf = (c: Context): string => c.req.header(ACTOR_HEADER)?.trim() || "user";
 
 export const noContent = (c: Context): Response => c.body(null, 204);
 

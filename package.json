@@ -1,5 +1,6 @@
 {
-  "name": "taskboard",
+  "name": "aboard",
+  "displayName": "Aboard",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.10.0",
@@ -7,9 +8,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web -c blue,magenta \"pnpm --filter @taskboard/server dev\" \"pnpm --filter @taskboard/web dev\"",
-    "build": "pnpm --filter @taskboard/web build",
-    "start": "pnpm build && pnpm --filter @taskboard/server start",
+    "dev": "concurrently -k -n server,web -c blue,magenta \"pnpm --filter @repo/server dev\" \"pnpm --filter @repo/web dev\"",
+    "build": "pnpm --filter @repo/web build",
+    "start": "pnpm build && pnpm --filter @repo/server start",
     "test": "pnpm -r --no-bail test",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint apps packages"

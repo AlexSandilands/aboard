@@ -1,4 +1,4 @@
-import type { ApiErrorBody, FsBrowseResult } from "@taskboard/contracts";
+import { BRAND, type ApiErrorBody, type FsBrowseResult } from "@repo/contracts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { browseDirectory } from "./fs.ts";
 import { createTestHarness } from "./test/harness.ts";
 
-const root = mkdtempSync(join(tmpdir(), "taskboard-fs-"));
+const root = mkdtempSync(join(tmpdir(), `${BRAND.id}-fs-`));
 for (const name of ["beta", "Alpha", ".hidden", "gamma"]) mkdirSync(join(root, name));
 writeFileSync(join(root, "file.txt"), "x");
 afterAll(() => rmSync(root, { recursive: true, force: true }));

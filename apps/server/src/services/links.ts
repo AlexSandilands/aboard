@@ -1,4 +1,4 @@
-import { classifyLink, t3DesktopThreadUrl, type ClassifiedLink, type LinkInput, type TaskLink } from "@taskboard/contracts";
+import { classifyLink, t3DesktopThreadUrl, type ClassifiedLink, type LinkInput, type TaskLink } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import { toLink, type LinkRow } from "../db/repos/links.ts";

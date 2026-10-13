@@ -1,4 +1,4 @@
-import type { PlanInput, PlanPhase, PlanStep, StepStatus } from "@taskboard/contracts";
+import type { PlanInput, PlanPhase, PlanStep, StepStatus } from "@repo/contracts";
 import { generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";

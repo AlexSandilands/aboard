@@ -1,5 +1,5 @@
 // Adapted from T3 Code (MIT) — see NOTICE.
-import { deriveProjectIdentity, ProjectIcon, type ProjectIconColor } from "@taskboard/contracts";
+import { deriveProjectIdentity, ProjectIcon, type ProjectIconColor } from "@repo/contracts";
 import { ProjectMonogram } from "./ProjectMonogram";
 import { DynamicIcon, type IconName } from "lucide-react/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";

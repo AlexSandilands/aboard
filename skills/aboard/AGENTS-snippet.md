@@ -1,6 +1,6 @@
-## Taskboard
+## Aboard (task board)
 
-Track work on the user's local taskboard via the `taskboard` MCP server (Ideas → Planned → In Progress → Review → Done). Pass `workspacePath` = your cwd to identify the project. Tasks are `#42`, steps `"2.3"`.
+Track work on the user's local task board via the `aboard` MCP server (Ideas → Planned → In Progress → Review → Done). Pass `workspacePath` = your cwd to identify the project. Tasks are `#42`, steps `"2.3"`.
 
 - **Orient:** `board_overview` / `list_tasks` at the start of meaningful work.
 - **Resume:** always `get_task` before continuing an existing task; it has the plan, current step and handover notes.
@@ -16,7 +16,7 @@ Register the server (it runs on 127.0.0.1:4317):
 
 ```sh
 # Claude Code
-claude mcp add --transport http taskboard http://127.0.0.1:4317/mcp
+claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
 # Codex
-codex mcp add taskboard --url http://127.0.0.1:4317/mcp
+codex mcp add aboard --url http://127.0.0.1:4317/mcp
 ```

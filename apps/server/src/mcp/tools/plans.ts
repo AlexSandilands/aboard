@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { StepStatus } from "@taskboard/contracts";
+import { StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { actorField, planFromArgs, planInputFields, run, taskField, taskResult, type ToolRegistrar } from "../shared.ts";
 

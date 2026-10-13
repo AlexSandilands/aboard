@@ -5,7 +5,7 @@ import {
   type PlanPhase,
   type PlanStep,
   type TaskSummary,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { toLink } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";

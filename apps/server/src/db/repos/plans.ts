@@ -1,4 +1,4 @@
-import type { PlanStep, StepStatus } from "@taskboard/contracts";
+import type { PlanStep, StepStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 export interface PhaseRecord {

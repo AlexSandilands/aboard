@@ -7,7 +7,7 @@ import {
   type TaskLink,
   type TaskStatus,
   type TaskSummary,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
 

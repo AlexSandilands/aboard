@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0a0a" />
-    <title>Taskboard</title>
+    <title>%BRAND_NAME%</title>
     <script>
       // Apply the stored theme before first paint (pattern from T3 Code's index.html).
       (function () {
         try {
-          var pref = localStorage.getItem("taskboard:theme") || "dark";
+          var pref = localStorage.getItem("%THEME_STORAGE_KEY%") || "dark";
           var dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
           var root = document.documentElement;
           root.classList.toggle("dark", dark);

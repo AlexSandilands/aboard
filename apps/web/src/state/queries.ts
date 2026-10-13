@@ -7,7 +7,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api, eventsUrl } from "~/lib/api";

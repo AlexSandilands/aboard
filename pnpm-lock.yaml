@@ -32,7 +32,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.1
         version: 1.32.1(zod@4.6.7)
-      '@taskboard/contracts':
+      '@repo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       fractional-indexing:
@@ -66,15 +66,15 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.3.0)
+      '@repo/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@tanstack/react-query':
         specifier: ^5.104.2
         version: 5.104.2(react@19.3.0)
       '@tanstack/react-router':
         specifier: ^1.170.44
         version: 1.170.44(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@taskboard/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

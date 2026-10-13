@@ -1,4 +1,4 @@
-import type { AppSettings } from "@taskboard/contracts";
+import type { AppSettings } from "@repo/contracts";
 import type { Core } from "./core.ts";
 import type { SettingsService } from "./types.ts";
 

@@ -18,7 +18,7 @@ import type {
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "~/lib/api";
 import { toastManager } from "~/components/ui/toast";

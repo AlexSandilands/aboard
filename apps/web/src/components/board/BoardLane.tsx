@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type Project, type TaskStatus } from "@taskboard/contracts";
+import { TASK_STATUSES, type Project, type TaskStatus } from "@repo/contracts";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";

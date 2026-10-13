@@ -1,4 +1,4 @@
-import type { StepStatus } from "@taskboard/contracts";
+import type { StepStatus } from "@repo/contracts";
 import { CheckIcon, CircleAlertIcon, CircleDotIcon, CircleIcon, CircleSlashIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";

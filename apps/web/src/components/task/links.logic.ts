@@ -1,4 +1,4 @@
-import type { ClassifiedLink, T3ThreadStatus, TaskLink } from "@taskboard/contracts";
+import type { ClassifiedLink, T3ThreadStatus, TaskLink } from "@repo/contracts";
 
 /** What the "Add link" input will create, for the live preview. Null when unrecognised. */
 export function describeLinkInput(link: ClassifiedLink | null): { kind: ClassifiedLink["kind"]; label: string } | null {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  BRAND,
   normalizeWorkspaceKey,
   ProjectIcon,
   type Project,
@@ -10,7 +11,7 @@ import {
   type T3ProjectCandidate,
   type T3ThreadSnapshot,
   type TaskLink,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
@@ -182,7 +183,7 @@ export interface T3SqliteProject {
 export function readT3ProjectsFromSqlite(t3Home: string): T3SqliteProject[] {
   const source = join(t3Home, "userdata", "statev2.sqlite");
   if (!existsSync(source)) return [];
-  const dir = mkdtempSync(join(tmpdir(), "taskboard-t3-"));
+  const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3-`));
   try {
     const copy = join(dir, "statev2.sqlite");
     copyFileSync(source, copy);

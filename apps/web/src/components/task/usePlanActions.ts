@@ -1,4 +1,4 @@
-import type { StepStatus, TaskDetail } from "@taskboard/contracts";
+import type { StepStatus, TaskDetail } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 

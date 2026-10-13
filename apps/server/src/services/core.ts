@@ -1,4 +1,4 @@
-import type { BoardEvent, T3IntegrationStatus } from "@taskboard/contracts";
+import type { BoardEvent, T3IntegrationStatus } from "@repo/contracts";
 import { generateKeyBetween } from "fractional-indexing";
 import type { EventBus } from "../bus.ts";
 import { nowIso, transaction, type Db } from "../db/database.ts";

@@ -1,5 +1,5 @@
 // Layout adapted from T3 Code (SidebarThreadHeader.tsx and the project scope combobox in Sidebar.tsx), MIT — see NOTICE.
-import type { Project } from "@taskboard/contracts";
+import type { Project } from "@repo/contracts";
 import { FolderIcon, FolderPlusIcon, ListFilterIcon, SearchIcon, SettingsIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { useMemo, useRef, useState, type RefObject } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";

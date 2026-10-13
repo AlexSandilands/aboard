@@ -1,4 +1,4 @@
-import { CreateProjectInput, UpdateProjectInput } from "@taskboard/contracts";
+import { CreateProjectInput, UpdateProjectInput } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";

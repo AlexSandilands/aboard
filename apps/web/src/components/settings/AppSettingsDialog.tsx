@@ -1,4 +1,4 @@
-import type { AppSettings, IntegrationsStatus, T3IntegrationStatus } from "@taskboard/contracts";
+import { BRAND, type AppSettings, type IntegrationsStatus, type T3IntegrationStatus } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useState } from "react";
@@ -301,22 +301,22 @@ function AgentsSection() {
   const url = mcpUrl();
   return (
     <SettingsSection title="Agents (MCP)">
-      <SettingsRow title="Claude Code" description="Register the taskboard MCP server.">
+      <SettingsRow title="Claude Code" description={`Register the ${BRAND.id} MCP server.`}>
         <div className="mt-2">
-          <CommandSnippet command={`claude mcp add --transport http taskboard ${url}`} />
+          <CommandSnippet command={`claude mcp add --transport http ${BRAND.id} ${url}`} />
         </div>
       </SettingsRow>
-      <SettingsRow title="Codex" description="Register the taskboard MCP server.">
+      <SettingsRow title="Codex" description={`Register the ${BRAND.id} MCP server.`}>
         <div className="mt-2">
-          <CommandSnippet command={`codex mcp add taskboard --url ${url}`} />
+          <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${url}`} />
         </div>
       </SettingsRow>
       <SettingsRow
         title="Skill"
-        description="Teaches Claude Code when to log ideas, write plans and update steps. Copy skills/taskboard from this repo to:"
+        description={`Teaches Claude Code when to log ideas, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
       >
         <div className="mt-2">
-          <CommandSnippet command="~/.claude/skills/taskboard" />
+          <CommandSnippet command={`~/.claude/skills/${BRAND.id}`} />
         </div>
       </SettingsRow>
     </SettingsSection>

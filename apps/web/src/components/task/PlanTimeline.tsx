@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import type { PlanStep, TaskDetail } from "@taskboard/contracts";
+import type { PlanStep, TaskDetail } from "@repo/contracts";
 import { ClipboardPasteIcon, EllipsisIcon, ListTodoIcon, ListTreeIcon, PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";

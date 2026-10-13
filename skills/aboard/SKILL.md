@@ -1,12 +1,12 @@
 ---
-name: taskboard
-description: Track work on the user's local taskboard (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea or follow-up comes up mid-task, when writing an implementation plan, when finishing steps, opening PRs, or ending a session. Covers ideas, plans, step progress, PR/Jira/T3 thread links and handover notes.
+name: aboard
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea or follow-up comes up mid-task, when writing an implementation plan, when finishing steps, opening PRs, or ending a session. Covers ideas, plans, step progress, PR/Jira/T3 thread links and handover notes.
 ---
 
-# Taskboard
+# Aboard (task board)
 
 The user keeps a local kanban board of their work across projects. Columns: **Ideas → Planned → In
-Progress → Review → Done**, one swimlane per project. You read and update it through the `taskboard`
+Progress → Review → Done**, one swimlane per project. You read and update it through the `aboard`
 MCP server; the board updates live in the user's browser. Identify the project by passing
 `workspacePath` = your current working directory. Unknown paths create the project automatically.
 
@@ -52,10 +52,10 @@ T3 Code exposes no environment variable for this, so you must call those tools.
 
 ## Setup
 
-The taskboard server runs locally on port 4317. Register it once:
+The server runs locally on port 4317. Register it once:
 
 ```sh
-claude mcp add --transport http taskboard http://127.0.0.1:4317/mcp
+claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
 ```
 
-Install this skill by copying the folder to `~/.claude/skills/taskboard/`.
+Install this skill by copying the folder to `~/.claude/skills/aboard/`.

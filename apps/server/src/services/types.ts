@@ -21,7 +21,7 @@ import type {
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never

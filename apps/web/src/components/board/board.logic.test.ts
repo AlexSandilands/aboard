@@ -1,4 +1,4 @@
-import type { BoardSnapshot, Project, TaskSummary } from "@taskboard/contracts";
+import type { BoardSnapshot, Project, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { attentionTasks, buildLanes, matchesTaskSearch, reuseUnchangedLanes } from "./board.logic";
 

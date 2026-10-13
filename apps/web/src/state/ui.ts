@@ -1,3 +1,4 @@
+import { storageKey } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -33,7 +34,7 @@ export const useBoardView = create<BoardViewState>()(
       setSearch: (search) => set({ search }),
     }),
     {
-      name: "taskboard:board-view",
+      name: storageKey("board-view"),
       partialize: ({ attentionOnly, hasPrOnly, showArchived, expandedDone }) => ({
         attentionOnly,
         hasPrOnly,
@@ -73,7 +74,7 @@ export const usePalette = create<PaletteState>()(
       closePalette: () => set({ open: false }),
       setLastProjectId: (lastProjectId) => set({ lastProjectId }),
     }),
-    { name: "taskboard:palette", partialize: ({ lastProjectId }) => ({ lastProjectId }) },
+    { name: storageKey("palette"), partialize: ({ lastProjectId }) => ({ lastProjectId }) },
   ),
 );
 

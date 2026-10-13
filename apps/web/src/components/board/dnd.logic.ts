@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@taskboard/contracts";
+import type { TaskStatus } from "@repo/contracts";
 
 /** What a draggable card or a droppable cell carries in its dnd-kit `data`. */
 export interface DragData {

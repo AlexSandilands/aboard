@@ -1,4 +1,4 @@
-import type { BoardSnapshot } from "@taskboard/contracts";
+import type { BoardSnapshot } from "@repo/contracts";
 import type { Core } from "./core.ts";
 import { assembleSummaries } from "./summaries.ts";
 import type { BoardService } from "./types.ts";

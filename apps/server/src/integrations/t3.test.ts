@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { BoardEvent, CreateProjectInput, PrSnapshot, Project, T3ThreadSnapshot, TaskLink } from "@taskboard/contracts";
-import { normalizeWorkspaceKey } from "@taskboard/contracts";
+import type { BoardEvent, CreateProjectInput, PrSnapshot, Project, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
+import { BRAND, normalizeWorkspaceKey } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 function makeT3Home(opts: { runtime?: boolean; projects?: Array<[string, string, string, string | null, string | null]> } = {}) {
-  const home = mkdtempSync(join(tmpdir(), "taskboard-t3home-"));
+  const home = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3home-`));
   tempDirs.push(home);
   mkdirSync(join(home, "userdata"));
   if (opts.runtime !== false) {
@@ -188,8 +188,8 @@ const SHELL_FIXTURE = {
   projects: [
     {
       id: "t3-p1",
-      title: "Taskboard",
-      workspaceRoot: "C:\\Code\\taskboard",
+      title: "Acme",
+      workspaceRoot: "C:\\Code\\acme",
       defaultModelSelection: null,
       projectIcon: { kind: "lucide", name: "kanban", color: "violet" },
       scripts: [],
@@ -267,11 +267,11 @@ describe("T3 integration", () => {
 
   it("lists projects from the shell when a token works, marking existing ones", async () => {
     const existing = fakeServices({ token: "tok" });
-    existing.services.projects.create({ title: "Mine", workspaceRoot: "c:/code/taskboard/" });
+    existing.services.projects.create({ title: "Mine", workspaceRoot: "c:/code/acme/" });
     const t3 = createT3Integration({ t3Home: makeT3Home(), bus: new EventBus(), services: () => existing.services, fetch: t3Fetch() });
     const candidates = await t3.listProjects();
     expect(candidates).toEqual([
-      { t3ProjectId: "t3-p1", title: "Taskboard", workspaceRoot: "C:\\Code\\taskboard", icon: { kind: "lucide", name: "kanban", color: "violet" }, existingProjectId: "proj-1" },
+      { t3ProjectId: "t3-p1", title: "Acme", workspaceRoot: "C:\\Code\\acme", icon: { kind: "lucide", name: "kanban", color: "violet" }, existingProjectId: "proj-1" },
       { t3ProjectId: "t3-p2", title: "T3 Code", workspaceRoot: "C:/Code/t3code", icon: null, existingProjectId: null },
     ]);
     const created = await t3.importProjects(["t3-p1", "t3-p2", "unknown"]);
@@ -286,7 +286,7 @@ describe("T3 sqlite import", () => {
     ["c", "Gone", "/home/me/gone", null, "2026-03-01T00:00:00Z"],
   ];
 
-  const tempCopies = () => readdirSync(tmpdir()).filter((name) => name.startsWith("taskboard-t3-"));
+  const tempCopies = () => readdirSync(tmpdir()).filter((name) => name.startsWith(`${BRAND.id}-t3-`));
 
   it("reads non-deleted projects from a temp copy and cleans it up", () => {
     const home = makeT3Home({ runtime: false, projects: PROJECTS });

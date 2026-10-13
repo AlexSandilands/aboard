@@ -1,3 +1,4 @@
+import { storageKey } from "@repo/contracts";
 import { useEffect, useRef } from "react";
 import { Board } from "~/components/board/Board";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
@@ -10,7 +11,7 @@ import { useBoardEvents } from "~/state/queries";
 import { useDialogs, usePalette } from "~/state/ui";
 import { isEditableTarget, isInsidePopup } from "./keyboard";
 
-const SIDEBAR_WIDTH_STORAGE_KEY = "taskboard:sidebar-width";
+const SIDEBAR_WIDTH_STORAGE_KEY = storageKey("sidebar-width");
 /** The board keeps at least this much room when the sidebar is dragged wider. */
 const MAIN_CONTENT_MIN_WIDTH = 480;
 

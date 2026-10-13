@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type Project, type TaskDetail, type TaskStatus } from "@taskboard/contracts";
+import { TASK_STATUSES, type Project, type TaskDetail, type TaskStatus } from "@repo/contracts";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,

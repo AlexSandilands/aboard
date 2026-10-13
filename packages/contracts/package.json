@@ -1,5 +1,5 @@
 {
-  "name": "@taskboard/contracts",
+  "name": "@repo/contracts",
   "private": true,
   "type": "module",
   "exports": {

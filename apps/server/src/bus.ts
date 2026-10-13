@@ -1,4 +1,4 @@
-import type { BoardEvent } from "@taskboard/contracts";
+import type { BoardEvent } from "@repo/contracts";
 
 type Listener = (event: BoardEvent) => void;
 

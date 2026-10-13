@@ -1,4 +1,4 @@
-import type { BoardEvent, BoardSnapshot, TaskStatus, TaskSummary } from "@taskboard/contracts";
+import type { BoardEvent, BoardSnapshot, TaskStatus, TaskSummary } from "@repo/contracts";
 import { generateKeyBetween } from "fractional-indexing";
 
 /** Applies a server BoardEvent to the cached board snapshot. Pure; returns the same object when nothing changed. */

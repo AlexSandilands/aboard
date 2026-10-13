@@ -1,4 +1,4 @@
-import type { LinkKind, PrRef, PrSnapshot, T3ThreadRef, T3ThreadSnapshot, TaskLink } from "@taskboard/contracts";
+import type { LinkKind, PrRef, PrSnapshot, T3ThreadRef, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
 

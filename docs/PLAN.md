@@ -1,4 +1,4 @@
-# Taskboard — Implementation Plan (v1)
+# Aboard — Implementation Plan (v1)
 
 A local, agent-integrated kanban board for tracking work across many projects. Agents log ideas and
 tasks, write structured plans, and advance them through statuses over MCP; the web UI updates live.
@@ -34,7 +34,7 @@ Status: **approved scope, ready to build.** Style source of truth: [STYLE_REFERE
 
 | Topic | Decision |
 |---|---|
-| Location | `C:\Code\taskboard`, own git repo, working name **taskboard** |
+| Location | `C:\Code\taskboard`, own git repo, working name **aboard** (see root `package.json`) |
 | Columns | Ideas (no plan needed) → Planned → In Progress → Review → Done |
 | Projects | Own DB keyed by normalized `workspaceRoot`; T3-style icon system; optional read-only T3 import |
 | Agent API | MCP (streamable HTTP at `/mcp`) + REST (`/api/*`) |
@@ -53,7 +53,7 @@ taskboard/
   packages/contracts/     zod schemas + inferred types shared by server & web (no runtime logic beyond helpers)
   apps/server/            Hono app: REST, SSE, MCP, services, SQLite, pollers, T3 integration
   apps/web/               Vite React app
-  skills/taskboard/       SKILL.md for Claude Code + AGENTS snippet for other agents
+  skills/aboard/       SKILL.md for Claude Code + AGENTS snippet for other agents
   docs/                   PLAN.md, STYLE_REFERENCE.md, user README content
 ```
 
@@ -66,9 +66,9 @@ taskboard/
 
 `GET /events` (SSE) streams bus events to browsers. The web app applies them to the TanStack Query cache. On reconnect it refetches `GET /api/board`. There is no replay protocol — the snapshot is small.
 
-**Localhost guard.** Reject requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>`. For browser-originated writes, check `Origin` (DNS-rebinding defence). Optional `TASKBOARD_TOKEN` env enables bearer auth for `/api` and `/mcp`. That's it.
+**Localhost guard.** Reject requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>`. For browser-originated writes, check `Origin` (DNS-rebinding defence). Optional `ABOARD_TOKEN` env enables bearer auth for `/api` and `/mcp`. That's it.
 
-**Data dir.** `~/.taskboard/` holds `taskboard.sqlite` and `settings.json`. Override with `TASKBOARD_HOME`. Tests use a temp dir.
+**Data dir.** `~/.aboard/` holds `data.sqlite` and `settings.json`. Override with `ABOARD_HOME`. Tests use a temp dir.
 
 ---
 
@@ -312,7 +312,7 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
 
 **Project settings** (dialog from the gear): name, icon (picker dialog), workspace path (browse), linked T3 project (auto-matched, shown read-only), archive project.
 
-**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http taskboard http://127.0.0.1:4317/mcp`, the Codex equivalent, and the skill install path).
+**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http aboard http://127.0.0.1:4317/mcp`, the Codex equivalent, and the skill install path).
 
 **Client state:**
 - TanStack Query for the board snapshot + task detail. A `useBoardEvents()` hook opens `EventSource('/events')` and patches the cache: `task.upserted` replaces the summary; `task.detail_changed` invalidates detail if open.
@@ -321,9 +321,9 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
 
 ---
 
-## 8. Agent workflow assets (`skills/taskboard`)
+## 8. Agent workflow assets (`skills/aboard`)
 
-- `SKILL.md`: a Claude Code skill (install by copying to `~/.claude/skills/taskboard/`) covering:
+- `SKILL.md`: a Claude Code skill (install by copying to `~/.claude/skills/aboard/`) covering:
   - At the start of meaningful work, `board_overview` / `list_tasks` for the cwd, then `get_task` if resuming.
   - When an idea comes up mid-work, `create_idea` (one call, don't derail).
   - Before implementation, ensure the task has a plan (`set_plan`), then `move_task in_progress`.
@@ -393,7 +393,7 @@ Each phase ends green: `pnpm -r typecheck && pnpm -r test`. File ownership is ex
 - Write the README.
 
 **Definition of done (v1):**
-- [ ] `pnpm dev` and `pnpm start` work on Windows; data persists in `~/.taskboard`.
+- [ ] `pnpm dev` and `pnpm start` work on Windows; data persists in `~/.aboard`.
 - [ ] Projects: add via folder browse, T3 import, or path-less; icon picker; reorder; collapse; archive.
 - [ ] Ideas → plan gate → full status flow by drag and by status select; the gate error is clear in UI and MCP.
 - [ ] Plan timeline: view, current-step emphasis, cycle status, edit, notes, reorder, add phase/step, paste markdown.

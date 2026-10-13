@@ -13,7 +13,7 @@ import {
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { BoardSnapshot, Project } from "@taskboard/contracts";
+import type { BoardSnapshot, Project } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderPlusIcon, SettingsIcon } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";

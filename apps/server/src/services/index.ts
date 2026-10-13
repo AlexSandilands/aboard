@@ -1,4 +1,4 @@
-import type { T3IntegrationStatus } from "@taskboard/contracts";
+import type { T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";

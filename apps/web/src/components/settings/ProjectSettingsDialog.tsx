@@ -1,4 +1,4 @@
-import type { Project } from "@taskboard/contracts";
+import type { Project } from "@repo/contracts";
 import { lazy, Suspense, useState } from "react";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";

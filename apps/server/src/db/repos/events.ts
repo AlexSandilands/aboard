@@ -1,4 +1,4 @@
-import type { TaskEvent } from "@taskboard/contracts";
+import type { TaskEvent } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 interface EventRow {

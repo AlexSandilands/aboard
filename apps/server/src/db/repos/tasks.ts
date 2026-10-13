@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@taskboard/contracts";
+import type { TaskStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */

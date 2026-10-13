@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { PlanStep, StepStatus } from "@taskboard/contracts";
+import type { PlanStep, StepStatus } from "@repo/contracts";
 import { ChevronRightIcon, EllipsisIcon, GripVerticalIcon, NotebookPenIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 

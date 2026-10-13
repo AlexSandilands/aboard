@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { BRAND, brandEnv } from "@repo/contracts";
 
 export interface Config {
   port: number;
@@ -17,17 +18,18 @@ export interface Config {
   pollers: boolean;
 }
 
+/** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const homeDir = env.TASKBOARD_HOME ?? join(homedir(), ".taskboard");
+  const homeDir = env[brandEnv("HOME")] ?? join(homedir(), `.${BRAND.id}`);
   mkdirSync(homeDir, { recursive: true });
   return {
-    port: Number(env.TASKBOARD_PORT ?? 4317),
+    port: Number(env[brandEnv("PORT")] ?? 4317),
     host: "127.0.0.1",
     homeDir,
-    dbPath: join(homeDir, "taskboard.sqlite"),
-    token: env.TASKBOARD_TOKEN || null,
-    webDist: env.TASKBOARD_WEB_DIST ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
+    dbPath: join(homeDir, "data.sqlite"),
+    token: env[brandEnv("TOKEN")] || null,
+    webDist: env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
-    pollers: env.TASKBOARD_POLLERS !== "0",
+    pollers: env[brandEnv("POLLERS")] !== "0",
   };
 }

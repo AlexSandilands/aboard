@@ -1,4 +1,4 @@
-import type { Project, TaskDetail } from "@taskboard/contracts";
+import type { Project, TaskDetail } from "@repo/contracts";
 import {
   ArchiveIcon,
   ArrowRightIcon,

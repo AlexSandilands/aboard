@@ -1,5 +1,5 @@
 // Dev-only gallery of every ported primitive, mounted at /__gallery for visual parity checks.
-import { deriveProjectIdentity, type ProjectIcon } from "@taskboard/contracts";
+import { BRAND, deriveProjectIdentity, storageKey, type ProjectIcon } from "@repo/contracts";
 import {
   BellIcon,
   CheckIcon,
@@ -108,7 +108,7 @@ const BADGE_VARIANTS = [
   "destructive",
 ] as const;
 const FRUITS = ["Apple", "Banana", "Cherry", "Dragonfruit", "Elderberry"];
-const PROJECT_NAMES = ["storefront", "t3code", "shop tools", "taskboard", "a2b"];
+const PROJECT_NAMES = ["storefront", "t3code", "shop tools", "acme", "a2b"];
 const SAMPLE_ICONS: ReadonlyArray<{ title: string; icon: ProjectIcon }> = [
   { title: "Rocket", icon: { kind: "lucide", name: "rocket", color: "violet" } },
   { title: "Server", icon: { kind: "lucide", name: "server", color: "emerald" } },
@@ -222,11 +222,11 @@ function SampleSidebarLayout() {
         className="h-full min-h-0 [&_[data-slot=sidebar-container]]:absolute [&_[data-slot=sidebar-container]]:h-full"
         data-app-sidebar
       >
-        <Sidebar resizable={{ storageKey: "taskboard:sidebar-width", minWidth: 208 }}>
+        <Sidebar resizable={{ storageKey: storageKey("sidebar-width"), minWidth: 208 }}>
           <div className="relative flex min-h-0 flex-1 flex-col">
             <SidebarStageBackdrop />
             <SidebarHeader className="relative z-10 h-[var(--workspace-topbar-height)] flex-row items-center justify-between">
-              <span className="px-1 text-sm font-medium">Taskboard</span>
+              <span className="px-1 text-sm font-medium">{BRAND.name}</span>
               <Button size="icon-xs" variant="ghost-muted" aria-label="Add project">
                 <PlusIcon />
               </Button>

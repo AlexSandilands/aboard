@@ -1,4 +1,4 @@
-import type { PlanPhase, PlanStep, StepStatus, TaskDetail } from "@taskboard/contracts";
+import type { PlanPhase, PlanStep, StepStatus, TaskDetail } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   applyStepOrder,

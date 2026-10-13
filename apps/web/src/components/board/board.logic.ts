@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type AttentionReason, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@taskboard/contracts";
+import { TASK_STATUSES, type AttentionReason, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** Done shows only the most recently finished tasks until the lane is expanded. */

@@ -1,6 +1,6 @@
 import { createApp } from "../app.ts";
 import { createContext } from "../context.ts";
-import type { BoardEvent } from "@taskboard/contracts";
+import type { BoardEvent } from "@repo/contracts";
 
 /** In-memory server context + app for tests. `events` collects everything published on the bus. */
 export function createTestHarness() {

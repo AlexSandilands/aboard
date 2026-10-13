@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { BoardEvent } from "@taskboard/contracts";
+import { BRAND, type BoardEvent } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus.ts";
 import { openDatabase } from "../db/database.ts";
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 function setup(opts: { runGh?: RunGh; fetch?: FetchFn; withDb?: boolean } = {}) {
-  const t3Home = mkdtempSync(join(tmpdir(), "taskboard-int-"));
+  const t3Home = mkdtempSync(join(tmpdir(), `${BRAND.id}-int-`));
   homes.push(t3Home);
   mkdirSync(join(t3Home, "userdata"));
   writeFileSync(join(t3Home, "userdata", "server-runtime.json"), JSON.stringify({ origin: "http://127.0.0.1:3773" }));

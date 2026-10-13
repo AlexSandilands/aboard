@@ -1,4 +1,4 @@
-import { normalizeWorkspaceKey, workspaceBasename, type Project } from "@taskboard/contracts";
+import { normalizeWorkspaceKey, workspaceBasename, type Project } from "@repo/contracts";
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";

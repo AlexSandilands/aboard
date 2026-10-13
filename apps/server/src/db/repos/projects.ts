@@ -1,4 +1,4 @@
-import type { Project, ProjectIcon } from "@taskboard/contracts";
+import type { Project, ProjectIcon } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import type { Sql } from "./sql.ts";
 

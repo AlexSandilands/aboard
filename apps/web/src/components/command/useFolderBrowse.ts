@@ -1,4 +1,4 @@
-import type { CreateProjectInput, Project } from "@taskboard/contracts";
+import type { CreateProjectInput, Project } from "@repo/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useFsBrowse } from "~/state/queries";
 import { api } from "~/lib/api";

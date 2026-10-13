@@ -1,4 +1,4 @@
-import type { PlanInput } from "@taskboard/contracts";
+import type { PlanInput } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";

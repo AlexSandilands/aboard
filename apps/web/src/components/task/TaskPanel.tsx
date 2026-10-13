@@ -1,4 +1,4 @@
-import type { Project, TaskDetail } from "@taskboard/contracts";
+import { storageKey, type Project, type TaskDetail } from "@repo/contracts";
 import { FileQuestionIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 
@@ -35,7 +35,7 @@ let handledPlanEditorRequest = 0;
 export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const maxWidth = Math.max(MIN_WIDTH, Math.round((typeof window === "undefined" ? 1600 : window.innerWidth) * 0.7));
   const { width, handlers } = useResizableWidth({
-    storageKey: "taskboard:panel-width",
+    storageKey: storageKey("panel-width"),
     defaultWidth: DEFAULT_WIDTH,
     minWidth: MIN_WIDTH,
     maxWidth,

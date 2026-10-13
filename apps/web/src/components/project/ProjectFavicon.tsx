@@ -1,5 +1,5 @@
 // Adapted from T3 Code (MIT) — see NOTICE.
-import { deriveProjectIdentity, type ProjectIcon } from "@taskboard/contracts";
+import { deriveProjectIdentity, type ProjectIcon } from "@repo/contracts";
 import { FolderCodeIcon } from "lucide-react";
 import type { IconName } from "lucide-react/dynamic";
 import { lazy, Suspense } from "react";

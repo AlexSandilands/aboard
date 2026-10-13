@@ -1,4 +1,4 @@
-import type { BoardSnapshot, TaskSummary } from "@taskboard/contracts";
+import type { BoardSnapshot, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { applyBoardEvent, cellTasks, optimisticMove } from "./boardReducer";
 

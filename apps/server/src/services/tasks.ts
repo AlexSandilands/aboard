@@ -1,4 +1,4 @@
-import type { TaskDetail, TaskSummary } from "@taskboard/contracts";
+import type { TaskDetail, TaskSummary } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";

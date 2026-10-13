@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ApiErrorCode } from "@taskboard/contracts";
+import { storageKey, type ApiErrorBody, type ApiErrorCode } from "@repo/contracts";
 
 export class ApiError extends Error {
   constructor(
@@ -11,10 +11,10 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = "taskboard:token";
+const TOKEN_KEY = storageKey("token");
 
 /**
- * Token mode (server started with TASKBOARD_TOKEN): open the UI at `/#token=<token>`. The token is
+ * Token mode (server started with the `TOKEN` env var, see `brandEnv`): open the UI at `/#token=<token>`. The token is
  * moved into sessionStorage and the hash stripped so it doesn't linger in the address bar.
  * Call once before rendering.
  */
@@ -35,7 +35,7 @@ export function eventsUrl(): string {
   return token ? `/events?token=${encodeURIComponent(token)}` : "/events";
 }
 
-/** JSON fetch against the taskboard server. Throws ApiError with the server's error code. */
+/** JSON fetch against the server. Throws ApiError with the server's error code. */
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const token = authToken();
   const headers: Record<string, string> = {};

@@ -7,7 +7,7 @@ import {
   type PlanStep,
   type StepStatus,
   type TaskDetail,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 
 /** Clicking a step's node walks todo → in_progress → done → todo; blocked/skipped reset to todo. */
 export function cycleStepStatus(status: StepStatus): StepStatus {

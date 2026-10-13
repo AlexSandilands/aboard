@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { PlanInput, parsePlanMarkdown, type Project } from "@taskboard/contracts";
+import { PlanInput, parsePlanMarkdown, type Project } from "@repo/contracts";
 import { renderTaskShort, taskStructured } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { AppError } from "../errors.ts";
@@ -20,7 +20,7 @@ export type ToolRegistrar = (server: McpServer, tc: ToolContext) => void;
 // ── Shared input fields ──────────────────────────────────────────────────
 
 export const projectFields = {
-  projectId: z.string().optional().describe("Taskboard project id. Usually omit and pass workspacePath instead."),
+  projectId: z.string().optional().describe("Project id. Usually omit and pass workspacePath instead."),
   workspacePath: z
     .string()
     .optional()

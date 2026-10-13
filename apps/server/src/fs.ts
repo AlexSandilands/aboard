@@ -1,4 +1,4 @@
-import type { FsBrowseResult } from "@taskboard/contracts";
+import type { FsBrowseResult } from "@repo/contracts";
 import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";

@@ -1,6 +1,6 @@
 // Pure helpers for the command palette. Path handling adapted from T3 Code's
 // client-runtime browse helpers (MIT) — see NOTICE.
-import type { FsBrowseResult } from "@taskboard/contracts";
+import type { FsBrowseResult } from "@repo/contracts";
 
 // ── Item filtering ───────────────────────────────────────────────────────
 

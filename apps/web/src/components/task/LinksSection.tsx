@@ -4,7 +4,7 @@ import {
   type T3IntegrationStatus,
   type TaskDetail,
   type TaskLink,
-} from "@taskboard/contracts";
+} from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDownIcon,

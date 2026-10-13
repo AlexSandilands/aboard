@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from "@taskboard/contracts";
+import type { ApiErrorCode } from "@repo/contracts";
 
 /** Typed domain error. HTTP routes and MCP tools map it to a response; anything else is INTERNAL. */
 export class AppError extends Error {

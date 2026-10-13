@@ -1,5 +1,5 @@
 {
-  "name": "@taskboard/server",
+  "name": "@repo/server",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.4",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@taskboard/contracts": "workspace:*",
+    "@repo/contracts": "workspace:*",
     "fractional-indexing": "^4.0.0",
     "hono": "^4.13.13",
     "zod": "^4.6.7"

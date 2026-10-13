@@ -1,5 +1,5 @@
 // View-stack command palette, modelled on T3 Code's CommandPalette (MIT) — see NOTICE.
-import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@taskboard/contracts";
+import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,

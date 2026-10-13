@@ -1,4 +1,4 @@
-import type { AttentionReason } from "@taskboard/contracts";
+import type { AttentionReason } from "@repo/contracts";
 import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 

@@ -1,4 +1,4 @@
-import type { PrSnapshot } from "@taskboard/contracts";
+import type { PrSnapshot } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -15,18 +15,18 @@ const codeOf = (fn: () => unknown): string | undefined => {
 describe("projects", () => {
   it("resolves exact, nested and case-insensitive Windows paths", () => {
     const { services: s } = createTestHarness();
-    const outer = s.projects.create({ workspaceRoot: "C:\\Code\\taskboard" });
-    const inner = s.projects.create({ workspaceRoot: "C:\\Code\\taskboard\\apps\\web" });
+    const outer = s.projects.create({ workspaceRoot: "C:\\Code\\acme" });
+    const inner = s.projects.create({ workspaceRoot: "C:\\Code\\acme\\apps\\web" });
     const unix = s.projects.create({ workspaceRoot: "/home/me/proj" });
-    expect(outer.title).toBe("taskboard");
-    expect(outer.workspaceKey).toBe("c:/code/taskboard");
+    expect(outer.title).toBe("acme");
+    expect(outer.workspaceKey).toBe("c:/code/acme");
 
-    expect(s.projects.resolve({ workspacePath: "c:/code/TASKBOARD/" }).id).toBe(outer.id);
-    expect(s.projects.resolve({ workspacePath: "C:\\Code\\taskboard\\apps\\server\\src" }).id).toBe(outer.id);
-    expect(s.projects.resolve({ workspacePath: "C:\\Code\\taskboard\\apps\\web\\src" }).id).toBe(inner.id);
+    expect(s.projects.resolve({ workspacePath: "c:/code/ACME/" }).id).toBe(outer.id);
+    expect(s.projects.resolve({ workspacePath: "C:\\Code\\acme\\apps\\server\\src" }).id).toBe(outer.id);
+    expect(s.projects.resolve({ workspacePath: "C:\\Code\\acme\\apps\\web\\src" }).id).toBe(inner.id);
     expect(s.projects.resolve({ workspacePath: "/home/me/proj/sub" }).id).toBe(unix.id);
     // Segment boundary: a sibling folder sharing a prefix is not inside the project.
-    expect(codeOf(() => s.projects.resolve({ workspacePath: "C:\\Code\\taskboard-old" }))).toBe("NOT_FOUND");
+    expect(codeOf(() => s.projects.resolve({ workspacePath: "C:\\Code\\acme-old" }))).toBe("NOT_FOUND");
     expect(codeOf(() => s.projects.resolve({ workspacePath: "/home/me/PROJ" }))).toBe("NOT_FOUND");
     expect(codeOf(() => s.projects.resolve({}))).toBe("VALIDATION");
   });

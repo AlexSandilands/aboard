@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.ts";
+import { BRAND } from "@repo/contracts";
 import { loadConfig } from "./config.ts";
 import { createContext } from "./context.ts";
 
@@ -18,8 +19,8 @@ if (config.webDist && existsSync(config.webDist)) {
 if (config.pollers) ctx.integrations.start();
 
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
-  console.log(`[taskboard] listening on http://${config.host}:${info.port}  (data: ${config.homeDir})`);
-  console.log(`[taskboard] MCP endpoint: http://${config.host}:${info.port}/mcp`);
+  console.log(`[${BRAND.id}] listening on http://${config.host}:${info.port}  (data: ${config.homeDir})`);
+  console.log(`[${BRAND.id}] MCP endpoint: http://${config.host}:${info.port}/mcp`);
 });
 
 function shutdown() {

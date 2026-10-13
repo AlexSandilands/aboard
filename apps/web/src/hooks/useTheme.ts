@@ -1,10 +1,11 @@
 // Adapted from T3 Code (apps/web/src/hooks/useTheme.ts), MIT — see NOTICE.
 // Trimmed to light | dark | system; the index.html boot script reads the same key.
+import { storageKey } from "@repo/contracts";
 import { useCallback, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
-const STORAGE_KEY = "taskboard:theme";
+const STORAGE_KEY = storageKey("theme");
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
 
 let listeners: Array<() => void> = [];

@@ -1,4 +1,4 @@
-import type { TaskDetail } from "@taskboard/contracts";
+import type { TaskDetail } from "@repo/contracts";
 import { CheckIcon, ChevronRightIcon, CircleCheckIcon, ListTodoIcon, MessageSquareQuoteIcon, PlayIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 

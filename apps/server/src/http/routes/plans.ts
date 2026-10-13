@@ -1,4 +1,4 @@
-import { PlanStepInput, StepPatch } from "@taskboard/contracts";
+import { PlanStepInput, StepPatch } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";

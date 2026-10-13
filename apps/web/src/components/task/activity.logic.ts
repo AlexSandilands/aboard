@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskEvent } from "@taskboard/contracts";
+import { TASK_STATUSES, type TaskEvent } from "@repo/contracts";
 
 export type ActivityIcon =
   | "created"

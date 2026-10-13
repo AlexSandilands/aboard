@@ -1,4 +1,4 @@
-import { UpdateSettingsInput } from "@taskboard/contracts";
+import { UpdateSettingsInput } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";

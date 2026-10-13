@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskStatus, type LinkInput } from "@taskboard/contracts";
+import { TaskStatus, type LinkInput } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { statusLabel } from "../format.ts";
 import {

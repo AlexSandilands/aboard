@@ -1,5 +1,5 @@
 {
-  "name": "@taskboard/web",
+  "name": "@repo/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@tanstack/react-query": "^5.104.2",
     "@tanstack/react-router": "^1.170.44",
-    "@taskboard/contracts": "workspace:*",
+    "@repo/contracts": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "fractional-indexing": "^4.0.0",
     "lucide-react": "^0.564.0",

@@ -13,7 +13,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus } from "@taskboard/contracts";
+import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";

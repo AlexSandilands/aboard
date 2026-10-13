@@ -1,4 +1,4 @@
-import type { PrSnapshot, T3ThreadStatus, TaskLink } from "@taskboard/contracts";
+import type { PrSnapshot, T3ThreadStatus, TaskLink } from "@repo/contracts";
 import {
   GitMergeIcon,
   GitPullRequestArrowIcon,

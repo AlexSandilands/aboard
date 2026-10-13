@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskSummary } from "@taskboard/contracts";
+import type { TaskSummary } from "@repo/contracts";
 import { memo, type KeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";

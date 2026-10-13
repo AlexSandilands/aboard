@@ -1,4 +1,4 @@
-import type { StepStatus, TaskSummary } from "@taskboard/contracts";
+import type { StepStatus, TaskSummary } from "@repo/contracts";
 import { cn } from "~/lib/utils";
 
 // Adapted from T3 Code's TaskSegments (ComposerTasksBadge.tsx), MIT — see NOTICE.

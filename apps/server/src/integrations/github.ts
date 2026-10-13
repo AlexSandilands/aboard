@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import type { GithubStatus, PrSnapshot, TaskLink } from "@taskboard/contracts";
+import type { GithubStatus, PrSnapshot, TaskLink } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";

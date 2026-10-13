@@ -1,4 +1,4 @@
-import { CreateTaskInput, LinkInput, MoveTaskInput, PlanInput, TaskStatus, UpdateTaskInput } from "@taskboard/contracts";
+import { CreateTaskInput, LinkInput, MoveTaskInput, PlanInput, TaskStatus, UpdateTaskInput , ACTOR_HEADER } from "@repo/contracts";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -35,7 +35,7 @@ export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
     "/api/tasks",
     handle(async (c) => {
       const input = await parseBody(c, CreateTaskInput);
-      const actor = c.req.header("x-taskboard-actor")?.trim() || input.actor || actorOf(c);
+      const actor = c.req.header(ACTOR_HEADER)?.trim() || input.actor || actorOf(c);
       return c.json(services.tasks.create({ ...input, actor }), 201);
     }),
   );

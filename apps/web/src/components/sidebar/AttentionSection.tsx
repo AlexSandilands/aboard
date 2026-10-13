@@ -1,5 +1,5 @@
 // Row styling adapted from T3 Code's SidebarThreadRow (Sidebar.tsx), MIT — see NOTICE.
-import type { Project, TaskSummary } from "@taskboard/contracts";
+import type { Project, TaskSummary } from "@repo/contracts";
 import { memo, useMemo, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { CollapsibleSectionHeader } from "~/components/ui/collapsible-section-header";

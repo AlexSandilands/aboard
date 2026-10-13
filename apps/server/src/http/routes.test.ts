@@ -1,4 +1,4 @@
-import type { ApiErrorBody, TaskDetail } from "@taskboard/contracts";
+import { ACTOR_HEADER, type ApiErrorBody, type TaskDetail } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -8,7 +8,7 @@ async function setup() {
   const res = await h.request("/api/tasks", {
     method: "POST",
     json: { projectId: project.id, title: "Idea" },
-    headers: { "x-taskboard-actor": "codex" },
+    headers: { [ACTOR_HEADER]: "codex" },
   });
   expect(res.status).toBe(201);
   const task = (await res.json()) as TaskDetail;

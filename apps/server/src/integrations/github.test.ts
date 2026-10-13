@@ -1,4 +1,4 @@
-import type { AppSettings, PrSnapshot, T3ThreadSnapshot, TaskLink } from "@taskboard/contracts";
+import type { AppSettings, PrSnapshot, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createGithubIntegration, GhError, GhPrJson, mapPrSnapshot, type GithubServices, type RunGh } from "./github.ts";

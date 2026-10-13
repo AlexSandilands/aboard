@@ -1,8 +1,8 @@
-import type { TaskEvent } from "@taskboard/contracts";
+import type { TaskEvent } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { describeEvent, type ActivityContext } from "./activity.logic";
 import { describeLinkInput, jiraHref, threadStatusPresentation } from "./links.logic";
-import { classifyLink } from "@taskboard/contracts";
+import { classifyLink } from "@repo/contracts";
 
 const ctx: ActivityContext = {
   steps: new Map([["s1", { label: "1.2", title: "Write migrations" }]]),

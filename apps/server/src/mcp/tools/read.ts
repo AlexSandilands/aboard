@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskStatus, type Project } from "@taskboard/contracts";
+import { TaskStatus, type Project } from "@repo/contracts";
 import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel, taskStructured } from "../format.ts";
 import {
   findProject,
@@ -19,7 +19,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
     {
       title: "Board overview",
       description:
-        "Cheap orientation call. Shows every project on the user's taskboard with task counts per status " +
+        "Cheap orientation call. Shows every project on the user's board with task counts per status " +
         "(Ideas, Planned, In Progress, Review, Done) and anything needing attention (blocked steps, failing PRs, " +
         "threads awaiting input). Pass workspacePath (your cwd) to also list that project's open tasks. " +
         "Call this at the start of meaningful work.",

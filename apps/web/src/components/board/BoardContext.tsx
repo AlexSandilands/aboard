@@ -1,4 +1,4 @@
-import type { AppSettings, T3IntegrationStatus } from "@taskboard/contracts";
+import type { AppSettings, T3IntegrationStatus } from "@repo/contracts";
 import { createContext, use, type RefObject } from "react";
 
 /**

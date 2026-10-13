@@ -1,4 +1,4 @@
-import type { GithubStatus, Project, T3IntegrationStatus, T3ProjectCandidate } from "@taskboard/contracts";
+import type { GithubStatus, Project, T3IntegrationStatus, T3ProjectCandidate } from "@repo/contracts";
 
 /** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
 export interface Integrations {

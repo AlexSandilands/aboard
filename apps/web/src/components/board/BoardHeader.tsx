@@ -1,4 +1,4 @@
-import type { Project } from "@taskboard/contracts";
+import type { Project } from "@repo/contracts";
 import { ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";

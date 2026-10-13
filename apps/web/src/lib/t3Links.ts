@@ -1,4 +1,4 @@
-import { t3BrowserThreadUrl, t3DesktopThreadUrl, type AppSettings, type T3IntegrationStatus, type T3ThreadRef } from "@taskboard/contracts";
+import { t3BrowserThreadUrl, t3DesktopThreadUrl, type AppSettings, type T3IntegrationStatus, type T3ThreadRef } from "@repo/contracts";
 
 export interface T3LinkTargets {
   primary: { href: string; label: string };

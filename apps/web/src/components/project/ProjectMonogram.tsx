@@ -1,5 +1,5 @@
 // Adapted from T3 Code (MIT) — see NOTICE.
-import type { ProjectIconColor } from "@taskboard/contracts";
+import type { ProjectIconColor } from "@repo/contracts";
 import { projectIconColorClassName } from "./projectIconColors";
 import { cn } from "~/lib/utils";
 

@@ -1,6 +1,6 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { TaskStatus, TaskSummary } from "@taskboard/contracts";
+import type { TaskStatus, TaskSummary } from "@repo/contracts";
 import { PlusIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 import { Button } from "~/components/ui/button";

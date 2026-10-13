@@ -1,4 +1,4 @@
-import type { Project } from "@taskboard/contracts";
+import type { Project } from "@repo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastManager } from "~/components/ui/toast";
 import { api } from "~/lib/api";

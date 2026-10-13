@@ -1,4 +1,4 @@
-# Taskboard
+# Aboard
 
 A local kanban board for juggling work across many projects, built for working with coding agents.
 Agents log ideas, write structured plans and move tasks along over MCP; the board updates live.
@@ -21,34 +21,34 @@ pnpm start        # builds the web app and serves everything on http://127.0.0.1
 pnpm dev          # development: server on 4317, Vite on http://127.0.0.1:5317
 ```
 
-Data lives in `~/.taskboard/taskboard.sqlite` (override with `TASKBOARD_HOME`). The server only
-listens on 127.0.0.1. Set `TASKBOARD_TOKEN` to require a bearer token on the API and MCP endpoint. With a token set, open the UI at `http://127.0.0.1:4317/#token=<token>`; the page keeps it for the browser tab and strips it from the address bar.
+Data lives in `~/.aboard/` (override with `ABOARD_HOME`; all env vars use the `ABOARD_` prefix). The server only
+listens on 127.0.0.1. Set `ABOARD_TOKEN` to require a bearer token on the API and MCP endpoint. With a token set, open the UI at `http://127.0.0.1:4317/#token=<token>`; the page keeps it for the browser tab and strips it from the address bar.
 
 ## Connect your agents
 
 The MCP endpoint is `http://127.0.0.1:4317/mcp`.
 
 ```sh
-claude mcp add --transport http taskboard http://127.0.0.1:4317/mcp
-codex mcp add taskboard --url http://127.0.0.1:4317/mcp
+claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
+codex mcp add aboard --url http://127.0.0.1:4317/mcp
 ```
 
 Then give your agent the workflow:
 
-- **Claude Code:** copy `skills/taskboard` to `~/.claude/skills/taskboard`.
-- **Other agents:** paste `skills/taskboard/AGENTS-snippet.md` into your `AGENTS.md` / `CLAUDE.md`.
+- **Claude Code:** copy `skills/aboard` to `~/.claude/skills/aboard`.
+- **Other agents:** paste `skills/aboard/AGENTS-snippet.md` into your `AGENTS.md` / `CLAUDE.md`.
 
 Agents identify the project by passing their working directory, so there's nothing to configure
 per repo. Unknown folders become new projects automatically.
 
 ## T3 Code integration (optional)
 
-When T3 Code is running, Taskboard detects it automatically.
+When T3 Code is running, it is detected automatically.
 
 - **Thread links:** agents inside T3 Code attach their thread to the task. The card and detail
   panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
   choose in Settings).
-- **Import projects:** command palette → *Add project → From T3 Code*. Read-only; Taskboard never
+- **Import projects:** command palette → *Add project → From T3 Code*. Read-only; this app never
   writes to T3 Code's data.
 - **Live thread status:** mint a read-only token and paste it in Settings → T3 Code:
   ```sh

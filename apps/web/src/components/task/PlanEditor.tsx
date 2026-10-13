@@ -1,4 +1,4 @@
-import { parsePlanMarkdown, type PlanInput, type TaskDetail } from "@taskboard/contracts";
+import { parsePlanMarkdown, type PlanInput, type TaskDetail } from "@repo/contracts";
 import { PlusIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
