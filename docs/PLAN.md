@@ -186,7 +186,7 @@ Tools take an optional `actor` label (default: the client name from initialize).
 | `add_steps` | Append steps to a phase (or a new phase). |
 | `update_step` | status and/or notes (append or replace) by step id. Also accepts `stepNumber` ("2.3"). |
 | `move_task` | Change status; returns `PLAN_REQUIRED` guidance when gated. |
-| `update_task` | title, description, project. |
+| `update_task` | title, description, archive; explicit `moveToProjectId`/`moveToWorkspacePath` to move projects. |
 | `add_note` | Free-form progress note → activity log ("handover notes"). |
 | `link` | Attach PR URL / Jira key / T3 thread `{environmentId, threadId}` / URL. Idempotent. |
 

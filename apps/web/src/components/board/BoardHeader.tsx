@@ -16,6 +16,11 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const { isMobile, open } = useSidebar();
   const attentionOnly = useBoardView((s) => s.attentionOnly);
   const setAttentionOnly = useBoardView((s) => s.setAttentionOnly);
+  const hasPrOnly = useBoardView((s) => s.hasPrOnly);
+  const setHasPrOnly = useBoardView((s) => s.setHasPrOnly);
+  const showArchived = useBoardView((s) => s.showArchived);
+  const setShowArchived = useBoardView((s) => s.setShowArchived);
+  const filtered = attentionOnly || hasPrOnly || showArchived;
   const setProjectFilter = useSetProjectFilter();
 
   return (
@@ -43,7 +48,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
             <TooltipTrigger
               render={
                 <MenuTrigger
-                  render={<Button variant={attentionOnly ? "secondary" : "ghost-muted"} size="icon-sm" aria-label="Filter board" />}
+                  render={<Button variant={filtered ? "secondary" : "ghost-muted"} size="icon-sm" aria-label="Filter board" />}
                 />
               }
             >
@@ -56,6 +61,12 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
               <MenuGroupLabel>Show</MenuGroupLabel>
               <MenuCheckboxItem checked={attentionOnly} onCheckedChange={setAttentionOnly}>
                 Needs attention only
+              </MenuCheckboxItem>
+              <MenuCheckboxItem checked={hasPrOnly} onCheckedChange={setHasPrOnly}>
+                Has PR
+              </MenuCheckboxItem>
+              <MenuCheckboxItem checked={showArchived} onCheckedChange={setShowArchived}>
+                Show archived
               </MenuCheckboxItem>
             </MenuGroup>
           </MenuPopup>

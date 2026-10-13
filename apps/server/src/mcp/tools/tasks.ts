@@ -4,6 +4,7 @@ import { AppError } from "../../errors.ts";
 import { statusLabel } from "../format.ts";
 import {
   actorField,
+  hasProjectRef,
   planFromArgs,
   planInputFields,
   projectFields,
@@ -143,14 +144,19 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description or plan context, move it to another project (projectId or workspacePath), " +
-        "or archive/unarchive it. For plan steps use set_plan/add_steps/update_step; for status use move_task.",
+        "Edit a task's title, description or plan context, or archive/unarchive it. To move the task to a different " +
+        "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist). " +
+        "For plan steps use set_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
         task: taskField,
         title: z.string().min(1).optional(),
         description: z.string().optional().describe("Replaces the description (markdown)."),
         planContext: z.string().optional().describe("Replaces the plan context (markdown)."),
-        ...projectFields,
+        moveToProjectId: z.string().optional().describe("Moves the task to this project. Omit unless you mean to move it."),
+        moveToWorkspacePath: z
+          .string()
+          .optional()
+          .describe("Moves the task to the existing project for this workspace path. Omit unless you mean to move it."),
         archived: z.boolean().optional(),
         actor: actorField,
       },
@@ -158,10 +164,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     (args) =>
       run(() => {
         const id = services.tasks.resolveId(args.task);
-        const projectId =
-          args.projectId || args.workspacePath
-            ? services.projects.resolve(projectRef(args), { autoCreate: true }).id
-            : undefined;
+        const moveRef = { projectId: args.moveToProjectId, workspacePath: args.moveToWorkspacePath };
+        const projectId = hasProjectRef(moveRef)
+          ? services.projects.resolve(projectRef(moveRef), { autoCreate: false }).id
+          : undefined;
         const task = services.tasks.update(
           id,
           {

@@ -40,6 +40,29 @@ describe("applyBoardEvent", () => {
   });
 });
 
+describe("applyBoardEvent project archiving", () => {
+  it("drops an archived project's tasks with its lane", () => {
+    const project = {
+      id: "p",
+      title: "P",
+      workspaceRoot: null,
+      workspaceKey: null,
+      icon: null,
+      t3ProjectId: null,
+      position: "a0",
+      collapsed: false,
+      archivedAt: null,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const other = { ...task("o", "idea", "a0"), projectId: "q" };
+    const b = { ...board([task("a", "idea", "a0"), other]), projects: [project] };
+    const archived = applyBoardEvent(b, { type: "project.upserted", project: { ...project, archivedAt: "x" } });
+    expect(archived.projects).toEqual([]);
+    expect(archived.tasks.map((t) => t.id)).toEqual(["o"]);
+  });
+});
+
 describe("optimisticMove", () => {
   const b = board([task("a", "planned", "a0"), task("b", "planned", "a1"), task("c", "idea", "a0")]);
   const order = (s: BoardSnapshot) => cellTasks(s.tasks, "p", "planned").map((t) => t.id);
@@ -49,6 +72,9 @@ describe("optimisticMove", () => {
   });
   it("places before a target", () => {
     expect(order(optimisticMove(b, "c", { status: "planned", beforeId: "a" }))).toEqual(["c", "a", "b"]);
+  });
+  it("prefers beforeId when both neighbours are given, like the server", () => {
+    expect(order(optimisticMove(b, "c", { status: "planned", beforeId: "a", afterId: "b" }))).toEqual(["c", "a", "b"]);
   });
   it("appends by default", () => {
     expect(order(optimisticMove(b, "c", { status: "planned" }))).toEqual(["a", "b", "c"]);

@@ -20,10 +20,12 @@ export function registerSse(app: Hono, bus: EventBus): void {
       while (!stream.aborted) {
         if (queue.length === 0) {
           // Heartbeat keeps proxies and the browser from timing out idle streams.
+          let heartbeat: ReturnType<typeof setTimeout> | undefined;
           await Promise.race([
             new Promise<void>((resolve) => (wake = resolve)),
-            new Promise<void>((resolve) => setTimeout(resolve, 25_000)),
+            new Promise<void>((resolve) => (heartbeat = setTimeout(resolve, 25_000))),
           ]);
+          clearTimeout(heartbeat);
           wake = null;
           if (queue.length === 0 && !stream.aborted) await stream.writeSSE({ event: "ping", data: "{}" });
           continue;

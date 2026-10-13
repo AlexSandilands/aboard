@@ -4,8 +4,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast.tsx";
 import { TooltipProvider } from "./components/ui/tooltip.tsx";
+import { captureTokenFromHash } from "./lib/api.ts";
 import { router } from "./router.tsx";
 import "./index.css";
+
+captureTokenFromHash();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, refetchOnWindowFocus: false, retry: 1 } },

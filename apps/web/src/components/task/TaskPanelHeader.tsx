@@ -75,18 +75,11 @@ export function TaskPanelHeader({
         <SelectPopup alignItemWithTrigger={false} matchTriggerWidth={false}>
           {STATUS_ITEMS.map((status) => {
             const gated = !hasPlan && status.value !== "idea";
-            const item = (
+            return (
               <SelectItem key={status.value} value={status.value} disabled={gated}>
                 {status.label}
+                {gated ? <span className="text-muted-foreground"> · needs a plan</span> : null}
               </SelectItem>
-            );
-            return gated ? (
-              <Tooltip key={status.value}>
-                <TooltipTrigger render={<div />}>{item}</TooltipTrigger>
-                <TooltipPopup side="right">Needs a plan</TooltipPopup>
-              </Tooltip>
-            ) : (
-              item
             );
           })}
         </SelectPopup>

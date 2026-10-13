@@ -4,12 +4,14 @@ import { persist } from "zustand/middleware";
 /** Persisted board view preferences. */
 interface BoardViewState {
   attentionOnly: boolean;
+  hasPrOnly: boolean;
   showArchived: boolean;
   /** Lanes whose Done column is expanded beyond the most recent few. */
   expandedDone: Record<string, boolean>;
   /** Free-text card filter from the sidebar search. Not persisted. */
   search: string;
   setAttentionOnly: (value: boolean) => void;
+  setHasPrOnly: (value: boolean) => void;
   setShowArchived: (value: boolean) => void;
   toggleExpandedDone: (projectId: string) => void;
   setSearch: (value: string) => void;
@@ -19,10 +21,12 @@ export const useBoardView = create<BoardViewState>()(
   persist(
     (set) => ({
       attentionOnly: false,
+      hasPrOnly: false,
       showArchived: false,
       expandedDone: {},
       search: "",
       setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
+      setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
       setShowArchived: (showArchived) => set({ showArchived }),
       toggleExpandedDone: (projectId) =>
         set((s) => ({ expandedDone: { ...s.expandedDone, [projectId]: !s.expandedDone[projectId] } })),
@@ -30,7 +34,12 @@ export const useBoardView = create<BoardViewState>()(
     }),
     {
       name: "taskboard:board-view",
-      partialize: ({ attentionOnly, showArchived, expandedDone }) => ({ attentionOnly, showArchived, expandedDone }),
+      partialize: ({ attentionOnly, hasPrOnly, showArchived, expandedDone }) => ({
+        attentionOnly,
+        hasPrOnly,
+        showArchived,
+        expandedDone,
+      }),
     },
   ),
 );

@@ -14,6 +14,13 @@ describe("app", () => {
     const h = createTestHarness();
     expect((await h.request("/api/health", { headers: { host: "evil.example" } })).status).toBe(403);
     expect((await h.request("/api/health", { headers: { origin: "https://evil.example" } })).status).toBe(403);
-    expect((await h.request("/api/health", { headers: { origin: "http://localhost:5317" } })).status).toBe(200);
+    const withOrigin = async (origin: string) => (await h.request("/api/health", { headers: { origin } })).status;
+    expect(await withOrigin("http://localhost:5317")).toBe(200);
+    expect(await withOrigin("http://127.0.0.1:4317")).toBe(200);
+    expect(await withOrigin("http://[::1]:4317")).toBe(200);
+    // Other local servers (any port but ours or the Vite dev port) are cross-origin too.
+    expect(await withOrigin("http://localhost:3000")).toBe(403);
+    expect(await withOrigin("http://127.0.0.1")).toBe(403);
+    expect(await withOrigin("null")).toBe(403);
   });
 });

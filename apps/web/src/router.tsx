@@ -1,7 +1,6 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet } from "@tanstack/react-router";
 import { z } from "zod";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
-import { StyleGallery } from "./dev/StyleGallery.tsx";
 
 /** Board search params: `task` opens the detail panel, `project` scopes the board. */
 export const BoardSearch = z.object({
@@ -19,13 +18,18 @@ export const boardRoute = createRoute({
   component: AppLayout,
 });
 
-const galleryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/__gallery",
-  component: StyleGallery,
-});
+// Dev-only component gallery; the DEV guard lets the production build drop it entirely.
+const devRoutes = import.meta.env.DEV
+  ? [
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: "/__gallery",
+        component: lazyRouteComponent(() => import("./dev/StyleGallery.tsx"), "StyleGallery"),
+      }),
+    ]
+  : [];
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([boardRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([boardRoute, ...devRoutes]) });
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -1,8 +1,7 @@
 import type { Project } from "@taskboard/contracts";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
-import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -21,6 +20,11 @@ import { useDialogs } from "~/state/ui";
 import { FolderPicker } from "./FolderPicker";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { useUnarchiveProject } from "./useArchivedProjects";
+
+// The picker pulls in lucide's full icon index; load it only when someone picks an icon.
+const ProjectIconPickerDialog = lazy(() =>
+  import("~/components/project/ProjectIconPickerDialog").then((module) => ({ default: module.ProjectIconPickerDialog })),
+);
 
 /** Project settings, opened from the sidebar gear via useDialogs().openProjectSettings(id). */
 export function ProjectSettingsDialog() {
@@ -195,13 +199,17 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
           />
         </SettingsSection>
       </DialogPanel>
-      <ProjectIconPickerDialog
-        title={project.title}
-        value={project.icon}
-        open={iconPickerOpen}
-        onOpenChange={setIconPickerOpen}
-        onSave={(icon) => updateProject.mutate({ id: project.id, icon })}
-      />
+      {iconPickerOpen ? (
+        <Suspense fallback={null}>
+          <ProjectIconPickerDialog
+            title={project.title}
+            value={project.icon}
+            open={iconPickerOpen}
+            onOpenChange={setIconPickerOpen}
+            onSave={(icon) => updateProject.mutate({ id: project.id, icon })}
+          />
+        </Suspense>
+      ) : null}
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogPopup className="max-w-md" showCloseButton={false}>
           <DialogHeader>

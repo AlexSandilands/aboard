@@ -1,6 +1,8 @@
 import { normalizeWorkspaceKey, workspaceBasename, type Project } from "@taskboard/contracts";
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
@@ -10,6 +12,22 @@ import type { ProjectsService } from "./types.ts";
 export function isWithinWorkspace(key: string, root: string): boolean {
   if (key === root) return true;
   return key.startsWith(root.endsWith("/") ? root : `${root}/`);
+}
+
+/**
+ * The enclosing git repository root of `path` (nearest ancestor containing `.git`), or `path`
+ * itself when it isn't inside a repository or doesn't exist on this machine. Agents often work
+ * in a subfolder; auto-created projects should be the whole repo.
+ */
+export function repositoryRootOf(path: string): string {
+  let dir = resolve(path);
+  if (!existsSync(dir)) return path;
+  for (;;) {
+    if (existsSync(resolve(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return path;
+    dir = parent;
+  }
 }
 
 /** Projects: lanes on the board, optionally bound to a workspace folder. */
@@ -46,9 +64,13 @@ export function createProjectsService(core: Core): ProjectsService {
         .withWorkspace()
         .filter((p) => isWithinWorkspace(key, p.workspaceKey!))
         .sort((a, b) => b.workspaceKey!.length - a.workspaceKey!.length)[0];
-      if (match) return match;
+      if (match) {
+        // Writing tools bring an archived lane back rather than silently filing into a hidden one.
+        if (opts?.autoCreate && match.archivedAt) return service.update(match.id, { archived: false });
+        return match;
+      }
       if (!opts?.autoCreate) throw notFound("Project for workspace", ref.workspacePath);
-      return service.create({ workspaceRoot: ref.workspacePath.trim() });
+      return service.create({ workspaceRoot: repositoryRootOf(ref.workspacePath.trim()) });
     },
 
     create(input) {
@@ -57,6 +79,9 @@ export function createProjectsService(core: Core): ProjectsService {
         const title = input.title ?? (workspaceRoot ? workspaceBasename(workspaceRoot) : null);
         if (!title) throw new AppError("VALIDATION", "A project needs a title or a workspace folder");
         const workspaceKey = workspaceRoot ? normalizeWorkspaceKey(workspaceRoot) : null;
+        // Re-adding an archived project's folder brings that project back instead of conflicting.
+        const archived = workspaceKey ? repos.projects.byKey(workspaceKey) : null;
+        if (archived?.archivedAt) return service.update(archived.id, { archived: false });
         assertKeyFree(workspaceKey);
         const now = nowIso();
         const project: Project = {
@@ -93,6 +118,10 @@ export function createProjectsService(core: Core): ProjectsService {
         if (input.archived !== undefined) next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;
         repos.projects.update(next);
         fx.project(id);
+        // Clients drop an archived lane's tasks; unarchiving must send them back.
+        if (current.archivedAt && !next.archivedAt) {
+          for (const task of repos.tasks.list({ projectId: id })) fx.task(task.id);
+        }
         return next;
       });
     },

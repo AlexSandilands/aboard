@@ -9,7 +9,12 @@ import { usePalette } from "~/state/ui";
 import { STATUS_ORDER, type LaneCells } from "./board.logic";
 import { BoardCell } from "./BoardCell";
 
-export const BOARD_GRID_CLASS_NAME = "grid grid-cols-[repeat(5,272px)] gap-3 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end)";
+/**
+ * Shared by the column header row and every lane so they stay aligned: columns share the width
+ * evenly, and the board scrolls horizontally once they would drop below 240px.
+ */
+export const BOARD_GRID_CLASS_NAME =
+  "grid grid-cols-[repeat(5,minmax(240px,1fr))] gap-3 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end)";
 
 /** A project swimlane: collapsible header, then one cell per status. */
 export const BoardLane = memo(function BoardLane({

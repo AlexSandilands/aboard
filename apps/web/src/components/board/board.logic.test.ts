@@ -49,7 +49,7 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
   };
 }
 
-const noFilters = { projectId: null, search: "", attentionOnly: false };
+const noFilters = { projectId: null, search: "", attentionOnly: false, hasPrOnly: false };
 
 describe("matchesTaskSearch", () => {
   const jira = task("t", {
@@ -98,6 +98,25 @@ describe("buildLanes", () => {
     const lanes = buildLanes(board([flagged, task("calm")]), { ...noFilters, attentionOnly: true });
     expect(lanes).toHaveLength(1);
     expect(lanes[0]!.cells.idea).toEqual([flagged]);
+  });
+
+  it("filters to tasks with a PR link", () => {
+    const withPr = task("pr", {
+      links: [
+        { id: "l", taskId: "pr", url: "", label: null, syncedAt: null, createdAt: "", kind: "pr", ref: null, snapshot: null },
+      ],
+    });
+    const lanes = buildLanes(board([withPr, task("none"), task("q-none", { projectId: "q" })]), { ...noFilters, hasPrOnly: true });
+    expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
+    expect(lanes[0]!.cells.idea).toEqual([withPr]);
+  });
+
+  it("merges archived tasks into their lanes, preferring the snapshot copy", () => {
+    const live = task("live");
+    const archived = task("old", { archivedAt: "2026-01-01", position: "a1" });
+    const stale = { ...live, archivedAt: "2026-01-01" };
+    const lanes = buildLanes(board([live]), noFilters, [archived, stale]);
+    expect(lanes[0]!.cells.idea).toEqual([live, archived]);
   });
 });
 

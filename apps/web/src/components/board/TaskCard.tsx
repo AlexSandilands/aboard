@@ -19,6 +19,7 @@ export function taskCardClassName(task: TaskSummary, selected: boolean) {
     "relative w-full cursor-pointer select-none rounded-xl border border-border/60 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
     selected ? "bg-sidebar-row-selected ring-1 ring-ring/40" : "bg-card/40 hover:bg-accent/40",
     !selected && attention && (attention.severity === "error" ? "ring-1 ring-error/40" : "ring-1 ring-warning/40"),
+    task.archivedAt && "opacity-60",
   );
 }
 
@@ -33,6 +34,11 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
         {jiraKey ? (
           <Badge variant="outline" size="sm">
             {jiraKey}
+          </Badge>
+        ) : null}
+        {task.archivedAt ? (
+          <Badge variant="secondary" size="sm">
+            Archived
           </Badge>
         ) : null}
         {attention ? (
@@ -56,7 +62,12 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
 export const SortableTaskCard = memo(function SortableTaskCard({ task, selected }: { task: TaskSummary; selected: boolean }) {
   const { openTask, suppressClickRef } = useBoardContext();
   const data: DragData = { type: "task", projectId: task.projectId, status: task.status };
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data });
+  // Archived cards (Show archived) open in the panel but can't be dragged; unarchive first.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data,
+    disabled: !!task.archivedAt,
+  });
 
   const open = () => {
     if (suppressClickRef.current) return;

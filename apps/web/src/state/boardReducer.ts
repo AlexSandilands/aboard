@@ -6,11 +6,17 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
   switch (event.type) {
     case "project.upserted": {
       const exists = board.projects.some((p) => p.id === event.project.id);
-      const projects = event.project.archivedAt
-        ? board.projects.filter((p) => p.id !== event.project.id)
-        : exists
-          ? board.projects.map((p) => (p.id === event.project.id ? event.project : p))
-          : [...board.projects, event.project];
+      if (event.project.archivedAt) {
+        // An archived lane leaves the board with its tasks; unarchiving republishes them.
+        return {
+          ...board,
+          projects: board.projects.filter((p) => p.id !== event.project.id),
+          tasks: board.tasks.filter((t) => t.projectId !== event.project.id),
+        };
+      }
+      const projects = exists
+        ? board.projects.map((p) => (p.id === event.project.id ? event.project : p))
+        : [...board.projects, event.project];
       return { ...board, projects: sortByPosition(projects) };
     }
     case "project.deleted":
@@ -54,14 +60,14 @@ export function optimisticMove(
   const task = board.tasks.find((t) => t.id === taskId);
   if (!task) return board;
   const cell = cellTasks(board.tasks, task.projectId, to.status).filter((t) => t.id !== taskId);
-  // Resolve the neighbours the same way the server does: after wins, else before, else append.
-  const afterIndex = to.afterId ? cell.findIndex((t) => t.id === to.afterId) : -1;
+  // Resolve the neighbours the same way the server's positionAmong does: before wins, else after, else append.
   const beforeIndex = to.beforeId ? cell.findIndex((t) => t.id === to.beforeId) : -1;
+  const afterIndex = to.afterId ? cell.findIndex((t) => t.id === to.afterId) : -1;
   const [lo, hi] =
-    afterIndex >= 0
-      ? [cell[afterIndex], cell[afterIndex + 1]]
-      : beforeIndex >= 0
-        ? [cell[beforeIndex - 1], cell[beforeIndex]]
+    beforeIndex >= 0
+      ? [cell[beforeIndex - 1], cell[beforeIndex]]
+      : afterIndex >= 0
+        ? [cell[afterIndex], cell[afterIndex + 1]]
         : [cell.at(-1), undefined];
   let position: string;
   try {

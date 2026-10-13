@@ -1,11 +1,21 @@
-import type { AppSettings, BoardEvent, BoardSnapshot, FsBrowseResult, IntegrationsStatus, T3ProjectCandidate, TaskDetail } from "@taskboard/contracts";
+import type {
+  AppSettings,
+  BoardEvent,
+  BoardSnapshot,
+  FsBrowseResult,
+  IntegrationsStatus,
+  T3ProjectCandidate,
+  TaskDetail,
+  TaskSummary,
+} from "@taskboard/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { api } from "~/lib/api";
+import { api, eventsUrl } from "~/lib/api";
 import { applyBoardEvent } from "./boardReducer";
 
 export const queryKeys = {
   board: ["board"] as const,
+  archivedTasks: ["archivedTasks"] as const,
   task: (id: string) => ["task", id] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
@@ -18,7 +28,20 @@ export function useBoard() {
   return useQuery({ queryKey: queryKeys.board, queryFn: ({ signal }) => api<BoardSnapshot>("/api/board", { signal }) });
 }
 
-/** Full task detail (plan, events). Invalidated by task.* events for that task. */
+/**
+ * Archived tasks, which the board snapshot leaves out. Only fetched while "Show archived" is on;
+ * invalidated by every task.upserted (a task may have just been archived or unarchived).
+ */
+export function useArchivedTasks(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.archivedTasks,
+    queryFn: async ({ signal }) =>
+      (await api<TaskSummary[]>("/api/tasks?includeArchived=true", { signal })).filter((t) => t.archivedAt),
+    enabled,
+  });
+}
+
+/** Full task detail (plan, events). Invalidated by task.detail_changed for that task. */
 export function useTaskDetail(taskId: string | null | undefined) {
   return useQuery({
     queryKey: queryKeys.task(taskId ?? ""),
@@ -67,11 +90,12 @@ export function useFsBrowse(path: string, enabled: boolean) {
 export function useBoardEvents() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const source = new EventSource("/events");
+    const source = new EventSource(eventsUrl());
     let connectedOnce = false;
     source.addEventListener("ready", () => {
       if (connectedOnce) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
       }
       connectedOnce = true;
@@ -79,9 +103,13 @@ export function useBoardEvents() {
     source.onmessage = (message) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) => (board ? applyBoardEvent(board, event) : board));
-      if (event.type === "task.upserted" || event.type === "task.detail_changed") {
-        const id = event.type === "task.upserted" ? event.task.id : event.taskId;
-        void queryClient.invalidateQueries({ queryKey: queryKeys.task(id) });
+      // The server pairs every task.upserted with a task.detail_changed, so detail only listens to the latter.
+      if (event.type === "task.detail_changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });
+      }
+      // Inactive (Show archived off) queries are only marked stale, not refetched.
+      if (event.type === "task.upserted" || event.type === "task.deleted") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });

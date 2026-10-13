@@ -25,7 +25,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { ApiError } from "~/lib/api";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
-import { useBoard, useT3ProjectCandidates } from "~/state/queries";
+import { useArchivedTasks, useBoard, useT3ProjectCandidates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { PaletteContent } from "./PaletteContent";
 import {
@@ -229,6 +229,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const importProjects = useImportT3Projects();
   const candidates = useT3ProjectCandidates(view.kind === "import-t3" && t3Detected);
   const browse = useFolderBrowse(query, view.kind === "browse");
+  // The board snapshot leaves archived tasks out; Go to task lists them in their own group.
+  const archivedTasks = useArchivedTasks(view.kind === "go-to-task").data;
 
   // ── Navigation ─────────────────────────────────────────────────────────
 
@@ -278,10 +280,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       { workspaceRoot: browse.resolved.path },
       {
         onSuccess: (project) => {
-          toastManager.add({ type: "success", title: "Project added", description: project.title });
+          // Re-adding an archived project's folder restores that project (with its tasks).
+          const restored = project.createdAt !== project.updatedAt;
+          toastManager.add({ type: "success", title: restored ? "Project restored" : "Project added", description: project.title });
           closePalette();
         },
         onError: (error) => {
+          // Only an active project can conflict now; archived ones are restored instead.
           if (error instanceof ApiError && error.code === "CONFLICT") {
             toastManager.add({ type: "info", title: "Already on the board", description: error.message });
             closePalette();
@@ -591,8 +596,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         return [{ value: "projects", label: flow === "idea" ? "New idea in…" : "New task in…", items: filterItems(items, query) }];
       }
       case "go-to-task": {
-        const matches = filterItems(tasks.map(taskItem), query);
-        return [{ value: "tasks", label: "Tasks", items: query.trim() ? matches : matches.slice(0, 50) }];
+        const limit = (items: PaletteItem[]) => (query.trim() ? items : items.slice(0, 50));
+        const groups = [{ value: "tasks", label: "Tasks", items: limit(filterItems(tasks.map(taskItem), query)) }];
+        const archived = limit(filterItems((archivedTasks ?? []).map(taskItem), query));
+        if (archived.length > 0) groups.push({ value: "archived-tasks", label: "Archived tasks", items: archived });
+        return groups;
       }
       case "go-to-project": {
         const items: PaletteItem[] = [];

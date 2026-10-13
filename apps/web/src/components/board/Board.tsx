@@ -23,7 +23,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
-import { queryKeys, useBoard, useSettings } from "~/state/queries";
+import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
 import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER, type Lane } from "./board.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
@@ -115,6 +115,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const queryClient = useQueryClient();
   const search = useBoardView((s) => s.search);
   const attentionOnly = useBoardView((s) => s.attentionOnly);
+  const hasPrOnly = useBoardView((s) => s.hasPrOnly);
+  const showArchived = useBoardView((s) => s.showArchived);
+  const archivedQuery = useArchivedTasks(showArchived);
+  const archivedTasks = showArchived ? archivedQuery.data : undefined;
   const expandedDone = useBoardView((s) => s.expandedDone);
   const toggleExpandedDone = useBoardView((s) => s.toggleExpandedDone);
   const selectedTaskId = useSelectedTaskId();
@@ -125,13 +129,18 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   const previousLanesRef = useRef<Lane[]>([]);
   const lanes = useMemo(() => {
-    const next = reuseUnchangedLanes(previousLanesRef.current, buildLanes(board, { projectId: projectFilter, search, attentionOnly }));
+    const next = reuseUnchangedLanes(
+      previousLanesRef.current,
+      buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly }, archivedTasks),
+    );
     previousLanesRef.current = next;
     return next;
-  }, [board, projectFilter, search, attentionOnly]);
+  }, [board, projectFilter, search, attentionOnly, hasPrOnly, archivedTasks]);
   const counts = useMemo(() => columnCounts(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
-  const selectedProjectId = selectedTaskId ? (tasksById.get(selectedTaskId)?.projectId ?? null) : null;
+  const selectedProjectId = selectedTaskId
+    ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
+    : null;
 
   const suppressClickRef = useRef(false);
   const context = useMemo<BoardContextValue>(
@@ -182,13 +191,15 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     const target = readDragData(over?.data.current);
     if (!task || !over || !target) return;
     const lane = lanes.find((l) => l.project.id === target.projectId);
-    const overTaskId = target.type === "task" ? String(over.id) : null;
+    // Archived cards (Show archived) aren't siblings on the server, so they never anchor a drop.
+    const cellTasks = lane ? lane.cells[target.status].filter((t) => !t.archivedAt) : [];
+    const overTaskId = target.type === "task" && cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
     const activeRect = active.rect.current.translated;
     const placeAfter = activeRect ? activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2 : false;
     const result = computeDrop({
       task,
       target,
-      cellTaskIds: lane ? lane.cells[target.status].map((t) => t.id) : [],
+      cellTaskIds: cellTasks.map((t) => t.id),
       overTaskId,
       placeAfter,
     });
@@ -252,7 +263,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   return (
     <BoardContext value={context}>
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="w-max min-w-full pb-10">
+        <div className="w-full min-w-min pb-10">
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => (

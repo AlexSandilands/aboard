@@ -190,10 +190,11 @@
   }
 }
 
-/* The spinner plays continuously (T3 gates it on visibility via an
-   IntersectionObserver; dropped here). Stay motion-safe at the call site. */
+/* T3 gates the spinner on visibility via an IntersectionObserver (dropped here); instead it
+   ticks in 8 steps per turn rather than repainting every frame. Stay motion-safe at the call site. */
 @utility visible-animate-spin {
   animation: var(--animate-spin);
+  animation-timing-function: steps(8);
 }
 
 @utility surface-glass {

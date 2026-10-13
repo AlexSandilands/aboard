@@ -11,11 +11,39 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = "taskboard:token";
+
+/**
+ * Token mode (server started with TASKBOARD_TOKEN): open the UI at `/#token=<token>`. The token is
+ * moved into sessionStorage and the hash stripped so it doesn't linger in the address bar.
+ * Call once before rendering.
+ */
+export function captureTokenFromHash(): void {
+  const match = /^#token=(.+)$/.exec(window.location.hash);
+  if (!match) return;
+  sessionStorage.setItem(TOKEN_KEY, decodeURIComponent(match[1]!));
+  history.replaceState(history.state, "", window.location.pathname + window.location.search);
+}
+
+function authToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+/** The SSE stream URL; EventSource can't send headers, so the token rides in the query. */
+export function eventsUrl(): string {
+  const token = authToken();
+  return token ? `/events?token=${encodeURIComponent(token)}` : "/events";
+}
+
 /** JSON fetch against the taskboard server. Throws ApiError with the server's error code. */
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
+  const token = authToken();
+  const headers: Record<string, string> = {};
+  if (init?.body !== undefined) headers["content-type"] = "application/json";
+  if (token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(path, {
     method: init?.method ?? (init?.body === undefined ? "GET" : "POST"),
-    headers: init?.body === undefined ? undefined : { "content-type": "application/json" },
+    headers,
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     signal: init?.signal,
   });

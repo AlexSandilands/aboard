@@ -16,6 +16,12 @@ export interface BoardFilters {
   projectId: string | null;
   search: string;
   attentionOnly: boolean;
+  /** Only cards with at least one PR link. */
+  hasPrOnly: boolean;
+}
+
+function hasPr(task: TaskSummary): boolean {
+  return task.links.some((link) => link.kind === "pr");
 }
 
 export function jiraKeys(task: TaskSummary): string[] {
@@ -48,16 +54,20 @@ function emptyCells(): Record<TaskStatus, TaskSummary[]> {
 
 /**
  * Groups the board into one lane per project (in project order) and five cells per lane.
- * Cells are ordered by position, except Done which is newest-first. With a text or attention
- * filter active, lanes without a match are dropped so results are easy to scan.
+ * Cells are ordered by position, except Done which is newest-first. With a text, attention or PR
+ * filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
+ * (Show archived) join their lanes; the snapshot's copy wins if a task is in both.
  */
-export function buildLanes(board: BoardSnapshot, filters: BoardFilters): Lane[] {
+export function buildLanes(board: BoardSnapshot, filters: BoardFilters, archived: ReadonlyArray<TaskSummary> = []): Lane[] {
   const scoped = filters.projectId && board.projects.some((p) => p.id === filters.projectId) ? filters.projectId : null;
-  const filtering = filters.search.trim() !== "" || filters.attentionOnly;
+  const filtering = filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly;
   const byProject = new Map<string, Record<TaskStatus, TaskSummary[]>>();
-  for (const task of board.tasks) {
+  const active = new Set(board.tasks.map((task) => task.id));
+  const tasks = archived.length ? [...board.tasks, ...archived.filter((task) => !active.has(task.id))] : board.tasks;
+  for (const task of tasks) {
     if (scoped && task.projectId !== scoped) continue;
     if (filters.attentionOnly && task.attention.length === 0) continue;
+    if (filters.hasPrOnly && !hasPr(task)) continue;
     if (!matchesTaskSearch(task, filters.search)) continue;
     let cells = byProject.get(task.projectId);
     if (!cells) byProject.set(task.projectId, (cells = emptyCells()));

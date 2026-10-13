@@ -130,6 +130,35 @@ describe("MCP endpoint", () => {
     expect(overview).toContain("In Progress 1");
   });
 
+  it("update_task only moves projects through the explicit moveTo params", async () => {
+    const home = h.services.projects.create({ workspaceRoot: "C:/Fake/home" });
+    const other = h.services.projects.create({ workspaceRoot: "C:/Fake/other" });
+    const task = h.services.tasks.create({ projectId: home.id, title: "Stay put" });
+
+    // Agents habitually pass workspacePath; it must not move the task.
+    const edited = await client.callTool({
+      name: "update_task",
+      arguments: { task: task.id, title: "Renamed", workspacePath: "C:/Fake/other" },
+    });
+    expect(edited.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id)).toMatchObject({ title: "Renamed", projectId: home.id });
+
+    const unknown = await client.callTool({
+      name: "update_task",
+      arguments: { task: task.id, moveToWorkspacePath: "C:/Fake/nowhere" },
+    });
+    expect(unknown.isError).toBe(true);
+    expect(text(unknown)).toMatch(/^NOT_FOUND: /);
+    expect(h.services.projects.list()).toHaveLength(2);
+
+    const moved = await client.callTool({
+      name: "update_task",
+      arguments: { task: task.id, moveToWorkspacePath: "C:/Fake/other/src" },
+    });
+    expect(moved.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id).projectId).toBe(other.id);
+  });
+
   it("treats an unknown workspace as empty for read-only tools", async () => {
     const result = await client.callTool({ name: "list_tasks", arguments: { workspacePath: "C:\\Nowhere" } });
     expect(result.isError).toBeFalsy();

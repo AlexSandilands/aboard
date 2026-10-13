@@ -49,9 +49,15 @@ export interface ProjectRef {
 export interface ProjectsService {
   list(opts?: { includeArchived?: boolean }): Project[];
   get(id: string): Project;
-  /** Finds a project by id or workspace path. With autoCreate, an unknown path creates a project (title = folder name). */
+  /**
+   * Finds a project by id or workspace path. With autoCreate, an unknown path creates a project (title = folder
+   * name) and a match on an archived project unarchives it.
+   */
   resolve(ref: ProjectRef, opts?: { autoCreate?: boolean }): Project;
-  /** Throws CONFLICT if a project with the same workspace key exists. Appends to the end of the lane order. */
+  /**
+   * Throws CONFLICT if an active project with the same workspace key exists; an archived one is unarchived and
+   * returned instead. Appends to the end of the lane order.
+   */
   create(input: CreateProjectInput): Project;
   update(id: string, input: UpdateProjectInput): Project;
   /** Sets lane order to the given id order. */

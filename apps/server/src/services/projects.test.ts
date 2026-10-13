@@ -40,6 +40,37 @@ describe("projects", () => {
     expect(codeOf(() => s.projects.create({ workspaceRoot: "d:\\repos\\API\\" }))).toBe("CONFLICT");
   });
 
+  it("unarchives an archived project when its folder is re-added or auto-resolved", () => {
+    const { services: s } = createTestHarness();
+    const project = s.projects.create({ workspaceRoot: "D:/Repos/api" });
+    s.projects.update(project.id, { archived: true });
+    // Read-only resolve still finds the archived project without changing it.
+    expect(s.projects.resolve({ workspacePath: "d:/repos/api" })).toMatchObject({ id: project.id });
+    expect(s.projects.get(project.id).archivedAt).not.toBeNull();
+
+    const readded = s.projects.create({ workspaceRoot: "d:/repos/API/" });
+    expect(readded).toMatchObject({ id: project.id, archivedAt: null });
+
+    s.projects.update(project.id, { archived: true });
+    const resolved = s.projects.resolve({ workspacePath: "D:/Repos/api/src" }, { autoCreate: true });
+    expect(resolved).toMatchObject({ id: project.id, archivedAt: null });
+    expect(s.projects.list().map((p) => p.id)).toEqual([project.id]);
+  });
+
+  it("republishes a project's tasks when it is unarchived", () => {
+    const { services: s, events } = createTestHarness();
+    const project = s.projects.create({ title: "P" });
+    const task = s.tasks.create({ projectId: project.id, title: "T" });
+    const archivedTask = s.tasks.create({ projectId: project.id, title: "Old" });
+    s.tasks.update(archivedTask.id, { archived: true }, "user");
+    s.projects.update(project.id, { archived: true });
+    events.length = 0;
+    s.projects.update(project.id, { archived: false });
+    expect(events.filter((e) => e.type === "task.upserted").map((e) => e.type === "task.upserted" && e.task.id)).toEqual([
+      task.id,
+    ]);
+  });
+
   it("reorders lanes", () => {
     const { services: s } = createTestHarness();
     const [a, b, c] = ["a", "b", "c"].map((title) => s.projects.create({ title }));
@@ -105,5 +136,19 @@ describe("settings", () => {
     expect(JSON.stringify(updated)).not.toContain("secret");
     expect(s.settings.t3Token()).toBe("secret");
     expect(s.settings.update({ t3Token: null }).t3TokenSet).toBe(false);
+  });
+});
+
+describe("repositoryRootOf", () => {
+  it("walks up to the nearest .git directory", async () => {
+    const { mkdtempSync, mkdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { repositoryRootOf } = await import("./projects.ts");
+    const root = mkdtempSync(join(tmpdir(), "tb-repo-"));
+    mkdirSync(join(root, ".git"));
+    mkdirSync(join(root, "apps", "web"), { recursive: true });
+    expect(repositoryRootOf(join(root, "apps", "web"))).toBe(root);
+    expect(repositoryRootOf("Z:/does/not/exist")).toBe("Z:/does/not/exist");
   });
 });
