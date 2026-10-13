@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {},
+    "apps/web": {
+      "entry": ["src/dev/**/*.tsx"],
+      "ignore": ["src/components/ui/**"]
+    },
+    "packages/contracts": {}
+  }
+}

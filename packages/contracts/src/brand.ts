@@ -1,4 +1,4 @@
-import { displayName, name } from "../../../package.json" with { type: "json" };
+import pkg from "../../../package.json" with { type: "json" };
 
 /**
  * Product identity, read from the root package.json (`name`, `displayName`). Everything that names the
@@ -7,9 +7,9 @@ import { displayName, name } from "../../../package.json" with { type: "json" };
  */
 export const BRAND = {
   /** Lowercase id: MCP server name, data dir, storage keys, temp-dir prefixes. */
-  id: name,
+  id: pkg.name,
   /** Display name for UI and agent-facing text. */
-  name: displayName,
+  name: pkg.displayName,
 } as const;
 
 /** Environment variable name, e.g. `brandEnv("HOME")` → `ABOARD_HOME`. */

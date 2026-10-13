@@ -48,7 +48,7 @@ When T3 Code is running, it is detected automatically.
 - **Thread links:** agents inside T3 Code attach their thread to the task. The card and detail
   panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
   choose in Settings).
-- **Import projects:** command palette → *Add project → From T3 Code*. Read-only; this app never
+- **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
   writes to T3 Code's data.
 - **Live thread status:** mint a read-only token and paste it in Settings → T3 Code:
   ```sh
@@ -58,18 +58,21 @@ When T3 Code is running, it is detected automatically.
 
 ## Keyboard
 
-| Key | Action |
-|---|---|
-| `Ctrl/Cmd K` | Command palette |
-| `N` | New idea |
-| `Esc` | Close the detail panel |
+| Key          | Action                 |
+| ------------ | ---------------------- |
+| `Ctrl/Cmd K` | Command palette        |
+| `N`          | New idea               |
+| `Esc`        | Close the detail panel |
 
 ## Development
 
 ```sh
-pnpm test        # all packages
-pnpm typecheck
+pnpm check       # format, lint, typecheck, unused-code check (knip), tests
+pnpm format      # apply formatting
 ```
+
+Git hooks (lefthook) are installed by `pnpm install`. Commits follow Conventional Commits. Contributor
+and agent conventions are in `AGENTS.md`.
 
 Layout: `packages/contracts` (shared zod schemas and helpers), `apps/server` (Hono, `node:sqlite`,
 REST, SSE, MCP, integrations), `apps/web` (React, Tailwind v4, Base UI). Design notes live in
