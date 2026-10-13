@@ -1,7 +1,10 @@
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
-import { DISABLED_T3_STATUS, type Integrations } from "./types.ts";
+import { createGithubIntegration, type RunGh } from "./github.ts";
+import { createT3Integration, type FetchFn } from "./t3.ts";
+import type { Integrations } from "./types.ts";
+import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
   config: Pick<Config, "t3Home" | "pollers">;
@@ -10,16 +13,50 @@ export interface IntegrationDeps {
   services: () => Services;
 }
 
-/** Builds integrations. Implemented by the integrations work package. */
-export function createIntegrations(_deps: IntegrationDeps): Integrations {
+/** Test seams: replace process spawning and network access. */
+export interface IntegrationOverrides {
+  runGh?: RunGh;
+  fetch?: FetchFn;
+  log?: Logger;
+}
+
+/** Builds the GitHub (gh CLI) and T3 Code integrations. */
+export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
+  const github = createGithubIntegration({
+    services: deps.services,
+    ...(overrides.runGh ? { runGh: overrides.runGh } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const t3 = createT3Integration({
+    t3Home: deps.config.t3Home,
+    bus: deps.bus,
+    services: deps.services,
+    ...(overrides.fetch ? { fetch: overrides.fetch } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  let started = false;
+
   return {
-    t3Status: () => DISABLED_T3_STATUS,
-    githubStatus: () => ({ available: false, authenticated: false, error: null }),
-    start: () => {},
-    stop: () => {},
-    listT3Projects: async () => [],
-    importT3Projects: async () => [],
-    refreshLink: async () => {},
-    testT3: async () => DISABLED_T3_STATUS,
+    t3Status: () => t3.status(),
+    githubStatus: () => github.status(),
+    start() {
+      if (!deps.config.pollers || started) return;
+      started = true;
+      github.start();
+      t3.start();
+    },
+    stop() {
+      started = false;
+      github.stop();
+      t3.stop();
+    },
+    listT3Projects: () => t3.listProjects(),
+    importT3Projects: (ids) => t3.importProjects(ids),
+    async refreshLink(linkId) {
+      const link = deps.services().links.get(linkId);
+      if (await github.refresh(link)) return;
+      await t3.refresh(link);
+    },
+    testT3: () => t3.test(),
   };
 }

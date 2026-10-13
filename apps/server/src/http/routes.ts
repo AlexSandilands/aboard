@@ -1,7 +1,14 @@
 import type { Hono } from "hono";
 import type { AppContext } from "../app.ts";
+import { registerPlanRoutes } from "./routes/plans.ts";
+import { registerProjectRoutes } from "./routes/projects.ts";
+import { registerSystemRoutes } from "./routes/system.ts";
+import { registerTaskRoutes } from "./routes/tasks.ts";
 
-/** Registers all /api routes. Implemented by the server-core work package. */
+/** Registers all /api routes. Handlers are thin: parse → one service call → JSON. */
 export function registerApiRoutes(app: Hono, ctx: AppContext): void {
-  app.get("/api/board", (c) => c.json(ctx.services.board.snapshot()));
+  registerSystemRoutes(app, ctx);
+  registerProjectRoutes(app, ctx);
+  registerTaskRoutes(app, ctx);
+  registerPlanRoutes(app, ctx);
 }

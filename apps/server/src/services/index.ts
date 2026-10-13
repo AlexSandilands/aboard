@@ -1,7 +1,15 @@
 import type { T3IntegrationStatus } from "@taskboard/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
-import type { Services } from "./types.ts";
+import { createRepos } from "../db/repos/index.ts";
+import { createBoardService } from "./board.ts";
+import { createCore } from "./core.ts";
+import { createLinksService } from "./links.ts";
+import { createPlans, type PlansModule } from "./plans.ts";
+import { createProjectsService } from "./projects.ts";
+import { createSettingsService } from "./settings.ts";
+import { createTasksService } from "./tasks.ts";
+import type { LinksService, Services } from "./types.ts";
 
 export interface ServiceDeps {
   db: Db;
@@ -10,22 +18,24 @@ export interface ServiceDeps {
   t3Status: () => T3IntegrationStatus;
 }
 
-/** Builds the service layer. Implemented by the server-core work package. */
-export function createServices(_deps: ServiceDeps): Services {
-  const notImplemented = new Proxy(
-    {},
-    {
-      get: (_t, prop) => () => {
-        throw new Error(`service method not implemented: ${String(prop)}`);
-      },
-    },
-  );
+/** Builds the service layer over one database. */
+export function createServices(deps: ServiceDeps): Services {
+  const core = createCore({ ...deps, repos: createRepos(deps.db) });
+  const settings = createSettingsService(core);
+  const projects = createProjectsService(core);
+
+  let plans: PlansModule | null = null;
+  let links: LinksService | null = null;
+  const tasks = createTasksService(core, { projects, plans: () => plans!, links: () => links! });
+  plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
+  links = createLinksService(core, { task: tasks.record, settings });
+
   return {
-    projects: notImplemented,
-    tasks: notImplemented,
-    plans: notImplemented,
-    links: notImplemented,
-    settings: notImplemented,
-    board: notImplemented,
-  } as Services;
+    projects,
+    tasks: tasks.service,
+    plans: plans.service,
+    links,
+    settings,
+    board: createBoardService(core),
+  };
 }

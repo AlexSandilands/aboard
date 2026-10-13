@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { z } from "zod";
+import { StyleGallery } from "./dev/StyleGallery.tsx";
 
 /** Board search params: `task` opens the detail panel, `project` scopes the board. */
 export const BoardSearch = z.object({
@@ -21,7 +22,13 @@ export const boardRoute = createRoute({
   },
 });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([boardRoute]) });
+const galleryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/__gallery",
+  component: StyleGallery,
+});
+
+export const router = createRouter({ routeTree: rootRoute.addChildren([boardRoute, galleryRoute]) });
 
 declare module "@tanstack/react-router" {
   interface Register {
