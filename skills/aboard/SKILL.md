@@ -61,6 +61,10 @@ The server runs locally on port 4317. Register it once:
 
 ```sh
 claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
+# GitHub Copilot CLI
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
+# GitHub Copilot in VS Code (or .vscode/mcp.json: servers.aboard = {type: http, url})
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```
 
 Install this skill by copying the folder to `~/.claude/skills/aboard/`.

@@ -72,6 +72,14 @@ The MCP endpoint is `http://127.0.0.1:4317/mcp`.
 ```sh
 claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
 codex mcp add aboard --url http://127.0.0.1:4317/mcp
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp   # GitHub Copilot CLI
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'   # GitHub Copilot in VS Code
+```
+
+For GitHub Copilot in VS Code you can also add this to `.vscode/mcp.json` (note the `servers` key):
+
+```json
+{ "servers": { "aboard": { "type": "http", "url": "http://127.0.0.1:4317/mcp" } } }
 ```
 
 Then give your agent the workflow:
