@@ -40,5 +40,5 @@
       }
     }
   ],
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**"]
+  "ignorePatterns": ["**/dist/**", "**/release/**", "**/node_modules/**"]
 }

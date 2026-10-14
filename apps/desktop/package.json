@@ -7,14 +7,14 @@
     "build": "node scripts/build.ts",
     "dev": "node scripts/launch.ts --dev",
     "start": "node scripts/launch.ts",
+    "package": "node scripts/package.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
-  "dependencies": {
-    "@repo/contracts": "workspace:*"
-  },
   "devDependencies": {
+    "@repo/contracts": "workspace:*",
     "electron": "^44.7.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2"
   }
 }

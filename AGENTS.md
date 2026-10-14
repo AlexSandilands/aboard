@@ -24,6 +24,11 @@ brand-neutral `@repo/*` scope. Keep the name out of prose docs where a neutral p
   - `components/ui/*` are primitives ported from T3 Code (MIT, see `NOTICE`). Keep diffs from upstream
     small. `docs/STYLE_REFERENCE.md` maps where the styles come from.
   - Pure logic sits in `*.logic.ts` files next to the components, with tests beside it.
+- `apps/desktop`: Electron shell. The main process (`src/main.ts`) only manages the window, tray and
+  server lifecycle. It attaches to a server already answering `/api/health` with our id, otherwise it runs
+  the esbuild server bundle (`apps/server/dist/server.mjs`, `pnpm --filter @repo/server bundle`) in a
+  `utilityProcess`. That process talks back over `process.parentPort` (`ready` / `shutdown`) in
+  `apps/server/src/main.ts`. Packaging config is code (`scripts/package.ts`) so names derive from `BRAND`.
 - `skills/<name>/`: the skill and `AGENTS.md` snippet we ship to agents that _use_ the board. These
   files are not used by the app.
 
@@ -31,6 +36,8 @@ brand-neutral `@repo/*` scope. Keep the name out of prose docs where a neutral p
 
 ```sh
 pnpm dev            # server :4317 + Vite :5317
+pnpm desktop        # pnpm dev + Electron window (attaches to the dev server)
+pnpm desktop:package  # Windows installer in apps/desktop/release/
 pnpm check          # format:check, lint, typecheck, knip, test: run before saying you're done
 pnpm format         # oxfmt (write)
 pnpm lint:fix       # oxlint autofix

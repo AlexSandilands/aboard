@@ -5,6 +5,8 @@ packages:
 allowBuilds:
   electron: true
   esbuild: true
+  # Only used by the Squirrel.Windows target; we ship NSIS.
+  electron-winstaller: false
   # Hooks are installed by the root `prepare` script instead.
   lefthook: false
 
