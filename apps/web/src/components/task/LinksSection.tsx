@@ -290,7 +290,7 @@ function T3ThreadRow({
     </span>
   ) : null;
   return (
-    <PanelSplitGroup className={cn(dimmed && "opacity-60 hover:opacity-100")}>
+    <PanelSplitGroup className={cn(dimmed && "opacity-60 hover:opacity-100 has-[[data-popup-open]]:opacity-100")}>
       <PanelControl
         part="primary"
         title={targets.primary.label}

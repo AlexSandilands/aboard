@@ -64,13 +64,13 @@ export const ShellThread = z.object({
   worktreePath: z.string().nullish(),
   updatedAt: z.string().nullish(),
   archivedAt: z.string().nullish(),
-  settledOverride: z.string().nullish(),
-  providerInstanceId: z.string().nullish(),
-  modelSelection: z.object({ model: z.string().nullish() }).loose().nullish(),
-  latestVisibleMessage: z.object({ updatedAt: z.string().nullish() }).loose().nullish(),
-  latestUserMessageAt: z.string().nullish(),
-  latestRunStartedAt: z.string().nullish(),
-  latestRunCompletedAt: z.string().nullish(),
+  // Display-only fields: an odd value degrades to null instead of failing the whole shell parse.
+  settledOverride: z.string().nullish().catch(null),
+  modelSelection: z.object({ model: z.string().nullish() }).loose().nullish().catch(null),
+  latestVisibleMessage: z.object({ updatedAt: z.string().nullish() }).loose().nullish().catch(null),
+  latestUserMessageAt: z.string().nullish().catch(null),
+  latestRunStartedAt: z.string().nullish().catch(null),
+  latestRunCompletedAt: z.string().nullish().catch(null),
 });
 export type ShellThread = z.infer<typeof ShellThread>;
 
@@ -117,8 +117,10 @@ export function mapThreadStatus(thread: ShellThread): T3ThreadSnapshot["status"]
 }
 
 /**
- * Newest message or run stamp, like T3's `resolveSettledThreadTimestamp` (client-runtime threadSort.ts).
- * `updatedAt` is only the fallback because settling or renaming bumps it without any agent activity.
+ * Newest message or run stamp. Loosely based on T3's `resolveSettledThreadTimestamp` (client-runtime
+ * threadSort.ts), but without `settledAt` and with the latest visible message, so a running thread reads
+ * as active. That stamp moves while the agent streams, so a working thread's snapshot changes on most
+ * polls (one event per 20s). `updatedAt` is only the fallback: settling or renaming bumps it too.
  */
 export function threadLastActivityAt(thread: ShellThread): string | null {
   let latest: string | null = null;
@@ -147,7 +149,6 @@ export function mapThreadSnapshot(thread: ShellThread): T3ThreadSnapshot {
     archived: thread.archivedAt != null,
     lastActivityAt: threadLastActivityAt(thread),
     model: thread.modelSelection?.model ?? null,
-    provider: thread.providerInstanceId ?? null,
     branch: thread.branch ?? null,
   };
 }

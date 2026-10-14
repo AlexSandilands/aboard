@@ -161,7 +161,6 @@ export const T3ThreadSnapshot = z.object({
   archived: z.boolean().optional(),
   lastActivityAt: IsoDate.nullable().optional(),
   model: z.string().nullable().optional(),
-  provider: z.string().nullable().optional(),
   branch: z.string().nullable().optional(),
 });
 export type T3ThreadSnapshot = z.infer<typeof T3ThreadSnapshot>;

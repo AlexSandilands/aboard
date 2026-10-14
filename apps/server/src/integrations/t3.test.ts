@@ -131,7 +131,6 @@ describe("mapThreadSnapshot", () => {
       archived: false,
       lastActivityAt: null,
       model: null,
-      provider: null,
       branch: null,
     });
   });
@@ -142,7 +141,6 @@ describe("mapThreadSnapshot", () => {
         id: "t",
         settledOverride: "settled",
         archivedAt: "2026-01-02T00:00:00Z",
-        providerInstanceId: "claude",
         modelSelection: { model: "claude-opus-5-5" },
         branch: "feat/x",
       }),
@@ -151,9 +149,13 @@ describe("mapThreadSnapshot", () => {
       settled: true,
       archived: true,
       model: "claude-opus-5-5",
-      provider: "claude",
       branch: "feat/x",
     });
+  });
+
+  it("tolerates odd display fields instead of failing the parse", () => {
+    const parsed = ShellThread.parse({ ...thread({ id: "t" }), modelSelection: "opus", latestUserMessageAt: 5 });
+    expect(mapThreadSnapshot(parsed)).toMatchObject({ model: null, lastActivityAt: null });
   });
 
   it("does not treat an 'active' override as settled", () => {

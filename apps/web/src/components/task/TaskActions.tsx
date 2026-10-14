@@ -1,4 +1,4 @@
-import type { Project, TaskDetail } from "@repo/contracts";
+import { BRAND, type Project, type TaskDetail } from "@repo/contracts";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -98,7 +98,7 @@ export function TaskActions({
       },
     },
     "copy-reference": {
-      label: "Copy task reference",
+      label: `Copy ${BRAND.id} link`,
       icon: HashIcon,
       run: () => copyTaskReference(task),
     },
