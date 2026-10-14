@@ -33,9 +33,12 @@ import {
 } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
+import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
 import { isPlanRequired, useDeleteTask, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { useBoard, useSettings } from "~/state/queries";
 import { copyToClipboard } from "./InlineInput";
 import { resolutionLabel } from "./resolution.logic";
 
@@ -61,6 +64,11 @@ export function TaskPanelHeader({
   const resolution = resolutionLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
+  const t3 = useBoard().data?.integrations.t3;
+  const settings = useSettings().data;
+  const taskProject = projects.find((p) => p.id === task.projectId);
+  const handoff = showHandoffActions(task);
+  const startT3 = handoff && !!t3 && canStartT3Thread(task, taskProject, t3, settings);
 
   const setStatus = (status: TaskStatus) => {
     if (status === task.status) return;
@@ -110,6 +118,8 @@ export function TaskPanelHeader({
       ) : null}
 
       <div className="ms-auto flex items-center gap-0.5">
+        {startT3 ? <StartT3Button taskId={task.id} variant="panel" /> : null}
+        {handoff ? <CopyPromptMenu task={task} variant="panel" /> : null}
         {task.status === "done" && !archived ? (
           <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
             <ArchiveIcon />

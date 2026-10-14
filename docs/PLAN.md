@@ -26,7 +26,8 @@ Status: **approved scope, ready to build.** Style source of truth: [STYLE_REFERE
 - Jira API sync (links only). Azure DevOps / Bitbucket PR status (links only; GitHub via `gh` only).
 - Git clone / "new repo" project sources. Projects are added by local folder, by T3 import, or as path-less projects.
 - Custom columns, custom themes, mobile layout, cross-lane drag (moving a task between projects is a field edit).
-- Any modification of T3 Code or writes to its data.
+- Any modification of T3 Code or writes to its data files. _(Revised: the board may start threads through T3's own
+  API when the user asks; see [integrations/agent-handoff.md](integrations/agent-handoff.md).)_
 
 ---
 
@@ -206,7 +207,7 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
   - browser: `<origin>/<environmentId>/<threadId>`
   - A setting picks the primary link (default: desktop), and the other is in a menu.
   - Thread links store their own `environmentId`, so links survive T3 restarts and can point at other environments.
-- **Live thread status (opt-in):** the user pastes a token minted with `t3 auth session issue --scopes orchestration:read --token-only`. Every 20s while any browser is connected, poll `GET <origin>/api/orchestration/shell` with `Authorization: Bearer` and `x-t3-orchestration-protocol: 2`. Map linked threads to `{title, status}` (working / waiting / input / failed / done) and update the link snapshot. **Verify this request shape against the live server in phase 4 before building UI on it. If the bearer isn't accepted on that route, ship without live status — it's a nice-to-have.**
+- **Live thread status (opt-in):** the user pastes a token minted with `t3 auth session issue --scope orchestration:read --token-only`. Every 20s while any browser is connected, poll `GET <origin>/api/orchestration/shell` with `Authorization: Bearer` and `x-t3-orchestration-protocol: 2`. Map linked threads to `{title, status}` (working / waiting / input / failed / done) and update the link snapshot. **Verify this request shape against the live server in phase 4 before building UI on it. If the bearer isn't accepted on that route, ship without live status — it's a nice-to-have.**
 - **Project import:** "Import from T3 Code" lists T3 projects not already present (matched by `workspace_key`) and imports the selected ones with title + `project_icon_json`.
   - Source 1: the shell API, if a token is configured.
   - Source 2: copy `statev2.sqlite` (+ `-wal`, `-shm` if present) to a temp dir, open the copy read-only with `node:sqlite`, and `SELECT project_id, title, workspace_root, project_icon_json FROM projection_projects WHERE deleted_at IS NULL`. Delete the copy afterwards. **Never open T3's live database file directly.**

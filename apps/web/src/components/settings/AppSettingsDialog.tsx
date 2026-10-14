@@ -26,7 +26,7 @@ import { useAppearance, useDialogs } from "~/state/ui";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
 
-const T3_TOKEN_COMMAND = "t3 auth session issue --scopes orchestration:read --token-only";
+const T3_TOKEN_COMMAND = "t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only";
 const LINK_TARGETS = [
   { value: "desktop", label: "Desktop app" },
   { value: "browser", label: "Browser" },
@@ -245,8 +245,8 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       />
       <SettingsRow
-        title="Live thread status"
-        description="Optional. Paste a read-only T3 token to show linked threads' status on cards. Mint one with:"
+        title="T3 token"
+        description="Optional. Shows linked threads' status on cards and lets you start a thread for a task. Mint one with:"
         status={
           settings.t3TokenSet ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">

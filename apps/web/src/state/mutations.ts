@@ -10,6 +10,7 @@ import type {
   PlanStep,
   PlanStepInput,
   Project,
+  StartT3ThreadInput,
   StepPatch,
   TaskDetail,
   TaskLink,
@@ -183,6 +184,12 @@ export const useAddLink = (opts?: MutationOpts) =>
   useApiMutation(
     ({ taskId, ...input }: LinkInput & { taskId: string }) =>
       api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }),
+    opts,
+  );
+export const useStartT3Thread = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ taskId, ...input }: StartT3ThreadInput & { taskId: string }) =>
+      api<TaskLink>(`/api/tasks/${enc(taskId)}/t3-thread`, { body: input }),
     opts,
   );
 export const useRemoveLink = (opts?: MutationOpts) =>

@@ -122,4 +122,14 @@ describe("REST", () => {
     const status = await h.request("/api/integrations/status");
     expect(await status.json()).toMatchObject({ t3: { detected: false }, github: { available: false } });
   });
+
+  it("validates T3 thread launches and explains when T3 Code isn't available", async () => {
+    const h = await setup();
+    const bad = await h.request(`/api/tasks/${h.task.id}/t3-thread`, { method: "POST", json: { prompt: "" } });
+    expect(bad.status).toBe(400);
+    const options = await h.request(`/api/tasks/${h.task.id}/t3-launch-options`);
+    expect(options.status).toBe(400);
+    expect(((await options.json()) as ApiErrorBody).error.message).toBe("T3 Code is not running");
+    expect((await h.request("/api/tasks/missing/t3-launch-options")).status).toBe(404);
+  });
 });

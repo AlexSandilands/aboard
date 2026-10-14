@@ -14,6 +14,8 @@ import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
+import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
+import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -39,6 +41,16 @@ export const TaskCardContent = memo(function TaskCardContent({
 }) {
   const attention = topAttention(task.attention);
   const jiraKey = jiraKeys(task)[0];
+  const { t3, settings, projects } = useBoardContext();
+  const handoff = showHandoffActions(task);
+  const startT3 =
+    handoff &&
+    canStartT3Thread(
+      task,
+      projects.find((p) => p.id === task.projectId),
+      t3,
+      settings,
+    );
   return (
     <div className="flex flex-col gap-1 px-2.5 py-2">
       <div className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
@@ -70,7 +82,17 @@ export const TaskCardContent = memo(function TaskCardContent({
       </div>
       <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
       <TaskProgressLine task={task} />
-      {hasCardLinks(task.links) ? <CardLinks links={task.links} /> : null}
+      {hasCardLinks(task.links) || handoff ? (
+        <div className="flex min-w-0 items-center gap-1">
+          <CardLinks links={task.links} />
+          {handoff ? (
+            <div className="ms-auto flex shrink-0 items-center gap-0.5">
+              {startT3 ? <StartT3Button taskId={task.id} variant="card" /> : null}
+              <CopyPromptMenu task={task} variant="card" />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 });
