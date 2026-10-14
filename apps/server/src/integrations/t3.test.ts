@@ -22,6 +22,7 @@ import {
   createT3Integration,
   discoverT3,
   mapThreadSnapshot,
+  parsePairingCode,
   parseT3Icon,
   readT3ProjectsFromSqlite,
   ShellThread,
@@ -193,6 +194,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
   const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | null>();
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
+  let token = opts.token ?? null;
   const services: T3Services = {
     links: {
       listByKind: (kind) => (opts.links ?? []).filter((l) => l.kind === kind),
@@ -202,7 +204,13 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
         return threadLink("l-new", input.t3Thread!.threadId, input.t3Thread!.environmentId);
       },
     },
-    settings: { t3Token: () => opts.token ?? null },
+    settings: {
+      t3Token: () => token,
+      update: (input) => {
+        if (input.t3Token !== undefined) token = input.t3Token;
+        return { jiraBaseUrl: null, githubPolling: true, t3LinkTarget: "desktop", t3TokenSet: Boolean(token) };
+      },
+    },
     tasks: {
       summary: (id) => ({ id, number: 9, title: "Hand off", projectId: projects[0]?.id ?? "none" }) as TaskSummary,
     },
@@ -279,8 +287,23 @@ const SHELL_FIXTURE = {
   ],
 };
 
-function t3Fetch(opts: { shellStatus?: number; onShell?: (init: RequestInit | undefined) => void } = {}): FetchFn {
+function t3Fetch(
+  opts: {
+    shellStatus?: number;
+    onShell?: (init: RequestInit | undefined) => void;
+    exchange?: { status: number; body: unknown };
+    onExchange?: (init: RequestInit | undefined) => void;
+  } = {},
+): FetchFn {
   return async (url, init) => {
+    if (url.endsWith("/oauth/token")) {
+      opts.onExchange?.(init);
+      const exchange = opts.exchange ?? {
+        status: 200,
+        body: { access_token: "fresh", issued_token_type: "x", token_type: "Bearer", expires_in: 60, scope: "s" },
+      };
+      return json(exchange.body, exchange.status);
+    }
     if (url.endsWith("/api/auth/websocket-ticket")) return json({ ticket: "tick", expiresAt: "x" });
     if (url.endsWith("/.well-known/t3/environment")) return json({ environmentId: ENV_ID, label: "MY-PC" });
     if (url.endsWith("/api/orchestration/shell")) {
@@ -349,7 +372,11 @@ describe("T3 integration", () => {
       fetch: t3Fetch({ shellStatus: 401 }),
       log: { warn: () => {} },
     });
-    expect(await t3.test()).toMatchObject({ detected: true, liveStatus: "error", error: "Token rejected" });
+    expect(await t3.test()).toMatchObject({
+      detected: true,
+      liveStatus: "error",
+      error: "Token expired or revoked. Paste a new pairing link",
+    });
   });
 
   it("lists projects from the shell when a token works, marking existing ones", async () => {
@@ -374,6 +401,95 @@ describe("T3 integration", () => {
     ]);
     const created = await t3.importProjects(["t3-p1", "t3-p2", "unknown"]);
     expect(created.map((p) => [p.title, p.t3ProjectId])).toEqual([["T3 Code", "t3-p2"]]);
+  });
+});
+
+// Built at runtime so the source holds no pairing-code-shaped literal for secret scanners to flag.
+const CODE = "ABCD".repeat(3);
+
+describe("parsePairingCode", () => {
+  it("reads the code from desktop and web pairing links and bare codes", () => {
+    expect(parsePairingCode(` t3code://app/pair#token=${CODE} `)).toBe(CODE);
+    expect(parsePairingCode(`http://127.0.0.1:3773/pair#token=${CODE}`)).toBe(CODE);
+    expect(parsePairingCode(CODE)).toBe(CODE);
+  });
+
+  it("treats anything else as a bearer token", () => {
+    expect(parsePairingCode("eyJhbGciOiJIUzI1NiJ9.payload.sig")).toBeNull();
+    expect(parsePairingCode("8438l44evd2v")).toBeNull();
+    expect(parsePairingCode("8438L44EVD2")).toBeNull();
+  });
+});
+
+describe("T3 connect", () => {
+  const LINK = `t3code://app/pair#token=${CODE}`;
+
+  it("exchanges a pairing link for a token with only the board's scopes, saves it and checks it", async () => {
+    const { services } = fakeServices();
+    let form = new URLSearchParams();
+    let shellAuth: string | undefined;
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch({
+        onExchange: (init) => void (form = new URLSearchParams(init?.body as string)),
+        onShell: (init) => void (shellAuth = (init?.headers as Record<string, string> | undefined)?.authorization),
+      }),
+    });
+    const result = await t3.connect(LINK);
+    expect(Object.fromEntries(form)).toMatchObject({
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      subject_token: CODE,
+      subject_token_type: "urn:t3:params:oauth:token-type:environment-bootstrap",
+      scope: "orchestration:read orchestration:operate",
+      client_label: BRAND.name,
+    });
+    expect(services.settings.t3Token()).toBe("fresh");
+    expect(shellAuth).toBe("Bearer fresh");
+    expect(result.settings.t3TokenSet).toBe(true);
+    expect(result.t3.liveStatus).toBe("ok");
+  });
+
+  it("saves anything that isn't a pairing link as a token without an exchange", async () => {
+    const { services } = fakeServices();
+    let exchanged = false;
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch({ onExchange: () => void (exchanged = true) }),
+    });
+    await t3.connect("  cli-token  ");
+    expect(exchanged).toBe(false);
+    expect(services.settings.t3Token()).toBe("cli-token");
+  });
+
+  it.each([
+    [401, { code: "auth_invalid" }, /expired or was already used/],
+    [400, { code: "invalid_request", reason: "scope_not_granted" }, /View environment/],
+    [500, {}, /HTTP 500/],
+  ])("keeps the current token when T3 answers %i", async (status, body, message) => {
+    const { services } = fakeServices({ token: "old" });
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch({ exchange: { status, body } }),
+    });
+    await expect(t3.connect(LINK)).rejects.toThrow(message);
+    expect(services.settings.t3Token()).toBe("old");
+  });
+
+  it("needs T3 Code running to exchange a pairing link", async () => {
+    const { services } = fakeServices();
+    const t3 = createT3Integration({
+      t3Home: makeT3Home({ runtime: false }),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch(),
+    });
+    await expect(t3.connect(LINK)).rejects.toThrow("T3 Code is not running");
   });
 });
 
