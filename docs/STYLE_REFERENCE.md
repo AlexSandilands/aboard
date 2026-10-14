@@ -64,6 +64,7 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 |---|---|
 | App shell, resizable sidebar, rail | `W/components/AppSidebarLayout.tsx`, `W/components/ui/sidebar.tsx`, `W/hooks/useResizeDrag.ts`, `W/components/threadSidebarWidth.ts` (default 256px, min 208) |
 | Sidebar header (search + `size-7` icon buttons) | `W/components/sidebar/SidebarThreadHeader.tsx` |
+| Sidebar footer (settings + utility icon row) | `SidebarChromeFooter` / `SidebarUtilityMenu` in `W/components/sidebar/SidebarChrome.tsx` |
 | Project filter combobox (gear per row) | `W/components/Sidebar.tsx` ~5060–5190, `W/components/ui/combobox.tsx` |
 | Attention rows / compact task rows | `SidebarThreadRow` in `W/components/Sidebar.tsx` ~1112 & ~1959–2225; status text map ~1301 |
 | Section headers ("Needs attention", "Projects") | `W/components/ui/collapsible-section-header.tsx` |

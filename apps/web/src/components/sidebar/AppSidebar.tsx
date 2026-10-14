@@ -4,9 +4,10 @@ import { useBoard } from "~/state/queries";
 import { AttentionSection } from "./AttentionSection";
 import { ProjectsSection } from "./ProjectsSection";
 import { SidebarBrandRow } from "./SidebarBrandRow";
+import { SidebarFooterMenu } from "./SidebarFooterMenu";
 import { SidebarSearchHeader } from "./SidebarSearchHeader";
 
-/** Sidebar contents: brand row, search header, "Needs attention" and "Projects". */
+/** Sidebar contents: brand row, search header, "Needs attention", "Projects" and the footer menu. */
 export function AppSidebar() {
   const board = useBoard().data;
   return (
@@ -37,6 +38,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+      <SidebarFooterMenu />
     </>
   );
 }
