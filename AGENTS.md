@@ -52,6 +52,7 @@ typecheck, test and knip on push. Don't bypass them; fix the cause.
 - Lint suppressions must be targeted and give a reason:
   `// oxlint-disable-next-line rule -- reason`.
 - Commits follow Conventional Commits (`feat(web): …`, `fix(server): …`, `chore: …`).
+- PR titles follow Conventional Commits, like the commits: `feat(web): add favicon options`.
 
 ## Tracking work on the board (dogfooding)
 
