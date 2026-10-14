@@ -2,6 +2,7 @@ import { storageKey } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
+import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
 
 /** Persisted board view preferences. */
 interface BoardViewState {
@@ -60,6 +61,23 @@ export const useAppearance = create<AppearanceState>()(
       setBanner: (banner) => set({ banner }),
     }),
     { name: storageKey("appearance"), partialize: ({ banner }) => ({ banner }) },
+  ),
+);
+
+/** Persisted task panel preferences. */
+interface TaskPanelPrefsState {
+  /** More-menu actions pinned beside the title. Stored values are re-validated by normalizePins. */
+  pinnedActions: PinnableAction[];
+  togglePinnedAction: (id: PinnableAction) => void;
+}
+
+export const useTaskPanelPrefs = create<TaskPanelPrefsState>()(
+  persist(
+    (set) => ({
+      pinnedActions: [],
+      togglePinnedAction: (id) => set((s) => ({ pinnedActions: togglePin(s.pinnedActions, id) })),
+    }),
+    { name: storageKey("task-panel"), partialize: ({ pinnedActions }) => ({ pinnedActions }) },
   ),
 );
 

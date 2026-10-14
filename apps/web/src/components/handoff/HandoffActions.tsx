@@ -35,7 +35,7 @@ export function CopyPromptMenu({ task, variant }: { task: TaskSummary; variant: 
                 variant === "card" ? (
                   <button type="button" aria-label="Copy agent prompt" className={chipClassName} {...cardHandlers} />
                 ) : (
-                  <Button variant="ghost" size="icon-xs" aria-label="Copy agent prompt" />
+                  <Button variant="ghost" size="icon" aria-label="Copy agent prompt" />
                 )
               }
             />
@@ -67,10 +67,10 @@ export function StartT3Button({ taskId, variant }: { taskId: string; variant: Va
   if (variant === "panel") {
     return (
       <Tooltip>
-        <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Start in T3 Code" onClick={open} />}>
+        <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Start in T3 Code" onClick={open} />}>
           <MessageSquarePlusIcon />
         </TooltipTrigger>
-        <TooltipPopup side="bottom">Start in T3 Code</TooltipPopup>
+        <TooltipPopup>Start in T3 Code</TooltipPopup>
       </Tooltip>
     );
   }

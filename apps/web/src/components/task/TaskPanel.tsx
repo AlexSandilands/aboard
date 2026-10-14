@@ -1,6 +1,6 @@
 import { storageKey, type Project, type TaskDetail } from "@repo/contracts";
 import { FileQuestionIcon, XIcon } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
@@ -17,7 +17,8 @@ import { MarkdownField } from "./MarkdownField";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
 import { ResolutionCallout } from "./ResolutionCallout";
-import { TaskPanelHeader } from "./TaskPanelHeader";
+import { TaskActions } from "./TaskActions";
+import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
 import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
@@ -46,7 +47,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => 
   return (
     <aside
       aria-label="Task details"
-      className="relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+      className="@container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />
@@ -94,7 +95,7 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
     handledPlanEditorRequest = Math.max(handledPlanEditorRequest, seenPlanEditorRequest);
   }, [seenPlanEditorRequest]);
 
-  if (detail.isPending) return <PanelSkeleton />;
+  if (detail.isPending) return <PanelSkeleton onClose={onClose} />;
   if (detail.isError && !detail.data) {
     const notFound = detail.error instanceof ApiError && detail.error.code === "NOT_FOUND";
     return (
@@ -126,17 +127,20 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
   }
 
   const task = detail.data;
+  const openPlanEditor = () => openEditor("outline");
   return (
     <>
-      <TaskPanelHeader
-        task={task}
-        projects={projects}
-        onClose={onClose}
-        onOpenPlanEditor={() => openEditor("outline")}
-      />
+      <TaskPanelHeader task={task} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
       <div className="min-h-0 flex-1">
         <ScrollArea scrollFade>
-          <TaskPanelBody task={task} projects={projects} onOpenEditor={openEditor} />
+          <TaskPanelBody
+            task={task}
+            projects={projects}
+            onOpenEditor={openEditor}
+            titleActions={
+              <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
+            }
+          />
         </ScrollArea>
       </div>
       <PlanEditor
@@ -154,17 +158,19 @@ function TaskPanelBody({
   task,
   projects,
   onOpenEditor,
+  titleActions,
 }: {
   task: TaskDetail;
   projects: ReadonlyArray<Project>;
   onOpenEditor: (mode: PlanEditorMode) => void;
+  titleActions: ReactNode;
 }) {
   const actions = usePlanActions(task.id);
   const { mutate: updateTask } = useUpdateTask();
   return (
     <div className="flex flex-col pb-10">
       <div className="px-4 pt-4 pb-3">
-        <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} />
+        <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} actions={titleActions} />
       </div>
       <div className="flex flex-col gap-2 px-3 pb-3">
         <ResolutionCallout task={task} />
@@ -192,15 +198,19 @@ function TaskPanelBody({
   );
 }
 
-function PanelSkeleton() {
+function PanelSkeleton({ onClose }: { onClose: () => void }) {
   return (
     <div aria-busy className="flex flex-col">
-      <div className="drag-region flex h-[var(--workspace-topbar-height)] items-center gap-2 border-b border-border px-3 wco:pe-(--workspace-native-controls-inset)">
+      <div className={PANEL_TOP_BAR_CLASS}>
+        <ClosePanelButton onClose={onClose} />
         <Skeleton className="h-4 w-8" />
         <Skeleton className="h-6 w-24" />
       </div>
       <div className="flex flex-col gap-3 px-4 pt-4">
-        <Skeleton className="h-6 w-3/4" />
+        <div className="flex items-start gap-2">
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="ms-auto hidden size-6 shrink-0 @min-[460px]:block" />
+        </div>
         <Skeleton className="h-4 w-40" />
         <Skeleton shape="card" className="mt-1 h-28 w-full" />
         <Skeleton className="mt-3 h-4 w-16" />
