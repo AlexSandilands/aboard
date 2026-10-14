@@ -225,10 +225,10 @@ function SampleSidebarLayout() {
         data-app-sidebar
       >
         <Sidebar resizable={{ storageKey: storageKey("sidebar-width"), minWidth: 208 }}>
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="stage-ink relative flex min-h-0 flex-1 flex-col">
             <SidebarStageBackdrop />
             <SidebarHeader className="relative z-10 h-[var(--workspace-topbar-height)] flex-row items-center justify-between">
-              <span className="px-1 text-sm font-medium">{BRAND.name}</span>
+              <span className="px-1 text-sm font-medium text-[var(--stage-ink)]">{BRAND.name}</span>
               <Button size="icon-xs" variant="ghost-muted" aria-label="Add project">
                 <PlusIcon />
               </Button>
@@ -528,10 +528,10 @@ export function StyleGallery() {
             {STAGE_BANNERS.map((banner) => (
               <div
                 key={banner.id}
-                className="relative flex h-[var(--workspace-topbar-height)] w-64 items-center overflow-hidden rounded-lg border border-border/60 bg-sidebar ps-4 [--sidebar-stage-fade:var(--sidebar)]"
+                className="stage-ink relative flex h-[var(--workspace-topbar-height)] w-64 items-center overflow-hidden rounded-lg border border-border/60 bg-sidebar ps-4 [--sidebar-stage-fade:var(--sidebar)]"
               >
                 <SidebarStageBackdrop banner={banner.id} />
-                <span className="relative z-10 text-sm font-medium text-white">
+                <span className="relative z-10 text-sm font-medium text-[var(--stage-ink)]">
                   {BRAND.name} · {banner.label}
                 </span>
               </div>

@@ -11,10 +11,19 @@ export function useArtIds<K extends string>(names: readonly K[]): Record<K, stri
   return Object.fromEntries(names.map((name) => [name, `${prefix}-${name}`])) as Record<K, string>;
 }
 
-export function StageSvg({ art, children }: { art: string; children: ReactNode }) {
+export function StageSvg({
+  art,
+  tone = "dark",
+  children,
+}: {
+  art: string;
+  tone?: "dark" | "theme";
+  children?: ReactNode;
+}) {
   return (
     <svg
       data-stage-art={art}
+      data-stage-tone={tone}
       className="h-full w-full"
       fill="none"
       preserveAspectRatio="xMinYMin slice"

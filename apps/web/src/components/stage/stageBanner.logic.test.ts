@@ -30,10 +30,10 @@ describe("resolveStageBanner", () => {
     expect(night).toBe(morning);
   });
 
-  it("visits every banner over consecutive days", () => {
-    const seen = new Set(
-      STAGE_BANNERS.map((_, offset) => resolveStageBanner("rotate", new Date(2026, 9, 14 + offset, 12))),
-    );
-    expect(seen.size).toBe(STAGE_BANNERS.length);
+  it("visits every rotating banner over consecutive days, and never None", () => {
+    const rotating = STAGE_BANNERS.filter((banner) => banner.rotates).map((banner) => banner.id);
+    const seen = new Set(rotating.map((_, offset) => resolveStageBanner("rotate", new Date(2026, 9, 14 + offset, 12))));
+    expect([...seen].toSorted()).toEqual(rotating.toSorted());
+    expect(seen.has("none")).toBe(false);
   });
 });

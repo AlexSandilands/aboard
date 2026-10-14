@@ -167,12 +167,14 @@ function BannerOption({
       aria-checked={selected}
       onClick={() => onSelect(choice)}
       className={cn(
-        "relative flex h-12 cursor-pointer items-center overflow-hidden rounded-lg border bg-sidebar px-3 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "stage-ink relative flex h-12 cursor-pointer items-center overflow-hidden rounded-lg border bg-sidebar px-3 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected ? "border-primary ring-1 ring-primary" : "border-border/60 hover:border-border",
       )}
     >
       <SidebarStageBackdrop banner={preview} />
-      <span className="relative z-10 flex items-center gap-1.5 text-xs font-medium text-white">{label}</span>
+      <span className="relative z-10 flex items-center gap-1.5 text-xs font-medium text-[var(--stage-ink)]">
+        {label}
+      </span>
     </button>
   );
 }
