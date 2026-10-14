@@ -9,7 +9,7 @@ import { BRAND } from "@repo/contracts";
 import { Platform, build } from "electron-builder";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const inputs = ["dist/main.mjs", "../server/dist/server.mjs", "../web/dist/index.html"];
+const inputs = ["dist/main.mjs", "dist/icons/icon.png", "../server/dist/server.mjs", "../web/dist/index.html"];
 const missing = inputs.filter((path) => !existsSync(root + path));
 if (missing.length > 0) throw new Error(`Missing build output: ${missing.join(", ")}. Run \`pnpm desktop:build\`.`);
 
@@ -30,6 +30,7 @@ await build({
       { from: "../server/dist", to: "server" },
       { from: "../web/dist", to: "web" },
     ],
+    win: { icon: "dist/icons/icon.png" },
     npmRebuild: false,
     electronFuses: {
       // T3 Code and VS Code terminals export ELECTRON_RUN_AS_NODE; it must not turn the app into Node.

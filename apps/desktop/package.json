@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@repo/contracts": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
     "electron": "^44.7.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2"

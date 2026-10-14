@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BRAND, brandEnv } from "@repo/contracts";
 import { BrowserWindow, Menu, Tray, app, clipboard, dialog, shell } from "electron";
-import { appIcon } from "./icon.ts";
+import { appIcon, trayIcon } from "./icon.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
 import { decideNavigation } from "./shell.logic.ts";
 
@@ -102,7 +102,7 @@ function buildTrayMenu(): Menu {
 }
 
 function createTray(): Tray {
-  const t = new Tray(appIcon());
+  const t = new Tray(trayIcon());
   t.setToolTip(BRAND.name);
   t.setContextMenu(buildTrayMenu());
   t.on("click", showWindow);
