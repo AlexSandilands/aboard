@@ -14,7 +14,6 @@ import {
   LockIcon,
   LockOpenIcon,
   SearchIcon,
-  SparkleIcon,
   StarIcon,
   ZapIcon,
 } from "lucide-react";
@@ -30,6 +29,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "~/components/ui/menu";
+import { ClaudeAI, OpenAI } from "~/components/handoff/providerIcons";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
 import {
@@ -78,7 +78,8 @@ export function ComposerControl({
 const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opacity-60" />;
 
 export function ProviderIcon({ driver, className }: { driver: string; className?: string }) {
-  if (driver === "claudeAgent") return <SparkleIcon aria-hidden className={cn("text-[#D97757]", className)} />;
+  if (driver === "claudeAgent") return <ClaudeAI aria-hidden className={cn("size-4", className)} />;
+  if (driver === "codex") return <OpenAI aria-hidden className={cn("size-4", className)} />;
   return <BotIcon aria-hidden className={className} />;
 }
 

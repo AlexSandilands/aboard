@@ -6,7 +6,7 @@ import {
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
+import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
@@ -20,6 +20,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
@@ -32,7 +33,28 @@ import { useAppearance, useDialogs } from "~/state/ui";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
 
-const T3_TOKEN_COMMAND = "t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only";
+/** How to get a pairing link, behind an info icon so the settings row stays short. */
+function PairingHelp() {
+  return (
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        aria-label="How to connect T3 Code"
+        className="inline-flex size-4 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <InfoIcon className="size-3.5" />
+      </PopoverTrigger>
+      <PopoverPopup side="top" className="max-w-72 text-xs leading-relaxed">
+        <ol className="list-decimal space-y-1 ps-4">
+          <li>In T3 Code, open Settings → Connections → Create link.</li>
+          <li>Allow “View environment” and “Operate tasks”.</li>
+          <li>Paste the link here within 5 minutes and press Connect.</li>
+        </ol>
+        <p className="mt-2 text-muted-foreground">A token from the t3 CLI works too.</p>
+      </PopoverPopup>
+    </Popover>
+  );
+}
 const LINK_TARGETS = [
   { value: "desktop", label: "Desktop app" },
   { value: "browser", label: "Browser" },
@@ -264,8 +286,13 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       />
       <SettingsRow
-        title="T3 token"
-        description="Optional. Shows linked threads' status on cards and lets you start a thread for a task. In T3 Code, open Settings → Connections → Create link (allow “View environment” and “Operate tasks”), then paste the link here within 5 minutes."
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            T3 connection
+            <PairingHelp />
+          </span>
+        }
+        description="Optional. Live thread status and starting threads from a task."
         status={
           settings.t3TokenSet ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -302,8 +329,6 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       >
         <div className="mt-2 space-y-2">
-          <p className="text-xs text-muted-foreground">Or paste a token minted with the T3 CLI:</p>
-          <CommandSnippet command={T3_TOKEN_COMMAND} />
           {settings.t3TokenSet ? (
             <div className="flex items-center justify-end gap-2">
               <Button
