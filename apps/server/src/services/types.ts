@@ -87,9 +87,10 @@ export interface TasksService {
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
    * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "idea" without plan steps.
-   * Moving a closed task out of Done clears its resolution.
+   * Moving a closed task out of Done clears its resolution. `because` is merged into the status_changed event
+   * payload, for automatic moves that should say why (e.g. `{ mergedPr: "owner/repo#12" }`).
    */
-  move(id: string, input: MoveTaskInput, actor: string): TaskSummary;
+  move(id: string, input: MoveTaskInput, actor: string, because?: Record<string, unknown>): TaskSummary;
   /**
    * Closes the task with a resolution and moves it to Done, without the plan check `move` applies.
    * completed/duplicate need `byTaskId` (an existing other task); wont_do must not have one.
@@ -133,7 +134,10 @@ export interface LinksService {
   get(linkId: string): TaskLink;
   /** Links of a kind on non-archived tasks — for pollers. */
   listByKind(kind: TaskLink["kind"]): TaskLink[];
-  /** Stores a poller snapshot. Publishes task.upserted only when the snapshot changed. */
+  /**
+   * Stores a poller snapshot. Publishes task.upserted only when the snapshot changed. A PR that just became merged
+   * or closed moves its task from Review to Done (actor "github") once all its PRs are finished and one merged.
+   */
   setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | null): void;
 }
 

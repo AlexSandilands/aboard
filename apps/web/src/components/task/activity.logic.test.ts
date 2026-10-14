@@ -35,6 +35,9 @@ describe("describeEvent", () => {
     expect(text("status_changed", { from: "done", to: "idea", clearedResolution: "wont_do" })).toBe(
       "reopened this and moved to Ideas",
     );
+    expect(text("status_changed", { from: "review", to: "done", mergedPr: "acme/app#12" })).toBe(
+      "moved to Done when acme/app#12 merged",
+    );
   });
 
   it("names steps by their current index label, falling back to the logged title", () => {

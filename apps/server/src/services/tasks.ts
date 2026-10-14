@@ -169,7 +169,7 @@ export function createTasksService(
       return service.detail(id);
     },
 
-    move(id, input, actor) {
+    move(id, input, actor, because) {
       core.write((fx) => {
         const current = record(id);
         const status = input.status ?? current.status;
@@ -199,6 +199,7 @@ export function createTasksService(
             from: current.status,
             to: status,
             ...(reopened ? { clearedResolution: current.resolution } : {}),
+            ...because,
           });
         } else fx.task(id);
       });
