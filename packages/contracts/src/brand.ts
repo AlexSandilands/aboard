@@ -1,7 +1,7 @@
 import pkg from "../../../package.json" with { type: "json" };
 
 /**
- * Product identity, read from the root package.json (`name`, `displayName`). Everything that names the
+ * Product identity, read from the root package.json (`name`, `displayName`, `version`). Everything that names the
  * product — env vars, data dir, MCP server name, storage keys, UI title — derives from here, so a
  * rename is a package.json edit.
  */
@@ -10,6 +10,7 @@ export const BRAND = {
   id: pkg.name,
   /** Display name for UI and agent-facing text. */
   name: pkg.displayName,
+  version: pkg.version,
 } as const;
 
 /** Environment variable name, e.g. `brandEnv("HOME")` → `ABOARD_HOME`. */

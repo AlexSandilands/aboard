@@ -400,3 +400,7 @@ export const ApiErrorBody = z.object({
   error: z.object({ code: ApiErrorCode, message: z.string(), details: z.unknown().optional() }),
 });
 export type ApiErrorBody = z.infer<typeof ApiErrorBody>;
+
+/** `GET /api/health`. `id` lets a client (the desktop shell) tell our server apart from whatever else holds the port. */
+export const Health = z.object({ ok: z.literal(true), id: z.string(), version: z.string() });
+export type Health = z.infer<typeof Health>;
