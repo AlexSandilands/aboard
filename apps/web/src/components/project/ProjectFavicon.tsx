@@ -14,7 +14,7 @@ function DynamicProjectIconFallback() {
 }
 
 /**
- * A project's identity tile: its saved icon (monogram, emoji or Lucide glyph), or a
+ * A project's identity tile: its saved icon (monogram, emoji, Lucide glyph or image), or a
  * monogram derived from the title when it has none. Always pass the saved title, not a
  * display label, so the derived monogram stays stable across surfaces.
  */
@@ -22,6 +22,17 @@ export function ProjectFavicon(input: { title: string; icon: ProjectIcon | null;
   const { icon, title } = input;
   if (icon?.kind === "monogram") {
     return <ProjectMonogram text={icon.text} color={icon.color} className={input.className} />;
+  }
+  if (icon?.kind === "image") {
+    return (
+      <img
+        src={icon.dataUrl}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className={cn("size-3.5 shrink-0 rounded-[25%] object-contain", input.className)}
+      />
+    );
   }
   if (icon?.kind === "emoji") {
     return (

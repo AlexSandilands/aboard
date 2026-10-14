@@ -7,6 +7,8 @@ import {
   deriveProjectIdentity,
   normalizeWorkspaceKey,
   parsePlanMarkdown,
+  PROJECT_ICON_IMAGE_MAX_LENGTH,
+  ProjectIcon,
   type PlanPhase,
   type StepStatus,
 } from "./index.ts";
@@ -103,6 +105,21 @@ describe("deriveProjectIdentity", () => {
   });
   it("is stable", () => {
     expect(deriveProjectIdentity("storefront").color).toBe(deriveProjectIdentity("Storefront").color);
+  });
+});
+
+describe("ProjectIcon image", () => {
+  const ok = (dataUrl: string) => ProjectIcon.safeParse({ kind: "image", dataUrl }).success;
+
+  it("accepts raster base64 data URLs", () => {
+    for (const type of ["png", "jpeg", "webp", "gif"]) expect(ok(`data:image/${type};base64,iVBORw0KGgo=`)).toBe(true);
+  });
+
+  it("rejects SVG, remote URLs, non-base64 payloads and oversized values", () => {
+    expect(ok("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
+    expect(ok("https://example.com/icon.png")).toBe(false);
+    expect(ok("data:image/png,<svg onload=alert(1)>")).toBe(false);
+    expect(ok(`data:image/png;base64,${"A".repeat(PROJECT_ICON_IMAGE_MAX_LENGTH)}`)).toBe(false);
   });
 });
 

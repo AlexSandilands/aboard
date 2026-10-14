@@ -118,6 +118,14 @@ const SAMPLE_ICONS: ReadonlyArray<{ title: string; icon: ProjectIcon }> = [
   { title: "Fire", icon: { kind: "emoji", emoji: "🔥" } },
   { title: "Brain", icon: { kind: "emoji", emoji: "🧠" } },
   { title: "Custom", icon: { kind: "monogram", text: "QX", color: "rose" } },
+  {
+    title: "Image",
+    icon: {
+      kind: "image",
+      dataUrl:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mNITvv4/43HzP+4aAZ8kiCaYViYAADqPrCha/7uswAAAABJRU5ErkJggg==",
+    },
+  },
 ];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
