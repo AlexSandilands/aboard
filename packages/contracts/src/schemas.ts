@@ -42,6 +42,11 @@ export const PROJECT_ICON_COLORS = [
 export const ProjectIconColor = z.enum(PROJECT_ICON_COLORS);
 export type ProjectIconColor = z.infer<typeof ProjectIconColor>;
 
+/** Edge length, in px, that uploaded icon images are resampled to. */
+export const PROJECT_ICON_IMAGE_SIZE = 128;
+/** Longest accepted image icon data URL (~96 KB of base64). */
+export const PROJECT_ICON_IMAGE_MAX_LENGTH = 128_000;
+
 export const ProjectIcon = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("lucide"),
@@ -61,6 +66,16 @@ export const ProjectIcon = z.discriminatedUnion("kind", [
       .max(32)
       .regex(/^[\p{L}\p{N}][\p{L}\p{N}\p{M}‌‍]*$/u),
     color: ProjectIconColor,
+  }),
+  // Inline so icons travel with the project row over REST/SSE with no file route or cleanup. The
+  // picker downscales to PROJECT_ICON_IMAGE_SIZE, so the cap only stops oversized hand-made values.
+  // Raster only: SVG can carry script and isn't needed once the image has been resampled.
+  z.object({
+    kind: z.literal("image"),
+    dataUrl: z
+      .string()
+      .max(PROJECT_ICON_IMAGE_MAX_LENGTH)
+      .regex(/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/),
   }),
 ]);
 export type ProjectIcon = z.infer<typeof ProjectIcon>;

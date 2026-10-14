@@ -1,4 +1,4 @@
-import { ACTOR_HEADER, type ApiErrorBody, type TaskDetail } from "@repo/contracts";
+import { ACTOR_HEADER, type ApiErrorBody, type Project, type TaskDetail } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -66,6 +66,21 @@ describe("REST", () => {
     const board = (await (await h.request("/api/board")).json()) as { tasks: unknown[]; projects: unknown[] };
     expect(board.tasks).toHaveLength(0);
     expect(board.projects).toHaveLength(1);
+  });
+
+  it("stores an image project icon and rejects unsafe ones", async () => {
+    const h = await setup();
+    const icon = { kind: "image", dataUrl: "data:image/png;base64,iVBORw0KGgo=" };
+    const saved = await h.request(`/api/projects/${h.project.id}`, { method: "PATCH", json: { icon } });
+    expect(saved.status).toBe(200);
+    const projects = (await (await h.request("/api/projects")).json()) as Project[];
+    expect(projects[0]?.icon).toEqual(icon);
+
+    const svg = await h.request(`/api/projects/${h.project.id}`, {
+      method: "PATCH",
+      json: { icon: { kind: "image", dataUrl: "data:image/svg+xml;base64,PHN2Zz4=" } },
+    });
+    expect(await errorCode(svg)).toBe("VALIDATION");
   });
 
   it("serves settings without the token", async () => {
