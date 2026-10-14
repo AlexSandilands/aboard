@@ -53,12 +53,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.description ? { description: args.description } : {}),
           actor: actor(args.actor),
         });
-        return textResult(`Captured idea #${task.number} "${task.title}" in ${project.title}.`, {
-          taskId: task.id,
-          number: task.number,
-          status: task.status,
-          projectId: project.id,
-        });
+        return textResult(`Captured idea #${task.number} "${task.title}" in ${project.title}.`);
       }),
   );
 
@@ -211,7 +206,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         const id = services.tasks.resolveId(args.task);
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
-        return textResult(`Note added to #${summary.number}.`, { taskId: id, number: summary.number });
+        return textResult(`Note added to #${summary.number}.`);
       }),
   );
 };

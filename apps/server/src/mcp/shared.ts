@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { PlanInput, parsePlanMarkdown, type Project } from "@repo/contracts";
-import { renderTaskShort, taskStructured } from "./format.ts";
+import { renderTaskShort } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
@@ -60,8 +60,12 @@ export const planPhasesField = z
 
 // ── Results ──────────────────────────────────────────────────────────────
 
-export function textResult(text: string, structured?: Record<string, unknown>): CallToolResult {
-  return { content: [{ type: "text", text }], ...(structured ? { structuredContent: structured } : {}) };
+/**
+ * Text only, on purpose: some clients (Claude Code) show `structuredContent` instead of the text when both are
+ * present, which hid task titles, plans and activity from agents. Everything an agent needs goes in the text.
+ */
+export function textResult(text: string): CallToolResult {
+  return { content: [{ type: "text", text }] };
 }
 
 export function errorResult(text: string): CallToolResult {
@@ -135,10 +139,7 @@ export function safeProject(services: Services, id: string): Project | undefined
 /** Mutating tools answer with a one-line confirmation plus the task's new state. */
 export function taskResult(services: Services, taskId: string, headline: string): CallToolResult {
   const task = services.tasks.detail(taskId);
-  return textResult(
-    `${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`,
-    taskStructured(task),
-  );
+  return textResult(`${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`);
 }
 
 /** set_plan / create_task accept a structured plan or markdown; returns null when neither was given. */

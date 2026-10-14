@@ -157,14 +157,3 @@ export function renderTaskDetail(
 export function renderTaskShort(task: TaskDetail, project: Project | undefined): string {
   return renderTaskDetail(task, project, { events: 0 });
 }
-
-export function taskStructured(task: TaskSummary): Record<string, unknown> {
-  return {
-    taskId: task.id,
-    number: task.number,
-    status: task.status,
-    projectId: task.projectId,
-    progress: task.progress,
-    currentStep: task.currentStep,
-  };
-}

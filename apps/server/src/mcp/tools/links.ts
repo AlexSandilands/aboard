@@ -37,11 +37,7 @@ export const registerLinkTools: ToolRegistrar = (server, { services, actor }) =>
           actor(args.actor),
         );
         const summary = services.tasks.summary(id);
-        return textResult(`Linked to #${summary.number}: ${linkText(link)}`, {
-          taskId: id,
-          linkId: link.id,
-          kind: link.kind,
-        });
+        return textResult(`Linked to #${summary.number}: ${linkText(link)}`);
       }),
   );
 };

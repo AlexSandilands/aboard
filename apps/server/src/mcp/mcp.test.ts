@@ -59,6 +59,8 @@ describe("MCP endpoint", () => {
     ]) {
       expect(names).toContain(name);
     }
+    // An outputSchema makes structuredContent mandatory, which Claude Code would show instead of the text.
+    expect(tools.filter((t) => t.outputSchema).map((t) => t.name)).toEqual([]);
     expect(client.getInstructions()).toContain("get_task");
   });
 
@@ -76,7 +78,7 @@ describe("MCP endpoint", () => {
     });
     expect(created.isError).toBeFalsy();
     expect(text(created)).toMatch(/#\d+/);
-    const number = (created.structuredContent as { number: number }).number;
+    const number = Number(/#(\d+)/.exec(text(created))?.[1]);
     const task = `#${number}`;
 
     const gated = await client.callTool({ name: "move_task", arguments: { task, status: "planned" } });
@@ -128,6 +130,38 @@ describe("MCP endpoint", () => {
 
     const overview = text(await client.callTool({ name: "board_overview", arguments: { workspacePath } }));
     expect(overview).toContain("In Progress 1");
+  });
+
+  it("puts the full detail in the text and sends no structuredContent", async () => {
+    // Clients such as Claude Code show structuredContent instead of the text when both are present.
+    const workspacePath = "C:\\Fake\\proj";
+    const project = h.services.projects.create({ workspaceRoot: workspacePath });
+    const task = h.services.tasks.create({ projectId: project.id, title: "Ship search", description: "Index titles" });
+    const getTask = { name: "get_task", arguments: { task: `#${task.number}` } };
+
+    const calls = [
+      { name: "set_plan", arguments: { task: `#${task.number}`, markdown: "## Build\n- [ ] Add FTS table" } },
+      getTask,
+      { name: "list_tasks", arguments: { workspacePath } },
+      { name: "board_overview", arguments: { workspacePath } },
+      { name: "add_note", arguments: { task: `#${task.number}`, text: "Handover" } },
+      { name: "link", arguments: { task: `#${task.number}`, value: "https://example.com" } },
+      { name: "move_task", arguments: { task: `#${task.number}`, status: "in_progress" } },
+      { name: "create_idea", arguments: { title: "Later", workspacePath } },
+    ];
+    for (const call of calls) {
+      const result = await client.callTool(call);
+      expect({ tool: call.name, isError: result.isError }).toEqual({ tool: call.name, isError: undefined });
+      expect({ tool: call.name, structured: result.structuredContent }).toEqual({
+        tool: call.name,
+        structured: undefined,
+      });
+    }
+
+    const detail = text(await client.callTool(getTask));
+    expect(detail).toContain("Ship search");
+    expect(detail).toContain("Index titles");
+    expect(detail).toContain("1.1 [ ] Add FTS table");
   });
 
   it("update_task only moves projects through the explicit moveTo params", async () => {
