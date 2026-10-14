@@ -65,26 +65,30 @@ export function prsCompleteTask(links: readonly TaskLink[]): boolean {
   return prs.some((l) => l.snapshot?.state === "merged") && prs.every((l) => isFinished(l.snapshot?.state));
 }
 
+export interface LinksModule {
+  service: LinksService;
+  /**
+   * Inside an open write: moves a Review task to Done (actor "github") when `prsCompleteTask` holds for its links.
+   * The tasks service calls this when a task enters Review, so a merge seen earlier still completes it.
+   */
+  completeIfPrsDone(taskId: string): void;
+}
+
 /** Task links (PRs, Jira, T3 threads, URLs) and their poller snapshots. */
 export function createLinksService(
   core: Core,
   deps: { task: (id: string) => TaskRecord; tasks: Pick<TasksService, "move">; settings: SettingsService },
-): LinksService {
+): LinksModule {
   const { repos } = core;
 
-  /**
-   * Moves a Review task to Done once its PRs are finished. Only runs when this PR has just become merged or
-   * closed, so re-polling a merged PR never pulls back a task the user moved out of Done.
-   */
-  const completeOnMerge = (row: LinkRow, before: string | null): void => {
-    const wasFinished = isFinished(parseJson<PrSnapshot>(before)?.state);
-    if (wasFinished || !isFinished(parseJson<PrSnapshot>(row.snapshot_json)?.state)) return;
-    const task = deps.task(row.task_id);
+  /** `creditLinkId` names the PR recorded as the merge, when it is one of the merged ones. */
+  const completeIfPrsDone = (taskId: string, creditLinkId?: string): void => {
+    const task = deps.task(taskId);
     if (task.status !== "review" || task.archivedAt !== null) return;
     const links = repos.links.forTasks([task.id]).map(toLink);
     if (!prsCompleteTask(links)) return;
     const merged = polledPrs(links).filter((l) => l.snapshot?.state === "merged");
-    const pr = merged.find((l) => l.id === row.id) ?? merged[0]!;
+    const pr = merged.find((l) => l.id === creditLinkId) ?? merged[0]!;
     try {
       deps.tasks.move(task.id, { status: "done" }, GITHUB_ACTOR, { mergedPr: `${pr.ref.repo}#${pr.ref.number}` });
     } catch (error) {
@@ -94,13 +98,23 @@ export function createLinksService(
     }
   };
 
+  /**
+   * Moves a Review task to Done once its PRs are finished. Only runs when this PR has just become merged or
+   * closed, so re-polling a merged PR never pulls back a task the user moved out of Done.
+   */
+  const completeOnMerge = (row: LinkRow, before: string | null): void => {
+    const wasFinished = isFinished(parseJson<PrSnapshot>(before)?.state);
+    if (wasFinished || !isFinished(parseJson<PrSnapshot>(row.snapshot_json)?.state)) return;
+    completeIfPrsDone(row.task_id, row.id);
+  };
+
   const rowOrThrow = (id: string): LinkRow => {
     const row = repos.links.row(id);
     if (!row) throw notFound("Link", id);
     return row;
   };
 
-  return {
+  const service: LinksService = {
     add(taskId, input, actor) {
       return core.write((fx) => {
         const task = deps.task(taskId);
@@ -147,4 +161,6 @@ export function createLinksService(
       });
     },
   };
+
+  return { service, completeIfPrsDone };
 }

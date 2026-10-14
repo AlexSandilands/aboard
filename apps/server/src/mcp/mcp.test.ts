@@ -304,4 +304,36 @@ describe("MCP endpoint", () => {
     const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
     expect(links.sort()).toEqual(["jira", "t3_thread", "url"]);
   });
+
+  it("move_task says when a task with merged PRs went on to Done", async () => {
+    const s = h.services;
+    const project = s.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = s.tasks.create({
+      projectId: project.id,
+      title: "Ship it",
+      plan: { phases: [{ title: "Build", steps: [{ title: "a" }] }] },
+      links: [{ value: "https://github.com/acme/app/pull/7" }],
+    });
+    const [pr] = s.links.listByKind("pr");
+    s.links.setSnapshot(pr!.id, {
+      state: "merged",
+      title: "Change",
+      checks: "passing",
+      reviewDecision: null,
+      mergeable: "mergeable",
+      headRef: "feat/x",
+      updatedAt: "2026-10-01T10:00:00Z",
+    });
+
+    const moved = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${task.number}`, status: "review" },
+    });
+
+    expect(moved.isError).toBeFalsy();
+    expect(text(moved)).toContain(
+      `Moved #${task.number} to Review; its PRs are already merged, so it went on to Done.`,
+    );
+    expect(s.tasks.summary(task.id).status).toBe("done");
+  });
 });

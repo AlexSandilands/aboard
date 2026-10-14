@@ -4,12 +4,12 @@ import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
-import { createLinksService } from "./links.ts";
+import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTasksService } from "./tasks.ts";
-import type { LinksService, Services } from "./types.ts";
+import type { Services } from "./types.ts";
 
 export interface ServiceDeps {
   db: Db;
@@ -25,7 +25,7 @@ export function createServices(deps: ServiceDeps): Services {
   const projects = createProjectsService(core);
 
   let plans: PlansModule | null = null;
-  let links: LinksService | null = null;
+  let links: LinksModule | null = null;
   const tasks = createTasksService(core, { projects, plans: () => plans!, links: () => links! });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, { task: tasks.record, tasks: tasks.service, settings });
@@ -34,7 +34,7 @@ export function createServices(deps: ServiceDeps): Services {
     projects,
     tasks: tasks.service,
     plans: plans.service,
-    links,
+    links: links.service,
     settings,
     board: createBoardService(core),
   };
