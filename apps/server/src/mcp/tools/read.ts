@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskStatus, type Project } from "@repo/contracts";
-import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel, taskStructured } from "../format.ts";
+import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel } from "../format.ts";
 import {
   findProject,
   hasProjectRef,
@@ -62,10 +62,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         }
         const t3 = snapshot.integrations.t3;
         if (t3.detected) lines.push("", `T3 Code detected (environment ${t3.environmentId ?? "unknown"}).`);
-        return textResult(lines.join("\n"), {
-          projects: snapshot.projects.length,
-          tasks: active.length,
-        });
+        return textResult(lines.join("\n"));
       }),
   );
 
@@ -108,7 +105,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         let projectId: string | undefined;
         if (hasProjectRef(args)) {
           const project = findProject(services, args);
-          if (!project) return textResult(`No tasks yet for ${args.workspacePath ?? args.projectId}.`, { tasks: [] });
+          if (!project) return textResult(`No tasks yet for ${args.workspacePath ?? args.projectId}.`);
           projectId = project.id;
         }
         const tasks = services.tasks.summaries({
@@ -118,7 +115,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           ...(args.attentionOnly ? { attentionOnly: true } : {}),
           ...(args.includeArchived ? { includeArchived: true } : {}),
         });
-        if (tasks.length === 0) return textResult("No matching tasks.", { tasks: [] });
+        if (tasks.length === 0) return textResult("No matching tasks.");
         const limit = args.limit ?? 100;
         const shown = tasks.slice(0, limit);
         const lines: string[] = [];
@@ -139,9 +136,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         }
         if (tasks.length > shown.length)
           lines.push(`(${tasks.length - shown.length} more — narrow the filter or raise limit)`);
-        return textResult(lines.join("\n"), {
-          tasks: shown.map((t) => ({ taskId: t.id, number: t.number, title: t.title, status: t.status })),
-        });
+        return textResult(lines.join("\n"));
       }),
   );
 
@@ -168,10 +163,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
     (args) =>
       run(() => {
         const task = services.tasks.detail(services.tasks.resolveId(args.task));
-        return textResult(
-          renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 }),
-          taskStructured(task),
-        );
+        return textResult(renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 }));
       }),
   );
 };
