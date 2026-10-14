@@ -12,6 +12,8 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain(`Call get_task("abc-123") on the ${BRAND.id} MCP server first`);
     expect(prompt).toContain("add_note");
     expect(prompt).not.toContain("already linked");
+    expect(prompt).toContain("link(t3Thread: {environmentId, threadId})");
+    expect(prompt).toContain("Jira issue");
   });
 
   it("asks a planning session to collaborate and not implement", () => {
@@ -22,10 +24,14 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("Don't implement anything yet.");
   });
 
-  it("tells a board-started thread it is already linked", () => {
-    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work", linkedThread: true })).toContain(
-      "already linked to the task",
-    );
+  it("tells a board-started thread it is already linked, instead of asking it to link itself", () => {
+    const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work", linkedThread: true });
+    expect(prompt).toContain("already linked to the task");
+    expect(prompt).not.toContain("t3Thread");
+  });
+
+  it("asks a planning session to link itself too", () => {
+    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).toContain("link(t3Thread:");
   });
 });
 

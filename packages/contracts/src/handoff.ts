@@ -49,6 +49,12 @@ export function taskHandoffPrompt({ task, boardUrl, mode, linkedThread = false }
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step, link any PR you open, and finish with an add_note handover.`,
         ];
-  if (linkedThread) lines.push("", "This thread is already linked to the task; don't link it again.");
+  lines.push(
+    "",
+    linkedThread
+      ? "This thread is already linked to the task; don't link it again."
+      : "Link the task to its Jira issue with link if it has one, and, if you're running in T3 Code, to this " +
+          "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
+  );
   return lines.join("\n");
 }

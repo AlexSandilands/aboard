@@ -32,7 +32,9 @@ so the agent always reads the current plan and notes from the board:
 
 - the task reference (`#9 Easier way to hand an idea…`) and its board link (`<board>/?task=<id>`);
 - "call `get_task` on the board's MCP server and follow the board's skill";
-- for T3 launches, a note that the thread is already linked to the task, so the agent shouldn't link it again.
+- for T3 launches, a note that the thread is already linked to the task, so the agent shouldn't link it again;
+  otherwise, a request to link the Jira issue and, in T3 Code, the agent's own thread. Task results also
+  list any **Missing links** until they are added.
 
 It is built by one pure helper in `packages/contracts` (`taskHandoffPrompt`), so the copy button and the T3
 launch can't drift apart.
