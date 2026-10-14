@@ -8,6 +8,8 @@
     "dev": "concurrently -k -n server,web -c blue,magenta \"pnpm --filter @repo/server dev\" \"pnpm --filter @repo/web dev\"",
     "build": "pnpm --filter @repo/web build",
     "start": "pnpm build && pnpm --filter @repo/server start",
+    "desktop": "concurrently -k -n server,web,desktop -c blue,magenta,green \"pnpm --filter @repo/server dev\" \"pnpm --filter @repo/web dev\" \"pnpm --filter @repo/desktop dev\"",
+    "desktop:build": "pnpm build && pnpm --filter @repo/server bundle && pnpm --filter @repo/desktop build",
     "test": "pnpm -r --no-bail test",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint --deny-warnings",
