@@ -185,12 +185,13 @@ export interface T3SqliteProject {
 
 /**
  * Reads projects from a private temp copy of `statev2.sqlite` (+ -wal/-shm). T3's live
- * database file is never opened. The copy is deleted before returning.
+ * database file is never opened. The copy is deleted before returning. `tempRoot` is injectable so
+ * tests can observe cleanup in a private directory.
  */
-export function readT3ProjectsFromSqlite(t3Home: string): T3SqliteProject[] {
+export function readT3ProjectsFromSqlite(t3Home: string, tempRoot: string = tmpdir()): T3SqliteProject[] {
   const source = join(t3Home, "userdata", "statev2.sqlite");
   if (!existsSync(source)) return [];
-  const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3-`));
+  const dir = mkdtempSync(join(tempRoot, `${BRAND.id}-t3-`));
   try {
     const copy = join(dir, "statev2.sqlite");
     copyFileSync(source, copy);
