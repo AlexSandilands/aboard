@@ -106,6 +106,12 @@ export function TaskPanelHeader({
       ) : null}
 
       <div className="ms-auto flex items-center gap-0.5">
+        {task.status === "done" && !archived ? (
+          <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
+            <ArchiveIcon />
+            Archive
+          </Button>
+        ) : null}
         <Menu>
           <MenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Task actions" />}>
             <EllipsisIcon />

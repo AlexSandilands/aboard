@@ -1,8 +1,12 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
+import { ArchiveIcon } from "lucide-react";
 import { memo, type KeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useUpdateTask } from "~/state/mutations";
 import { resolutionLabel } from "~/components/task/resolution.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
@@ -25,7 +29,14 @@ export function taskCardClassName(task: TaskSummary, selected: boolean) {
 }
 
 /** The card's lines. Memoized on the task object, which the board reducer keeps stable. */
-export const TaskCardContent = memo(function TaskCardContent({ task }: { task: TaskSummary }) {
+export const TaskCardContent = memo(function TaskCardContent({
+  task,
+  archivable = false,
+}: {
+  task: TaskSummary;
+  /** Shows the quick Archive button on Done cards. Off for the drag overlay. */
+  archivable?: boolean;
+}) {
   const attention = topAttention(task.attention);
   const jiraKey = jiraKeys(task)[0];
   return (
@@ -55,6 +66,7 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
         >
           {formatElapsedDurationLabel(task.updatedAt)}
         </span>
+        {archivable && task.status === "done" && !task.archivedAt ? <ArchiveButton task={task} /> : null}
       </div>
       <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
       <TaskProgressLine task={task} />
@@ -62,6 +74,34 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
     </div>
   );
 });
+
+/** Quick archive for Done cards. Must not open the panel or start a drag, like the card's links. */
+function ArchiveButton({ task }: { task: TaskSummary }) {
+  const { mutate: updateTask, isPending } = useUpdateTask();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="-my-1 -me-1 size-6 shrink-0"
+            aria-label={`Archive #${task.number}`}
+            disabled={isPending}
+            {...linkHandlers}
+            onClick={(event) => {
+              event.stopPropagation();
+              updateTask({ id: task.id, archived: true });
+            }}
+          />
+        }
+      >
+        <ArchiveIcon />
+      </TooltipTrigger>
+      <TooltipPopup>Archive</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 /** Muted "Done by #4" / "Duplicate of #4" / "Won't do" on closed cards; the number opens the delivering task. */
 function ResolutionChip({ task }: { task: TaskSummary }) {
@@ -134,7 +174,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         open();
       }}
     >
-      <TaskCardContent task={task} />
+      <TaskCardContent task={task} archivable />
     </div>
   );
 });
