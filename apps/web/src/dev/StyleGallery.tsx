@@ -15,6 +15,7 @@ import { useState, type ReactNode } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
+import { STAGE_BANNERS } from "~/components/stage/stageBanner.logic";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -520,6 +521,22 @@ export function StyleGallery() {
             value={pickedIcon}
             onSave={setPickedIcon}
           />
+        </Section>
+
+        <Section title="Sidebar banners">
+          <div className="grid w-full gap-3 sm:grid-cols-2">
+            {STAGE_BANNERS.map((banner) => (
+              <div
+                key={banner.id}
+                className="relative flex h-[var(--workspace-topbar-height)] w-64 items-center overflow-hidden rounded-lg border border-border/60 bg-sidebar ps-4 [--sidebar-stage-fade:var(--sidebar)]"
+              >
+                <SidebarStageBackdrop banner={banner.id} />
+                <span className="relative z-10 text-sm font-medium text-white">
+                  {BRAND.name} · {banner.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </Section>
 
         <Section title="Sample sidebar layout (stage backdrop, resizable rail)">
