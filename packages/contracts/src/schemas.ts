@@ -411,7 +411,11 @@ export type GithubStatus = z.infer<typeof GithubStatus>;
 export const IntegrationsStatus = z.object({ t3: T3IntegrationStatus, github: GithubStatus });
 export type IntegrationsStatus = z.infer<typeof IntegrationsStatus>;
 
-export const ConnectT3Result = z.object({ settings: AppSettings, t3: T3IntegrationStatus });
+export const ConnectT3Result = z.object({
+  settings: AppSettings,
+  t3: T3IntegrationStatus,
+  warning: z.string().optional(),
+});
 export type ConnectT3Result = z.infer<typeof ConnectT3Result>;
 
 export const T3ProjectCandidate = z.object({

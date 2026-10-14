@@ -300,7 +300,13 @@ function t3Fetch(
       opts.onExchange?.(init);
       const exchange = opts.exchange ?? {
         status: 200,
-        body: { access_token: "fresh", issued_token_type: "x", token_type: "Bearer", expires_in: 60, scope: "s" },
+        body: {
+          access_token: "fresh",
+          issued_token_type: "x",
+          token_type: "Bearer",
+          expires_in: 60,
+          scope: "orchestration:read orchestration:operate",
+        },
       };
       return json(exchange.body, exchange.status);
     }
@@ -412,11 +418,12 @@ describe("parsePairingCode", () => {
     expect(parsePairingCode(` t3code://app/pair#token=${CODE} `)).toBe(CODE);
     expect(parsePairingCode(`http://127.0.0.1:3773/pair#token=${CODE}`)).toBe(CODE);
     expect(parsePairingCode(CODE)).toBe(CODE);
+    expect(parsePairingCode(CODE.toLowerCase())).toBe(CODE);
   });
 
   it("treats anything else as a bearer token", () => {
-    expect(parsePairingCode("eyJhbGciOiJIUzI1NiJ9.payload.sig")).toBeNull();
-    expect(parsePairingCode("8438l44evd2v")).toBeNull();
+    expect(parsePairingCode("header.payload.sig")).toBeNull();
+    expect(parsePairingCode("not-a-code")).toBeNull();
     expect(parsePairingCode("8438L44EVD2")).toBeNull();
   });
 });
@@ -490,6 +497,31 @@ describe("T3 connect", () => {
       fetch: t3Fetch(),
     });
     await expect(t3.connect(LINK)).rejects.toThrow("T3 Code is not running");
+  });
+
+  it("connects a read-only link but warns that starting threads needs Operate tasks", async () => {
+    const { services } = fakeServices();
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch({
+        exchange: { status: 200, body: { access_token: "fresh", token_type: "Bearer", scope: "orchestration:read" } },
+      }),
+    });
+    const result = await t3.connect(LINK);
+    expect(result.warning).toContain("Operate tasks");
+  });
+
+  it("rejects a link that carries something other than a pairing code", async () => {
+    const { services } = fakeServices();
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => services,
+      fetch: t3Fetch(),
+    });
+    await expect(t3.connect("https://example.com/#token=nope")).rejects.toThrow("isn't a T3 pairing link");
   });
 });
 

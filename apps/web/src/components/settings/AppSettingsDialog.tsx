@@ -214,6 +214,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
   const test = useMutation({
     mutationFn: () => api<T3IntegrationStatus>("/api/integrations/t3/test", { method: "POST", body: {} }),
     onSuccess: (t3) => {
+      connect.reset();
       queryClient.setQueryData<IntegrationsStatus>(queryKeys.integrations, (current) =>
         current ? { ...current, t3 } : current,
       );
@@ -234,7 +235,9 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
     },
   });
   const detected = status?.detected ?? false;
-  const live = test.data ?? connect.data?.t3 ?? status;
+  // Both mutations write their result into the integrations cache, so the live status stays current.
+  const live = status;
+  const warning = connect.data?.warning;
   const error = connect.error ?? test.error;
 
   function saveToken() {
@@ -286,13 +289,13 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       />
       <SettingsRow
-        title={
+        title="T3 connection"
+        description={
           <span className="inline-flex items-center gap-1.5">
-            T3 connection
+            Optional. Live thread status and starting threads from a task.
             <PairingHelp />
           </span>
         }
-        description="Optional. Live thread status and starting threads from a task."
         status={
           settings.t3TokenSet ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -307,7 +310,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         control={
           <>
             <Input
-              aria-label="T3 token"
+              aria-label="T3 pairing link or token"
               type="password"
               size="sm"
               className="sm:w-44"
@@ -335,7 +338,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
                 size="xs"
                 variant="ghost"
                 disabled={updateSettings.isPending}
-                onClick={() => updateSettings.mutate({ t3Token: null })}
+                onClick={() => updateSettings.mutate({ t3Token: null }, { onSuccess: () => connect.reset() })}
               >
                 Clear token
               </Button>
@@ -345,6 +348,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
             </div>
           ) : null}
           {error ? <p className="text-xs text-destructive-foreground">{error.message}</p> : null}
+          {warning ? <p className="text-xs text-warning-foreground">{warning}</p> : null}
         </div>
       </SettingsRow>
     </SettingsSection>

@@ -80,7 +80,7 @@ const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opa
 export function ProviderIcon({ driver, className }: { driver: string; className?: string }) {
   if (driver === "claudeAgent") return <ClaudeAI aria-hidden className={cn("size-4", className)} />;
   if (driver === "codex") return <OpenAI aria-hidden className={cn("size-4", className)} />;
-  return <BotIcon aria-hidden className={className} />;
+  return <BotIcon aria-hidden className={cn("size-4", className)} />;
 }
 
 // ── Model ────────────────────────────────────────────────────────────────

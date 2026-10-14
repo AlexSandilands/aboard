@@ -211,7 +211,7 @@ const PAIRING_CODE = /^[2-9A-HJ-NP-Z]{12}$/;
 /** What the board needs: read threads for live status, operate to start them. */
 const TOKEN_SCOPES = "orchestration:read orchestration:operate";
 
-const TokenResult = z.object({ access_token: z.string().min(1) });
+const TokenResult = z.object({ access_token: z.string().min(1), scope: z.string().optional() });
 
 /**
  * The one-time code in a T3 pairing link (`t3code://app/pair#token=…` or `<origin>/pair#token=…`) or a bare
@@ -219,13 +219,23 @@ const TokenResult = z.object({ access_token: z.string().min(1) });
  */
 export function parsePairingCode(value: string): string | null {
   const trimmed = value.trim();
-  const fromLink = /[#?&]token=([^&#\s]+)/.exec(trimmed)?.[1];
-  if (fromLink) return fromLink;
-  return PAIRING_CODE.test(trimmed) ? trimmed : null;
+  const fromLink = /[#?&]token=([^&\s]+)/.exec(trimmed)?.[1];
+  // Codes are upper case, but people retype them; CLI tokens contain dots, so they never match.
+  const code = (fromLink ?? trimmed).toUpperCase();
+  return PAIRING_CODE.test(code) ? code : null;
+}
+
+/** Whether a value is shaped like a pairing link, so a bad one isn't saved as a token. */
+export function looksLikePairingLink(value: string): boolean {
+  return /[#?&]token=/.test(value);
 }
 
 /** Trades a pairing code for a bearer token (OAuth token exchange), asking only for the board's scopes. */
-export async function exchangePairingCode(origin: string, code: string, fetchFn: FetchFn): Promise<string> {
+export async function exchangePairingCode(
+  origin: string,
+  code: string,
+  fetchFn: FetchFn,
+): Promise<{ token: string; scopes: string[] | null }> {
   let response: Response;
   try {
     response = await fetchFn(`${origin}/oauth/token`, {
@@ -252,11 +262,13 @@ export async function exchangePairingCode(origin: string, code: string, fetchFn:
   if (response.status === 400 && (body as { reason?: unknown } | null)?.reason === "scope_not_granted") {
     throw new AppError(
       "VALIDATION",
-      "This pairing link doesn't allow “View environment” and “Operate tasks”. Create one that does",
+      "This pairing link doesn't allow “View environment”. Create one that allows “View environment” and “Operate tasks”",
     );
   }
   if (!response.ok) throw new AppError("VALIDATION", `T3 Code returned HTTP ${response.status}`);
-  return parseWire(TokenResult, body, "token response").access_token;
+  const result = parseWire(TokenResult, body, "token response");
+  // RFC 6749 lets the server omit `scope` when it granted exactly what was asked.
+  return { token: result.access_token, scopes: result.scope?.split(" ") ?? null };
 }
 
 export interface T3SqliteProject {
@@ -629,17 +641,29 @@ export function createT3Integration(deps: {
     },
     async connect(value) {
       const code = parsePairingCode(value);
+      if (!code && looksLikePairingLink(value)) {
+        throw new AppError(
+          "VALIDATION",
+          "That isn't a T3 pairing link. Create one in T3 Code under Settings → Connections",
+        );
+      }
       let bearer = value.trim();
+      let warning: string | undefined;
       if (code) {
         await discover();
         if (!discovery.detected || !discovery.origin) throw new AppError("VALIDATION", "T3 Code is not running");
-        bearer = await exchangePairingCode(discovery.origin, code, fetchFn);
+        const exchanged = await exchangePairingCode(discovery.origin, code, fetchFn);
+        bearer = exchanged.token;
+        // T3 grants whichever requested scopes the link allows, so a read-only link still pairs.
+        if (exchanged.scopes && !exchanged.scopes.includes("orchestration:operate")) {
+          warning = "Connected read-only. To start threads from tasks, pair a link that allows “Operate tasks”";
+        }
       }
       const settings = deps.services().settings.update({ t3Token: bearer });
       // A poll already in flight used the previous token; wait it out so the check uses the new one.
       await polling;
       await pollLive();
-      return { settings, t3: current() };
+      return { settings, t3: current(), ...(warning ? { warning } : {}) };
     },
     start() {
       void discover();
