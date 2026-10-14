@@ -128,11 +128,14 @@ describe("model picker", () => {
   });
 });
 
-it("reuses a launch's commandId only after a transport failure", () => {
+it("reuses a launch's commandId unless T3 definitely rejected it", () => {
   expect(keepsCommandId({ t3: "unreachable" })).toBe(true);
+  expect(keepsCommandId({ t3: "protocol-after-send" })).toBe(true);
+  expect(keepsCommandId(undefined)).toBe(true);
+  expect(keepsCommandId(null)).toBe(true);
   expect(keepsCommandId({ t3: "failed" })).toBe(false);
   expect(keepsCommandId({ t3: "forbidden" })).toBe(false);
-  expect(keepsCommandId(undefined)).toBe(false);
+  expect(keepsCommandId({})).toBe(false);
 });
 
 describe("access", () => {

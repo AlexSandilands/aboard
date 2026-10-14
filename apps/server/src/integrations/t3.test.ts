@@ -475,6 +475,15 @@ describe("T3 thread launch", () => {
     expect(link.kind).toBe("t3_thread");
   });
 
+  it("tags an unreadable launch result so a retry keeps its commandId", async () => {
+    const { t3, added } = setup((frame) => success(frame.id, { unexpected: true }));
+    await expect(t3.startThread("task-1", LAUNCH, "user")).rejects.toMatchObject({
+      code: "VALIDATION",
+      details: { t3: "protocol-after-send" },
+    });
+    expect(added).toEqual([]);
+  });
+
   it("explains why a launch can't happen", async () => {
     await expect(setup(() => undefined, null).t3.launchOptions("task-1")).rejects.toThrow("No T3 Code token");
     const forbidden = setup((frame) => ({

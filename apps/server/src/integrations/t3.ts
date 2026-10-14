@@ -458,24 +458,28 @@ export function createT3Integration(deps: {
   const startThread = async (taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink> => {
     const ctx = await launchContext(taskId);
     const { options, ...selection } = input.modelSelection;
-    const result = await withRpc(ctx.origin, ctx.bearer, async (rpc) =>
-      parseWire(
-        WireLaunchResult,
-        await rpc.request("orchestration.launchThread", {
-          commandId: input.commandId ?? randomUUID(),
-          projectId: ctx.t3Project.id,
-          title: `#${ctx.task.number} ${ctx.task.title}`,
-          modelSelection: options.length > 0 ? { ...selection, options } : selection,
-          runtimeMode: input.runtimeMode,
-          // T3's plan mode sits behind a client beta flag the board can't read; a thread started in it may
-          // have no visible way out. "Plan with me" is carried by the prompt instead.
-          interactionMode: "default",
-          workspaceStrategy: toWorkspaceStrategy(input.workspace),
-          initialMessage: { text: input.prompt, attachments: [] },
-        }),
-        "launch result",
-      ),
-    );
+    const result = await withRpc(ctx.origin, ctx.bearer, async (rpc) => {
+      const raw = await rpc.request("orchestration.launchThread", {
+        commandId: input.commandId ?? randomUUID(),
+        projectId: ctx.t3Project.id,
+        title: `#${ctx.task.number} ${ctx.task.title}`,
+        modelSelection: options.length > 0 ? { ...selection, options } : selection,
+        runtimeMode: input.runtimeMode,
+        // T3's plan mode sits behind a client beta flag the board can't read; a thread started in it may
+        // have no visible way out. "Plan with me" is carried by the prompt instead.
+        interactionMode: "default",
+        workspaceStrategy: toWorkspaceStrategy(input.workspace),
+        initialMessage: { text: input.prompt, attachments: [] },
+      });
+      // The command was sent, so T3 may have accepted it; tag the failure so a retry keeps the commandId.
+      const parsed = WireLaunchResult.safeParse(raw);
+      if (!parsed.success) {
+        throw new AppError("VALIDATION", "Unexpected launch result from T3 Code (its protocol may have changed)", {
+          t3: "protocol-after-send",
+        });
+      }
+      return parsed.data;
+    });
     const link = deps
       .services()
       .links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId: result.threadId } }, actor);
