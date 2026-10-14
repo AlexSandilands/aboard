@@ -59,6 +59,8 @@ describe("MCP endpoint", () => {
     ]) {
       expect(names).toContain(name);
     }
+    // An outputSchema makes structuredContent mandatory, which Claude Code would show instead of the text.
+    expect(tools.filter((t) => t.outputSchema).map((t) => t.name)).toEqual([]);
     expect(client.getInstructions()).toContain("get_task");
   });
 
@@ -144,6 +146,7 @@ describe("MCP endpoint", () => {
       { name: "board_overview", arguments: { workspacePath } },
       { name: "add_note", arguments: { task: `#${task.number}`, text: "Handover" } },
       { name: "link", arguments: { task: `#${task.number}`, value: "https://example.com" } },
+      { name: "move_task", arguments: { task: `#${task.number}`, status: "in_progress" } },
       { name: "create_idea", arguments: { title: "Later", workspacePath } },
     ];
     for (const call of calls) {
