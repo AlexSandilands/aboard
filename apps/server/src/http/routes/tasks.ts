@@ -3,6 +3,7 @@ import {
   LinkInput,
   MoveTaskInput,
   PlanInput,
+  StartT3ThreadInput,
   TaskStatus,
   UpdateTaskInput,
   ACTOR_HEADER,
@@ -21,7 +22,7 @@ const TaskListQuery = z.object({
 });
 
 /** /api/tasks — task cards, plan replacement, phases, links and notes scoped to a task. */
-export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
+export function registerTaskRoutes(app: Hono, { services, integrations }: AppContext): void {
   const taskId = (c: Context) => services.tasks.resolveId(idParam(c));
 
   app.get(
@@ -60,6 +61,18 @@ export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
     handle((c) => {
       services.tasks.update(taskId(c), { archived: true }, actorOf(c));
       return noContent(c);
+    }),
+  );
+  app.get(
+    "/api/tasks/:id/t3-launch-options",
+    handle(async (c) => c.json(await integrations.t3LaunchOptions(taskId(c)))),
+  );
+  app.post(
+    "/api/tasks/:id/t3-thread",
+    handle(async (c) => {
+      const id = taskId(c);
+      const input = await parseBody(c, StartT3ThreadInput);
+      return c.json(await integrations.startT3Thread(id, input, actorOf(c)), 201);
     }),
   );
   app.post(

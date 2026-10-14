@@ -27,7 +27,10 @@ import {
 } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
+import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
 import { isPlanRequired, useMoveTask, useUpdateTask } from "~/state/mutations";
+import { useBoard, useSettings } from "~/state/queries";
 import { copyToClipboard } from "./InlineInput";
 
 const STATUS_ITEMS = TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }));
@@ -47,6 +50,11 @@ export function TaskPanelHeader({
   const { mutate: updateTask } = useUpdateTask();
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
+  const t3 = useBoard().data?.integrations.t3;
+  const settings = useSettings().data;
+  const taskProject = projects.find((p) => p.id === task.projectId);
+  const handoff = showHandoffActions(task);
+  const startT3 = handoff && !!t3 && canStartT3Thread(task, taskProject, t3, settings);
 
   const setStatus = (status: TaskStatus) => {
     if (status === task.status) return;
@@ -91,6 +99,8 @@ export function TaskPanelHeader({
       ) : null}
 
       <div className="ms-auto flex items-center gap-0.5">
+        {startT3 ? <StartT3Button taskId={task.id} variant="panel" /> : null}
+        {handoff ? <CopyPromptMenu task={task} variant="panel" /> : null}
         <Menu>
           <MenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Task actions" />}>
             <EllipsisIcon />

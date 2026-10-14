@@ -49,12 +49,17 @@ When T3 Code is running, it is detected automatically.
   panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
   choose in Settings).
 - **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
-  writes to T3 Code's data.
-- **Live thread status:** mint a read-only token and paste it in Settings → T3 Code:
+  touches T3 Code's data files (it only starts threads through T3's own API when you ask it to).
+- **Live thread status and Start in T3 Code:** mint a token and paste it in Settings → T3 Code:
   ```sh
-  t3 auth session issue --scopes orchestration:read --token-only
+  t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
   ```
-  Linked threads then show whether they're working, waiting for input, or done.
+  Linked threads then show whether they're working, waiting for input, or done, and cards get a
+  **Start in T3 Code** button that opens a new thread for the task (model, access, worktree and
+  branch are picked in a dialog). `orchestration:read` alone is enough for status only.
+- **Copy prompt:** every open task has a button that copies a ready-to-paste prompt for any agent
+  (Claude Code, Copilot, …), with a planning variant for rough ideas. See
+  [docs/integrations/agent-handoff.md](docs/integrations/agent-handoff.md).
 
 ## Keyboard
 

@@ -4,6 +4,7 @@ import type {
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  T3LaunchOptions,
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
@@ -21,6 +22,7 @@ export const queryKeys = {
   integrations: ["integrations"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
+  t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
 };
 
 /** The whole board: projects, task summaries and T3 status. Kept live by useBoardEvents. */
@@ -72,6 +74,19 @@ export function useT3ProjectCandidates(enabled: boolean) {
     queryFn: ({ signal }) => api<T3ProjectCandidate[]>("/api/integrations/t3/projects", { signal }),
     enabled,
     staleTime: 0,
+  });
+}
+
+/** Models, refs and defaults for starting a T3 Code thread. Fetched fresh each time the dialog opens. */
+export function useT3LaunchOptions(taskId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.t3LaunchOptions(taskId ?? ""),
+    queryFn: ({ signal }) =>
+      api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/t3-launch-options`, { signal }),
+    enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
   });
 }
 

@@ -2,11 +2,22 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { BoardEvent, CreateProjectInput, PrSnapshot, Project, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
+import type {
+  BoardEvent,
+  CreateProjectInput,
+  LinkInput,
+  PrSnapshot,
+  Project,
+  StartT3ThreadInput,
+  T3ThreadSnapshot,
+  TaskLink,
+  TaskSummary,
+} from "@repo/contracts";
 import { BRAND, normalizeWorkspaceKey } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
+import { fakeSocket, success, type SentFrame } from "../test/fakeT3Socket.ts";
 import {
   createT3Integration,
   discoverT3,
@@ -181,13 +192,22 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
 function fakeServices(opts: { token?: string | null; links?: TaskLink[]; projects?: Project[] } = {}) {
   const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | null>();
   const projects = [...(opts.projects ?? [])];
+  const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
   const services: T3Services = {
     links: {
       listByKind: (kind) => (opts.links ?? []).filter((l) => l.kind === kind),
       setSnapshot: (id, snapshot) => void snapshots.set(id, snapshot),
+      add: (taskId, input, actor) => {
+        added.push({ taskId, input, actor });
+        return threadLink("l-new", input.t3Thread!.threadId, input.t3Thread!.environmentId);
+      },
     },
     settings: { t3Token: () => opts.token ?? null },
+    tasks: {
+      summary: (id) => ({ id, number: 9, title: "Hand off", projectId: projects[0]?.id ?? "none" }) as TaskSummary,
+    },
     projects: {
+      get: (id) => projects.find((p) => p.id === id)!,
       list: () => projects,
       create: (input: CreateProjectInput) => {
         const key = input.workspaceRoot ? normalizeWorkspaceKey(input.workspaceRoot) : null;
@@ -210,7 +230,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
       },
     },
   };
-  return { services, snapshots, projects };
+  return { services, snapshots, projects, added };
 }
 
 const SHELL_FIXTURE = {
@@ -246,6 +266,13 @@ const SHELL_FIXTURE = {
       itemCount: 3,
     },
     { ...thread({ id: "th-ask", status: "running", pendingRuntimeRequest: { kind: "user_input" } }), archivedAt: null },
+    {
+      ...thread({ id: "th-wt", projectId: "t3-p1" }),
+      worktreePath: "C:/Users/me/.t3/worktrees/acme/t3-1",
+      branch: "t3/feature",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+      archivedAt: null,
+    },
   ],
   archivedThreads: [
     { ...thread({ id: "th-old", status: "completed", title: "Old" }), archivedAt: "2026-02-01T00:00:00.000Z" },
@@ -254,6 +281,7 @@ const SHELL_FIXTURE = {
 
 function t3Fetch(opts: { shellStatus?: number; onShell?: (init: RequestInit | undefined) => void } = {}): FetchFn {
   return async (url, init) => {
+    if (url.endsWith("/api/auth/websocket-ticket")) return json({ ticket: "tick", expiresAt: "x" });
     if (url.endsWith("/.well-known/t3/environment")) return json({ environmentId: ENV_ID, label: "MY-PC" });
     if (url.endsWith("/api/orchestration/shell")) {
       opts.onShell?.(init);
@@ -346,6 +374,122 @@ describe("T3 integration", () => {
     ]);
     const created = await t3.importProjects(["t3-p1", "t3-p2", "unknown"]);
     expect(created.map((p) => [p.title, p.t3ProjectId])).toEqual([["T3 Code", "t3-p2"]]);
+  });
+});
+
+const SERVER_CONFIG = {
+  providers: [
+    {
+      instanceId: "claudeAgent",
+      driver: "claudeAgent",
+      displayName: "Claude",
+      enabled: true,
+      status: "ready",
+      models: [{ slug: "claude-opus-5-5", name: "Claude Opus 5.5", isCustom: false, isDefault: true }],
+    },
+  ],
+  settings: { favorites: [], defaultModelSelection: null, defaultRuntimeMode: "full-access" },
+};
+
+const LAUNCH: StartT3ThreadInput = {
+  prompt: "Let us work on #9",
+  modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5", options: [] },
+  runtimeMode: "full-access",
+  interactionMode: "plan",
+  workspace: { mode: "new_worktree", baseRef: "main", startFromOrigin: true },
+};
+
+describe("T3 thread launch", () => {
+  const acme: Project = {
+    id: "proj-acme",
+    title: "Acme",
+    workspaceRoot: "c:/code/acme",
+    workspaceKey: normalizeWorkspaceKey("c:/code/acme"),
+    icon: null,
+    t3ProjectId: null,
+    position: "a0",
+    collapsed: false,
+    archivedAt: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+
+  const setup = (reply: (frame: SentFrame) => unknown, token: string | null = "tok") => {
+    const fake = fakeServices({ token, projects: [acme] });
+    const socket = fakeSocket(reply);
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => fake.services,
+      fetch: t3Fetch(),
+      openSocket: socket.open,
+    });
+    return { ...fake, socket, t3 };
+  };
+
+  it("loads launch options for the T3 project with the same folder", async () => {
+    const { t3, socket } = setup((frame) =>
+      frame.tag === "server.getConfig"
+        ? success(frame.id, SERVER_CONFIG)
+        : success(frame.id, {
+            isRepo: true,
+            refs: [{ name: "main", current: true, isDefault: true, worktreePath: "C:\\Code\\acme" }],
+          }),
+    );
+    const options = await t3.launchOptions("task-1");
+    expect(socket.sent.map((f) => [f.tag, f.payload])).toEqual([
+      ["server.getConfig", {}],
+      ["vcs.listRefs", { cwd: "C:\\Code\\acme", limit: 100 }],
+    ]);
+    expect(options).toMatchObject({
+      t3ProjectId: "t3-p1",
+      isRepo: true,
+      previousWorktree: { worktreePath: "C:/Users/me/.t3/worktrees/acme/t3-1", branch: "t3/feature" },
+      defaults: {
+        modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5", options: [] },
+        runtimeMode: "full-access",
+        envMode: "local",
+      },
+    });
+    expect(socket.closed).toBe(true);
+  });
+
+  it("launches a thread and links it to the task", async () => {
+    const { t3, socket, added } = setup((frame) => success(frame.id, { threadId: "th-new", resumed: false }));
+    const link = await t3.startThread("task-1", LAUNCH, "user");
+    expect(socket.sent).toHaveLength(1);
+    expect(socket.sent[0]!.tag).toBe("orchestration.launchThread");
+    expect(socket.sent[0]!.payload).toMatchObject({
+      projectId: "t3-p1",
+      title: "#9 Hand off",
+      modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },
+      runtimeMode: "full-access",
+      interactionMode: "plan",
+      workspaceStrategy: { type: "worktree", baseRef: "main", startFromOrigin: true },
+      initialMessage: { text: "Let us work on #9", attachments: [] },
+    });
+    expect(added).toEqual([
+      { taskId: "task-1", input: { t3Thread: { environmentId: ENV_ID, threadId: "th-new" } }, actor: "user" },
+    ]);
+    expect(link.kind).toBe("t3_thread");
+  });
+
+  it("explains why a launch can't happen", async () => {
+    await expect(setup(() => undefined, null).t3.launchOptions("task-1")).rejects.toThrow("No T3 Code token");
+    const forbidden = setup((frame) => ({
+      _tag: "Exit",
+      requestId: frame.id,
+      exit: {
+        _tag: "Failure",
+        cause: [
+          { _tag: "Fail", error: { _tag: "EnvironmentAuthorizationError", requiredScope: "orchestration:operate" } },
+        ],
+      },
+    }));
+    await expect(forbidden.t3.startThread("task-1", LAUNCH, "user")).rejects.toThrow(
+      "lacks the orchestration:operate scope",
+    );
+    expect(forbidden.added).toEqual([]);
   });
 });
 

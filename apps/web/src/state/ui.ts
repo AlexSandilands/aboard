@@ -82,17 +82,24 @@ export const usePalette = create<PaletteState>()(
 interface DialogsState {
   projectSettingsId: string | null;
   appSettingsOpen: boolean;
+  /** Task whose "Start in T3 Code" dialog is open. */
+  t3LaunchTaskId: string | null;
   openProjectSettings: (projectId: string) => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
+  openT3Launch: (taskId: string) => void;
+  closeT3Launch: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
   appSettingsOpen: false,
+  t3LaunchTaskId: null,
   openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
   closeProjectSettings: () => set({ projectSettingsId: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
+  openT3Launch: (t3LaunchTaskId) => set({ t3LaunchTaskId }),
+  closeT3Launch: () => set({ t3LaunchTaskId: null }),
 }));
 
 /** Signals the detail panel to focus the plan editor (e.g. after a PLAN_REQUIRED drop). */
