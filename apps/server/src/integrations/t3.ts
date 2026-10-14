@@ -461,7 +461,7 @@ export function createT3Integration(deps: {
       parseWire(
         WireLaunchResult,
         await rpc.request("orchestration.launchThread", {
-          commandId: randomUUID(),
+          commandId: input.commandId ?? randomUUID(),
           projectId: ctx.t3Project.id,
           title: `#${ctx.task.number} ${ctx.task.title}`,
           modelSelection: options.length > 0 ? { ...selection, options } : selection,

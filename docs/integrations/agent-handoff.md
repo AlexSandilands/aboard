@@ -31,7 +31,7 @@ The prompt is deliberately short. It points the agent at the task rather than co
 so the agent always reads the current plan and notes from the board:
 
 - the task reference (`#9 Easier way to hand an idea…`) and its board link (`<board>/?task=<id>`);
-- "call `get_task` on the `aboard` MCP server and follow the `aboard` skill";
+- "call `get_task` on the board's MCP server and follow the board's skill";
 - for T3 launches, a note that the thread is already linked to the task, so the agent shouldn't link it again.
 
 It is built by one pure helper in `packages/contracts` (`taskHandoffPrompt`), so the copy button and the T3
@@ -47,7 +47,8 @@ option switches the prompt to a planning brief:
 - propose phases and steps, and wait for agreement;
 - only then call `set_plan` and move the task to Planned. Don't implement anything.
 
-In T3 Code the thread also starts in T3's plan interaction mode. The option is on by default for tasks in
+In T3 Code the thread also starts in T3's plan interaction mode, when the provider supports it (T3 hides its
+plan toggle for providers that don't; those still get the planning prompt). The option is on by default for tasks in
 Ideas or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
 ## Starting a thread in T3 Code
@@ -94,13 +95,17 @@ Clicking the button opens a dialog modelled on T3's own new-thread screen:
 - **effort** (and fast mode where the model has it) and **access**: Supervised, Auto-accept edits, Auto or
   Full access, limited to what the provider supports;
 - **workspace**: Current checkout, New worktree or Previous worktree;
-- **branch**: a searchable list of refs, labelled current, worktree or remote.
+- **branch**: a searchable list of refs, labelled current, worktree, remote or default. The list holds the
+  first 100 refs T3 returns, searched in the browser; a branch beyond that can't be picked yet.
 
 The choices start from your T3 settings, resolved the way T3 resolves them for a new thread: the project's
 default model, then the environment default, then the first ready provider's default model. Runtime mode,
 worktree default and "start new worktrees from origin" come from the same settings, project overrides first.
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
+
+Each dialog session sends one `commandId`, which T3 uses to de-duplicate launches. Pressing Send again after
+a timeout or error returns the same thread instead of starting a second one.
 
 Not mirrored from T3 (yet): defaults from a repo's `t3.json`, per-project provider enable/disable
 overrides, and hidden or reordered models. The dialog shows every model of every enabled provider.
@@ -134,8 +139,9 @@ Where the code lives:
 | `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
 
 **This protocol is not a public API.** It was worked out from T3 Code's source, so a T3 update can break it.
-Failures are reported in the dialog with the reason (for example "the token lacks `orchestration:operate`" or
-"T3 Code's protocol changed"). The copy-prompt hand-off keeps working regardless.
+Failures to load the dialog's options are shown in the dialog, with an offer to copy the prompt instead.
+Launch failures are shown as a toast with the reason (for example "the token lacks `orchestration:operate`"
+or "T3 Code's protocol may have changed"). The copy-prompt hand-off keeps working regardless.
 
 ### Workspace and branch
 

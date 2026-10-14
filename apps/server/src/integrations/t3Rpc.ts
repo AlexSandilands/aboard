@@ -52,6 +52,15 @@ const FailureCause = z.array(
     .transform(({ _tag: tag, error, defect }) => ({ tag, error, defect })),
 );
 
+/** Session-level failures (no requestId): every pending request is dead. */
+const SessionFailure = z
+  .object({
+    _tag: z.enum(["Defect", "ClientProtocolError"]),
+    defect: z.unknown().optional(),
+    error: z.unknown().optional(),
+  })
+  .transform(({ defect, error }) => defect ?? error);
+
 const TaggedError = z
   .object({ _tag: z.string(), message: z.string().optional(), requiredScope: z.unknown().optional() })
   .transform(({ _tag: tag, message, requiredScope }) => ({ tag, message, requiredScope }));
@@ -130,16 +139,27 @@ export async function openT3Rpc(opts: {
     pending.clear();
   };
 
+  const closeSocket = () => {
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+  };
+
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new T3RpcError("unreachable", "Timed out connecting to T3 Code")), timeoutMs);
+    // A failed handshake still closes the socket, so a late open can't leave an authenticated socket behind.
+    const fail = (message: string) => {
+      clearTimeout(timer);
+      closeSocket();
+      reject(new T3RpcError("unreachable", message));
+    };
+    const timer = setTimeout(() => fail("Timed out connecting to T3 Code"), timeoutMs);
     socket.addEventListener("open", () => {
       clearTimeout(timer);
       resolve();
     });
-    socket.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new T3RpcError("unreachable", "Could not open a WebSocket to T3 Code"));
-    });
+    socket.addEventListener("error", () => fail("Could not open a WebSocket to T3 Code"));
   });
 
   socket.addEventListener("close", () => failAll(new T3RpcError("unreachable", "T3 Code closed the connection")));
@@ -151,6 +171,13 @@ export async function openT3Rpc(opts: {
       return;
     }
     for (const frame of Array.isArray(frames) ? frames : [frames]) {
+      const failure = SessionFailure.safeParse(frame);
+      if (failure.success) {
+        const detail = typeof failure.data === "string" ? failure.data : JSON.stringify(failure.data ?? "unknown");
+        failAll(new T3RpcError("protocol", `T3 Code rejected the session (its protocol may have changed): ${detail}`));
+        closeSocket();
+        return;
+      }
       const exit = Exit.safeParse(frame);
       if (!exit.success) continue;
       const entry = pending.get(exit.data.requestId);
@@ -185,11 +212,7 @@ export async function openT3Rpc(opts: {
     },
     close() {
       failAll(new T3RpcError("unreachable", "Session closed"));
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
+      closeSocket();
     },
   };
 }

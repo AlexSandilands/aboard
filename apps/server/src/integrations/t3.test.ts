@@ -456,10 +456,12 @@ describe("T3 thread launch", () => {
 
   it("launches a thread and links it to the task", async () => {
     const { t3, socket, added } = setup((frame) => success(frame.id, { threadId: "th-new", resumed: false }));
-    const link = await t3.startThread("task-1", LAUNCH, "user");
+    const commandId = "6f1c7f2e-2d8f-4f0b-9a57-0c7f0e5b1d2a";
+    const link = await t3.startThread("task-1", { ...LAUNCH, commandId }, "user");
     expect(socket.sent).toHaveLength(1);
     expect(socket.sent[0]!.tag).toBe("orchestration.launchThread");
     expect(socket.sent[0]!.payload).toMatchObject({
+      commandId,
       projectId: "t3-p1",
       title: "#9 Hand off",
       modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },

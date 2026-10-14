@@ -68,6 +68,42 @@ describe("openT3Rpc", () => {
     ).rejects.toMatchObject({ kind: "unreachable" });
   });
 
+  it("answers each request from a batched array of frames", async () => {
+    const socket = fakeSocket(() => undefined);
+    const rpc = await openT3Rpc({ origin: ORIGIN, token: "tok", fetch: ticketFetch(), openSocket: socket.open });
+    const a = rpc.request("a", {});
+    const b = rpc.request("b", {});
+    socket.emit("message", [success("2", "second"), success("1", "first")]);
+    expect(await Promise.all([a, b])).toEqual(["first", "second"]);
+  });
+
+  it("fails pending requests at once when the socket closes or T3 sends a session defect", async () => {
+    const closing = fakeSocket(() => undefined);
+    const rpc = await openT3Rpc({ origin: ORIGIN, token: "tok", fetch: ticketFetch(), openSocket: closing.open });
+    const pending = rpc.request("server.getConfig", {});
+    closing.emit("close");
+    await expect(pending).rejects.toMatchObject({ kind: "unreachable", message: "T3 Code closed the connection" });
+    await expect(rpc.request("again", {})).rejects.toMatchObject({ kind: "unreachable" });
+
+    const defect = fakeSocket(() => undefined);
+    const rpc2 = await openT3Rpc({ origin: ORIGIN, token: "tok", fetch: ticketFetch(), openSocket: defect.open });
+    const waiting = rpc2.request("server.getConfig", {});
+    defect.emit("message", { _tag: "Defect", defect: "Malformed message" });
+    await expect(waiting).rejects.toMatchObject({
+      kind: "protocol",
+      message: expect.stringContaining("Malformed message"),
+    });
+    expect(defect.closed).toBe(true);
+  });
+
+  it("closes the socket when the handshake fails", async () => {
+    const socket = fakeSocket(() => undefined, false);
+    await expect(
+      openT3Rpc({ origin: ORIGIN, token: "tok", fetch: ticketFetch(), openSocket: socket.open }),
+    ).rejects.toMatchObject({ kind: "unreachable" });
+    expect(socket.closed).toBe(true);
+  });
+
   it("times out a request with no reply", async () => {
     const socket = fakeSocket(() => undefined);
     const rpc = await openT3Rpc({

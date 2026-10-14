@@ -92,6 +92,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
   const [choice, setChoice] = useState<WorkspaceChoice>(() => initialWorkspaceChoice(options));
   const start = useStartT3Thread({ silent: true });
+  const [commandId] = useState(() => crypto.randomUUID());
 
   const workspace = toLaunchWorkspace(options, choice);
   const model = findModel(options, selection);
@@ -110,10 +111,12 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
     start.mutate(
       {
         taskId: task.id,
+        commandId,
         prompt,
         modelSelection: selection,
         runtimeMode,
-        interactionMode: planWithMe ? "plan" : "default",
+        // Providers without T3's plan mode still get the planning prompt.
+        interactionMode: planWithMe && provider?.supportsPlanMode ? "plan" : "default",
         workspace,
       },
       {

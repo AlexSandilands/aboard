@@ -39,6 +39,7 @@ const claude: T3LaunchProvider = {
   ready: true,
   message: null,
   supportedRuntimeModes: [],
+  supportsPlanMode: true,
   models: [
     { slug: "opus", name: "Claude Opus", badge: null, isLegacy: false, isDefault: true, options: [effort, fastMode] },
     { slug: "haiku", name: "Claude Haiku", badge: "new", isLegacy: false, isDefault: false, options: [] },

@@ -36,6 +36,9 @@ export function fakeSocket(reply: (frame: SentFrame) => unknown, opens = true) {
     get closed() {
       return closed;
     },
+    /** Fires a socket event, e.g. `emit("close")` or `emit("message", frame)`. */
+    emit: (type: string, frame?: unknown) =>
+      listeners[type]?.forEach((l) => l(frame === undefined ? undefined : { data: JSON.stringify(frame) })),
     open: (u: string) => {
       url = u;
       queueMicrotask(() => listeners[opens ? "open" : "error"]?.forEach((l) => l()));

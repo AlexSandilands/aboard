@@ -52,6 +52,8 @@ export const T3LaunchProvider = z.object({
   message: z.string().nullable(),
   /** Empty means every runtime mode is supported. */
   supportedRuntimeModes: z.array(T3RuntimeMode),
+  /** Whether threads can start in plan mode (T3 hides its plan toggle otherwise). */
+  supportsPlanMode: z.boolean(),
   models: z.array(T3LaunchModel),
 });
 export type T3LaunchProvider = z.infer<typeof T3LaunchProvider>;
@@ -107,6 +109,8 @@ export const T3LaunchWorkspace = z.discriminatedUnion("mode", [
 export type T3LaunchWorkspace = z.infer<typeof T3LaunchWorkspace>;
 
 export const StartT3ThreadInput = z.object({
+  /** One per dialog session: T3 de-duplicates launches by it, so a retry can't start a second thread. */
+  commandId: z.uuid().optional(),
   prompt: z.string().trim().min(1),
   modelSelection: T3ModelSelection,
   runtimeMode: T3RuntimeMode,
