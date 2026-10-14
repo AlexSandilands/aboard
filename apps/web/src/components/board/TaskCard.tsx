@@ -3,12 +3,13 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
 import { memo, type KeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
+import { resolutionLabel } from "~/components/task/resolution.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
-import { CardLinks, hasCardLinks } from "./CardLinks";
+import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -36,6 +37,7 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
             {jiraKey}
           </Badge>
         ) : null}
+        <ResolutionChip task={task} />
         {task.archivedAt ? (
           <Badge variant="secondary" size="sm">
             Archived
@@ -60,6 +62,30 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
     </div>
   );
 });
+
+/** Muted "Done by #4" / "Duplicate of #4" / "Won't do" on closed cards; the number opens the delivering task. */
+function ResolutionChip({ task }: { task: TaskSummary }) {
+  const { openTask } = useBoardContext();
+  const label = resolutionLabel(task);
+  if (!label) return null;
+  const by = task.resolvedBy;
+  if (!by) return <span className="min-w-0 truncate text-muted-foreground">{label}</span>;
+  return (
+    <button
+      type="button"
+      title={`#${by.number} ${by.title}`}
+      aria-label={`${label}: open #${by.number} ${by.title}`}
+      className={cn(chipClassName, "font-normal")}
+      {...linkHandlers}
+      onClick={(event) => {
+        event.stopPropagation();
+        openTask(by.id);
+      }}
+    >
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
 
 /** A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. */
 export const SortableTaskCard = memo(function SortableTaskCard({

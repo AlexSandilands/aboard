@@ -14,6 +14,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Ideas are cheap: create_idea mid-task for anything worth doing later, then carry on.
 - A task can't leave Ideas without a plan: set_plan (phases of 3-8 concrete, verifiable steps) before moving it to planned/in_progress. create_task makes a planned task in one call.
 - Keep steps current with update_step (in_progress when you start, done when finished). link PRs when opened and move_task to review; done when merged/verified.
+- Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
 - End each session with add_note: a handover of what's done, what's left and the next action.
 - In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task or link.`;
 

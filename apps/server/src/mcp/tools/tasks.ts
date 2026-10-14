@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { TaskStatus, type LinkInput } from "@repo/contracts";
+import { CloseTaskInput, TaskResolution, TaskStatus, type LinkInput } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
-import { statusLabel } from "../format.ts";
+import { resolutionText, statusLabel } from "../format.ts";
 import {
   actorField,
   hasProjectRef,
@@ -20,9 +20,10 @@ import {
 
 const PLAN_REQUIRED_HINT =
   "Fix: call set_plan for this task (phases with concrete steps, or a markdown checklist), then retry move_task. " +
-  "Only Ideas may exist without a plan.";
+  "Only Ideas may exist without a plan. If the work was already delivered by another task, is a duplicate, or " +
+  "won't be done, use close_task instead; it needs no plan.";
 
-/** Task lifecycle tools: create_idea, create_task, move_task, update_task, add_note. */
+/** Task lifecycle tools: create_idea, create_task, move_task, close_task, update_task, add_note. */
 export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
   server.registerTool(
     "create_idea",
@@ -138,6 +139,37 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),
+  );
+
+  server.registerTool(
+    "close_task",
+    {
+      title: "Close a task as done elsewhere, duplicate or won't do",
+      description:
+        "Close a task without doing it here: resolution 'completed' when another task already delivered it, " +
+        "'duplicate' when another task covers the same thing, 'wont_do' when it is no longer wanted. Moves it to " +
+        "Done with no plan needed and records the link, so the other task shows it also resolved this one. Prefer " +
+        "this to archiving. completed/duplicate need byTask; wont_do must not have one. Moving the task out of " +
+        "Done later reopens it and clears the resolution.",
+      inputSchema: {
+        task: taskField,
+        resolution: TaskResolution,
+        byTask: z.string().optional().describe('The task that delivered or duplicates this one: "#42", "42" or uuid.'),
+        actor: actorField,
+      },
+    },
+    (args) =>
+      run(() => {
+        const input = CloseTaskInput.parse({ resolution: args.resolution, byTask: args.byTask });
+        const id = services.tasks.resolveId(args.task);
+        const byTaskId = input.byTask ? services.tasks.resolveId(input.byTask) : undefined;
+        const task = services.tasks.close(
+          id,
+          { resolution: input.resolution, ...(byTaskId ? { byTaskId } : {}) },
+          actor(args.actor),
+        );
+        return taskResult(services, id, `Closed #${task.number} as ${resolutionText(task) ?? task.resolution}.`);
+      }),
   );
 
   server.registerTool(

@@ -7,6 +7,10 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
 - **Swimlane per project**, columns **Ideas → Planned → In Progress → Review → Done**.
 - **Plans first:** ideas can be rough, but a task can't leave Ideas until it has a plan.
   Plans are phases of steps; the detail panel shows exactly where a task is up to.
+- **Closing without doing:** a task delivered by another one, a duplicate, or one you won't do can be
+  closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or `close_task` over MCP). It
+  moves to Done without a plan, and the other task lists it under "Also resolved". Moving it out of Done
+  reopens it. Archive is for clearing cards away, not for resolving them.
 - **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
   conversation), any URL. Failing checks, requested changes and blocked steps surface under
   **Needs attention**.

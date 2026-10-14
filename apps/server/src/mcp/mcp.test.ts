@@ -53,6 +53,7 @@ describe("MCP endpoint", () => {
       "add_steps",
       "update_step",
       "move_task",
+      "close_task",
       "update_task",
       "add_note",
       "link",
@@ -203,5 +204,36 @@ describe("MCP endpoint", () => {
     const result = await client.callTool({ name: "get_task", arguments: { task: "#999" } });
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/^NOT_FOUND: /);
+  });
+
+  it("closes a task as done by another and shows it on both tasks", async () => {
+    const workspacePath = "C:/Fake/proj";
+    const project = h.services.projects.create({ workspaceRoot: workspacePath });
+    const shipped = h.services.tasks.create({ projectId: project.id, title: "Ship search" });
+    const idea = h.services.tasks.create({ projectId: project.id, title: "Search titles" });
+
+    const gated = await client.callTool({ name: "move_task", arguments: { task: `#${idea.number}`, status: "done" } });
+    expect(text(gated)).toContain("close_task");
+
+    const missing = await client.callTool({
+      name: "close_task",
+      arguments: { task: `#${idea.number}`, resolution: "completed" },
+    });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toMatch(/^VALIDATION: byTask/);
+
+    const closed = await client.callTool({
+      name: "close_task",
+      arguments: { task: `#${idea.number}`, resolution: "completed", byTask: `#${shipped.number}` },
+    });
+    expect(closed.isError).toBeFalsy();
+    expect(text(closed)).toContain(`Closed #${idea.number} as done by #${shipped.number}.`);
+    expect(text(closed)).toContain(`Closed: done by #${shipped.number} "Ship search"`);
+
+    const delivering = text(await client.callTool({ name: "get_task", arguments: { task: `#${shipped.number}` } }));
+    expect(delivering).toContain(`Also resolved: #${idea.number} Search titles (done by this)`);
+
+    const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "done" } }));
+    expect(listed).toContain(`#${idea.number} Search titles — done by #${shipped.number}`);
   });
 });

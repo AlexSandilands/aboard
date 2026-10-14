@@ -168,4 +168,141 @@ describe("events", () => {
     expect(events).toHaveLength(3);
     expectCode(() => s.tasks.summary(t1.id), "NOT_FOUND");
   });
+
+  describe("close", () => {
+    it("re-closing against another task refreshes the previous one, and rejects closing two tasks against each other", () => {
+      const { s, project, events } = setup();
+      const a = s.tasks.create({ projectId: project.id, title: "A" });
+      const b = s.tasks.create({ projectId: project.id, title: "B" });
+      const c = s.tasks.create({ projectId: project.id, title: "C" });
+      s.tasks.close(a.id, { resolution: "duplicate", byTaskId: b.id }, "user");
+      expectCode(() => s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "user"), "VALIDATION");
+
+      events.length = 0;
+      s.tasks.close(a.id, { resolution: "completed", byTaskId: c.id }, "user");
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: b.id });
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: c.id });
+      expect(s.tasks.detail(b.id).resolves).toEqual([]);
+      expect(s.tasks.detail(c.id).resolves.map((r) => r.id)).toEqual([a.id]);
+    });
+
+    it("closes an archived task without unarchiving it", () => {
+      const { s, project } = setup();
+      const task = s.tasks.create({ projectId: project.id, title: "Old" });
+      s.tasks.update(task.id, { archived: true }, "user");
+      const closed = s.tasks.close(task.id, { resolution: "wont_do" }, "user");
+      expect(closed.status).toBe("done");
+      expect(closed.archivedAt).not.toBeNull();
+    });
+
+    it("refreshes the resolver's detail when a closed task is renamed", () => {
+      const { s, project, events } = setup();
+      const original = s.tasks.create({ projectId: project.id, title: "Original" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: original.id }, "user");
+      events.length = 0;
+      s.tasks.update(dupe.id, { title: "Dupe renamed" }, "user");
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: original.id });
+    });
+
+    it("refreshes cards in other projects when their resolver's project is deleted", () => {
+      const { s, project, events } = setup();
+      const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+      const original = s.tasks.create({ projectId: other.id, title: "Original" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: original.id }, "user");
+      events.length = 0;
+      s.projects.delete(other.id);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "task.upserted",
+          task: expect.objectContaining({ id: dupe.id, resolution: "duplicate", resolvedBy: null }),
+        }),
+      );
+
+      // The other direction: deleting the closed task's project refreshes its resolver's detail.
+      const keeper = s.tasks.create({ projectId: project.id, title: "Keeper" });
+      const gone = s.projects.create({ title: "Gamma", workspaceRoot: "/work/gamma" });
+      const closed = s.tasks.create({ projectId: gone.id, title: "Closed" });
+      s.tasks.close(closed.id, { resolution: "completed", byTaskId: keeper.id }, "user");
+      events.length = 0;
+      s.projects.delete(gone.id);
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: keeper.id });
+    });
+
+    it("moves a planless task to Done only through close, linking the delivering task", () => {
+      const { s, project, events } = setup();
+      const shipped = s.tasks.create({ projectId: project.id, title: "Shipped", plan: plan("a") });
+      const idea = s.tasks.create({ projectId: project.id, title: "Same thing" });
+      expectCode(() => s.tasks.move(idea.id, { status: "done" }, "user"), "PLAN_REQUIRED");
+
+      events.length = 0;
+      const closed = s.tasks.close(idea.id, { resolution: "completed", byTaskId: shipped.id }, "agent");
+      expect(closed).toMatchObject({
+        status: "done",
+        resolution: "completed",
+        resolvedBy: { id: shipped.id, number: shipped.number, title: "Shipped" },
+      });
+      expect(closed.events.at(-1)).toMatchObject({
+        type: "closed",
+        actor: "agent",
+        payload: { resolution: "completed", from: "idea", byTask: shipped.number },
+      });
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "task.upserted", task: expect.objectContaining({ id: idea.id }) }),
+          { type: "task.detail_changed", taskId: shipped.id },
+        ]),
+      );
+      expect(s.tasks.detail(shipped.id).resolves).toEqual([
+        { id: idea.id, number: idea.number, title: "Same thing", resolution: "completed" },
+      ]);
+    });
+
+    it("rejects a missing, unknown or self by-task, and a by-task on won't do", () => {
+      const { s, project } = setup();
+      const a = s.tasks.create({ projectId: project.id, title: "A" });
+      const b = s.tasks.create({ projectId: project.id, title: "B" });
+      expectCode(() => s.tasks.close(a.id, { resolution: "duplicate" }, "user"), "VALIDATION");
+      expectCode(() => s.tasks.close(a.id, { resolution: "duplicate", byTaskId: "nope" }, "user"), "NOT_FOUND");
+      expectCode(() => s.tasks.close(a.id, { resolution: "completed", byTaskId: a.id }, "user"), "VALIDATION");
+      expectCode(() => s.tasks.close(a.id, { resolution: "wont_do", byTaskId: b.id }, "user"), "VALIDATION");
+      expect(s.tasks.summary(a.id)).toMatchObject({ status: "idea", resolution: null });
+
+      const wontDo = s.tasks.close(a.id, { resolution: "wont_do" }, "user");
+      expect(wontDo).toMatchObject({ status: "done", resolution: "wont_do", resolvedBy: null });
+    });
+
+    it("clears the resolution when the task leaves Done", () => {
+      const { s, project, events } = setup();
+      const original = s.tasks.create({ projectId: project.id, title: "Original" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: original.id }, "user");
+
+      events.length = 0;
+      const reopened = s.tasks.move(dupe.id, { status: "idea" }, "user");
+      expect(reopened).toMatchObject({ status: "idea", resolution: null, resolvedBy: null });
+      expect(s.tasks.detail(dupe.id).events.at(-1)).toMatchObject({
+        type: "status_changed",
+        payload: { from: "done", to: "idea", clearedResolution: "duplicate" },
+      });
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: original.id });
+      expect(s.tasks.detail(original.id).resolves).toEqual([]);
+    });
+
+    it("refreshes resolved cards when the delivering task is renamed", () => {
+      const { s, project, events } = setup();
+      const original = s.tasks.create({ projectId: project.id, title: "Original" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: original.id }, "user");
+      events.length = 0;
+      s.tasks.update(original.id, { title: "Renamed" }, "user");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "task.upserted",
+          task: expect.objectContaining({ id: dupe.id, resolvedBy: expect.objectContaining({ title: "Renamed" }) }),
+        }),
+      );
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   BoardSnapshot,
+  CloseTaskInput,
   CreateTaskInput,
   LinkInput,
   MoveTaskInput,
@@ -77,6 +78,13 @@ export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>
       api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+/** Closes a task as done by / duplicate of another task, or won't do. Named apart from the panel's useCloseTask. */
+export const useResolveTask = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ id, ...input }: CloseTaskInput & { id: string }) =>
+      api<TaskDetail>(`/api/tasks/${enc(id)}/close`, { body: input }),
     opts,
   );
 export const useAddNote = (opts?: MutationOpts) =>

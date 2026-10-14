@@ -15,6 +15,8 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     createdAt: "",
     updatedAt: "",
     statusChangedAt: "",
+    resolution: null,
+    resolvedBy: null,
     progress: { done: 0, total: 0 },
     stepStatuses: [],
     currentStep: null,
@@ -83,5 +85,17 @@ describe("optimisticMove", () => {
   });
   it("appends by default", () => {
     expect(order(optimisticMove(b, "c", { status: "planned" }))).toEqual(["a", "b", "c"]);
+  });
+  it("clears a closed task's resolution when it leaves Done, but not on a reorder", () => {
+    const closed: TaskSummary = {
+      ...task("d", "done", "a0"),
+      resolution: "duplicate",
+      resolvedBy: { id: "a", number: 1, title: "a" },
+    };
+    const withClosed = board([closed, task("e", "done", "a1")]);
+    const reordered = optimisticMove(withClosed, "d", { status: "done", afterId: "e" });
+    expect(reordered.tasks.find((t) => t.id === "d")).toMatchObject({ resolution: "duplicate" });
+    const reopened = optimisticMove(withClosed, "d", { status: "idea" });
+    expect(reopened.tasks.find((t) => t.id === "d")).toMatchObject({ resolution: null, resolvedBy: null });
   });
 });
