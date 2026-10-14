@@ -4,12 +4,14 @@
  * Design-system port: tokens, glass utilities, grain, scrollbars, markdown prose.
  * Dropped vs T3: the `--contrast-*` accessibility layer (tokens map straight to the
  * raw values), the theme-palette bridge, and terminal/diff/composer/chat-timeline/
- * browser-preview/Electron rules. Prose class is `.markdown` (T3: `.chat-markdown`).
+ * browser-preview rules. Electron keeps only the title bar overlay and drag region. Prose class is `.markdown` (T3: `.chat-markdown`).
  */
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));
+/* Desktop shell with native window controls painted over the page (see lib/windowControlsOverlay.ts). */
+@custom-variant wco (&:is(.wco, .wco *));
 
 /* Secondary hovering pointers reveal sidebar actions on touch-primary devices. */
 @custom-variant any-hover {
@@ -56,6 +58,38 @@
     --glass-blur: 16px;
     --glass-saturation: 1.08;
   }
+}
+
+/* Desktop title bar: top bars shrink to the overlay's height, and the header at the right edge
+   pads past the native min/max/close buttons. */
+.wco {
+  --workspace-topbar-height: max(40px, env(titlebar-area-height, 52px));
+  --workspace-native-controls-inset: calc(
+    100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 0.75rem
+  );
+}
+
+/* Window drag region (frameless title bar), from T3 Code. */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+/* Electron 44 inherits app-region. Reset children to the initial value so they
+   do not add drag rectangles over fixed controls. Explicit `none` is treated
+   as `no-drag` and breaks titlebar dragging; `initial` emits no rectangle.
+   The base layer lets explicit drag/no-drag utilities take precedence. */
+@layer base {
+  .drag-region > * {
+    -webkit-app-region: initial;
+  }
+}
+
+.drag-region button,
+.drag-region input,
+.drag-region textarea,
+.drag-region select,
+.drag-region a {
+  -webkit-app-region: no-drag;
 }
 
 /* System font stacks only. */

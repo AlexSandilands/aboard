@@ -32,7 +32,17 @@ export default defineConfig({
     proxy: {
       "/api": { target, changeOrigin: false },
       "/mcp": { target, changeOrigin: false },
-      "/events": { target, changeOrigin: false },
+      "/events": {
+        target,
+        changeOrigin: false,
+        // When the dev server restarts mid-stream the proxy logs the reset but leaves the browser's side
+        // open, so EventSource never notices and the board goes stale. Drop it so the client reconnects.
+        configure: (proxy) => {
+          proxy.on("error", (_error, _req, res) => {
+            res.destroy();
+          });
+        },
+      },
     },
   },
   test: {

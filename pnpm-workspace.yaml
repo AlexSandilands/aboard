@@ -3,7 +3,10 @@ packages:
   - packages/*
 
 allowBuilds:
+  electron: true
   esbuild: true
+  # Only used by the Squirrel.Windows target; we ship NSIS.
+  electron-winstaller: false
   # Hooks are installed by the root `prepare` script instead.
   lefthook: false
 
@@ -14,3 +17,4 @@ minimumReleaseAgeExclude:
   - "@vitest/spy@5.0.4"
   - vitest@5.0.4
   - zod@4.6.7
+  - electron@44.7.1

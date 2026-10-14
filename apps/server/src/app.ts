@@ -1,3 +1,4 @@
+import { BRAND, type Health } from "@repo/contracts";
 import { Hono } from "hono";
 import type { Config } from "./config.ts";
 import type { EventBus } from "./bus.ts";
@@ -19,7 +20,7 @@ export interface AppContext {
 export function createApp(ctx: AppContext): Hono {
   const app = new Hono();
   app.use("*", localGuard(ctx.config));
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  app.get("/api/health", (c) => c.json({ ok: true, id: BRAND.id, version: BRAND.version } satisfies Health));
   registerSse(app, ctx.bus);
   registerApiRoutes(app, ctx);
   registerMcp(app, ctx);
