@@ -60,7 +60,7 @@ export function TaskPanelHeader({
   };
 
   return (
-    <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 border-b border-border px-3">
+    <header className="drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 border-b border-border px-3 wco:pe-(--workspace-native-controls-inset)">
       <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
       <Select
         value={task.status}

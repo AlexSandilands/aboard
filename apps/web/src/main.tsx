@@ -4,11 +4,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast.tsx";
 import { TooltipProvider } from "./components/ui/tooltip.tsx";
+import { syncDesktopTheme } from "./hooks/useTheme.ts";
 import { captureTokenFromHash } from "./lib/api.ts";
+import { syncDocumentWindowControlsOverlayClass } from "./lib/windowControlsOverlay.ts";
 import { router } from "./router.tsx";
 import "./index.css";
 
 captureTokenFromHash();
+syncDocumentWindowControlsOverlayClass();
+syncDesktopTheme();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, refetchOnWindowFocus: false, retry: 1 } },

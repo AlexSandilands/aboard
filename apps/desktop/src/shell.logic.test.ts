@@ -1,6 +1,6 @@
 import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { LogTail, decideNavigation, isOwnHealth } from "./shell.logic.ts";
+import { LogTail, decideNavigation, isDesktopTheme, isOwnHealth } from "./shell.logic.ts";
 
 describe("isOwnHealth", () => {
   it("accepts only our brand id", () => {
@@ -38,5 +38,13 @@ describe("LogTail", () => {
     tail.push("one\ntw");
     tail.push("o\r\nthree\nfou");
     expect(tail.toString()).toBe("two\nthree\nfou");
+  });
+});
+
+describe("isDesktopTheme", () => {
+  it("accepts only the web app's theme choices", () => {
+    expect(["light", "dark", "system"].every(isDesktopTheme)).toBe(true);
+    expect(isDesktopTheme("blue")).toBe(false);
+    expect(isDesktopTheme({ toString: () => "dark" })).toBe(false);
   });
 });

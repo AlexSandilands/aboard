@@ -1,6 +1,6 @@
 // Adapted from T3 Code (apps/web/src/hooks/useTheme.ts), MIT — see NOTICE.
 // Trimmed to light | dark | system; the index.html boot script reads the same key.
-import { storageKey } from "@repo/contracts";
+import { storageKey, type DesktopBridge } from "@repo/contracts";
 import { useCallback, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark" | "system";
@@ -28,7 +28,18 @@ function resolve(theme: Theme): "light" | "dark" {
   return theme === "system" ? (systemDark() ? "dark" : "light") : theme;
 }
 
+/** Lets the desktop shell restyle its native window controls to match. */
+function reportToDesktop(theme: Theme) {
+  (window as { desktopBridge?: DesktopBridge }).desktopBridge?.setTheme(theme);
+}
+
+/** Called once at startup: index.html already applied the stored theme, but the shell hasn't heard it. */
+export function syncDesktopTheme() {
+  reportToDesktop(readTheme());
+}
+
 function applyTheme(theme: Theme, suppressTransitions: boolean) {
+  reportToDesktop(theme);
   const root = document.documentElement;
   if (suppressTransitions) root.classList.add("no-transitions");
   const dark = resolve(theme) === "dark";

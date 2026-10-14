@@ -1,9 +1,16 @@
-import { BRAND, Health } from "@repo/contracts";
+import { BRAND, Health, type DesktopTheme } from "@repo/contracts";
 
 /** True when a `/api/health` body comes from our server, not some other app holding the port. */
 export function isOwnHealth(body: unknown): boolean {
   const parsed = Health.safeParse(body);
   return parsed.success && parsed.data.id === BRAND.id;
+}
+
+const DESKTOP_THEMES = new Set<unknown>(["light", "dark", "system"] satisfies DesktopTheme[]);
+
+/** Validates a theme sent over IPC by the page. */
+export function isDesktopTheme(value: unknown): value is DesktopTheme {
+  return DESKTOP_THEMES.has(value);
 }
 
 /** Schemes we hand to the OS. Anything else (file:, javascript:, ms-* handlers…) is dropped. */

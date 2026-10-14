@@ -7,6 +7,9 @@
       "entry": ["src/dev/**/*.tsx"],
       "ignore": ["src/components/ui/**"]
     },
+    "apps/desktop": {
+      "entry": ["src/main.ts", "src/preload.ts"]
+    },
     "packages/contracts": {}
   }
 }

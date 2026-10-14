@@ -1,6 +1,6 @@
 /**
- * Bundles the Electron main process (and @repo/contracts, which is TS source) into `dist/main.mjs`, and
- * rasterises the web favicon into `dist/icons/` (Electron can't load SVG icons on Windows).
+ * Bundles the Electron main process (and @repo/contracts, which is TS source) into `dist/main.mjs`, the
+ * preload into `dist/preload.cjs` (sandboxed preloads can't be ESM), and rasterises the web favicon into `dist/icons/` (Electron can't load SVG icons on Windows).
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,16 @@ await build({
   platform: "node",
   format: "esm",
   target: "node24",
+  external: ["electron"],
+  logLevel: "warning",
+});
+await build({
+  entryPoints: [`${root}src/preload.ts`],
+  outfile: `${root}dist/preload.cjs`,
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  target: "chrome140",
   external: ["electron"],
   logLevel: "warning",
 });

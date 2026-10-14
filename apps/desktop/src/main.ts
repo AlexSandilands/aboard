@@ -1,10 +1,12 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BRAND, brandEnv } from "@repo/contracts";
-import { BrowserWindow, Menu, Tray, app, clipboard, dialog, shell } from "electron";
+import { BrowserWindow, Menu, Tray, app, clipboard, dialog, ipcMain, nativeTheme, shell } from "electron";
 import { appIcon, trayIcon } from "./icon.ts";
+import { SET_THEME_CHANNEL } from "./ipc.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
-import { decideNavigation } from "./shell.logic.ts";
+import { decideNavigation, isDesktopTheme } from "./shell.logic.ts";
+import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
 
 const port = Number(process.env[brandEnv("PORT")] ?? 4317);
 /** Set by `pnpm desktop`: load the Vite dev server and attach to the API server `pnpm dev` runs. */
@@ -44,9 +46,14 @@ function createWindow(show: boolean): BrowserWindow {
     title: BRAND.name,
     icon: appIcon(),
     autoHideMenuBar: true,
-    webPreferences: { sandbox: true, contextIsolation: true },
+    ...titleBarOptions(nativeTheme.shouldUseDarkColors),
+    webPreferences: { sandbox: true, contextIsolation: true, preload: join(here, "preload.cjs") },
   });
   if (show) win.once("ready-to-show", () => win.show());
+  // Restyling the overlay before the window's first show leaves the page's
+  // navigator.windowControlsOverlay stuck at visible=false (Electron 44), so the board would lay out
+  // as if there were no title bar. The page reports its theme while loading, so apply it on show.
+  win.on("show", () => syncTitleBar(win, nativeTheme.shouldUseDarkColors));
   // Closing hides to the tray so the MCP endpoint stays up for agents.
   win.on("close", (event) => {
     if (quitting) return;
@@ -150,6 +157,16 @@ if (app.requestSingleInstanceLock()) {
   app.on("activate", showWindow);
   // Without a listener Electron quits when the last window closes; we live in the tray.
   app.on("window-all-closed", () => {});
+  // The board reports its light/dark/system choice; "system" lets nativeTheme follow the OS itself.
+  ipcMain.on(SET_THEME_CHANNEL, (event, theme: unknown) => {
+    const sender = event.senderFrame?.url ?? "";
+    if (!isDesktopTheme(theme) || decideNavigation(sender, boardUrl()) !== "allow") return;
+    nativeTheme.themeSource = theme;
+  });
+  nativeTheme.on("updated", () => {
+    // Hidden windows catch up on "show" (see createWindow).
+    if (window?.isVisible()) syncTitleBar(window, nativeTheme.shouldUseDarkColors);
+  });
   app.on("before-quit", (event) => {
     quitting = true;
     if (!server?.owned) return;

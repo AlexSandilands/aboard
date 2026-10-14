@@ -29,6 +29,9 @@ brand-neutral `@repo/*` scope. Keep the name out of prose docs where a neutral p
   the esbuild server bundle (`apps/server/dist/server.mjs`, `pnpm --filter @repo/server bundle`) in a
   `utilityProcess`. That process talks back over `process.parentPort` (`ready` / `shutdown`) in
   `apps/server/src/main.ts`. Packaging config is code (`scripts/package.ts`) so names derive from `BRAND`.
+  The window is frameless with native controls painted over the page (T3 Code's `titleBarOverlay`); the
+  web app reads `navigator.windowControlsOverlay` (`.wco` class) and reports its theme through the
+  preload's `window.desktopBridge` (`DesktopBridge` in contracts). Top bars use `.drag-region`.
 - `skills/<name>/`: the skill and `AGENTS.md` snippet we ship to agents that _use_ the board. These
   files are not used by the app.
 

@@ -190,7 +190,7 @@ function TaskPanelBody({
 function PanelSkeleton() {
   return (
     <div aria-busy className="flex flex-col">
-      <div className="flex h-[var(--workspace-topbar-height)] items-center gap-2 border-b border-border px-3">
+      <div className="drag-region flex h-[var(--workspace-topbar-height)] items-center gap-2 border-b border-border px-3 wco:pe-(--workspace-native-controls-inset)">
         <Skeleton className="h-4 w-8" />
         <Skeleton className="h-6 w-24" />
       </div>
