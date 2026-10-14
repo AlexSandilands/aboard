@@ -18,7 +18,7 @@ export interface ServerOptions {
   bundle: string;
   /** Built web app, or null to keep the server's own default (the repo's `apps/web/dist`). */
   webDist: string | null;
-  /** Wait for an external server instead of starting one (`pnpm desktop` runs `pnpm dev` alongside). */
+  /** Never start a server; `pnpm desktop` starts the dev server and waits for it before launching us. */
   attachOnly: boolean;
   /** Called if a server we own dies after startup. */
   onUnexpectedExit(details: string): void;
@@ -34,7 +34,6 @@ export class ServerStartError extends Error {
 }
 
 const READY_TIMEOUT_MS = 30_000;
-const ATTACH_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 5000;
 
 async function probe(url: string): Promise<"ours" | "other" | "none"> {
@@ -62,12 +61,7 @@ export async function connectServer(options: ServerOptions): Promise<BoardServer
     throw new ServerStartError(`Port ${options.port} is in use by another application.`, "");
   }
   if (options.attachOnly) {
-    const deadline = Date.now() + ATTACH_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      await sleep(500);
-      if ((await probe(url)) === "ours") return attached;
-    }
-    throw new ServerStartError(`No ${BRAND.name} server came up on ${url}. Is \`pnpm dev\` running?`, "");
+    throw new ServerStartError(`No ${BRAND.name} dev server on ${url}. Start the app with \`pnpm desktop\`.`, "");
   }
   return spawnServer(url, options);
 }

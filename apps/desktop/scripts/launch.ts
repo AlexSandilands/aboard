@@ -1,6 +1,7 @@
 /**
- * Builds the main process and opens Electron on it. `--dev` (used by `pnpm desktop`) loads the Vite
- * dev server and attaches to the API server `pnpm dev` runs alongside. Exits when the app quits.
+ * Builds the main process and opens Electron on it. `--dev` (used by `pnpm desktop`, after wait-on has
+ * seen both dev servers) loads the Vite dev server and attaches to the API dev server. Exits when the
+ * app quits.
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -15,10 +16,12 @@ await import("./build.ts");
 const env = { ...process.env };
 // Terminals inside Electron apps (T3 Code, VS Code) export this, which would start Electron as plain Node.
 delete env.ELECTRON_RUN_AS_NODE;
-if (process.argv.includes("--dev")) env[brandEnv("DEV_URL")] = "http://localhost:5317";
+if (process.argv.includes("--dev")) env[brandEnv("DEV_URL")] = "http://127.0.0.1:5317";
 
 // Extra flags (e.g. --inspect) go before the app path so Electron itself sees them.
-const child = spawn(electron, [...process.argv.slice(2).filter((arg) => arg !== "--dev"), root], {
+// pnpm forwards a literal "--" before extra args; Electron would stop parsing its own flags there.
+const extraArgs = process.argv.slice(2).filter((arg) => arg !== "--dev" && arg !== "--");
+const child = spawn(electron, [...extraArgs, root], {
   stdio: "inherit",
   env,
 });

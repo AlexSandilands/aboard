@@ -43,6 +43,24 @@ pnpm desktop           # development: pnpm dev plus an Electron window on the Vi
 
 The installer isn't code-signed yet, so Windows SmartScreen warns on first run.
 
+### Developing with the desktop app
+
+`pnpm desktop` starts the server (`node --watch`) and Vite, waits until both answer, then opens the
+window on Vite. Web edits hot-reload in place; server edits restart the server and the board reconnects
+on its own. Changes under `apps/desktop` need a restart of `pnpm desktop`. Quitting the app from the
+tray stops the whole set.
+
+Stop it with `Ctrl+C`. On Windows each script runs through `cmd`, which asks
+`Terminate batch job (Y/N)?`: answer `y` (more than once if asked), and run `reset` if the terminal is
+left garbled. To confirm nothing is still holding the ports:
+
+```sh
+netstat -ano | grep -E "127.0.0.1:(4317|5317) " | grep LISTEN   # empty when everything has stopped
+taskkill //PID <pid> //T //F                                    # for anything still listed
+```
+
+To try the built app without packaging it: `pnpm desktop:build && pnpm --filter @repo/desktop start`.
+
 ## Connect your agents
 
 The MCP endpoint is `http://127.0.0.1:4317/mcp`.
