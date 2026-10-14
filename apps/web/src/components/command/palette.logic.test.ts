@@ -3,6 +3,7 @@ import {
   filterBrowseEntries,
   filterItems,
   isPathQuery,
+  normalizeDescription,
   queryForEntry,
   queryForParent,
   resolveSubmitPath,
@@ -151,5 +152,16 @@ describe("filterItems", () => {
     ];
     expect(filterItems(tasks, "#12").map((t) => t.title)).toEqual(["Fix login", "Other"]);
     expect(filterItems(tasks, "12")[0]?.title).toBe("Fix login");
+  });
+});
+
+describe("normalizeDescription", () => {
+  it("treats blank input as not set", () => {
+    expect(normalizeDescription("")).toBeUndefined();
+    expect(normalizeDescription("  \n\t ")).toBeUndefined();
+  });
+
+  it("trims surrounding whitespace but keeps inner newlines", () => {
+    expect(normalizeDescription("\n first\n\nsecond  ")).toBe("first\n\nsecond");
   });
 });

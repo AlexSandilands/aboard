@@ -151,3 +151,9 @@ export function resolveSubmitPath(query: string, listing: FsBrowseResult | undef
   if (exact) return { ok: true, path: trimTrailingSeparators(exact.fullPath) };
   return { ok: false, reason: `No folder named "${leaf}"` };
 }
+
+/** The description to send on create: blank or whitespace-only means "not set". */
+export function normalizeDescription(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
