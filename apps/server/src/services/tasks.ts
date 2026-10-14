@@ -1,4 +1,4 @@
-import { resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { findJiraKeys, resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -45,6 +45,12 @@ export function createTasksService(
       repos.tasks.lane(task.projectId, task.status).filter((t) => t.id !== task.id),
       {},
     );
+
+  // A key in the title is a strong signal, so it is linked outright. Keys in a description are only
+  // hinted at (mcp/format.ts), since prose there gives too many false positives. links.add is idempotent.
+  const linkTitleKeys = (taskId: string, title: string, actor: string): void => {
+    for (const key of findJiraKeys(title)) deps.links().add(taskId, { value: key }, actor);
+  };
 
   /** Validates the resolution/by-task pairing for `close` and returns the by-task, if any. */
   const closingTask = (task: TaskRecord, input: CloseInput): TaskRecord | null => {
@@ -125,6 +131,7 @@ export function createTasksService(
         fx.log(task.id, actor, "created", { status });
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
         for (const link of input.links ?? []) deps.links().add(task.id, link, actor);
+        linkTitleKeys(task.id, task.title, actor);
         return task.id;
       });
       return service.detail(id);
@@ -164,6 +171,7 @@ export function createTasksService(
         }
         repos.tasks.update(next);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
+        if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);
       });
       return service.detail(id);

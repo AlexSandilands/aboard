@@ -15,7 +15,8 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
   menu, or `delete_task` over MCP). Archive first; active tasks can't be deleted.
 - **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
   conversation), any URL. Failing checks, requested changes and blocked steps surface under
-  **Needs attention**.
+  **Needs attention**. Jira keys in a task title are linked automatically, and agents are told which
+  Jira keys and T3 thread a task is still missing.
 
 ## Run it
 

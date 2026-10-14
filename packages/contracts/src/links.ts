@@ -52,6 +52,42 @@ export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null 
   return null;
 }
 
+// Uppercase only: lowercase "utf-8" or "abc-123" in prose is rarely an issue key. Lookarounds keep
+// "ISO-8601-1" and "foo_ABC-1" from matching part-way, while "/browse/ABC-1" and "(ABC-1)." still do.
+const JIRA_KEY_IN_TEXT = /(?<![A-Za-z0-9_-])[A-Z][A-Z0-9_]+-\d+(?![A-Za-z0-9_]|-\d)/g;
+
+/** Prefixes of standards, encodings and identifiers that look like issue keys. */
+const NOT_JIRA_PROJECTS = new Set([
+  "AES",
+  "CVE",
+  "CWE",
+  "ECMA",
+  "GPT",
+  "HMAC",
+  "HTTP",
+  "IEC",
+  "IEEE",
+  "ISO",
+  "MD",
+  "RFC",
+  "RSA",
+  "SHA",
+  "TLS",
+  "UTF",
+  "WCAG",
+]);
+
+/** Jira keys (PROJ-123) mentioned in free text, de-duplicated in order of appearance. */
+export function findJiraKeys(text: string | null | undefined): string[] {
+  const keys: string[] = [];
+  for (const match of text?.matchAll(JIRA_KEY_IN_TEXT) ?? []) {
+    const key = match[0];
+    const project = key.slice(0, key.lastIndexOf("-"));
+    if (!NOT_JIRA_PROJECTS.has(project) && !keys.includes(key)) keys.push(key);
+  }
+  return keys;
+}
+
 export function isLinkKind(value: string): value is LinkKind {
   return value === "pr" || value === "jira" || value === "t3_thread" || value === "url";
 }

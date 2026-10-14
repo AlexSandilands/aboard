@@ -129,6 +129,27 @@ describe("tasks", () => {
     expect(one.id).toBeTruthy();
   });
 
+  it("links Jira keys in the title on create and rename, but not keys only in the description", () => {
+    const { s, project } = setup();
+    const jiraKeys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : []));
+    const idea = s.tasks.create({ projectId: project.id, title: "CORE-1245 Fix login", actor: "agent" });
+    const planned = s.tasks.create({
+      projectId: project.id,
+      title: "Fix PAY-7 (UTF-8)",
+      description: "See OPS-9",
+      plan: plan("a"),
+      links: [{ value: "PAY-7" }],
+    });
+    expect(jiraKeys(idea.id)).toEqual(["CORE-1245"]);
+    expect(idea.events.find((e) => e.type === "link_added")).toMatchObject({ actor: "agent" });
+    expect(jiraKeys(planned.id)).toEqual(["PAY-7"]);
+
+    s.tasks.update(idea.id, { title: "CORE-1245 and CORE-1246 Fix login" }, "agent");
+    s.tasks.update(idea.id, { title: "CORE-1245 and CORE-1246: fix login" }, "agent");
+    expect(jiraKeys(idea.id)).toEqual(["CORE-1245", "CORE-1246"]);
+    expect(s.tasks.detail(idea.id).events.filter((e) => e.type === "link_added")).toHaveLength(2);
+  });
+
   it("archives via update and records lastNote", () => {
     const { s, project } = setup();
     const task = s.tasks.create({ projectId: project.id, title: "T" });
