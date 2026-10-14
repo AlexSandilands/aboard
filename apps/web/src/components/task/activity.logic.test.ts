@@ -27,6 +27,14 @@ describe("describeEvent", () => {
     });
   });
 
+  it("explains a resolution whose task was deleted", () => {
+    expect(describeEvent(event("resolver_deleted", { number: 7, title: "Ship it" }), ctx)).toEqual({
+      icon: "delete",
+      text: "deleted #7, which closed this",
+      quote: null,
+    });
+  });
+
   it("describes closing and reopening", () => {
     const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx).text;
     expect(text("closed", { resolution: "completed", byTask: 4 })).toBe("closed this as done by #4");
@@ -34,6 +42,9 @@ describe("describeEvent", () => {
     expect(text("closed", { resolution: "wont_do" })).toBe("closed this as won't do");
     expect(text("status_changed", { from: "done", to: "idea", clearedResolution: "wont_do" })).toBe(
       "reopened this and moved to Ideas",
+    );
+    expect(text("status_changed", { from: "review", to: "done", mergedPr: "acme/app#12" })).toBe(
+      "moved to Done when acme/app#12 merged",
     );
   });
 

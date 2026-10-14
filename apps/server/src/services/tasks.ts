@@ -177,7 +177,7 @@ export function createTasksService(
       return service.detail(id);
     },
 
-    move(id, input, actor) {
+    move(id, input, actor, because) {
       core.write((fx) => {
         const current = record(id);
         const status = input.status ?? current.status;
@@ -204,6 +204,7 @@ export function createTasksService(
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         if (statusChanged) {
           fx.log(id, actor, "status_changed", {
+            ...because,
             from: current.status,
             to: status,
             ...(reopened ? { clearedResolution: current.resolution } : {}),
@@ -248,6 +249,25 @@ export function createTasksService(
         repos.tasks.update({ ...task, updatedAt: now });
         fx.task(id);
         return repos.events.append(id, now, actor, "note", { text: body });
+      });
+    },
+
+    delete(id, actor) {
+      core.write((fx) => {
+        const task = record(id);
+        if (task.archivedAt === null) {
+          throw new AppError(
+            "VALIDATION",
+            `Archive #${task.number} before deleting it; only archived tasks can be deleted`,
+          );
+        }
+        // Tasks closed against this one keep their resolution; their log records what they pointed at.
+        for (const resolved of repos.tasks.resolvedBy([id])) {
+          fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
+        }
+        if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+        repos.tasks.delete(id);
+        fx.taskDeleted(id);
       });
     },
   };

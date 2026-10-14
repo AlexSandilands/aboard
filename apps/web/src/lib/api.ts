@@ -5,6 +5,7 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     message: string,
     readonly status: number,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -54,7 +55,12 @@ export async function api<T>(
   const json = (await res.json().catch(() => null)) as unknown;
   if (!res.ok) {
     const err = (json as ApiErrorBody | null)?.error;
-    throw new ApiError(err?.code ?? "INTERNAL", err?.message ?? `Request failed (${res.status})`, res.status);
+    throw new ApiError(
+      err?.code ?? "INTERNAL",
+      err?.message ?? `Request failed (${res.status})`,
+      res.status,
+      err?.details,
+    );
   }
   return json as T;
 }

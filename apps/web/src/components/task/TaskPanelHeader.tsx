@@ -12,6 +12,7 @@ import {
   ListTodoIcon,
   RotateCcwIcon,
   SquareCheckIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -32,8 +33,12 @@ import {
 } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { isPlanRequired, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
+import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
+import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
+import { isPlanRequired, useDeleteTask, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { useBoard, useSettings } from "~/state/queries";
 import { copyToClipboard } from "./InlineInput";
 import { resolutionLabel } from "./resolution.logic";
 
@@ -53,10 +58,17 @@ export function TaskPanelHeader({
   const { mutate: moveTask } = useMoveTask();
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: resolveTask } = useResolveTask();
+  const { mutate: deleteTask } = useDeleteTask();
   const [closeAs, setCloseAs] = useState<PickResolution | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const resolution = resolutionLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
+  const t3 = useBoard().data?.integrations.t3;
+  const settings = useSettings().data;
+  const taskProject = projects.find((p) => p.id === task.projectId);
+  const handoff = showHandoffActions(task);
+  const startT3 = handoff && !!t3 && canStartT3Thread(task, taskProject, t3, settings);
 
   const setStatus = (status: TaskStatus) => {
     if (status === task.status) return;
@@ -106,6 +118,14 @@ export function TaskPanelHeader({
       ) : null}
 
       <div className="ms-auto flex items-center gap-0.5">
+        {startT3 ? <StartT3Button taskId={task.id} variant="panel" /> : null}
+        {handoff ? <CopyPromptMenu task={task} variant="panel" /> : null}
+        {task.status === "done" && !archived ? (
+          <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
+            <ArchiveIcon />
+            Archive
+          </Button>
+        ) : null}
         <Menu>
           <MenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Task actions" />}>
             <EllipsisIcon />
@@ -170,6 +190,13 @@ export function TaskPanelHeader({
               {archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
               {archived ? "Unarchive" : "Archive"}
             </MenuItem>
+            {archived ? (
+              // Deleting is a second step after archiving, so it never sits next to everyday actions.
+              <MenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2Icon />
+                Delete permanently…
+              </MenuItem>
+            ) : null}
             <MenuSeparator />
             <MenuItem onClick={copyLink}>
               <LinkIcon />
@@ -189,6 +216,19 @@ export function TaskPanelHeader({
         </Tooltip>
       </div>
       <CloseTaskDialog task={task} resolution={closeAs} onOpenChange={(open) => !open && setCloseAs(null)} />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete #${task.number}?`}
+        description="This permanently deletes the task with its plan, links and activity. It can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          // Close up front: task.deleted can arrive before the response and flash "Task not found".
+          // Failures still toast, since the hook's onError outlives the panel.
+          deleteTask(task.id);
+          onClose();
+        }}
+      />
     </header>
   );
 }

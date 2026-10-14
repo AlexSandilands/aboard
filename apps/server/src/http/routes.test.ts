@@ -62,10 +62,24 @@ describe("REST", () => {
       json: { status: "in_progress" },
     });
     expect(((await moved.json()) as { status: string }).status).toBe("in_progress");
-    expect((await h.request(`/api/tasks/${h.task.id}`, { method: "DELETE" })).status).toBe(204);
+    const archived = await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { archived: true } });
+    expect(archived.status).toBe(200);
     const board = (await (await h.request("/api/board")).json()) as { tasks: unknown[]; projects: unknown[] };
     expect(board.tasks).toHaveLength(0);
     expect(board.projects).toHaveLength(1);
+  });
+
+  it("deletes a task permanently only once it is archived", async () => {
+    const h = await setup();
+    const active = await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" });
+    expect(active.status).toBe(400);
+    expect(await errorCode(active)).toBe("VALIDATION");
+
+    await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { archived: true } });
+    expect((await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" })).status).toBe(204);
+    expect((await h.request(`/api/tasks/${h.task.id}`)).status).toBe(404);
+    const archivedList = (await (await h.request("/api/tasks?includeArchived=true")).json()) as unknown[];
+    expect(archivedList).toHaveLength(0);
   });
 
   it("closes a task by #number reference and validates the pairing", async () => {
@@ -107,5 +121,15 @@ describe("REST", () => {
     expect(await res.json()).toMatchObject({ t3TokenSet: true });
     const status = await h.request("/api/integrations/status");
     expect(await status.json()).toMatchObject({ t3: { detected: false }, github: { available: false } });
+  });
+
+  it("validates T3 thread launches and explains when T3 Code isn't available", async () => {
+    const h = await setup();
+    const bad = await h.request(`/api/tasks/${h.task.id}/t3-thread`, { method: "POST", json: { prompt: "" } });
+    expect(bad.status).toBe(400);
+    const options = await h.request(`/api/tasks/${h.task.id}/t3-launch-options`);
+    expect(options.status).toBe(400);
+    expect(((await options.json()) as ApiErrorBody).error.message).toBe("T3 Code is not running");
+    expect((await h.request("/api/tasks/missing/t3-launch-options")).status).toBe(404);
   });
 });

@@ -26,7 +26,8 @@ Status: **approved scope, ready to build.** Style source of truth: [STYLE_REFERE
 - Jira API sync (links only). Azure DevOps / Bitbucket PR status (links only; GitHub via `gh` only).
 - Git clone / "new repo" project sources. Projects are added by local folder, by T3 import, or as path-less projects.
 - Custom columns, custom themes, mobile layout, cross-lane drag (moving a task between projects is a field edit).
-- Any modification of T3 Code or writes to its data.
+- Any modification of T3 Code or writes to its data files. _(Revised: the board may start threads through T3's own
+  API when the user asks; see [integrations/agent-handoff.md](integrations/agent-handoff.md).)_
 
 ---
 
@@ -165,7 +166,7 @@ src/
 **REST (all JSON, zod-validated):**
 - `GET /api/board`
 - `GET|POST /api/projects`, `PATCH|DELETE /api/projects/:id`, `POST /api/projects/reorder`
-- `GET /api/tasks/:id` (detail), `POST /api/tasks`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/move {status, beforeId?, afterId?}`, `DELETE /api/tasks/:id` (archive)
+- `GET /api/tasks/:id` (detail), `POST /api/tasks`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/move {status, beforeId?, afterId?}`, `DELETE /api/tasks/:id` (permanent delete; archived tasks only)
 - `PUT /api/tasks/:id/plan` (replace), `PATCH /api/steps/:id`, `POST /api/phases/:id/steps`, `POST /api/tasks/:id/phases`, `POST /api/steps/:id/move`, `DELETE /api/steps/:id`, `DELETE /api/phases/:id`
 - `POST /api/tasks/:id/links`, `DELETE /api/links/:id`, `POST /api/tasks/:id/notes`
 - `GET /api/fs/browse?path=` (directories only, `~` expansion, Windows drive roots)
@@ -187,6 +188,7 @@ Tools take an optional `actor` label (default: the client name from initialize).
 | `update_step` | status and/or notes (append or replace) by step id. Also accepts `stepNumber` ("2.3"). |
 | `move_task` | Change status; returns `PLAN_REQUIRED` guidance when gated. |
 | `update_task` | title, description, archive; explicit `moveToProjectId`/`moveToWorkspacePath` to move projects. |
+| `delete_task` | Permanently delete an archived task (plan, links and activity cascade). Refuses active tasks. |
 | `add_note` | Free-form progress note → activity log ("handover notes"). |
 | `link` | Attach PR URL / Jira key / T3 thread `{environmentId, threadId}` / URL. Idempotent. |
 
@@ -205,7 +207,7 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
   - browser: `<origin>/<environmentId>/<threadId>`
   - A setting picks the primary link (default: desktop), and the other is in a menu.
   - Thread links store their own `environmentId`, so links survive T3 restarts and can point at other environments.
-- **Live thread status (opt-in):** the user pastes a token minted with `t3 auth session issue --scopes orchestration:read --token-only`. Every 20s while any browser is connected, poll `GET <origin>/api/orchestration/shell` with `Authorization: Bearer` and `x-t3-orchestration-protocol: 2`. Map linked threads to `{title, status}` (working / waiting / input / failed / done) and update the link snapshot. **Verify this request shape against the live server in phase 4 before building UI on it. If the bearer isn't accepted on that route, ship without live status — it's a nice-to-have.**
+- **Live thread status (opt-in):** the user pastes a token minted with `t3 auth session issue --scope orchestration:read --token-only`. Every 20s while any browser is connected, poll `GET <origin>/api/orchestration/shell` with `Authorization: Bearer` and `x-t3-orchestration-protocol: 2`. Map linked threads to `{title, status}` (working / waiting / input / failed / done) and update the link snapshot. **Verify this request shape against the live server in phase 4 before building UI on it. If the bearer isn't accepted on that route, ship without live status — it's a nice-to-have.**
 - **Project import:** "Import from T3 Code" lists T3 projects not already present (matched by `workspace_key`) and imports the selected ones with title + `project_icon_json`.
   - Source 1: the shell API, if a token is configured.
   - Source 2: copy `statev2.sqlite` (+ `-wal`, `-shm` if present) to a temp dir, open the copy read-only with `node:sqlite`, and `SELECT project_id, title, workspace_root, project_icon_json FROM projection_projects WHERE deleted_at IS NULL`. Delete the copy afterwards. **Never open T3's live database file directly.**
@@ -312,7 +314,7 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
 
 **Project settings** (dialog from the gear): name, icon (picker dialog), workspace path (browse), linked T3 project (auto-matched, shown read-only), archive project.
 
-**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http aboard http://127.0.0.1:4317/mcp`, the Codex equivalent, and the skill install path).
+**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http aboard http://127.0.0.1:4317/mcp`, the Codex, GitHub Copilot CLI and Copilot-in-VS-Code equivalents, and the skill install path).
 
 **Client state:**
 - TanStack Query for the board snapshot + task detail. A `useBoardEvents()` hook opens `EventSource('/events')` and patches the cache: `task.upserted` replaces the summary; `task.detail_changed` invalidates detail if open.

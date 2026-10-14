@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,9 @@ import {
   normalizeWorkspaceKey,
   ProjectIcon,
   type Project,
+  type StartT3ThreadInput,
   type T3IntegrationStatus,
+  type T3LaunchOptions,
   type T3ProjectCandidate,
   type T3ThreadSnapshot,
   type TaskLink,
@@ -15,8 +18,17 @@ import {
 import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
-import type { LinksService, ProjectsService, SettingsService } from "../services/types.ts";
+import type { LinksService, ProjectsService, SettingsService, TasksService } from "../services/types.ts";
 import { messageOf } from "./github.ts";
+import {
+  buildLaunchOptions,
+  resolveT3Project,
+  toWorkspaceStrategy,
+  WireLaunchResult,
+  WireRefs,
+  WireServerConfig,
+} from "./t3Launch.ts";
+import { openT3Rpc, T3RpcError, type OpenSocket, type T3RpcSession } from "./t3Rpc.ts";
 import type { Logger } from "./util.ts";
 
 export const DISCOVERY_INTERVAL_MS = 60_000;
@@ -47,6 +59,10 @@ export const ShellThread = z.object({
   pendingRuntimeRequest: z.object({ kind: z.string() }).loose().nullish(),
   pendingBackgroundTasks: z.array(z.object({ kind: z.string() }).loose()).optional(),
   lastErrorClass: z.string().nullish(),
+  branch: z.string().nullish(),
+  worktreePath: z.string().nullish(),
+  updatedAt: z.string().nullish(),
+  archivedAt: z.string().nullish(),
 });
 export type ShellThread = z.infer<typeof ShellThread>;
 
@@ -56,6 +72,7 @@ const ShellProject = z.object({
   title: z.string(),
   workspaceRoot: z.string(),
   projectIcon: z.unknown().optional(),
+  defaultModelSelection: z.unknown().optional(),
 });
 
 export const ShellSnapshot = z.object({
@@ -157,6 +174,15 @@ export async function discoverT3(t3Home: string, fetchFn: FetchFn): Promise<Disc
 
 export class ShellError extends Error {}
 
+/** Parses a T3 response; a mismatch means T3's protocol moved on, which the user should hear about. */
+function parseWire<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError("VALIDATION", `Unexpected ${what} from T3 Code (its protocol may have changed)`);
+  }
+  return parsed.data;
+}
+
 /** GET /api/orchestration/shell with a CLI-issued bearer session token (scope orchestration:read). */
 export async function fetchShell(origin: string, token: string, fetchFn: FetchFn): Promise<ShellSnapshot> {
   let response: Response;
@@ -185,12 +211,13 @@ export interface T3SqliteProject {
 
 /**
  * Reads projects from a private temp copy of `statev2.sqlite` (+ -wal/-shm). T3's live
- * database file is never opened. The copy is deleted before returning.
+ * database file is never opened. The copy is deleted before returning. `tempRoot` is injectable so
+ * tests can observe cleanup in a private directory.
  */
-export function readT3ProjectsFromSqlite(t3Home: string): T3SqliteProject[] {
+export function readT3ProjectsFromSqlite(t3Home: string, tempRoot: string = tmpdir()): T3SqliteProject[] {
   const source = join(t3Home, "userdata", "statev2.sqlite");
   if (!existsSync(source)) return [];
-  const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3-`));
+  const dir = mkdtempSync(join(tempRoot, `${BRAND.id}-t3-`));
   try {
     const copy = join(dir, "statev2.sqlite");
     copyFileSync(source, copy);
@@ -247,9 +274,10 @@ function openCopy(path: string): DatabaseSync {
 // ── Integration ──────────────────────────────────────────────────────────
 
 export interface T3Services {
-  links: Pick<LinksService, "listByKind" | "setSnapshot">;
+  links: Pick<LinksService, "listByKind" | "setSnapshot" | "add">;
   settings: Pick<SettingsService, "t3Token">;
-  projects: Pick<ProjectsService, "list" | "create">;
+  projects: Pick<ProjectsService, "list" | "create" | "get">;
+  tasks: Pick<TasksService, "summary">;
 }
 
 type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
@@ -261,6 +289,10 @@ export interface T3Integration {
   pollLive(): Promise<void>;
   listProjects(): Promise<T3ProjectCandidate[]>;
   importProjects(ids: string[]): Promise<Project[]>;
+  /** Models, refs and defaults for the "Start in T3 Code" dialog of a task. */
+  launchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
+  startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Refreshes one thread link. Returns false when it is not a T3 thread link. */
   refresh(link: TaskLink): Promise<boolean>;
   test(): Promise<T3IntegrationStatus>;
@@ -273,6 +305,7 @@ export function createT3Integration(deps: {
   bus: EventBus;
   services: () => T3Services;
   fetch?: FetchFn;
+  openSocket?: OpenSocket;
   log?: Logger;
 }): T3Integration {
   const fetchFn: FetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
@@ -374,6 +407,82 @@ export function createT3Integration(deps: {
     return polling;
   };
 
+  /** The task's T3 project and the live shell, or a clear reason why a thread can't be started. */
+  const launchContext = async (taskId: string) => {
+    await ensureDiscovered();
+    const { origin, environmentId } = discovery;
+    if (!discovery.detected || !origin || !environmentId) throw new AppError("VALIDATION", "T3 Code is not running");
+    const bearer = token();
+    if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
+    const task = deps.services().tasks.summary(taskId);
+    const project = deps.services().projects.get(task.projectId);
+    const shell = await loadShell();
+    if (!shell) throw new AppError("VALIDATION", live.error ?? "T3 Code is unavailable");
+    const t3Project = resolveT3Project(project, shell);
+    if (!t3Project) throw new AppError("VALIDATION", `${project.title} isn't a project in T3 Code`);
+    return { task, shell, t3Project, origin, environmentId, bearer };
+  };
+
+  /** Runs requests on one RPC session, closing it afterwards and turning RPC failures into AppErrors. */
+  const withRpc = async <T>(origin: string, bearer: string, run: (rpc: T3RpcSession) => Promise<T>): Promise<T> => {
+    let rpc: T3RpcSession | null = null;
+    try {
+      rpc = await openT3Rpc({
+        origin,
+        token: bearer,
+        fetch: fetchFn,
+        ...(deps.openSocket ? { openSocket: deps.openSocket } : {}),
+      });
+      return await run(rpc);
+    } catch (error) {
+      if (error instanceof T3RpcError) throw new AppError("VALIDATION", error.message, { t3: error.kind });
+      throw error;
+    } finally {
+      rpc?.close();
+    }
+  };
+
+  const launchOptions = async (taskId: string): Promise<T3LaunchOptions> => {
+    const ctx = await launchContext(taskId);
+    return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
+      const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
+      // Refs are optional: a folder that isn't a git repo (or a failed listing) just offers the current checkout.
+      const refs = await rpc
+        .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
+        .then((value) => WireRefs.safeParse(value).data ?? null)
+        .catch(() => null);
+      return buildLaunchOptions({ config, refs, shell: ctx.shell, t3Project: ctx.t3Project });
+    });
+  };
+
+  const startThread = async (taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink> => {
+    const ctx = await launchContext(taskId);
+    const { options, ...selection } = input.modelSelection;
+    const result = await withRpc(ctx.origin, ctx.bearer, async (rpc) =>
+      parseWire(
+        WireLaunchResult,
+        await rpc.request("orchestration.launchThread", {
+          commandId: input.commandId ?? randomUUID(),
+          projectId: ctx.t3Project.id,
+          title: `#${ctx.task.number} ${ctx.task.title}`,
+          modelSelection: options.length > 0 ? { ...selection, options } : selection,
+          runtimeMode: input.runtimeMode,
+          // T3's plan mode sits behind a client beta flag the board can't read; a thread started in it may
+          // have no visible way out. "Plan with me" is carried by the prompt instead.
+          interactionMode: "default",
+          workspaceStrategy: toWorkspaceStrategy(input.workspace),
+          initialMessage: { text: input.prompt, attachments: [] },
+        }),
+        "launch result",
+      ),
+    );
+    const link = deps
+      .services()
+      .links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId: result.threadId } }, actor);
+    void pollLive();
+    return link;
+  };
+
   const listProjects = async (): Promise<T3ProjectCandidate[]> => {
     await ensureDiscovered();
     let source: T3SqliteProject[] | null = null;
@@ -413,6 +522,8 @@ export function createT3Integration(deps: {
     discover,
     pollLive,
     listProjects,
+    launchOptions,
+    startThread,
     async importProjects(ids) {
       const wanted = new Set(ids);
       const candidates = (await listProjects()).filter((c) => wanted.has(c.t3ProjectId) && !c.existingProjectId);

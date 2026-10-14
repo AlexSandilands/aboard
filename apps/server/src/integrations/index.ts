@@ -3,6 +3,7 @@ import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import { createGithubIntegration, type RunGh } from "./github.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
+import type { OpenSocket } from "./t3Rpc.ts";
 import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
@@ -17,6 +18,7 @@ export interface IntegrationDeps {
 export interface IntegrationOverrides {
   runGh?: RunGh;
   fetch?: FetchFn;
+  openSocket?: OpenSocket;
   log?: Logger;
 }
 
@@ -32,6 +34,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     bus: deps.bus,
     services: deps.services,
     ...(overrides.fetch ? { fetch: overrides.fetch } : {}),
+    ...(overrides.openSocket ? { openSocket: overrides.openSocket } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   let started = false;
@@ -58,5 +61,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       await t3.refresh(link);
     },
     testT3: () => t3.test(),
+    t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
+    startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
   };
 }

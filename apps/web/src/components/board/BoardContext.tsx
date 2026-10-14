@@ -1,4 +1,4 @@
-import type { AppSettings, T3IntegrationStatus } from "@repo/contracts";
+import type { AppSettings, Project, T3IntegrationStatus } from "@repo/contracts";
 import { createContext, use, type RefObject } from "react";
 
 /**
@@ -11,6 +11,7 @@ export interface BoardContextValue {
   suppressClickRef: RefObject<boolean>;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
+  projects: ReadonlyArray<Project>;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

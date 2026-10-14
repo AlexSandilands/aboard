@@ -1,11 +1,18 @@
-import { classifyLink, t3DesktopThreadUrl, type ClassifiedLink, type LinkInput, type TaskLink } from "@repo/contracts";
+import {
+  classifyLink,
+  t3DesktopThreadUrl,
+  type ClassifiedLink,
+  type LinkInput,
+  type PrSnapshot,
+  type TaskLink,
+} from "@repo/contracts";
 import { randomUUID } from "node:crypto";
-import { nowIso } from "../db/database.ts";
+import { nowIso, parseJson } from "../db/database.ts";
 import { toLink, type LinkRow } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
-import type { LinksService, SettingsService } from "./types.ts";
+import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
 export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null): ClassifiedLink {
@@ -38,12 +45,54 @@ const refJson = (c: ClassifiedLink): string | null => {
   }
 };
 
+/** Actor recorded when merged pull requests move a task to Done. */
+export const GITHUB_ACTOR = "github";
+
+type PolledPr = Extract<TaskLink, { kind: "pr" }> & { ref: NonNullable<Extract<TaskLink, { kind: "pr" }>["ref"]> };
+
+const isFinished = (state: PrSnapshot["state"] | null | undefined): boolean => state === "merged" || state === "closed";
+
+/** A task's polled PRs: links without a ref are never fetched, so they can't hold a task back. */
+const polledPrs = (links: readonly TaskLink[]): PolledPr[] =>
+  links.filter((l): l is PolledPr => l.kind === "pr" && l.ref !== null);
+
+/**
+ * True when a task's pull requests are done with: every polled PR is merged or closed, and at least one merged.
+ * A PR not fetched yet counts as unfinished, so one merge can't finish a task whose other PR is still open.
+ */
+export function prsCompleteTask(links: readonly TaskLink[]): boolean {
+  const prs = polledPrs(links);
+  return prs.some((l) => l.snapshot?.state === "merged") && prs.every((l) => isFinished(l.snapshot?.state));
+}
+
 /** Task links (PRs, Jira, T3 threads, URLs) and their poller snapshots. */
 export function createLinksService(
   core: Core,
-  deps: { task: (id: string) => TaskRecord; settings: SettingsService },
+  deps: { task: (id: string) => TaskRecord; tasks: Pick<TasksService, "move">; settings: SettingsService },
 ): LinksService {
   const { repos } = core;
+
+  /**
+   * Moves a Review task to Done once its PRs are finished. Only runs when this PR has just become merged or
+   * closed, so re-polling a merged PR never pulls back a task the user moved out of Done.
+   */
+  const completeOnMerge = (row: LinkRow, before: string | null): void => {
+    const wasFinished = isFinished(parseJson<PrSnapshot>(before)?.state);
+    if (wasFinished || !isFinished(parseJson<PrSnapshot>(row.snapshot_json)?.state)) return;
+    const task = deps.task(row.task_id);
+    if (task.status !== "review" || task.archivedAt !== null) return;
+    const links = repos.links.forTasks([task.id]).map(toLink);
+    if (!prsCompleteTask(links)) return;
+    const merged = polledPrs(links).filter((l) => l.snapshot?.state === "merged");
+    const pr = merged.find((l) => l.id === row.id) ?? merged[0]!;
+    try {
+      deps.tasks.move(task.id, { status: "done" }, GITHUB_ACTOR, { mergedPr: `${pr.ref.repo}#${pr.ref.number}` });
+    } catch (error) {
+      // move's plan check rejects a Review task whose steps were all removed; keep the snapshot rather than roll it back.
+      if (error instanceof AppError && error.code === "PLAN_REQUIRED") return;
+      throw error;
+    }
+  };
 
   const rowOrThrow = (id: string): LinkRow => {
     const row = repos.links.row(id);
@@ -92,7 +141,9 @@ export function createLinksService(
         const row = rowOrThrow(linkId);
         const json = snapshot ? JSON.stringify(snapshot) : null;
         repos.links.setSnapshot(linkId, json, nowIso());
-        if (json !== row.snapshot_json) fx.task(row.task_id);
+        if (json === row.snapshot_json) return;
+        fx.task(row.task_id);
+        if (row.kind === "pr") completeOnMerge({ ...row, snapshot_json: json }, row.snapshot_json);
       });
     },
   };

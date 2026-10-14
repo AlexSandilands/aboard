@@ -146,8 +146,14 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   const suppressClickRef = useRef(false);
   const context = useMemo<BoardContextValue>(
-    () => ({ openTask: (id) => void openTask(id), suppressClickRef, t3: board.integrations.t3, settings }),
-    [openTask, board.integrations.t3, settings],
+    () => ({
+      openTask: (id) => void openTask(id),
+      suppressClickRef,
+      t3: board.integrations.t3,
+      settings,
+      projects: board.projects,
+    }),
+    [openTask, board.integrations.t3, settings, board.projects],
   );
 
   const sensors = useSensors(

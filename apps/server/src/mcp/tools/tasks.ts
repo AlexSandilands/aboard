@@ -32,7 +32,7 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
   return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
 }
 
-/** Task lifecycle tools: create_idea, create_task, move_task, close_task, update_task, add_note. */
+/** Task lifecycle tools: create_idea, create_task, move_task, close_task, update_task, delete_task, add_note. */
 export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
   server.registerTool(
     "create_idea",
@@ -228,6 +228,29 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           actor(args.actor),
         );
         return taskResult(services, task.id, `Updated #${task.number}.`);
+      }),
+  );
+
+  server.registerTool(
+    "delete_task",
+    {
+      title: "Permanently delete an archived task",
+      description:
+        "Permanently delete a task with its plan, links and activity log. This cannot be undone. The task must be " +
+        "archived first (update_task with archived: true), so deleting is always a deliberate second step. Only " +
+        "delete when the user asks for it; to close finished or unwanted work use close_task or move_task instead. " +
+        "Tasks that were closed against this one keep their resolution but lose the link to it.",
+      inputSchema: {
+        task: taskField,
+        actor: actorField,
+      },
+    },
+    (args) =>
+      run(() => {
+        const id = services.tasks.resolveId(args.task);
+        const { number, title } = services.tasks.summary(id);
+        services.tasks.delete(id, actor(args.actor));
+        return textResult(`Deleted #${number} "${title}" permanently.`);
       }),
   );
 

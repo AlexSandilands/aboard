@@ -4,6 +4,7 @@ import type {
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  T3LaunchOptions,
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
@@ -21,6 +22,7 @@ export const queryKeys = {
   integrations: ["integrations"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
+  t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
 };
 
 /** The whole board: projects, task summaries and T3 status. Kept live by useBoardEvents. */
@@ -75,6 +77,19 @@ export function useT3ProjectCandidates(enabled: boolean) {
   });
 }
 
+/** Models, refs and defaults for starting a T3 Code thread. Fetched fresh each time the dialog opens. */
+export function useT3LaunchOptions(taskId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.t3LaunchOptions(taskId ?? ""),
+    queryFn: ({ signal }) =>
+      api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/t3-launch-options`, { signal }),
+    enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
 /** Directory listing for the add-project folder browser. Empty path = home directory. */
 export function useFsBrowse(path: string, enabled: boolean) {
   return useQuery({
@@ -119,6 +134,10 @@ export function useBoardEvents() {
       // The server pairs every task.upserted with a task.detail_changed, so detail only listens to the latter.
       if (event.type === "task.detail_changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });
+      }
+      // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
+      if (event.type === "task.deleted") {
+        void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
       }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {

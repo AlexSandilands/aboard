@@ -11,6 +11,8 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
   closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or `close_task` over MCP). It
   moves to Done without a plan, and the other task lists it under "Also resolved". Moving it out of Done
   reopens it. Archive is for clearing cards away, not for resolving them.
+- **Deleting:** an archived task can be deleted permanently, with its plan, links and activity (task
+  menu, or `delete_task` over MCP). Archive first; active tasks can't be deleted.
 - **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
   conversation), any URL. Failing checks, requested changes and blocked steps surface under
   **Needs attention**. Jira keys in a task title are linked automatically, and agents are told which
@@ -73,6 +75,14 @@ The MCP endpoint is `http://127.0.0.1:4317/mcp`.
 ```sh
 claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
 codex mcp add aboard --url http://127.0.0.1:4317/mcp
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp   # GitHub Copilot CLI
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'   # GitHub Copilot in VS Code
+```
+
+For GitHub Copilot in VS Code you can also add this to `.vscode/mcp.json` (note the `servers` key):
+
+```json
+{ "servers": { "aboard": { "type": "http", "url": "http://127.0.0.1:4317/mcp" } } }
 ```
 
 Then give your agent the workflow:
@@ -91,12 +101,17 @@ When T3 Code is running, it is detected automatically.
   panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
   choose in Settings).
 - **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
-  writes to T3 Code's data.
-- **Live thread status:** mint a read-only token and paste it in Settings → T3 Code:
+  touches T3 Code's data files (it only starts threads through T3's own API when you ask it to).
+- **Live thread status and Start in T3 Code:** mint a token and paste it in Settings → T3 Code:
   ```sh
-  t3 auth session issue --scopes orchestration:read --token-only
+  t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
   ```
-  Linked threads then show whether they're working, waiting for input, or done.
+  Linked threads then show whether they're working, waiting for input, or done, and cards get a
+  **Start in T3 Code** button that opens a new thread for the task (model, access, worktree and
+  branch are picked in a dialog). `orchestration:read` alone is enough for status only.
+- **Copy prompt:** every open task has a button that copies a ready-to-paste prompt for any agent
+  (Claude Code, Copilot, …), with a planning variant for rough ideas. See
+  [docs/integrations/agent-handoff.md](docs/integrations/agent-handoff.md).
 
 ## Keyboard
 
