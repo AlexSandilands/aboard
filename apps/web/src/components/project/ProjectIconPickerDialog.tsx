@@ -3,7 +3,7 @@ import { deriveProjectIdentity, ProjectIcon, type ProjectIconColor } from "@repo
 import { ProjectMonogram } from "./ProjectMonogram";
 import { DynamicIcon, type IconName } from "lucide-react/dynamic";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { imageFileToIconDataUrl } from "./projectIconImage";
+import { IconImageError, imageFileToIconDataUrl } from "./projectIconImage";
 import {
   filterProjectIconNames,
   firstEmoji,
@@ -66,6 +66,8 @@ export function ProjectIconPickerDialog({
   const [image, setImage] = useState(current?.kind === "image" ? current.dataUrl : null);
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Bumped per pick and per open, so a slow conversion can't land over a newer pick or a reopen.
+  const imageRequestRef = useRef(0);
   const previousOpenRef = useRef(false);
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export function ProjectIconPickerDialog({
       setCustomEmoji("");
       setImage(current?.kind === "image" ? current.dataUrl : null);
       setImageError(null);
+      imageRequestRef.current += 1;
     }
     previousOpenRef.current = open;
   }, [current, open, automatic.color, automatic.monogram]);
@@ -102,30 +105,45 @@ export function ProjectIconPickerDialog({
     onOpenChange(false);
   };
 
-  const takeImageFile = (file: File | undefined) => {
-    if (!file) return;
+  const takeImageFile = async (file: File | undefined) => {
+    const request = ++imageRequestRef.current;
+    if (!file) {
+      setImageError("Choose an image file.");
+      return;
+    }
     setImageError(null);
-    imageFileToIconDataUrl(file).then(setImage, (error: unknown) =>
-      setImageError(error instanceof Error ? error.message : "That image couldn't be used."),
-    );
+    try {
+      const dataUrl = await imageFileToIconDataUrl(file);
+      if (request === imageRequestRef.current) setImage(dataUrl);
+    } catch (error) {
+      if (request !== imageRequestRef.current) return;
+      setImageError(error instanceof IconImageError ? error.message : "That image couldn't be used.");
+    }
   };
   const imageFrom = (items: DataTransferItemList) =>
-    [...items].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile() ?? undefined;
+    [...items]
+      .find((item) => item.kind === "file" && (item.type === "" || item.type.startsWith("image/")))
+      ?.getAsFile() ?? undefined;
   const onPaste = (event: ClipboardEvent) => {
     if (mode !== "image") return;
     const file = imageFrom(event.clipboardData.items);
     if (!file) return;
     event.preventDefault();
-    takeImageFile(file);
+    void takeImageFile(file);
+  };
+  // Handled on the whole popup so a drop that misses the zone doesn't navigate away to the file.
+  const onDragOver = (event: DragEvent) => {
+    if (mode === "image") event.preventDefault();
   };
   const onDrop = (event: DragEvent) => {
+    if (mode !== "image") return;
     event.preventDefault();
-    takeImageFile(imageFrom(event.dataTransfer.items));
+    void takeImageFile(imageFrom(event.dataTransfer.items));
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="w-full sm:w-[32rem]" onPaste={onPaste}>
+      <DialogPopup className="w-full sm:w-[32rem]" onPaste={onPaste} onDragOver={onDragOver} onDrop={onDrop}>
         <DialogHeader>
           <DialogTitle>Choose project icon</DialogTitle>
           <DialogDescription>Choose an icon, emoji, monogram, or image.</DialogDescription>
@@ -223,11 +241,7 @@ export function ProjectIconPickerDialog({
               </div>
             </div>
           ) : mode === "image" ? (
-            <div
-              className="flex items-center gap-4 rounded-lg border border-dashed border-border p-4"
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={onDrop}
-            >
+            <div className="flex items-center gap-4 rounded-lg border border-dashed border-border p-4">
               {image ? (
                 <img src={image} alt="Selected icon" className="size-12 shrink-0 rounded-[25%] object-contain" />
               ) : (
@@ -240,7 +254,8 @@ export function ProjectIconPickerDialog({
                   accept="image/*"
                   className="hidden"
                   onChange={(event) => {
-                    takeImageFile(event.currentTarget.files?.[0]);
+                    const file = event.currentTarget.files?.[0];
+                    if (file) void takeImageFile(file);
                     event.currentTarget.value = "";
                   }}
                 />
