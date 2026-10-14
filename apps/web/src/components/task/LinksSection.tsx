@@ -323,7 +323,15 @@ function T3ThreadRow({
       </PanelControl>
       <PanelSplitSeparator />
       <Menu>
-        <MenuTrigger render={<PanelControl part="secondary" aria-label="More thread actions" />}>
+        <MenuTrigger
+          render={
+            <PanelControl
+              part="secondary"
+              aria-label="More thread actions"
+              className={cn(multiThread && "h-auto self-stretch")}
+            />
+          }
+        >
           <ChevronDownIcon className={PANEL_ICON_CLASS} />
         </MenuTrigger>
         <MenuPopup align="end">
