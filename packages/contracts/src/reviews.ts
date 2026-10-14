@@ -214,3 +214,15 @@ export const ResolveFindingInput = z.object({
   note: z.string().optional(),
 });
 export type ResolveFindingInput = z.infer<typeof ResolveFindingInput>;
+
+/** A SKILL.md found on disk, offered as a review skill. */
+export const SkillInfo = z.object({
+  source: z.enum(["global", "project"]),
+  name: z.string(),
+  description: z.string().nullable(),
+  /** Absolute path to the SKILL.md. */
+  path: z.string(),
+  /** The folder it was found in, e.g. "~/.claude/skills" or ".github/skills", for display. */
+  root: z.string(),
+});
+export type SkillInfo = z.infer<typeof SkillInfo>;

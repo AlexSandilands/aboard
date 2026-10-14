@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CloseTaskInput, TaskResolution, TaskStatus, type LinkInput, type T3ThreadRef } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { resolutionText, statusLabel } from "../format.ts";
+import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
   hasProjectRef,
@@ -123,8 +124,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       title: "Move task to a status",
       description:
         "Change a task's status: idea -> planned -> in_progress -> review -> done (any direction is allowed). " +
-        "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when a PR is up (link it first), and to done " +
+        "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
         "when merged or verified. Leaving Ideas requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
+        "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
+        "the review loop; finish it before opening the PR. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
       inputSchema: {
         task: taskField,
@@ -152,7 +155,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             summary.status === args.status
               ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
               : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
-          return taskResult(services, id, moved);
+          const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
+          return taskResult(services, id, review ? `${moved}\n\n${review}` : moved);
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),
@@ -211,6 +215,11 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .optional()
           .describe("Moves the task to the existing project for this workspace path. Omit unless you mean to move it."),
         archived: z.boolean().optional(),
+        autoReview: z
+          .boolean()
+          .nullable()
+          .optional()
+          .describe("Turn local review on or off for this task; null follows the board's setting."),
         actor: actorField,
       },
     },
@@ -229,6 +238,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.planContext !== undefined ? { planContext: args.planContext } : {}),
             ...(projectId ? { projectId } : {}),
             ...(args.archived !== undefined ? { archived: args.archived } : {}),
+            ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
           },
           actor(args.actor),
         );

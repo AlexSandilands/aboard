@@ -2,6 +2,9 @@ import {
   TASK_STATUSES,
   findJiraKeys,
   formatPlanText,
+  isGatingSeverity,
+  reviewBadgeLabel,
+  type ReviewFinding,
   type Project,
   type TaskDetail,
   type TaskEvent,
@@ -86,6 +89,7 @@ export function summaryLine(task: TaskSummary): string {
   }
   const links = task.links.map(shortLink);
   if (links.length) parts.push(links.join(", "));
+  if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
   return `#${task.number} ${task.title}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
@@ -128,6 +132,20 @@ function eventText(event: TaskEvent): string {
     case "link_added":
       what = `linked ${str("kind") ?? ""} ${str("url") ?? ""}`.trimEnd();
       break;
+    case "review_opened":
+      what = `review round ${typeof p.round === "number" ? p.round : "?"} opened`;
+      break;
+    case "review_submitted": {
+      const counts = (p.findings ?? {}) as Record<string, number>;
+      const tally = Object.entries(counts)
+        .filter(([, n]) => n > 0)
+        .map(([severity, n]) => `${n} ${severity}`);
+      what = `review round ${typeof p.round === "number" ? p.round : "?"} submitted: ${tally.join(", ") || "no findings"}`;
+      break;
+    }
+    case "finding_resolved":
+      what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
+      break;
     default: {
       const json = Object.keys(p).length ? ` ${JSON.stringify(p)}` : "";
       what = `${event.type.replace(/_/g, " ")}${json.length > 160 ? `${json.slice(0, 157)}...` : json}`;
@@ -156,6 +174,47 @@ export function missingLinkHints(task: TaskDetail): string[] {
     );
   }
   return hints;
+}
+
+function findingLine(f: ReviewFinding): string {
+  const where = f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : "";
+  const resolution = f.status === "open" ? "" : ` -> ${f.status}${f.resolutionNote ? `: ${f.resolutionNote}` : ""}`;
+  return `  ${f.label} [${f.severity}]${where} ${f.title}${resolution}`;
+}
+
+const indented = (text: string) => text.trim().replace(/\n/g, "\n      ");
+
+/**
+ * The review section: the badge, the latest round's findings in full (with body and suggestion while open),
+ * and open findings left from earlier rounds.
+ */
+function reviewLines(task: TaskDetail): string[] {
+  const latest = task.reviews.at(-1);
+  if (!task.review || !latest) return [];
+  const r = task.review;
+  const lines = [
+    "",
+    `Local review: ${reviewBadgeLabel(r)} (round ${latest.round}, ${r.round} of ${r.maxRounds} this cycle, ${latest.status})`,
+  ];
+  if (latest.summary) lines.push(`  Summary: ${latest.summary}`);
+  if (latest.error) lines.push(`  Error: ${latest.error}`);
+  for (const f of latest.findings) {
+    lines.push(findingLine(f));
+    if (f.status === "open") {
+      if (f.body?.trim()) lines.push(`      ${indented(f.body)}`);
+      if (f.suggestion?.trim()) lines.push(`      Suggestion: ${indented(f.suggestion)}`);
+    }
+  }
+  const earlier = task.reviews.slice(0, -1).flatMap((round) => round.findings.filter((f) => f.status === "open"));
+  if (earlier.length) {
+    lines.push("  Still open from earlier rounds:");
+    for (const f of earlier) lines.push(`  ${findingLine(f)}`);
+  }
+  const gating = [...earlier, ...latest.findings].filter((f) => f.status === "open" && isGatingSeverity(f.severity));
+  if (gating.length) {
+    lines.push(`  Resolve each with resolve_finding(task: "#${task.number}", finding: "<label>", status, note).`);
+  }
+  return lines;
 }
 
 /** Full "where was I" rendering of a task. */
@@ -200,6 +259,8 @@ export function renderTaskDetail(
   } else {
     lines.push("Plan: none yet. Add one with set_plan before moving this out of Ideas.");
   }
+
+  lines.push(...reviewLines(task));
 
   if (task.links.length) {
     lines.push("", "Links:");

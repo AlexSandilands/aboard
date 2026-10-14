@@ -7,7 +7,7 @@ import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { LinksModule } from "./links.ts";
-import type { CloseInput, ProjectsService, TaskQuery, TasksService } from "./types.ts";
+import type { CloseInput, ProjectsService, ReviewsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -29,7 +29,12 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
 /** Task cards: creation, updates, moves between columns, notes. */
 export function createTasksService(
   core: Core,
-  deps: { projects: ProjectsService; plans: () => PlansModule; links: () => LinksModule },
+  deps: {
+    projects: ProjectsService;
+    plans: () => PlansModule;
+    links: () => LinksModule;
+    reviews: () => ReviewsService;
+  },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
 
@@ -219,6 +224,10 @@ export function createTasksService(
           // A merge seen before the task reached Review was used up then; finish it now. Coming back from Done
           // is a deliberate reopen, so it stays put. The follow-up is its own move, logged as "github".
           if (status === "review" && current.status !== "done") deps.links().completeIfPrsDone(id);
+          // Still in Review (not completed by a merged PR just now): with auto-review on, a reviewer is due.
+          if (status === "review" && record(id).status === "review" && deps.reviews().effectiveAutoReview(id)) {
+            deps.reviews().openRoundIn(id, { trigger: "move", actor }, fx);
+          }
         } else fx.task(id);
       });
       return service.summary(id);

@@ -23,6 +23,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     webDist: null,
     t3Home: "/nonexistent",
     pollers: false,
+    userHome: "/nonexistent",
     ...overrides,
   };
 }
