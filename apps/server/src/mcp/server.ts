@@ -13,7 +13,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task.
 - Ideas are cheap: create_idea mid-task for anything worth doing later, then carry on.
 - A task can't leave Ideas without a plan: set_plan (phases of 3-8 concrete, verifiable steps) before moving it to planned/in_progress. create_task makes a planned task in one call.
-- Keep steps current with update_step (in_progress when you start, done when finished). link PRs when opened and move_task to review; done when merged/verified.
+- Keep steps current with update_step (in_progress when you start, done when finished). Before asking the user a question and waiting for the answer, mark the current step blocked with a note saying what you need; set it back to in_progress once answered. link PRs when opened and move_task to review; done when merged/verified.
 - Link the Jira issue at creation: pass its key in links (create_task/create_idea) or call link. Keys in the title are linked automatically. Task results list any "Missing links"; act on them.
 - Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
 - End each session with add_note: a handover of what's done, what's left and the next action.
