@@ -129,7 +129,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
           onDone();
         },
         onError: (error) => {
-          if (!(error instanceof ApiError && keepsCommandId(error.details))) setCommandId(crypto.randomUUID());
+          if (error instanceof ApiError && !keepsCommandId(error.details)) setCommandId(crypto.randomUUID());
           toastManager.add({ type: "error", title: "Couldn't start the thread", description: error.message });
         },
       },

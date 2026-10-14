@@ -38,12 +38,17 @@ export function canStartT3Thread(
 }
 
 /**
- * Whether a failed launch may be retried with the same commandId. Only when T3 may never have seen it (an
- * unreachable/timeout error, which the server tags as `details.t3`): T3 would replay an accepted launch. A
- * command T3 rejected stays rejected under that id, so anything else needs a fresh one.
+ * Whether a failed launch may be retried with the same commandId. Keep it whenever T3 may already have
+ * accepted the launch, since T3 replays an accepted command instead of starting a second thread: an
+ * unreachable/timeout error, a result the board couldn't read (`protocol-after-send`), or an error with no
+ * details at all (the board's own response was lost). The dialog also keeps it for non-ApiError failures such
+ * as a fetch TypeError, which mean the response never arrived. A command T3 rejected stays rejected under that id,
+ * so any other tagged error needs a fresh one.
  */
 export function keepsCommandId(details: unknown): boolean {
-  return (details as { t3?: unknown } | null | undefined)?.t3 === "unreachable";
+  if (details == null) return true;
+  const tag = (details as { t3?: unknown }).t3;
+  return tag === "unreachable" || tag === "protocol-after-send";
 }
 
 // ── Models ───────────────────────────────────────────────────────────────
