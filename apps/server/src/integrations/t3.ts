@@ -64,6 +64,13 @@ export const ShellThread = z.object({
   worktreePath: z.string().nullish(),
   updatedAt: z.string().nullish(),
   archivedAt: z.string().nullish(),
+  settledOverride: z.string().nullish(),
+  providerInstanceId: z.string().nullish(),
+  modelSelection: z.object({ model: z.string().nullish() }).loose().nullish(),
+  latestVisibleMessage: z.object({ updatedAt: z.string().nullish() }).loose().nullish(),
+  latestUserMessageAt: z.string().nullish(),
+  latestRunStartedAt: z.string().nullish(),
+  latestRunCompletedAt: z.string().nullish(),
 });
 export type ShellThread = z.infer<typeof ShellThread>;
 
@@ -109,8 +116,40 @@ export function mapThreadStatus(thread: ShellThread): T3ThreadSnapshot["status"]
   return "idle";
 }
 
+/**
+ * Newest message or run stamp, like T3's `resolveSettledThreadTimestamp` (client-runtime threadSort.ts).
+ * `updatedAt` is only the fallback because settling or renaming bumps it without any agent activity.
+ */
+export function threadLastActivityAt(thread: ShellThread): string | null {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const candidate of [
+    thread.latestVisibleMessage?.updatedAt,
+    thread.latestUserMessageAt,
+    thread.latestRunStartedAt,
+    thread.latestRunCompletedAt,
+  ]) {
+    const ms = candidate ? Date.parse(candidate) : Number.NaN;
+    if (candidate && Number.isFinite(ms) && ms > latestMs) {
+      latest = candidate;
+      latestMs = ms;
+    }
+  }
+  return latest ?? thread.updatedAt ?? null;
+}
+
 export function mapThreadSnapshot(thread: ShellThread): T3ThreadSnapshot {
-  return { title: thread.title, status: mapThreadStatus(thread) };
+  return {
+    title: thread.title,
+    status: mapThreadStatus(thread),
+    // T3's auto-settle writes the same override as a manual settle (Orchestrator), so this covers both.
+    settled: thread.settledOverride === "settled",
+    archived: thread.archivedAt != null,
+    lastActivityAt: threadLastActivityAt(thread),
+    model: thread.modelSelection?.model ?? null,
+    provider: thread.providerInstanceId ?? null,
+    branch: thread.branch ?? null,
+  };
 }
 
 /** Parses a T3 project icon into ours, reading T3's legacy lucide+monogramText shape. Invalid → null. */

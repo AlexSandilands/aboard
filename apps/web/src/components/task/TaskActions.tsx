@@ -34,7 +34,7 @@ import {
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
-import { HandoffMenu } from "~/components/handoff/HandoffActions";
+import { copyTaskReference, HandoffMenu } from "~/components/handoff/HandoffActions";
 import { cn } from "~/lib/utils";
 import { useDeleteTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { useBoard, useSettings } from "~/state/queries";
@@ -100,7 +100,7 @@ export function TaskActions({
     "copy-reference": {
       label: "Copy task reference",
       icon: HashIcon,
-      run: () => copyToClipboard(`#${task.number}`, "task reference"),
+      run: () => copyTaskReference(task),
     },
   };
   const pins = normalizePins(storedPins);

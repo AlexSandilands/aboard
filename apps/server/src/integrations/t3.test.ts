@@ -123,8 +123,60 @@ describe("mapThreadSnapshot", () => {
     expect(mapThreadSnapshot(thread({ id: "t", ...overrides })).status).toBe(expected);
   });
 
-  it("keeps the title", () => {
-    expect(mapThreadSnapshot(thread({ id: "t", title: "Fix login" }))).toEqual({ title: "Fix login", status: "done" });
+  it("keeps the title and defaults the detail fields", () => {
+    expect(mapThreadSnapshot(thread({ id: "t", title: "Fix login" }))).toEqual({
+      title: "Fix login",
+      status: "done",
+      settled: false,
+      archived: false,
+      lastActivityAt: null,
+      model: null,
+      provider: null,
+      branch: null,
+    });
+  });
+
+  it("maps settled, archived, model and branch", () => {
+    const snapshot = mapThreadSnapshot(
+      thread({
+        id: "t",
+        settledOverride: "settled",
+        archivedAt: "2026-01-02T00:00:00Z",
+        providerInstanceId: "claude",
+        modelSelection: { model: "claude-opus-5-5" },
+        branch: "feat/x",
+      }),
+    );
+    expect(snapshot).toMatchObject({
+      settled: true,
+      archived: true,
+      model: "claude-opus-5-5",
+      provider: "claude",
+      branch: "feat/x",
+    });
+  });
+
+  it("does not treat an 'active' override as settled", () => {
+    expect(mapThreadSnapshot(thread({ id: "t", settledOverride: "active" })).settled).toBe(false);
+  });
+
+  it("takes the newest message or run stamp as last activity", () => {
+    const snapshot = mapThreadSnapshot(
+      thread({
+        id: "t",
+        updatedAt: "2026-01-09T00:00:00Z",
+        latestUserMessageAt: "2026-01-03T00:00:00Z",
+        latestVisibleMessage: { updatedAt: "2026-01-05T00:00:00Z" },
+        latestRunCompletedAt: "2026-01-04T00:00:00Z",
+      }),
+    );
+    expect(snapshot.lastActivityAt).toBe("2026-01-05T00:00:00Z");
+  });
+
+  it("falls back to updatedAt without any activity stamps", () => {
+    expect(mapThreadSnapshot(thread({ id: "t", updatedAt: "2026-01-09T00:00:00Z" })).lastActivityAt).toBe(
+      "2026-01-09T00:00:00Z",
+    );
   });
 });
 
@@ -362,9 +414,9 @@ describe("T3 integration", () => {
     const status = await t3.test();
     expect(status.liveStatus).toBe("ok");
     expect(headers).toMatchObject({ authorization: "Bearer tok", "x-t3-orchestration-protocol": "2" });
-    expect(snapshots.get("l-run")).toEqual({ title: "Build integrations", status: "working" });
-    expect(snapshots.get("l-ask")).toEqual({ title: "Thread th-ask", status: "input" });
-    expect(snapshots.get("l-old")).toEqual({ title: "Old", status: "done" });
+    expect(snapshots.get("l-run")).toMatchObject({ title: "Build integrations", status: "working" });
+    expect(snapshots.get("l-ask")).toMatchObject({ title: "Thread th-ask", status: "input" });
+    expect(snapshots.get("l-old")).toMatchObject({ title: "Old", status: "done", archived: true });
     expect(snapshots.has("l-other")).toBe(false);
     expect(snapshots.has("l-gone")).toBe(false);
   });

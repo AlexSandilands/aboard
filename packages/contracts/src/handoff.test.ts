@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "./brand.ts";
-import { defaultHandoffMode, taskBoardUrl, taskHandoffPrompt } from "./handoff.ts";
+import { defaultHandoffMode, taskBoardUrl, taskHandoffPrompt, taskReferenceLine } from "./handoff.ts";
 
 const task = { id: "abc-123", number: 9, title: "Hand tasks to agents" };
 
@@ -45,4 +45,14 @@ describe("defaultHandoffMode", () => {
 
 it("taskBoardUrl encodes the id and trims trailing slashes", () => {
   expect(taskBoardUrl("http://h:1//", "a b")).toBe("http://h:1/?task=a%20b");
+});
+
+it("taskReferenceLine points at the task by uuid", () => {
+  expect(taskReferenceLine({ task, boardUrl: "http://127.0.0.1:5317/" })).toBe(
+    [
+      `#9 "Hand tasks to agents"`,
+      "Board: http://127.0.0.1:5317/?task=abc-123",
+      `Call get_task("abc-123") on the ${BRAND.id} MCP server, then continue from the current step.`,
+    ].join("\n"),
+  );
 });

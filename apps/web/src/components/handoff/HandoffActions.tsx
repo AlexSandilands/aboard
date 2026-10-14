@@ -1,4 +1,11 @@
-import { defaultHandoffMode, taskHandoffPrompt, type HandoffMode, type TaskSummary } from "@repo/contracts";
+import {
+  BRAND,
+  defaultHandoffMode,
+  taskHandoffPrompt,
+  taskReferenceLine,
+  type HandoffMode,
+  type TaskSummary,
+} from "@repo/contracts";
 import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
@@ -20,6 +27,11 @@ const cardHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 export function copyHandoffPrompt(task: Pick<TaskSummary, "id" | "number" | "title">, mode: HandoffMode) {
   const prompt = taskHandoffPrompt({ task, boardUrl: window.location.origin, mode });
   copyToClipboard(prompt, mode === "plan" ? "planning prompt" : "prompt");
+}
+
+/** Copies a short pointer to the task (see taskReferenceLine), for a new session on any task status. */
+export function copyTaskReference(task: Pick<TaskSummary, "id" | "number" | "title">) {
+  copyToClipboard(taskReferenceLine({ task, boardUrl: window.location.origin }), `${BRAND.id} link`);
 }
 
 /**
