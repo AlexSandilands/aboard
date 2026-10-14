@@ -27,7 +27,8 @@ function testConfig(overrides: Partial<Config> = {}): Config {
   };
 }
 
-describe("startServer", () => {
+// Each test boots real servers (DB + migrations), which can exceed vitest's 5s default on the Windows CI runner.
+describe("startServer", { timeout: 20_000 }, () => {
   it("listens on a free port, serves health, and closes despite an open SSE stream", async () => {
     const server = await startServer(testConfig());
     expect(server.port).toBeGreaterThan(0);
