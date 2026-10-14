@@ -140,14 +140,21 @@ export function createTasksRepo(sql: Sql) {
         )
         .map(toRecord);
     },
+    /** Claims the next task number. Call inside the write that inserts the task, so a rollback releases it. */
     nextNumber(): number {
-      return (sql.get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1;
+      return sql.get<{ value: number }>(
+        "UPDATE counters SET value = value + 1 WHERE name = 'task_number' RETURNING value",
+      )!.value;
     },
     insert(t: TaskRecord): void {
       sql.insert("tasks", { ...toRow(t) });
     },
     update(t: TaskRecord): void {
       sql.update("tasks", { ...toRow(t) });
+    },
+    /** Hard delete; events, plan and links cascade, and tasks closed against it lose the pointer (SET NULL). */
+    delete(id: string): void {
+      sql.run("DELETE FROM tasks WHERE id = ?", id);
     },
   };
 }

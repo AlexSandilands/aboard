@@ -180,6 +180,85 @@ describe("events", () => {
     expectCode(() => s.tasks.summary(t1.id), "NOT_FOUND");
   });
 
+  describe("delete", () => {
+    it("only deletes archived tasks", () => {
+      const { s, project, events } = setup();
+      const task = s.tasks.create({ projectId: project.id, title: "Keep" });
+      events.length = 0;
+      expectCode(() => s.tasks.delete(task.id, "user"), "VALIDATION");
+      expect(events).toEqual([]);
+      expect(s.tasks.summary(task.id).title).toBe("Keep");
+    });
+
+    it("cascades the plan, links and activity and publishes task.deleted", () => {
+      const { s, project, events, db } = setup();
+      const task = s.tasks.create({
+        projectId: project.id,
+        title: "Gone",
+        plan: plan("a", "b"),
+        links: [{ value: "https://example.com" }],
+      });
+      s.tasks.addNote(task.id, "note", "user");
+      s.tasks.update(task.id, { archived: true }, "user");
+      events.length = 0;
+      s.tasks.delete(task.id, "user");
+      expect(events).toEqual([{ type: "task.deleted", taskId: task.id }]);
+      expectCode(() => s.tasks.summary(task.id), "NOT_FOUND");
+      for (const table of ["plan_phases", "plan_steps", "task_links", "task_events"]) {
+        const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE task_id = ?`).get(task.id) as { n: number };
+        expect({ table, n: row.n }).toEqual({ table, n: 0 });
+      }
+    });
+
+    it("never reuses a deleted task's number, including after a project delete", () => {
+      const { s, project } = setup();
+      const first = s.tasks.create({ projectId: project.id, title: "One" });
+      const second = s.tasks.create({ projectId: project.id, title: "Two" });
+      expect([first.number, second.number]).toEqual([1, 2]);
+      s.tasks.update(second.id, { archived: true }, "user");
+      s.tasks.delete(second.id, "user");
+      expect(s.tasks.create({ projectId: project.id, title: "Three" }).number).toBe(3);
+
+      const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+      s.tasks.create({ projectId: other.id, title: "Four" });
+      s.projects.delete(other.id);
+      expect(s.tasks.create({ projectId: project.id, title: "Five" }).number).toBe(5);
+    });
+
+    it("keeps the resolution of tasks closed against it and logs why the link went", () => {
+      const { s, project, events } = setup();
+      const resolver = s.tasks.create({ projectId: project.id, title: "Resolver" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: resolver.id }, "user");
+      s.tasks.update(resolver.id, { archived: true }, "user");
+      events.length = 0;
+      s.tasks.delete(resolver.id, "agent");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "task.upserted",
+          task: expect.objectContaining({ id: dupe.id, resolution: "duplicate", resolvedBy: null }),
+        }),
+      );
+      expect(s.tasks.detail(dupe.id).events.at(-1)).toMatchObject({
+        type: "resolver_deleted",
+        actor: "agent",
+        payload: { number: resolver.number, title: "Resolver" },
+      });
+    });
+
+    it("drops a deleted closed task from its resolver's list", () => {
+      const { s, project, events } = setup();
+      const resolver = s.tasks.create({ projectId: project.id, title: "Resolver" });
+      const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
+      s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: resolver.id }, "user");
+      s.tasks.update(dupe.id, { archived: true }, "user");
+      events.length = 0;
+      s.tasks.delete(dupe.id, "user");
+      expect(events).toContainEqual({ type: "task.detail_changed", taskId: resolver.id });
+      expect(s.tasks.detail(resolver.id).resolves).toEqual([]);
+    });
+  });
+
   describe("close", () => {
     it("re-closing against another task refreshes the previous one, and rejects closing two tasks against each other", () => {
       const { s, project, events } = setup();

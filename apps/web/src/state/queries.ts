@@ -120,6 +120,10 @@ export function useBoardEvents() {
       if (event.type === "task.detail_changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });
       }
+      // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
+      if (event.type === "task.deleted") {
+        void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
+      }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });

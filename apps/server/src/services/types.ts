@@ -98,6 +98,11 @@ export interface TasksService {
    */
   close(id: string, input: CloseInput, actor: string): TaskDetail;
   addNote(id: string, text: string, actor: string): TaskEvent;
+  /**
+   * Permanently deletes an archived task with its activity, plan and links. Throws VALIDATION if it isn't
+   * archived. Tasks closed against it keep their resolution but lose the pointer.
+   */
+  delete(id: string, actor: string): void;
 }
 
 export interface CloseInput {
