@@ -41,7 +41,8 @@ export function canStartT3Thread(
  * Whether a failed launch may be retried with the same commandId. Keep it whenever T3 may already have
  * accepted the launch, since T3 replays an accepted command instead of starting a second thread: an
  * unreachable/timeout error, a result the board couldn't read (`protocol-after-send`), or an error with no
- * details at all (the board's own response was lost). A command T3 rejected stays rejected under that id,
+ * details at all (the board's own response was lost). The dialog also keeps it for non-ApiError failures such
+ * as a fetch TypeError, which mean the response never arrived. A command T3 rejected stays rejected under that id,
  * so any other tagged error needs a fresh one.
  */
 export function keepsCommandId(details: unknown): boolean {
