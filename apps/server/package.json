@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/main.ts",
-    "start": "tsx src/main.ts",
+    "dev": "node --watch --watch-preserve-output --import tsx src/main.ts",
+    "start": "node --import tsx src/main.ts",
+    "bundle": "node scripts/bundle.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
@@ -17,6 +18,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15"
   }
 }

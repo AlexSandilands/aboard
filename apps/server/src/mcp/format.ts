@@ -15,6 +15,21 @@ export function statusLabel(status: TaskStatus): string {
   return TASK_STATUSES.find((s) => s.value === status)?.label ?? status;
 }
 
+/** "done by #4", "duplicate of #4", "won't do"; null for open tasks. */
+export function resolutionText(task: Pick<TaskSummary, "resolution" | "resolvedBy">): string | null {
+  const by = task.resolvedBy ? ` #${task.resolvedBy.number}` : "";
+  switch (task.resolution) {
+    case "completed":
+      return `done by${by || " another task"}`;
+    case "duplicate":
+      return `duplicate of${by || " another task"}`;
+    case "wont_do":
+      return "won't do";
+    case null:
+      return null;
+  }
+}
+
 export function projectLabel(project: Project | undefined): string {
   if (!project) return "unknown project";
   return project.workspaceRoot ? `${project.title} (${project.workspaceRoot})` : project.title;
@@ -60,6 +75,8 @@ function shortLink(link: TaskLink): string {
 /** One line per task: "#42 Title — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
 export function summaryLine(task: TaskSummary): string {
   const parts: string[] = [];
+  const resolution = resolutionText(task);
+  if (resolution) parts.push(resolution);
   if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
@@ -94,6 +111,15 @@ function eventText(event: TaskEvent): string {
       break;
     case "status_changed":
       what = `status ${str("from") ?? "?"} -> ${str("to") ?? "?"}`;
+      if (str("clearedResolution")) what += ` (reopened, was ${str("clearedResolution")})`;
+      break;
+    case "closed": {
+      const by = typeof p.byTask === "number" ? ` #${p.byTask}` : "";
+      what = `closed as ${str("resolution") ?? "?"}${by}`;
+      break;
+    }
+    case "resolver_deleted":
+      what = `#${typeof p.number === "number" ? p.number : "?"} "${str("title") ?? "?"}", which closed this, was deleted`;
       break;
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
@@ -123,6 +149,17 @@ export function renderTaskDetail(
     const c = task.currentStep;
     lines.push(`Current step: ${c.index} ${c.title} [${c.status}] (phase: ${c.phaseTitle})`);
   }
+  const resolution = resolutionText(task);
+  if (resolution) {
+    const title = task.resolvedBy ? ` "${task.resolvedBy.title}"` : "";
+    lines.push(`Closed: ${resolution}${title}`);
+  }
+  if (task.resolves.length) {
+    const resolved = task.resolves.map(
+      (r) => `#${r.number} ${r.title} (${r.resolution === "duplicate" ? "duplicate" : "done by this"})`,
+    );
+    lines.push(`Also resolved: ${resolved.join("; ")}`);
+  }
   if (task.attention.length) lines.push(`Needs attention: ${task.attention.map((a) => a.message).join("; ")}`);
 
   if (task.description?.trim()) lines.push("", "Description:", task.description.trim());
@@ -135,6 +172,8 @@ export function renderTaskDetail(
       phase.steps.flatMap((step, si) => (step.notes?.trim() ? [`  ${pi + 1}.${si + 1}: ${step.notes.trim()}`] : [])),
     );
     if (withNotes.length) lines.push("Step notes:", ...withNotes);
+  } else if (task.resolution) {
+    lines.push("Plan: none.");
   } else {
     lines.push("Plan: none yet. Add one with set_plan before moving this out of Ideas.");
   }

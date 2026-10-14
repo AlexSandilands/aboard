@@ -16,6 +16,7 @@ import { LinksSection } from "./LinksSection";
 import { MarkdownField } from "./MarkdownField";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
+import { ResolutionCallout } from "./ResolutionCallout";
 import { TaskPanelHeader } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
 import { usePlanActions } from "./usePlanActions";
@@ -165,8 +166,12 @@ function TaskPanelBody({
       <div className="px-4 pt-4 pb-3">
         <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} />
       </div>
-      <div className="px-3 pb-3">
-        <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
+      <div className="flex flex-col gap-2 px-3 pb-3">
+        <ResolutionCallout task={task} />
+        {/* A task closed without a plan has nothing to be up to. */}
+        {task.resolution && task.progress.total === 0 ? null : (
+          <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
+        )}
       </div>
       <LinksSection task={task} />
       <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />
@@ -190,7 +195,7 @@ function TaskPanelBody({
 function PanelSkeleton() {
   return (
     <div aria-busy className="flex flex-col">
-      <div className="flex h-[var(--workspace-topbar-height)] items-center gap-2 border-b border-border px-3">
+      <div className="drag-region flex h-[var(--workspace-topbar-height)] items-center gap-2 border-b border-border px-3 wco:pe-(--workspace-native-controls-inset)">
         <Skeleton className="h-4 w-8" />
         <Skeleton className="h-6 w-24" />
       </div>

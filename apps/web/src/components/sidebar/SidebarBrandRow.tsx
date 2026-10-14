@@ -6,7 +6,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { useDialogs } from "~/state/ui";
 
-/** Icon control drawn on the night-sky art, so it is always light-on-dark (T3's media-control treatment). */
+/** Icon control drawn on the banner art, inked to match it (T3's media-control treatment). */
 function BackdropIconButton({ label, ...props }: { label: string } & ComponentProps<"button">) {
   return (
     <Tooltip>
@@ -15,7 +15,7 @@ function BackdropIconButton({ label, ...props }: { label: string } & ComponentPr
           <button
             type="button"
             aria-label={label}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-white/70 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white [&_svg]:size-4"
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[color-mix(in_srgb,var(--stage-ink)_70%,transparent)] outline-none hover:bg-[color-mix(in_srgb,var(--stage-ink)_10%,transparent)] hover:text-[var(--stage-ink)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--stage-ink)] [&_svg]:size-4"
             {...props}
           />
         }
@@ -25,14 +25,14 @@ function BackdropIconButton({ label, ...props }: { label: string } & ComponentPr
   );
 }
 
-/** The 52px titlebar row of the sidebar: stage art, wordmark, settings and theme. */
+/** The titlebar row of the sidebar: stage art, wordmark, settings and theme. */
 export function SidebarBrandRow() {
   const { resolvedTheme, setTheme } = useTheme();
   const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
   return (
-    <div className="relative flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 ps-4 pe-2">
+    <div className="drag-region stage-ink relative flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 ps-4 pe-2">
       <SidebarStageBackdrop />
-      <span className="relative z-10 min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-white">
+      <span className="relative z-10 min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-[var(--stage-ink)]">
         {BRAND.name}
       </span>
       <div className="relative z-10 flex items-center">

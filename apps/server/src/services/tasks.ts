@@ -1,12 +1,12 @@
-import type { TaskDetail, TaskSummary } from "@repo/contracts";
+import { resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
-import { assembleSummaries, type AssembledTask } from "./summaries.ts";
-import type { LinksService, ProjectsService, TaskQuery, TasksService } from "./types.ts";
+import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
+import type { CloseInput, LinksService, ProjectsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -46,6 +46,24 @@ export function createTasksService(
       {},
     );
 
+  /** Validates the resolution/by-task pairing for `close` and returns the by-task, if any. */
+  const closingTask = (task: TaskRecord, input: CloseInput): TaskRecord | null => {
+    if (!resolutionNeedsTask(input.resolution)) {
+      if (input.byTaskId) throw new AppError("VALIDATION", "A task closed as won't do cannot point at another task");
+      return null;
+    }
+    if (!input.byTaskId) {
+      throw new AppError("VALIDATION", `Closing as ${input.resolution} needs the task that delivered it`);
+    }
+    const by = record(input.byTaskId);
+    if (by.id === task.id) throw new AppError("VALIDATION", "A task cannot be resolved by itself");
+    // Two tasks closed against each other would leave neither as the one that holds the work.
+    if (by.resolvedByTaskId === task.id) {
+      throw new AppError("VALIDATION", `#${by.number} is already closed against #${task.number}; reopen it first`);
+    }
+    return by;
+  };
+
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
       const records = repos.tasks.list(query);
@@ -65,6 +83,9 @@ export function createTasksService(
         planContext: task.planContext,
         phases,
         events: repos.events.recent(id, DETAIL_EVENT_LIMIT),
+        resolves: repos.tasks
+          .resolvedBy([id])
+          .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
       };
     },
 
@@ -97,6 +118,8 @@ export function createTasksService(
           createdAt: now,
           updatedAt: now,
           statusChangedAt: now,
+          resolution: null,
+          resolvedByTaskId: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
@@ -116,6 +139,9 @@ export function createTasksService(
         if (input.title !== undefined && input.title !== current.title) {
           next.title = input.title;
           changed.push("title");
+          // Cards of tasks this one resolved show its title, and so does the "Also resolved" list of its resolver.
+          for (const resolved of repos.tasks.resolvedBy([id])) fx.task(resolved.id);
+          if (current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         }
         if (input.description !== undefined && input.description !== current.description) {
           next.description = input.description;
@@ -143,7 +169,7 @@ export function createTasksService(
       return service.detail(id);
     },
 
-    move(id, input, actor) {
+    move(id, input, actor, because) {
       core.write((fx) => {
         const current = record(id);
         const status = input.status ?? current.status;
@@ -157,17 +183,53 @@ export function createTasksService(
         }
         const lane = repos.tasks.lane(current.projectId, status).filter((t) => t.id !== id);
         const now = nowIso();
+        // Reopening a closed task drops its resolution, so it reads as open work again.
+        const reopened = statusChanged && current.resolution !== null;
         repos.tasks.update({
           ...current,
           status,
           position: positionAmong(lane, input),
           updatedAt: now,
           statusChangedAt: statusChanged ? now : current.statusChangedAt,
+          ...(reopened ? { resolution: null, resolvedByTaskId: null } : {}),
         });
-        if (statusChanged) fx.log(id, actor, "status_changed", { from: current.status, to: status });
-        else fx.task(id);
+        if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
+        if (statusChanged) {
+          fx.log(id, actor, "status_changed", {
+            ...because,
+            from: current.status,
+            to: status,
+            ...(reopened ? { clearedResolution: current.resolution } : {}),
+          });
+        } else fx.task(id);
       });
       return service.summary(id);
+    },
+
+    close(id, input: CloseInput, actor) {
+      core.write((fx) => {
+        const current = record(id);
+        const by = closingTask(current, input);
+        const now = nowIso();
+        const statusChanged = current.status !== "done";
+        repos.tasks.update({
+          ...current,
+          status: "done",
+          position: statusChanged ? endOfLane({ ...current, status: "done" }) : current.position,
+          updatedAt: now,
+          statusChangedAt: statusChanged ? now : current.statusChangedAt,
+          resolution: input.resolution,
+          resolvedByTaskId: by?.id ?? null,
+        });
+        fx.log(id, actor, "closed", {
+          resolution: input.resolution,
+          from: current.status,
+          ...(by ? { byTask: by.number } : {}),
+        });
+        if (by) fx.detail(by.id);
+        if (current.resolvedByTaskId && current.resolvedByTaskId !== by?.id) fx.detail(current.resolvedByTaskId);
+      });
+      return service.detail(id);
     },
 
     addNote(id, text, actor) {
@@ -179,6 +241,25 @@ export function createTasksService(
         repos.tasks.update({ ...task, updatedAt: now });
         fx.task(id);
         return repos.events.append(id, now, actor, "note", { text: body });
+      });
+    },
+
+    delete(id, actor) {
+      core.write((fx) => {
+        const task = record(id);
+        if (task.archivedAt === null) {
+          throw new AppError(
+            "VALIDATION",
+            `Archive #${task.number} before deleting it; only archived tasks can be deleted`,
+          );
+        }
+        // Tasks closed against this one keep their resolution; their log records what they pointed at.
+        for (const resolved of repos.tasks.resolvedBy([id])) {
+          fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
+        }
+        if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+        repos.tasks.delete(id);
+        fx.taskDeleted(id);
       });
     },
   };

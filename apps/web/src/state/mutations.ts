@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   BoardSnapshot,
+  CloseTaskInput,
   CreateTaskInput,
   LinkInput,
   MoveTaskInput,
@@ -78,6 +79,16 @@ export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>
       api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+/** Permanently deletes a task; the server only allows it for archived tasks. */
+export const useDeleteTask = (opts?: MutationOpts) =>
+  useApiMutation((id: string) => api<void>(`/api/tasks/${enc(id)}`, { method: "DELETE" }), opts);
+/** Closes a task as done by / duplicate of another task, or won't do. Named apart from the panel's useCloseTask. */
+export const useResolveTask = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ id, ...input }: CloseTaskInput & { id: string }) =>
+      api<TaskDetail>(`/api/tasks/${enc(id)}/close`, { body: input }),
     opts,
   );
 export const useAddNote = (opts?: MutationOpts) =>

@@ -7,11 +7,12 @@ import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuPopup, MenuTrigg
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useBoardView, usePalette } from "~/state/ui";
-import { useSetProjectFilter } from "./boardNavigation";
+import { useSelectedTaskId, useSetProjectFilter } from "./boardNavigation";
+import { cn } from "~/lib/utils";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-/** The board's 52px top bar: title or scoped project, filters, and the palette hint. */
+/** The board's top bar (52px; 40px under the desktop title bar): title or scoped project, filters, and the palette hint. */
 export function BoardHeader({ scopedProject }: { scopedProject: Project | null }) {
   const { isMobile, open } = useSidebar();
   const attentionOnly = useBoardView((s) => s.attentionOnly);
@@ -22,9 +23,16 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const setShowArchived = useBoardView((s) => s.setShowArchived);
   const filtered = attentionOnly || hasPrOnly || showArchived;
   const setProjectFilter = useSetProjectFilter();
+  // With the task panel closed this header reaches the window's right edge and the native controls.
+  const atRightEdge = useSelectedTaskId() === null;
 
   return (
-    <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end)">
+    <header
+      className={cn(
+        "drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end)",
+        atRightEdge && "wco:pe-(--workspace-native-controls-inset)",
+      )}
+    >
       {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
       {scopedProject ? (
         <div className="flex min-w-0 items-center gap-2">

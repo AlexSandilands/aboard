@@ -1,8 +1,15 @@
 import { BRAND, type AppSettings, type IntegrationsStatus, type T3IntegrationStatus } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useState } from "react";
+import { MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
+import {
+  STAGE_BANNERS,
+  type StageBannerChoice,
+  type StageBannerId,
+  resolveStageBanner,
+} from "~/components/stage/stageBanner.logic";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -12,9 +19,10 @@ import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { type Theme, useTheme } from "~/hooks/useTheme";
 import { api } from "~/lib/api";
+import { cn } from "~/lib/utils";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
+import { useAppearance, useDialogs } from "~/state/ui";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
 
@@ -101,7 +109,73 @@ function AppearanceSection() {
           </ToggleGroup>
         }
       />
+      <BannerRow />
     </SettingsSection>
+  );
+}
+
+function BannerRow() {
+  const banner = useAppearance((s) => s.banner);
+  const setBanner = useAppearance((s) => s.setBanner);
+  return (
+    <SettingsRow title="Sidebar banner" description="The art behind the name in the top-left corner.">
+      <div role="radiogroup" aria-label="Sidebar banner" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {STAGE_BANNERS.map((option) => (
+          <BannerOption
+            key={option.id}
+            choice={option.id}
+            preview={option.id}
+            label={option.label}
+            selected={banner === option.id}
+            onSelect={setBanner}
+          />
+        ))}
+        <BannerOption
+          choice="rotate"
+          preview={resolveStageBanner("rotate")}
+          label={
+            <>
+              <RefreshCwIcon className="size-3" />
+              Rotate daily
+            </>
+          }
+          selected={banner === "rotate"}
+          onSelect={setBanner}
+        />
+      </div>
+    </SettingsRow>
+  );
+}
+
+function BannerOption({
+  choice,
+  preview,
+  label,
+  selected,
+  onSelect,
+}: {
+  choice: StageBannerChoice;
+  preview: StageBannerId;
+  label: ReactNode;
+  selected: boolean;
+  onSelect: (choice: StageBannerChoice) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={() => onSelect(choice)}
+      className={cn(
+        "stage-ink relative flex h-12 cursor-pointer items-center overflow-hidden rounded-lg border bg-sidebar px-3 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected ? "border-primary ring-1 ring-primary" : "border-border/60 hover:border-border",
+      )}
+    >
+      <SidebarStageBackdrop banner={preview} />
+      <span className="relative z-10 flex items-center gap-1.5 text-xs font-medium text-[var(--stage-ink)]">
+        {label}
+      </span>
+    </button>
   );
 }
 
@@ -329,6 +403,22 @@ function AgentsSection() {
       <SettingsRow title="Codex" description={`Register the ${BRAND.id} MCP server.`}>
         <div className="mt-2">
           <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${url}`} />
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        title="GitHub Copilot CLI"
+        description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`copilot mcp add --transport http ${BRAND.id} ${url}`} />
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        title="GitHub Copilot (VS Code)"
+        description={`Add the ${BRAND.id} MCP server to your VS Code user profile, or put the same entry under "servers" in .vscode/mcp.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
         </div>
       </SettingsRow>
       <SettingsRow

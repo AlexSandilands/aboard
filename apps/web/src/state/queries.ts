@@ -101,6 +101,10 @@ export function useFsBrowse(path: string, enabled: boolean) {
   });
 }
 
+/** Delay before reopening a stream the browser gave up on; doubles per failure up to the cap. */
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 5000;
+
 /**
  * Subscribes to /events and patches the query cache. Mount once at the app root.
  * On (re)connect the board is refetched, so missed events are never a problem.
@@ -108,17 +112,21 @@ export function useFsBrowse(path: string, enabled: boolean) {
 export function useBoardEvents() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const source = new EventSource(eventsUrl());
+    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
     let connectedOnce = false;
-    source.addEventListener("ready", () => {
+
+    const onReady = () => {
+      failures = 0;
       if (connectedOnce) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
       }
       connectedOnce = true;
-    });
-    source.addEventListener("message", (message) => {
+    };
+    const onMessage = (message: MessageEvent) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
         board ? applyBoardEvent(board, event) : board,
@@ -127,6 +135,10 @@ export function useBoardEvents() {
       if (event.type === "task.detail_changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });
       }
+      // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
+      if (event.type === "task.deleted") {
+        void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
+      }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
@@ -134,7 +146,26 @@ export function useBoardEvents() {
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
       }
-    });
-    return () => source.close();
+    };
+    // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while
+    // the dev server restarts) closes it for good, leaving the board silently stale. Reopen it then.
+    const onError = () => {
+      if (source?.readyState !== EventSource.CLOSED) return;
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** failures, RECONNECT_MAX_MS);
+      failures += 1;
+      retryTimer = setTimeout(connect, delay);
+    };
+    const connect = () => {
+      source = new EventSource(eventsUrl());
+      source.addEventListener("ready", onReady);
+      source.addEventListener("message", onMessage);
+      source.addEventListener("error", onError);
+    };
+
+    connect();
+    return () => {
+      clearTimeout(retryTimer);
+      source?.close();
+    };
   }, [queryClient]);
 }

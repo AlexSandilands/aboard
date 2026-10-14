@@ -1,14 +1,19 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
+import { ArchiveIcon } from "lucide-react";
 import { memo, type KeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useUpdateTask } from "~/state/mutations";
+import { resolutionLabel } from "~/components/task/resolution.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
-import { CardLinks, hasCardLinks } from "./CardLinks";
+import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
 import type { DragData } from "./dnd.logic";
@@ -26,7 +31,14 @@ export function taskCardClassName(task: TaskSummary, selected: boolean) {
 }
 
 /** The card's lines. Memoized on the task object, which the board reducer keeps stable. */
-export const TaskCardContent = memo(function TaskCardContent({ task }: { task: TaskSummary }) {
+export const TaskCardContent = memo(function TaskCardContent({
+  task,
+  archivable = false,
+}: {
+  task: TaskSummary;
+  /** Shows the quick Archive button on Done cards. Off for the drag overlay. */
+  archivable?: boolean;
+}) {
   const attention = topAttention(task.attention);
   const jiraKey = jiraKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
@@ -48,6 +60,7 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
             {jiraKey}
           </Badge>
         ) : null}
+        <ResolutionChip task={task} />
         {task.archivedAt ? (
           <Badge variant="secondary" size="sm">
             Archived
@@ -65,6 +78,7 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
         >
           {formatElapsedDurationLabel(task.updatedAt)}
         </span>
+        {archivable && task.status === "done" && !task.archivedAt ? <ArchiveButton task={task} /> : null}
       </div>
       <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
       <TaskProgressLine task={task} />
@@ -82,6 +96,58 @@ export const TaskCardContent = memo(function TaskCardContent({ task }: { task: T
     </div>
   );
 });
+
+/** Quick archive for Done cards. Must not open the panel or start a drag, like the card's links. */
+function ArchiveButton({ task }: { task: TaskSummary }) {
+  const { mutate: updateTask, isPending } = useUpdateTask();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="-my-1 -me-1 size-6 shrink-0"
+            aria-label={`Archive #${task.number}`}
+            disabled={isPending}
+            {...linkHandlers}
+            onClick={(event) => {
+              event.stopPropagation();
+              updateTask({ id: task.id, archived: true });
+            }}
+          />
+        }
+      >
+        <ArchiveIcon />
+      </TooltipTrigger>
+      <TooltipPopup>Archive</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+/** Muted "Done by #4" / "Duplicate of #4" / "Won't do" on closed cards; the number opens the delivering task. */
+function ResolutionChip({ task }: { task: TaskSummary }) {
+  const { openTask } = useBoardContext();
+  const label = resolutionLabel(task);
+  if (!label) return null;
+  const by = task.resolvedBy;
+  if (!by) return <span className="min-w-0 truncate text-muted-foreground">{label}</span>;
+  return (
+    <button
+      type="button"
+      title={`#${by.number} ${by.title}`}
+      aria-label={`${label}: open #${by.number} ${by.title}`}
+      className={cn(chipClassName, "font-normal")}
+      {...linkHandlers}
+      onClick={(event) => {
+        event.stopPropagation();
+        openTask(by.id);
+      }}
+    >
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
 
 /** A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. */
 export const SortableTaskCard = memo(function SortableTaskCard({
@@ -130,7 +196,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         open();
       }}
     >
-      <TaskCardContent task={task} />
+      <TaskCardContent task={task} archivable />
     </div>
   );
 });

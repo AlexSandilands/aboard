@@ -38,7 +38,12 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    PRs show live checks/review state on the board.
 7. **Status transitions.** `in_progress` while implementing → `review` when a PR is up → `done` when
    merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first.
-8. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
+8. **Close what's already handled.** If a task was delivered by another task, duplicates one, or is no
+   longer wanted, `close_task` it with resolution `completed` / `duplicate` (plus `byTask: "#N"`) or
+   `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
+   archive these: archiving hides the card and loses why it was closed. `delete_task` is permanent and
+   only works on archived tasks; use it only when the user asks for a task to be deleted.
+9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
    exact next action. The next agent starts from `get_task`.
 
 ## Running inside T3 Code
@@ -57,6 +62,10 @@ The server runs locally on port 4317. Register it once:
 
 ```sh
 claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
+# GitHub Copilot CLI
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
+# GitHub Copilot in VS Code (or .vscode/mcp.json: servers.aboard = {type: http, url})
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```
 
 Install this skill by copying the folder to `~/.claude/skills/aboard/`.

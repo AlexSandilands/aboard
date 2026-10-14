@@ -15,6 +15,7 @@ import { useState, type ReactNode } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
+import { STAGE_BANNERS } from "~/components/stage/stageBanner.logic";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -118,6 +119,14 @@ const SAMPLE_ICONS: ReadonlyArray<{ title: string; icon: ProjectIcon }> = [
   { title: "Fire", icon: { kind: "emoji", emoji: "🔥" } },
   { title: "Brain", icon: { kind: "emoji", emoji: "🧠" } },
   { title: "Custom", icon: { kind: "monogram", text: "QX", color: "rose" } },
+  {
+    title: "Image",
+    icon: {
+      kind: "image",
+      dataUrl:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mNITvv4/43HzP+4aAZ8kiCaYViYAADqPrCha/7uswAAAABJRU5ErkJggg==",
+    },
+  },
 ];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -224,10 +233,10 @@ function SampleSidebarLayout() {
         data-app-sidebar
       >
         <Sidebar resizable={{ storageKey: storageKey("sidebar-width"), minWidth: 208 }}>
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="stage-ink relative flex min-h-0 flex-1 flex-col">
             <SidebarStageBackdrop />
             <SidebarHeader className="relative z-10 h-[var(--workspace-topbar-height)] flex-row items-center justify-between">
-              <span className="px-1 text-sm font-medium">{BRAND.name}</span>
+              <span className="px-1 text-sm font-medium text-[var(--stage-ink)]">{BRAND.name}</span>
               <Button size="icon-xs" variant="ghost-muted" aria-label="Add project">
                 <PlusIcon />
               </Button>
@@ -520,6 +529,22 @@ export function StyleGallery() {
             value={pickedIcon}
             onSave={setPickedIcon}
           />
+        </Section>
+
+        <Section title="Sidebar banners">
+          <div className="grid w-full gap-3 sm:grid-cols-2">
+            {STAGE_BANNERS.map((banner) => (
+              <div
+                key={banner.id}
+                className="stage-ink relative flex h-[var(--workspace-topbar-height)] w-64 items-center overflow-hidden rounded-lg border border-border/60 bg-sidebar ps-4 [--sidebar-stage-fade:var(--sidebar)]"
+              >
+                <SidebarStageBackdrop banner={banner.id} />
+                <span className="relative z-10 text-sm font-medium text-[var(--stage-ink)]">
+                  {BRAND.name} · {banner.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </Section>
 
         <Section title="Sample sidebar layout (stage backdrop, resizable rail)">

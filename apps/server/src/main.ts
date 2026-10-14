@@ -1,33 +1,28 @@
-import { existsSync } from "node:fs";
-import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
-import { createApp } from "./app.ts";
 import { BRAND } from "@repo/contracts";
 import { loadConfig } from "./config.ts";
-import { createContext } from "./context.ts";
+import { startServer } from "./server.ts";
+
+/** Set when running as an Electron utilityProcess; the desktop shell talks to us over it. */
+interface ParentPort {
+  postMessage(message: unknown): void;
+  on(event: "message", listener: (event: { data: unknown }) => void): void;
+}
+const parentPort = (process as { parentPort?: ParentPort }).parentPort;
 
 const config = loadConfig();
-const ctx = createContext(config);
-const app = createApp(ctx);
+const server = await startServer(config);
+console.log(`[${BRAND.id}] listening on ${server.url}  (data: ${config.homeDir})`);
+console.log(`[${BRAND.id}] MCP endpoint: ${server.url}/mcp`);
 
-if (config.webDist && existsSync(config.webDist)) {
-  app.use("/*", serveStatic({ root: config.webDist }));
-  // SPA fallback for client-side routes.
-  app.get("*", serveStatic({ root: config.webDist, path: "index.html" }));
-}
-
-if (config.pollers) ctx.integrations.start();
-
-const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
-  console.log(`[${BRAND.id}] listening on http://${config.host}:${info.port}  (data: ${config.homeDir})`);
-  console.log(`[${BRAND.id}] MCP endpoint: http://${config.host}:${info.port}/mcp`);
-});
-
-function shutdown() {
-  ctx.integrations.stop();
-  server.close();
-  ctx.db.close();
+async function shutdown() {
+  await server.close();
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+parentPort?.on("message", ({ data }) => {
+  if (data === "shutdown") void shutdown();
+});
+// oxlint-disable-next-line unicorn/require-post-message-target-origin -- Electron MessagePortMain, not window.postMessage
+parentPort?.postMessage({ type: "ready", url: server.url });

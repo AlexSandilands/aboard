@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@repo/contracts";
+import type { TaskResolution, TaskStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */
@@ -16,6 +16,8 @@ export interface TaskRecord {
   createdAt: string;
   updatedAt: string;
   statusChangedAt: string;
+  resolution: TaskResolution | null;
+  resolvedByTaskId: string | null;
 }
 
 interface TaskRow {
@@ -32,6 +34,8 @@ interface TaskRow {
   created_at: string;
   updated_at: string;
   status_changed_at: string;
+  resolution: TaskResolution | null;
+  resolved_by_task_id: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -48,6 +52,8 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   statusChangedAt: r.status_changed_at,
+  resolution: r.resolution,
+  resolvedByTaskId: r.resolved_by_task_id,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -64,6 +70,8 @@ const toRow = (t: TaskRecord): TaskRow => ({
   created_at: t.createdAt,
   updated_at: t.updatedAt,
   status_changed_at: t.statusChangedAt,
+  resolution: t.resolution,
+  resolved_by_task_id: t.resolvedByTaskId,
 });
 
 export interface TaskFilter {
@@ -123,14 +131,30 @@ export function createTasksRepo(sql: Sql) {
         )
         .map(toRecord);
     },
+    /** Tasks closed against any of `ids` (done by / duplicate of), by number. */
+    resolvedBy(ids: readonly string[]): TaskRecord[] {
+      return sql
+        .all<TaskRow>(
+          "SELECT * FROM tasks WHERE resolved_by_task_id IN (SELECT value FROM json_each(?)) ORDER BY number",
+          jsonList(ids),
+        )
+        .map(toRecord);
+    },
+    /** Claims the next task number. Call inside the write that inserts the task, so a rollback releases it. */
     nextNumber(): number {
-      return (sql.get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1;
+      return sql.get<{ value: number }>(
+        "UPDATE counters SET value = value + 1 WHERE name = 'task_number' RETURNING value",
+      )!.value;
     },
     insert(t: TaskRecord): void {
       sql.insert("tasks", { ...toRow(t) });
     },
     update(t: TaskRecord): void {
       sql.update("tasks", { ...toRow(t) });
+    },
+    /** Hard delete; events, plan and links cascade, and tasks closed against it lose the pointer (SET NULL). */
+    delete(id: string): void {
+      sql.run("DELETE FROM tasks WHERE id = ?", id);
     },
   };
 }

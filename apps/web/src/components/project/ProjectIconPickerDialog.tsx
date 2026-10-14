@@ -2,7 +2,8 @@
 import { deriveProjectIdentity, ProjectIcon, type ProjectIconColor } from "@repo/contracts";
 import { ProjectMonogram } from "./ProjectMonogram";
 import { DynamicIcon, type IconName } from "lucide-react/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { IconImageError, imageFileToIconDataUrl } from "./projectIconImage";
 import {
   filterProjectIconNames,
   firstEmoji,
@@ -57,24 +58,30 @@ export function ProjectIconPickerDialog({
   const [iconName, setIconName] = useState<IconName>(
     current?.kind === "lucide" ? (current.name as IconName) : DEFAULT_ICON,
   );
-  const [color, setColor] = useState<ProjectIconColor>(
-    current && current.kind !== "emoji" ? current.color : automatic.color,
-  );
+  const [color, setColor] = useState<ProjectIconColor>(current && "color" in current ? current.color : automatic.color);
   const [letters, setLetters] = useState(current?.kind === "monogram" ? current.text : automatic.monogram);
   const [emoji, setEmoji] = useState(current?.kind === "emoji" ? current.emoji : "💻");
   const [query, setQuery] = useState("");
   const [customEmoji, setCustomEmoji] = useState("");
+  const [image, setImage] = useState(current?.kind === "image" ? current.dataUrl : null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Bumped per pick and per open, so a slow conversion can't land over a newer pick or a reopen.
+  const imageRequestRef = useRef(0);
   const previousOpenRef = useRef(false);
 
   useEffect(() => {
     if (open && !previousOpenRef.current) {
       setMode(current?.kind ?? "lucide");
       setIconName(current?.kind === "lucide" ? (current.name as IconName) : DEFAULT_ICON);
-      setColor(current && current.kind !== "emoji" ? current.color : automatic.color);
+      setColor(current && "color" in current ? current.color : automatic.color);
       setLetters(current?.kind === "monogram" ? current.text : automatic.monogram);
       setEmoji(current?.kind === "emoji" ? current.emoji : "💻");
       setQuery("");
       setCustomEmoji("");
+      setImage(current?.kind === "image" ? current.dataUrl : null);
+      setImageError(null);
+      imageRequestRef.current += 1;
     }
     previousOpenRef.current = open;
   }, [current, open, automatic.color, automatic.monogram]);
@@ -83,24 +90,63 @@ export function ProjectIconPickerDialog({
   const selectedColorClassName = projectIconColorClassName(color);
   const monogram = letters.normalize("NFKC").trim().toUpperCase();
   const validMonogram = isMonogramText(monogram, color);
+  const canSave = mode === "monogram" ? validMonogram : mode === "image" ? image !== null : true;
   const save = () => {
-    if (mode === "monogram" && !validMonogram) return;
+    if (!canSave) return;
     onSave(
       mode === "monogram"
         ? { kind: "monogram", text: monogram, color }
         : mode === "lucide"
           ? { kind: "lucide", name: iconName, color }
-          : { kind: "emoji", emoji },
+          : mode === "image" && image
+            ? { kind: "image", dataUrl: image }
+            : { kind: "emoji", emoji },
     );
     onOpenChange(false);
   };
 
+  const takeImageFile = async (file: File | undefined) => {
+    const request = ++imageRequestRef.current;
+    if (!file) {
+      setImageError("Choose an image file.");
+      return;
+    }
+    setImageError(null);
+    try {
+      const dataUrl = await imageFileToIconDataUrl(file);
+      if (request === imageRequestRef.current) setImage(dataUrl);
+    } catch (error) {
+      if (request !== imageRequestRef.current) return;
+      setImageError(error instanceof IconImageError ? error.message : "That image couldn't be used.");
+    }
+  };
+  const imageFrom = (items: DataTransferItemList) =>
+    [...items]
+      .find((item) => item.kind === "file" && (item.type === "" || item.type.startsWith("image/")))
+      ?.getAsFile() ?? undefined;
+  const onPaste = (event: ClipboardEvent) => {
+    if (mode !== "image") return;
+    const file = imageFrom(event.clipboardData.items);
+    if (!file) return;
+    event.preventDefault();
+    void takeImageFile(file);
+  };
+  // Handled on the whole popup so a drop that misses the zone doesn't navigate away to the file.
+  const onDragOver = (event: DragEvent) => {
+    if (mode === "image") event.preventDefault();
+  };
+  const onDrop = (event: DragEvent) => {
+    if (mode !== "image") return;
+    event.preventDefault();
+    void takeImageFile(imageFrom(event.dataTransfer.items));
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="w-full sm:w-[32rem]">
+      <DialogPopup className="w-full sm:w-[32rem]" onPaste={onPaste} onDragOver={onDragOver} onDrop={onDrop}>
         <DialogHeader>
           <DialogTitle>Choose project icon</DialogTitle>
-          <DialogDescription>Choose an icon, emoji, or monogram.</DialogDescription>
+          <DialogDescription>Choose an icon, emoji, monogram, or image.</DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex min-h-0 flex-col">
           <ToggleGroup
@@ -109,15 +155,16 @@ export function ProjectIconPickerDialog({
             value={[mode]}
             onValueChange={(next) => {
               const value = next[0];
-              if (value === "lucide" || value === "emoji" || value === "monogram") setMode(value);
+              if (value === "lucide" || value === "emoji" || value === "monogram" || value === "image") setMode(value);
             }}
           >
             <Toggle value="lucide">Icons</Toggle>
             <Toggle value="emoji">Emoji</Toggle>
             <Toggle value="monogram">Monogram</Toggle>
+            <Toggle value="image">Image</Toggle>
           </ToggleGroup>
 
-          {mode !== "emoji" ? (
+          {mode === "lucide" || mode === "monogram" ? (
             <div>
               <div className="mb-2 text-xs font-medium text-muted-foreground">Color</div>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Icon color">
@@ -193,6 +240,37 @@ export function ProjectIconPickerDialog({
                 </p>
               </div>
             </div>
+          ) : mode === "image" ? (
+            <div className="flex items-center gap-4 rounded-lg border border-dashed border-border p-4">
+              {image ? (
+                <img src={image} alt="Selected icon" className="size-12 shrink-0 rounded-[25%] object-contain" />
+              ) : (
+                <div className="size-12 shrink-0 rounded-[25%] bg-muted" />
+              )}
+              <div className="flex-1 space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    if (file) void takeImageFile(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  {image ? "Choose another image" : "Choose image"}
+                </Button>
+                {imageError ? (
+                  <p className="text-xs text-destructive-foreground">{imageError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Or drop or paste one here. It's resized to a small square.
+                  </p>
+                )}
+              </div>
+            </div>
           ) : (
             <>
               <ScrollArea scrollFade className="max-h-64">
@@ -246,7 +324,7 @@ export function ProjectIconPickerDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={mode === "monogram" && !validMonogram}>
+          <Button onClick={save} disabled={!canSave}>
             Save icon
           </Button>
         </DialogFooter>

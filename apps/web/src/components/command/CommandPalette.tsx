@@ -20,6 +20,7 @@ import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "~/components/ui/command";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
+import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
@@ -36,7 +37,14 @@ import {
   type PaletteItem,
   PaletteResults,
 } from "./PaletteResults";
-import { filterItems, queryForEntry, queryForParent, startsBrowseFromRoot, taskSearchTerms } from "./palette.logic";
+import {
+  filterItems,
+  normalizeDescription,
+  queryForEntry,
+  queryForParent,
+  startsBrowseFromRoot,
+  taskSearchTerms,
+} from "./palette.logic";
 import { useAddProject, useFolderBrowse } from "./useFolderBrowse";
 
 type TaskFlow = "idea" | "task";
@@ -92,16 +100,16 @@ function intentKey(intent: PaletteIntent): number {
 const isMac = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
 const MOD_LABEL = isMac ? "⌘" : "Ctrl";
 
-function isPrimaryModifier(event: KeyboardEvent<HTMLInputElement>): boolean {
+function isPrimaryModifier(event: KeyboardEvent<HTMLElement>): boolean {
   return isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 }
 
-function isComposing(event: KeyboardEvent<HTMLInputElement>): boolean {
+function isComposing(event: KeyboardEvent<HTMLElement>): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
 /** Stops Base UI from also handling the key (e.g. clicking the highlighted row on Enter). */
-function claimKey(event: KeyboardEvent<HTMLInputElement>): void {
+function claimKey(event: KeyboardEvent<HTMLElement>): void {
   (event as typeof event & { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
   event.preventDefault();
   event.stopPropagation();
@@ -229,6 +237,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const [stack, setStack] = useState<PaletteView[]>(() => initialStack(intent));
   const view = stack.at(-1) ?? { kind: "root" };
   const [query, setQuery] = useState(() => initialQueryFor(view));
+  const [description, setDescription] = useState("");
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selectedImports, setSelectedImports] = useState<ReadonlySet<string>>(() => new Set());
@@ -246,6 +255,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   function pushView(next: PaletteView): void {
     setStack((current) => [...current, next]);
     setQuery(initialQueryFor(next));
+    setDescription("");
     setHighlighted(null);
   }
 
@@ -253,6 +263,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (stack.length <= 1) return;
     setStack((current) => current.slice(0, -1));
     setQuery("");
+    setDescription("");
     setHighlighted(null);
   }
 
@@ -333,7 +344,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (!title || createTask.isPending) return;
     const { flow, projectId } = view;
     createTask.mutate(
-      { projectId, title },
+      { projectId, title, description: normalizeDescription(description) },
       {
         onSuccess: (task) => {
           setLastProjectId(projectId);
@@ -350,8 +361,10 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             description: `#${task.number} ${task.title}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
-          if (keepOpen) replaceQuery("");
-          else closePalette();
+          if (keepOpen) {
+            setDescription("");
+            replaceQuery("");
+          } else closePalette();
         },
       },
     );
@@ -690,6 +703,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     }
   }
 
+  /** In the description, Enter is a newline; Mod+Enter submits (Shift adds another idea). */
+  function handleDescriptionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== "Enter" || isComposing(event) || !isPrimaryModifier(event)) return;
+    claimKey(event);
+    submitTitle(event.shiftKey);
+  }
+
   // ── View chrome ────────────────────────────────────────────────────────
 
   let placeholder = "Search commands, tasks, and projects...";
@@ -798,13 +818,27 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       );
       inputClassName = "*:data-[slot=autocomplete-input]:pe-32!";
       preamble = (
-        <ContextRow
-          icon={titleProject ? projectIcon(titleProject) : <FolderIcon className={ITEM_ICON_CLASS} />}
-          title={titleProject?.title ?? "Unknown project"}
-          description={
-            view.flow === "idea" ? "Lands in Ideas · Shift+Enter to add another" : "Opens the task with the plan editor"
-          }
-        />
+        <>
+          <ContextRow
+            icon={titleProject ? projectIcon(titleProject) : <FolderIcon className={ITEM_ICON_CLASS} />}
+            title={titleProject?.title ?? "Unknown project"}
+            description={
+              view.flow === "idea"
+                ? "Lands in Ideas · Shift+Enter to add another"
+                : "Opens the task with the plan editor"
+            }
+          />
+          <div className="px-4 pb-3">
+            <Textarea
+              size="sm"
+              aria-label="Description (optional)"
+              placeholder={`Description (optional) · Tab to focus · ${MOD_LABEL}+Enter to create`}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              onKeyDown={handleDescriptionKeyDown}
+            />
+          </div>
+        </>
       );
       emptyStateMessage = undefined;
       break;

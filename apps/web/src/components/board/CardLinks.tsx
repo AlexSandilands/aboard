@@ -38,12 +38,12 @@ const THREAD_STATUS: Record<T3ThreadStatus, { label: string; dot: string }> = {
   idle: { label: "Idle", dot: "bg-muted-foreground/40" },
 };
 
-const chipClassName =
+export const chipClassName =
   "inline-flex h-5 min-w-0 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 /** Links inside a card must not open the panel or start a drag. */
 const stop = (event: SyntheticEvent) => event.stopPropagation();
-const linkHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
+export const linkHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 
 export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
   return links.some((link) => link.kind === "pr" || link.kind === "t3_thread");

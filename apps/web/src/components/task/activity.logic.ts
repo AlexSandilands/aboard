@@ -59,8 +59,26 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const status = STATUS_LABEL.get(str(p.status) ?? "");
       return line("created", status ? `created this in ${status}` : "created this");
     }
-    case "status_changed":
-      return line("status", `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`);
+    case "status_changed": {
+      const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;
+      const merged = str(p.mergedPr);
+      if (merged) return line("status", `${to} when ${merged} merged`);
+      return line("status", str(p.clearedResolution) ? `reopened this and ${to}` : to);
+    }
+    case "closed": {
+      const by = num(p.byTask);
+      const text =
+        str(p.resolution) === "wont_do"
+          ? "closed this as won't do"
+          : str(p.resolution) === "duplicate"
+            ? `closed this as a duplicate${by !== null ? ` of #${by}` : ""}`
+            : `closed this as done${by !== null ? ` by #${by}` : " elsewhere"}`;
+      return line("status", text);
+    }
+    case "resolver_deleted": {
+      const by = num(p.number);
+      return line("delete", `deleted ${by !== null ? `#${by}` : "the task"}, which closed this`);
+    }
     case "updated": {
       const fields = Array.isArray(p.fields) ? p.fields.filter((f): f is string => typeof f === "string") : [];
       const names = fields.map((f) => FIELD_LABEL[f] ?? f);

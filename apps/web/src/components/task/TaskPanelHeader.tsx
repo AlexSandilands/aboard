@@ -3,13 +3,19 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   CheckIcon,
+  CircleCheckBigIcon,
+  CopyIcon,
   EllipsisIcon,
   FolderInputIcon,
   HashIcon,
   LinkIcon,
   ListTodoIcon,
+  RotateCcwIcon,
+  SquareCheckIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react";
+import { useState } from "react";
 
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Badge } from "~/components/ui/badge";
@@ -29,9 +35,12 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
-import { isPlanRequired, useMoveTask, useUpdateTask } from "~/state/mutations";
+import { isPlanRequired, useDeleteTask, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
+import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { useBoard, useSettings } from "~/state/queries";
 import { copyToClipboard } from "./InlineInput";
+import { resolutionLabel } from "./resolution.logic";
 
 const STATUS_ITEMS = TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }));
 
@@ -48,6 +57,11 @@ export function TaskPanelHeader({
 }) {
   const { mutate: moveTask } = useMoveTask();
   const { mutate: updateTask } = useUpdateTask();
+  const { mutate: resolveTask } = useResolveTask();
+  const { mutate: deleteTask } = useDeleteTask();
+  const [closeAs, setCloseAs] = useState<PickResolution | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const resolution = resolutionLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
   const t3 = useBoard().data?.integrations.t3;
@@ -68,7 +82,7 @@ export function TaskPanelHeader({
   };
 
   return (
-    <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 border-b border-border px-3">
+    <header className="drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 border-b border-border px-3 wco:pe-(--workspace-native-controls-inset)">
       <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
       <Select
         value={task.status}
@@ -92,6 +106,11 @@ export function TaskPanelHeader({
           })}
         </SelectPopup>
       </Select>
+      {resolution ? (
+        <Badge variant="secondary" size="sm">
+          {resolution}
+        </Badge>
+      ) : null}
       {archived ? (
         <Badge variant="warning" size="sm">
           Archived
@@ -101,6 +120,12 @@ export function TaskPanelHeader({
       <div className="ms-auto flex items-center gap-0.5">
         {startT3 ? <StartT3Button taskId={task.id} variant="panel" /> : null}
         {handoff ? <CopyPromptMenu task={task} variant="panel" /> : null}
+        {task.status === "done" && !archived ? (
+          <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
+            <ArchiveIcon />
+            Archive
+          </Button>
+        ) : null}
         <Menu>
           <MenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Task actions" />}>
             <EllipsisIcon />
@@ -131,10 +156,47 @@ export function TaskPanelHeader({
                   ))}
               </MenuSubPopup>
             </MenuSub>
+            {task.resolution ? (
+              // Back to where a plan allows: a planless task can only be an idea.
+              <MenuItem onClick={() => setStatus(hasPlan ? "planned" : "idea")}>
+                <RotateCcwIcon />
+                Reopen
+              </MenuItem>
+            ) : null}
+            <MenuSub>
+              <MenuSubTrigger>
+                <CircleCheckBigIcon />
+                {task.resolution ? "Close differently" : "Close as…"}
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <MenuItem onClick={() => setCloseAs("completed")}>
+                  <SquareCheckIcon />
+                  Done by another task…
+                </MenuItem>
+                <MenuItem onClick={() => setCloseAs("duplicate")}>
+                  <CopyIcon />
+                  Duplicate of…
+                </MenuItem>
+                <MenuItem
+                  disabled={task.resolution === "wont_do"}
+                  onClick={() => resolveTask({ id: task.id, resolution: "wont_do" })}
+                >
+                  <XIcon />
+                  Won&apos;t do
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
             <MenuItem onClick={() => updateTask({ id: task.id, archived: !archived })}>
               {archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
               {archived ? "Unarchive" : "Archive"}
             </MenuItem>
+            {archived ? (
+              // Deleting is a second step after archiving, so it never sits next to everyday actions.
+              <MenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2Icon />
+                Delete permanently…
+              </MenuItem>
+            ) : null}
             <MenuSeparator />
             <MenuItem onClick={copyLink}>
               <LinkIcon />
@@ -153,6 +215,20 @@ export function TaskPanelHeader({
           <TooltipPopup side="bottom">Close (Esc)</TooltipPopup>
         </Tooltip>
       </div>
+      <CloseTaskDialog task={task} resolution={closeAs} onOpenChange={(open) => !open && setCloseAs(null)} />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete #${task.number}?`}
+        description="This permanently deletes the task with its plan, links and activity. It can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          // Close up front: task.deleted can arrive before the response and flash "Task not found".
+          // Failures still toast, since the hook's onError outlives the panel.
+          deleteTask(task.id);
+          onClose();
+        }}
+      />
     </header>
   );
 }

@@ -1,6 +1,7 @@
 import { storageKey } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
 
 /** Persisted board view preferences. */
 interface BoardViewState {
@@ -42,6 +43,23 @@ export const useBoardView = create<BoardViewState>()(
         expandedDone,
       }),
     },
+  ),
+);
+
+/** Persisted look-and-feel choices that live in the browser rather than server settings. */
+interface AppearanceState {
+  /** Art behind the sidebar brand row. Stored values are re-validated by resolveStageBanner. */
+  banner: StageBannerChoice;
+  setBanner: (banner: StageBannerChoice) => void;
+}
+
+export const useAppearance = create<AppearanceState>()(
+  persist(
+    (set) => ({
+      banner: DEFAULT_STAGE_BANNER,
+      setBanner: (banner) => set({ banner }),
+    }),
+    { name: storageKey("appearance"), partialize: ({ banner }) => ({ banner }) },
   ),
 );
 

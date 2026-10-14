@@ -1,0 +1,22 @@
+{
+  "name": "@repo/desktop",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "dev": "wait-on --timeout 120000 http-get://127.0.0.1:4317/api/health http-get://127.0.0.1:5317 && node scripts/launch.ts --dev",
+    "start": "node scripts/launch.ts",
+    "package": "node scripts/package.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@repo/contracts": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
+    "electron": "^44.7.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "wait-on": "^9.5.1"
+  }
+}
