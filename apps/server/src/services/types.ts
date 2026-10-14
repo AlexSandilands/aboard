@@ -90,6 +90,8 @@ export interface TasksService {
    * Moving a closed task out of Done clears its resolution. `because` adds fields to the status_changed event
    * payload, for automatic moves that should say why (e.g. `{ mergedPr: "owner/repo#12" }`); it cannot override
    * from/to/clearedResolution.
+   * Entering Review from any status but Done, with all its PRs finished and one merged, is followed by a second
+   * move to Done by actor "github" (see LinksService.setSnapshot); the returned summary is then in Done.
    */
   move(id: string, input: MoveTaskInput, actor: string, because?: Record<string, unknown>): TaskSummary;
   /**
@@ -146,8 +148,8 @@ export interface LinksService {
    * Because only that transition triggers it:
    * - a link with no snapshot yet whose first successful poll sees "merged" counts as the merge, so after polling
    *   was off or gh was unauthenticated for a while, several Review tasks can move to Done at once;
-   * - a merge seen while the task was not in Review (e.g. still In Progress) is used up, so moving the task to
-   *   Review afterwards does not complete it.
+   * - a merge seen while the task was not in Review (e.g. still In Progress) is used up here; `TasksService.move`
+   *   completes the task instead when it later enters Review.
    */
   setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | null): void;
 }

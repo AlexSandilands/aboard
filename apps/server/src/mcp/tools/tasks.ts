@@ -147,7 +147,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             },
             actor(args.actor),
           );
-          return taskResult(services, id, `Moved #${summary.number} to ${statusLabel(summary.status)}.`);
+          // Entering Review with every PR already merged completes the task straight away.
+          const moved =
+            summary.status === args.status
+              ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
+              : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
+          return taskResult(services, id, moved);
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),

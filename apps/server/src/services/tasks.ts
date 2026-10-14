@@ -6,7 +6,8 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
-import type { CloseInput, LinksService, ProjectsService, TaskQuery, TasksService } from "./types.ts";
+import type { LinksModule } from "./links.ts";
+import type { CloseInput, ProjectsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -28,7 +29,7 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
 /** Task cards: creation, updates, moves between columns, notes. */
 export function createTasksService(
   core: Core,
-  deps: { projects: ProjectsService; plans: () => PlansModule; links: () => LinksService },
+  deps: { projects: ProjectsService; plans: () => PlansModule; links: () => LinksModule },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
 
@@ -49,7 +50,7 @@ export function createTasksService(
   // A key in the title is a strong signal, so it is linked outright. Keys in a description are only
   // hinted at (mcp/format.ts), since prose there gives too many false positives. links.add is idempotent.
   const linkTitleKeys = (taskId: string, title: string, actor: string): void => {
-    for (const key of findJiraKeys(title)) deps.links().add(taskId, { value: key }, actor);
+    for (const key of findJiraKeys(title)) deps.links().service.add(taskId, { value: key }, actor);
   };
 
   /** Validates the resolution/by-task pairing for `close` and returns the by-task, if any. */
@@ -130,7 +131,7 @@ export function createTasksService(
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
-        for (const link of input.links ?? []) deps.links().add(task.id, link, actor);
+        for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
         return task.id;
       });
@@ -209,6 +210,9 @@ export function createTasksService(
             to: status,
             ...(reopened ? { clearedResolution: current.resolution } : {}),
           });
+          // A merge seen before the task reached Review was used up then; finish it now. Coming back from Done
+          // is a deliberate reopen, so it stays put. The follow-up is its own move, logged as "github".
+          if (status === "review" && current.status !== "done") deps.links().completeIfPrsDone(id);
         } else fx.task(id);
       });
       return service.summary(id);

@@ -111,3 +111,69 @@ describe("moving Review tasks to Done when their PR merges", () => {
     expect(status()).toBe("done");
   });
 });
+
+describe("completing tasks that enter Review with their PRs already merged", () => {
+  const upserts = (events: ReturnType<typeof setup>["events"], taskId: string) =>
+    events.flatMap((e) => (e.type === "task.upserted" && e.task.id === taskId ? [e.task.status] : []));
+
+  it("moves on to Done as github when every PR is finished and one merged", () => {
+    const { s, task, links, status, events } = setup("in_progress", [1, 2]);
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    s.links.setSnapshot(links[1]!.id, pr("closed"));
+    expect(status()).toBe("in_progress");
+    events.length = 0;
+
+    const summary = s.tasks.move(task.id, { status: "review" }, "agent");
+
+    expect(summary.status).toBe("done");
+    expect(s.tasks.detail(task.id).events.slice(-2)).toMatchObject([
+      { type: "status_changed", actor: "agent", payload: { from: "in_progress", to: "review" } },
+      {
+        type: "status_changed",
+        actor: GITHUB_ACTOR,
+        payload: { from: "review", to: "done", mergedPr: `acme/app#${links[0]!.url.split("/").at(-1)}` },
+      },
+    ]);
+    // Both moves share one write, so clients only ever see the final state.
+    expect(upserts(events, task.id)).toEqual(["done"]);
+  });
+
+  it("does the same for a move through the REST API", async () => {
+    const { s, task, links, request, status } = setup("in_progress");
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    const res = await request(`/api/tasks/${task.id}/move`, { method: "POST", json: { status: "review" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "done" });
+    expect(status()).toBe("done");
+  });
+
+  it("stays in Review while a PR is still open", () => {
+    const { s, task, links, status } = setup("in_progress", [1, 2]);
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    s.links.setSnapshot(links[1]!.id, pr("open"));
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    expect(status()).toBe("review");
+  });
+
+  it("stays in Review without PR links", () => {
+    const { s, task, status } = setup("in_progress", []);
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    expect(status()).toBe("review");
+  });
+
+  it("stays in Review when moved back from Done", () => {
+    const { s, task, links, status } = setup("in_progress");
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    s.tasks.move(task.id, { status: "done" }, "agent");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    expect(status()).toBe("review");
+  });
+
+  it("ignores archived tasks", () => {
+    const { s, task, links, status } = setup("in_progress");
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    s.tasks.update(task.id, { archived: true }, "user");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    expect(status()).toBe("review");
+  });
+});
