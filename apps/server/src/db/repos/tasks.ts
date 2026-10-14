@@ -18,6 +18,8 @@ export interface TaskRecord {
   statusChangedAt: string;
   resolution: TaskResolution | null;
   resolvedByTaskId: string | null;
+  /** null inherits the global auto-review setting. */
+  autoReview: boolean | null;
 }
 
 interface TaskRow {
@@ -36,6 +38,7 @@ interface TaskRow {
   status_changed_at: string;
   resolution: TaskResolution | null;
   resolved_by_task_id: string | null;
+  auto_review: number | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -54,6 +57,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   statusChangedAt: r.status_changed_at,
   resolution: r.resolution,
   resolvedByTaskId: r.resolved_by_task_id,
+  autoReview: r.auto_review === null ? null : r.auto_review !== 0,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -72,6 +76,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   status_changed_at: t.statusChangedAt,
   resolution: t.resolution,
   resolved_by_task_id: t.resolvedByTaskId,
+  auto_review: t.autoReview === null ? null : t.autoReview ? 1 : 0,
 });
 
 export interface TaskFilter {

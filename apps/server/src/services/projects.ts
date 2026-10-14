@@ -91,6 +91,7 @@ export function createProjectsService(core: Core): ProjectsService {
           workspaceKey,
           icon: input.icon ?? null,
           t3ProjectId: input.t3ProjectId ?? null,
+          reviewSkill: null,
           position: generateKeyBetween(repos.projects.lastPosition(), null),
           collapsed: false,
           archivedAt: null,
@@ -114,6 +115,7 @@ export function createProjectsService(core: Core): ProjectsService {
           assertKeyFree(next.workspaceKey, id);
         }
         if (input.icon !== undefined) next.icon = input.icon;
+        if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
         if (input.collapsed !== undefined) next.collapsed = input.collapsed;
         if (input.archived !== undefined)
           next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;

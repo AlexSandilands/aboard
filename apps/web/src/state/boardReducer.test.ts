@@ -23,6 +23,8 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     links: [],
     attention: [],
     lastNote: null,
+    autoReview: null,
+    review: null,
   };
 }
 
@@ -64,6 +66,7 @@ describe("applyBoardEvent project archiving", () => {
       workspaceKey: null,
       icon: null,
       t3ProjectId: null,
+      reviewSkill: null,
       position: "a0",
       collapsed: false,
       archivedAt: null,

@@ -10,6 +10,7 @@ function project(id: string): Project {
     workspaceKey: null,
     icon: null,
     t3ProjectId: null,
+    reviewSkill: null,
     position: id,
     collapsed: false,
     archivedAt: null,
@@ -39,6 +40,8 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     links: [],
     attention: [],
     lastNote: null,
+    autoReview: null,
+    review: null,
     ...overrides,
   };
 }

@@ -138,6 +138,9 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   pr_conflict: "Conflict",
   thread_needs_input: "Needs input",
   thread_failed: "Thread failed",
+  review_stalled: "Needs review",
+  review_stuck: "Review stuck",
+  review_failed: "Review failed",
 };
 
 /** Tasks for the sidebar's "Needs attention" list: errors first, then most recently updated. */

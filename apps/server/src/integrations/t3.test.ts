@@ -29,6 +29,7 @@ import {
   type FetchFn,
   type T3Services,
 } from "./t3.ts";
+import { defaultSettings } from "../test/fixtures.ts";
 
 const ENV_ID = "19032d81-04ac-423c-a5b0-f71db3f71200";
 const ORIGIN = "http://127.0.0.1:3773";
@@ -262,7 +263,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
       t3Token: () => token,
       update: (input) => {
         if (input.t3Token !== undefined) token = input.t3Token;
-        return { jiraBaseUrl: null, githubPolling: true, t3LinkTarget: "desktop", t3TokenSet: Boolean(token) };
+        return { ...defaultSettings, t3TokenSet: Boolean(token) };
       },
     },
     tasks: {
@@ -281,6 +282,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
           workspaceKey: key,
           icon: input.icon ?? null,
           t3ProjectId: input.t3ProjectId ?? null,
+          reviewSkill: null,
           position: "a0",
           collapsed: false,
           archivedAt: null,
@@ -608,6 +610,7 @@ describe("T3 thread launch", () => {
     workspaceKey: normalizeWorkspaceKey("c:/code/acme"),
     icon: null,
     t3ProjectId: null,
+    reviewSkill: null,
     position: "a0",
     collapsed: false,
     archivedAt: null,

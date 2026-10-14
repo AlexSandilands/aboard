@@ -7,6 +7,7 @@ import { createCore } from "./core.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
+import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTasksService } from "./tasks.ts";
 import type { Services } from "./types.ts";
@@ -37,5 +38,6 @@ export function createServices(deps: ServiceDeps): Services {
     links: links.service,
     settings,
     board: createBoardService(core),
+    reviews: createReviewsService(core, { task: tasks.record }),
   };
 }

@@ -83,7 +83,7 @@ export function createTasksService(
     summary: (id) => assembleOne(id).summary,
 
     detail(id): TaskDetail {
-      const { record: task, summary, phases } = assembleOne(id);
+      const { record: task, summary, phases, reviews } = assembleOne(id);
       return {
         ...summary,
         description: task.description,
@@ -93,6 +93,7 @@ export function createTasksService(
         resolves: repos.tasks
           .resolvedBy([id])
           .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
+        reviews,
       };
     },
 
@@ -127,6 +128,7 @@ export function createTasksService(
           statusChangedAt: now,
           resolution: null,
           resolvedByTaskId: null,
+          autoReview: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
@@ -158,6 +160,10 @@ export function createTasksService(
         if (input.planContext !== undefined && input.planContext !== current.planContext) {
           next.planContext = input.planContext;
           changed.push("planContext");
+        }
+        if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
+          next.autoReview = input.autoReview;
+          changed.push("autoReview");
         }
         if (input.projectId !== undefined && input.projectId !== current.projectId) {
           const project = deps.projects.get(input.projectId);

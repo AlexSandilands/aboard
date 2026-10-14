@@ -3,6 +3,7 @@ import { createEventsRepo } from "./events.ts";
 import { createLinksRepo } from "./links.ts";
 import { createPlansRepo } from "./plans.ts";
 import { createProjectsRepo } from "./projects.ts";
+import { createReviewsRepo } from "./reviews.ts";
 import { createSettingsRepo } from "./settings.ts";
 import { createSql } from "./sql.ts";
 import { createTasksRepo } from "./tasks.ts";
@@ -16,6 +17,7 @@ export function createRepos(db: Db) {
     plans: createPlansRepo(sql),
     links: createLinksRepo(sql),
     events: createEventsRepo(sql),
+    reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
   };
 }

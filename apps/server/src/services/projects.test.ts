@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { repositoryRootOf } from "./projects.ts";
+import { defaultSettings } from "../test/fixtures.ts";
 
 const codeOf = (fn: () => unknown): string | undefined => {
   try {
@@ -137,12 +138,7 @@ describe("links", () => {
 describe("settings", () => {
   it("never returns the token", () => {
     const { services: s } = createTestHarness();
-    expect(s.settings.get()).toEqual({
-      jiraBaseUrl: null,
-      githubPolling: true,
-      t3LinkTarget: "desktop",
-      t3TokenSet: false,
-    });
+    expect(s.settings.get()).toEqual(defaultSettings);
     const updated = s.settings.update({ t3Token: "secret", githubPolling: false });
     expect(updated).toMatchObject({ t3TokenSet: true, githubPolling: false });
     expect(JSON.stringify(updated)).not.toContain("secret");

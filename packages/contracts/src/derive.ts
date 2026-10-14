@@ -1,3 +1,4 @@
+import type { TaskReviewSummary } from "./reviews.ts";
 import type { AttentionReason, CurrentStep, PlanPhase, StepStatus, TaskLink } from "./schemas.ts";
 
 /** Statuses that count as finished for progress. */
@@ -52,7 +53,11 @@ export function deriveCurrentStep(phases: ReadonlyArray<PlanPhase>): CurrentStep
   };
 }
 
-export function deriveAttention(phases: ReadonlyArray<PlanPhase>, links: ReadonlyArray<TaskLink>): AttentionReason[] {
+export function deriveAttention(
+  phases: ReadonlyArray<PlanPhase>,
+  links: ReadonlyArray<TaskLink>,
+  review: TaskReviewSummary | null = null,
+): AttentionReason[] {
   const reasons: AttentionReason[] = [];
   const blocked = phases.flatMap((p) => p.steps).filter((s) => s.status === "blocked");
   if (blocked.length > 0) {
@@ -86,6 +91,20 @@ export function deriveAttention(phases: ReadonlyArray<PlanPhase>, links: Readonl
         reasons.push({ kind: "thread_failed", severity: "error", message: "Thread failed" });
       }
     }
+  }
+  // A review mid-loop (pending, changes requested, fixed) is the agent's business; only a loop that ended
+  // without a clean result needs the user.
+  if (review?.state === "stalled") {
+    reasons.push({ kind: "review_stalled", severity: "warning", message: "Needs review: no reviewer ran" });
+  } else if (review?.state === "stuck") {
+    const open = review.open.blocking + review.open.major;
+    reasons.push({
+      kind: "review_stuck",
+      severity: "warning",
+      message: `Review: ${open} open after ${review.round} round${review.round === 1 ? "" : "s"}`,
+    });
+  } else if (review?.state === "failed") {
+    reasons.push({ kind: "review_failed", severity: "error", message: "Review failed" });
   }
   return reasons;
 }
