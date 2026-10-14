@@ -199,6 +199,21 @@ describe("events", () => {
       }
     });
 
+    it("never reuses a deleted task's number, including after a project delete", () => {
+      const { s, project } = setup();
+      const first = s.tasks.create({ projectId: project.id, title: "One" });
+      const second = s.tasks.create({ projectId: project.id, title: "Two" });
+      expect([first.number, second.number]).toEqual([1, 2]);
+      s.tasks.update(second.id, { archived: true }, "user");
+      s.tasks.delete(second.id, "user");
+      expect(s.tasks.create({ projectId: project.id, title: "Three" }).number).toBe(3);
+
+      const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+      s.tasks.create({ projectId: other.id, title: "Four" });
+      s.projects.delete(other.id);
+      expect(s.tasks.create({ projectId: project.id, title: "Five" }).number).toBe(5);
+    });
+
     it("keeps the resolution of tasks closed against it and logs why the link went", () => {
       const { s, project, events } = setup();
       const resolver = s.tasks.create({ projectId: project.id, title: "Resolver" });

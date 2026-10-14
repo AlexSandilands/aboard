@@ -206,7 +206,12 @@ export function TaskPanelHeader({
         title={`Delete #${task.number}?`}
         description="This permanently deletes the task with its plan, links and activity. It can't be undone."
         confirmLabel="Delete"
-        onConfirm={() => deleteTask(task.id, { onSuccess: onClose })}
+        onConfirm={() => {
+          // Close up front: task.deleted can arrive before the response and flash "Task not found".
+          // Failures still toast, since the hook's onError outlives the panel.
+          deleteTask(task.id);
+          onClose();
+        }}
       />
     </header>
   );
