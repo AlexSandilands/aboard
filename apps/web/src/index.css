@@ -307,6 +307,15 @@
   }
 }
 
+/* Text and icons drawn over a sidebar banner. Ink follows the theme's foreground (no banner, or a
+   theme-toned one) and turns white when the art marks itself dark. */
+@utility stage-ink {
+  --stage-ink: var(--foreground);
+  &:has([data-stage-tone="dark"]) {
+    --stage-ink: #fff;
+  }
+}
+
 @layer base {
   :root {
     --stage-night-base-top: oklch(0.283792 0.117327 297.201);
@@ -322,6 +331,13 @@
     --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
     --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
     --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
+    /* Theme-toned banners: paper and ink swap with the theme. */
+    --stage-mono-bg: #fff;
+    --stage-mono-ink: #000;
+  }
+  .dark {
+    --stage-mono-bg: #000;
+    --stage-mono-ink: #fff;
   }
 
   * {
