@@ -39,7 +39,7 @@ export default defineConfig({
         // open, so EventSource never notices and the board goes stale. Drop it so the client reconnects.
         configure: (proxy) => {
           proxy.on("error", (_error, _req, res) => {
-            if ("destroy" in res) res.destroy();
+            res.destroy();
           });
         },
       },

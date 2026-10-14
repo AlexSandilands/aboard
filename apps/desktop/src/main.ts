@@ -8,14 +8,17 @@ import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
 import { decideNavigation, isDesktopTheme } from "./shell.logic.ts";
 import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
 
-const port = Number(process.env[brandEnv("PORT")] ?? 4317);
+const port = parsePort(process.env[brandEnv("PORT")]);
 /** Set by `pnpm desktop`: load the Vite dev server and attach to the API server `pnpm dev` runs. */
-const devUrl = process.env[brandEnv("DEV_URL")] ?? null;
+const devUrl = app.isPackaged ? null : (process.env[brandEnv("DEV_URL")] ?? null);
+/** Bearer token the server enforces when set; the board picks it up from the URL hash. */
+const token = process.env[brandEnv("TOKEN")] || null;
 /** Passed by the login item so a start at login stays in the tray. */
 const HIDDEN_ARG = "--hidden";
 
-// Before anything reads app paths: userData and logs live under the app name, not the package name.
-app.setName(BRAND.name);
+// Before anything reads app paths: userData, logs and the single-instance lock live under the app name.
+// Dev builds get their own, so `pnpm desktop` doesn't hand off to an installed copy that's running.
+app.setName(app.isPackaged ? BRAND.name : `${BRAND.name} Dev`);
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const bundle = app.isPackaged
@@ -27,9 +30,22 @@ let server: BoardServer | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+/** Tray clicks and second launches before the server is ready; the window opens once it is. */
+let showRequested = false;
+
+function parsePort(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65_536 ? parsed : 4317;
+}
 
 function boardUrl(): string {
   return devUrl ?? server?.url ?? `http://127.0.0.1:${port}`;
+}
+
+function withToken(url: string, form: "hash" | "query"): string {
+  if (!token) return url;
+  const value = encodeURIComponent(token);
+  return form === "hash" ? `${url}/#token=${value}` : `${url}?token=${value}`;
 }
 
 function openExternally(url: string): void {
@@ -70,11 +86,15 @@ function createWindow(show: boolean): BrowserWindow {
     event.preventDefault();
     openExternally(url);
   });
-  void win.loadURL(boardUrl());
+  void win.loadURL(withToken(boardUrl(), "hash"));
   return win;
 }
 
 function showWindow(): void {
+  if (!server) {
+    showRequested = true;
+    return;
+  }
   window ??= createWindow(false);
   if (window.isMinimized()) window.restore();
   window.show();
@@ -92,7 +112,7 @@ function buildTrayMenu(): Menu {
       label: "Copy MCP URL",
       enabled: server !== null,
       // The API server's URL even in dev, where the window shows the Vite server instead.
-      click: () => server && clipboard.writeText(`${server.url}/mcp`),
+      click: () => server && clipboard.writeText(withToken(`${server.url}/mcp`, "query")),
     },
     { type: "separator" },
     {
@@ -143,12 +163,13 @@ async function start(): Promise<void> {
       },
     });
   } catch (error) {
-    await reportStartFailure(error);
-    app.exit(1);
+    // Quitting from the tray mid-startup kills the server; that isn't a failure to report.
+    if (!quitting) await reportStartFailure(error);
+    app.exit(quitting ? 0 : 1);
     return;
   }
   tray.setContextMenu(buildTrayMenu());
-  window = createWindow(!process.argv.includes(HIDDEN_ARG));
+  window = createWindow(showRequested || !process.argv.includes(HIDDEN_ARG));
 }
 
 if (app.requestSingleInstanceLock()) {
@@ -173,6 +194,8 @@ if (app.requestSingleInstanceLock()) {
     const owned = server;
     server = null;
     event.preventDefault();
+    // The graceful stop can take a few seconds; don't leave a window that looks frozen meanwhile.
+    window?.hide();
     void owned.stop().finally(() => app.quit());
   });
   void app.whenReady().then(start);

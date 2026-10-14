@@ -83,12 +83,21 @@ function spawnServer(url: string, options: ServerOptions): Promise<BoardServer> 
       NODE_NO_WARNINGS: "1",
     },
   });
+  let logEnded = false;
+  log.on("error", (error) => console.error(`[${BRAND.id}] server log:`, error));
   const capture = (chunk: Buffer) => {
-    log.write(chunk);
+    if (!logEnded) log.write(chunk);
     tail.push(chunk.toString("utf8"));
   };
   child.stdout?.on("data", capture);
   child.stderr?.on("data", capture);
+  // "exit" can arrive before the last piped output (often the crash's stack trace), so the exit handler
+  // waits, briefly, for the streams to close. Listen from the start in case they close first.
+  const streamsClosed = Promise.all(
+    [child.stdout, child.stderr].map(
+      (stream) => new Promise<void>((resolve) => (stream ? stream.once("close", resolve) : resolve())),
+    ),
+  );
 
   const report = () => `${tail.toString()}
 
@@ -123,8 +132,10 @@ Full log: ${logPath}`;
       ready = true;
       resolve(server);
     });
-    child.once("exit", (code) => {
+    child.once("exit", async (code) => {
       clearTimeout(timer);
+      await Promise.race([streamsClosed, sleep(1000)]);
+      logEnded = true;
       log.end(`--- exited with code ${code}
 `);
       if (!ready) fail(`The server exited during startup (code ${code}).`);
