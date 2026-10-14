@@ -406,6 +406,22 @@ function AgentsSection() {
         </div>
       </SettingsRow>
       <SettingsRow
+        title="GitHub Copilot CLI"
+        description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`copilot mcp add --transport http ${BRAND.id} ${url}`} />
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        title="GitHub Copilot (VS Code)"
+        description={`Add the ${BRAND.id} MCP server to your VS Code user profile, or put the same entry under "servers" in .vscode/mcp.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
+        </div>
+      </SettingsRow>
+      <SettingsRow
         title="Skill"
         description={`Teaches Claude Code when to log ideas, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
       >

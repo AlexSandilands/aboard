@@ -20,4 +20,8 @@ Register the server (it runs on 127.0.0.1:4317):
 claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
 # Codex
 codex mcp add aboard --url http://127.0.0.1:4317/mcp
+# GitHub Copilot CLI
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
+# GitHub Copilot in VS Code (or add to .vscode/mcp.json under "servers")
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```

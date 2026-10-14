@@ -312,7 +312,7 @@ Tool descriptions are written for agents: when to call, what a good plan looks l
 
 **Project settings** (dialog from the gear): name, icon (picker dialog), workspace path (browse), linked T3 project (auto-matched, shown read-only), archive project.
 
-**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http aboard http://127.0.0.1:4317/mcp`, the Codex equivalent, and the skill install path).
+**App settings** (dialog): theme; T3 integration (detected origin/env, token field for live status, "Test connection"); GitHub (gh detected/auth status, polling toggle); Jira base URL; MCP setup snippet with copy buttons (`claude mcp add --transport http aboard http://127.0.0.1:4317/mcp`, the Codex, GitHub Copilot CLI and Copilot-in-VS-Code equivalents, and the skill install path).
 
 **Client state:**
 - TanStack Query for the board snapshot + task detail. A `useBoardEvents()` hook opens `EventSource('/events')` and patches the cache: `task.upserted` replaces the summary; `task.detail_changed` invalidates detail if open.
