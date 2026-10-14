@@ -307,12 +307,12 @@
   }
 }
 
-/* Text and icons drawn over a sidebar banner. Banners are dark (white ink) unless the art marks
-   itself theme-toned, in which case the ink follows the theme's foreground. */
+/* Text and icons drawn over a sidebar banner. Ink follows the theme's foreground (no banner, or a
+   theme-toned one) and turns white when the art marks itself dark. */
 @utility stage-ink {
-  --stage-ink: #fff;
-  &:has([data-stage-tone="theme"]) {
-    --stage-ink: var(--foreground);
+  --stage-ink: var(--foreground);
+  &:has([data-stage-tone="dark"]) {
+    --stage-ink: #fff;
   }
 }
 

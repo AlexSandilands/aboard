@@ -46,6 +46,7 @@ export function NightlyArt() {
   return (
     <svg
       data-stage-art="nightly"
+      data-stage-tone="dark"
       className="h-full w-full"
       fill="none"
       preserveAspectRatio="xMinYMin slice"

@@ -1,24 +1,26 @@
 import type { ComponentType } from "react";
 import { useAppearance } from "~/state/ui";
 import { AuroraArt } from "./stage/AuroraArt";
+import { BlackArt } from "./stage/BlackArt";
 import { CardsArt } from "./stage/CardsArt";
 import { CircuitArt } from "./stage/CircuitArt";
 import { DuskArt } from "./stage/DuskArt";
-import { HexArt } from "./stage/HexArt";
+import { HexArt, HexMonoArt } from "./stage/HexArt";
 import { NightlyArt } from "./stage/NightlyArt";
-import { NoneArt } from "./stage/NoneArt";
 import { type StageBannerId, resolveStageBanner } from "./stage/stageBanner.logic";
 import { WiresArt } from "./stage/WiresArt";
 
-const STAGE_ART: Record<StageBannerId, ComponentType> = {
+const STAGE_ART: Record<StageBannerId, ComponentType | null> = {
   nightly: NightlyArt,
   aurora: AuroraArt,
   dusk: DuskArt,
   circuit: CircuitArt,
   cards: CardsArt,
   hex: HexArt,
+  "hex-mono": HexMonoArt,
   wires: WiresArt,
-  none: NoneArt,
+  black: BlackArt,
+  none: null,
 };
 
 /**
@@ -28,6 +30,7 @@ const STAGE_ART: Record<StageBannerId, ComponentType> = {
 export function SidebarStageBackdrop({ banner }: { banner?: StageBannerId }) {
   const choice = useAppearance((s) => s.banner);
   const Art = STAGE_ART[banner ?? resolveStageBanner(choice)];
+  if (!Art) return null;
   return (
     <div
       aria-hidden

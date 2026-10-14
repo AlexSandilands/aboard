@@ -30,10 +30,11 @@ describe("resolveStageBanner", () => {
     expect(night).toBe(morning);
   });
 
-  it("visits every rotating banner over consecutive days, and never None", () => {
+  it("visits every rotating banner over consecutive days, and never the plain ones", () => {
     const rotating = STAGE_BANNERS.filter((banner) => banner.rotates).map((banner) => banner.id);
     const seen = new Set(rotating.map((_, offset) => resolveStageBanner("rotate", new Date(2026, 9, 14 + offset, 12))));
     expect([...seen].toSorted()).toEqual(rotating.toSorted());
     expect(seen.has("none")).toBe(false);
+    expect(seen.has("black")).toBe(false);
   });
 });

@@ -31,18 +31,27 @@ function cellCenter(col: number, row: number): [number, number] {
   return [col * W + (row % 2 === 1 ? W / 2 : 0), row * ROW];
 }
 
-/** A honeycomb grid that fades out towards the wordmark, with a few lit cells. */
-export function HexArt() {
+const COLORS = {
+  dark: { line: "oklch(0.75 0.11 230)", lit: "oklch(0.72 0.14 220)" },
+  mono: { line: "var(--stage-mono-ink)", lit: "var(--stage-mono-ink)" },
+} as const;
+
+/**
+ * A honeycomb grid that fades out towards the wordmark, with a few lit cells. `mono` draws it in
+ * ink on paper, black or white with the theme.
+ */
+export function HexArt({ mono = false }: { mono?: boolean }) {
+  const colors = mono ? COLORS.mono : COLORS.dark;
   const ids = useArtIds(["bg", "grid", "lit", "fade", "mask"] as const);
   return (
-    <StageSvg art="hex">
+    <StageSvg art={mono ? "hex-mono" : "hex"} tone={mono ? "theme" : "dark"}>
       <defs>
         <linearGradient id={ids.bg} x1="0" y1="0" x2="280" y2="96" gradientUnits="userSpaceOnUse">
           <stop stopColor="oklch(0.15 0.02 260)" />
           <stop offset="1" stopColor="oklch(0.2 0.05 255)" />
         </linearGradient>
         <pattern id={ids.grid} width={W} height={2 * ROW} patternUnits="userSpaceOnUse">
-          <g stroke="oklch(0.75 0.11 230)" strokeOpacity="0.4" strokeWidth="0.6">
+          <g stroke={colors.line} strokeOpacity={mono ? 0.28 : 0.4} strokeWidth="0.6">
             {GRID_CELLS.map((d) => (
               <path key={d} d={d} />
             ))}
@@ -55,8 +64,8 @@ export function HexArt() {
               <path
                 key={`${col}-${row}`}
                 d={hexPath(cx, cy, R - 1.2)}
-                fill="oklch(0.72 0.14 220)"
-                fillOpacity={opacity}
+                fill={colors.lit}
+                fillOpacity={mono ? opacity * 0.5 : opacity}
               />
             );
           })}
@@ -71,11 +80,15 @@ export function HexArt() {
         </mask>
       </defs>
 
-      <rect width="100%" height="96" fill={`url(#${ids.bg})`} />
+      <rect width="100%" height="96" fill={mono ? "var(--stage-mono-bg)" : `url(#${ids.bg})`} />
       <g mask={`url(#${ids.mask})`}>
         <rect width="100%" height="96" fill={`url(#${ids.grid})`} />
         <rect width="100%" height="96" fill={`url(#${ids.lit})`} />
       </g>
     </StageSvg>
   );
+}
+
+export function HexMonoArt() {
+  return <HexArt mono />;
 }
