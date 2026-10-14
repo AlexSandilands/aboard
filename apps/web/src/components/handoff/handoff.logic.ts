@@ -19,11 +19,11 @@ export function showHandoffActions(task: Pick<TaskSummary, "status" | "archivedA
 }
 
 /**
- * "Start in T3 Code" needs a running T3, a token, a project T3 could know (by id or folder) and no thread
- * linked yet. Whether T3 really has the project is only known once the dialog loads its options.
+ * "New T3 Code thread" needs a running T3, a token and a project T3 could know (by id or folder). A task
+ * can have several threads (a follow-up for conflicts, a review, …), so linked ones don't hide it. Whether T3 really has the project is only known once the dialog loads its options.
  */
 export function canStartT3Thread(
-  task: Pick<TaskSummary, "status" | "archivedAt" | "links">,
+  task: Pick<TaskSummary, "status" | "archivedAt">,
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
   settings: Pick<AppSettings, "t3TokenSet"> | undefined,
@@ -32,8 +32,7 @@ export function canStartT3Thread(
     showHandoffActions(task) &&
     t3.detected &&
     settings?.t3TokenSet === true &&
-    !!(project?.t3ProjectId || project?.workspaceRoot) &&
-    !task.links.some((link) => link.kind === "t3_thread")
+    !!(project?.t3ProjectId || project?.workspaceRoot)
   );
 }
 

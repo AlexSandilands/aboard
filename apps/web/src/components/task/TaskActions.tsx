@@ -34,7 +34,7 @@ import {
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
-import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
+import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { cn } from "~/lib/utils";
 import { useDeleteTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { useBoard, useSettings } from "~/state/queries";
@@ -115,8 +115,7 @@ export function TaskActions({
       {pinnedButtons(pins, task).map((id) => (
         <PinnedButton key={id} action={actions[id]} />
       ))}
-      {startT3 ? <StartT3Button taskId={task.id} variant="panel" /> : null}
-      {handoff ? <CopyPromptMenu task={task} variant="panel" /> : null}
+      {handoff ? <HandoffMenu task={task} variant="panel" canStartT3={startT3} /> : null}
       <Menu>
         <Tooltip>
           <TooltipTrigger

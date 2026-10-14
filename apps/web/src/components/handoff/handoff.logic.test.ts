@@ -1,4 +1,4 @@
-import type { T3LaunchOptions, T3LaunchProvider, TaskLink } from "@repo/contracts";
+import type { T3LaunchOptions, T3LaunchProvider } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   canStartT3Thread,
@@ -78,8 +78,7 @@ const options: T3LaunchOptions = {
 };
 
 describe("visibility", () => {
-  const thread = { kind: "t3_thread" } as TaskLink;
-  const task = { status: "idea" as const, archivedAt: null, links: [] };
+  const task = { status: "idea" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
   const settings = { t3TokenSet: true };
@@ -90,9 +89,8 @@ describe("visibility", () => {
     expect(showHandoffActions({ ...task, archivedAt: "x" })).toBe(false);
   });
 
-  it("offers Start in T3 Code only when T3 can take it and no thread is linked", () => {
+  it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {
     expect(canStartT3Thread(task, project, t3, settings)).toBe(true);
-    expect(canStartT3Thread({ ...task, links: [thread] }, project, t3, settings)).toBe(false);
     expect(canStartT3Thread(task, project, { detected: false }, settings)).toBe(false);
     expect(canStartT3Thread(task, project, t3, { t3TokenSet: false })).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);

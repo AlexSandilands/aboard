@@ -2,7 +2,7 @@ import { defaultHandoffMode, taskHandoffPrompt, type HandoffMode, type TaskSumma
 import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
@@ -22,8 +22,19 @@ export function copyHandoffPrompt(task: Pick<TaskSummary, "id" | "number" | "tit
   copyToClipboard(prompt, mode === "plan" ? "planning prompt" : "prompt");
 }
 
-/** Copies a ready-to-paste prompt for any agent harness (Claude Code, Copilot, …). */
-export function CopyPromptMenu({ task, variant }: { task: TaskSummary; variant: Variant }) {
+/**
+ * Hands a task to an agent: starts a T3 Code thread (when `canStartT3`, see canStartT3Thread) or copies a
+ * ready-to-paste prompt for any harness (Claude Code, Copilot, …).
+ */
+export function HandoffMenu({
+  task,
+  variant,
+  canStartT3,
+}: {
+  task: TaskSummary;
+  variant: Variant;
+  canStartT3: boolean;
+}) {
   const suggested = defaultHandoffMode(task);
   return (
     <Menu>
@@ -33,9 +44,9 @@ export function CopyPromptMenu({ task, variant }: { task: TaskSummary; variant: 
             <MenuTrigger
               render={
                 variant === "card" ? (
-                  <button type="button" aria-label="Copy agent prompt" className={chipClassName} {...cardHandlers} />
+                  <button type="button" aria-label="Hand off to an agent" className={chipClassName} {...cardHandlers} />
                 ) : (
-                  <Button variant="ghost" size="icon" aria-label="Copy agent prompt" />
+                  <Button variant="ghost" size="icon" aria-label="Hand off to an agent" />
                 )
               }
             />
@@ -43,9 +54,18 @@ export function CopyPromptMenu({ task, variant }: { task: TaskSummary; variant: 
         >
           <TerminalIcon aria-hidden className={cn(variant === "card" && "size-3.5")} />
         </TooltipTrigger>
-        <TooltipPopup>Copy a prompt to hand this task to an agent</TooltipPopup>
+        <TooltipPopup>Hand off to an agent</TooltipPopup>
       </Tooltip>
       <MenuPopup align={variant === "card" ? "start" : "end"} {...cardHandlers}>
+        {canStartT3 ? (
+          <>
+            <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
+              <MessageSquarePlusIcon />
+              New T3 Code thread…
+            </MenuItem>
+            <MenuSeparator />
+          </>
+        ) : null}
         <MenuItem onClick={() => copyHandoffPrompt(task, "work")}>
           <ClipboardCopyIcon />
           Copy prompt
@@ -58,41 +78,5 @@ export function CopyPromptMenu({ task, variant }: { task: TaskSummary; variant: 
         </MenuItem>
       </MenuPopup>
     </Menu>
-  );
-}
-
-/** Opens the "Start in T3 Code" dialog. Callers decide visibility with canStartT3Thread. */
-export function StartT3Button({ taskId, variant }: { taskId: string; variant: Variant }) {
-  const open = () => useDialogs.getState().openT3Launch(taskId);
-  if (variant === "panel") {
-    return (
-      <Tooltip>
-        <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Start in T3 Code" onClick={open} />}>
-          <MessageSquarePlusIcon />
-        </TooltipTrigger>
-        <TooltipPopup>Start in T3 Code</TooltipPopup>
-      </Tooltip>
-    );
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Start in T3 Code"
-            className={chipClassName}
-            {...cardHandlers}
-            onClick={(event) => {
-              event.stopPropagation();
-              open();
-            }}
-          />
-        }
-      >
-        <MessageSquarePlusIcon aria-hidden className="size-3.5" />
-      </TooltipTrigger>
-      <TooltipPopup>Start in T3 Code</TooltipPopup>
-    </Tooltip>
   );
 }

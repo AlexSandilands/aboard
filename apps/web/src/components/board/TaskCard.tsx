@@ -15,7 +15,7 @@ import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
-import { CopyPromptMenu, StartT3Button } from "~/components/handoff/HandoffActions";
+import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -87,8 +87,7 @@ export const TaskCardContent = memo(function TaskCardContent({
           <CardLinks links={task.links} />
           {handoff ? (
             <div className="ms-auto flex shrink-0 items-center gap-0.5">
-              {startT3 ? <StartT3Button taskId={task.id} variant="card" /> : null}
-              <CopyPromptMenu task={task} variant="card" />
+              <HandoffMenu task={task} variant="card" canStartT3={startT3} />
             </div>
           ) : null}
         </div>
