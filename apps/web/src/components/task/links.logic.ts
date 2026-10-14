@@ -1,4 +1,4 @@
-import type { ClassifiedLink, T3ThreadStatus, TaskLink } from "@repo/contracts";
+import type { ClassifiedLink, T3ThreadSnapshot, T3ThreadStatus, TaskLink } from "@repo/contracts";
 
 /** What the "Add link" input will create, for the live preview. Null when unrecognised. */
 export function describeLinkInput(link: ClassifiedLink | null): { kind: ClassifiedLink["kind"]; label: string } | null {
@@ -79,4 +79,62 @@ export function threadStatusPresentation(status: T3ThreadStatus): ThreadStatusPr
     case "idle":
       return null;
   }
+}
+
+type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
+
+const STATUS_RANK: Record<T3ThreadStatus, number> = {
+  approval: 0,
+  input: 0,
+  failed: 0,
+  working: 1,
+  waiting: 2,
+  done: 3,
+  idle: 3,
+};
+
+function threadRank(snapshot: T3ThreadSnapshot | null): number {
+  if (!snapshot) return 3;
+  if (snapshot.archived) return 5;
+  if (snapshot.settled) return 4;
+  return STATUS_RANK[snapshot.status];
+}
+
+const activityMs = (snapshot: T3ThreadSnapshot | null) => {
+  const ms = snapshot?.lastActivityAt ? Date.parse(snapshot.lastActivityAt) : Number.NaN;
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Orders links for display. T3 threads gather at the first thread's position, sorted by what needs
+ * the user (attention, working, waiting, finished, then settled and archived), most recent first.
+ * Other links keep their order.
+ */
+export function orderLinks(links: ReadonlyArray<TaskLink>): TaskLink[] {
+  const threads = links.filter((link): link is ThreadLink => link.kind === "t3_thread");
+  if (threads.length < 2) return [...links];
+  const sorted = threads.toSorted(
+    (a, b) => threadRank(a.snapshot) - threadRank(b.snapshot) || activityMs(b.snapshot) - activityMs(a.snapshot),
+  );
+  const first = links.indexOf(threads[0]!);
+  const others = links.filter((link) => link.kind !== "t3_thread");
+  return [...others.slice(0, first), ...sorted, ...others.slice(first)];
+}
+
+/** Model is only worth showing when the task's threads don't all use the same one. */
+export function threadModelsDiffer(links: ReadonlyArray<TaskLink>): boolean {
+  const models = new Set(
+    links.flatMap((link) => (link.kind === "t3_thread" && link.snapshot?.model ? [link.snapshot.model] : [])),
+  );
+  return models.size > 1;
+}
+
+/** Details that tell one linked thread from another, without the (client-ticking) relative time. */
+export function threadDetails(snapshot: T3ThreadSnapshot | null, { showModel }: { showModel: boolean }): string[] {
+  if (!snapshot) return [];
+  return [
+    snapshot.archived ? "Archived" : snapshot.settled ? "Settled" : null,
+    snapshot.branch ?? null,
+    showModel ? (snapshot.model ?? null) : null,
+  ].filter((part): part is string => part !== null);
 }

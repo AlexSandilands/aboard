@@ -10,6 +10,7 @@ import {
   parsePlanMarkdown,
   PROJECT_ICON_IMAGE_MAX_LENGTH,
   ProjectIcon,
+  T3ThreadSnapshot,
   type PlanPhase,
   type StepStatus,
 } from "./index.ts";
@@ -83,6 +84,12 @@ describe("deriveAttention", () => {
       "pr_changes_requested",
       "pr_conflict",
     ]);
+  });
+});
+
+describe("T3ThreadSnapshot", () => {
+  it("parses snapshots stored before the detail fields existed", () => {
+    expect(T3ThreadSnapshot.parse({ title: "x", status: "done" })).toEqual({ title: "x", status: "done" });
   });
 });
 

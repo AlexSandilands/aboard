@@ -1,4 +1,5 @@
 import {
+  BRAND,
   classifyLink,
   type AppSettings,
   type T3IntegrationStatus,
@@ -26,16 +27,27 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { copyTaskReference } from "~/components/handoff/HandoffActions";
 import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
+import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useAddLink, useRefreshLink, useRemoveLink } from "~/state/mutations";
 import { queryKeys, useBoard, useSettings } from "~/state/queries";
 import { copyToClipboard } from "./InlineInput";
-import { describeLinkInput, hostnameOf, isWebUrl, jiraHref, threadStatusPresentation } from "./links.logic";
+import {
+  describeLinkInput,
+  hostnameOf,
+  isWebUrl,
+  jiraHref,
+  orderLinks,
+  threadDetails,
+  threadModelsDiffer,
+  threadStatusPresentation,
+} from "./links.logic";
 import {
   PANEL_ICON_CLASS,
   PANEL_LABEL_CLASS,
@@ -92,11 +104,36 @@ export function LinksSection({ task }: { task: TaskDetail }) {
     removeLink(linkId, { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) }) });
   };
 
+  const links = orderLinks(task.links);
+  const threads = links.filter((link) => link.kind === "t3_thread");
+  // One thread keeps the compact row; several get details so they can be told apart.
+  const multiThread =
+    threads.length > 1 ? { firstId: threads[0]!.id, showModel: threadModelsDiffer(threads) } : undefined;
+
   return (
-    <TaskSection title="Links">
+    <TaskSection
+      title="Links"
+      actions={
+        <PanelControl
+          part="meta"
+          title="Copy the task's title, board link and get_task call, to start a new session on it"
+          onClick={() => copyTaskReference(task)}
+        >
+          <CopyIcon className="size-3.5" />
+          Copy {BRAND.id} link
+        </PanelControl>
+      }
+    >
       <div className="flex flex-col gap-0.5">
-        {task.links.map((link) => (
-          <LinkRow key={link.id} link={link} t3={t3} settings={settings} onRemove={() => remove(link.id)} />
+        {links.map((link) => (
+          <LinkRow
+            key={link.id}
+            link={link}
+            t3={t3}
+            settings={settings}
+            multiThread={multiThread}
+            onRemove={() => remove(link.id)}
+          />
         ))}
         <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} />
       </div>
@@ -104,20 +141,27 @@ export function LinksSection({ task }: { task: TaskDetail }) {
   );
 }
 
+interface MultiThread {
+  firstId: string;
+  showModel: boolean;
+}
+
 function LinkRow({
   link,
   t3,
   settings,
+  multiThread,
   onRemove,
 }: {
   link: TaskLink;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
+  multiThread: MultiThread | undefined;
   onRemove: () => void;
 }) {
   switch (link.kind) {
     case "t3_thread":
-      return <T3ThreadRow link={link} t3={t3} settings={settings} onRemove={onRemove} />;
+      return <T3ThreadRow link={link} t3={t3} settings={settings} multiThread={multiThread} onRemove={onRemove} />;
     case "pr":
       return <PullRequestRow link={link} onRemove={onRemove} />;
     case "jira": {
@@ -218,28 +262,64 @@ function T3ThreadRow({
   link,
   t3,
   settings,
+  multiThread,
   onRemove,
 }: {
   link: Extract<TaskLink, { kind: "t3_thread" }>;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
+  multiThread: MultiThread | undefined;
   onRemove: () => void;
 }) {
   const targets = t3LinkTargets(link.ref, t3, settings);
-  const status = link.snapshot ? threadStatusPresentation(link.snapshot.status) : null;
-  const title = link.snapshot?.title ?? link.label;
+  const snapshot = link.snapshot;
+  const status = snapshot ? threadStatusPresentation(snapshot.status) : null;
+  const title = snapshot?.title ?? link.label;
+  const showOpenLabel = !multiThread || multiThread.firstId === link.id;
+  const details = multiThread
+    ? [
+        ...threadDetails(snapshot, { showModel: multiThread.showModel }),
+        snapshot?.lastActivityAt ? formatRelativeTimeLabel(snapshot.lastActivityAt) : null,
+      ].filter(Boolean)
+    : [];
+  const dimmed = Boolean(snapshot?.settled || snapshot?.archived);
+  const statusBadge = status ? (
+    <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
+      <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
+      {status.label}
+    </span>
+  ) : null;
   return (
-    <PanelSplitGroup>
-      <PanelControl part="primary" title={targets.primary.label} render={<a {...linkProps(targets.primary.href)} />}>
+    <PanelSplitGroup className={cn(dimmed && "opacity-60 hover:opacity-100 has-[[data-popup-open]]:opacity-100")}>
+      <PanelControl
+        part="primary"
+        title={targets.primary.label}
+        className={cn(multiThread && "h-auto items-start py-1.5")}
+        render={<a {...linkProps(targets.primary.href)} />}
+      >
         <MessagesSquareIcon className={PANEL_ICON_CLASS} />
-        <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span>
-        <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{title}</span>
-        {status ? (
-          <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
-            <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
-            {status.label}
+        {multiThread ? (
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="flex min-w-0 items-center gap-2.5">
+              {showOpenLabel ? <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span> : null}
+              <span className={cn(PANEL_LABEL_CLASS, "flex-1", showOpenLabel && "font-normal text-muted-foreground")}>
+                {title}
+              </span>
+              {statusBadge}
+            </span>
+            {details.length > 0 ? (
+              <span className="min-w-0 truncate text-xs leading-4 font-normal text-muted-foreground">
+                {details.join(" · ")}
+              </span>
+            ) : null}
           </span>
-        ) : null}
+        ) : (
+          <>
+            <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span>
+            <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{title}</span>
+            {statusBadge}
+          </>
+        )}
       </PanelControl>
       <PanelSplitSeparator />
       <Menu>

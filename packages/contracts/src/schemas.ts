@@ -153,7 +153,16 @@ export type T3ThreadRef = z.infer<typeof T3ThreadRef>;
 export const T3ThreadStatus = z.enum(["working", "waiting", "input", "approval", "failed", "done", "idle"]);
 export type T3ThreadStatus = z.infer<typeof T3ThreadStatus>;
 
-export const T3ThreadSnapshot = z.object({ title: z.string(), status: T3ThreadStatus });
+// Fields after `status` are optional so snapshots stored before they existed still parse.
+export const T3ThreadSnapshot = z.object({
+  title: z.string(),
+  status: T3ThreadStatus,
+  settled: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  lastActivityAt: IsoDate.nullable().optional(),
+  model: z.string().nullable().optional(),
+  branch: z.string().nullable().optional(),
+});
 export type T3ThreadSnapshot = z.infer<typeof T3ThreadSnapshot>;
 
 const LinkBase = {

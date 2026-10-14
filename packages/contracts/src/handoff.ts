@@ -23,6 +23,18 @@ export function taskBoardUrl(boardUrl: string, taskId: string): string {
 }
 
 /**
+ * Short pointer to a task for starting a session on it ad hoc (merge conflicts, a follow-up). Unlike
+ * taskHandoffPrompt it prescribes no workflow; the uuid works across projects where `#N` would not.
+ */
+export function taskReferenceLine({ task, boardUrl }: Omit<HandoffPromptInput, "mode" | "linkedThread">): string {
+  return [
+    `#${task.number} "${task.title}"`,
+    `Board: ${taskBoardUrl(boardUrl, task.id)}`,
+    `Call get_task("${task.id}") on the ${BRAND.id} MCP server, then continue from the current step.`,
+  ].join("\n");
+}
+
+/**
  * Prompt that hands a task to an agent session (pasted into any harness, or sent as a T3 thread's first
  * message). It points at the task instead of copying it, so the agent reads the live plan and notes.
  */
