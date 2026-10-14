@@ -45,6 +45,14 @@ describe("applyBoardEvent", () => {
     });
     expect(archived.tasks).toHaveLength(0);
   });
+
+  it("drops a deleted task and leaves the rest alone", () => {
+    const b = board([task("a", "idea", "a0"), task("b", "done", "a0")]);
+    const deleted = applyBoardEvent(b, { type: "task.deleted", taskId: "a" });
+    expect(deleted.tasks.map((t) => t.id)).toEqual(["b"]);
+    // Another client may already have dropped it (e.g. archived, so never on the board).
+    expect(applyBoardEvent(deleted, { type: "task.deleted", taskId: "a" }).tasks.map((t) => t.id)).toEqual(["b"]);
+  });
 });
 
 describe("applyBoardEvent project archiving", () => {

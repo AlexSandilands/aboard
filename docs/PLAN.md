@@ -165,7 +165,7 @@ src/
 **REST (all JSON, zod-validated):**
 - `GET /api/board`
 - `GET|POST /api/projects`, `PATCH|DELETE /api/projects/:id`, `POST /api/projects/reorder`
-- `GET /api/tasks/:id` (detail), `POST /api/tasks`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/move {status, beforeId?, afterId?}`, `DELETE /api/tasks/:id` (archive)
+- `GET /api/tasks/:id` (detail), `POST /api/tasks`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/move {status, beforeId?, afterId?}`, `DELETE /api/tasks/:id` (permanent delete; archived tasks only)
 - `PUT /api/tasks/:id/plan` (replace), `PATCH /api/steps/:id`, `POST /api/phases/:id/steps`, `POST /api/tasks/:id/phases`, `POST /api/steps/:id/move`, `DELETE /api/steps/:id`, `DELETE /api/phases/:id`
 - `POST /api/tasks/:id/links`, `DELETE /api/links/:id`, `POST /api/tasks/:id/notes`
 - `GET /api/fs/browse?path=` (directories only, `~` expansion, Windows drive roots)
@@ -187,6 +187,7 @@ Tools take an optional `actor` label (default: the client name from initialize).
 | `update_step` | status and/or notes (append or replace) by step id. Also accepts `stepNumber` ("2.3"). |
 | `move_task` | Change status; returns `PLAN_REQUIRED` guidance when gated. |
 | `update_task` | title, description, archive; explicit `moveToProjectId`/`moveToWorkspacePath` to move projects. |
+| `delete_task` | Permanently delete an archived task (plan, links and activity cascade). Refuses active tasks. |
 | `add_note` | Free-form progress note → activity log ("handover notes"). |
 | `link` | Attach PR URL / Jira key / T3 thread `{environmentId, threadId}` / URL. Idempotent. |
 

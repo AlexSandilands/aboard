@@ -73,6 +73,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
             : `closed this as done${by !== null ? ` by #${by}` : " elsewhere"}`;
       return line("status", text);
     }
+    case "resolver_deleted": {
+      const by = num(p.number);
+      return line("delete", `deleted ${by !== null ? `#${by}` : "the task"}, which closed this`);
+    }
     case "updated": {
       const fields = Array.isArray(p.fields) ? p.fields.filter((f): f is string => typeof f === "string") : [];
       const names = fields.map((f) => FIELD_LABEL[f] ?? f);

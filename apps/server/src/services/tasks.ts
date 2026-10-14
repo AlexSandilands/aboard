@@ -242,6 +242,25 @@ export function createTasksService(
         return repos.events.append(id, now, actor, "note", { text: body });
       });
     },
+
+    delete(id, actor) {
+      core.write((fx) => {
+        const task = record(id);
+        if (task.archivedAt === null) {
+          throw new AppError(
+            "VALIDATION",
+            `Archive #${task.number} before deleting it; only archived tasks can be deleted`,
+          );
+        }
+        // Tasks closed against this one keep their resolution; their log records what they pointed at.
+        for (const resolved of repos.tasks.resolvedBy([id])) {
+          fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
+        }
+        if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+        repos.tasks.delete(id);
+        fx.taskDeleted(id);
+      });
+    },
   };
 
   return { service, record };

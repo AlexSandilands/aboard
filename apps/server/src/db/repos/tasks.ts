@@ -149,5 +149,9 @@ export function createTasksRepo(sql: Sql) {
     update(t: TaskRecord): void {
       sql.update("tasks", { ...toRow(t) });
     },
+    /** Hard delete; events, plan and links cascade, and tasks closed against it lose the pointer (SET NULL). */
+    delete(id: string): void {
+      sql.run("DELETE FROM tasks WHERE id = ?", id);
+    },
   };
 }

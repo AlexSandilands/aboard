@@ -59,7 +59,7 @@ export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
   app.delete(
     "/api/tasks/:id",
     handle((c) => {
-      services.tasks.update(taskId(c), { archived: true }, actorOf(c));
+      services.tasks.delete(taskId(c), actorOf(c));
       return noContent(c);
     }),
   );

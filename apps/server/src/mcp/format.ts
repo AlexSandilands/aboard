@@ -118,6 +118,9 @@ function eventText(event: TaskEvent): string {
       what = `closed as ${str("resolution") ?? "?"}${by}`;
       break;
     }
+    case "resolver_deleted":
+      what = `#${typeof p.number === "number" ? p.number : "?"} "${str("title") ?? "?"}", which closed this, was deleted`;
+      break;
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
       break;

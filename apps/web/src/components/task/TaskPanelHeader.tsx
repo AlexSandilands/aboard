@@ -12,6 +12,7 @@ import {
   ListTodoIcon,
   RotateCcwIcon,
   SquareCheckIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -32,8 +33,9 @@ import {
 } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { isPlanRequired, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
+import { isPlanRequired, useDeleteTask, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { copyToClipboard } from "./InlineInput";
 import { resolutionLabel } from "./resolution.logic";
 
@@ -53,7 +55,9 @@ export function TaskPanelHeader({
   const { mutate: moveTask } = useMoveTask();
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: resolveTask } = useResolveTask();
+  const { mutate: deleteTask } = useDeleteTask();
   const [closeAs, setCloseAs] = useState<PickResolution | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const resolution = resolutionLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
@@ -170,6 +174,13 @@ export function TaskPanelHeader({
               {archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
               {archived ? "Unarchive" : "Archive"}
             </MenuItem>
+            {archived ? (
+              // Deleting is a second step after archiving, so it never sits next to everyday actions.
+              <MenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2Icon />
+                Delete permanently…
+              </MenuItem>
+            ) : null}
             <MenuSeparator />
             <MenuItem onClick={copyLink}>
               <LinkIcon />
@@ -189,6 +200,14 @@ export function TaskPanelHeader({
         </Tooltip>
       </div>
       <CloseTaskDialog task={task} resolution={closeAs} onOpenChange={(open) => !open && setCloseAs(null)} />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete #${task.number}?`}
+        description="This permanently deletes the task with its plan, links and activity. It can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => deleteTask(task.id, { onSuccess: onClose })}
+      />
     </header>
   );
 }
