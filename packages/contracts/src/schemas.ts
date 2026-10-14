@@ -13,6 +13,16 @@ export const TASK_STATUSES: ReadonlyArray<{ value: TaskStatus; label: string }> 
   { value: "done", label: "Done" },
 ];
 
+/**
+ * Why a task is closed, separate from its status. Set only by closing a task, which also moves it to Done;
+ * moving the task out of Done clears it.
+ */
+export const TaskResolution = z.enum(["completed", "duplicate", "wont_do"]);
+export type TaskResolution = z.infer<typeof TaskResolution>;
+
+/** Resolutions that point at the task that delivered (or duplicates) the closed one. */
+export const resolutionNeedsTask = (resolution: TaskResolution): boolean => resolution !== "wont_do";
+
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
@@ -202,6 +212,10 @@ export const TaskEvent = z.object({
 });
 export type TaskEvent = z.infer<typeof TaskEvent>;
 
+/** Compact pointer to another task, e.g. the one that resolved this one. */
+export const TaskRef = z.object({ id: z.string(), number: z.number().int(), title: z.string() });
+export type TaskRef = z.infer<typeof TaskRef>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -214,6 +228,9 @@ export const TaskSummary = z.object({
   createdAt: IsoDate,
   updatedAt: IsoDate,
   statusChangedAt: IsoDate,
+  resolution: TaskResolution.nullable(),
+  /** The task that delivered or duplicates this one; null for "won't do" or once that task is deleted. */
+  resolvedBy: TaskRef.nullable(),
   progress: z.object({ done: z.number().int(), total: z.number().int() }),
   /** Per-step statuses in plan order, for segmented progress bars. */
   stepStatuses: z.array(StepStatus),
@@ -229,6 +246,8 @@ export const TaskDetail = TaskSummary.extend({
   planContext: z.string().nullable(),
   phases: z.array(PlanPhase),
   events: z.array(TaskEvent),
+  /** Tasks closed as done by, or duplicates of, this one. */
+  resolves: z.array(TaskRef.extend({ resolution: TaskResolution })),
 });
 export type TaskDetail = z.infer<typeof TaskDetail>;
 
@@ -337,6 +356,18 @@ export const MoveTaskInput = z.object({
   afterId: z.string().nullable().optional(),
 });
 export type MoveTaskInput = z.infer<typeof MoveTaskInput>;
+
+export const CloseTaskInput = z
+  .object({
+    resolution: TaskResolution,
+    /** The delivering / original task: uuid, "#42" or "42". Required unless the resolution is wont_do. */
+    byTask: z.string().trim().min(1).optional(),
+  })
+  .refine((input) => resolutionNeedsTask(input.resolution) === (input.byTask !== undefined), {
+    message: "completed and duplicate need byTask; wont_do must not have one",
+    path: ["byTask"],
+  });
+export type CloseTaskInput = z.infer<typeof CloseTaskInput>;
 
 export const StepPatch = z.object({
   title: z.string().trim().min(1).optional(),

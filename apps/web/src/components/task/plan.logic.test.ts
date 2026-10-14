@@ -46,6 +46,8 @@ function detail(phases: PlanPhase[]): TaskDetail {
     createdAt: "",
     updatedAt: "",
     statusChangedAt: "",
+    resolution: null,
+    resolvedBy: null,
     progress: { done: 0, total: 0 },
     stepStatuses: [],
     currentStep: null,
@@ -56,6 +58,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     planContext: null,
     phases,
     events: [],
+    resolves: [],
   };
 }
 

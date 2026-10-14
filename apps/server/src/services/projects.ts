@@ -148,7 +148,16 @@ export function createProjectsService(core: Core): ProjectsService {
     delete(id) {
       core.write((fx) => {
         get(id);
-        for (const taskId of repos.tasks.idsForProject(id)) fx.taskDeleted(taskId);
+        const taskIds = repos.tasks.idsForProject(id);
+        for (const taskId of taskIds) fx.taskDeleted(taskId);
+        // Tasks elsewhere that were closed against these lose the link (ON DELETE SET NULL); refresh their cards.
+        for (const resolved of repos.tasks.resolvedBy(taskIds)) {
+          if (resolved.projectId !== id) fx.task(resolved.id);
+        }
+        // ...and resolvers elsewhere drop these from their "Also resolved" list.
+        for (const task of repos.tasks.getMany(taskIds)) {
+          if (task.resolvedByTaskId && !taskIds.includes(task.resolvedByTaskId)) fx.detail(task.resolvedByTaskId);
+        }
         repos.projects.delete(id);
         fx.projectDeleted(id);
       });

@@ -77,6 +77,11 @@ export function optimisticMove(
   }
   return {
     ...board,
-    tasks: board.tasks.map((t) => (t.id === taskId ? { ...t, status: to.status, position } : t)),
+    tasks: board.tasks.map((t) => {
+      if (t.id !== taskId) return t;
+      // Leaving its column reopens a closed task; the server clears the resolution the same way.
+      const reopened = to.status !== t.status ? { resolution: null, resolvedBy: null } : {};
+      return { ...t, status: to.status, position, ...reopened };
+    }),
   };
 }

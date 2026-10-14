@@ -3,13 +3,18 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   CheckIcon,
+  CircleCheckBigIcon,
+  CopyIcon,
   EllipsisIcon,
   FolderInputIcon,
   HashIcon,
   LinkIcon,
   ListTodoIcon,
+  RotateCcwIcon,
+  SquareCheckIcon,
   XIcon,
 } from "lucide-react";
+import { useState } from "react";
 
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Badge } from "~/components/ui/badge";
@@ -27,8 +32,10 @@ import {
 } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { isPlanRequired, useMoveTask, useUpdateTask } from "~/state/mutations";
+import { isPlanRequired, useMoveTask, useResolveTask, useUpdateTask } from "~/state/mutations";
+import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
 import { copyToClipboard } from "./InlineInput";
+import { resolutionLabel } from "./resolution.logic";
 
 const STATUS_ITEMS = TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }));
 
@@ -45,6 +52,9 @@ export function TaskPanelHeader({
 }) {
   const { mutate: moveTask } = useMoveTask();
   const { mutate: updateTask } = useUpdateTask();
+  const { mutate: resolveTask } = useResolveTask();
+  const [closeAs, setCloseAs] = useState<PickResolution | null>(null);
+  const resolution = resolutionLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
 
@@ -84,6 +94,11 @@ export function TaskPanelHeader({
           })}
         </SelectPopup>
       </Select>
+      {resolution ? (
+        <Badge variant="secondary" size="sm">
+          {resolution}
+        </Badge>
+      ) : null}
       {archived ? (
         <Badge variant="warning" size="sm">
           Archived
@@ -121,6 +136,36 @@ export function TaskPanelHeader({
                   ))}
               </MenuSubPopup>
             </MenuSub>
+            {task.resolution ? (
+              // Back to where a plan allows: a planless task can only be an idea.
+              <MenuItem onClick={() => setStatus(hasPlan ? "planned" : "idea")}>
+                <RotateCcwIcon />
+                Reopen
+              </MenuItem>
+            ) : null}
+            <MenuSub>
+              <MenuSubTrigger>
+                <CircleCheckBigIcon />
+                {task.resolution ? "Close differently" : "Close as…"}
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <MenuItem onClick={() => setCloseAs("completed")}>
+                  <SquareCheckIcon />
+                  Done by another task…
+                </MenuItem>
+                <MenuItem onClick={() => setCloseAs("duplicate")}>
+                  <CopyIcon />
+                  Duplicate of…
+                </MenuItem>
+                <MenuItem
+                  disabled={task.resolution === "wont_do"}
+                  onClick={() => resolveTask({ id: task.id, resolution: "wont_do" })}
+                >
+                  <XIcon />
+                  Won&apos;t do
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
             <MenuItem onClick={() => updateTask({ id: task.id, archived: !archived })}>
               {archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
               {archived ? "Unarchive" : "Archive"}
@@ -143,6 +188,7 @@ export function TaskPanelHeader({
           <TooltipPopup side="bottom">Close (Esc)</TooltipPopup>
         </Tooltip>
       </div>
+      <CloseTaskDialog task={task} resolution={closeAs} onOpenChange={(open) => !open && setCloseAs(null)} />
     </header>
   );
 }

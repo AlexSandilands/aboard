@@ -27,6 +27,16 @@ describe("describeEvent", () => {
     });
   });
 
+  it("describes closing and reopening", () => {
+    const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx).text;
+    expect(text("closed", { resolution: "completed", byTask: 4 })).toBe("closed this as done by #4");
+    expect(text("closed", { resolution: "duplicate", byTask: 4 })).toBe("closed this as a duplicate of #4");
+    expect(text("closed", { resolution: "wont_do" })).toBe("closed this as won't do");
+    expect(text("status_changed", { from: "done", to: "idea", clearedResolution: "wont_do" })).toBe(
+      "reopened this and moved to Ideas",
+    );
+  });
+
   it("names steps by their current index label, falling back to the logged title", () => {
     expect(
       describeEvent(event("step_updated", { stepId: "s1", title: "old", from: "in_progress", to: "done" }), ctx).text,

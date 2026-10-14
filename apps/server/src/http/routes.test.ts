@@ -68,6 +68,24 @@ describe("REST", () => {
     expect(board.projects).toHaveLength(1);
   });
 
+  it("closes a task by #number reference and validates the pairing", async () => {
+    const h = await setup();
+    const other = h.services.tasks.create({ projectId: h.project.id, title: "Delivered it" });
+    const close = (json: unknown) => h.request(`/api/tasks/${h.task.id}/close`, { method: "POST", json });
+
+    const bad = await close({ resolution: "wont_do", byTask: `#${other.number}` });
+    expect(bad.status).toBe(400);
+    expect(await errorCode(bad)).toBe("VALIDATION");
+
+    const res = await close({ resolution: "completed", byTask: `#${other.number}` });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as TaskDetail).toMatchObject({
+      status: "done",
+      resolution: "completed",
+      resolvedBy: { id: other.id },
+    });
+  });
+
   it("stores an image project icon and rejects unsafe ones", async () => {
     const h = await setup();
     const icon = { kind: "image", dataUrl: "data:image/png;base64,iVBORw0KGgo=" };

@@ -1,4 +1,5 @@
 import {
+  CloseTaskInput,
   CreateTaskInput,
   LinkInput,
   MoveTaskInput,
@@ -65,6 +66,15 @@ export function registerTaskRoutes(app: Hono, { services }: AppContext): void {
   app.post(
     "/api/tasks/:id/move",
     handle(async (c) => c.json(services.tasks.move(taskId(c), await parseBody(c, MoveTaskInput), actorOf(c)))),
+  );
+  app.post(
+    "/api/tasks/:id/close",
+    handle(async (c) => {
+      const id = taskId(c);
+      const { resolution, byTask } = await parseBody(c, CloseTaskInput);
+      const byTaskId = byTask ? services.tasks.resolveId(byTask) : undefined;
+      return c.json(services.tasks.close(id, { resolution, ...(byTaskId ? { byTaskId } : {}) }, actorOf(c)));
+    }),
   );
   app.put(
     "/api/tasks/:id/plan",

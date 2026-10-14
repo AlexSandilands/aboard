@@ -16,6 +16,7 @@ import type {
   TaskDetail,
   TaskEvent,
   TaskLink,
+  TaskResolution,
   TaskStatus,
   TaskSummary,
   UpdateProjectInput,
@@ -84,9 +85,22 @@ export interface TasksService {
   /** Lands in "planned" when `plan` is given (with ≥1 step), else "idea". Appends to the end of the column. */
   create(input: CreateTaskInput): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
-  /** Status change and/or reorder. Throws PLAN_REQUIRED when leaving "idea" without plan steps. */
+  /**
+   * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "idea" without plan steps.
+   * Moving a closed task out of Done clears its resolution.
+   */
   move(id: string, input: MoveTaskInput, actor: string): TaskSummary;
+  /**
+   * Closes the task with a resolution and moves it to Done, without the plan check `move` applies.
+   * completed/duplicate need `byTaskId` (an existing other task); wont_do must not have one.
+   */
+  close(id: string, input: CloseInput, actor: string): TaskDetail;
   addNote(id: string, text: string, actor: string): TaskEvent;
+}
+
+export interface CloseInput {
+  resolution: TaskResolution;
+  byTaskId?: string;
 }
 
 export interface PlansService {
