@@ -236,4 +236,55 @@ describe("MCP endpoint", () => {
     const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "done" } }));
     expect(listed).toContain(`#${idea.number} Search titles — done by #${shipped.number}`);
   });
+
+  it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
+    const workspacePath = "C:/Fake/proj";
+    const project = h.services.projects.create({ workspaceRoot: workspacePath });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "CORE-1245 Fix login",
+      description: "Follows CORE-1200. Uses UTF-8.",
+    });
+    const ref = `#${task.number}`;
+    const getTask = async () => text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
+
+    let detail = await getTask();
+    expect(detail).toContain("Missing links:");
+    expect(detail).toContain(`Jira CORE-1200: link(task: "${ref}", value: "CORE-1200")`);
+    expect(detail).not.toContain("Jira CORE-1245:");
+    expect(detail).not.toContain("UTF-8:");
+    expect(detail).toContain(`link(task: "${ref}", t3Thread: {environmentId, threadId})`);
+
+    await client.callTool({ name: "link", arguments: { task: ref, value: "CORE-1200" } });
+    const linked = await client.callTool({
+      name: "link",
+      arguments: { task: ref, t3Thread: { environmentId: "env-1", threadId: "thread-1" } },
+    });
+    expect(linked.isError).toBeFalsy();
+    detail = await getTask();
+    expect(detail).not.toContain("Missing links:");
+
+    const other = h.services.tasks.create({ projectId: project.id, title: "Old", description: "OPS-1" });
+    const closed = await client.callTool({
+      name: "close_task",
+      arguments: { task: `#${other.number}`, resolution: "wont_do" },
+    });
+    expect(text(closed)).not.toContain("Missing links:");
+  });
+
+  it("create_idea attaches links and the T3 thread", async () => {
+    const created = await client.callTool({
+      name: "create_idea",
+      arguments: {
+        title: "Retry flaky upload",
+        workspacePath: "C:/Fake/proj",
+        links: ["PAY-12", "https://example.com/spec"],
+        t3Thread: { environmentId: "env-1", threadId: "thread-1" },
+      },
+    });
+    expect(created.isError).toBeFalsy();
+    const number = Number(/#(\d+)/.exec(text(created))?.[1]);
+    const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
+    expect(links.sort()).toEqual(["jira", "t3_thread", "url"]);
+  });
 });

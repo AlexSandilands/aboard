@@ -12,9 +12,10 @@ export const registerLinkTools: ToolRegistrar = (server, { services, actor }) =>
       description:
         "Attach a link to a task. Idempotent. `value` may be a GitHub/Azure DevOps/Bitbucket PR URL (GitHub PRs " +
         "show live state: checks, review, conflicts), a Jira key like ABC-123, a t3code:// thread link, or any URL. " +
-        "Link the PR as soon as you open it (then move_task to review). Inside T3 Code, pass `t3Thread` " +
-        "({environmentId, threadId} from t3_environment_read and t3_thread_configuration) so the user can jump " +
-        "back to your thread.",
+        "Link the Jira issue when the task is created or picked up, and the PR as soon as you open it (then " +
+        "move_task to review). Inside T3 Code, pass `t3Thread` ({environmentId, threadId} from " +
+        "t3_environment_read and t3_thread_configuration) whenever you start or resume a task, so the user can " +
+        "jump back to your thread.",
       inputSchema: {
         task: taskField,
         value: z.string().optional().describe("PR URL, Jira key, t3code:// link or URL."),

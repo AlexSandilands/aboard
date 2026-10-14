@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CloseTaskInput, TaskResolution, TaskStatus, type LinkInput } from "@repo/contracts";
+import { CloseTaskInput, TaskResolution, TaskStatus, type LinkInput, type T3ThreadRef } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { resolutionText, statusLabel } from "../format.ts";
 import {
@@ -23,6 +23,15 @@ const PLAN_REQUIRED_HINT =
   "Only Ideas may exist without a plan. If the work was already delivered by another task, is a duplicate, or " +
   "won't be done, use close_task instead; it needs no plan.";
 
+const linksField = z
+  .array(z.string().min(1))
+  .optional()
+  .describe("Jira keys (ABC-123), PR URLs or URLs to attach. Jira keys in the title are linked automatically.");
+
+function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined }): LinkInput[] {
+  return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
+}
+
 /** Task lifecycle tools: create_idea, create_task, move_task, close_task, update_task, add_note. */
 export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
   server.registerTool(
@@ -33,7 +42,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "Capture an idea in the Ideas column with one call. Ideas are cheap and need no plan: when something " +
         "worth doing comes up mid-task (a refactor, a bug you noticed, a follow-up), log it here and carry on " +
         "with your current work instead of getting derailed. Pass workspacePath (your cwd); the project is " +
-        "created automatically if the board doesn't know it yet.",
+        "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, and " +
+        "t3Thread when running inside T3 Code.",
       inputSchema: {
         title: z.string().min(1).describe("Short imperative title."),
         description: z
@@ -41,6 +51,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .optional()
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
+        links: linksField,
+        t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
     },
@@ -48,10 +60,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       run(() => {
         requireProjectRef(args);
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
+        const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
+          ...(links.length ? { links } : {}),
           actor: actor(args.actor),
         });
         return textResult(`Captured idea #${task.number} "${task.title}" in ${project.title}.`);
@@ -66,14 +80,15 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "Create a task you are about to work on, with its plan, in one call. Lands in Planned. A plan is required: " +
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
-        "keys, URLs) and, when running inside T3 Code, t3Thread so the user can jump back to your thread. " +
+        "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
+        "can jump back to your thread. " +
         "For something you are not doing now, use create_idea instead.",
       inputSchema: {
         title: z.string().min(1),
         description: z.string().optional().describe("Markdown: what and why."),
         ...projectFields,
         ...planInputFields,
-        links: z.array(z.string().min(1)).optional().describe("PR URLs, Jira keys (ABC-123) or URLs to attach."),
+        links: linksField,
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -89,10 +104,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           );
         }
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
-        const links: LinkInput[] = [
-          ...(args.links ?? []).map((value) => ({ value })),
-          ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : []),
-        ];
+        const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
           title: args.title,
@@ -111,7 +123,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       title: "Move task to a status",
       description:
         "Change a task's status: idea -> planned -> in_progress -> review -> done (any direction is allowed). " +
-        "Move to in_progress when you start implementing, to review when a PR is up (link it first), and to done " +
+        "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when a PR is up (link it first), and to done " +
         "when merged or verified. Leaving Ideas requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
         "beforeTask/afterTask optionally position it within the column.",
       inputSchema: {

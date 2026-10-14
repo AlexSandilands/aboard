@@ -1,5 +1,6 @@
 import {
   TASK_STATUSES,
+  findJiraKeys,
   formatPlanText,
   type Project,
   type TaskDetail,
@@ -132,6 +133,28 @@ function eventText(event: TaskEvent): string {
   return `${event.at.slice(0, 16).replace("T", " ")} ${event.actor}: ${what}`;
 }
 
+/**
+ * Links an open task is missing, each naming the exact call that adds it: Jira keys mentioned in the title or
+ * description, and the agent's own T3 thread. Agents act on what tool results say far more reliably than on
+ * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
+ */
+export function missingLinkHints(task: TaskDetail): string[] {
+  if (task.status === "done" || task.archivedAt) return [];
+  const ref = `"#${task.number}"`;
+  const linked = new Set(task.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])));
+  const keys = new Set([...findJiraKeys(task.title), ...findJiraKeys(task.description)]);
+  const hints = [...keys]
+    .filter((key) => !linked.has(key))
+    .map((key) => `Jira ${key}: link(task: ${ref}, value: "${key}")`);
+  if (!task.links.some((l) => l.kind === "t3_thread")) {
+    hints.push(
+      `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
+        "from t3_environment_read and t3_thread_configuration",
+    );
+  }
+  return hints;
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
@@ -178,6 +201,11 @@ export function renderTaskDetail(
   if (task.links.length) {
     lines.push("", "Links:");
     for (const link of task.links) lines.push(`- ${linkText(link)}`);
+  }
+  const missing = missingLinkHints(task);
+  if (missing.length) {
+    lines.push("", "Missing links:");
+    for (const hint of missing) lines.push(`- ${hint}`);
   }
 
   const limit = opts.events ?? 10;

@@ -17,7 +17,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 1. **Orient.** At the start of meaningful work call `board_overview` (with `workspacePath`) or
    `list_tasks`. If the user's request matches an existing task, that's the one you're working on.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
-   the current step, linked PRs/threads and the latest handover notes. Pick up from there.
+   the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
+   **Missing links**, add them now: the Jira issue, and your own T3 thread when you're in T3 Code.
 3. **Ideas are cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
    follow-up), call `create_idea` once and carry on with your current work. Don't derail.
 4. **Plan before implementing.** A task can't leave Ideas without a plan. Use `set_plan` on an existing
@@ -34,8 +35,11 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Found
    more work? `add_steps`. When revising with `set_plan`, pass existing step ids to keep their status.
-6. **Link things.** `link` PR URLs as soon as the PR is open, plus Jira keys and relevant URLs. GitHub
-   PRs show live checks/review state on the board.
+6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in
+   `links` to `create_task` / `create_idea`, or call `link`. Keys in the title are linked
+   automatically. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
+   as soon as the PR is open; GitHub PRs show live checks/review state on the board. `link` is
+   idempotent, so linking twice is harmless.
 7. **Status transitions.** `in_progress` while implementing → `review` when a PR is up → `done` when
    merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first.
 8. **Close what's already handled.** If a task was delivered by another task, duplicates one, or is no
@@ -47,11 +51,13 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
 ## Running inside T3 Code
 
-If you have the T3 Code tools, link the task to your thread so the user can jump back to it:
+If you have the T3 Code tools, link every task you work on to your thread so the user can jump back to
+it. That includes existing tasks you pick up or resume, not only ones you create:
 
 1. Call `t3_thread_configuration` once → `threadId`.
 2. Call `t3_environment_read` once → `environmentId`.
-3. Pass `t3Thread: { environmentId, threadId }` to `create_task`, or to `link` for an existing task.
+3. Pass `t3Thread: { environmentId, threadId }` to `create_task` / `create_idea`, or to `link` when you
+   start or resume an existing task. A task can have several threads; each session adds its own.
 
 T3 Code exposes no environment variable for this, so you must call those tools.
 

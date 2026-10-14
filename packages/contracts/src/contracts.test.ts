@@ -5,6 +5,7 @@ import {
   deriveCurrentStep,
   deriveProgress,
   deriveProjectIdentity,
+  findJiraKeys,
   normalizeWorkspaceKey,
   parsePlanMarkdown,
   PROJECT_ICON_IMAGE_MAX_LENGTH,
@@ -144,6 +145,26 @@ describe("classifyLink", () => {
     });
     expect(classifyLink("https://example.com")).toEqual({ kind: "url", url: "https://example.com" });
     expect(classifyLink("not a link")).toBeNull();
+  });
+});
+
+describe("findJiraKeys", () => {
+  it("finds keys in titles and descriptions, in order, without duplicates", () => {
+    expect(findJiraKeys("CORE-1245 Fix login")).toEqual(["CORE-1245"]);
+    expect(findJiraKeys("Fix login (CORE-1245, OPS_2-7). See CORE-1245 and AB1-9.")).toEqual([
+      "CORE-1245",
+      "OPS_2-7",
+      "AB1-9",
+    ]);
+    expect(findJiraKeys("Details: https://jira.example.com/browse/ABC-12?focus=1")).toEqual(["ABC-12"]);
+    expect(findJiraKeys("ABC-1: done; DEF-2!")).toEqual(["ABC-1", "DEF-2"]);
+    expect(findJiraKeys(null)).toEqual([]);
+  });
+
+  it("ignores lowercase, partial matches and common false positives", () => {
+    expect(findJiraKeys("abc-123 and Abc-123")).toEqual([]);
+    expect(findJiraKeys("foo_ABC-1 ABC-1x xABC-1 ABC-1-2 X-1")).toEqual([]);
+    expect(findJiraKeys("UTF-8, SHA-256, ISO-8601, RFC-9110, CVE-2024-1234, X-Request-Id")).toEqual([]);
   });
 });
 
