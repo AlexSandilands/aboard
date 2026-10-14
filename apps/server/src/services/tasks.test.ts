@@ -52,6 +52,17 @@ describe("tasks", () => {
     });
   });
 
+  it("adds a move's reason to the status event without letting it override the move", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "T", plan: plan("a") });
+    s.tasks.move(task.id, { status: "review" }, "github", { mergedPr: "acme/app#1", from: "x", to: "y" });
+    expect(s.tasks.detail(task.id).events.at(-1)?.payload).toEqual({
+      mergedPr: "acme/app#1",
+      from: "planned",
+      to: "review",
+    });
+  });
+
   it("derives progress, step statuses and current step in summaries", () => {
     const { s, project } = setup();
     const task = s.tasks.create({

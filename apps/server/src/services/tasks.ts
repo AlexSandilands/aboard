@@ -196,10 +196,10 @@ export function createTasksService(
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         if (statusChanged) {
           fx.log(id, actor, "status_changed", {
+            ...because,
             from: current.status,
             to: status,
             ...(reopened ? { clearedResolution: current.resolution } : {}),
-            ...because,
           });
         } else fx.task(id);
       });
