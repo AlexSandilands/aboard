@@ -61,6 +61,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       await t3.refresh(link);
     },
     testT3: () => t3.test(),
+    connectT3: (value) => t3.connect(value),
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
   };

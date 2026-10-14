@@ -397,6 +397,10 @@ export const UpdateSettingsInput = z.object({
 });
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 
+/** A T3 pairing link or code (exchanged for a token by the server) or a raw bearer token. */
+export const ConnectT3Input = z.object({ value: z.string().trim().min(1) });
+export type ConnectT3Input = z.infer<typeof ConnectT3Input>;
+
 export const GithubStatus = z.object({
   available: z.boolean(),
   authenticated: z.boolean(),
@@ -406,6 +410,13 @@ export type GithubStatus = z.infer<typeof GithubStatus>;
 
 export const IntegrationsStatus = z.object({ t3: T3IntegrationStatus, github: GithubStatus });
 export type IntegrationsStatus = z.infer<typeof IntegrationsStatus>;
+
+export const ConnectT3Result = z.object({
+  settings: AppSettings,
+  t3: T3IntegrationStatus,
+  warning: z.string().optional(),
+});
+export type ConnectT3Result = z.infer<typeof ConnectT3Result>;
 
 export const T3ProjectCandidate = z.object({
   t3ProjectId: z.string(),

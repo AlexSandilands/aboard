@@ -1,4 +1,4 @@
-import { UpdateSettingsInput } from "@repo/contracts";
+import { ConnectT3Input, UpdateSettingsInput } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -59,6 +59,10 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   app.post(
     "/api/integrations/t3/test",
     handle(async (c) => c.json(await integrations.testT3())),
+  );
+  app.post(
+    "/api/integrations/t3/connect",
+    handle(async (c) => c.json(await integrations.connectT3((await parseBody(c, ConnectT3Input)).value))),
   );
 
   app.get(

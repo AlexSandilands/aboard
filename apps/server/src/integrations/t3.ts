@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   BRAND,
+  type ConnectT3Result,
   normalizeWorkspaceKey,
   ProjectIcon,
   type Project,
@@ -183,7 +184,7 @@ function parseWire<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
   return parsed.data;
 }
 
-/** GET /api/orchestration/shell with a CLI-issued bearer session token (scope orchestration:read). */
+/** GET /api/orchestration/shell with a bearer session token (scope orchestration:read). */
 export async function fetchShell(origin: string, token: string, fetchFn: FetchFn): Promise<ShellSnapshot> {
   let response: Response;
   try {
@@ -194,12 +195,80 @@ export async function fetchShell(origin: string, token: string, fetchFn: FetchFn
   } catch (error) {
     throw new ShellError(`T3 Code unreachable: ${messageOf(error)}`);
   }
-  if (response.status === 401) throw new ShellError("Token rejected");
+  if (response.status === 401) throw new ShellError("Token expired or revoked. Paste a new pairing link");
   if (response.status === 403) throw new ShellError("Token lacks the orchestration:read scope");
   if (!response.ok) throw new ShellError(`T3 Code returned HTTP ${response.status}`);
   const parsed = ShellSnapshot.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new ShellError("Unexpected response from T3 Code");
   return parsed.data;
+}
+
+// ── Pairing ──────────────────────────────────────────────────────────────
+
+/** T3's pairing codes: 12 characters from an alphabet without 0, 1, I and O. */
+const PAIRING_CODE = /^[2-9A-HJ-NP-Z]{12}$/;
+
+/** What the board needs: read threads for live status, operate to start them. */
+const TOKEN_SCOPES = "orchestration:read orchestration:operate";
+
+const TokenResult = z.object({ access_token: z.string().min(1), scope: z.string().optional() });
+
+/**
+ * The one-time code in a T3 pairing link (`t3code://app/pair#token=…` or `<origin>/pair#token=…`) or a bare
+ * pairing code. Null for anything else, which is taken to be a bearer token minted with the CLI.
+ */
+export function parsePairingCode(value: string): string | null {
+  const trimmed = value.trim();
+  const fromLink = /[#?&]token=([^&\s]+)/.exec(trimmed)?.[1];
+  // Codes are upper case, but people retype them; CLI tokens contain dots, so they never match.
+  const code = (fromLink ?? trimmed).toUpperCase();
+  return PAIRING_CODE.test(code) ? code : null;
+}
+
+/** Whether a value is shaped like a pairing link, so a bad one isn't saved as a token. */
+export function looksLikePairingLink(value: string): boolean {
+  return /[#?&]token=/.test(value);
+}
+
+/** Trades a pairing code for a bearer token (OAuth token exchange), asking only for the board's scopes. */
+export async function exchangePairingCode(
+  origin: string,
+  code: string,
+  fetchFn: FetchFn,
+): Promise<{ token: string; scopes: string[] | null }> {
+  let response: Response;
+  try {
+    response = await fetchFn(`${origin}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        subject_token: code,
+        subject_token_type: "urn:t3:params:oauth:token-type:environment-bootstrap",
+        requested_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        scope: TOKEN_SCOPES,
+        client_label: BRAND.name,
+        client_device_type: "bot",
+      }).toString(),
+      signal: AbortSignal.timeout(SHELL_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new AppError("VALIDATION", `T3 Code unreachable: ${messageOf(error)}`);
+  }
+  if (response.status === 401) {
+    throw new AppError("VALIDATION", "This pairing link has expired or was already used. Create a new one in T3 Code");
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (response.status === 400 && (body as { reason?: unknown } | null)?.reason === "scope_not_granted") {
+    throw new AppError(
+      "VALIDATION",
+      "This pairing link doesn't allow “View environment”. Create one that allows “View environment” and “Operate tasks”",
+    );
+  }
+  if (!response.ok) throw new AppError("VALIDATION", `T3 Code returned HTTP ${response.status}`);
+  const result = parseWire(TokenResult, body, "token response");
+  // RFC 6749 lets the server omit `scope` when it granted exactly what was asked.
+  return { token: result.access_token, scopes: result.scope?.split(" ") ?? null };
 }
 
 export interface T3SqliteProject {
@@ -275,7 +344,7 @@ function openCopy(path: string): DatabaseSync {
 
 export interface T3Services {
   links: Pick<LinksService, "listByKind" | "setSnapshot" | "add">;
-  settings: Pick<SettingsService, "t3Token">;
+  settings: Pick<SettingsService, "t3Token" | "update">;
   projects: Pick<ProjectsService, "list" | "create" | "get">;
   tasks: Pick<TasksService, "summary">;
 }
@@ -296,6 +365,8 @@ export interface T3Integration {
   /** Refreshes one thread link. Returns false when it is not a T3 thread link. */
   refresh(link: TaskLink): Promise<boolean>;
   test(): Promise<T3IntegrationStatus>;
+  /** Saves a token, exchanging a pairing link or code for one first, then checks it with a live poll. */
+  connect(value: string): Promise<ConnectT3Result>;
   start(): void;
   stop(): void;
 }
@@ -567,6 +638,32 @@ export function createT3Integration(deps: {
       await discover();
       await pollLive();
       return current();
+    },
+    async connect(value) {
+      const code = parsePairingCode(value);
+      if (!code && looksLikePairingLink(value)) {
+        throw new AppError(
+          "VALIDATION",
+          "That isn't a T3 pairing link. Create one in T3 Code under Settings → Connections",
+        );
+      }
+      let bearer = value.trim();
+      let warning: string | undefined;
+      if (code) {
+        await discover();
+        if (!discovery.detected || !discovery.origin) throw new AppError("VALIDATION", "T3 Code is not running");
+        const exchanged = await exchangePairingCode(discovery.origin, code, fetchFn);
+        bearer = exchanged.token;
+        // T3 grants whichever requested scopes the link allows, so a read-only link still pairs.
+        if (exchanged.scopes && !exchanged.scopes.includes("orchestration:operate")) {
+          warning = "Connected read-only. To start threads from tasks, pair a link that allows “Operate tasks”";
+        }
+      }
+      const settings = deps.services().settings.update({ t3Token: bearer });
+      // A poll already in flight used the previous token; wait it out so the check uses the new one.
+      await polling;
+      await pollLive();
+      return { settings, t3: current(), ...(warning ? { warning } : {}) };
     },
     start() {
       void discover();

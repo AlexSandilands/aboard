@@ -1,4 +1,5 @@
 import type {
+  ConnectT3Result,
   GithubStatus,
   Project,
   StartT3ThreadInput,
@@ -26,4 +27,6 @@ export interface Integrations {
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Re-runs T3 discovery + a live-status request and returns the resulting status. */
   testT3(): Promise<T3IntegrationStatus>;
+  /** Saves a T3 token, or exchanges a pairing link/code for one, and checks it. */
+  connectT3(value: string): Promise<ConnectT3Result>;
 }
