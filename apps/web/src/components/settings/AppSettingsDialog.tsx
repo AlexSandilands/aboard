@@ -1,4 +1,10 @@
-import { BRAND, type AppSettings, type IntegrationsStatus, type T3IntegrationStatus } from "@repo/contracts";
+import {
+  BRAND,
+  type AppSettings,
+  type ConnectT3Result,
+  type IntegrationsStatus,
+  type T3IntegrationStatus,
+} from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -192,13 +198,26 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
       void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
     },
   });
+  // The server exchanges a pairing link for a token (or saves a CLI token as is), then checks it.
+  const connect = useMutation({
+    mutationFn: (value: string) =>
+      api<ConnectT3Result>("/api/integrations/t3/connect", { method: "POST", body: { value } }),
+    onSuccess: ({ settings: saved, t3 }) => {
+      setToken("");
+      test.reset();
+      queryClient.setQueryData(queryKeys.settings, saved);
+      queryClient.setQueryData<IntegrationsStatus>(queryKeys.integrations, (current) =>
+        current ? { ...current, t3 } : current,
+      );
+    },
+  });
   const detected = status?.detected ?? false;
-  const live = test.data ?? status;
+  const live = test.data ?? connect.data?.t3 ?? status;
+  const error = connect.error ?? test.error;
 
   function saveToken() {
     const value = token.trim();
-    if (!value) return;
-    updateSettings.mutate({ t3Token: value }, { onSuccess: () => setToken("") });
+    if (value) connect.mutate(value);
   }
 
   return (
@@ -246,7 +265,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
       />
       <SettingsRow
         title="T3 token"
-        description="Optional. Shows linked threads' status on cards and lets you start a thread for a task. Mint one with:"
+        description="Optional. Shows linked threads' status on cards and lets you start a thread for a task. In T3 Code, open Settings → Connections → Create link (allow “View environment” and “Operate tasks”), then paste the link here within 5 minutes."
         status={
           settings.t3TokenSet ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -266,7 +285,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
               size="sm"
               className="sm:w-44"
               autoComplete="off"
-              placeholder={settings.t3TokenSet ? "Replace token" : "Paste token"}
+              placeholder={settings.t3TokenSet ? "Replace with a pairing link" : "Paste pairing link"}
               value={token}
               onChange={(event) => setToken(event.target.value)}
               onKeyDown={(event) => {
@@ -276,18 +295,14 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
                 }
               }}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!token.trim() || updateSettings.isPending}
-              onClick={saveToken}
-            >
-              Save
+            <Button size="sm" variant="outline" disabled={!token.trim() || connect.isPending} onClick={saveToken}>
+              {connect.isPending ? "Connecting…" : "Connect"}
             </Button>
           </>
         }
       >
         <div className="mt-2 space-y-2">
+          <p className="text-xs text-muted-foreground">Or paste a token minted with the T3 CLI:</p>
           <CommandSnippet command={T3_TOKEN_COMMAND} />
           {settings.t3TokenSet ? (
             <div className="flex items-center justify-end gap-2">
@@ -304,7 +319,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
               </Button>
             </div>
           ) : null}
-          {test.error ? <p className="text-xs text-destructive-foreground">{test.error.message}</p> : null}
+          {error ? <p className="text-xs text-destructive-foreground">{error.message}</p> : null}
         </div>
       </SettingsRow>
     </SettingsSection>

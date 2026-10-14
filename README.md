@@ -102,7 +102,10 @@ When T3 Code is running, it is detected automatically.
   choose in Settings).
 - **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
   touches T3 Code's data files (it only starts threads through T3's own API when you ask it to).
-- **Live thread status and Start in T3 Code:** mint a token and paste it in Settings → T3 Code:
+- **Live thread status and Start in T3 Code:** in T3 Code, open Settings → Connections → Create link
+  (allow "View environment" and "Operate tasks"), and paste the pairing link into Settings → T3 Code
+  within 5 minutes. The board exchanges it for a 30-day token. If you have the `t3` CLI, you can
+  paste a token from it instead:
   ```sh
   t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
   ```
