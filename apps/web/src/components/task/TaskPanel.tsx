@@ -47,7 +47,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => 
   return (
     <aside
       aria-label="Task details"
-      className="relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+      className="@container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />
@@ -209,7 +209,7 @@ function PanelSkeleton({ onClose }: { onClose: () => void }) {
       <div className="flex flex-col gap-3 px-4 pt-4">
         <div className="flex items-start gap-2">
           <Skeleton className="h-6 w-3/4" />
-          <Skeleton className="ms-auto size-6 shrink-0" />
+          <Skeleton className="ms-auto hidden size-6 shrink-0 @min-[460px]:block" />
         </div>
         <Skeleton className="h-4 w-40" />
         <Skeleton shape="card" className="mt-1 h-28 w-full" />
