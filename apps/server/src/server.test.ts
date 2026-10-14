@@ -27,33 +27,44 @@ function testConfig(overrides: Partial<Config> = {}): Config {
   };
 }
 
+// Each test boots real servers (DB + migrations), which can exceed vitest's 5s default on the Windows CI runner.
+const SERVER_TEST_TIMEOUT_MS = 20_000;
+
 describe("startServer", () => {
-  it("listens on a free port, serves health, and closes despite an open SSE stream", async () => {
-    const server = await startServer(testConfig());
-    expect(server.port).toBeGreaterThan(0);
-    expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
+  it(
+    "listens on a free port, serves health, and closes despite an open SSE stream",
+    async () => {
+      const server = await startServer(testConfig());
+      expect(server.port).toBeGreaterThan(0);
+      expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
 
-    const health = await fetch(`${server.url}/api/health`);
-    expect(await health.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version });
-    // The Origin guard must know the real port, not the 0 we asked for.
-    const sameOrigin = await fetch(`${server.url}/api/health`, { headers: { origin: server.url } });
-    expect(sameOrigin.status).toBe(200);
+      const health = await fetch(`${server.url}/api/health`);
+      expect(await health.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version });
+      // The Origin guard must know the real port, not the 0 we asked for.
+      const sameOrigin = await fetch(`${server.url}/api/health`, { headers: { origin: server.url } });
+      expect(sameOrigin.status).toBe(200);
 
-    const events = await fetch(`${server.url}/events`);
-    expect(events.status).toBe(200);
+      const events = await fetch(`${server.url}/events`);
+      expect(events.status).toBe(200);
 
-    await server.close();
-    await expect(fetch(`${server.url}/api/health`)).rejects.toThrow("fetch failed");
-    // Idempotent: a second quit signal must not throw on the closed DB.
-    await server.close();
-  });
+      await server.close();
+      await expect(fetch(`${server.url}/api/health`)).rejects.toThrow("fetch failed");
+      // Idempotent: a second quit signal must not throw on the closed DB.
+      await server.close();
+    },
+    SERVER_TEST_TIMEOUT_MS,
+  );
 
-  it("rejects when the port is taken and releases the database", async () => {
-    const first = await startServer(testConfig());
-    const config = testConfig({ port: first.port });
-    await expect(startServer(config)).rejects.toMatchObject({ code: "EADDRINUSE" });
-    // The failed attempt must not leave the DB file locked (Windows can't delete open files).
-    rmSync(config.homeDir, { recursive: true, force: true });
-    await first.close();
-  });
+  it(
+    "rejects when the port is taken and releases the database",
+    async () => {
+      const first = await startServer(testConfig());
+      const config = testConfig({ port: first.port });
+      await expect(startServer(config)).rejects.toMatchObject({ code: "EADDRINUSE" });
+      // The failed attempt must not leave the DB file locked (Windows can't delete open files).
+      rmSync(config.homeDir, { recursive: true, force: true });
+      await first.close();
+    },
+    SERVER_TEST_TIMEOUT_MS,
+  );
 });
