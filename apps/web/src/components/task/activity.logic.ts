@@ -61,6 +61,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     }
     case "status_changed": {
       const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;
+      const merged = str(p.mergedPr);
+      if (merged) return line("status", `${to} when ${merged} merged`);
       return line("status", str(p.clearedResolution) ? `reopened this and ${to}` : to);
     }
     case "closed": {

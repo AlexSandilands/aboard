@@ -28,7 +28,7 @@ export function createServices(deps: ServiceDeps): Services {
   let links: LinksService | null = null;
   const tasks = createTasksService(core, { projects, plans: () => plans!, links: () => links! });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
-  links = createLinksService(core, { task: tasks.record, settings });
+  links = createLinksService(core, { task: tasks.record, tasks: tasks.service, settings });
 
   return {
     projects,

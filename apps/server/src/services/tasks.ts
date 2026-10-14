@@ -169,7 +169,7 @@ export function createTasksService(
       return service.detail(id);
     },
 
-    move(id, input, actor) {
+    move(id, input, actor, because) {
       core.write((fx) => {
         const current = record(id);
         const status = input.status ?? current.status;
@@ -196,6 +196,7 @@ export function createTasksService(
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         if (statusChanged) {
           fx.log(id, actor, "status_changed", {
+            ...because,
             from: current.status,
             to: status,
             ...(reopened ? { clearedResolution: current.resolution } : {}),
