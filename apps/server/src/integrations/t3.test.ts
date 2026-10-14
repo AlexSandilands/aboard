@@ -356,16 +356,16 @@ describe("T3 sqlite import", () => {
     ["c", "Gone", "/home/me/gone", null, "2026-03-01T00:00:00Z"],
   ];
 
-  const tempCopies = () => readdirSync(tmpdir()).filter((name) => name.startsWith(`${BRAND.id}-t3-`));
-
   it("reads non-deleted projects from a temp copy and cleans it up", () => {
     const home = makeT3Home({ runtime: false, projects: PROJECTS });
-    const before = tempCopies();
-    expect(readT3ProjectsFromSqlite(home)).toEqual([
+    // A private temp root, so copies made by other processes can't show up in the listing.
+    const tempRoot = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3root-`));
+    expect(readT3ProjectsFromSqlite(home, tempRoot)).toEqual([
       { t3ProjectId: "a", title: "Alpha", workspaceRoot: "C:\\Work\\alpha", icon: { kind: "emoji", emoji: "🧪" } },
       { t3ProjectId: "b", title: "Beta", workspaceRoot: "/home/me/beta", icon: null },
     ]);
-    expect(tempCopies()).toEqual(before);
+    expect(readdirSync(tempRoot)).toEqual([]);
+    rmSync(tempRoot, { recursive: true, force: true });
   });
 
   it("falls back to the sqlite copy without a token and imports", async () => {
