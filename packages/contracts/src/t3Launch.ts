@@ -17,9 +17,6 @@ export const T3_RUNTIME_MODES: ReadonlyArray<{ value: T3RuntimeMode; label: stri
   { value: "full-access", label: "Full access", description: "Allow commands and edits without prompts." },
 ];
 
-export const T3InteractionMode = z.enum(["default", "plan"]);
-export type T3InteractionMode = z.infer<typeof T3InteractionMode>;
-
 export const T3ModelOptionDescriptor = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("select"),
@@ -52,8 +49,6 @@ export const T3LaunchProvider = z.object({
   message: z.string().nullable(),
   /** Empty means every runtime mode is supported. */
   supportedRuntimeModes: z.array(T3RuntimeMode),
-  /** Whether threads can start in plan mode (T3 hides its plan toggle otherwise). */
-  supportsPlanMode: z.boolean(),
   models: z.array(T3LaunchModel),
 });
 export type T3LaunchProvider = z.infer<typeof T3LaunchProvider>;
@@ -109,12 +104,11 @@ export const T3LaunchWorkspace = z.discriminatedUnion("mode", [
 export type T3LaunchWorkspace = z.infer<typeof T3LaunchWorkspace>;
 
 export const StartT3ThreadInput = z.object({
-  /** One per dialog session: T3 de-duplicates launches by it, so a retry can't start a second thread. */
+  /** T3 de-duplicates launches by it: reusing it after a lost response returns the same thread. */
   commandId: z.uuid().optional(),
   prompt: z.string().trim().min(1),
   modelSelection: T3ModelSelection,
   runtimeMode: T3RuntimeMode,
-  interactionMode: T3InteractionMode,
   workspace: T3LaunchWorkspace,
 });
 export type StartT3ThreadInput = z.infer<typeof StartT3ThreadInput>;

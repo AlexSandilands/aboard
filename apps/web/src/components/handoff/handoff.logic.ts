@@ -37,6 +37,15 @@ export function canStartT3Thread(
   );
 }
 
+/**
+ * Whether a failed launch may be retried with the same commandId. Only when T3 may never have seen it (an
+ * unreachable/timeout error, which the server tags as `details.t3`): T3 would replay an accepted launch. A
+ * command T3 rejected stays rejected under that id, so anything else needs a fresh one.
+ */
+export function keepsCommandId(details: unknown): boolean {
+  return (details as { t3?: unknown } | null | undefined)?.t3 === "unreachable";
+}
+
 // ── Models ───────────────────────────────────────────────────────────────
 
 export const FAVORITES = "favorites";

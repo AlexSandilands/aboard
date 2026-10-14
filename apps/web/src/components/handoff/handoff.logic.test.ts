@@ -6,6 +6,7 @@ import {
   FAVORITES,
   initialPickerTab,
   initialWorkspaceChoice,
+  keepsCommandId,
   modelTraits,
   optionValue,
   pickerModels,
@@ -39,7 +40,6 @@ const claude: T3LaunchProvider = {
   ready: true,
   message: null,
   supportedRuntimeModes: [],
-  supportsPlanMode: true,
   models: [
     { slug: "opus", name: "Claude Opus", badge: null, isLegacy: false, isDefault: true, options: [effort, fastMode] },
     { slug: "haiku", name: "Claude Haiku", badge: "new", isLegacy: false, isDefault: false, options: [] },
@@ -126,6 +126,13 @@ describe("model picker", () => {
     expect(modelTraits(claude.models[0])).toEqual({ effort, fastMode });
     expect(modelTraits(claude.models[1])).toEqual({ effort: null, fastMode: null });
   });
+});
+
+it("reuses a launch's commandId only after a transport failure", () => {
+  expect(keepsCommandId({ t3: "unreachable" })).toBe(true);
+  expect(keepsCommandId({ t3: "failed" })).toBe(false);
+  expect(keepsCommandId({ t3: "forbidden" })).toBe(false);
+  expect(keepsCommandId(undefined)).toBe(false);
 });
 
 describe("access", () => {

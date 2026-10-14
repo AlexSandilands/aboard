@@ -47,8 +47,9 @@ option switches the prompt to a planning brief:
 - propose phases and steps, and wait for agreement;
 - only then call `set_plan` and move the task to Planned. Don't implement anything.
 
-In T3 Code the thread also starts in T3's plan interaction mode, when the provider supports it (T3 hides its
-plan toggle for providers that don't; those still get the planning prompt). The option is on by default for tasks in
+The option only changes the prompt. T3 threads always start in T3's default interaction mode: T3's own plan
+mode is a legacy beta behind a client setting the board can't read, and a thread started in it could be left
+with no visible way to switch back. The option is on by default for tasks in
 Ideas or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
 ## Starting a thread in T3 Code
@@ -104,8 +105,10 @@ worktree default and "start new worktrees from origin" come from the same settin
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
 
-Each dialog session sends one `commandId`, which T3 uses to de-duplicate launches. Pressing Send again after
-a timeout or error returns the same thread instead of starting a second one.
+Launches carry a `commandId`, which T3 uses to de-duplicate them. After a timeout or lost connection the
+dialog keeps it, so pressing Send again returns the thread T3 may already have started instead of a second
+one (with that first attempt's settings, even if you changed them). After T3 rejects a launch, T3 would
+keep rejecting that id, so the dialog starts the next attempt with a fresh one.
 
 Not mirrored from T3 (yet): defaults from a repo's `t3.json`, per-project provider enable/disable
 overrides, and hidden or reordered models. The dialog shows every model of every enabled provider.

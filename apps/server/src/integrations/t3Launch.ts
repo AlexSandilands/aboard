@@ -58,7 +58,6 @@ const WireProvider = z.object({
   availability: z.string().nullish(),
   message: z.string().nullish(),
   supportedRuntimeModes: z.array(z.string()).nullish(),
-  showInteractionModeToggle: z.boolean().nullish(),
   models: z.array(WireModel),
 });
 
@@ -159,7 +158,6 @@ export function mapProviders(config: WireServerConfig): T3LaunchProvider[] {
       supportedRuntimeModes: (p.supportedRuntimeModes ?? []).filter(
         (m): m is T3RuntimeMode => T3RuntimeMode.safeParse(m).success,
       ),
-      supportsPlanMode: p.showInteractionModeToggle ?? true,
       models: p.models.map(mapModel),
     }));
 }

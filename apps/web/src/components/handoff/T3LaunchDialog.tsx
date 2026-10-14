@@ -12,12 +12,14 @@ import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } fro
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
+import { ApiError } from "~/lib/api";
 import { cn } from "~/lib/utils";
 import { useStartT3Thread } from "~/state/mutations";
 import { useBoard, useT3LaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   clampRuntimeMode,
+  keepsCommandId,
   findModel,
   initialWorkspaceChoice,
   toLaunchWorkspace,
@@ -92,7 +94,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
   const [choice, setChoice] = useState<WorkspaceChoice>(() => initialWorkspaceChoice(options));
   const start = useStartT3Thread({ silent: true });
-  const [commandId] = useState(() => crypto.randomUUID());
+  const [commandId, setCommandId] = useState(() => crypto.randomUUID());
 
   const workspace = toLaunchWorkspace(options, choice);
   const model = findModel(options, selection);
@@ -115,8 +117,6 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
         prompt,
         modelSelection: selection,
         runtimeMode,
-        // Providers without T3's plan mode still get the planning prompt.
-        interactionMode: planWithMe && provider?.supportsPlanMode ? "plan" : "default",
         workspace,
       },
       {
@@ -128,8 +128,10 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
           });
           onDone();
         },
-        onError: (error) =>
-          toastManager.add({ type: "error", title: "Couldn't start the thread", description: error.message }),
+        onError: (error) => {
+          if (!(error instanceof ApiError && keepsCommandId(error.details))) setCommandId(crypto.randomUUID());
+          toastManager.add({ type: "error", title: "Couldn't start the thread", description: error.message });
+        },
       },
     );
   };

@@ -26,7 +26,6 @@ const config = (settings: Record<string, unknown> = {}, providers?: unknown[]) =
         displayName: "Codex",
         enabled: true,
         status: "error",
-        showInteractionModeToggle: false,
         models: [{ slug: "gpt", name: "GPT", isDefault: true }],
       },
       {
@@ -73,9 +72,9 @@ const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isD
 describe("mapProviders", () => {
   it("keeps enabled providers, flags readiness and maps model options", () => {
     const providers = mapProviders(config());
-    expect(providers.map((p) => [p.instanceId, p.displayName, p.ready, p.supportsPlanMode])).toEqual([
-      ["codex", "Codex", false, false],
-      ["claudeAgent", "claudeAgent", true, true],
+    expect(providers.map((p) => [p.instanceId, p.displayName, p.ready])).toEqual([
+      ["codex", "Codex", false],
+      ["claudeAgent", "claudeAgent", true],
     ]);
     const claude = providers[1]!;
     expect(claude.supportedRuntimeModes).toEqual(["approval-required", "full-access"]);

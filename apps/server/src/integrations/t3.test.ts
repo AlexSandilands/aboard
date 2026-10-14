@@ -395,7 +395,6 @@ const LAUNCH: StartT3ThreadInput = {
   prompt: "Let us work on #9",
   modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5", options: [] },
   runtimeMode: "full-access",
-  interactionMode: "plan",
   workspace: { mode: "new_worktree", baseRef: "main", startFromOrigin: true },
 };
 
@@ -466,7 +465,7 @@ describe("T3 thread launch", () => {
       title: "#9 Hand off",
       modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },
       runtimeMode: "full-access",
-      interactionMode: "plan",
+      interactionMode: "default",
       workspaceStrategy: { type: "worktree", baseRef: "main", startFromOrigin: true },
       initialMessage: { text: "Let us work on #9", attachments: [] },
     });

@@ -466,7 +466,9 @@ export function createT3Integration(deps: {
           title: `#${ctx.task.number} ${ctx.task.title}`,
           modelSelection: options.length > 0 ? { ...selection, options } : selection,
           runtimeMode: input.runtimeMode,
-          interactionMode: input.interactionMode,
+          // T3's plan mode sits behind a client beta flag the board can't read; a thread started in it may
+          // have no visible way out. "Plan with me" is carried by the prompt instead.
+          interactionMode: "default",
           workspaceStrategy: toWorkspaceStrategy(input.workspace),
           initialMessage: { text: input.prompt, attachments: [] },
         }),
