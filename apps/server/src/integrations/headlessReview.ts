@@ -167,8 +167,7 @@ export function resolveExecutable(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string | null {
-  const exts =
-    platform === "win32" ? ["", ...(env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";").map((e) => e.toLowerCase())] : [""];
+  const exts = platform === "win32" ? ["", ...(env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";").filter(Boolean)] : [""];
   const candidates = (base: string) => exts.map((ext) => base + ext);
   if (isAbsolute(command) || command.includes("/") || command.includes("\\")) {
     return candidates(command).find((c) => existsSync(c)) ?? null;
