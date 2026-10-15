@@ -1,12 +1,14 @@
 # Local review
 
-Status: **shipped** (board task #1). Verified against Claude Code 2.1.300 and T3 Code 0.0.46 (October 2026).
+Board task: #1. Verified against Claude Code 2.1.300 and T3 Code 0.0.46 (October 2026).
 
 Local review gets a task's code reviewed, and the findings fixed, before a pull request exists. The aim is
 that you come back to a card in Review whose work has already been reviewed and fixed, without having asked
 for a review or relayed what it found.
 
-## The loop
+## How it works
+
+### The loop
 
 Turn it on in Settings → Local review ("Review before the PR"). A task can override the setting in its
 panel (Auto: Default / On / Off), or an agent can with `update_task(autoReview)`.
@@ -32,7 +34,7 @@ trail on the task.
 A round is **clean** when it raises no blocking or major findings and none are open from earlier rounds.
 Minor findings and nits may stay open.
 
-## Findings
+### Findings
 
 | Severity | Meaning | Sends the change back |
 |---|---|---|
@@ -48,7 +50,7 @@ Rounds belong to a **cycle**. Each move to Review starts a new cycle, and the ro
 cycle, so a task that goes back to In Progress after a clean review can be reviewed again. Round numbers
 keep counting across cycles.
 
-## Review skills
+### Review skills
 
 The reviewer follows a skill:
 
@@ -60,7 +62,7 @@ The reviewer follows a skill:
   `.claude/skills`, `.github/skills` or `.agents/skills` folder. The brief then names the skill and its
   absolute path, so a harness that doesn't have it installed can still read it.
 
-## The card
+### The card
 
 The review state shows as a badge on the card, not as a column: *Reviewing*, *N open*, *Fixed, re-review*,
 *Reviewed*, *Needs review*, *Stuck* or *Review failed*. While the loop runs it's the agent's business. The
@@ -71,7 +73,7 @@ card only asks for your attention when the loop ended without a clean result:
 - **Review failed:** the board's reviewer couldn't finish (the reason is on the round).
 - **Board review: N to fix:** the board's own reviewer found problems that no agent is looping on.
 
-## Fallbacks: when no agent runs the round
+### Fallbacks: when no agent runs the round
 
 Sometimes nobody runs the round: you dragged the card to Review yourself, pressed **Run review**, or the
 agent stopped without reviewing. A watchdog checks pending rounds every 30 seconds and works through the
@@ -94,7 +96,7 @@ fallbacks in order:
 4. **Otherwise** the round is marked stalled and the card shows *Needs review*. The panel's **Copy prompt**
    copies the loop (or, after a board review, the fix instructions) for any harness.
 
-### The board reviewer
+#### The board reviewer
 
 The board runs `claude -p` in the task's checkout: the linked T3 thread's worktree when T3 reports one,
 else the project folder. One review runs at a time.
@@ -118,7 +120,9 @@ the diff.
 The Test button next to the CLI setting runs `claude --version` with the configured path (empty means
 `claude` on PATH).
 
-## Decision: the agent runs the loop, not the board
+## Decisions
+
+### The agent runs the loop, not the board
 
 The first idea was the reverse: the board runs `claude -p` as the reviewer whenever a task reaches Review,
 and posts the findings into the task's T3 thread. It was set aside as the main path because of the
@@ -138,7 +142,7 @@ direction findings have to travel:
 
 The board-run reviewer survives as fallback 3, where it fits: rounds nobody else will run.
 
-## Other decisions
+### Other decisions
 
 - **No column.** A Local Review column between In Progress and Review was the original idea. The board is
   already short of width, and cards narrower than now get too busy, so review state is a badge.
@@ -152,7 +156,7 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 - **Forgiving submissions.** `submit_review` without an open round opens one, so a review run outside the
   loop still gets recorded.
 
-## Where the code lives
+## Code map
 
 | File | What it does |
 |---|---|

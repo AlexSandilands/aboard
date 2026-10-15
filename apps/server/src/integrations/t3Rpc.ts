@@ -4,7 +4,7 @@ import type { FetchFn } from "./t3.ts";
 
 // A one-shot client for T3 Code's WebSocket RPC (Effect RPC with JSON serialization). T3 has no HTTP
 // endpoint for writes, so starting a thread has to go through the socket its own web client uses.
-// This is not a public API; see docs/integrations/agent-handoff.md.
+// This is not a public API; see docs/features/agent-handoff.md.
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const TICKET_TIMEOUT_MS = 5_000;

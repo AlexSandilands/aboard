@@ -103,7 +103,7 @@ The card shows the review state, and the task panel lists every finding and how 
 The reviewer follows the built-in review skill, or any skill you have installed for Claude Code, Copilot or
 Codex (per project, if you like). When no agent runs a review, the board nudges the task's T3 thread, and
 can review it itself with Claude Code headless. See
-[docs/integrations/local-review.md](docs/integrations/local-review.md).
+[docs/features/local-review.md](docs/features/local-review.md).
 
 ## T3 Code integration (optional)
 
@@ -126,7 +126,7 @@ When T3 Code is running, it is detected automatically.
   branch are picked in a dialog). `orchestration:read` alone is enough for status only.
 - **Copy prompt:** every open task has a button that copies a ready-to-paste prompt for any agent
   (Claude Code, Copilot, …), with a planning variant for rough ideas. See
-  [docs/integrations/agent-handoff.md](docs/integrations/agent-handoff.md).
+  [docs/features/agent-handoff.md](docs/features/agent-handoff.md).
 
 ## Keyboard
 

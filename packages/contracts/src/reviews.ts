@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Local review: rounds of review on a task, each with findings the implementing agent fixes or declines.
-// The loop runs before the PR is opened; see docs/integrations/local-review.md.
+// The loop runs before the PR is opened; see docs/features/local-review.md.
 
 /** blocking and major findings keep the loop going; minor and nit may stay open. */
 export const FindingSeverity = z.enum(["blocking", "major", "minor", "nit"]);

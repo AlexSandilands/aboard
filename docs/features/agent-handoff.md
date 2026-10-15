@@ -1,12 +1,14 @@
 # Handing tasks to agents
 
-Status: **shipped** (board task #9). Verified against T3 Code 0.0.46 (nightly, October 2026).
+Board task: #9. Verified against T3 Code 0.0.46 (nightly, October 2026).
 
 The board tracks work, but the work itself happens in an agent harness: Claude Code, Copilot, T3 Code and
 similar. This document covers how a task on the board becomes a running agent session, and how that session
 finds its way back to the task.
 
-## How the board and a harness talk to each other
+## How it works
+
+### How the board and a harness talk to each other
 
 There are two directions, and they use different channels.
 
@@ -25,7 +27,7 @@ harness-specific way. It offers two levels:
 
 Both hand-offs send the same kind of prompt, so the agent behaves the same either way.
 
-## The hand-off prompt
+### The hand-off prompt
 
 The prompt is deliberately short. It points the agent at the task rather than copying the task's content,
 so the agent always reads the current plan and notes from the board:
@@ -39,7 +41,7 @@ so the agent always reads the current plan and notes from the board:
 It is built by one pure helper in `packages/contracts` (`taskHandoffPrompt`), so the copy button and the T3
 launch can't drift apart.
 
-### Plan with me
+#### Plan with me
 
 A rough idea in the Ideas column usually needs a conversation before it needs code. The **Plan with me**
 option switches the prompt to a planning brief:
@@ -54,9 +56,9 @@ mode is a legacy beta behind a client setting the board can't read, and a thread
 with no visible way to switch back. The option is on by default for tasks in
 Ideas or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
-## Starting a thread in T3 Code
+### Starting a thread in T3 Code
 
-### Setup
+#### Setup
 
 The board needs a T3 session token with two scopes:
 
@@ -71,7 +73,7 @@ database and never sent to the browser.
 The flag is `--scope`, repeated once per scope. Older instructions in this repo said `--scopes`, which T3's
 CLI doesn't accept.
 
-### When the button appears
+#### When the button appears
 
 Both buttons sit at the right of the card's bottom line and in the task panel header. They only show on
 open work: not on Done or archived tasks.
@@ -89,7 +91,7 @@ that suits the task marked _Suggested_.
 Whether T3 really has the project (by its id, or the same folder) is checked when the dialog opens. If it
 doesn't, the dialog says so and offers to copy the prompt instead.
 
-### The launch dialog
+#### The launch dialog
 
 Clicking the button opens a dialog modelled on T3's own new-thread screen:
 
@@ -115,7 +117,7 @@ keep rejecting that id, so the dialog starts the next attempt with a fresh one.
 Not mirrored from T3 (yet): defaults from a repo's `t3.json`, per-project provider enable/disable
 overrides, and hidden or reordered models. The dialog shows every model of every enabled provider.
 
-### How the launch works
+#### How the launch works
 
 T3 Code has no HTTP endpoint for starting threads. The board's server uses the same WebSocket RPC that T3's
 own web client uses:
@@ -132,23 +134,12 @@ own web client uses:
 The browser only talks to the board's REST API (`GET /api/tasks/:id/t3-launch-options`,
 `POST /api/tasks/:id/t3-thread`). Each request opens one WebSocket session and closes it when done.
 
-Where the code lives:
-
-| File | What it does |
-|---|---|
-| `packages/contracts/src/handoff.ts` | The hand-off prompt (`taskHandoffPrompt`) and the default mode |
-| `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime mode labels |
-| `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
-| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, workspace → `workspaceStrategy` |
-| `apps/server/src/integrations/t3.ts` | `launchOptions` and `startThread`, and linking the new thread to the task |
-| `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
-
 **This protocol is not a public API.** It was worked out from T3 Code's source, so a T3 update can break it.
 Failures to load the dialog's options are shown in the dialog, with an offer to copy the prompt instead.
 Launch failures are shown as a toast with the reason (for example "the token lacks `orchestration:operate`"
 or "T3 Code's protocol may have changed"). The copy-prompt hand-off keeps working regardless.
 
-### Workspace and branch
+#### Workspace and branch
 
 The workspace and branch choices map to T3's `workspaceStrategy`:
 
@@ -158,7 +149,9 @@ The workspace and branch choices map to T3's `workspaceStrategy`:
 | A branch that already has its own worktree, or Previous worktree | Runs the thread in that existing worktree folder. |
 | Current checkout | Runs the thread in the project folder on whatever branch is checked out. |
 
-#### Decision: no branch switching in the current checkout
+## Decisions
+
+### No branch switching in the current checkout
 
 In T3's own screen, choosing Current checkout and then a different branch runs `git checkout` in the
 project folder before the thread starts. The board deliberately doesn't do that. Under Current checkout you
@@ -184,7 +177,9 @@ on the current branch and ask the agent to switch to X in the prompt.
 before launching, exactly like T3. If that's ever wanted, make the switch an explicit, clearly labelled
 choice, warn which folder will change, and refuse when the folder has uncommitted changes.
 
-## Alternatives considered for starting T3 threads
+## Alternatives considered
+
+For starting T3 threads:
 
 | Option | Starts the agent? | Why not chosen |
 |---|---|---|
@@ -193,7 +188,17 @@ choice, warn which folder will change, and refuse when the folder has uncommitte
 | A T3 scheduled task with a webhook trigger | Yes | One-time setup over the same WebSocket, then a plain HTTP POST per launch. It adds a hidden scheduled task in T3 and gives less control over model and workspace per launch. |
 | WebSocket `orchestration.launchThread` | Yes | **Chosen.** One request, full control over model, mode and workspace, and the thread id comes back so the board can link it immediately. |
 
-Choosing this option reverses the original v1 non-goal "no writes to T3 Code" in [PLAN.md](../PLAN.md).
-The board still never touches T3's database or files; it only acts through T3's own API, with a token you
-issue. [Local review](local-review.md) uses the same channel for one more write: when nobody runs a review
+The chosen option means the board writes to T3 Code, which it originally never did. It still never touches
+T3's database or files; it only acts through T3's own API, with a token you issue. [Local review](local-review.md) uses the same channel for one more write: when nobody runs a review
 round, it posts a message into the task's linked thread (`orchestration.dispatchCommand`, `message.dispatch`).
+
+## Code map
+
+| File | What it does |
+|---|---|
+| `packages/contracts/src/handoff.ts` | The hand-off prompt (`taskHandoffPrompt`) and the default mode |
+| `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime mode labels |
+| `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
+| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, workspace → `workspaceStrategy` |
+| `apps/server/src/integrations/t3.ts` | `launchOptions` and `startThread`, and linking the new thread to the task |
+| `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
