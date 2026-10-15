@@ -11,6 +11,7 @@ import { ApiError } from "~/lib/api";
 import { useUpdateTask } from "~/state/mutations";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { usePanel } from "~/state/ui";
+import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
 import { LinksSection } from "./LinksSection";
@@ -180,6 +181,7 @@ function TaskPanelBody({
           <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
         )}
       </div>
+      <LabelsSection task={task} />
       <LinksSection task={task} />
       <ReviewSection task={task} />
       <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />

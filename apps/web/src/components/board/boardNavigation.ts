@@ -1,5 +1,6 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 
 /** `?task=` — the task open in the detail panel. */
 export function useSelectedTaskId(): string | null {
@@ -9,6 +10,21 @@ export function useSelectedTaskId(): string | null {
 /** `?project=` — the project the board is scoped to. */
 export function useProjectFilter(): string | null {
   return useSearch({ strict: false, select: (search) => search.project ?? null });
+}
+
+/** `?labels=`: the labels the board is filtered to (any of them). */
+export function useLabelFilter(): string[] {
+  const raw = useSearch({ strict: false, select: (search) => search.labels });
+  return useMemo(() => parseLabelFilter(raw), [raw]);
+}
+
+export function useSetLabelFilter() {
+  const navigate = useNavigate();
+  return useCallback(
+    (labels: ReadonlyArray<string>) =>
+      navigate({ to: "/", search: (prev) => ({ ...prev, labels: formatLabelFilter(labels) }) }),
+    [navigate],
+  );
 }
 
 export function useOpenTask() {

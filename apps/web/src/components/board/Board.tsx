@@ -35,7 +35,7 @@ import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER, type Lane 
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
-import { useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
+import { useLabelFilter, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
 import { dropAnimation } from "./cardMotion";
 import {
   cellDroppableId,
@@ -183,6 +183,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const search = useBoardView((s) => s.search);
   const attentionOnly = useBoardView((s) => s.attentionOnly);
   const hasPrOnly = useBoardView((s) => s.hasPrOnly);
+  const labels = useLabelFilter();
   const showArchived = useBoardView((s) => s.showArchived);
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
@@ -195,8 +196,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const updateProject = useUpdateProject();
 
   const builtLanes = useMemo(
-    () => buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly }, archivedTasks),
-    [board, projectFilter, search, attentionOnly, hasPrOnly, archivedTasks],
+    () => buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels }, archivedTasks),
+    [board, projectFilter, search, attentionOnly, hasPrOnly, labels, archivedTasks],
   );
   // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
   const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });
@@ -218,8 +219,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       t3: board.integrations.t3,
       settings,
       projects: board.projects,
+      labelColors: board.labelColors,
     }),
-    [openTask, board.integrations.t3, settings, board.projects],
+    [openTask, board.integrations.t3, settings, board.projects, board.labelColors],
   );
 
   const sensors = useSensors(

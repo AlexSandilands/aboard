@@ -31,7 +31,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
       description:
         "Cheap orientation call. Shows every project on the user's board with task counts per status " +
         "(Ideas, Planned, In Progress, Review, Done) and anything needing attention (blocked steps, failing PRs, " +
-        "threads awaiting input). Pass workspacePath (your cwd) to also list that project's open tasks. " +
+        "threads awaiting input), plus the labels in use. Pass workspacePath (your cwd) to also list that project's open tasks. " +
         "Call this at the start of meaningful work.",
       inputSchema: { ...projectFields },
       annotations: { readOnlyHint: true },
@@ -70,6 +70,8 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
             lines.push(open.length ? renderTaskGroups(open, "  ") : "  none");
           }
         }
+        const labels = services.labels.usage();
+        if (labels.length) lines.push("", `Labels in use: ${labels.map((l) => `${l.name} (${l.count})`).join(", ")}`);
         const t3 = snapshot.integrations.t3;
         if (t3.detected) lines.push("", `T3 Code detected (environment ${t3.environmentId ?? "unknown"}).`);
         return textResult(lines.join("\n"));
@@ -98,12 +100,16 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
       title: "List tasks",
       description:
         "Lists tasks as compact one-line summaries grouped by status (progress, current step, links, attention). " +
-        "Filter by project (workspacePath/projectId), status, free text (matches title, description, #number, Jira keys) " +
-        "or attentionOnly. Use it to find the task you should resume, then call get_task.",
+        "Filter by project (workspacePath/projectId), status, labels (any of), free text (matches title, description, " +
+        "#number, Jira keys, labels) or attentionOnly. Use it to find the task you should resume, then call get_task.",
       inputSchema: {
         ...projectFields,
         status: TaskStatus.optional().describe("Only tasks in this status."),
         query: z.string().optional().describe("Free-text filter."),
+        labels: z
+          .array(z.string().min(1))
+          .optional()
+          .describe('Only tasks with any of these labels, e.g. ["ui", "backend"].'),
         attentionOnly: z.boolean().optional().describe("Only tasks needing attention."),
         includeArchived: z.boolean().optional(),
         limit: z.number().int().min(1).max(500).optional().describe("Max tasks to show (default 100)."),
@@ -122,6 +128,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           ...(projectId ? { projectId } : {}),
           ...(args.status ? { status: args.status } : {}),
           ...(args.query ? { query: args.query } : {}),
+          ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.attentionOnly ? { attentionOnly: true } : {}),
           ...(args.includeArchived ? { includeArchived: true } : {}),
         });

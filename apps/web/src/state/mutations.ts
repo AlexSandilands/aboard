@@ -85,6 +85,37 @@ export const useUpdateTask = (opts?: MutationOpts) =>
       api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
     opts,
   );
+// ── Labels ───────────────────────────────────────────────────────────────
+
+/** Sets a label's colour override, or clears it with `hue: null`; the cached board updates at once. */
+export function useSetLabelColor(opts?: MutationOpts) {
+  const queryClient = useQueryClient();
+  const setColors = (labelColors: Record<string, number>) =>
+    queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) => (board ? { ...board, labelColors } : board));
+  return useMutation({
+    mutationFn: ({ label, hue }: { label: string; hue: number | null }) =>
+      hue === null
+        ? api<Record<string, number>>(`/api/labels/${enc(label)}/color`, { method: "DELETE" })
+        : api<Record<string, number>>(`/api/labels/${enc(label)}/color`, { method: "PUT", body: { hue } }),
+    onMutate: ({ label, hue }) => {
+      const board = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      if (!board) return;
+      const { [label]: _previous, ...rest } = board.labelColors;
+      setColors(hue === null ? rest : { ...rest, [label]: hue });
+    },
+    onSuccess: setColors,
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board });
+      if (opts?.silent) return;
+      toastManager.add({
+        type: "error",
+        title: "Couldn't change the label colour",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
+
 /** Permanently deletes a task; the server only allows it for archived tasks. */
 export const useDeleteTask = (opts?: MutationOpts) =>
   useApiMutation((id: string) => api<void>(`/api/tasks/${enc(id)}`, { method: "DELETE" }), opts);

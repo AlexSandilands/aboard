@@ -25,6 +25,8 @@ export interface BoardFilters {
   attentionOnly: boolean;
   /** Only cards with at least one PR link. */
   hasPrOnly: boolean;
+  /** `?labels=`: only cards with any of these labels; empty shows all. */
+  labels: ReadonlyArray<string>;
 }
 
 function hasPr(task: TaskSummary): boolean {
@@ -37,13 +39,14 @@ export function jiraKeys(task: TaskSummary): string[] {
   return keys;
 }
 
-/** Matches a card against the sidebar search: title, `#number` / bare number, or Jira key. */
+/** Matches a card against the sidebar search: title, `#number` / bare number, Jira key or label. */
 export function matchesTaskSearch(task: TaskSummary, rawQuery: string): boolean {
   const query = rawQuery.trim().toLowerCase();
   if (!query) return true;
   if (task.title.toLowerCase().includes(query)) return true;
   const numberQuery = query.startsWith("#") ? query.slice(1) : query;
   if (/^\d+$/.test(numberQuery) && String(task.number).startsWith(numberQuery)) return true;
+  if (task.labels.some((label) => label.includes(query))) return true;
   return jiraKeys(task).some((key) => key.toLowerCase().includes(query));
 }
 
@@ -61,8 +64,8 @@ function emptyCells(): Record<TaskStatus, TaskSummary[]> {
 
 /**
  * Groups the board into one lane per project (in project order) and five cells per lane.
- * Cells are ordered by position, except Done which is newest-first. With a text, attention or PR
- * filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
+ * Cells are ordered by position, except Done which is newest-first. With a text, attention, PR or
+ * label filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
  * (Show archived) join their lanes; the snapshot's copy wins if a task is in both.
  */
 export function buildLanes(
@@ -71,7 +74,8 @@ export function buildLanes(
   archived: ReadonlyArray<TaskSummary> = [],
 ): Lane[] {
   const scoped = filters.projectId && board.projects.some((p) => p.id === filters.projectId) ? filters.projectId : null;
-  const filtering = filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly;
+  const filtering =
+    filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly || filters.labels.length > 0;
   const byProject = new Map<string, Record<TaskStatus, TaskSummary[]>>();
   const active = new Set(board.tasks.map((task) => task.id));
   const tasks = archived.length ? [...board.tasks, ...archived.filter((task) => !active.has(task.id))] : board.tasks;
@@ -79,6 +83,7 @@ export function buildLanes(
     if (scoped && task.projectId !== scoped) continue;
     if (filters.attentionOnly && task.attention.length === 0) continue;
     if (filters.hasPrOnly && !hasPr(task)) continue;
+    if (filters.labels.length && !task.labels.some((label) => filters.labels.includes(label))) continue;
     if (!matchesTaskSearch(task, filters.search)) continue;
     let cells = byProject.get(task.projectId);
     if (!cells) byProject.set(task.projectId, (cells = emptyCells()));

@@ -32,6 +32,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     createdAt: "",
     updatedAt: "",
     statusChangedAt: "",
+    labels: [],
     resolution: null,
     resolvedBy: null,
     progress: { done: 0, total: 0 },
@@ -50,13 +51,14 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
   return {
     projects,
     tasks,
+    labelColors: {},
     integrations: {
       t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
     },
   };
 }
 
-const noFilters = { projectId: null, search: "", attentionOnly: false, hasPrOnly: false };
+const noFilters = { projectId: null, search: "", attentionOnly: false, hasPrOnly: false, labels: [] };
 
 describe("matchesTaskSearch", () => {
   const jira = task("t", {
@@ -85,6 +87,10 @@ describe("matchesTaskSearch", () => {
     expect(matchesTaskSearch(jira, "logout")).toBe(false);
     expect(matchesTaskSearch(jira, "  ")).toBe(true);
   });
+
+  it("matches labels", () => {
+    expect(matchesTaskSearch(task("t", { labels: ["backend"] }), "back")).toBe(true);
+  });
 });
 
 describe("buildLanes", () => {
@@ -109,6 +115,17 @@ describe("buildLanes", () => {
     expect(buildLanes(board([]), { ...noFilters, projectId: "q" }).map((l) => l.project.id)).toEqual(["q"]);
     expect(buildLanes(board([]), { ...noFilters, projectId: "missing" })).toHaveLength(2);
     expect(buildLanes(board([task("x")]), { ...noFilters, search: "x" }).map((l) => l.project.id)).toEqual(["p"]);
+  });
+
+  it("keeps tasks with any of the selected labels and drops lanes without one", () => {
+    const ui = task("ui", { position: "a1", labels: ["ui"] });
+    const server = task("server", { position: "a2", labels: ["server", "bug"] });
+    const lanes = buildLanes(board([ui, server, task("plain"), task("docs", { projectId: "q", labels: ["docs"] })]), {
+      ...noFilters,
+      labels: ["ui", "bug"],
+    });
+    expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
+    expect(lanes[0]!.cells.idea.map((t) => t.id)).toEqual(["ui", "server"]);
   });
 
   it("filters to tasks needing attention", () => {

@@ -15,6 +15,8 @@ export interface Effects {
   project(id: string): void;
   projectDeleted(id: string): void;
   taskDeleted(id: string): void;
+  /** Label colour overrides changed (publishes labels.colors_changed). */
+  labelColors(): void;
   /** Appends a task_events row and marks the task's card changed. */
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
 }
@@ -25,6 +27,7 @@ interface Pending {
   projects: Set<string>;
   deletedProjects: Set<string>;
   deletedTasks: Set<string>;
+  labelColors: boolean;
 }
 
 export interface Core {
@@ -50,6 +53,9 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
     project: (id) => p.projects.add(id),
     projectDeleted: (id) => p.deletedProjects.add(id),
     taskDeleted: (id) => p.deletedTasks.add(id),
+    labelColors: () => {
+      p.labelColors = true;
+    },
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
       p.tasks.add(taskId);
@@ -74,6 +80,7 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
     for (const taskId of p.details) {
       if (!p.tasks.has(taskId) && !p.deletedTasks.has(taskId)) events.push({ type: "task.detail_changed", taskId });
     }
+    if (p.labelColors) events.push({ type: "labels.colors_changed", labelColors: repos.labels.colors() });
     for (const event of events) bus.publish(event);
   };
 
@@ -90,6 +97,7 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
         projects: new Set(),
         deletedProjects: new Set(),
         deletedTasks: new Set(),
+        labelColors: false,
       };
       pending = p;
       let result: T;

@@ -336,4 +336,38 @@ describe("MCP endpoint", () => {
     );
     expect(s.tasks.summary(task.id).status).toBe("done");
   });
+
+  it("tags tasks with labels, filters and shows them", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    await call("create_idea", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
+    await call("create_task", {
+      title: "Add endpoint",
+      workspacePath,
+      markdown: "## Build\n- [ ] route",
+      labels: ["backend"],
+    });
+    await call("create_idea", { title: "Write docs", workspacePath });
+
+    const listed = await call("list_tasks", { workspacePath, labels: ["ui", "Backend"] });
+    expect(listed).toContain("Polish header [polish] [ui]");
+    expect(listed).toContain("Add endpoint [backend]");
+    expect(listed).not.toContain("Write docs");
+    expect(await call("list_tasks", { query: "polish" })).toContain("Polish header");
+    expect(await call("board_overview", {})).toContain("Labels in use: backend (1), polish (1), ui (1)");
+
+    const updated = await call("update_task", { task: "#1", labels: ["ui", "design"] });
+    expect(updated).toContain("Labels: design, ui");
+    const detail = await call("get_task", { task: "#1" });
+    expect(detail).toContain("labels +design -polish");
+
+    const rejected = await client.callTool({ name: "update_task", arguments: { task: "#1", labels: ["#"] } });
+    expect(rejected.isError).toBe(true);
+    expect(text(rejected)).toMatch(/^VALIDATION: Label "#" is empty/);
+  });
 });

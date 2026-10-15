@@ -42,9 +42,12 @@ export function filterItems<T extends SearchableItem>(items: ReadonlyArray<T>, r
     .map((entry) => entry.item);
 }
 
-/** Search terms for a task row: `#12`, `12`, the title and its project. */
-export function taskSearchTerms(task: { number: number; title: string }, projectTitle: string | undefined): string[] {
-  return [`#${task.number}`, String(task.number), task.title, projectTitle ?? ""];
+/** Search terms for a task row: `#12`, `12`, the title, its project and its labels. */
+export function taskSearchTerms(
+  task: { number: number; title: string; labels?: ReadonlyArray<string> },
+  projectTitle: string | undefined,
+): string[] {
+  return [`#${task.number}`, String(task.number), task.title, projectTitle ?? "", ...(task.labels ?? [])];
 }
 
 // ── Path browsing ────────────────────────────────────────────────────────
