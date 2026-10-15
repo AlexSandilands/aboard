@@ -239,7 +239,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       placeAfter,
     });
     if (result.kind !== "move") return;
-    const fullIds = allCellTasks.filter((t) => !t.archivedAt).map((t) => t.id);
+    // Archived cards (Show archived) take preview slots in the cell too, so they count here.
+    const fullIds = allCellTasks.map((t) => t.id);
     // A card that would land past the preview (say, dropped below the last shown card) would vanish, so
     // show the whole cell instead.
     if (collapsed && landsPastPreview(result, task.id, fullIds, COLUMN_PREVIEW_COUNT)) {
