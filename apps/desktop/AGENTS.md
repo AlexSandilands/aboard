@@ -13,7 +13,8 @@ The Electron shell. How it works: [docs/features/desktop.md](../../docs/features
   preload's `window.desktopBridge` (`DesktopBridge` in contracts).
 - The preload is sandboxed and bundled to CJS. Anything it exposes must be typed in
   `packages/contracts/src/desktop.ts`, and the main process checks the sender before acting on IPC.
-- Packaging config is code (`scripts/package.ts`) so names derive from `BRAND`.
+- Packaging config is code (`scripts/package.ts`) so names derive from `BRAND`. `pnpm desktop:package`
+  (from the root) builds the Windows installer in `apps/desktop/release/`.
 - Scripts in `scripts/` run on plain `node` (type stripping): erasable TypeScript only.
 - Pure logic goes in `src/shell.logic.ts`, with tests beside it. Changes under `apps/desktop` need a
   restart of `pnpm desktop`.
