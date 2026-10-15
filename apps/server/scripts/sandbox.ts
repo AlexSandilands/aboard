@@ -37,6 +37,8 @@ interface SandboxState {
   mode: "isolated" | "live";
   seed: string | null;
   url: string;
+  /** When the processes above had all started; a pid that started later was reused by something else. */
+  startedAt: number;
   serverPort: number;
   webPort: number;
   home: string;
@@ -102,14 +104,58 @@ async function waitForExit(pids: number[], timeoutMs = 10_000): Promise<void> {
   while (pids.some(isAlive) && Date.now() < deadline) await sleep(100);
 }
 
-async function stop(): Promise<void> {
-  const state = readState();
-  if (!state) {
-    if (existsSync(home)) removeHome();
-    console.log("[sandbox] no sandbox running");
-    return;
+interface ProcessInfo {
+  startedAt: number;
+  commandLine: string;
+}
+
+/** Start time and command line of the given live pids. */
+function processInfo(pids: number[]): Map<number, ProcessInfo> {
+  const info = new Map<number, ProcessInfo>();
+  const live = pids.filter(isAlive);
+  if (live.length === 0) return info;
+  if (isWindows) {
+    const filter = live.map((pid) => `ProcessId=${pid}`).join(" OR ");
+    const script =
+      `Get-CimInstance Win32_Process -Filter '${filter}' | ForEach-Object { '{0}|{1}|{2}' -f ` +
+      "$_.ProcessId, ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds(), $_.CommandLine }";
+    const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+    for (const line of out.stdout.split(/\r?\n/)) {
+      const [pid, startedAt, ...commandLine] = line.split("|");
+      if (pid && startedAt) info.set(Number(pid), { startedAt: Number(startedAt), commandLine: commandLine.join("|") });
+    }
+    return info;
   }
-  const pids = [state.pid, ...state.childPids];
+  const out = spawnSync("ps", ["-o", "pid=,lstart=,args=", "-p", live.join(",")], { encoding: "utf8" });
+  for (const line of out.stdout.split("\n")) {
+    // lstart is always five fields, e.g. "Thu Oct 15 17:21:35 2026".
+    const [pid, ...rest] = line.trim().split(/\s+/);
+    if (!pid || rest.length < 5) continue;
+    info.set(Number(pid), { startedAt: Date.parse(rest.slice(0, 5).join(" ")), commandLine: rest.slice(5).join(" ") });
+  }
+  return info;
+}
+
+const normalizePath = (p: string) => p.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+
+/**
+ * The state's pids that still belong to this sandbox. The state file outlives crashes and reboots, and the OS
+ * reuses pids, so a pid only counts when its process started before the sandbox finished starting and its
+ * command line is this checkout's.
+ */
+function ownedPids(state: SandboxState): number[] {
+  const info = processInfo([state.pid, ...state.childPids]);
+  const root = normalizePath(repoRoot);
+  return [...info].flatMap(([pid, { startedAt, commandLine }]) => {
+    const line = normalizePath(commandLine);
+    const ours = pid === state.pid ? line.includes("scripts/sandbox.ts") : line.includes(root);
+    return ours && startedAt <= state.startedAt ? [pid] : [];
+  });
+}
+
+/** Kills what's left of a sandbox (only processes it started) and deletes its home. */
+async function cleanUp(state: SandboxState): Promise<void> {
+  const pids = ownedPids(state);
   for (const pid of pids) killTree(pid);
   await waitForExit(pids);
   const ports = state.mode === "live" ? [state.webPort] : [state.serverPort, state.webPort];
@@ -119,6 +165,16 @@ async function stop(): Promise<void> {
     console.warn(`[sandbox] port ${busy.join(", ")} still in use after stopping`);
   }
   removeHome();
+}
+
+async function stop(): Promise<void> {
+  const state = readState();
+  if (!state) {
+    if (existsSync(home)) removeHome();
+    console.log("[sandbox] no sandbox running");
+    return;
+  }
+  await cleanUp(state);
   console.log(`[sandbox] stopped; removed ${home}`);
 }
 
@@ -212,7 +268,7 @@ async function start(argv: string[]): Promise<void> {
   const { isScenarioName, seedDatabase } = await import("../src/dev/seeds.ts");
   const { live, seed } = parseArgs(argv, isScenarioName);
   const existing = readState();
-  if (existing && isAlive(existing.pid)) {
+  if (existing && ownedPids(existing).includes(existing.pid)) {
     // Same checkout, so Vite already hot-reloads its edits: hand back the running one instead of a port clash.
     console.log(
       `[sandbox] already running (${existing.mode}${existing.seed ? `, seed ${existing.seed}` : ""}); ` +
@@ -221,7 +277,9 @@ async function start(argv: string[]): Promise<void> {
     console.log(`${READY_PREFIX} ${JSON.stringify(existing)}`);
     return;
   }
-  if (existsSync(home)) removeHome();
+  // A crashed sandbox can leave its server or Vite running; stop them before reusing the home.
+  if (existing) await cleanUp(existing);
+  else if (existsSync(home)) removeHome();
   mkdirSync(home, { recursive: true });
 
   const realServerPort = Number(process.env[brandEnv("PORT")] ?? DEFAULT_SERVER_PORT);
@@ -281,7 +339,13 @@ async function start(argv: string[]): Promise<void> {
     // Vite serves the UI; a stale build in apps/web/dist would only confuse.
     env[brandEnv("WEB_DIST")] = join(home, "no-web-dist");
     children.push(
-      run("server", ["--watch", "--watch-preserve-output", "--import", "tsx", "src/main.ts"], serverDir, env),
+      // Absolute paths put this checkout in each child's command line, which `ownedPids` checks.
+      run(
+        "server",
+        ["--watch", "--watch-preserve-output", "--import", "tsx", join(serverDir, "src", "main.ts")],
+        serverDir,
+        env,
+      ),
     );
   }
 
@@ -290,7 +354,7 @@ async function start(argv: string[]): Promise<void> {
     "bin",
     "vite.js",
   );
-  children.push(run("web", [viteBin], webDir, env));
+  children.push(run("web", [viteBin, "--config", join(webDir, "vite.config.ts")], webDir, env));
 
   for (const child of children) {
     child.once("exit", (code) => {
@@ -304,6 +368,7 @@ async function start(argv: string[]): Promise<void> {
     pid: process.pid,
     childPids: children.flatMap((c) => (c.pid ? [c.pid] : [])),
     mode: live ? "live" : "isolated",
+    startedAt: Date.now(),
     seed: live ? null : seed,
     url,
     serverPort,
@@ -331,6 +396,8 @@ const [command, ...rest] = process.argv.slice(2).filter((arg) => arg !== "--");
 if (command === "stop") await stop();
 else if (command === "status") {
   const state = readState();
-  if (state && isAlive(state.pid)) console.log(`${READY_PREFIX} ${JSON.stringify(state)}`);
+  if (state && ownedPids(state).includes(state.pid)) console.log(`${READY_PREFIX} ${JSON.stringify(state)}`);
   else console.log("[sandbox] no sandbox running");
-} else await start(command === undefined ? [] : [command, ...rest]);
+} else if (command === undefined || command.startsWith("--"))
+  await start(command === undefined ? [] : [command, ...rest]);
+else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live)`);
