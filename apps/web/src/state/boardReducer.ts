@@ -79,9 +79,11 @@ export function optimisticMove(
     ...board,
     tasks: board.tasks.map((t) => {
       if (t.id !== taskId) return t;
+      if (to.status === t.status) return { ...t, position };
       // Leaving its column reopens a closed task; the server clears the resolution the same way.
-      const reopened = to.status !== t.status ? { resolution: null, resolvedBy: null } : {};
-      return { ...t, status: to.status, position, ...reopened };
+      // statusChangedAt puts it on top of Done, which is newest-first.
+      const statusChangedAt = new Date().toISOString();
+      return { ...t, status: to.status, position, statusChangedAt, resolution: null, resolvedBy: null };
     }),
   };
 }

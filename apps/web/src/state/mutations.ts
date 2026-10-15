@@ -17,14 +17,15 @@ import type {
   TaskDetail,
   TaskLink,
   TaskReview,
-  TaskStatus,
   TaskSummary,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { api, ApiError } from "~/lib/api";
+import { captureCardRect } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
 import { optimisticMove } from "./boardReducer";
 import { queryKeys } from "./queries";
@@ -106,23 +107,44 @@ export const useAddNote = (opts?: MutationOpts) =>
  * PLAN_REQUIRED errors are NOT toasted here — check `isPlanRequired(error)` in onError and
  * offer to write a plan.
  */
+type MoveVars = MoveTaskInput & { id: string };
+
+const applyMove = (board: BoardSnapshot, { id, status, beforeId, afterId }: MoveVars) =>
+  optimisticMove(board, id, {
+    status: status ?? board.tasks.find((t) => t.id === id)?.status ?? "idea",
+    beforeId,
+    afterId,
+  });
+
+/**
+ * Moves a task. `mutate` writes the optimistic move synchronously, so a dropped card renders in its
+ * new slot in the same commit that ends the drag and the drop animation lands there. A failed move
+ * slides the card back.
+ */
 export function useMoveTask() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...input }: MoveTaskInput & { id: string }) =>
-      api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
-    onMutate: async ({ id, status, beforeId, afterId }) => {
+  // Each move's task as it was before, keyed by the mutate() variables object, for rollback.
+  const [originals] = useState(() => new WeakMap<MoveVars, TaskSummary>());
+  const mutation = useMutation({
+    mutationFn: ({ id, ...input }: MoveVars) => api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
+    onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.board });
-      const previous = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
-      if (previous) {
-        const current = previous.tasks.find((t) => t.id === id);
-        const target: TaskStatus = status ?? current?.status ?? "idea";
-        queryClient.setQueryData(queryKeys.board, optimisticMove(previous, id, { status: target, beforeId, afterId }));
-      }
-      return { previous };
+      // Cancelling a board fetch restores the cache from before the fetch, and a fetch that
+      // landed meanwhile has the old position too: write the move again if it was undone.
+      const original = originals.get(vars);
+      const board = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      const task = board?.tasks.find((t) => t.id === vars.id);
+      if (board && original && task?.status === original.status && task.position === original.position)
+        queryClient.setQueryData(queryKeys.board, applyMove(board, vars));
     },
-    onError: (error, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.board, context.previous);
+    onError: (error, vars) => {
+      const original = originals.get(vars);
+      if (original) {
+        captureCardRect(original.id);
+        queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
+          board ? { ...board, tasks: board.tasks.map((t) => (t.id === original.id ? original : t)) } : board,
+        );
+      }
       if (!isPlanRequired(error)) {
         toastManager.add({
           type: "error",
@@ -132,6 +154,20 @@ export function useMoveTask() {
       }
     },
   });
+  const { mutate: baseMutate } = mutation;
+  const mutate = useCallback<typeof baseMutate>(
+    (vars, options) => {
+      const board = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      const original = board?.tasks.find((t) => t.id === vars.id);
+      if (board && original) {
+        originals.set(vars, original);
+        queryClient.setQueryData(queryKeys.board, applyMove(board, vars));
+      }
+      baseMutate(vars, options);
+    },
+    [queryClient, originals, baseMutate],
+  );
+  return { ...mutation, mutate };
 }
 
 export function isPlanRequired(error: unknown): boolean {

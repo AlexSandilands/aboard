@@ -109,4 +109,10 @@ describe("optimisticMove", () => {
     const reopened = optimisticMove(withClosed, "d", { status: "idea" });
     expect(reopened.tasks.find((t) => t.id === "d")).toMatchObject({ resolution: null, resolvedBy: null });
   });
+  it("stamps statusChangedAt on a status change so the card tops Done", () => {
+    const moved = optimisticMove(b, "c", { status: "done" }).tasks.find((t) => t.id === "c");
+    expect(moved?.statusChangedAt).not.toBe(task("c", "idea", "a0").statusChangedAt);
+    const reordered = optimisticMove(b, "b", { status: "planned", beforeId: "a" }).tasks.find((t) => t.id === "b");
+    expect(reordered?.statusChangedAt).toBe(task("b", "planned", "a1").statusChangedAt);
+  });
 });
