@@ -203,14 +203,17 @@ export interface ReviewsService {
   resolveFinding(taskId: string, ref: string, input: ResolveFindingInput, actor: string): ReviewFinding;
   /** Rounds in a status on non-archived tasks, oldest first (for the board's fallbacks). */
   roundsWithStatus(status: ReviewRoundStatus): ReviewRecord[];
-  /** Records that the board asked the task's T3 thread to run the round. */
-  markNudged(reviewId: string, actor: string): void;
-  /** For the board's own fallbacks: running, stalled, failed or back to pending. */
+  /** Records that the board asked the task's T3 thread to run the round. False when it's no longer pending. */
+  markNudged(reviewId: string, actor: string): boolean;
+  /**
+   * For the board's own fallbacks: running, stalled, failed or back to pending. With `from`, only applies when
+   * the round is still in one of those statuses (checked in the same transaction) and returns null otherwise.
+   */
   setRoundStatus(
     reviewId: string,
     status: Exclude<ReviewRoundStatus, "submitted">,
-    opts: { actor: string; error?: string },
-  ): TaskReview;
+    opts: { actor: string; error?: string; from?: ReadonlyArray<ReviewRoundStatus> },
+  ): TaskReview | null;
 }
 
 export interface BoardService {

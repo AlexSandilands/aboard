@@ -140,6 +140,36 @@ describe("reviews", () => {
     expect(retried).toMatchObject({ round: 1, status: "pending", error: null });
   });
 
+  it("only changes a round's status from the one the caller expects", () => {
+    const { s, task } = setup();
+    const opened = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.submit(task.id, { findings: [] }, "reviewer");
+    expect(s.reviews.setRoundStatus(opened.id, "stalled", { actor: "board", from: ["pending"] })).toBeNull();
+    expect(s.reviews.markNudged(opened.id, "board")).toBe(false);
+    expect(s.reviews.list(task.id)[0]).toMatchObject({ status: "submitted", nudgedAt: null });
+  });
+
+  it("doesn't block a move to Review while the board is reviewing", () => {
+    const { s, task } = setup();
+    s.settings.update({ autoReview: true });
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    const round = s.reviews.list(task.id)[0]!;
+    s.reviews.setRoundStatus(round.id, "running", { actor: "board" });
+    s.tasks.move(task.id, { status: "in_progress" }, "agent");
+    expect(s.tasks.move(task.id, { status: "review" }, "agent").status).toBe("review");
+    expect(s.reviews.list(task.id)).toHaveLength(1);
+  });
+
+  it("keeps the badge but drops the call to action once the task is done", () => {
+    const { s, task } = setup();
+    s.settings.update({ reviewMaxRounds: 1 });
+    s.reviews.submit(task.id, { findings: [{ severity: "blocking", title: "x" }] }, "reviewer");
+    expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("review_stuck");
+    const done = s.tasks.move(task.id, { status: "done" }, "user");
+    expect(done.review?.state).toBe("stuck");
+    expect(done.attention).toEqual([]);
+  });
+
   it("resolves auto-review and the skill from task, project and global settings", () => {
     const { s, project, task } = setup();
     expect(s.reviews.effectiveAutoReview(task.id)).toBe(false);

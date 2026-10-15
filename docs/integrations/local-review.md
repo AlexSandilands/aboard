@@ -77,15 +77,19 @@ Sometimes nobody runs the round: you dragged the card to Review yourself, presse
 agent stopped without reviewing. A watchdog checks pending rounds every 30 seconds and works through the
 fallbacks in order:
 
-1. **Wait.** An agent's round gets a 10-minute grace period. A round you opened yourself skips the wait.
-   The watchdog also waits while the task's T3 thread is busy (working, or waiting on you).
+1. **Wait.** An agent's round gets 30 minutes, counted from the task's last activity: its reviewer only
+   reports when it submits, so the implementer updating steps or notes counts as a sign the loop is still
+   going. After a nudge the wait is 10 minutes. A round you opened yourself skips the first wait. The
+   watchdog also waits while the task's T3 thread is busy (working, or waiting on you).
 2. **Nudge the T3 thread.** If the task has a linked T3 thread, the board posts the loop instructions into
    it, and the agent there runs the loop. This uses the same token and WebSocket RPC as Start in T3 Code
    (`orchestration.dispatchCommand` with a `message.dispatch` command and `deliveryIntent: "auto"`, so T3
    starts a turn or queues it behind the running one). The command id is stable per round, so a retry
    doesn't post twice. It needs the `orchestration:operate` scope.
 3. **The board reviewer.** If it's on (Settings → Local review → Board reviewer), the board reviews the
-   round itself with Claude Code headless. When it finds blocking or major issues and a T3 thread is linked,
+   round itself with Claude Code headless. If an agent's reviewer submits while it runs, the agent's review
+   stands and the board's is dropped. Moving the task to Review meanwhile isn't blocked; the running review
+   covers it. When it finds blocking or major issues and a T3 thread is linked,
    it posts a "fix these findings" prompt into the thread. Otherwise the card asks for attention.
 4. **Otherwise** the round is marked stalled and the card shows *Needs review*. The panel's **Copy prompt**
    copies the loop (or, after a board review, the fix instructions) for any harness.
@@ -102,6 +106,8 @@ else the project folder. One review runs at a time.
   must not record the round itself as well. The task's text is included in the prompt instead.
 - **Structured output:** `--json-schema` makes Claude Code return the summary and findings as JSON, which
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
+- **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,
+  because the shim expands them again; the schema and paths with spaces survive intact.
 - **Capped:** `--max-budget-usd` (Settings, default $2) and a 20-minute timeout. `--no-session-persistence`
   keeps these runs out of your session history.
 

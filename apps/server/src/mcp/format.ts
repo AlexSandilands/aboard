@@ -198,18 +198,19 @@ function reviewLines(task: TaskDetail): string[] {
   ];
   if (latest.summary) lines.push(`  Summary: ${latest.summary}`);
   if (latest.error) lines.push(`  Error: ${latest.error}`);
-  for (const f of latest.findings) {
-    lines.push(findingLine(f));
-    if (f.status === "open") {
-      if (f.body?.trim()) lines.push(`      ${indented(f.body)}`);
-      if (f.suggestion?.trim()) lines.push(`      Suggestion: ${indented(f.suggestion)}`);
-    }
-  }
+  // Open findings carry their detail wherever they are listed: the implementer fixes from it.
+  const pushFinding = (f: ReviewFinding, indent = "") => {
+    lines.push(`${indent}${findingLine(f)}`);
+    if (f.status !== "open") return;
+    if (f.body?.trim()) lines.push(`${indent}      ${indented(f.body)}`);
+    if (f.suggestion?.trim()) lines.push(`${indent}      Suggestion: ${indented(f.suggestion)}`);
+  };
+  for (const f of latest.findings) pushFinding(f);
   const previous = task.reviews.slice(0, -1).flatMap((round) => round.findings);
   const earlier = previous.filter((f) => f.status === "open");
   if (earlier.length) {
     lines.push("  Still open from earlier rounds:");
-    for (const f of earlier) lines.push(`  ${findingLine(f)}`);
+    for (const f of earlier) pushFinding(f, "  ");
   }
   const resolved = previous.filter((f) => f.status !== "open");
   if (resolved.length) {

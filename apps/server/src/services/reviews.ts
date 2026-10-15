@@ -63,6 +63,8 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
     const latest = repos.reviews.latest(taskId);
     const now = nowIso();
     if (latest?.status === "running") {
+      // A move to Review is never blocked: the review already under way covers it.
+      if (opts.trigger === "move") return latest;
       throw new AppError("CONFLICT", `Round ${latest.round} is already being reviewed`);
     }
     // An unfinished round is reused rather than skipped, so round numbers only count real reviews. A move
@@ -228,19 +230,25 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
     roundsWithStatus: (status) => repos.reviews.withStatus(status),
 
     markNudged(reviewId, actor) {
-      const round = repos.reviews.get(reviewId);
-      if (!round) throw notFound("Review", reviewId);
-      core.write((fx) => {
+      return core.write((fx) => {
+        // Read inside the write: an agent may have submitted since the caller looked.
+        const round = repos.reviews.get(reviewId);
+        if (!round) throw notFound("Review", reviewId);
+        if (round.status !== "pending") return false;
         const now = nowIso();
         repos.reviews.update({ ...round, nudgedAt: now, updatedAt: now });
         fx.log(round.taskId, actor, "review_nudged", { round: round.round });
+        return true;
       });
     },
 
     setRoundStatus(reviewId, status, opts) {
-      const round = repos.reviews.get(reviewId);
-      if (!round) throw notFound("Review", reviewId);
-      core.write((fx) => {
+      const updated = core.write((fx) => {
+        // Read inside the write and check the status the caller expects, so a fallback acting on what it saw a
+        // moment ago can't overwrite a round an agent has since submitted.
+        const round = repos.reviews.get(reviewId);
+        if (!round) throw notFound("Review", reviewId);
+        if (opts.from && !opts.from.includes(round.status)) return null;
         const now = nowIso();
         repos.reviews.update({
           ...round,
@@ -255,8 +263,9 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
           ...(opts.error ? { error: opts.error } : {}),
         });
         touch(round.taskId, fx);
+        return round;
       });
-      return review(round.taskId, reviewId);
+      return updated ? review(updated.taskId, reviewId) : null;
     },
   };
 

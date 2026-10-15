@@ -99,7 +99,8 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       stepStatuses: phases.flatMap((p) => p.steps.map((s) => s.status)),
       currentStep: deriveCurrentStep(phases),
       links,
-      attention: deriveAttention(phases, links, review),
+      // A finished task's review is history: the badge stays, the call to action doesn't.
+      attention: deriveAttention(phases, links, record.status === "done" ? null : review),
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,

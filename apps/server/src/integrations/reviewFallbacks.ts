@@ -7,6 +7,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import { AppError } from "../errors.ts";
 import { renderTaskDetail } from "../mcp/format.ts";
 import type { Services } from "../services/types.ts";
 import { messageOf } from "./github.ts";
@@ -14,8 +15,10 @@ import { headlessPrompt, runHeadlessReview, type RunHeadless } from "./headlessR
 import type { T3Integration, ThreadLink } from "./t3.ts";
 import type { Logger } from "./util.ts";
 
-/** How long a round may wait for an agent's reviewer (or a nudged thread) before the next fallback. */
+/** How long a nudged thread (or a round the user opened and a thread then took) gets before the next fallback. */
 export const REVIEW_GRACE_MS = 10 * 60_000;
+/** How long a round an agent opened gets, from the task's last activity: its reviewer reports only at the end. */
+export const AGENT_REVIEW_GRACE_MS = 30 * 60_000;
 export const REVIEW_WATCHDOG_INTERVAL_MS = 30_000;
 
 /** Thread states where the agent is busy (or waiting on the user), so its review may still come. */
@@ -49,21 +52,31 @@ export function createReviewFallbacks(deps: {
   runHeadless?: RunHeadless;
   now?: () => number;
   graceMs?: number;
+  agentGraceMs?: number;
   log?: Logger;
 }): ReviewFallbacks {
   const runHeadless = deps.runHeadless ?? runHeadlessReview;
   const now = deps.now ?? Date.now;
   const grace = deps.graceMs ?? REVIEW_GRACE_MS;
+  const agentGrace = deps.agentGraceMs ?? AGENT_REVIEW_GRACE_MS;
   const log = deps.log ?? console;
   let headless: Promise<void> | null = null;
   let ticking: Promise<void> | null = null;
   let timer: NodeJS.Timeout | null = null;
+
+  /** Whether the round is still waiting for a reviewer: an agent may have submitted since the pass began. */
+  const stillPending = (round: ReviewRecord): boolean =>
+    deps
+      .services()
+      .reviews.list(round.taskId)
+      .find((r) => r.id === round.id)?.status === "pending";
 
   const nudge = async (round: ReviewRecord, task: TaskSummary, thread: ThreadLink): Promise<boolean> => {
     const s = deps.services();
     const text = reviewLoopInstructions({
       task,
       round: round.round,
+      cycleRound: task.review?.round ?? 1,
       maxRounds: s.settings.get().reviewMaxRounds,
       skill: s.reviews.skillFor(task.id),
     });
@@ -80,7 +93,8 @@ export function createReviewFallbacks(deps: {
 
   const reviewHeadless = async (round: ReviewRecord, task: TaskSummary, thread: ThreadLink | null) => {
     const s = deps.services();
-    s.reviews.setRoundStatus(round.id, "running", { actor: BOARD_REVIEWER });
+    // Claim the round only if nobody reviewed it in the meantime.
+    if (!s.reviews.setRoundStatus(round.id, "running", { actor: BOARD_REVIEWER, from: ["pending"] })) return;
     try {
       const project = s.projects.get(task.projectId);
       const workspace = thread ? await deps.t3.threadWorkspace(thread) : null;
@@ -100,20 +114,36 @@ export function createReviewFallbacks(deps: {
         }),
       });
       const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;
-      const submitted = s.reviews.submit(
-        task.id,
-        { round: round.round, summary: `${result.summary}${cost}`, findings: result.findings },
-        BOARD_REVIEWER,
-      );
+      let submitted;
+      try {
+        submitted = s.reviews.submit(
+          task.id,
+          { round: round.round, summary: `${result.summary}${cost}`, findings: result.findings },
+          BOARD_REVIEWER,
+        );
+      } catch (error) {
+        // An agent's reviewer submitted while this one ran: its review stands, this one is dropped.
+        if (error instanceof AppError && error.code === "CONFLICT") return;
+        throw error;
+      }
       // Findings nobody is looping on: hand them to the thread's agent to fix, if there is one.
       if (thread && submitted.findings.some((f) => isGatingSeverity(f.severity))) {
-        const text = reviewFixInstructions({ task, round: round.round, maxRounds: settings.reviewMaxRounds });
+        const text = reviewFixInstructions({
+          task,
+          round: round.round,
+          cycleRound: s.tasks.summary(task.id).review?.round ?? 1,
+          maxRounds: settings.reviewMaxRounds,
+        });
         await deps.t3.sendToThread(thread, text, `review-${round.id}-fix`).catch((error: unknown) => {
           log.warn(`[review] couldn't send findings to the T3 thread of #${task.number}: ${messageOf(error)}`);
         });
       }
     } catch (error) {
-      s.reviews.setRoundStatus(round.id, "failed", { actor: BOARD_REVIEWER, error: messageOf(error) });
+      s.reviews.setRoundStatus(round.id, "failed", {
+        actor: BOARD_REVIEWER,
+        error: messageOf(error),
+        from: ["running"],
+      });
     }
   };
 
@@ -123,10 +153,15 @@ export function createReviewFallbacks(deps: {
     if (task.status !== "review" || task.archivedAt) return;
     const thread = latestThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
-    const waited = now() - Date.parse(round.nudgedAt ?? round.updatedAt);
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
-    if (!userAsked && waited < grace) return;
-    if (!round.nudgedAt && thread && (await nudge(round, task, thread))) return;
+    if (!userAsked) {
+      // An agent's reviewer only reports when it submits, so give it longer, and count any activity on the
+      // task (the implementer updating steps, notes) as a sign the loop is still going.
+      const since = Math.max(Date.parse(round.nudgedAt ?? round.updatedAt), Date.parse(task.updatedAt));
+      const wait = round.openedBy === "user" || round.nudgedAt ? grace : agentGrace;
+      if (now() - since < wait) return;
+    }
+    if (!round.nudgedAt && thread && stillPending(round) && (await nudge(round, task, thread))) return;
     if (s.settings.get().headlessReviewEnabled) {
       // One board review at a time; the rest wait for the next tick.
       headless ??= reviewHeadless(round, task, thread).finally(() => {
@@ -137,6 +172,7 @@ export function createReviewFallbacks(deps: {
     s.reviews.setRoundStatus(round.id, "stalled", {
       actor: BOARD_REVIEWER,
       error: thread ? "The task's T3 thread didn't run the review" : "No agent ran the review",
+      from: ["pending"],
     });
   };
 
@@ -167,6 +203,7 @@ export function createReviewFallbacks(deps: {
         s.reviews.setRoundStatus(round.id, "pending", {
           actor: BOARD_REVIEWER,
           error: "The board restarted mid-review",
+          from: ["running"],
         });
       }
       timer ??= setInterval(() => void tick(), REVIEW_WATCHDOG_INTERVAL_MS);

@@ -181,6 +181,22 @@ export function resolveExecutable(
   return null;
 }
 
+// Adapted from cross-spawn (lib/util/escape.js, MIT, see NOTICE): quote each argument for the C runtime's
+// argv parser, then escape cmd.exe's metacharacters twice: once for this command line, and once more because
+// the shim expands `%*` again inside the batch file.
+const CMD_META = /([()\][%!^"`<>&|;, *?])/g;
+
+function escapeCmdArgument(arg: string): string {
+  const quoted = `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, "$1$1")}"`;
+  return quoted.replace(CMD_META, "^$1").replace(CMD_META, "^$1");
+}
+
+/** `cmd.exe` arguments that run `exe` with `args` verbatim, spaces and quotes included. */
+export function cmdShimArgs(exe: string, args: readonly string[]): string[] {
+  const line = [exe.replace(CMD_META, "^$1"), ...args.map(escapeCmdArgument)].join(" ");
+  return ["/d", "/s", "/c", `"${line}"`];
+}
+
 interface RunResult {
   code: number | null;
   stdout: string;
@@ -193,10 +209,13 @@ function run(
   opts: { cwd?: string; input?: string; timeoutMs: number },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    // .cmd/.bat shims only run through cmd.exe; everything else is spawned directly.
-    const viaCmd = /\.(cmd|bat)$/i.test(exe);
-    const child = viaCmd
-      ? spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", exe, ...args], { cwd: opts.cwd, windowsHide: true })
+    // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
+    const child = /\.(cmd|bat)$/i.test(exe)
+      ? spawn(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(exe, args), {
+          cwd: opts.cwd,
+          windowsHide: true,
+          windowsVerbatimArguments: true,
+        })
       : spawn(exe, args, { cwd: opts.cwd, windowsHide: true });
     let stdout = "";
     let stderr = "";

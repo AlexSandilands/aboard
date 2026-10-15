@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { headlessArgs, headlessPrompt, parseHeadlessOutput, resolveExecutable } from "./headlessReview.ts";
+import { cmdShimArgs, headlessArgs, headlessPrompt, parseHeadlessOutput, resolveExecutable } from "./headlessReview.ts";
 
 describe("headless review", () => {
   it("runs read-only, without MCP servers, within the budget", () => {
@@ -60,5 +61,23 @@ describe("headless review", () => {
     expect(resolveExecutable("claude", env, "win32")?.toLowerCase()).toBe(join(dir, "bin", "claude.exe").toLowerCase());
     expect(resolveExecutable("missing", env, "win32")).toBeNull();
     expect(resolveExecutable(join(dir, "bin", "claude"), env, "win32")).not.toBeNull();
+  });
+  // Only meaningful on Windows, where cmd.exe parses the line; the escaping is what makes it round-trip.
+  it.runIf(process.platform === "win32")("runs a .cmd shim in a folder with spaces, arguments intact", async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "headless-")), "Program Files", "claude cli");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "echo.mjs"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));");
+    writeFileSync(join(dir, "claude.cmd"), '@node "%~dp0echo.mjs" %*\r\n');
+    const args = [
+      "--json-schema",
+      JSON.stringify({ a: 'b "c"', d: ["x y", "&|<>^%!"] }),
+      "Bash(git diff *)",
+      "trailing\\",
+    ];
+    const child = spawnSync(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(join(dir, "claude.cmd"), args), {
+      windowsVerbatimArguments: true,
+      encoding: "utf8",
+    });
+    expect(JSON.parse(child.stdout)).toEqual(args);
   });
 });

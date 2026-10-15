@@ -60,8 +60,10 @@ type TaskRef = Pick<TaskSummary, "number" | "title">;
 
 export interface ReviewPromptInput {
   task: TaskRef;
-  /** The round the reviewer submits to. */
+  /** The round the reviewer submits to (numbered across the task's whole history). */
   round: number;
+  /** Which round of the current cycle it is; the limit applies per cycle. */
+  cycleRound: number;
   maxRounds: number;
   skill: ReviewSkillRef;
 }
@@ -72,7 +74,7 @@ const skillLines = (skill: ReviewSkillRef): string[] =>
     : [`How to review: read the skill "${skill.name}" at ${skill.path} and follow it.`];
 
 /** What the reviewer subagent (or the board's headless reviewer) is given. Read-only: it records, never edits. */
-export function reviewerBrief({ task, round, skill }: Omit<ReviewPromptInput, "maxRounds">): string {
+export function reviewerBrief({ task, round, skill }: Pick<ReviewPromptInput, "task" | "round" | "skill">): string {
   const ref = `"#${task.number}"`;
   return [
     `Review task #${task.number} "${task.title}" from the ${BRAND.id} task board. This is review round ${round}.`,
@@ -90,13 +92,18 @@ export function reviewerBrief({ task, round, skill }: Omit<ReviewPromptInput, "m
  * Sent when a round came back with blocking or major findings but no agent is looping on it (the board's own
  * reviewer ran it): fix, resolve, then carry on with the loop.
  */
-export function reviewFixInstructions({ task, round, maxRounds }: Omit<ReviewPromptInput, "skill">): string {
+export function reviewFixInstructions({
+  task,
+  round,
+  cycleRound,
+  maxRounds,
+}: Omit<ReviewPromptInput, "skill">): string {
   const ref = `"#${task.number}"`;
   return [
     `Review round ${round} of task #${task.number} "${task.title}" found blocking or major issues. Before you open a pull request:`,
     `1. Call get_task(${ref}) on the ${BRAND.id} MCP server and read the open findings.`,
     "2. Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).",
-    round < maxRounds
+    cycleRound < maxRounds
       ? `3. Call start_review(${ref}) and follow what it returns: it runs the next round with a fresh reviewer, up to ${maxRounds} rounds.`
       : "3. That was the last review round; leave anything you can't fix open for the user.",
     "4. Then open the pull request, link it and carry on.",
@@ -108,10 +115,11 @@ export function reviewFixInstructions({ task, round, maxRounds }: Omit<ReviewPro
  * with a fresh reviewer subagent per round until nothing blocking or major is open, then open the PR.
  */
 export function reviewLoopInstructions(input: ReviewPromptInput): string {
-  const { task, round, maxRounds } = input;
+  const { task, round, cycleRound, maxRounds } = input;
   const ref = `"#${task.number}"`;
+  const which = round === cycleRound ? `round ${round}` : `round ${round} (${cycleRound} of this review)`;
   return [
-    `Local review is on for this task: round ${round} is open (up to ${maxRounds} rounds). Run the review loop before you open a pull request:`,
+    `Local review is on for this task: ${which} is open, up to ${maxRounds} rounds. Run the review loop before you open a pull request:`,
     "1. Start a reviewer subagent with fresh context (Claude Code: the Agent tool; Copilot: a subagent) and give it the brief below. Wait for it to finish; it records its findings on the board.",
     `2. Call get_task(${ref}). Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).`,
     `3. If the round raised blocking or major findings, call start_review(${ref}) and repeat from step 1 with a new reviewer. Stop when a round comes back clean or after ${maxRounds} rounds.`,

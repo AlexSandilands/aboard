@@ -18,6 +18,8 @@ export function openRoundInstructions(services: Services, taskId: string): strin
   return reviewLoopInstructions({
     task,
     round: latest.round,
+    // The summary counts the current cycle's rounds, this open one included.
+    cycleRound: task.review?.round ?? 1,
     maxRounds: task.review?.maxRounds ?? services.settings.get().reviewMaxRounds,
     skill: services.reviews.skillFor(taskId),
   });

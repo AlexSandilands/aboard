@@ -44,12 +44,22 @@ export function registerReviewRoutes(app: Hono, { services, config }: AppContext
       const latest = services.reviews.list(id).at(-1);
       const maxRounds = services.settings.get().reviewMaxRounds;
       const gating = task.review ? task.review.open.blocking + task.review.open.major : 0;
+      // The summary counts the current cycle's rounds; the limit is per cycle.
+      const cycleRounds = task.review?.round ?? 0;
       if (latest?.status === "submitted" && gating > 0) {
-        return c.json({ prompt: reviewFixInstructions({ task, round: latest.round, maxRounds }) });
+        return c.json({
+          prompt: reviewFixInstructions({ task, round: latest.round, cycleRound: cycleRounds, maxRounds }),
+        });
       }
-      const round = latest && latest.status !== "submitted" ? latest.round : (latest?.round ?? 0) + 1;
+      const open = latest && latest.status !== "submitted";
       return c.json({
-        prompt: reviewLoopInstructions({ task, round, maxRounds, skill: services.reviews.skillFor(id) }),
+        prompt: reviewLoopInstructions({
+          task,
+          round: open ? latest.round : (latest?.round ?? 0) + 1,
+          cycleRound: open ? cycleRounds : cycleRounds + 1,
+          maxRounds,
+          skill: services.reviews.skillFor(id),
+        }),
       });
     }),
   );

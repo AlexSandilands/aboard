@@ -60,7 +60,7 @@ describe("local review loop over MCP", () => {
 
     // 1. The move opens round 1 and tells the implementer how to run the loop.
     const moved = await call(agent, "move_task", { task: taskRef, status: "review" });
-    expect(moved.text).toContain("round 1 is open (up to 3 rounds)");
+    expect(moved.text).toContain("round 1 is open, up to 3 rounds");
     expect(moved.text).toContain("Reviewer brief:");
     expect(moved.text).toContain(`submit_review(task: "${taskRef}", round: 1`);
 
@@ -85,7 +85,7 @@ describe("local review loop over MCP", () => {
           body: "A title like `a, b` splits into two columns.",
           suggestion: "Quote fields per RFC 4180.",
         },
-        { severity: "nit", title: "Rename `rows` to `records`" },
+        { severity: "nit", title: "Rename `rows` to `records`", body: "They hold records, not rows." },
       ],
     });
     expect(submitted.text).toContain("Recorded round 1");
@@ -119,6 +119,7 @@ describe("local review loop over MCP", () => {
     const final = await call(agent, "get_task", { task: taskRef, events: 20 });
     expect(final.text).toContain("Local review: Reviewed");
     expect(final.text).toContain("Still open from earlier rounds:");
+    expect(final.text).toContain("They hold records, not rows.");
     expect(final.text).toContain("Resolved in earlier rounds:");
     expect(final.text).toContain(
       "R1.1 [blocking] src/export.ts:40 Fields with commas aren't quoted -> fixed: Quoting added with a test",

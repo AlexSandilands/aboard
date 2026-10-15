@@ -2,10 +2,11 @@ import { BOARD_REVIEWER, type T3ThreadSnapshot } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { HeadlessJob, HeadlessReview } from "./headlessReview.ts";
-import { createReviewFallbacks, REVIEW_GRACE_MS } from "./reviewFallbacks.ts";
+import { AGENT_REVIEW_GRACE_MS, createReviewFallbacks, REVIEW_GRACE_MS } from "./reviewFallbacks.ts";
 
 // Rounds are stamped with the real clock a few ms after setup reads it, so step well past the grace period.
 const PAST_GRACE = REVIEW_GRACE_MS + 60_000;
+const PAST_AGENT_GRACE = AGENT_REVIEW_GRACE_MS + 60_000;
 
 const snapshot = (status: T3ThreadSnapshot["status"]): T3ThreadSnapshot => ({ title: "Thread", status });
 
@@ -51,13 +52,14 @@ function setup(
 }
 
 describe("review fallbacks", () => {
-  it("gives an agent's round the grace period, then marks it stalled", async () => {
+  it("gives an agent's round a longer grace, from the task's last activity, then marks it stalled", async () => {
     const { s, task, fallbacks, advance, round } = setup();
     s.tasks.move(task.id, { status: "in_progress" }, "agent");
     s.tasks.move(task.id, { status: "review" }, "agent");
+    advance(PAST_GRACE);
     await fallbacks.tick();
     expect(round()?.status).toBe("pending");
-    advance(PAST_GRACE);
+    advance(PAST_AGENT_GRACE);
     await fallbacks.tick();
     expect(round()).toMatchObject({ status: "stalled", error: "No agent ran the review" });
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("review_stalled");
@@ -102,9 +104,26 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     await fallbacks.tick();
     s.tasks.move(task.id, { status: "review" }, "agent");
-    advance(PAST_GRACE);
+    advance(PAST_AGENT_GRACE);
     await fallbacks.tick();
     expect(round()?.status).toBe("stalled");
+  });
+
+  it("drops the board's review when an agent's reviewer submitted while it ran", async () => {
+    const late = { submit: () => {} };
+    const { s, task, fallbacks, round } = setup({
+      headless: true,
+      review: () => {
+        late.submit();
+        return Promise.resolve({ summary: "Board", findings: [{ severity: "blocking", title: "x" }], costUsd: null });
+      },
+    });
+    late.submit = () => s.reviews.submit(task.id, { findings: [] }, "agent (reviewer)");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    await fallbacks.tick();
+    await fallbacks.idle();
+    expect(round()).toMatchObject({ status: "submitted", reviewer: "agent (reviewer)", error: null });
+    expect(s.tasks.summary(task.id).review?.state).toBe("clean");
   });
 
   it("waits while the T3 thread is busy", async () => {
