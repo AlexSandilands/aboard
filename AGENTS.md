@@ -84,6 +84,26 @@ The rules for what goes where are in [docs/README.md](docs/README.md).
   `docs/decisions/`. Don't rewrite an accepted ADR; supersede it.
 - Add new docs to the index in `docs/README.md` and to the table above.
 
+## What agents are told
+
+Agents that use the board learn it only from what we ship them, not from these docs. When a change
+alters what an agent can do or should do (a tool, its arguments or results, a status, the plan gate,
+links, labels, review), update every place that tells them, in the same PR:
+
+| Text                                        | Where                                                                   |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| Server instructions (sent on connect)       | `INSTRUCTIONS` in `apps/server/src/mcp/server.ts`                       |
+| Tool descriptions and argument descriptions | `apps/server/src/mcp/tools/*.ts`, shared fields in `mcp/shared.ts`      |
+| Hints in results (Missing links/labels)     | `apps/server/src/mcp/format.ts`; review loop text in `tools/reviews.ts` |
+| The hand-off prompt                         | `taskHandoffPrompt` in `packages/contracts/src/handoff.ts`              |
+| The shipped skill and snippet               | `skills/aboard/SKILL.md` and `skills/aboard/AGENTS-snippet.md`          |
+| The review skill                            | `skills/aboard-review/SKILL.md` and `BUILTIN_REVIEW_SKILL_BODY`         |
+
+- Keep them consistent: a tool renamed in one place and not another sends agents to a tool that doesn't
+  exist. No test ties the skill to the tools; only the review skill is checked (`skills.test.ts`).
+- If nothing an agent sees changes (UI-only work, refactors), none of these need touching.
+- How to write them is in [docs/features/mcp.md](docs/features/mcp.md#writing-tool-descriptions).
+
 ## Tracking work on the board (dogfooding)
 
 If the `aboard` MCP server is connected, use it for work in this repo. Follow the workflow in
