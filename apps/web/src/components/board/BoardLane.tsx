@@ -70,14 +70,14 @@ export const BoardLane = memo(function BoardLane({
               <Button
                 variant="ghost-muted"
                 size="icon-xs"
-                aria-label={`Add idea to ${project.title}`}
-                onClick={() => usePalette.getState().openPalette({ kind: "new-idea", projectId: project.id })}
+                aria-label={`Add task to ${project.title}`}
+                onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId: project.id })}
               />
             }
           >
             <PlusIcon />
           </TooltipTrigger>
-          <TooltipPopup>Add idea</TooltipPopup>
+          <TooltipPopup>Add task</TooltipPopup>
         </Tooltip>
       </header>
       {collapsed ? null : (

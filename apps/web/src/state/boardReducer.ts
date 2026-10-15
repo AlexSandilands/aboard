@@ -101,7 +101,7 @@ export const applyMove = (
   }: { id: string; status?: TaskStatus; beforeId?: string | null; afterId?: string | null },
 ) =>
   optimisticMove(board, id, {
-    status: status ?? board.tasks.find((t) => t.id === id)?.status ?? "idea",
+    status: status ?? board.tasks.find((t) => t.id === id)?.status ?? "backlog",
     beforeId,
     afterId,
   });

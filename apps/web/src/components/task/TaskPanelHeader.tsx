@@ -72,7 +72,7 @@ export function TaskPanelHeader({
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false} matchTriggerWidth={false}>
           {STATUS_ITEMS.map((status) => {
-            const gated = !hasPlan && status.value !== "idea";
+            const gated = !hasPlan && status.value !== "backlog";
             return (
               <SelectItem key={status.value} value={status.value} disabled={gated}>
                 {status.label}

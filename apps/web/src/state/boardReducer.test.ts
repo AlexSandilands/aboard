@@ -40,18 +40,18 @@ const board = (tasks: TaskSummary[]): BoardSnapshot => ({
 
 describe("applyBoardEvent", () => {
   it("upserts and removes archived tasks", () => {
-    const b = board([task("a", "idea", "a0")]);
+    const b = board([task("a", "backlog", "a0")]);
     const updated = applyBoardEvent(b, { type: "task.upserted", task: task("a", "planned", "a0") });
     expect(updated.tasks[0]?.status).toBe("planned");
     const archived = applyBoardEvent(b, {
       type: "task.upserted",
-      task: { ...task("a", "idea", "a0"), archivedAt: "x" },
+      task: { ...task("a", "backlog", "a0"), archivedAt: "x" },
     });
     expect(archived.tasks).toHaveLength(0);
   });
 
   it("drops a deleted task and leaves the rest alone", () => {
-    const b = board([task("a", "idea", "a0"), task("b", "done", "a0")]);
+    const b = board([task("a", "backlog", "a0"), task("b", "done", "a0")]);
     const deleted = applyBoardEvent(b, { type: "task.deleted", taskId: "a" });
     expect(deleted.tasks.map((t) => t.id)).toEqual(["b"]);
     // Another client may already have dropped it (e.g. archived, so never on the board).
@@ -82,8 +82,8 @@ describe("applyBoardEvent project archiving", () => {
       createdAt: "",
       updatedAt: "",
     };
-    const other = { ...task("o", "idea", "a0"), projectId: "q" };
-    const b = { ...board([task("a", "idea", "a0"), other]), projects: [project] };
+    const other = { ...task("o", "backlog", "a0"), projectId: "q" };
+    const b = { ...board([task("a", "backlog", "a0"), other]), projects: [project] };
     const archived = applyBoardEvent(b, { type: "project.upserted", project: { ...project, archivedAt: "x" } });
     expect(archived.projects).toEqual([]);
     expect(archived.tasks.map((t) => t.id)).toEqual(["o"]);
@@ -91,7 +91,7 @@ describe("applyBoardEvent project archiving", () => {
 });
 
 describe("optimisticMove", () => {
-  const b = board([task("a", "planned", "a0"), task("b", "planned", "a1"), task("c", "idea", "a0")]);
+  const b = board([task("a", "planned", "a0"), task("b", "planned", "a1"), task("c", "backlog", "a0")]);
   const order = (s: BoardSnapshot) => cellTasks(s.tasks, "p", "planned").map((t) => t.id);
 
   it("places after a target", () => {
@@ -115,19 +115,19 @@ describe("optimisticMove", () => {
     const withClosed = board([closed, task("e", "done", "a1")]);
     const reordered = optimisticMove(withClosed, "d", { status: "done", afterId: "e" });
     expect(reordered.tasks.find((t) => t.id === "d")).toMatchObject({ resolution: "duplicate" });
-    const reopened = optimisticMove(withClosed, "d", { status: "idea" });
+    const reopened = optimisticMove(withClosed, "d", { status: "backlog" });
     expect(reopened.tasks.find((t) => t.id === "d")).toMatchObject({ resolution: null, resolvedBy: null });
   });
   it("stamps statusChangedAt on a status change so the card tops Done", () => {
     const moved = optimisticMove(b, "c", { status: "done" }).tasks.find((t) => t.id === "c");
-    expect(moved?.statusChangedAt).not.toBe(task("c", "idea", "a0").statusChangedAt);
+    expect(moved?.statusChangedAt).not.toBe(task("c", "backlog", "a0").statusChangedAt);
     const reordered = optimisticMove(b, "b", { status: "planned", beforeId: "a" }).tasks.find((t) => t.id === "b");
     expect(reordered?.statusChangedAt).toBe(task("b", "planned", "a1").statusChangedAt);
   });
 });
 
 describe("move rollback", () => {
-  const before = board([task("a", "idea", "a0"), task("b", "planned", "a0")]);
+  const before = board([task("a", "backlog", "a0"), task("b", "planned", "a0")]);
   const original = before.tasks[0]!;
   const after = applyMove(before, { id: "a", status: "planned", afterId: "b" });
   const moved = after.tasks.find((t) => t.id === "a")!;
@@ -140,7 +140,11 @@ describe("move rollback", () => {
   it("puts the task back but keeps fields that changed since", () => {
     const updated = { ...after, tasks: after.tasks.map((t) => (t.id === "a" ? { ...t, title: "renamed" } : t)) };
     const rolled = rollbackMove(updated, original, moved);
-    expect(rolled.tasks.find((t) => t.id === "a")).toMatchObject({ status: "idea", position: "a0", title: "renamed" });
+    expect(rolled.tasks.find((t) => t.id === "a")).toMatchObject({
+      status: "backlog",
+      position: "a0",
+      title: "renamed",
+    });
     expect(rolled.tasks.find((t) => t.id === "b")).toBe(updated.tasks.find((t) => t.id === "b"));
   });
 

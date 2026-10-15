@@ -78,7 +78,7 @@ const options: T3LaunchOptions = {
 };
 
 describe("visibility", () => {
-  const task = { status: "idea" as const, archivedAt: null };
+  const task = { status: "backlog" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
   const settings = { t3TokenSet: true };

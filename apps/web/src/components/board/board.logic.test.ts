@@ -33,7 +33,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     number: 1,
     projectId: "p",
     title: id,
-    status: "idea",
+    status: "backlog",
     position: "a0",
     archivedAt: null,
     createdBy: "user",
@@ -114,9 +114,9 @@ describe("buildLanes", () => {
       noFilters,
     );
     expect(lanes.map((l) => l.project.id)).toEqual(["p", "q"]);
-    expect(lanes[0]!.cells.idea.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(lanes[0]!.cells.backlog.map((t) => t.id)).toEqual(["a", "b"]);
     expect(lanes[0]!.cells.done.map((t) => t.id)).toEqual(["new", "old"]);
-    expect(lanes[1]!.cells.idea.map((t) => t.id)).toEqual(["other"]);
+    expect(lanes[1]!.cells.backlog.map((t) => t.id)).toEqual(["other"]);
   });
 
   it("scopes to a project and keeps empty lanes unless filtering", () => {
@@ -133,14 +133,14 @@ describe("buildLanes", () => {
       labels: ["ui", "bug"],
     });
     expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
-    expect(lanes[0]!.cells.idea.map((t) => t.id)).toEqual(["ui", "server"]);
+    expect(lanes[0]!.cells.backlog.map((t) => t.id)).toEqual(["ui", "server"]);
   });
 
   it("filters to tasks needing attention", () => {
     const flagged = task("flagged", { attention: [{ kind: "blocked_step", severity: "warning", message: "Blocked" }] });
     const lanes = buildLanes(board([flagged, task("calm")]), { ...noFilters, attentionOnly: true });
     expect(lanes).toHaveLength(1);
-    expect(lanes[0]!.cells.idea).toEqual([flagged]);
+    expect(lanes[0]!.cells.backlog).toEqual([flagged]);
   });
 
   it("filters to tasks with a PR link", () => {
@@ -164,7 +164,7 @@ describe("buildLanes", () => {
       hasPrOnly: true,
     });
     expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
-    expect(lanes[0]!.cells.idea).toEqual([withPr]);
+    expect(lanes[0]!.cells.backlog).toEqual([withPr]);
   });
 
   it("merges archived tasks into their lanes, preferring the snapshot copy", () => {
@@ -172,7 +172,7 @@ describe("buildLanes", () => {
     const archived = task("old", { archivedAt: "2026-01-01", position: "a1" });
     const stale = { ...live, archivedAt: "2026-01-01" };
     const lanes = buildLanes(board([live]), noFilters, [archived, stale]);
-    expect(lanes[0]!.cells.idea).toEqual([live, archived]);
+    expect(lanes[0]!.cells.backlog).toEqual([live, archived]);
   });
 });
 
@@ -187,7 +187,7 @@ describe("reuseUnchangedLanes", () => {
     expect(second[0]).toBe(first[0]);
     expect(second[1]).not.toBe(first[1]);
     expect(second[1]!.cells.planned).toBe(first[1]!.cells.planned);
-    expect(second[1]!.cells.idea).toEqual([changedB]);
+    expect(second[1]!.cells.backlog).toEqual([changedB]);
   });
 });
 
@@ -247,7 +247,7 @@ describe("visibleCellTasks", () => {
 });
 
 describe("laneHasCollapsibleCell", () => {
-  const empty = { idea: [], planned: [], in_progress: [], review: [], done: [] };
+  const empty = { backlog: [], planned: [], in_progress: [], review: [], done: [] };
   const many = Array.from({ length: COLUMN_PREVIEW_COUNT + 1 }, (_, i) => task(`t${i}`));
 
   it("is true when any cell has more cards than the preview", () => {

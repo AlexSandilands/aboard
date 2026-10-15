@@ -88,7 +88,9 @@ export function PlanTimeline({
               <ListTodoIcon />
             </EmptyMedia>
             <EmptyTitle>No plan yet</EmptyTitle>
-            <EmptyDescription>Plans turn ideas into tasks. Write one here or let an agent create it.</EmptyDescription>
+            <EmptyDescription>
+              Plans turn a backlog task into steps. Write one here or let an agent create it.
+            </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <div className="flex gap-2">

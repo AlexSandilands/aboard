@@ -1,11 +1,12 @@
 # Aboard
 
 A local kanban board for juggling work across many projects, built for working with coding agents.
-Agents log ideas, write structured plans and move tasks along over MCP; the board updates live.
+Agents add tasks to a backlog, write structured plans and move tasks along over MCP; the board updates live.
 Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with it when it's running.
 
-- **Swimlane per project**, columns **Ideas → Planned → In Progress → Review → Done**.
-- **Plans first:** ideas can be rough, but a task can't leave Ideas until it has a plan.
+- **Swimlane per project**, columns **Backlog → Planned → In Progress → Review → Done**.
+- **Plans first:** a backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leave
+  Backlog until it has a plan.
   Plans are phases of steps; the detail panel shows exactly where a task is up to.
 - **Closing without doing:** a task delivered by another one, a duplicate, or one you won't do can be
   closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or `close_task` over MCP). It
@@ -97,6 +98,9 @@ Then give your agent the workflow:
 - **Claude Code:** copy `skills/aboard` to `~/.claude/skills/aboard`.
 - **Other agents:** paste `skills/aboard/AGENTS-snippet.md` into your `AGENTS.md` / `CLAUDE.md`.
 
+Copy them again after upgrading: tools get renamed (for example `create_idea` became `add_to_backlog`), and
+an old copy sends agents to tools that no longer exist.
+
 Agents identify the project by passing their working directory, so there's nothing to configure
 per repo. Unknown folders become new projects automatically.
 
@@ -132,7 +136,7 @@ When T3 Code is running, it is detected automatically.
   menu gets **New T3 Code thread…**, which opens a new thread for the task (model, access, worktree and
   branch are picked in a dialog). `orchestration:read` alone is enough for status only.
 - **Copy prompt:** every open task has a hand-off menu that copies a ready-to-paste prompt for any agent
-  (Claude Code, Copilot, …), with a planning variant for rough ideas. See
+  (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. See
   [docs/features/agent-handoff.md](docs/features/agent-handoff.md).
 
 ## Keyboard
@@ -140,7 +144,7 @@ When T3 Code is running, it is detected automatically.
 | Key          | Action                 |
 | ------------ | ---------------------- |
 | `Ctrl/Cmd K` | Command palette        |
-| `N`          | New idea               |
+| `N`          | New task               |
 | `Esc`        | Close the detail panel |
 
 ## Development

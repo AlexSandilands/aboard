@@ -96,11 +96,11 @@ export interface TasksService {
   detail(id: string): TaskDetail;
   /** Accepts a uuid, "#42" or "42". */
   resolveId(ref: string): string;
-  /** Lands in "planned" when `plan` is given (with ≥1 step), else "idea". Appends to the end of the column. */
+  /** Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column. */
   create(input: CreateTaskInput): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
-   * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "idea" without plan steps.
+   * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.
    * Moving a closed task out of Done clears its resolution. `because` adds fields to the status_changed event
    * payload, for automatic moves that should say why (e.g. `{ mergedPr: "owner/repo#12" }`); it cannot override
    * from/to/clearedResolution.
@@ -130,7 +130,7 @@ export interface PlansService {
   /**
    * Replaces the plan. Phases/steps given with an existing `id` are kept (status and
    * timestamps preserved unless overridden); others are created; missing ones are deleted.
-   * Throws PLAN_REQUIRED if the result has no steps and the task is not an idea.
+   * Throws PLAN_REQUIRED if the result has no steps and the task is not in Backlog.
    */
   setPlan(taskId: string, plan: PlanInput, actor: string): TaskDetail;
   addPhase(taskId: string, title: string, actor: string, opts?: { afterPhaseId?: string }): PlanPhase;

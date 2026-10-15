@@ -367,7 +367,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           const toastId = toastManager.add({
             type: "warning",
             title: "Plan required",
-            description: `Ideas need a plan before they can move to ${STATUS_LABEL[result.status]}.`,
+            description: `Tasks need a plan before they can move to ${STATUS_LABEL[result.status]}.`,
             actionProps: {
               children: "Write plan",
               onClick: () => {
@@ -421,7 +421,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             <LayoutGridIcon />
           </EmptyMedia>
           <EmptyTitle>No projects yet</EmptyTitle>
-          <EmptyDescription>Add a project to start tracking ideas and tasks.</EmptyDescription>
+          <EmptyDescription>Add a project to start tracking tasks.</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button size="sm" onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}>

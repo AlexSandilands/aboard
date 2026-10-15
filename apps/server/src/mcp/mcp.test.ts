@@ -47,7 +47,7 @@ describe("MCP endpoint", () => {
       "list_projects",
       "list_tasks",
       "get_task",
-      "create_idea",
+      "add_to_backlog",
       "create_task",
       "set_plan",
       "add_steps",
@@ -71,11 +71,11 @@ describe("MCP endpoint", () => {
     expect(res.status).toBe(405);
   });
 
-  it("drives an idea through plan, progress, links and notes", async () => {
+  it("drives a backlog task through plan, progress, links and notes", async () => {
     const workspacePath = "C:\\Fake\\proj";
 
     const created = await client.callTool({
-      name: "create_idea",
+      name: "add_to_backlog",
       arguments: { title: "Add dark mode", description: "Users asked for it", workspacePath },
     });
     expect(created.isError).toBeFalsy();
@@ -149,7 +149,7 @@ describe("MCP endpoint", () => {
       { name: "add_note", arguments: { task: `#${task.number}`, text: "Handover" } },
       { name: "link", arguments: { task: `#${task.number}`, value: "https://example.com" } },
       { name: "move_task", arguments: { task: `#${task.number}`, status: "in_progress" } },
-      { name: "create_idea", arguments: { title: "Later", workspacePath } },
+      { name: "add_to_backlog", arguments: { title: "Later", workspacePath } },
     ];
     for (const call of calls) {
       const result = await client.callTool(call);
@@ -223,35 +223,55 @@ describe("MCP endpoint", () => {
     expect(text(result)).toMatch(/^NOT_FOUND: /);
   });
 
+  it("still reads the old idea status as backlog", async () => {
+    const workspacePath = "C:/Fake/proj";
+    const project = h.services.projects.create({ workspaceRoot: workspacePath });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "Old agent",
+      plan: { phases: [{ title: "P", steps: [{ title: "s" }] }] },
+    });
+
+    const moved = await client.callTool({ name: "move_task", arguments: { task: `#${task.number}`, status: "idea" } });
+    expect(moved.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id).status).toBe("backlog");
+
+    const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "idea" } }));
+    expect(listed).toContain(`#${task.number} Old agent`);
+  });
+
   it("closes a task as done by another and shows it on both tasks", async () => {
     const workspacePath = "C:/Fake/proj";
     const project = h.services.projects.create({ workspaceRoot: workspacePath });
     const shipped = h.services.tasks.create({ projectId: project.id, title: "Ship search" });
-    const idea = h.services.tasks.create({ projectId: project.id, title: "Search titles" });
+    const unplanned = h.services.tasks.create({ projectId: project.id, title: "Search titles" });
 
-    const gated = await client.callTool({ name: "move_task", arguments: { task: `#${idea.number}`, status: "done" } });
+    const gated = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${unplanned.number}`, status: "done" },
+    });
     expect(text(gated)).toContain("close_task");
 
     const missing = await client.callTool({
       name: "close_task",
-      arguments: { task: `#${idea.number}`, resolution: "completed" },
+      arguments: { task: `#${unplanned.number}`, resolution: "completed" },
     });
     expect(missing.isError).toBe(true);
     expect(text(missing)).toMatch(/^VALIDATION: byTask/);
 
     const closed = await client.callTool({
       name: "close_task",
-      arguments: { task: `#${idea.number}`, resolution: "completed", byTask: `#${shipped.number}` },
+      arguments: { task: `#${unplanned.number}`, resolution: "completed", byTask: `#${shipped.number}` },
     });
     expect(closed.isError).toBeFalsy();
-    expect(text(closed)).toContain(`Closed #${idea.number} as done by #${shipped.number}.`);
+    expect(text(closed)).toContain(`Closed #${unplanned.number} as done by #${shipped.number}.`);
     expect(text(closed)).toContain(`Closed: done by #${shipped.number} "Ship search"`);
 
     const delivering = text(await client.callTool({ name: "get_task", arguments: { task: `#${shipped.number}` } }));
-    expect(delivering).toContain(`Also resolved: #${idea.number} Search titles (done by this)`);
+    expect(delivering).toContain(`Also resolved: #${unplanned.number} Search titles (done by this)`);
 
     const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "done" } }));
-    expect(listed).toContain(`#${idea.number} Search titles — done by #${shipped.number}`);
+    expect(listed).toContain(`#${unplanned.number} Search titles — done by #${shipped.number}`);
   });
 
   it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
@@ -289,9 +309,9 @@ describe("MCP endpoint", () => {
     expect(text(closed)).not.toContain("Missing links:");
   });
 
-  it("create_idea attaches links and the T3 thread", async () => {
+  it("add_to_backlog attaches links and the T3 thread", async () => {
     const created = await client.callTool({
-      name: "create_idea",
+      name: "add_to_backlog",
       arguments: {
         title: "Retry flaky upload",
         workspacePath: "C:/Fake/proj",
@@ -345,14 +365,14 @@ describe("MCP endpoint", () => {
       return body;
     };
     const workspacePath = "C:/Fake/proj";
-    await call("create_idea", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
+    await call("add_to_backlog", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
     await call("create_task", {
       title: "Add endpoint",
       workspacePath,
       markdown: "## Build\n- [ ] route",
       labels: ["backend"],
     });
-    await call("create_idea", { title: "Write docs", workspacePath });
+    await call("add_to_backlog", { title: "Write docs", workspacePath });
 
     const listed = await call("list_tasks", { workspacePath, labels: ["ui", "Backend"] });
     expect(listed).toContain("Polish header [polish] [ui]");
@@ -380,8 +400,8 @@ describe("MCP endpoint", () => {
     };
     const workspacePath = "C:/Fake/proj";
     const markdown = "## Build\n- [ ] route";
-    await call("create_idea", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
-    await call("create_idea", { title: "Untagged", workspacePath });
+    await call("add_to_backlog", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
+    await call("add_to_backlog", { title: "Untagged", workspacePath });
 
     const planned = await call("set_plan", { task: "#2", markdown });
     expect(planned).toContain("Missing labels:");

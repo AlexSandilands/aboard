@@ -125,7 +125,7 @@ describe("previewMove", () => {
   const lane = (id: string, cells: Partial<Record<TaskStatus, string[]>>): Lane => ({
     project: { id } as Project,
     cells: {
-      idea: (cells.idea ?? []).map(card),
+      backlog: (cells.backlog ?? []).map(card),
       planned: (cells.planned ?? []).map(card),
       in_progress: (cells.in_progress ?? []).map(card),
       review: (cells.review ?? []).map(card),
@@ -133,7 +133,7 @@ describe("previewMove", () => {
     },
   });
   const ids = (l: Lane | undefined, status: TaskStatus) => l?.cells[status].map((t) => t.id);
-  const lanes = [lane("p", { planned: ["a", "b"], review: ["x", "y"] }), lane("q", { idea: ["z"] })];
+  const lanes = [lane("p", { planned: ["a", "b"], review: ["x", "y"] }), lane("q", { backlog: ["z"] })];
 
   it("moves the card from its cell into the placement", () => {
     const next = previewMove(lanes, { taskId: "a", projectId: "p", status: "review", index: 1 });
@@ -149,7 +149,7 @@ describe("previewMove", () => {
   it("keeps other lanes and cells referentially stable", () => {
     const next = previewMove(lanes, { taskId: "a", projectId: "p", status: "review", index: 0 });
     expect(next[1]).toBe(lanes[1]);
-    expect(next[0]!.cells.idea).toBe(lanes[0]!.cells.idea);
+    expect(next[0]!.cells.backlog).toBe(lanes[0]!.cells.backlog);
     expect(next[0]!.cells.done).toBe(lanes[0]!.cells.done);
   });
 
@@ -186,24 +186,24 @@ describe("parseCellKey", () => {
   it("reads back a cell key and rejects anything else", () => {
     expect(parseCellKey("p-1:in_progress")).toEqual({ projectId: "p-1", status: "in_progress" });
     expect(parseCellKey("p:nope")).toBeNull();
-    expect(parseCellKey(":idea")).toBeNull();
+    expect(parseCellKey(":backlog")).toBeNull();
     expect(parseCellKey(undefined)).toBeNull();
   });
 });
 
 describe("readDragData", () => {
   it("accepts task and cell data and rejects anything else", () => {
-    expect(readDragData({ type: "cell", projectId: "p", status: "idea" })).toEqual({
+    expect(readDragData({ type: "cell", projectId: "p", status: "backlog" })).toEqual({
       type: "cell",
       projectId: "p",
-      status: "idea",
+      status: "backlog",
     });
     expect(readDragData({ type: "task", projectId: "p", status: "done", sortable: {} })).toEqual({
       type: "task",
       projectId: "p",
       status: "done",
     });
-    expect(readDragData({ type: "other", projectId: "p", status: "idea" })).toBeNull();
+    expect(readDragData({ type: "other", projectId: "p", status: "backlog" })).toBeNull();
     expect(readDragData(undefined)).toBeNull();
   });
 });

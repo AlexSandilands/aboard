@@ -26,7 +26,7 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
         "Write or replace a task's plan before implementing. Give structured `phases` or a `markdown` checklist, plus " +
         "optional `context` (approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. " +
         "When revising an existing plan, pass the phase/step ids from get_task to keep their statuses and notes; " +
-        "steps you omit are deleted. A task needs a plan before it can leave Ideas. If the task has no labels, the " +
+        "steps you omit are deleted. A task needs a plan before it can leave Backlog. If the task has no labels, the " +
         "result asks you to suggest some: propose 1-3 to the user and apply them with update_task once they agree.",
       inputSchema: {
         task: taskField,

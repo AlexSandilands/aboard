@@ -43,10 +43,10 @@ launch can't drift apart.
 
 #### Plan with me
 
-A rough idea in the Ideas column usually needs a conversation before it needs code. The **Plan with me**
+A task in Backlog usually needs a conversation before it needs code. The **Plan with me**
 option switches the prompt to a planning brief:
 
-- the idea is still basic, and the user wants to shape the plan together;
+- the task has no plan yet, and the user wants to shape the plan together;
 - explore the task and the relevant code, then ask clarifying questions;
 - propose phases and steps, and wait for agreement;
 - only then call `set_plan` and move the task to Planned. Don't implement anything.
@@ -54,7 +54,7 @@ option switches the prompt to a planning brief:
 The option only changes the prompt. T3 threads always start in T3's default interaction mode: T3's own plan
 mode is a legacy beta behind a client setting the board can't read, and a thread started in it could be left
 with no visible way to switch back. The option is on by default for tasks in
-Ideas or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
+Backlog or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
 ### Starting a thread in T3 Code
 

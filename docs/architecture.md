@@ -98,7 +98,9 @@ and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_cha
 SQLite through `node:sqlite` ([ADR 0002](decisions/0002-node-sqlite.md)), with WAL, foreign keys on and
 a 5-second busy timeout. Migrations are `apps/server/src/db/migrations/NNN_name.sql`, applied in name
 order at startup, each in its own transaction, and recorded in `migrations`. Never edit a shipped one;
-add the next number. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
+add the next number. A migration that rebuilds a table (SQLite's create, copy, drop, rename) starts with
+`-- migrate: foreign_keys off`: dropping the old table with foreign keys on would cascade-delete its
+children. The runner turns them off around that file and runs `foreign_key_check` before committing. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
 ORM.
 
 | Table             | Holds                                                                                                                         |

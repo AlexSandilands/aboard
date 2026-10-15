@@ -36,8 +36,8 @@ describe("taskHandoffPrompt", () => {
 });
 
 describe("defaultHandoffMode", () => {
-  it("plans ideas and plan-less tasks, works otherwise", () => {
-    expect(defaultHandoffMode({ status: "idea", progress: { done: 0, total: 3 } })).toBe("plan");
+  it("plans backlog and plan-less tasks, works otherwise", () => {
+    expect(defaultHandoffMode({ status: "backlog", progress: { done: 0, total: 3 } })).toBe("plan");
     expect(defaultHandoffMode({ status: "planned", progress: { done: 0, total: 0 } })).toBe("plan");
     expect(defaultHandoffMode({ status: "in_progress", progress: { done: 1, total: 3 } })).toBe("work");
   });

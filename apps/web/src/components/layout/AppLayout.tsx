@@ -52,7 +52,7 @@ export function AppLayout() {
 }
 
 /**
- * App-wide shortcuts: Ctrl/Cmd+K opens the palette, N starts a new idea (in the scoped project),
+ * App-wide shortcuts: Ctrl/Cmd+K opens the palette, N starts a new task (in the scoped project),
  * Esc closes the detail panel when nothing nearer to the focus claims it.
  */
 function useGlobalKeybindings(panelOpen: boolean, closePanel: () => unknown) {
@@ -76,7 +76,7 @@ function useGlobalKeybindings(panelOpen: boolean, closePanel: () => unknown) {
     }
     if (!modifier && !event.altKey && (event.key === "n" || event.key === "N") && !event.shiftKey) {
       event.preventDefault();
-      palette.openPalette({ kind: "new-idea", projectId: projectFilter ?? undefined });
+      palette.openPalette({ kind: "new-task", projectId: projectFilter ?? undefined });
     }
   });
 
