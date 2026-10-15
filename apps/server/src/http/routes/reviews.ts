@@ -1,7 +1,8 @@
-import { ResolveFindingInput, reviewLoopInstructions } from "@repo/contracts";
+import { ResolveFindingInput, reviewFixInstructions, reviewLoopInstructions } from "@repo/contracts";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
+import { headlessCliVersion } from "../../integrations/headlessReview.ts";
 import { discoverSkills } from "../../skills.ts";
 import { actorOf, handle, idParam, parseBody, parseQuery } from "../respond.ts";
 
@@ -31,22 +32,38 @@ export function registerReviewRoutes(app: Hono, { services, config }: AppContext
     ),
   );
 
-  /** The loop instructions for pasting into any harness, for the latest round (or the next one). */
+  /**
+   * A prompt for pasting into any harness: fix the open findings when the latest round has blocking or major
+   * ones, otherwise run the loop for the open round (or the next one).
+   */
   app.get(
     "/api/tasks/:id/review-prompt",
     handle((c) => {
       const id = taskId(c);
       const task = services.tasks.summary(id);
       const latest = services.reviews.list(id).at(-1);
+      const maxRounds = services.settings.get().reviewMaxRounds;
+      const gating = task.review ? task.review.open.blocking + task.review.open.major : 0;
+      if (latest?.status === "submitted" && gating > 0) {
+        return c.json({ prompt: reviewFixInstructions({ task, round: latest.round, maxRounds }) });
+      }
       const round = latest && latest.status !== "submitted" ? latest.round : (latest?.round ?? 0) + 1;
       return c.json({
-        prompt: reviewLoopInstructions({
-          task,
-          round,
-          maxRounds: services.settings.get().reviewMaxRounds,
-          skill: services.reviews.skillFor(id),
-        }),
+        prompt: reviewLoopInstructions({ task, round, maxRounds, skill: services.reviews.skillFor(id) }),
       });
+    }),
+  );
+
+  /** Checks the configured Claude Code CLI for the board reviewer: its path and version. */
+  app.post(
+    "/api/review/test-cli",
+    handle(async (c) => {
+      const { cli } = await parseBody(c, z.object({ cli: z.string().trim().nullable().optional() }));
+      try {
+        return c.json({ ok: true, ...(await headlessCliVersion(cli ?? services.settings.get().headlessReviewCli)) });
+      } catch (error) {
+        return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
     }),
   );
 

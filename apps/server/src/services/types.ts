@@ -201,6 +201,10 @@ export interface ReviewsService {
   submit(taskId: string, input: SubmitReviewInput, actor: string): TaskReview;
   /** Accepts a finding id or a "R2.3" label. wont_fix needs a note; "open" reopens. */
   resolveFinding(taskId: string, ref: string, input: ResolveFindingInput, actor: string): ReviewFinding;
+  /** Rounds in a status on non-archived tasks, oldest first (for the board's fallbacks). */
+  roundsWithStatus(status: ReviewRoundStatus): ReviewRecord[];
+  /** Records that the board asked the task's T3 thread to run the round. */
+  markNudged(reviewId: string, actor: string): void;
   /** For the board's own fallbacks: running, stalled, failed or back to pending. */
   setRoundStatus(
     reviewId: string,

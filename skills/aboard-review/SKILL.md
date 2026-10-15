@@ -11,8 +11,9 @@ job is to find what would make a careful maintainer send the change back, before
 ## What to read
 
 1. The task: description, plan, plan context and step notes say what the change is meant to do.
-2. The diff of the current branch against where it forked, plus uncommitted work:
-   `git diff $(git merge-base HEAD origin/HEAD)` (fall back to `origin/main` or `main`) and `git status`.
+2. The diff of the current branch against where it forked, plus uncommitted work: find the fork point with
+   `git merge-base HEAD origin/HEAD` (fall back to `origin/main` or `main`), then run `git diff <that commit>`
+   and `git status`. Run them as separate commands; `$(...)` substitutions may need a permission you don't have.
 3. Enough of the surrounding code to judge the change: callers, tests, and the project's own conventions
    (AGENTS.md, CLAUDE.md, CONTRIBUTING.md, linters' configs).
 
@@ -40,8 +41,10 @@ Blocking and major findings send the change back for another round; minor and ni
 
 ## Earlier rounds
 
-The task lists earlier findings and how they were resolved. Check every finding marked fixed: if the fix
-doesn't hold, raise it again as a new finding. Accept a reasoned "won't fix" unless the reason is wrong.
+The task lists earlier findings and how they were resolved. Findings still open stay open on their own: don't
+raise them again, just mention in your summary that they are unresolved. Check every finding marked fixed: if
+the fix doesn't hold, raise it again as a new finding. Accept a reasoned "won't fix" unless the reason is wrong.
+Your findings are only what's new: problems nobody has raised yet, and fixes that didn't work.
 
 ## Each finding
 

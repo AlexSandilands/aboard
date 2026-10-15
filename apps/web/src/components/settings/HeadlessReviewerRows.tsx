@@ -1,6 +1,8 @@
 import type { AppSettings } from "@repo/contracts";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
-import { useUpdateSettings } from "~/state/mutations";
+import { useTestReviewCli, useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
 import { SettingsRow } from "./settingsLayout";
 
@@ -10,6 +12,8 @@ import { SettingsRow } from "./settingsLayout";
  */
 export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
+  const testCli = useTestReviewCli();
+  const check = testCli.data;
   return (
     <>
       <SettingsRow
@@ -28,15 +32,43 @@ export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
           <SettingsRow
             title="Claude Code CLI"
             description="Leave empty to use claude from your PATH."
+            status={
+              check ? (
+                check.ok ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Badge variant="success">Found</Badge>
+                    {check.version} · <span className="font-mono">{check.path}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Badge variant="warning">Not working</Badge>
+                    {check.error}
+                  </span>
+                )
+              ) : null
+            }
             control={
-              <BlurInput
-                aria-label="Claude Code CLI"
-                size="sm"
-                className="sm:w-56"
-                placeholder="claude"
-                value={settings.headlessReviewCli ?? ""}
-                onSave={(next) => updateSettings.mutate({ headlessReviewCli: next.trim() || null })}
-              />
+              <>
+                <BlurInput
+                  aria-label="Claude Code CLI"
+                  size="sm"
+                  className="sm:w-56"
+                  placeholder="claude"
+                  value={settings.headlessReviewCli ?? ""}
+                  onSave={(next) => {
+                    testCli.reset();
+                    updateSettings.mutate({ headlessReviewCli: next.trim() || null });
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={testCli.isPending}
+                  onClick={() => testCli.mutate(undefined)}
+                >
+                  Test
+                </Button>
+              </>
             }
           />
           <SettingsRow

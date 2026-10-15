@@ -33,8 +33,24 @@ describe("review REST routes", () => {
     expect(resolved.status).toBe(200);
     expect(((await resolved.json()) as ReviewFinding).status).toBe("wont_fix");
 
+    const fix = await h.request(`/api/tasks/${h.task.id}/review-prompt`);
+    expect(((await fix.json()) as { prompt: string }).prompt).toContain("round 2 is open");
+
     const rounds = (await (await h.request(`/api/tasks/${h.task.id}/reviews`)).json()) as TaskReview[];
     expect(rounds.map((r) => r.round)).toEqual([1, 2]);
+  });
+
+  it("asks to fix open blocking findings before another round", async () => {
+    const h = setup();
+    h.services.reviews.submit(h.task.id, { findings: [{ severity: "blocking", title: "x" }] }, "reviewer");
+    const res = await h.request(`/api/tasks/${h.task.id}/review-prompt`);
+    expect(((await res.json()) as { prompt: string }).prompt).toContain("found blocking or major issues");
+  });
+
+  it("reports a missing CLI instead of failing the request", async () => {
+    const h = setup();
+    const res = await h.request("/api/review/test-cli", { method: "POST", json: { cli: "/nonexistent/claude" } });
+    expect(await res.json()).toEqual({ ok: false, error: "Claude Code CLI not found at /nonexistent/claude" });
   });
 
   it("lists skills without reading the real home folder", async () => {

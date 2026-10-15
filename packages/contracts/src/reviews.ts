@@ -41,6 +41,9 @@ export type ReviewSkillRef = z.infer<typeof ReviewSkillRef>;
 
 export const BUILTIN_REVIEW_SKILL_NAME = "aboard-review";
 
+/** Actor the board's own headless reviewer records rounds as. */
+export const BOARD_REVIEWER = "board reviewer";
+
 export const reviewSkillName = (skill: ReviewSkillRef): string =>
   skill.source === "builtin" ? BUILTIN_REVIEW_SKILL_NAME : skill.name;
 
@@ -80,6 +83,8 @@ export const TaskReview = z.object({
   summary: z.string().nullable(),
   /** Why the round failed or stalled. */
   error: z.string().nullable(),
+  /** When the board asked the task's T3 thread to run this round, because no reviewer had. */
+  nudgedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().nullable(),
@@ -122,6 +127,8 @@ export const TaskReviewSummary = z.object({
   maxRounds: z.number().int(),
   /** Open findings across all rounds, by severity. */
   open: SeverityCounts,
+  /** The latest round was reviewed by the board's own reviewer, not an agent running the loop. */
+  byBoard: z.boolean(),
 });
 export type TaskReviewSummary = z.infer<typeof TaskReviewSummary>;
 
@@ -132,6 +139,7 @@ interface RoundLike {
   round: number;
   cycle: number;
   status: ReviewRoundStatus;
+  reviewer: string | null;
 }
 interface FindingLike {
   /** The round that raised it. */
@@ -150,7 +158,7 @@ export function deriveReviewSummary(
   const open: SeverityCounts = { blocking: 0, major: 0, minor: 0, nit: 0 };
   for (const f of findings) if (f.status === "open") open[f.severity] += 1;
   const cycleRounds = rounds.filter((r) => r.cycle === latest.cycle).length;
-  const base = { round: cycleRounds, maxRounds, open };
+  const base = { round: cycleRounds, maxRounds, open, byBoard: latest.reviewer === BOARD_REVIEWER };
   if (latest.status !== "submitted") return { ...base, state: latest.status };
   if (open.blocking + open.major > 0) {
     return { ...base, state: cycleRounds >= maxRounds ? "stuck" : "changes_requested" };

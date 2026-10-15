@@ -150,6 +150,11 @@ export const useResolveFinding = (opts?: MutationOpts) =>
     opts,
   );
 
+export type ReviewCliCheck = { ok: true; path: string; version: string } | { ok: false; error: string };
+/** Checks the board reviewer's Claude Code CLI (the saved one unless `cli` is given). */
+export const useTestReviewCli = (opts?: MutationOpts) =>
+  useApiMutation((cli?: string | null) => api<ReviewCliCheck>("/api/review/test-cli", { body: { cli } }), opts);
+
 /** The review loop prompt for pasting into any harness. */
 export const fetchReviewPrompt = async (taskId: string): Promise<string> =>
   (await api<{ prompt: string }>(`/api/tasks/${enc(taskId)}/review-prompt`)).prompt;

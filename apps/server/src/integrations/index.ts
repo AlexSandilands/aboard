@@ -2,6 +2,8 @@ import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import { createGithubIntegration, type RunGh } from "./github.ts";
+import type { RunHeadless } from "./headlessReview.ts";
+import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
 import type { Integrations } from "./types.ts";
@@ -19,6 +21,7 @@ export interface IntegrationOverrides {
   runGh?: RunGh;
   fetch?: FetchFn;
   openSocket?: OpenSocket;
+  runHeadless?: RunHeadless;
   log?: Logger;
 }
 
@@ -37,6 +40,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.openSocket ? { openSocket: overrides.openSocket } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const reviews = createReviewFallbacks({
+    services: deps.services,
+    t3,
+    ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -47,11 +56,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       started = true;
       github.start();
       t3.start();
+      reviews.start();
     },
     stop() {
       started = false;
       github.stop();
       t3.stop();
+      reviews.stop();
     },
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),

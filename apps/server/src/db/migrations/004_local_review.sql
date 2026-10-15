@@ -18,6 +18,8 @@ CREATE TABLE task_reviews (
   head_sha TEXT,
   summary TEXT,
   error TEXT,
+  -- When the board last asked the task's T3 thread to run this round (a fallback).
+  nudged_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   completed_at TEXT,

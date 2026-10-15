@@ -186,7 +186,7 @@ const indented = (text: string) => text.trim().replace(/\n/g, "\n      ");
 
 /**
  * The review section: the badge, the latest round's findings in full (with body and suggestion while open),
- * and open findings left from earlier rounds.
+ * then earlier rounds' findings: open ones, and resolved ones so the next reviewer can check the fixes hold.
  */
 function reviewLines(task: TaskDetail): string[] {
   const latest = task.reviews.at(-1);
@@ -205,10 +205,16 @@ function reviewLines(task: TaskDetail): string[] {
       if (f.suggestion?.trim()) lines.push(`      Suggestion: ${indented(f.suggestion)}`);
     }
   }
-  const earlier = task.reviews.slice(0, -1).flatMap((round) => round.findings.filter((f) => f.status === "open"));
+  const previous = task.reviews.slice(0, -1).flatMap((round) => round.findings);
+  const earlier = previous.filter((f) => f.status === "open");
   if (earlier.length) {
     lines.push("  Still open from earlier rounds:");
     for (const f of earlier) lines.push(`  ${findingLine(f)}`);
+  }
+  const resolved = previous.filter((f) => f.status !== "open");
+  if (resolved.length) {
+    lines.push("  Resolved in earlier rounds:");
+    for (const f of resolved) lines.push(`  ${findingLine(f)}`);
   }
   const gating = [...earlier, ...latest.findings].filter((f) => f.status === "open" && isGatingSeverity(f.severity));
   if (gating.length) {

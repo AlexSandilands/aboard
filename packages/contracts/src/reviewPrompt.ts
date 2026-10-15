@@ -15,8 +15,9 @@ job is to find what would make a careful maintainer send the change back, before
 ## What to read
 
 1. The task: description, plan, plan context and step notes say what the change is meant to do.
-2. The diff of the current branch against where it forked, plus uncommitted work:
-   \`git diff $(git merge-base HEAD origin/HEAD)\` (fall back to \`origin/main\` or \`main\`) and \`git status\`.
+2. The diff of the current branch against where it forked, plus uncommitted work: find the fork point with
+   \`git merge-base HEAD origin/HEAD\` (fall back to \`origin/main\` or \`main\`), then run \`git diff <that commit>\`
+   and \`git status\`. Run them as separate commands; \`$(...)\` substitutions may need a permission you don't have.
 3. Enough of the surrounding code to judge the change: callers, tests, and the project's own conventions
    (AGENTS.md, CLAUDE.md, CONTRIBUTING.md, linters' configs).
 
@@ -44,8 +45,10 @@ Blocking and major findings send the change back for another round; minor and ni
 
 ## Earlier rounds
 
-The task lists earlier findings and how they were resolved. Check every finding marked fixed: if the fix
-doesn't hold, raise it again as a new finding. Accept a reasoned "won't fix" unless the reason is wrong.
+The task lists earlier findings and how they were resolved. Findings still open stay open on their own: don't
+raise them again, just mention in your summary that they are unresolved. Check every finding marked fixed: if
+the fix doesn't hold, raise it again as a new finding. Accept a reasoned "won't fix" unless the reason is wrong.
+Your findings are only what's new: problems nobody has raised yet, and fixes that didn't work.
 
 ## Each finding
 
@@ -80,6 +83,23 @@ export function reviewerBrief({ task, round, skill }: Omit<ReviewPromptInput, "m
     "- Then reply with one short paragraph: the number of findings by severity.",
     "",
     ...skillLines(skill),
+  ].join("\n");
+}
+
+/**
+ * Sent when a round came back with blocking or major findings but no agent is looping on it (the board's own
+ * reviewer ran it): fix, resolve, then carry on with the loop.
+ */
+export function reviewFixInstructions({ task, round, maxRounds }: Omit<ReviewPromptInput, "skill">): string {
+  const ref = `"#${task.number}"`;
+  return [
+    `Review round ${round} of task #${task.number} "${task.title}" found blocking or major issues. Before you open a pull request:`,
+    `1. Call get_task(${ref}) on the ${BRAND.id} MCP server and read the open findings.`,
+    "2. Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).",
+    round < maxRounds
+      ? `3. Call start_review(${ref}) and follow what it returns: it runs the next round with a fresh reviewer, up to ${maxRounds} rounds.`
+      : "3. That was the last review round; leave anything you can't fix open for the user.",
+    "4. Then open the pull request, link it and carry on.",
   ].join("\n");
 }
 

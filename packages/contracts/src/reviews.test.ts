@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveAttention } from "./derive.ts";
 import {
+  BOARD_REVIEWER,
   deriveReviewSummary,
   reviewBadgeLabel,
   reviewWantsAnotherRound,
@@ -9,7 +10,12 @@ import {
   type ReviewRoundStatus,
 } from "./reviews.ts";
 
-const round = (n: number, status: ReviewRoundStatus = "submitted", cycle = 1) => ({ round: n, cycle, status });
+const round = (n: number, status: ReviewRoundStatus = "submitted", cycle = 1, reviewer: string | null = "agent") => ({
+  round: n,
+  cycle,
+  status,
+  reviewer,
+});
 const finding = (n: number, severity: FindingSeverity, status: FindingStatus = "open") => ({
   round: n,
   severity,
@@ -34,6 +40,7 @@ describe("deriveReviewSummary", () => {
       round: 1,
       maxRounds: 3,
       open: { blocking: 1, major: 0, minor: 1, nit: 0 },
+      byBoard: false,
     });
     expect(reviewWantsAnotherRound(summary)).toBe(true);
     expect(reviewBadgeLabel(summary!)).toBe("1 open");
@@ -75,11 +82,12 @@ describe("deriveReviewSummary", () => {
 });
 
 describe("deriveAttention for reviews", () => {
-  const summary = (state: "stalled" | "stuck" | "failed" | "changes_requested") => ({
+  const summary = (state: "stalled" | "stuck" | "failed" | "changes_requested", byBoard = false) => ({
     state,
     round: 3,
     maxRounds: 3,
     open: { blocking: 1, major: 1, minor: 0, nit: 0 },
+    byBoard,
   });
 
   it("flags loops that ended without a clean result", () => {
@@ -92,5 +100,13 @@ describe("deriveAttention for reviews", () => {
 
   it("leaves a review mid-loop to the agent", () => {
     expect(deriveAttention([], [], summary("changes_requested"))).toEqual([]);
+  });
+
+  it("flags findings from the board's own reviewer, which no agent is looping on", () => {
+    expect(deriveAttention([], [], summary("changes_requested", true))).toEqual([
+      { kind: "review_unattended", severity: "warning", message: "Board review: 2 to fix" },
+    ]);
+    const rounds = [round(1, "submitted", 1, BOARD_REVIEWER)];
+    expect(deriveReviewSummary(rounds, [finding(1, "major")], 3)?.byBoard).toBe(true);
   });
 });

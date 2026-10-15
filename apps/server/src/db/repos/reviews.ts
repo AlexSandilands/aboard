@@ -31,6 +31,7 @@ interface ReviewRow {
   head_sha: string | null;
   summary: string | null;
   error: string | null;
+  nudged_at: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -67,6 +68,7 @@ const toReview = (r: ReviewRow): ReviewRecord => ({
   headSha: r.head_sha,
   summary: r.summary,
   error: r.error,
+  nudgedAt: r.nudged_at,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   completedAt: r.completed_at,
@@ -85,6 +87,7 @@ const toReviewRow = (r: ReviewRecord): ReviewRow => ({
   head_sha: r.headSha,
   summary: r.summary,
   error: r.error,
+  nudged_at: r.nudgedAt,
   created_at: r.createdAt,
   updated_at: r.updatedAt,
   completed_at: r.completedAt,

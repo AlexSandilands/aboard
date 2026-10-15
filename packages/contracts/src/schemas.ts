@@ -201,6 +201,7 @@ export const AttentionReason = z.object({
     "review_stalled",
     "review_stuck",
     "review_failed",
+    "review_unattended",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),

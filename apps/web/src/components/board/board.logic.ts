@@ -141,6 +141,7 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   review_stalled: "Needs review",
   review_stuck: "Review stuck",
   review_failed: "Review failed",
+  review_unattended: "Review findings",
 };
 
 /** Tasks for the sidebar's "Needs attention" list: errors first, then most recently updated. */

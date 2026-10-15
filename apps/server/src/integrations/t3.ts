@@ -389,7 +389,13 @@ export interface T3Services {
   tasks: Pick<TasksService, "summary">;
 }
 
-type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
+export type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
+
+/** Where a thread works: its worktree (null for the project's own checkout) and branch. */
+export interface ThreadWorkspace {
+  worktreePath: string | null;
+  branch: string | null;
+}
 
 export interface T3Integration {
   status(): T3IntegrationStatus;
@@ -402,6 +408,13 @@ export interface T3Integration {
   launchOptions(taskId: string): Promise<T3LaunchOptions>;
   /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
   startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
+  /**
+   * Posts a message into a linked thread, as if the user had typed it: T3 starts a turn, or queues it behind
+   * the running one. `commandId` de-duplicates retries. Needs the orchestration:operate scope.
+   */
+  sendToThread(link: ThreadLink, text: string, commandId: string): Promise<void>;
+  /** The thread's workspace from the live shell; null when T3 can't say. */
+  threadWorkspace(link: ThreadLink): Promise<ThreadWorkspace | null>;
   /** Refreshes one thread link. Returns false when it is not a T3 thread link. */
   refresh(link: TaskLink): Promise<boolean>;
   test(): Promise<T3IntegrationStatus>;
@@ -598,6 +611,49 @@ export function createT3Integration(deps: {
     return link;
   };
 
+  /** The live origin and token for acting on a thread of this environment, or a clear reason why not. */
+  const threadAccess = async (link: ThreadLink) => {
+    await ensureDiscovered();
+    const { origin, environmentId } = discovery;
+    if (!discovery.detected || !origin) throw new AppError("VALIDATION", "T3 Code is not running");
+    if (link.ref.environmentId !== environmentId) {
+      throw new AppError("VALIDATION", "This thread belongs to a different T3 Code environment");
+    }
+    const bearer = token();
+    if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
+    return { origin, bearer };
+  };
+
+  const sendToThread = async (link: ThreadLink, text: string, commandId: string): Promise<void> => {
+    const { origin, bearer } = await threadAccess(link);
+    await withRpc(origin, bearer, (rpc) =>
+      rpc.request("orchestration.dispatchCommand", {
+        type: "message.dispatch",
+        // The board acts for the user over the same socket as T3's web client.
+        createdBy: "user",
+        creationSource: "web",
+        commandId,
+        threadId: link.ref.threadId,
+        messageId: randomUUID(),
+        text,
+        attachments: [],
+        // T3 resolves "auto" against the thread's state: start now when idle, else queue or steer.
+        deliveryIntent: "auto",
+        dispatchMode: { type: "queue_after_active" },
+      }),
+    );
+    void pollLive();
+  };
+
+  const threadWorkspace = async (link: ThreadLink): Promise<ThreadWorkspace | null> => {
+    if (link.ref.environmentId !== discovery.environmentId) return null;
+    const shell = await loadShell();
+    const thread = [...(shell?.threads ?? []), ...(shell?.archivedThreads ?? [])].find(
+      (t) => t.id === link.ref.threadId,
+    );
+    return thread ? { worktreePath: thread.worktreePath ?? null, branch: thread.branch ?? null } : null;
+  };
+
   const listProjects = async (): Promise<T3ProjectCandidate[]> => {
     await ensureDiscovered();
     let source: T3SqliteProject[] | null = null;
@@ -639,6 +695,8 @@ export function createT3Integration(deps: {
     listProjects,
     launchOptions,
     startThread,
+    sendToThread,
+    threadWorkspace,
     async importProjects(ids) {
       const wanted = new Set(ids);
       const candidates = (await listProjects()).filter((c) => wanted.has(c.t3ProjectId) && !c.existingProjectId);

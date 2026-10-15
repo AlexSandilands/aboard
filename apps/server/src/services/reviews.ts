@@ -78,6 +78,7 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
         openedBy: opts.actor,
         skill: reviewSkillName(skillFor(taskId)),
         error: null,
+        nudgedAt: null,
         updatedAt: now,
       };
       repos.reviews.update(reopened);
@@ -109,6 +110,7 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
       headSha: null,
       summary: null,
       error: null,
+      nudgedAt: null,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
@@ -221,6 +223,18 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
         .flatMap((r) => r.findings)
         .find((f) => f.id === id);
       return updated!;
+    },
+
+    roundsWithStatus: (status) => repos.reviews.withStatus(status),
+
+    markNudged(reviewId, actor) {
+      const round = repos.reviews.get(reviewId);
+      if (!round) throw notFound("Review", reviewId);
+      core.write((fx) => {
+        const now = nowIso();
+        repos.reviews.update({ ...round, nudgedAt: now, updatedAt: now });
+        fx.log(round.taskId, actor, "review_nudged", { round: round.round });
+      });
     },
 
     setRoundStatus(reviewId, status, opts) {

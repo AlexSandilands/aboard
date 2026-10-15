@@ -105,6 +105,10 @@ export function deriveAttention(
     });
   } else if (review?.state === "failed") {
     reasons.push({ kind: "review_failed", severity: "error", message: "Review failed" });
+  } else if (review?.state === "changes_requested" && review.byBoard) {
+    // The board's own reviewer found these, so no agent is looping on them unless one is nudged.
+    const open = review.open.blocking + review.open.major;
+    reasons.push({ kind: "review_unattended", severity: "warning", message: `Board review: ${open} to fix` });
   }
   return reasons;
 }

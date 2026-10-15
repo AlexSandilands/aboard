@@ -1,0 +1,179 @@
+import {
+  BOARD_REVIEWER,
+  isGatingSeverity,
+  reviewFixInstructions,
+  reviewLoopInstructions,
+  type TaskLink,
+  type TaskSummary,
+} from "@repo/contracts";
+import type { ReviewRecord } from "../db/repos/reviews.ts";
+import { renderTaskDetail } from "../mcp/format.ts";
+import type { Services } from "../services/types.ts";
+import { messageOf } from "./github.ts";
+import { headlessPrompt, runHeadlessReview, type RunHeadless } from "./headlessReview.ts";
+import type { T3Integration, ThreadLink } from "./t3.ts";
+import type { Logger } from "./util.ts";
+
+/** How long a round may wait for an agent's reviewer (or a nudged thread) before the next fallback. */
+export const REVIEW_GRACE_MS = 10 * 60_000;
+export const REVIEW_WATCHDOG_INTERVAL_MS = 30_000;
+
+/** Thread states where the agent is busy (or waiting on the user), so its review may still come. */
+const BUSY = new Set(["working", "input", "approval"]);
+
+export interface ReviewFallbacks {
+  /** One pass over pending rounds; resolves when any nudge is sent (not when a headless review ends). */
+  tick(): Promise<void>;
+  /** Resolves when the headless review in flight, if any, has finished. */
+  idle(): Promise<void>;
+  start(): void;
+  stop(): void;
+}
+
+/** The task's most recently linked T3 thread that isn't archived. */
+function latestThread(task: TaskSummary): ThreadLink | null {
+  const threads = task.links.filter(
+    (l): l is Extract<TaskLink, { kind: "t3_thread" }> => l.kind === "t3_thread" && !l.snapshot?.archived,
+  );
+  return threads.at(-1) ?? null;
+}
+
+/**
+ * Picks up review rounds no agent ran: first asks the task's T3 thread to run the loop, then (if enabled)
+ * reviews with the board's own headless reviewer, else marks the round stalled so the card asks for help.
+ * Rounds the user opened (a card dragged to Review, Run review) skip the first wait.
+ */
+export function createReviewFallbacks(deps: {
+  services: () => Services;
+  t3: Pick<T3Integration, "sendToThread" | "threadWorkspace">;
+  runHeadless?: RunHeadless;
+  now?: () => number;
+  graceMs?: number;
+  log?: Logger;
+}): ReviewFallbacks {
+  const runHeadless = deps.runHeadless ?? runHeadlessReview;
+  const now = deps.now ?? Date.now;
+  const grace = deps.graceMs ?? REVIEW_GRACE_MS;
+  const log = deps.log ?? console;
+  let headless: Promise<void> | null = null;
+  let ticking: Promise<void> | null = null;
+  let timer: NodeJS.Timeout | null = null;
+
+  const nudge = async (round: ReviewRecord, task: TaskSummary, thread: ThreadLink): Promise<boolean> => {
+    const s = deps.services();
+    const text = reviewLoopInstructions({
+      task,
+      round: round.round,
+      maxRounds: s.settings.get().reviewMaxRounds,
+      skill: s.reviews.skillFor(task.id),
+    });
+    try {
+      // Stable per round, so a retry after a lost reply doesn't post twice.
+      await deps.t3.sendToThread(thread, text, `review-${round.id}-nudge`);
+      s.reviews.markNudged(round.id, BOARD_REVIEWER);
+      return true;
+    } catch (error) {
+      log.warn(`[review] couldn't nudge the T3 thread of #${task.number}: ${messageOf(error)}`);
+      return false;
+    }
+  };
+
+  const reviewHeadless = async (round: ReviewRecord, task: TaskSummary, thread: ThreadLink | null) => {
+    const s = deps.services();
+    s.reviews.setRoundStatus(round.id, "running", { actor: BOARD_REVIEWER });
+    try {
+      const project = s.projects.get(task.projectId);
+      const workspace = thread ? await deps.t3.threadWorkspace(thread) : null;
+      const cwd = workspace?.worktreePath ?? project.workspaceRoot;
+      if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
+      const settings = s.settings.get();
+      const result = await runHeadless({
+        cli: settings.headlessReviewCli,
+        cwd,
+        budgetUsd: settings.headlessReviewBudgetUsd,
+        prompt: headlessPrompt({
+          taskNumber: task.number,
+          round: round.round,
+          taskText: renderTaskDetail(s.tasks.detail(task.id), project, { events: 0 }),
+          skill: s.reviews.skillFor(task.id),
+          baseRef: null,
+        }),
+      });
+      const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;
+      const submitted = s.reviews.submit(
+        task.id,
+        { round: round.round, summary: `${result.summary}${cost}`, findings: result.findings },
+        BOARD_REVIEWER,
+      );
+      // Findings nobody is looping on: hand them to the thread's agent to fix, if there is one.
+      if (thread && submitted.findings.some((f) => isGatingSeverity(f.severity))) {
+        const text = reviewFixInstructions({ task, round: round.round, maxRounds: settings.reviewMaxRounds });
+        await deps.t3.sendToThread(thread, text, `review-${round.id}-fix`).catch((error: unknown) => {
+          log.warn(`[review] couldn't send findings to the T3 thread of #${task.number}: ${messageOf(error)}`);
+        });
+      }
+    } catch (error) {
+      s.reviews.setRoundStatus(round.id, "failed", { actor: BOARD_REVIEWER, error: messageOf(error) });
+    }
+  };
+
+  const consider = async (round: ReviewRecord): Promise<void> => {
+    const s = deps.services();
+    const task = s.tasks.summary(round.taskId);
+    if (task.status !== "review" || task.archivedAt) return;
+    const thread = latestThread(task);
+    if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
+    const waited = now() - Date.parse(round.nudgedAt ?? round.updatedAt);
+    const userAsked = round.openedBy === "user" && !round.nudgedAt;
+    if (!userAsked && waited < grace) return;
+    if (!round.nudgedAt && thread && (await nudge(round, task, thread))) return;
+    if (s.settings.get().headlessReviewEnabled) {
+      // One board review at a time; the rest wait for the next tick.
+      headless ??= reviewHeadless(round, task, thread).finally(() => {
+        headless = null;
+      });
+      return;
+    }
+    s.reviews.setRoundStatus(round.id, "stalled", {
+      actor: BOARD_REVIEWER,
+      error: thread ? "The task's T3 thread didn't run the review" : "No agent ran the review",
+    });
+  };
+
+  const pass = async (): Promise<void> => {
+    for (const round of deps.services().reviews.roundsWithStatus("pending")) {
+      await consider(round).catch((error: unknown) => {
+        log.warn(`[review] fallback for round ${round.round} failed: ${messageOf(error)}`);
+      });
+    }
+  };
+
+  const tick = (): Promise<void> => {
+    // Cleared in .finally, never inside the pass: a pass with nothing to await settles synchronously, and a
+    // `finally` there would run before this assignment and leave every later tick returning the stale promise.
+    ticking ??= pass().finally(() => {
+      ticking = null;
+    });
+    return ticking;
+  };
+
+  return {
+    tick,
+    idle: () => headless ?? Promise.resolve(),
+    start() {
+      // A board review interrupted by a restart left its round running; let the chain pick it up again.
+      const s = deps.services();
+      for (const round of s.reviews.roundsWithStatus("running")) {
+        s.reviews.setRoundStatus(round.id, "pending", {
+          actor: BOARD_REVIEWER,
+          error: "The board restarted mid-review",
+        });
+      }
+      timer ??= setInterval(() => void tick(), REVIEW_WATCHDOG_INTERVAL_MS);
+    },
+    stop() {
+      if (timer) clearInterval(timer);
+      timer = null;
+    },
+  };
+}

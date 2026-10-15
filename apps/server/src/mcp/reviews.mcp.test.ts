@@ -119,6 +119,10 @@ describe("local review loop over MCP", () => {
     const final = await call(agent, "get_task", { task: taskRef, events: 20 });
     expect(final.text).toContain("Local review: Reviewed");
     expect(final.text).toContain("Still open from earlier rounds:");
+    expect(final.text).toContain("Resolved in earlier rounds:");
+    expect(final.text).toContain(
+      "R1.1 [blocking] src/export.ts:40 Fields with commas aren't quoted -> fixed: Quoting added with a test",
+    );
     expect(final.text).toContain("finding R1.1 fixed: Quoting added with a test");
     expect(final.text).not.toContain("waiting for its reviewer");
     await reviewer.close();

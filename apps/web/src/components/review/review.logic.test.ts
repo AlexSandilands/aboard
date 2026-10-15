@@ -46,6 +46,7 @@ const review = (findings: ReviewFinding[]): TaskReview => ({
   headSha: null,
   summary: null,
   error: null,
+  nudgedAt: null,
   createdAt: "",
   updatedAt: "",
   completedAt: null,
@@ -54,7 +55,7 @@ const review = (findings: ReviewFinding[]): TaskReview => ({
 
 describe("review logic", () => {
   it("maps states to badge variants", () => {
-    const summary = { round: 1, maxRounds: 3, open: { blocking: 0, major: 0, minor: 0, nit: 0 } };
+    const summary = { round: 1, maxRounds: 3, open: { blocking: 0, major: 0, minor: 0, nit: 0 }, byBoard: false };
     expect(reviewBadgeVariant({ ...summary, state: "clean" })).toBe("success");
     expect(reviewBadgeVariant({ ...summary, state: "stuck" })).toBe("warning");
     expect(reviewBadgeVariant({ ...summary, state: "failed" })).toBe("error");
