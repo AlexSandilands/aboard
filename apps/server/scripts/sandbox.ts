@@ -257,6 +257,10 @@ function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   const live = argv.includes("--live");
   const seedIndex = argv.indexOf("--seed");
   const seed = seedIndex >= 0 ? argv[seedIndex + 1] : "basic";
+  const unknown = argv.find(
+    (arg, i) => arg !== "--live" && arg !== "--seed" && !(seedIndex >= 0 && i === seedIndex + 1),
+  );
+  if (unknown !== undefined) fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live)`);
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
     fail(`unknown seed "${seed}" (basic, review, threads, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
