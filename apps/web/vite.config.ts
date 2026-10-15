@@ -7,6 +7,8 @@ import { BRAND, brandEnv, storageKey } from "../../packages/contracts/src/brand.
 
 const serverPort = Number(process.env[brandEnv("PORT")] ?? 4317);
 const target = `http://127.0.0.1:${serverPort}`;
+// The server's Origin guard reads the same variable, so Vite on another port can still write.
+const webPort = Number(process.env[brandEnv("WEB_PORT")] ?? 5317);
 
 /** Fills brand placeholders in index.html (`%BRAND_NAME%`, `%THEME_STORAGE_KEY%`). */
 function brandHtml(): Plugin {
@@ -27,7 +29,7 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 5317,
+    port: webPort,
     strictPort: true,
     proxy: {
       "/api": { target, changeOrigin: false },

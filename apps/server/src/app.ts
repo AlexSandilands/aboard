@@ -10,7 +10,7 @@ import { registerMcp } from "./mcp/server.ts";
 import { localGuard } from "./http/guard.ts";
 
 export interface AppContext {
-  config: Pick<Config, "port" | "token" | "userHome">;
+  config: Pick<Config, "port" | "webPort" | "token" | "userHome">;
   bus: EventBus;
   services: Services;
   integrations: Integrations;
