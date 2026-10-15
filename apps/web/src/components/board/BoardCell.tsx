@@ -1,12 +1,13 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import type { TaskStatus, TaskSummary } from "@repo/contracts";
-import { PlusIcon } from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 import { Button } from "~/components/ui/button";
-import { usePalette } from "~/state/ui";
+import { useBoardView, usePalette } from "~/state/ui";
 import { cn } from "~/lib/utils";
-import { DONE_PREVIEW_COUNT } from "./board.logic";
+import { COLUMN_PREVIEW_COUNT, visibleCellTasks } from "./board.logic";
+import { isCellCollapsed } from "./columnCollapse.logic";
 import { cellDroppableId, cellKey, type DragData } from "./dnd.logic";
 import { SortableTaskCard } from "./TaskCard";
 
@@ -20,23 +21,29 @@ export const BoardCell = memo(function BoardCell({
   projectId,
   status,
   tasks,
+  toggleRow,
   selectedTaskId,
+  draggingTaskId,
   dropState,
-  doneExpanded,
-  onToggleDone,
 }: {
   projectId: string;
   status: TaskStatus;
   tasks: ReadonlyArray<TaskSummary>;
+  /** Some cell in this lane has a collapse toggle; the others keep a spacer so cards stay aligned. */
+  toggleRow: boolean;
   selectedTaskId: string | null;
+  /** The card being dragged, when it belongs to this lane; a collapsed cell keeps it in view. */
+  draggingTaskId: string | null;
   dropState: CellDropState;
-  doneExpanded: boolean;
-  onToggleDone: (projectId: string) => void;
 }) {
   const data: DragData = { type: "cell", projectId, status };
   const { setNodeRef } = useDroppable({ id: cellDroppableId(projectId, status), data });
-  const truncated = status === "done" && !doneExpanded && tasks.length > DONE_PREVIEW_COUNT;
-  const visible = truncated ? tasks.slice(0, DONE_PREVIEW_COUNT) : tasks;
+  const collapsed = useBoardView((s) => isCellCollapsed(s, projectId, status));
+  const toggleCellCollapsed = useBoardView((s) => s.toggleCellCollapsed);
+  const { visible, hiddenCount } = useMemo(
+    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId]),
+    [tasks, collapsed, selectedTaskId, draggingTaskId],
+  );
   const ids = useMemo(() => visible.map((task) => task.id), [visible]);
 
   return (
@@ -49,6 +56,20 @@ export const BoardCell = memo(function BoardCell({
         dropState === "invalid" && "cursor-not-allowed bg-error/5 ring-1 ring-inset ring-error/40",
       )}
     >
+      {tasks.length > COLUMN_PREVIEW_COUNT ? (
+        <Button
+          variant="ghost-muted"
+          size="xs"
+          className="justify-start"
+          aria-expanded={!collapsed}
+          onClick={() => toggleCellCollapsed(projectId, status)}
+        >
+          {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+          {collapsed ? `Show all ${tasks.length}` : "Collapse"}
+        </Button>
+      ) : toggleRow ? (
+        <div aria-hidden className="h-7 shrink-0 sm:h-6" />
+      ) : null}
       <SortableContext
         id={cellKey(projectId, status)}
         items={ids}
@@ -69,9 +90,14 @@ export const BoardCell = memo(function BoardCell({
           Add idea
         </Button>
       ) : null}
-      {status === "done" && tasks.length > DONE_PREVIEW_COUNT ? (
-        <Button variant="ghost-muted" size="xs" className="justify-start" onClick={() => onToggleDone(projectId)}>
-          {doneExpanded ? "Show less" : `Show ${tasks.length - DONE_PREVIEW_COUNT} more`}
+      {hiddenCount > 0 ? (
+        <Button
+          variant="ghost-muted"
+          size="xs"
+          className="justify-start"
+          onClick={() => toggleCellCollapsed(projectId, status)}
+        >
+          Show {hiddenCount} more
         </Button>
       ) : null}
     </div>

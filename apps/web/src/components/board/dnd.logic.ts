@@ -156,3 +156,24 @@ function neighbours(status: TaskStatus, ordered: ReadonlyArray<string>, index: n
   if (beforeId !== undefined) return { kind: "move", status, beforeId };
   return null;
 }
+
+/**
+ * Whether a move leaves the card past the first `previewCount` cards of its new cell, where a
+ * collapsed cell would hide it. `fullCellTaskIds` is the whole cell in order, not just the rendered
+ * cards. Done orders by completion time, so a card moved there always lands first.
+ */
+export function landsPastPreview(
+  result: DropResult,
+  taskId: string,
+  fullCellTaskIds: ReadonlyArray<string>,
+  previewCount: number,
+): boolean {
+  if (result.kind !== "move" || result.status === "done") return false;
+  const others = fullCellTaskIds.filter((id) => id !== taskId);
+  const index = result.afterId
+    ? others.indexOf(result.afterId) + 1
+    : result.beforeId
+      ? others.indexOf(result.beforeId)
+      : 0;
+  return index >= previewCount;
+}

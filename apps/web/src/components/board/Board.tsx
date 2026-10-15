@@ -21,17 +21,27 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutGridIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
-import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER, type Lane } from "./board.logic";
+import {
+  buildLanes,
+  COLUMN_PREVIEW_COUNT,
+  columnCounts,
+  reuseUnchangedLanes,
+  STATUS_ORDER,
+  visibleCellTasks,
+  type Lane,
+} from "./board.logic";
+import { isCellCollapsed, isColumnMixed } from "./columnCollapse.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
@@ -40,6 +50,7 @@ import { dropAnimation } from "./cardMotion";
 import {
   cellDroppableId,
   computeDrop,
+  landsPastPreview,
   parseCellKey,
   placementAfterDrop,
   previewMove,
@@ -186,8 +197,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const showArchived = useBoardView((s) => s.showArchived);
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
-  const expandedDone = useBoardView((s) => s.expandedDone);
-  const toggleExpandedDone = useBoardView((s) => s.toggleExpandedDone);
+  const collapsedColumns = useBoardView((s) => s.collapsedColumns);
+  const cellOverrides = useBoardView((s) => s.cellOverrides);
+  const toggleColumnCollapsed = useBoardView((s) => s.toggleColumnCollapsed);
   const selectedTaskId = useSelectedTaskId();
   const openTask = useOpenTask();
   const settings = useSettings().data;
@@ -205,6 +217,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     lanes = reuseUnchangedLanes(stableLanes.lanes, builtLanes);
     setStableLanes({ built: builtLanes, lanes });
   }
+  const laneProjectIds = useMemo(() => lanes.map((lane) => lane.project.id), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
@@ -246,6 +259,17 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const counts = useMemo(() => columnCounts(shownLanes), [shownLanes]);
   const activeTask = activeId ? (tasksById.get(activeId) ?? null) : null;
 
+  /** A cell's cards and the ones it renders, as BoardCell works them out; drops anchor on the latter. */
+  const renderedCell = (
+    source: ReadonlyArray<Lane>,
+    at: { projectId: string; status: TaskStatus },
+    draggedId: string,
+  ) => {
+    const cell = source.find((l) => l.project.id === at.projectId)?.cells[at.status] ?? [];
+    const collapsed = isCellCollapsed(useBoardView.getState(), at.projectId, at.status);
+    return { cell, collapsed, visible: visibleCellTasks(cell, collapsed, [selectedTaskId, draggedId]).visible };
+  };
+
   const endDrag = () => {
     setActiveId(null);
     setOverCell(null);
@@ -284,7 +308,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       // Inside the cell the card already shows in, sortable moves the cards; the preview stays.
       const shownIn = current ?? task;
       if (target.projectId === shownIn.projectId && target.status === shownIn.status) return current;
-      const cell = lanes.find((l) => l.project.id === target.projectId)?.cells[target.status] ?? [];
+      const cell = renderedCell(lanes, target, task.id).visible;
       const overTaskId = target.type === "task" ? String(over.id) : null;
       const activeRect = active.rect.current.translated;
       const placeAfter = activeRect
@@ -313,13 +337,25 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     // Dropped on its own placeholder: it lands where the preview shows it.
     const target = over.id === active.id ? (placement ?? task) : readDragData(over.data.current);
     if (!target) return;
-    const lane = shownLanes.find((l) => l.project.id === target.projectId);
+    const shown = renderedCell(shownLanes, target, task.id);
     // Archived cards (Show archived) aren't siblings on the server, so they never anchor a drop.
-    const cellTasks = lane ? lane.cells[target.status].filter((t) => !t.archivedAt) : [];
+    const cellTasks = shown.visible.filter((t) => !t.archivedAt);
     const overTaskId = cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
     const result = computeDrop({ task, target, cellTaskIds: cellTasks.map((t) => t.id), overTaskId });
     if (result.kind !== "move") return;
-    setPlacement(placementAfterDrop(task, lane ? lane.cells[target.status].map((t) => t.id) : [], result));
+    // Once the drag ends, a card that landed past a collapsed cell's preview (say, below its last shown
+    // card) would vanish, so show the whole cell instead. Archived cards take preview slots too.
+    const before = renderedCell(lanes, target, task.id).cell.map((t) => t.id);
+    if (shown.collapsed && landsPastPreview(result, task.id, before, COLUMN_PREVIEW_COUNT)) {
+      useBoardView.getState().toggleCellCollapsed(target.projectId, target.status);
+    }
+    setPlacement(
+      placementAfterDrop(
+        task,
+        shown.cell.map((t) => t.id),
+        result,
+      ),
+    );
     setSettlingFrom(lanes);
     moveTask.mutate(
       { id: task.id, status: result.status, beforeId: result.beforeId, afterId: result.afterId },
@@ -400,16 +436,41 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         <div className="w-full min-w-min pb-10">
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
-              {TASK_STATUSES.map(({ value, label }) => (
-                <div
-                  key={value}
-                  role="columnheader"
-                  className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
-                >
-                  {label}
-                  <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
-                </div>
-              ))}
+              {TASK_STATUSES.map(({ value, label }) => {
+                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, laneProjectIds);
+                const collapsed = !mixed && !!collapsedColumns[value];
+                const action = `${collapsed ? "Expand" : "Collapse"} ${label} for every project`;
+                return (
+                  <div
+                    key={value}
+                    role="columnheader"
+                    className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {label}
+                    <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost-muted"
+                            size="icon-xs"
+                            className="relative ms-auto"
+                            aria-expanded={mixed ? undefined : !collapsed}
+                            aria-label={action}
+                            onClick={() => toggleColumnCollapsed(value, mixed)}
+                          />
+                        }
+                      >
+                        {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                        {mixed ? (
+                          <span aria-hidden className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary" />
+                        ) : null}
+                      </TooltipTrigger>
+                      <TooltipPopup>{mixed ? `Some projects differ. ${action}` : action}</TooltipPopup>
+                    </Tooltip>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <DndContext
@@ -429,10 +490,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                 project={lane.project}
                 cells={lane.cells}
                 selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
+                draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
                 overStatus={overCell?.projectId === lane.project.id ? overCell.status : null}
                 overInvalid={overCell?.projectId === lane.project.id ? overCell.invalid : false}
-                doneExpanded={!!expandedDone[lane.project.id]}
-                onToggleDone={toggleExpandedDone}
                 onToggleCollapsed={handleToggleCollapsed}
               />
             ))}
