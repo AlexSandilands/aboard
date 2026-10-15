@@ -12,8 +12,9 @@ updates live. User-facing docs are in `README.md`; docs for changing the code ar
   brand-neutral `@repo/*` scope.
 - **Never touch the real `~/.<name>` data dir**, in tests or by hand.
 - **PR titles follow Conventional Commits**, like the commits: `feat(web): add favicon options`.
-- **Don't run `pnpm dev` from a worktree.** The user's own board runs from main on :4317 / :5317. Use
-  `pnpm sandbox` to run this checkout.
+- **Don't run `pnpm dev` or `pnpm desktop` from a worktree.** They use the user's real data dir and the
+  ports of the board the user runs from main (:4317 / :5317), so this branch's code and migrations would
+  run on real data. Use `pnpm sandbox`, which uses a throwaway data dir and free ports.
 
 ## Layout
 
@@ -33,7 +34,7 @@ Each app has its own `AGENTS.md` with the conventions for working in it.
 ```sh
 pnpm sandbox        # this checkout's board on free ports with seeded data; `pnpm sandbox stop` (.claude/skills/sandbox)
 pnpm dev            # server :4317 + Vite :5317 (main checkout only, see Must)
-pnpm desktop        # pnpm dev + Electron window
+pnpm desktop        # pnpm dev + Electron window (main checkout only)
 pnpm typecheck      # quick check while iterating
 pnpm --filter @repo/server test -- src/services/tasks.test.ts   # one test file
 pnpm check          # format:check, lint, typecheck, knip, docs:check, test: run before saying you're done
