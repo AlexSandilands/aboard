@@ -1,6 +1,14 @@
 import type { BoardSnapshot, Project, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionTasks, buildLanes, matchesTaskSearch, reuseUnchangedLanes } from "./board.logic";
+import {
+  attentionTasks,
+  buildLanes,
+  COLUMN_PREVIEW_COUNT,
+  laneHasCollapsibleCell,
+  matchesTaskSearch,
+  reuseUnchangedLanes,
+  visibleCellTasks,
+} from "./board.logic";
 
 function project(id: string): Project {
   return {
@@ -177,5 +185,51 @@ describe("attentionTasks", () => {
       attention: [{ kind: "thread_failed", severity: "error", message: "" }],
     });
     expect(attentionTasks([warn, task("calm"), err]).map((t) => t.id)).toEqual(["err", "warn"]);
+  });
+});
+
+describe("visibleCellTasks", () => {
+  const tasks = Array.from({ length: COLUMN_PREVIEW_COUNT + 3 }, (_, i) => task(`t${i}`));
+  const ids = (list: ReadonlyArray<TaskSummary>) => list.map((t) => t.id);
+
+  it("shows every card when the column is expanded", () => {
+    expect(visibleCellTasks(tasks, false, null)).toEqual({ visible: tasks, hiddenCount: 0 });
+  });
+
+  it("shows every card when a collapsed cell is within the preview", () => {
+    const few = tasks.slice(0, COLUMN_PREVIEW_COUNT);
+    expect(visibleCellTasks(few, true, null)).toEqual({ visible: few, hiddenCount: 0 });
+  });
+
+  it("truncates a collapsed cell to the preview", () => {
+    const result = visibleCellTasks(tasks, true, null);
+    expect(ids(result.visible)).toEqual(ids(tasks.slice(0, COLUMN_PREVIEW_COUNT)));
+    expect(result.hiddenCount).toBe(3);
+  });
+
+  it("keeps the selected card visible when it is past the preview", () => {
+    const selected = tasks[COLUMN_PREVIEW_COUNT + 1]!;
+    const result = visibleCellTasks(tasks, true, selected.id);
+    expect(ids(result.visible)).toEqual([...ids(tasks.slice(0, COLUMN_PREVIEW_COUNT)), selected.id]);
+    expect(result.hiddenCount).toBe(2);
+  });
+
+  it("does not duplicate a selected card already in the preview", () => {
+    const result = visibleCellTasks(tasks, true, tasks[0]!.id);
+    expect(result.visible).toHaveLength(COLUMN_PREVIEW_COUNT);
+    expect(result.hiddenCount).toBe(3);
+  });
+});
+
+describe("laneHasCollapsibleCell", () => {
+  const empty = { idea: [], planned: [], in_progress: [], review: [], done: [] };
+  const many = Array.from({ length: COLUMN_PREVIEW_COUNT + 1 }, (_, i) => task(`t${i}`));
+
+  it("is true when any cell has more cards than the preview", () => {
+    expect(laneHasCollapsibleCell({ ...empty, review: many })).toBe(true);
+  });
+
+  it("is false when every cell fits in the preview", () => {
+    expect(laneHasCollapsibleCell({ ...empty, done: many.slice(0, COLUMN_PREVIEW_COUNT) })).toBe(false);
   });
 });

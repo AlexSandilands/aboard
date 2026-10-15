@@ -15,17 +15,19 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutGridIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
 import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER } from "./board.logic";
+import { isColumnMixed } from "./columnCollapse.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
@@ -119,8 +121,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const showArchived = useBoardView((s) => s.showArchived);
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
-  const expandedDone = useBoardView((s) => s.expandedDone);
-  const toggleExpandedDone = useBoardView((s) => s.toggleExpandedDone);
+  const collapsedColumns = useBoardView((s) => s.collapsedColumns);
+  const cellOverrides = useBoardView((s) => s.cellOverrides);
+  const toggleColumnCollapsed = useBoardView((s) => s.toggleColumnCollapsed);
   const selectedTaskId = useSelectedTaskId();
   const openTask = useOpenTask();
   const settings = useSettings().data;
@@ -139,6 +142,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     setStableLanes({ built: builtLanes, lanes });
   }
   const counts = useMemo(() => columnCounts(lanes), [lanes]);
+  const laneProjectIds = useMemo(() => lanes.map((lane) => lane.project.id), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
@@ -288,16 +292,41 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         <div className="w-full min-w-min pb-10">
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
-              {TASK_STATUSES.map(({ value, label }) => (
-                <div
-                  key={value}
-                  role="columnheader"
-                  className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
-                >
-                  {label}
-                  <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
-                </div>
-              ))}
+              {TASK_STATUSES.map(({ value, label }) => {
+                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, laneProjectIds);
+                const collapsed = !mixed && !!collapsedColumns[value];
+                const action = `${collapsed ? "Expand" : "Collapse"} ${label} for every project`;
+                return (
+                  <div
+                    key={value}
+                    role="columnheader"
+                    className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {label}
+                    <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost-muted"
+                            size="icon-xs"
+                            className="relative ms-auto"
+                            aria-expanded={mixed ? undefined : !collapsed}
+                            aria-label={action}
+                            onClick={() => toggleColumnCollapsed(value, mixed)}
+                          />
+                        }
+                      >
+                        {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                        {mixed ? (
+                          <span aria-hidden className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary" />
+                        ) : null}
+                      </TooltipTrigger>
+                      <TooltipPopup>{mixed ? `Some projects differ. ${action}` : action}</TooltipPopup>
+                    </Tooltip>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <DndContext
@@ -316,8 +345,6 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                 selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
                 overStatus={overCell?.projectId === lane.project.id ? overCell.status : null}
                 overInvalid={overCell?.projectId === lane.project.id ? overCell.invalid : false}
-                doneExpanded={!!expandedDone[lane.project.id]}
-                onToggleDone={toggleExpandedDone}
                 onToggleCollapsed={handleToggleCollapsed}
               />
             ))}

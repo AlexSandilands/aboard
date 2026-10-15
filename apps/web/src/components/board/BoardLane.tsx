@@ -6,7 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
-import { STATUS_ORDER, type LaneCells } from "./board.logic";
+import { laneHasCollapsibleCell, STATUS_ORDER, type LaneCells } from "./board.logic";
 import { BoardCell } from "./BoardCell";
 
 /**
@@ -23,8 +23,6 @@ export const BoardLane = memo(function BoardLane({
   selectedTaskId,
   overStatus,
   overInvalid,
-  doneExpanded,
-  onToggleDone,
   onToggleCollapsed,
 }: {
   project: Project;
@@ -33,11 +31,10 @@ export const BoardLane = memo(function BoardLane({
   /** The cell currently hovered by a dragged card, if it is in this lane. */
   overStatus: TaskStatus | null;
   overInvalid: boolean;
-  doneExpanded: boolean;
-  onToggleDone: (projectId: string) => void;
   onToggleCollapsed: (project: Project) => void;
 }) {
   const collapsed = project.collapsed;
+  const toggleRow = laneHasCollapsibleCell(cells);
   return (
     <section
       id={`lane-${project.id}`}
@@ -88,10 +85,9 @@ export const BoardLane = memo(function BoardLane({
               projectId={project.id}
               status={status}
               tasks={cells[status]}
+              toggleRow={toggleRow}
               selectedTaskId={selectedTaskId}
               dropState={overStatus === status ? (overInvalid ? "invalid" : "valid") : null}
-              doneExpanded={doneExpanded}
-              onToggleDone={onToggleDone}
             />
           ))}
         </div>

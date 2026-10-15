@@ -8,14 +8,41 @@ import {
 } from "@repo/contracts";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
-/** Done shows only the most recently finished tasks until the lane is expanded. */
-export const DONE_PREVIEW_COUNT = 5;
+/** A collapsed column shows only the first few cards of each lane until it is expanded. */
+export const COLUMN_PREVIEW_COUNT = 5;
 
 export type LaneCells = Readonly<Record<TaskStatus, ReadonlyArray<TaskSummary>>>;
 
 export interface Lane {
   project: Project;
   cells: LaneCells;
+}
+
+export interface VisibleCellTasks {
+  visible: ReadonlyArray<TaskSummary>;
+  /** Cards left out because the column is collapsed. */
+  hiddenCount: number;
+}
+
+/**
+ * The cards a cell renders. A collapsed column keeps the first few, plus the selected card when it
+ * falls past them so a task opened by link is never hidden.
+ */
+export function visibleCellTasks(
+  tasks: ReadonlyArray<TaskSummary>,
+  collapsed: boolean,
+  selectedTaskId: string | null,
+): VisibleCellTasks {
+  if (!collapsed || tasks.length <= COLUMN_PREVIEW_COUNT) return { visible: tasks, hiddenCount: 0 };
+  const visible = tasks.slice(0, COLUMN_PREVIEW_COUNT);
+  const selected = selectedTaskId ? tasks.slice(COLUMN_PREVIEW_COUNT).find((t) => t.id === selectedTaskId) : undefined;
+  if (selected) visible.push(selected);
+  return { visible, hiddenCount: tasks.length - visible.length };
+}
+
+/** True when any cell in the lane is long enough to get a collapse toggle row. */
+export function laneHasCollapsibleCell(cells: LaneCells): boolean {
+  return STATUS_ORDER.some((status) => cells[status].length > COLUMN_PREVIEW_COUNT);
 }
 
 export interface BoardFilters {

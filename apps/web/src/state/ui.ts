@@ -1,22 +1,23 @@
-import { storageKey } from "@repo/contracts";
+import { storageKey, type TaskStatus } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
 import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
 import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
 
 /** Persisted board view preferences. */
-interface BoardViewState {
+interface BoardViewState extends CollapseState {
   attentionOnly: boolean;
   hasPrOnly: boolean;
   showArchived: boolean;
-  /** Lanes whose Done column is expanded beyond the most recent few. */
-  expandedDone: Record<string, boolean>;
   /** Free-text card filter from the sidebar search. Not persisted. */
   search: string;
   setAttentionOnly: (value: boolean) => void;
   setHasPrOnly: (value: boolean) => void;
   setShowArchived: (value: boolean) => void;
-  toggleExpandedDone: (projectId: string) => void;
+  /** `mixed`: some shown project differs from the column, so the header collapses them all. */
+  toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
+  toggleCellCollapsed: (projectId: string, status: TaskStatus) => void;
   setSearch: (value: string) => void;
 }
 
@@ -26,22 +27,37 @@ export const useBoardView = create<BoardViewState>()(
       attentionOnly: false,
       hasPrOnly: false,
       showArchived: false,
-      expandedDone: {},
+      collapsedColumns: { done: true },
+      cellOverrides: {},
       search: "",
       setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
       setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
       setShowArchived: (showArchived) => set({ showArchived }),
-      toggleExpandedDone: (projectId) =>
-        set((s) => ({ expandedDone: { ...s.expandedDone, [projectId]: !s.expandedDone[projectId] } })),
+      toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
+      toggleCellCollapsed: (projectId, status) => set((s) => toggleCell(s, projectId, status)),
       setSearch: (search) => set({ search }),
     }),
     {
       name: storageKey("board-view"),
-      partialize: ({ attentionOnly, hasPrOnly, showArchived, expandedDone }) => ({
+      version: 1,
+      // v0 stored per-lane `expandedDone`, which has no per-column equivalent; keep the filters and fall
+      // back to the default collapsed columns.
+      migrate: (persisted) => {
+        const old = (persisted ?? {}) as Partial<Record<"attentionOnly" | "hasPrOnly" | "showArchived", unknown>>;
+        return {
+          attentionOnly: old.attentionOnly === true,
+          hasPrOnly: old.hasPrOnly === true,
+          showArchived: old.showArchived === true,
+          collapsedColumns: { done: true },
+          cellOverrides: {},
+        };
+      },
+      partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedColumns, cellOverrides }) => ({
         attentionOnly,
         hasPrOnly,
         showArchived,
-        expandedDone,
+        collapsedColumns,
+        cellOverrides,
       }),
     },
   ),
