@@ -41,7 +41,7 @@ The hooks in `state/mutations.ts` don't write their results into the cache: the 
 the change. Errors become toasts, unless the caller handles them. Settings are the exception: the
 response replaces the settings query.
 
-Edits the user should see at once are optimistic, applied by the caller before the request:
+Edits the user should see at once are applied to the cache before the request:
 
 - **Moving a card:** `useMoveTask` applies the move (`optimisticMove`) so a drag never snaps back while
   the request is in flight. On failure it rolls back only if the card is still where the optimistic move
@@ -50,7 +50,8 @@ Edits the user should see at once are optimistic, applied by the caller before t
 - **Task detail:** step and phase edits (`usePlanActions.ts`) and removing a link (`LinksSection.tsx`)
   patch the open task's detail.
 
-These refetch the query on error. Follow the same pattern for new edits that must feel instant.
+Apart from the card move, these are patched by the caller and refetch the query on error. Follow the same
+pattern for new edits that must feel instant.
 
 ### UI state
 
