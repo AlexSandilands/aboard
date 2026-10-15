@@ -27,4 +27,13 @@ describe("app", () => {
     expect(await withOrigin("http://127.0.0.1")).toBe(403);
     expect(await withOrigin("null")).toBe(403);
   });
+
+  it("allows the configured Vite port instead of the default one", async () => {
+    const h = createTestHarness({ webPort: 5391 });
+    const withOrigin = async (origin: string) => (await h.request("/api/health", { headers: { origin } })).status;
+    expect(await withOrigin("http://127.0.0.1:5391")).toBe(200);
+    expect(await withOrigin("http://127.0.0.1:4317")).toBe(200);
+    expect(await withOrigin("http://127.0.0.1:5317")).toBe(403);
+    expect(await withOrigin("http://127.0.0.1:5392")).toBe(403);
+  });
 });

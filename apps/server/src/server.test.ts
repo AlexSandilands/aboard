@@ -16,6 +16,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
   dirs.push(homeDir);
   return {
     port: 0,
+    webPort: 5317,
     host: "127.0.0.1",
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),

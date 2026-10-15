@@ -41,6 +41,7 @@ brand-neutral `@repo/*` scope. Keep the name out of prose docs where a neutral p
 pnpm dev            # server :4317 + Vite :5317
 pnpm desktop        # pnpm dev + Electron window (attaches to the dev server)
 pnpm desktop:package  # Windows installer in apps/desktop/release/
+pnpm sandbox        # this checkout's board on free ports with seeded data; `pnpm sandbox stop` (.claude/skills/sandbox)
 pnpm check          # format:check, lint, typecheck, knip, test: run before saying you're done
 pnpm format         # oxfmt (write)
 pnpm lint:fix       # oxlint autofix
