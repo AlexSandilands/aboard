@@ -30,6 +30,8 @@ pnpm dev          # development: server on 4317, Vite on http://127.0.0.1:5317
 
 Data lives in `~/.aboard/` (override with `ABOARD_HOME`; all env vars use the `ABOARD_` prefix). The server only
 listens on 127.0.0.1. Set `ABOARD_TOKEN` to require a bearer token on the API and MCP endpoint. With a token set, open the UI at `http://127.0.0.1:4317/#token=<token>`; the page keeps it for the browser tab and strips it from the address bar.
+In development, `ABOARD_PORT` moves the server and `ABOARD_WEB_PORT` moves Vite (default 5317); the server only accepts
+browser writes from its own port and the Vite port.
 
 ## Desktop app (Windows)
 
@@ -143,7 +145,8 @@ pnpm check       # format, lint, typecheck, unused-code check (knip), tests
 pnpm format      # apply formatting
 ```
 
-Git hooks (lefthook) are installed by `pnpm install`. Commits follow Conventional Commits. Contributor
+Git hooks (lefthook) are installed by `pnpm install` and format, lint and check commit messages on
+commit; CI runs `pnpm check` and commitlint on every PR. Commits follow Conventional Commits. Contributor
 and agent conventions are in `AGENTS.md`.
 
 Layout: `packages/contracts` (shared zod schemas and helpers), `apps/server` (Hono, `node:sqlite`,

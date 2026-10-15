@@ -7,11 +7,8 @@ function hostname(hostHeader: string): string {
   return hostHeader.replace(/:\d+$/, "").toLowerCase();
 }
 
-/** The Vite dev server's port; it proxies browser requests here with its own Origin. */
-const DEV_WEB_PORT = 5317;
-
 /** True for a localhost origin served by this server or the Vite dev server. */
-function isAllowedOrigin(origin: string, port: number): boolean {
+function isAllowedOrigin(origin: string, config: Pick<Config, "port" | "webPort">): boolean {
   let url: URL;
   try {
     url = new URL(origin);
@@ -22,7 +19,7 @@ function isAllowedOrigin(origin: string, port: number): boolean {
   const host = url.hostname.toLowerCase();
   if (!LOCAL_HOSTS.has(host) && !LOCAL_HOSTS.has(`[${host}]`)) return false;
   const originPort = Number(url.port || (url.protocol === "https:" ? 443 : 80));
-  return originPort === port || originPort === DEV_WEB_PORT;
+  return originPort === config.port || originPort === config.webPort;
 }
 
 /**
@@ -30,14 +27,14 @@ function isAllowedOrigin(origin: string, port: number): boolean {
  * any origin other than this server or the Vite dev server, and enforces the optional bearer
  * token on /api, /mcp and /events.
  */
-export function localGuard(config: Pick<Config, "token" | "port">): MiddlewareHandler {
+export function localGuard(config: Pick<Config, "token" | "port" | "webPort">): MiddlewareHandler {
   return async (c, next) => {
     const host = c.req.header("host");
     if (host && !LOCAL_HOSTS.has(hostname(host))) {
       return c.json({ error: { code: "VALIDATION", message: "Forbidden host" } }, 403);
     }
     const origin = c.req.header("origin");
-    if (origin && !isAllowedOrigin(origin, config.port)) {
+    if (origin && !isAllowedOrigin(origin, config)) {
       return c.json({ error: { code: "VALIDATION", message: "Forbidden origin" } }, 403);
     }
     const path = c.req.path;

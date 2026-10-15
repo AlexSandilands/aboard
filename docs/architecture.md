@@ -48,6 +48,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
 | `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files)                 |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
+| `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
@@ -62,7 +63,7 @@ vars. See `apps/server/src/services/settings.ts`.
 `apps/server/src/http/guard.ts` runs before every route ([ADR 0003](decisions/0003-localhost-guard.md)):
 
 - **Host** must be `127.0.0.1`, `localhost` or `[::1]` (any port). This stops DNS rebinding.
-- **Origin**, when present, must be http(s) on a local host and on the server's port or Vite's 5317.
+- **Origin**, when present, must be http(s) on a local host and on the server's port or Vite's (`WEB_PORT`, 5317).
   Requests without an Origin (agents, curl) pass.
 - **Token**, when configured: `/api/*` (except `/api/health`), `/mcp` and `/events` need
   `Authorization: Bearer <token>` or a `token` query parameter (EventSource can't send headers). Static

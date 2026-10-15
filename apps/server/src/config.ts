@@ -5,6 +5,8 @@ import { BRAND, brandEnv } from "@repo/contracts";
 
 export interface Config {
   port: number;
+  /** The Vite dev server's port. It proxies browser requests with its own Origin, which the guard allows. */
+  webPort: number;
   host: string;
   homeDir: string;
   dbPath: string;
@@ -26,6 +28,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   mkdirSync(homeDir, { recursive: true });
   return {
     port: Number(env[brandEnv("PORT")] ?? 4317),
+    webPort: Number(env[brandEnv("WEB_PORT")] ?? 5317),
     host: "127.0.0.1",
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),

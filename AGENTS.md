@@ -33,6 +33,7 @@ Each app has its own `AGENTS.md` with the conventions for working in it.
 pnpm dev            # server :4317 + Vite :5317
 pnpm desktop        # pnpm dev + Electron window (attaches to the dev server)
 pnpm desktop:package  # Windows installer in apps/desktop/release/
+pnpm sandbox        # this checkout's board on free ports with seeded data; `pnpm sandbox stop` (.claude/skills/sandbox)
 pnpm check          # format:check, lint, typecheck, knip, docs:check, test: run before saying you're done
 pnpm format         # oxfmt (write)
 pnpm lint:fix       # oxlint autofix
@@ -40,8 +41,9 @@ pnpm docs:check     # broken links in Markdown and docs/ paths in code
 pnpm --filter @repo/server test -- src/services/tasks.test.ts   # one file
 ```
 
-Git hooks (lefthook) format and lint staged files on commit, check the commit message, and run
-typecheck, test and knip on push. Don't bypass them; fix the cause.
+Git hooks (lefthook) format and lint staged files and check the commit message on commit. There is
+no pre-push hook: run `pnpm check` before pushing; CI runs it on ubuntu and windows and lints every PR
+commit message. Don't bypass the hooks; fix the cause.
 
 ## Conventions
 

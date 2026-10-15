@@ -8,7 +8,7 @@ import type { AppContext } from "./app.ts";
 
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
-  config: Pick<Config, "dbPath" | "port" | "token" | "t3Home" | "pollers" | "userHome">,
+  config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome">,
 ): AppContext & { db: Db } {
   const db = openDatabase(config.dbPath);
   const bus = new EventBus();
