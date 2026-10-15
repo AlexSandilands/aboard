@@ -143,7 +143,8 @@ pnpm check       # format, lint, typecheck, unused-code check (knip), tests
 pnpm format      # apply formatting
 ```
 
-Git hooks (lefthook) are installed by `pnpm install`. Commits follow Conventional Commits. Contributor
+Git hooks (lefthook) are installed by `pnpm install` and format, lint and check commit messages on
+commit; CI runs `pnpm check` and commitlint on every PR. Commits follow Conventional Commits. Contributor
 and agent conventions are in `AGENTS.md`.
 
 Layout: `packages/contracts` (shared zod schemas and helpers), `apps/server` (Hono, `node:sqlite`,
