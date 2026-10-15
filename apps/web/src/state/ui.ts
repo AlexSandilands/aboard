@@ -2,6 +2,7 @@ import { storageKey, type TaskStatus } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
+import { DEFAULT_COLLAPSE, migrateBoardView } from "./boardView.logic";
 import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
 import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
 
@@ -27,8 +28,7 @@ export const useBoardView = create<BoardViewState>()(
       attentionOnly: false,
       hasPrOnly: false,
       showArchived: false,
-      collapsedColumns: { done: true },
-      cellOverrides: {},
+      ...DEFAULT_COLLAPSE,
       search: "",
       setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
       setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
@@ -40,18 +40,7 @@ export const useBoardView = create<BoardViewState>()(
     {
       name: storageKey("board-view"),
       version: 1,
-      // v0 stored per-lane `expandedDone`, which has no per-column equivalent; keep the filters and fall
-      // back to the default collapsed columns.
-      migrate: (persisted) => {
-        const old = (persisted ?? {}) as Partial<Record<"attentionOnly" | "hasPrOnly" | "showArchived", unknown>>;
-        return {
-          attentionOnly: old.attentionOnly === true,
-          hasPrOnly: old.hasPrOnly === true,
-          showArchived: old.showArchived === true,
-          collapsedColumns: { done: true },
-          cellOverrides: {},
-        };
-      },
+      migrate: migrateBoardView,
       partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedColumns, cellOverrides }) => ({
         attentionOnly,
         hasPrOnly,

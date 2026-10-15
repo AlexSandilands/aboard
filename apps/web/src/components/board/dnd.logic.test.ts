@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDrop, readDragData, type DropInput } from "./dnd.logic";
+import { computeDrop, landsPastPreview, readDragData, type DropInput } from "./dnd.logic";
 
 const base = (overrides: Partial<DropInput>): DropInput => ({
   task: { id: "a", projectId: "p", status: "planned" },
@@ -76,5 +76,28 @@ describe("readDragData", () => {
     });
     expect(readDragData({ type: "other", projectId: "p", status: "idea" })).toBeNull();
     expect(readDragData(undefined)).toBeNull();
+  });
+});
+
+describe("landsPastPreview", () => {
+  const full = ["a", "b", "c", "d"];
+
+  it("is false when the card lands within the preview", () => {
+    expect(landsPastPreview({ kind: "move", status: "planned", beforeId: "a" }, "x", full, 2)).toBe(false);
+    expect(landsPastPreview({ kind: "move", status: "planned", afterId: "a" }, "x", full, 2)).toBe(false);
+  });
+
+  it("is true when the card lands past the preview", () => {
+    expect(landsPastPreview({ kind: "move", status: "planned", afterId: "b" }, "x", full, 2)).toBe(true);
+    expect(landsPastPreview({ kind: "move", status: "planned", beforeId: "c" }, "x", full, 2)).toBe(true);
+  });
+
+  it("ignores the dragged card's old slot in the same cell", () => {
+    expect(landsPastPreview({ kind: "move", status: "planned", afterId: "b" }, "a", full, 2)).toBe(false);
+  });
+
+  it("never applies to Done or to non-moves", () => {
+    expect(landsPastPreview({ kind: "move", status: "done", afterId: "d" }, "x", full, 2)).toBe(false);
+    expect(landsPastPreview({ kind: "noop" }, "x", full, 2)).toBe(false);
   });
 });

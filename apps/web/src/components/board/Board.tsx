@@ -26,13 +26,20 @@ import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
-import { buildLanes, columnCounts, reuseUnchangedLanes, STATUS_ORDER } from "./board.logic";
-import { isColumnMixed } from "./columnCollapse.logic";
+import {
+  buildLanes,
+  COLUMN_PREVIEW_COUNT,
+  columnCounts,
+  reuseUnchangedLanes,
+  STATUS_ORDER,
+  visibleCellTasks,
+} from "./board.logic";
+import { isCellCollapsed, isColumnMixed } from "./columnCollapse.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
 import { useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
-import { computeDrop, readDragData } from "./dnd.logic";
+import { computeDrop, landsPastPreview, readDragData } from "./dnd.logic";
 import { TaskCardOverlay } from "./TaskCard";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<TaskStatus, string>;
@@ -213,8 +220,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     const target = readDragData(over?.data.current);
     if (!task || !over || !target) return;
     const lane = lanes.find((l) => l.project.id === target.projectId);
-    // Archived cards (Show archived) aren't siblings on the server, so they never anchor a drop.
-    const cellTasks = lane ? lane.cells[target.status].filter((t) => !t.archivedAt) : [];
+    // Drops anchor on the cards the cell renders, so a collapsed cell never places a card among its
+    // hidden ones by accident. Archived cards (Show archived) aren't siblings on the server, so they never
+    // anchor a drop either.
+    const allCellTasks = lane ? lane.cells[target.status] : [];
+    const collapsed = isCellCollapsed(useBoardView.getState(), target.projectId, target.status);
+    const cellTasks = visibleCellTasks(allCellTasks, collapsed, selectedTaskId).visible.filter((t) => !t.archivedAt);
     const overTaskId = target.type === "task" && cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
     const activeRect = active.rect.current.translated;
     const placeAfter = activeRect
@@ -228,6 +239,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       placeAfter,
     });
     if (result.kind !== "move") return;
+    const fullIds = allCellTasks.filter((t) => !t.archivedAt).map((t) => t.id);
+    // A card that would land past the preview (say, dropped below the last shown card) would vanish, so
+    // show the whole cell instead.
+    if (collapsed && landsPastPreview(result, task.id, fullIds, COLUMN_PREVIEW_COUNT)) {
+      useBoardView.getState().toggleCellCollapsed(target.projectId, target.status);
+    }
     moveTask.mutate(
       { id: task.id, status: result.status, beforeId: result.beforeId, afterId: result.afterId },
       {
