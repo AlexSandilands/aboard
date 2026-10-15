@@ -13,6 +13,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
 import { useBoardContext } from "./BoardContext";
+import { cardLinks } from "./cardLinks.logic";
 
 // PR state colours from T3 Code's pullRequestIcons.tsx (MIT) — see NOTICE.
 const PR_STATE: Record<PrSnapshot["state"], { label: string; tone: string; Icon: LucideIcon }> = {
@@ -46,14 +47,14 @@ const stop = (event: SyntheticEvent) => event.stopPropagation();
 export const linkHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 
 export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
-  return links.some((link) => link.kind === "pr" || link.kind === "t3_thread");
+  return cardLinks(links).length > 0;
 }
 
-/** Card line 4: PR chips and "Open in T3 Code" thread buttons. */
+/** Card line 4: PR chips and "Open in T3 Code" buttons for active threads. */
 export function CardLinks({ links }: { links: ReadonlyArray<TaskLink> }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
-      {links.map((link) =>
+      {cardLinks(links).map((link) =>
         link.kind === "pr" ? (
           <PrChip key={link.id} link={link} />
         ) : link.kind === "t3_thread" ? (
