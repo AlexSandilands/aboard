@@ -4,6 +4,13 @@ import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
 import { DEFAULT_COLLAPSE, migrateBoardView } from "./boardView.logic";
 import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
+import {
+  moveSection,
+  normalizeSectionLayout,
+  SECTION_IDS,
+  type SectionId,
+  type SectionLayout,
+} from "~/components/task/sections.logic";
 import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
 
 /** Persisted board view preferences. */
@@ -74,17 +81,57 @@ interface TaskPanelPrefsState {
   /** More-menu actions pinned beside the title. Stored values are re-validated by normalizePins. */
   pinnedActions: PinnableAction[];
   togglePinnedAction: (id: PinnableAction) => void;
+  /** Section order, hidden sections and collapse choices. Read through useSectionLayout, which re-validates them. */
+  sections: Partial<SectionLayout>;
+  setSectionCollapsed: (id: SectionId, collapsed: boolean) => void;
+  setAllSectionsCollapsed: (collapsed: boolean) => void;
+  moveSection: (id: SectionId, overId: SectionId) => void;
+  setSectionHidden: (id: SectionId, hidden: boolean) => void;
+  showAllSections: () => void;
+  resetSections: () => void;
 }
 
 export const useTaskPanelPrefs = create<TaskPanelPrefsState>()(
   persist(
-    (set) => ({
-      pinnedActions: [],
-      togglePinnedAction: (id) => set((s) => ({ pinnedActions: togglePin(s.pinnedActions, id) })),
-    }),
-    { name: storageKey("task-panel"), partialize: ({ pinnedActions }) => ({ pinnedActions }) },
+    (set) => {
+      const updateSections = (update: (layout: SectionLayout) => Partial<SectionLayout>) =>
+        set((s) => {
+          const layout = normalizeSectionLayout(s.sections);
+          return { sections: { ...layout, ...update(layout) } };
+        });
+      return {
+        pinnedActions: [],
+        togglePinnedAction: (id) => set((s) => ({ pinnedActions: togglePin(s.pinnedActions, id) })),
+        sections: {},
+        setSectionCollapsed: (id, collapsed) =>
+          updateSections((l) => ({ collapsed: { ...l.collapsed, [id]: collapsed } })),
+        setAllSectionsCollapsed: (collapsed) =>
+          updateSections(() => ({ collapsed: Object.fromEntries(SECTION_IDS.map((id) => [id, collapsed])) })),
+        moveSection: (id, overId) => updateSections((l) => ({ order: moveSection(l.order, id, overId) })),
+        setSectionHidden: (id, hidden) =>
+          updateSections((l) => ({ hidden: hidden ? [...l.hidden, id] : l.hidden.filter((h) => h !== id) })),
+        showAllSections: () => updateSections(() => ({ hidden: [] })),
+        resetSections: () => set({ sections: {} }),
+      };
+    },
+    {
+      name: storageKey("task-panel"),
+      partialize: ({ pinnedActions, sections }) => ({ pinnedActions, sections }),
+    },
   ),
 );
+
+/** The validated section layout. Memoised on the stored object so selectors stay referentially stable. */
+const layoutCache = new WeakMap<object, SectionLayout>();
+export function useSectionLayout(): SectionLayout {
+  const stored = useTaskPanelPrefs((s) => s.sections);
+  let layout = layoutCache.get(stored);
+  if (!layout) {
+    layout = normalizeSectionLayout(stored);
+    layoutCache.set(stored, layout);
+  }
+  return layout;
+}
 
 /** Command palette entry points. Views are pushed onto a stack inside the palette. */
 export type PaletteIntent =
