@@ -25,18 +25,17 @@ export interface VisibleCellTasks {
 }
 
 /**
- * The cards a cell renders. A collapsed column keeps the first few, plus the selected card when it
- * falls past them so a task opened by link is never hidden.
+ * The cards a cell renders. A collapsed column keeps the first few, plus any of `keepIds` that fall
+ * past them (the selected card, the card being dragged) so those are never hidden.
  */
 export function visibleCellTasks(
   tasks: ReadonlyArray<TaskSummary>,
   collapsed: boolean,
-  selectedTaskId: string | null,
+  keepIds: ReadonlyArray<string | null>,
 ): VisibleCellTasks {
   if (!collapsed || tasks.length <= COLUMN_PREVIEW_COUNT) return { visible: tasks, hiddenCount: 0 };
   const visible = tasks.slice(0, COLUMN_PREVIEW_COUNT);
-  const selected = selectedTaskId ? tasks.slice(COLUMN_PREVIEW_COUNT).find((t) => t.id === selectedTaskId) : undefined;
-  if (selected) visible.push(selected);
+  for (const task of tasks.slice(COLUMN_PREVIEW_COUNT)) if (keepIds.includes(task.id)) visible.push(task);
   return { visible, hiddenCount: tasks.length - visible.length };
 }
 

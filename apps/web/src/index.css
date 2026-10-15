@@ -176,6 +176,14 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
+  --animate-card-lift: card-lift 160ms cubic-bezier(0.2, 0, 0, 1);
+  @keyframes card-lift {
+    /* From the resting card to the overlay's lifted scale and shadow. */
+    from {
+      scale: 1;
+      box-shadow: none;
+    }
+  }
   @keyframes skeleton {
     /* One opacity breath per loading bar, stepped so the compositor draws a
        handful of discrete frames per cycle rather than one per vsync. */

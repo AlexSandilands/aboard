@@ -193,29 +193,37 @@ describe("visibleCellTasks", () => {
   const ids = (list: ReadonlyArray<TaskSummary>) => list.map((t) => t.id);
 
   it("shows every card when the column is expanded", () => {
-    expect(visibleCellTasks(tasks, false, null)).toEqual({ visible: tasks, hiddenCount: 0 });
+    expect(visibleCellTasks(tasks, false, [])).toEqual({ visible: tasks, hiddenCount: 0 });
   });
 
   it("shows every card when a collapsed cell is within the preview", () => {
     const few = tasks.slice(0, COLUMN_PREVIEW_COUNT);
-    expect(visibleCellTasks(few, true, null)).toEqual({ visible: few, hiddenCount: 0 });
+    expect(visibleCellTasks(few, true, [])).toEqual({ visible: few, hiddenCount: 0 });
   });
 
   it("truncates a collapsed cell to the preview", () => {
-    const result = visibleCellTasks(tasks, true, null);
+    const result = visibleCellTasks(tasks, true, [null]);
     expect(ids(result.visible)).toEqual(ids(tasks.slice(0, COLUMN_PREVIEW_COUNT)));
     expect(result.hiddenCount).toBe(3);
   });
 
   it("keeps the selected card visible when it is past the preview", () => {
     const selected = tasks[COLUMN_PREVIEW_COUNT + 1]!;
-    const result = visibleCellTasks(tasks, true, selected.id);
+    const result = visibleCellTasks(tasks, true, [selected.id]);
     expect(ids(result.visible)).toEqual([...ids(tasks.slice(0, COLUMN_PREVIEW_COUNT)), selected.id]);
     expect(result.hiddenCount).toBe(2);
   });
 
+  it("keeps several cards visible in cell order", () => {
+    const dragged = tasks[COLUMN_PREVIEW_COUNT]!;
+    const selected = tasks[COLUMN_PREVIEW_COUNT + 2]!;
+    const result = visibleCellTasks(tasks, true, [selected.id, dragged.id]);
+    expect(ids(result.visible).slice(COLUMN_PREVIEW_COUNT)).toEqual([dragged.id, selected.id]);
+    expect(result.hiddenCount).toBe(1);
+  });
+
   it("does not duplicate a selected card already in the preview", () => {
-    const result = visibleCellTasks(tasks, true, tasks[0]!.id);
+    const result = visibleCellTasks(tasks, true, [tasks[0]!.id]);
     expect(result.visible).toHaveLength(COLUMN_PREVIEW_COUNT);
     expect(result.hiddenCount).toBe(3);
   });

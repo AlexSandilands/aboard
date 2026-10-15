@@ -21,6 +21,7 @@ export const BoardLane = memo(function BoardLane({
   project,
   cells,
   selectedTaskId,
+  draggingTaskId,
   overStatus,
   overInvalid,
   onToggleCollapsed,
@@ -28,6 +29,8 @@ export const BoardLane = memo(function BoardLane({
   project: Project;
   cells: LaneCells;
   selectedTaskId: string | null;
+  /** The card being dragged, when it belongs to this lane. */
+  draggingTaskId: string | null;
   /** The cell currently hovered by a dragged card, if it is in this lane. */
   overStatus: TaskStatus | null;
   overInvalid: boolean;
@@ -87,6 +90,7 @@ export const BoardLane = memo(function BoardLane({
               tasks={cells[status]}
               toggleRow={toggleRow}
               selectedTaskId={selectedTaskId}
+              draggingTaskId={draggingTaskId}
               dropState={overStatus === status ? (overInvalid ? "invalid" : "valid") : null}
             />
           ))}

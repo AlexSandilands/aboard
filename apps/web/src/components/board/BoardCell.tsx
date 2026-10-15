@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import type { TaskStatus, TaskSummary } from "@repo/contracts";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { memo, useMemo } from "react";
@@ -11,6 +11,9 @@ import { isCellCollapsed } from "./columnCollapse.logic";
 import { cellDroppableId, cellKey, type DragData } from "./dnd.logic";
 import { SortableTaskCard } from "./TaskCard";
 
+// Done is newest-first whatever the drag, so its cards don't shuffle to make room.
+const noSorting: SortingStrategy = () => null;
+
 export type CellDropState = "valid" | "invalid" | null;
 
 /** One project × status cell: a droppable column segment holding sortable cards. */
@@ -20,6 +23,7 @@ export const BoardCell = memo(function BoardCell({
   tasks,
   toggleRow,
   selectedTaskId,
+  draggingTaskId,
   dropState,
 }: {
   projectId: string;
@@ -28,6 +32,8 @@ export const BoardCell = memo(function BoardCell({
   /** Some cell in this lane has a collapse toggle; the others keep a spacer so cards stay aligned. */
   toggleRow: boolean;
   selectedTaskId: string | null;
+  /** The card being dragged, when it belongs to this lane; a collapsed cell keeps it in view. */
+  draggingTaskId: string | null;
   dropState: CellDropState;
 }) {
   const data: DragData = { type: "cell", projectId, status };
@@ -35,8 +41,8 @@ export const BoardCell = memo(function BoardCell({
   const collapsed = useBoardView((s) => isCellCollapsed(s, projectId, status));
   const toggleCellCollapsed = useBoardView((s) => s.toggleCellCollapsed);
   const { visible, hiddenCount } = useMemo(
-    () => visibleCellTasks(tasks, collapsed, selectedTaskId),
-    [tasks, collapsed, selectedTaskId],
+    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId]),
+    [tasks, collapsed, selectedTaskId, draggingTaskId],
   );
   const ids = useMemo(() => visible.map((task) => task.id), [visible]);
 
@@ -64,7 +70,11 @@ export const BoardCell = memo(function BoardCell({
       ) : toggleRow ? (
         <div aria-hidden className="h-7 shrink-0 sm:h-6" />
       ) : null}
-      <SortableContext id={cellKey(projectId, status)} items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext
+        id={cellKey(projectId, status)}
+        items={ids}
+        strategy={status === "done" ? noSorting : verticalListSortingStrategy}
+      >
         {visible.map((task) => (
           <SortableTaskCard key={task.id} task={task} selected={task.id === selectedTaskId} />
         ))}

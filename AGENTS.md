@@ -47,8 +47,9 @@ pnpm lint:fix       # oxlint autofix
 pnpm --filter @repo/server test -- src/services/tasks.test.ts   # one file
 ```
 
-Git hooks (lefthook) format and lint staged files on commit, check the commit message, and run
-typecheck, test and knip on push. Don't bypass them; fix the cause.
+Git hooks (lefthook) format and lint staged files and check the commit message on commit. There is
+no pre-push hook: run `pnpm check` before pushing; CI runs it on ubuntu and windows and lints every PR
+commit message. Don't bypass the hooks; fix the cause.
 
 ## Conventions
 

@@ -1,4 +1,5 @@
-import type { TaskStatus } from "@repo/contracts";
+import type { TaskStatus, TaskSummary } from "@repo/contracts";
+import { STATUS_ORDER, type Lane } from "./board.logic";
 
 /** What a draggable card or a droppable cell carries in its dnd-kit `data`. */
 export interface DragData {
@@ -15,7 +16,96 @@ export function readDragData(value: unknown): DragData | null {
 }
 
 export const cellKey = (projectId: string, status: TaskStatus) => `${projectId}:${status}`;
+export function parseCellKey(key: unknown): { projectId: string; status: TaskStatus } | null {
+  if (typeof key !== "string") return null;
+  const split = key.lastIndexOf(":");
+  const status = key.slice(split + 1);
+  if (split <= 0 || !STATUS_ORDER.includes(status as TaskStatus)) return null;
+  return { projectId: key.slice(0, split), status: status as TaskStatus };
+}
 export const cellDroppableId = (projectId: string, status: TaskStatus) => `cell:${projectId}:${status}`;
+
+/** Where the dragged card shows while it hovers another column of its own lane. */
+export interface DragPlacement {
+  taskId: string;
+  projectId: string;
+  status: TaskStatus;
+  /** Index in the target cell's rendered cards, not counting the dragged card. */
+  index: number;
+}
+
+export interface PlacementInput {
+  task: { id: string; projectId: string; status: TaskStatus };
+  target: { projectId: string; status: TaskStatus };
+  /** Ids of the hovered cell as rendered, in order. */
+  cellTaskIds: ReadonlyArray<string>;
+  /** The card under the pointer, or null when hovering the cell itself. */
+  overTaskId: string | null;
+  /** Whether the dragged card's centre is below the hovered card's centre. */
+  placeAfter: boolean;
+}
+
+/**
+ * Where to open a gap for the dragged card. Null means no preview: the card's own column (sortable
+ * handles reordering there) or another project's lane (tasks never change project by dragging).
+ * Done is newest-first on the server too, so a card dragged into Done always shows at the top.
+ */
+export function previewPlacement(input: PlacementInput): DragPlacement | null {
+  const { task, target, cellTaskIds, overTaskId, placeAfter } = input;
+  if (target.projectId !== task.projectId || target.status === task.status) return null;
+  const placement = { taskId: task.id, projectId: target.projectId, status: target.status };
+  if (target.status === "done") return { ...placement, index: 0 };
+  const others = cellTaskIds.filter((id) => id !== task.id);
+  const overIndex = overTaskId === null ? -1 : others.indexOf(overTaskId);
+  return { ...placement, index: overIndex < 0 ? others.length : overIndex + (placeAfter ? 1 : 0) };
+}
+
+export const samePlacement = (a: DragPlacement | null, b: DragPlacement | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.taskId === b.taskId &&
+    a.projectId === b.projectId &&
+    a.status === b.status &&
+    a.index === b.index);
+
+/**
+ * The lanes as shown mid-drag, and right after a drop until the cache has the move: the dragged
+ * card moved into its placement. Only the lane and the cells involved are new objects, so every
+ * other memoized lane and cell skips rendering.
+ */
+export function previewMove(lanes: ReadonlyArray<Lane>, placement: DragPlacement | null): ReadonlyArray<Lane> {
+  if (!placement) return lanes;
+  const lane = lanes.find((l) => l.project.id === placement.projectId);
+  if (!lane) return lanes;
+  const from = STATUS_ORDER.find((status) => lane.cells[status].some((t) => t.id === placement.taskId));
+  if (!from) return lanes;
+  const source = lane.cells[from];
+  const task = source.find((t) => t.id === placement.taskId)!;
+  const rest = (from === placement.status ? source : lane.cells[placement.status]).filter((t) => t !== task);
+  const index = Math.min(placement.index, rest.length);
+  if (from === placement.status && source[index] === task) return lanes;
+  const cells: Record<TaskStatus, ReadonlyArray<TaskSummary>> = { ...lane.cells };
+  cells[from] = source.filter((t) => t !== task);
+  cells[placement.status] = [...rest.slice(0, index), task, ...rest.slice(index)];
+  return lanes.map((l) => (l === lane ? { project: lane.project, cells } : l));
+}
+
+/**
+ * Where a dropped card ends up once the move lands: its slot among the target cell's other
+ * rendered cards. Held as the placement until the cache has the move, which arrives a tick later.
+ */
+export function placementAfterDrop(
+  task: { id: string; projectId: string },
+  cellTaskIds: ReadonlyArray<string>,
+  move: Extract<DropResult, { kind: "move" }>,
+): DragPlacement {
+  const others = cellTaskIds.filter((id) => id !== task.id);
+  const after = move.afterId === undefined ? -1 : others.indexOf(move.afterId);
+  const before = move.beforeId === undefined ? -1 : others.indexOf(move.beforeId);
+  const index = move.status === "done" ? 0 : after >= 0 ? after + 1 : before >= 0 ? before : others.length;
+  return { taskId: task.id, projectId: task.projectId, status: move.status, index };
+}
 
 export type DropResult =
   | { kind: "invalid" }
@@ -25,53 +115,46 @@ export type DropResult =
 export interface DropInput {
   task: { id: string; projectId: string; status: TaskStatus };
   target: { projectId: string; status: TaskStatus };
-  /** Ids of the target cell as rendered, in order. May include the dragged task. */
+  /**
+   * Ids of the target cell as the user saw them at the drop, in order: the drag preview, so a card
+   * brought in from another column is already in it. Leave out cards that can't anchor a move.
+   */
   cellTaskIds: ReadonlyArray<string>;
   /** The card under the pointer, or null when dropped on the cell itself. */
   overTaskId: string | null;
-  /** For cross-cell drops: whether the dragged card's centre is below the hovered card's centre. */
-  placeAfter: boolean;
 }
 
 /**
- * Turns a drop into a move request. Tasks never change project by dragging. Within a cell,
- * the order follows sortable semantics (the card takes the hovered card's slot); across cells
- * the card lands before/after the hovered card, or at the end of the cell. Done is ordered by
- * completion time, so reordering inside Done does nothing.
+ * Turns a drop into a move request. Tasks never change project by dragging. The card takes the
+ * hovered card's slot (sortable semantics) in the order the user saw, or stays where the preview
+ * put it when dropped on the cell. Done is ordered by completion time, so a card moved there needs
+ * no neighbours and reordering inside Done does nothing.
  */
 export function computeDrop(input: DropInput): DropResult {
-  const { task, target, cellTaskIds, overTaskId, placeAfter } = input;
+  const { task, target, cellTaskIds, overTaskId } = input;
   if (target.projectId !== task.projectId) return { kind: "invalid" };
 
-  if (target.status === task.status) {
-    if (task.status === "done") return { kind: "noop" };
-    if (overTaskId === null || overTaskId === task.id) return { kind: "noop" };
-    const from = cellTaskIds.indexOf(task.id);
-    const to = cellTaskIds.indexOf(overTaskId);
-    if (from < 0 || to < 0) return { kind: "noop" };
-    const reordered = [...cellTaskIds];
-    reordered.splice(from, 1);
-    reordered.splice(to, 0, task.id);
-    return neighbours(target.status, reordered, to);
-  }
+  const ordered = cellTaskIds.includes(task.id) ? [...cellTaskIds] : [...cellTaskIds, task.id];
+  const from = ordered.indexOf(task.id);
+  const overIndex = overTaskId === null || overTaskId === task.id ? -1 : ordered.indexOf(overTaskId);
+  const to = overIndex < 0 ? from : overIndex;
+  ordered.splice(from, 1);
+  ordered.splice(to, 0, task.id);
 
-  const others = cellTaskIds.filter((id) => id !== task.id);
-  const overIndex = overTaskId === null ? -1 : others.indexOf(overTaskId);
-  if (overIndex < 0) {
-    const last = others.at(-1);
-    return last ? { kind: "move", status: target.status, afterId: last } : { kind: "move", status: target.status };
+  if (target.status === task.status) {
+    if (task.status === "done" || to === from) return { kind: "noop" };
+    return neighbours(target.status, ordered, to) ?? { kind: "noop" };
   }
-  return placeAfter
-    ? { kind: "move", status: target.status, afterId: others[overIndex] }
-    : { kind: "move", status: target.status, beforeId: others[overIndex] };
+  if (target.status === "done") return { kind: "move", status: "done" };
+  return neighbours(target.status, ordered, to) ?? { kind: "move", status: target.status };
 }
 
-function neighbours(status: TaskStatus, ordered: ReadonlyArray<string>, index: number): DropResult {
+function neighbours(status: TaskStatus, ordered: ReadonlyArray<string>, index: number): DropResult | null {
   const afterId = ordered[index - 1];
   if (afterId !== undefined) return { kind: "move", status, afterId };
   const beforeId = ordered[index + 1];
   if (beforeId !== undefined) return { kind: "move", status, beforeId };
-  return { kind: "noop" };
+  return null;
 }
 
 /**
