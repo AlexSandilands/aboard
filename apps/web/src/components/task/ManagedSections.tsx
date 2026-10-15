@@ -23,7 +23,7 @@ import { createPortal } from "react-dom";
 
 import { cn } from "~/lib/utils";
 import { useSectionLayout, useTaskPanelPrefs } from "~/state/ui";
-import { isSectionExpanded, SECTION_TITLES, summarizeSection, type SectionId } from "./sections.logic";
+import { collapsedByDefault, SECTION_TITLES, summarizeSection, type SectionId } from "./sections.logic";
 
 const modifiers = [restrictToVerticalAxis];
 
@@ -47,9 +47,14 @@ export function useSortableSensors() {
   );
 }
 
-/** Saved choice, else the smart default for this task. */
-export function useSectionExpanded(id: SectionId, task: TaskDetail): boolean {
-  return isSectionExpanded(id, task, useSectionLayout().collapsed);
+/**
+ * Saved choice, else the smart default for this task. The default is taken when the section mounts (the
+ * panel remounts per task), so removing the last link doesn't snap Links shut while it's in use.
+ */
+function useSectionExpanded(id: SectionId, task: TaskDetail) {
+  const [byDefault] = useState(() => collapsedByDefault(id, task));
+  const saved = useSectionLayout().collapsed[id];
+  return { expanded: !(saved ?? byDefault), byDefault };
 }
 
 /**
@@ -111,7 +116,7 @@ export function ManagedSections({ task, render }: { task: TaskDetail; render: (i
 }
 
 function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetail; children: ReactNode }) {
-  const expanded = useSectionExpanded(id, task);
+  const { expanded, byDefault } = useSectionExpanded(id, task);
   const setCollapsed = useTaskPanelPrefs((s) => s.setSectionCollapsed);
   const { setNodeRef, setActivatorNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({
     id,
@@ -121,7 +126,7 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
     () => ({
       id,
       expanded,
-      onToggle: () => setCollapsed(id, expanded),
+      onToggle: () => setCollapsed(id, expanded, byDefault),
       summary,
       dragHandle: (
         <button
@@ -136,7 +141,7 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
         </button>
       ),
     }),
-    [id, expanded, summary, setCollapsed, setActivatorNodeRef, attributes, listeners],
+    [id, expanded, byDefault, summary, setCollapsed, setActivatorNodeRef, attributes, listeners],
   );
   return (
     <div

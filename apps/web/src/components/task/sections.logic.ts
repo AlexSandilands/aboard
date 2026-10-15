@@ -93,8 +93,17 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
   }
 }
 
-export function isSectionExpanded(id: SectionId, task: SectionTask, collapsed: SectionLayout["collapsed"]): boolean {
-  return !(collapsed[id] ?? collapsedByDefault(id, task));
+/** Records a collapse choice; choosing the section's default clears it so the smart default applies again. */
+export function withCollapseChoice(
+  collapsed: SectionLayout["collapsed"],
+  id: SectionId,
+  value: boolean,
+  byDefault: boolean,
+): SectionLayout["collapsed"] {
+  const next = { ...collapsed };
+  if (value === byDefault) delete next[id];
+  else next[id] = value;
+  return next;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

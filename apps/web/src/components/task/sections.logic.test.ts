@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   collapsedByDefault,
   firstLine,
-  isSectionExpanded,
   moveSection,
   normalizeSectionLayout,
   SECTION_IDS,
   summarizeSection,
   type SectionTask,
+  withCollapseChoice,
 } from "./sections.logic";
 
 const NOW = Date.parse("2026-10-15T12:00:00Z");
@@ -92,11 +92,14 @@ describe("collapsedByDefault", () => {
   });
 });
 
-describe("isSectionExpanded", () => {
-  it("prefers the saved choice over the default", () => {
-    expect(isSectionExpanded("links", task(), {})).toBe(false);
-    expect(isSectionExpanded("links", task(), { links: false })).toBe(true);
-    expect(isSectionExpanded("plan", task(), { plan: true })).toBe(false);
+describe("withCollapseChoice", () => {
+  it("saves a choice that differs from the default", () => {
+    expect(withCollapseChoice({}, "links", false, true)).toEqual({ links: false });
+    expect(withCollapseChoice({ plan: true }, "links", true, false)).toEqual({ plan: true, links: true });
+  });
+
+  it("clears the choice when it matches the default", () => {
+    expect(withCollapseChoice({ links: false, plan: true }, "links", true, true)).toEqual({ plan: true });
   });
 });
 

@@ -50,6 +50,8 @@ const ICONS: Record<ActivityIcon, ReactNode> = {
 
 /** Handover input plus the task's event log, newest first (T3 WorkLog line style). */
 export function ActivityLog({ task, projects }: { task: TaskDetail; projects: ReadonlyArray<Project> }) {
+  // Held here rather than in the input: collapsing the section unmounts the input, not this.
+  const [draft, setDraft] = useState("");
   const lines = useMemo(() => {
     const ctx = {
       steps: stepIndexLabels(task.phases),
@@ -64,7 +66,7 @@ export function ActivityLog({ task, projects }: { task: TaskDetail; projects: Re
       actions={<span className="text-2xs text-muted-foreground tabular-nums">{task.events.length}</span>}
     >
       <div className="px-1.5">
-        <AddNoteInput taskId={task.id} />
+        <AddNoteInput taskId={task.id} draft={draft} onDraftChange={setDraft} />
       </div>
       <ol className="mt-2 flex flex-col px-1.5">
         {lines.map(({ event, line }) => (
@@ -96,8 +98,15 @@ export function ActivityLog({ task, projects }: { task: TaskDetail; projects: Re
 }
 
 /** Notes are handovers: what was done, what's next, anything surprising. */
-function AddNoteInput({ taskId }: { taskId: string }) {
-  const [draft, setDraft] = useState("");
+function AddNoteInput({
+  taskId,
+  draft,
+  onDraftChange: setDraft,
+}: {
+  taskId: string;
+  draft: string;
+  onDraftChange: (draft: string) => void;
+}) {
   const { mutate: addNote, isPending } = useAddNote();
   return (
     <Input
