@@ -41,8 +41,8 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
   - Anything without a matching id is new; anything omitted is deleted.
   - Positions are regenerated in input order. `context` updates the plan context only when given.
 - Smaller edits: `add_steps` (to a phase by number or id, the last phase by default, or a new phase),
-  `update_step` (status, title, notes, `appendNotes`), and the REST routes for phases and steps
-  (add, rename, move, delete).
+  `update_step` (status, title, notes, `appendNotes`), and REST: steps can be added, edited, moved and
+  deleted; phases can be added, renamed and deleted.
 - Steps are referenced by id or by their `2.3` label.
 
 ### The gate on the plan side
@@ -94,6 +94,7 @@ Phase 1: Structure
 | `apps/server/src/services/plans.ts`         | `replacePlan`, `gate`, phase and step edits, `resolveStepId`, `withStatus` |
 | `apps/server/src/mcp/tools/plans.ts`        | `set_plan`, `add_steps`, `update_step`                               |
 | `apps/server/src/http/routes/plans.ts`      | REST for phases and steps                                            |
+| `apps/server/src/http/routes/tasks.ts`      | `PUT /api/tasks/:id/plan` and `POST /api/tasks/:id/phases`           |
 | `packages/contracts/src/planMarkdown.ts`    | `parsePlanMarkdown`                                                  |
 | `packages/contracts/src/derive.ts`          | `deriveProgress`, `deriveCurrentStep`, `formatPlanText`              |
 | `apps/web/src/components/task/PlanTimeline.tsx`, `PlanPhaseGroup.tsx`, `PlanStepRow.tsx`, `PlanEditor.tsx` | The timeline and editor; logic in `plan.logic.ts` |

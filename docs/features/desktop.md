@@ -19,8 +19,8 @@ On start (`apps/desktop/src/server.ts`, `connectServer`) the shell probes
 | Nothing                             | Spawns the server                                                 |
 
 Spawning forks the bundled server (`apps/server/dist/server.mjs`, from `pnpm --filter @repo/server bundle`)
-in an Electron `utilityProcess`. It gets the port and the web dist through env vars, plus
-`NODE_NO_WARNINGS`. Its output goes to `server.log` in the app's logs folder; startup failures show the
+in an Electron `utilityProcess`. It gets the port through env vars (and, when packaged, the
+bundled web dist), plus `NODE_NO_WARNINGS`. Its output goes to `server.log` in the app's logs folder; startup failures show the
 last 40 lines in a dialog.
 
 ### The server's side

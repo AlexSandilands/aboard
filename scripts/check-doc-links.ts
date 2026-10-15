@@ -27,9 +27,15 @@ const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclud
 
 /** Blanks out fenced blocks and code spans, keeping line breaks so line numbers still match. */
 function withoutCode(markdown: string): string {
-  return markdown
-    .replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, (block) => block.replace(/[^\n]/g, " "))
-    .replace(/(`+)[^`\n]*?\1/g, (span) => " ".repeat(span.length));
+  return (
+    markdown
+      // A fence may be indented (inside a list item); it closes on a fence of the same kind at least as long,
+      // or at the end of the file.
+      .replace(/^ *(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ *\1[`~]*[ \t]*$|(?![\s\S]))/gm, (block) =>
+        block.replace(/[^\n]/g, " "),
+      )
+      .replace(/(`+)[^`\n]*?\1/g, (span) => " ".repeat(span.length))
+  );
 }
 
 function lineOf(text: string, index: number): number {
@@ -51,7 +57,13 @@ for (const file of files) {
     const target = match[1]!;
     // Skip URLs with a scheme (https:, mailto:, t3code:) and same-page anchors.
     if (/^[a-z][\w+.-]*:/i.test(target) || target.startsWith("#")) continue;
-    const path = decodeURIComponent(target.replace(/[?#].*$/, ""));
+    let path: string;
+    try {
+      path = decodeURIComponent(target.replace(/[?#].*$/, ""));
+    } catch {
+      broken.push(`${file}:${lineOf(prose, match.index)}  ${target} (bad %-escape)`);
+      continue;
+    }
     const resolved = path.startsWith("/") ? join(root, path) : join(root, dirname(file), path);
     if (!existsSync(resolved)) {
       broken.push(`${file}:${lineOf(prose, match.index)}  ${posix.normalize(target)}`);

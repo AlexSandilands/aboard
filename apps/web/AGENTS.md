@@ -7,8 +7,9 @@ React 19, Vite, Tailwind v4, Base UI, TanStack Query + zustand, TanStack Router.
 - Server state is in the TanStack Query cache, kept fresh by SSE: `useBoardEvents` in
   `state/queries.ts` applies events with `state/boardReducer.ts`. See
   [docs/features/live-sync.md](../../docs/features/live-sync.md).
-- Mutations (`state/mutations.ts`) don't patch the cache; the server's event does. Moving a card is the
-  one optimistic exception.
+- Mutation hooks (`state/mutations.ts`) don't write results into the cache; the server's event does.
+  Edits that must feel instant patch the cache optimistically in the caller and refetch on error
+  (card moves, lane collapse and order, plan edits, link removal).
 - UI-only state is in zustand stores in `state/ui.ts`. Persisted keys go through `storageKey()`.
 - All requests go through `api()` in `lib/api.ts`.
 

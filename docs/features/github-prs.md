@@ -51,9 +51,9 @@ already finished. Unpolled PRs (other hosts) never hold it back.
 
 ## Decisions
 
-- **`gh`, not the GitHub API.** No token to store or scope, and it works with whatever accounts and
-  enterprise hosts the user's `gh` is signed in to. The cost is a dependency on an installed CLI and
-  2-minute freshness.
+- **`gh`, not the GitHub API.** No token to store or scope; it uses the account the user's `gh` is
+  signed in to. The cost is a dependency on an installed CLI and 2-minute freshness. GitHub Enterprise
+  hosts aren't supported: the link parser and the poller only accept `github.com`.
 - **Other hosts are links only.** Azure DevOps and Bitbucket PRs are recognised so they show as PRs, but
   aren't polled.
 

@@ -23,4 +23,6 @@ repos (`apps/server/src/db/repos`), with no ORM. The engine requirement is Node 
 - Queries are synchronous, which suits a local app with one writer and keeps transactions simple.
 - Only one server process may own the file. The desktop app attaches to a running server rather than
   starting a second one.
-- Repos are the only code that knows SQL, so swapping the driver would be a change to `db/`.
+- Board SQL lives in `db/` (repos, migrations, transactions). The only other `node:sqlite` user is
+  `integrations/t3.ts`, which reads a copy of T3 Code's database for project import. Swapping the driver
+  would touch those two places.

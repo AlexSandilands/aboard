@@ -16,7 +16,8 @@ user visits, through cross-site requests and DNS rebinding.
   port (stops cross-site writes from browsers).
 - Requests without an `Origin`, such as agents and CLIs, are allowed.
 - An optional bearer token (`brandEnv("TOKEN")`) adds auth for `/api/*`, `/mcp` and `/events` when the
-  machine is shared.
+  machine is shared: an `Authorization: Bearer` header, or a `token` query parameter (EventSource can't
+  send headers, and the desktop's "Copy MCP URL" uses it).
 
 There are no accounts, sessions or roles.
 

@@ -49,9 +49,11 @@ ignored), then `agent`. The User-Agent step exists because a stateless server do
 Results are plain text, with no `structuredContent`: Claude Code shows `structuredContent` instead of the
 text when both are present.
 
-- Mutating tools return a headline plus the task's short render: status, progress, current step, the plan
-  with step ids (`1.2 [x] Title  (id: …)   <- current`), links, review state and **Missing links**.
-- `get_task` adds description, notes and recent activity, and a pointer when a review round is waiting.
+- Mutating tools return a headline plus the full task render without the activity log: status,
+  progress, current step, description, plan context, the plan with step ids
+  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**.
+- `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
+  review round is waiting.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`).
 
@@ -76,6 +78,10 @@ Descriptions are written for agents, and they are most of what an agent knows ab
 app, and no test ties them to the tool descriptions. When you rename a tool, change its arguments or change
 the workflow, update both, plus `INSTRUCTIONS`.
 
+`skills/aboard-review/SKILL.md` is different: it must match `BUILTIN_REVIEW_SKILL_BODY` in
+`packages/contracts/src/reviewPrompt.ts`, the review skill the server hands out, and
+`apps/server/src/skills.test.ts` enforces it. Change both together.
+
 ## Decisions
 
 - **Stateless.** No sessions to track or expire; any request can arrive on its own, which suits agents
@@ -95,3 +101,4 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |
+| `skills/aboard-review/SKILL.md`       | The review skill, kept identical to `BUILTIN_REVIEW_SKILL_BODY`      |

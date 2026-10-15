@@ -21,7 +21,8 @@ capture, with no plan.
 
 ## Consequences
 
-- Every card outside Ideas has a current step and progress.
+- Every task that left Ideas through a move has at least one plan step, so it shows progress, and a
+  current step until all its steps are done. Tasks closed with `close_task` are the exception.
 - The gate is enforced in services, so UI drags, REST and MCP all hit it. The UI turns the error into a
   "Write plan" prompt.
 - Agents have to plan before implementing, which the tool descriptions and the shipped skill explain.

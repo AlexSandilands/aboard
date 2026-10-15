@@ -16,8 +16,10 @@ reload. The board snapshot is small: one user's projects and their open tasks.
   refetches an open task's detail on `task.detail_changed`.
 - There are no event ids and no replay. After a reconnect the client refetches the board and task
   queries.
-- Mutations from the UI don't patch the cache themselves; the server's event does. Moving a card is the
-  one optimistic exception, so drag and drop feels instant.
+- The server's events are the source of truth. The mutation hooks don't write their results into the
+  cache. Small edits the user sees at once (moving a card, collapsing or reordering lanes, plan edits,
+  removing a link) patch the cache optimistically, and refetch or roll back on error; the event that
+  follows confirms them.
 
 ## Consequences
 

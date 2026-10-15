@@ -10,18 +10,19 @@ and MCP all behave the same.
 
 `idea → planned → in_progress → review → done`, shown as Ideas, Planned, In Progress, Review and Done.
 Any move in any direction is allowed, subject to the plan gate. `status_changed_at` is set only when the
-status really changes, and every change logs a `status_changed` event.
+status really changes. A move logs `status_changed`; closing logs `closed` instead.
 
 ### Creating
 
 - `create_idea` (MCP) or **New idea** (UI): no plan, lands in Ideas.
-- `create_task` (MCP): requires a plan and lands in Planned. A `POST /api/tasks` with a plan that has at
-  least one step lands in Planned; without one, in Ideas.
+- `create_task` (MCP): requires a plan and lands in Planned. Like `POST /api/tasks`, it lands in Ideas
+  instead when no phase of the plan has a step.
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
   keys in the title are linked automatically (on later title edits too).
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
-  path, deepest first. An unknown path creates a project at the nearest folder with a `.git`, and an
-  archived match is unarchived.
+  path, deepest first. `create_idea` and `create_task` create a project for an unknown path (at the
+  nearest folder with a `.git`, else the path itself) and unarchive an archived match. Other write tools
+  return `NOT_FOUND` for an unknown path; read tools treat it as an empty project.
 
 ### The plan gate
 
@@ -37,7 +38,8 @@ The plan side of the gate (a plan can't be emptied outside Ideas) is in [plans.m
 ### Entering Review
 
 - If every polled PR of the task is merged or closed (at least one merged), the move goes straight on to
-  Done, as actor `github`. See [github-prs.md](github-prs.md).
+  Done, as actor `github`. Not when the task comes back from Done (a deliberate reopen), nor for an
+  archived task. See [github-prs.md](github-prs.md).
 - If the task is still in Review and local review applies to it, a review round opens. See
   [local-review.md](local-review.md).
 

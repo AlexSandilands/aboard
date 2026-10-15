@@ -9,7 +9,8 @@ to its TanStack Query cache.
 ### Server
 
 - Services publish `BoardEvent`s on the in-process `EventBus` after each committed write
-  ([architecture.md](../architecture.md#how-a-change-flows)).
+  ([architecture.md](../architecture.md#how-a-change-flows)). The T3 poller publishes
+  `integrations.changed` itself when T3 Code's status changes.
 - `GET /events` (`apps/server/src/sse.ts`) sends `event: ready` first, then each event as a default
   `message` with JSON data, and `event: ping` after 25 seconds idle. Every client gets every event.
 
@@ -20,7 +21,7 @@ to its TanStack Query cache.
 | `task.upserted`        | the full `TaskSummary` (card) | Replaces the card; an archived task is removed      |
 | `task.deleted`         | `taskId`                      | Removes the card, resets an open panel's query      |
 | `task.detail_changed`  | `taskId`                      | Invalidates that task's detail query                |
-| `integrations.changed` | T3 Code status                | Invalidates the integrations query                  |
+| `integrations.changed` | T3 Code status                | Patches the board's T3 status, invalidates the integrations query |
 
 `task.upserted` is always followed by `task.detail_changed`. Changes that only affect a task's detail send
 `task.detail_changed` alone.
@@ -36,17 +37,25 @@ to its TanStack Query cache.
 
 ### Mutations
 
-`state/mutations.ts` doesn't patch the cache after a mutation: the server's event does. Errors become
-toasts, unless the caller handles them.
+The hooks in `state/mutations.ts` don't write their results into the cache: the server's event brings
+the change. Errors become toasts, unless the caller handles them. Settings are the exception: the
+response replaces the settings query.
 
-Moving a card is the exception. `useMoveTask` applies the move optimistically before the request
-(`optimisticMove`), so a drag never snaps back while the request is in flight. On failure it rolls back
-only if the card is still where the optimistic move put it (`rollbackMove`), so a newer event isn't
-undone.
+Edits the user should see at once are optimistic, applied by the caller before the request:
+
+- **Moving a card:** `useMoveTask` applies the move (`optimisticMove`) so a drag never snaps back while
+  the request is in flight. On failure it rolls back only if the card is still where the optimistic move
+  put it (`rollbackMove`), so a newer event isn't undone.
+- **Lanes:** collapsing and reordering projects patch the board (`Board.tsx`, `ProjectsSection.tsx`).
+- **Task detail:** step and phase edits (`usePlanActions.ts`) and removing a link (`LinksSection.tsx`)
+  patch the open task's detail.
+
+These refetch the query on error. Follow the same pattern for new edits that must feel instant.
 
 ### UI state
 
-State that isn't server data lives in zustand stores in `state/ui.ts`: board filters, appearance,
+State that isn't server data lives in zustand stores in `state/ui.ts`: board filters (not the search),
+appearance,
 pinned panel actions and the palette's last project are persisted under `storageKey(...)`; dialogs and
 panel requests aren't.
 

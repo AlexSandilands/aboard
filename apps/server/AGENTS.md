@@ -8,7 +8,8 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
 - `services/*` holds all business logic. REST routes (`http/routes`), MCP tools (`mcp/tools`) and
   pollers (`integrations`) stay thin: parse, call a service, format
   ([ADR 0001](../../docs/decisions/0001-service-layer.md)).
-- `db/repos/*` is the only code that writes SQL. Repos are thin and typed, with no ORM.
+- Board data SQL lives in `db/repos/*` (thin and typed, no ORM); migrations and transactions are in
+  `db/database.ts`.
 - `integrations/*` talks to the outside world (`gh`, T3 Code, `claude -p`). Inject process and network
   calls so tests can fake them (see `test/fakeT3Socket.ts`).
 
