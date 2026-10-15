@@ -17,16 +17,17 @@ import type {
   TaskDetail,
   TaskLink,
   TaskReview,
-  TaskStatus,
   TaskSummary,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { api, ApiError } from "~/lib/api";
+import { captureCardRect } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
-import { optimisticMove } from "./boardReducer";
+import { applyMove, moveWasReverted, rollbackMove } from "./boardReducer";
 import { queryKeys } from "./queries";
 
 /*
@@ -101,28 +102,37 @@ export const useAddNote = (opts?: MutationOpts) =>
     opts,
   );
 
+type MoveVars = MoveTaskInput & { id: string };
+
 /**
- * Moves a task (status and/or order) with an optimistic board update, rolled back on error.
- * PLAN_REQUIRED errors are NOT toasted here — check `isPlanRequired(error)` in onError and
- * offer to write a plan.
+ * Moves a task (status and/or order). `mutate` and `mutateAsync` write the optimistic move
+ * synchronously, so a dropped card renders in its new slot in the same commit that ends the drag and
+ * the drop animation lands there. A failed move slides the card back. PLAN_REQUIRED errors are NOT
+ * toasted here: check `isPlanRequired(error)` in onError and offer to write a plan.
  */
 export function useMoveTask() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...input }: MoveTaskInput & { id: string }) =>
-      api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
-    onMutate: async ({ id, status, beforeId, afterId }) => {
+  // Each move's task before and after the optimistic write, keyed by the variables object.
+  const [moves] = useState(() => new WeakMap<MoveVars, { original: TaskSummary; moved: TaskSummary }>());
+  const mutation = useMutation({
+    mutationFn: ({ id, ...input }: MoveVars) => api<TaskSummary>(`/api/tasks/${enc(id)}/move`, { body: input }),
+    onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.board });
-      const previous = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
-      if (previous) {
-        const current = previous.tasks.find((t) => t.id === id);
-        const target: TaskStatus = status ?? current?.status ?? "idea";
-        queryClient.setQueryData(queryKeys.board, optimisticMove(previous, id, { status: target, beforeId, afterId }));
-      }
-      return { previous };
+      // Cancelling a board fetch restores the cache from before the fetch, and a fetch that
+      // landed meanwhile has the old position too: write the move again if it was undone.
+      const move = moves.get(vars);
+      const board = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      if (board && move && moveWasReverted(board, move.original))
+        queryClient.setQueryData(queryKeys.board, applyMove(board, vars));
     },
-    onError: (error, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.board, context.previous);
+    onError: (error, vars) => {
+      const move = moves.get(vars);
+      if (move) {
+        captureCardRect(move.original.id);
+        queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
+          board ? rollbackMove(board, move.original, move.moved) : board,
+        );
+      }
       if (!isPlanRequired(error)) {
         toastManager.add({
           type: "error",
@@ -132,6 +142,34 @@ export function useMoveTask() {
       }
     },
   });
+  const writeOptimistic = useCallback(
+    (vars: MoveVars) => {
+      const board = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      const original = board?.tasks.find((t) => t.id === vars.id);
+      if (!board || !original) return;
+      const next = applyMove(board, vars);
+      const moved = next.tasks.find((t) => t.id === vars.id);
+      if (moved) moves.set(vars, { original, moved });
+      queryClient.setQueryData(queryKeys.board, next);
+    },
+    [queryClient, moves],
+  );
+  const { mutate: baseMutate, mutateAsync: baseMutateAsync } = mutation;
+  const mutate = useCallback<typeof baseMutate>(
+    (vars, options) => {
+      writeOptimistic(vars);
+      baseMutate(vars, options);
+    },
+    [writeOptimistic, baseMutate],
+  );
+  const mutateAsync = useCallback<typeof baseMutateAsync>(
+    (vars, options) => {
+      writeOptimistic(vars);
+      return baseMutateAsync(vars, options);
+    },
+    [writeOptimistic, baseMutateAsync],
+  );
+  return { ...mutation, mutate, mutateAsync };
 }
 
 export function isPlanRequired(error: unknown): boolean {

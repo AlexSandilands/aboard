@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import type { TaskStatus, TaskSummary } from "@repo/contracts";
 import { PlusIcon } from "lucide-react";
 import { memo, useMemo } from "react";
@@ -9,6 +9,9 @@ import { cn } from "~/lib/utils";
 import { DONE_PREVIEW_COUNT } from "./board.logic";
 import { cellDroppableId, cellKey, type DragData } from "./dnd.logic";
 import { SortableTaskCard } from "./TaskCard";
+
+// Done is newest-first whatever the drag, so its cards don't shuffle to make room.
+const noSorting: SortingStrategy = () => null;
 
 export type CellDropState = "valid" | "invalid" | null;
 
@@ -46,7 +49,11 @@ export const BoardCell = memo(function BoardCell({
         dropState === "invalid" && "cursor-not-allowed bg-error/5 ring-1 ring-inset ring-error/40",
       )}
     >
-      <SortableContext id={cellKey(projectId, status)} items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext
+        id={cellKey(projectId, status)}
+        items={ids}
+        strategy={status === "done" ? noSorting : verticalListSortingStrategy}
+      >
         {visible.map((task) => (
           <SortableTaskCard key={task.id} task={task} selected={task.id === selectedTaskId} />
         ))}

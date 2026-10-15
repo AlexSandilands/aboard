@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
 import { ArchiveIcon } from "lucide-react";
-import { memo, type KeyboardEvent } from "react";
+import { memo, useCallback, useRef, type KeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -17,6 +17,7 @@ import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLink
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
+import { useCardFlip } from "./cardMotion";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -166,6 +167,15 @@ export const SortableTaskCard = memo(function SortableTaskCard({
     data,
     disabled: !!task.archivedAt,
   });
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback(
+    (node: HTMLDivElement | null) => {
+      nodeRef.current = node;
+      setNodeRef(node);
+    },
+    [setNodeRef],
+  );
+  useCardFlip(task.id, nodeRef, `${task.status}:${task.position}`);
 
   const open = () => {
     if (suppressClickRef.current) return;
@@ -174,7 +184,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={ref}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
       {...listeners}
@@ -186,7 +196,8 @@ export const SortableTaskCard = memo(function SortableTaskCard({
       data-task-card={task.id}
       className={cn(
         taskCardClassName(task, selected),
-        "[contain-intrinsic-size:auto_84px] [content-visibility:auto]",
+        // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
+        "[contain-intrinsic-size:auto_84px] [content-visibility:auto] motion-reduce:transition-none!",
         isDragging && "opacity-40",
       )}
       onClick={open}
@@ -202,11 +213,24 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   );
 });
 
-/** What the DragOverlay renders while a card is lifted. Static tilt, no animation. */
+/**
+ * What the DragOverlay renders while a card is lifted: it rises (scale and shadow) on pickup and
+ * settles back while the drop animation lands it (`is-dropping`, see cardMotion).
+ */
 export function TaskCardOverlay({ task }: { task: TaskSummary }) {
+  // dnd-kit measures the overlay's first child to aim the drop, so the lift scale sits one level
+  // deeper where it can't skew the landing spot.
   return (
-    <div className={cn(taskCardClassName(task, false), "rotate-[1deg] cursor-grabbing bg-card shadow-lg")}>
-      <TaskCardContent task={task} />
+    <div>
+      <div
+        className={cn(
+          taskCardClassName(task, false),
+          "scale-[1.03] cursor-grabbing bg-card shadow-xl transition-[scale,box-shadow] duration-200 ease-out motion-safe:animate-card-lift motion-reduce:transition-none",
+          "in-[.is-dropping]:scale-100 in-[.is-dropping]:shadow-sm",
+        )}
+      >
+        <TaskCardContent task={task} />
+      </div>
     </div>
   );
 }
