@@ -13,9 +13,9 @@ export interface HandoffPromptInput {
   linkedThread?: boolean;
 }
 
-/** Ideas and plan-less tasks still need a plan, so they default to planning together. */
+/** Backlog and plan-less tasks still need a plan, so they default to planning together. */
 export function defaultHandoffMode(task: Pick<TaskSummary, "status" | "progress">): HandoffMode {
-  return task.status === "idea" || task.progress.total === 0 ? "plan" : "work";
+  return task.status === "backlog" || task.progress.total === 0 ? "plan" : "work";
 }
 
 export function taskBoardUrl(boardUrl: string, taskId: string): string {
@@ -47,7 +47,7 @@ export function taskHandoffPrompt({ task, boardUrl, mode, linkedThread = false }
           `Let's plan ${ref} from the ${BRAND.id} task board together.`,
           `Board: ${taskBoardUrl(boardUrl, task.id)}`,
           "",
-          "This is still a rough idea. I want to shape the plan with you before any code is written.",
+          "This has no plan yet. I want to shape the plan with you before any code is written.",
           `1. ${getTask} to read the task, then explore the relevant code.`,
           "2. Ask me clarifying questions about scope, approach and anything ambiguous.",
           "3. Propose a plan: phases of 3-8 concrete, verifiable steps, plus the key decisions for the plan context.",

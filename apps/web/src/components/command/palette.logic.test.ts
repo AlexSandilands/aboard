@@ -132,7 +132,7 @@ describe("resolveSubmitPath", () => {
 
 describe("filterItems", () => {
   const items = [
-    { title: "New idea…", searchTerms: ["create", "capture"] },
+    { title: "New task…", searchTerms: ["create", "capture"] },
     { title: "Add project…", searchTerms: ["folder", "workspace"] },
     { title: "Go to project…", searchTerms: ["jump", "filter"] },
   ];

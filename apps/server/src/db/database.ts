@@ -25,12 +25,29 @@ function migrate(db: Db): void {
   for (const file of files) {
     if (applied.has(file)) continue;
     const sql = readFileSync(MIGRATIONS_DIR + file, "utf8");
-    transaction(db, () => {
-      db.exec(sql);
-      db.prepare("INSERT INTO migrations (name, applied_at) VALUES (?, ?)").run(file, new Date().toISOString());
-    });
+    // Rebuilding a table (SQLite's 12-step ALTER) drops it, which with foreign keys on would cascade-delete
+    // every child row. Such a migration marks itself and runs with them off; the pragma is a no-op inside a
+    // transaction, so it is set around it, and foreign_key_check stands in for the checks we skipped.
+    const foreignKeysOff = sql.startsWith(FOREIGN_KEYS_OFF);
+    if (foreignKeysOff) db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      transaction(db, () => {
+        db.exec(sql);
+        if (foreignKeysOff) {
+          const broken = db.prepare("PRAGMA foreign_key_check").all();
+          if (broken.length > 0)
+            throw new Error(`${file} broke ${broken.length} foreign key(s): ${JSON.stringify(broken)}`);
+        }
+        db.prepare("INSERT INTO migrations (name, applied_at) VALUES (?, ?)").run(file, new Date().toISOString());
+      });
+    } finally {
+      if (foreignKeysOff) db.exec("PRAGMA foreign_keys = ON");
+    }
   }
 }
+
+/** First line of a migration that must run with foreign keys off. */
+const FOREIGN_KEYS_OFF = "-- migrate: foreign_keys off";
 
 let depth = 0;
 

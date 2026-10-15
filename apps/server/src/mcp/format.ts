@@ -85,7 +85,7 @@ export function summaryLine(task: TaskSummary): string {
   if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
-  } else if (task.status === "idea") {
+  } else if (task.status === "backlog") {
     parts.push("no plan");
   }
   const links = task.links.map(shortLink);
@@ -289,7 +289,7 @@ export function renderTaskDetail(
   } else if (task.resolution) {
     lines.push("Plan: none.");
   } else {
-    lines.push("Plan: none yet. Add one with set_plan before moving this out of Ideas.");
+    lines.push("Plan: none yet. Add one with set_plan before moving this out of Backlog.");
   }
 
   lines.push(...reviewLines(task));

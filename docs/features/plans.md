@@ -47,8 +47,8 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
 
 ### The gate on the plan side
 
-Outside Ideas a plan can't become empty. `set_plan`, deleting a phase and deleting a step all throw
-`PLAN_REQUIRED` if they'd leave a non-idea task with no steps. See
+Outside Backlog a plan can't become empty. `set_plan`, deleting a phase and deleting a step all throw
+`PLAN_REQUIRED` if they'd leave a task outside Backlog with no steps. See
 [task-lifecycle.md](task-lifecycle.md) and [ADR 0004](../decisions/0004-plan-gate.md).
 
 ### Markdown plans

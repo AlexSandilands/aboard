@@ -469,7 +469,7 @@ function AgentsSection() {
       </SettingsRow>
       <SettingsRow
         title="Skill"
-        description={`Teaches Claude Code when to log ideas, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
+        description={`Teaches Claude Code when to add to the backlog, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
       >
         <div className="mt-2">
           <CommandSnippet command={`~/.claude/skills/${BRAND.id}`} />

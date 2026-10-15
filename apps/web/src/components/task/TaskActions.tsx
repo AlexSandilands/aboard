@@ -81,8 +81,8 @@ export function TaskActions({
 
   const actions: Record<PinnableAction, ActionDef> = {
     plan: { label: hasPlan ? "Edit plan" : "Write plan", icon: ListTodoIcon, run: onOpenPlanEditor },
-    // Back to where a plan allows: a planless task can only be an idea.
-    reopen: { label: "Reopen", icon: RotateCcwIcon, run: () => setStatus(hasPlan ? "planned" : "idea") },
+    // Back to where a plan allows: a planless task can only be in Backlog.
+    reopen: { label: "Reopen", icon: RotateCcwIcon, run: () => setStatus(hasPlan ? "planned" : "backlog") },
     archive: {
       label: archived ? "Unarchive" : "Archive",
       icon: archived ? ArchiveRestoreIcon : ArchiveIcon,

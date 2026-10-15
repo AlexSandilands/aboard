@@ -5,7 +5,7 @@ import {
   MoveTaskInput,
   PlanInput,
   StartT3ThreadInput,
-  TaskStatus,
+  TaskStatusInput,
   UpdateTaskInput,
   ACTOR_HEADER,
 } from "@repo/contracts";
@@ -16,7 +16,7 @@ import { actorOf, handle, noContent, parseBody, parseQuery, queryFlag, idParam }
 
 const TaskListQuery = z.object({
   projectId: z.string().optional(),
-  status: TaskStatus.optional(),
+  status: TaskStatusInput.optional(),
   q: z.string().optional(),
   /** Comma-separated; tasks with any of them. */
   labels: z.string().optional(),

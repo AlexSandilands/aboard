@@ -4,11 +4,17 @@ import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
-export const TaskStatus = z.enum(["idea", "planned", "in_progress", "review", "done"]);
+export const TaskStatus = z.enum(["backlog", "planned", "in_progress", "review", "done"]);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 
+/**
+ * TaskStatus for inputs. The first column used to be "idea"; agents with older instructions still send it, so
+ * it is read as "backlog". Outputs never say "idea".
+ */
+export const TaskStatusInput = z.preprocess((value) => (value === "idea" ? "backlog" : value), TaskStatus);
+
 export const TASK_STATUSES: ReadonlyArray<{ value: TaskStatus; label: string }> = [
-  { value: "idea", label: "Ideas" },
+  { value: "backlog", label: "Backlog" },
   { value: "planned", label: "Planned" },
   { value: "in_progress", label: "In Progress" },
   { value: "review", label: "Review" },
@@ -385,7 +391,7 @@ export const UpdateTaskInput = z.object({
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
 export const MoveTaskInput = z.object({
-  status: TaskStatus.optional(),
+  status: TaskStatusInput.optional(),
   /** Place before this task (same project+status). */
   beforeId: z.string().nullable().optional(),
   /** Place after this task (same project+status). */

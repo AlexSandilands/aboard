@@ -85,7 +85,7 @@ function byRecentStatusChange(a: TaskSummary, b: TaskSummary) {
 }
 
 function emptyCells(): Record<TaskStatus, TaskSummary[]> {
-  return { idea: [], planned: [], in_progress: [], review: [], done: [] };
+  return { backlog: [], planned: [], in_progress: [], review: [], done: [] };
 }
 
 /**
@@ -128,7 +128,7 @@ export function buildLanes(
 }
 
 export function columnCounts(lanes: ReadonlyArray<Lane>): Record<TaskStatus, number> {
-  const counts = { idea: 0, planned: 0, in_progress: 0, review: 0, done: 0 };
+  const counts = { backlog: 0, planned: 0, in_progress: 0, review: 0, done: 0 };
   for (const lane of lanes) for (const status of STATUS_ORDER) counts[status] += lane.cells[status].length;
   return counts;
 }

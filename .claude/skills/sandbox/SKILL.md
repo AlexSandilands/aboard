@@ -20,7 +20,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 Seeds (`apps/server/src/dev/seeds.ts`):
 
-- `basic`: two projects, every column, ideas with and without plans, a blocked step, a handover note,
+- `basic`: two projects, every column, backlog tasks with and without plans, a blocked step, a handover note,
   more than five Done, closed (duplicate / won't do) and archived cards.
 - `review`: a task per local-review state (pending, running, stalled, failed, findings at every
   severity, clean after two rounds, re-review pending).

@@ -1,7 +1,7 @@
 # MCP
 
 Agents use the board through an MCP server at `/mcp` on the board's port. The tools cover what an agent
-needs in a session: orient, read a task, capture ideas, plan, keep steps current, link work, move the
+needs in a session: orient, read a task, add to the backlog, plan, keep steps current, link work, move the
 task along, run local review rounds and leave a handover note.
 
 ## How it works
@@ -14,7 +14,7 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 ([ADR 0003](../decisions/0003-localhost-guard.md)).
 
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
-`get_task` before resuming, plan before leaving Ideas (and suggest labels if the task has none), keep
+`get_task` before resuming, plan before leaving Backlog (and suggest labels if the task has none), keep
 steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 
 ### Tools
@@ -22,12 +22,12 @@ steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
 | `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task` (all read-only)                             |
-| `tools/tasks.ts`   | `create_idea`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`       |
+| `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`       |
 | `tools/plans.ts`   | `set_plan`, `add_steps`, `update_step`                                                                  |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, or a T3 thread `{environmentId, threadId}`; idempotent)                  |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 
-`create_idea`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
+`add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
 counts. See [labels.md](labels.md).
 
@@ -37,7 +37,7 @@ Every tool validates its input with zod and calls a service; none holds rules of
 ### Projects
 
 Project-scoped tools take `projectId` or `workspacePath` (the agent's cwd). Write tools need one of them.
-Read tools treat an unknown path as an empty project rather than an error. `create_idea` and
+Read tools treat an unknown path as an empty project rather than an error. `add_to_backlog` and
 `create_task` create the project when the path is new. See [task-lifecycle.md](task-lifecycle.md#creating).
 
 ### Who did it
@@ -55,7 +55,7 @@ text when both are present.
 
 - Most mutating tools return a headline plus the full task render without the activity log: status,
   labels, progress, current step, description, plan context, the plan with step ids
-  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `create_idea`, `link`, `add_note` and
+  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link`, `add_note` and
   `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting.
@@ -76,7 +76,7 @@ Descriptions are written for agents, and they are most of what an agent knows ab
   instructions say to call it before resuming).
 - Say what good input looks like: 1–4 phases of 3–8 concrete, verifiable steps.
 - Explain the gate where it bites (`create_task`, `move_task`), and point to the cheap path
-  (`create_idea`, `close_task`).
+  (`add_to_backlog`, `close_task`).
 - Put guidance agents must act on in **results** too (Missing links, Missing labels, review loop
   instructions): agents follow a result they just got more reliably than instructions read once. Show
   it only where it applies, or agents learn to skip it.
@@ -100,7 +100,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
   that reconnect often. The cost is the lost client name, worked around through the User-Agent.
 - **Text, not JSON.** Agents read text plans and summaries well, and step ids in the text let them act
   without another call.
-- **A cheap path for everything.** `create_idea` and `close_task` need no plan, so the gate never pushes
+- **A cheap path for everything.** `add_to_backlog` and `close_task` need no plan, so the gate never pushes
   an agent into faking one.
 
 ## Code map

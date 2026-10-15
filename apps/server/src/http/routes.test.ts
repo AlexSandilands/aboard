@@ -7,7 +7,7 @@ async function setup() {
   const project = h.services.projects.create({ title: "P" });
   const res = await h.request("/api/tasks", {
     method: "POST",
-    json: { projectId: project.id, title: "Idea" },
+    json: { projectId: project.id, title: "Later" },
     headers: { [ACTOR_HEADER]: "codex" },
   });
   expect(res.status).toBe(201);
@@ -41,6 +41,13 @@ describe("REST", () => {
     const body = (await invalid.json()) as ApiErrorBody;
     expect(body.error.code).toBe("VALIDATION");
     expect(Array.isArray(body.error.details)).toBe(true);
+
+    // Agents with older instructions still send the old name for Backlog.
+    const old = await h.request(`/api/tasks/${h.task.id}/move`, { method: "POST", json: { status: "idea" } });
+    expect(old.status).toBe(200);
+    expect(((await old.json()) as TaskDetail).status).toBe("backlog");
+    const listed = (await (await h.request("/api/tasks?status=idea")).json()) as TaskDetail[];
+    expect(listed.map((t) => [t.id, t.status])).toEqual([[h.task.id, "backlog"]]);
 
     const malformed = await h.request("/api/projects", {
       method: "POST",

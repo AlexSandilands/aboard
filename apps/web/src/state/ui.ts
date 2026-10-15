@@ -47,7 +47,7 @@ export const useBoardView = create<BoardViewState>()(
     }),
     {
       name: storageKey("board-view"),
-      version: 1,
+      version: 2,
       migrate: migrateBoardView,
       partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedColumns, cellOverrides }) => ({
         attentionOnly,
@@ -140,14 +140,16 @@ export type PaletteIntent =
   | { kind: "root" }
   | { kind: "add-project" }
   | { kind: "import-t3" }
-  | { kind: "new-idea"; projectId?: string }
+  /** A task for the Backlog: just a title and description. */
   | { kind: "new-task"; projectId?: string }
+  /** A task that opens with the plan editor, to land in Planned. */
+  | { kind: "new-planned-task"; projectId?: string }
   | { kind: "go-to-task" };
 
 interface PaletteState {
   open: boolean;
   intent: PaletteIntent;
-  /** Last project used for new ideas/tasks, preselected next time. */
+  /** Last project used for new tasks, preselected next time. */
   lastProjectId: string | null;
   openPalette: (intent?: PaletteIntent) => void;
   closePalette: () => void;

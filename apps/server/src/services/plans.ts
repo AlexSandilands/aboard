@@ -60,9 +60,9 @@ export function createPlans(
       steps: steps.filter((s) => s.phaseId === phase.id).map(toPlanStep),
     }));
   };
-  /** Throws PLAN_REQUIRED if `remaining` steps would be left on a non-idea task. */
+  /** Throws PLAN_REQUIRED if `remaining` steps would be left on a task outside Backlog. */
   const gate = (task: TaskRecord, remaining: number) => {
-    if (remaining === 0 && task.status !== "idea") throw planRequired(task.number);
+    if (remaining === 0 && task.status !== "backlog") throw planRequired(task.number);
   };
   const touchTask = (task: TaskRecord, now: string) => repos.tasks.update({ ...task, updatedAt: now });
 

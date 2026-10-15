@@ -47,7 +47,8 @@ import {
 } from "./palette.logic";
 import { useAddProject, useFolderBrowse } from "./useFolderBrowse";
 
-type TaskFlow = "idea" | "task";
+/** Where the new task lands: Backlog with just a title, or Planned via the plan editor. */
+type TaskFlow = "backlog" | "planned";
 
 type PaletteView =
   | { kind: "root" }
@@ -71,9 +72,9 @@ function initialStack(intent: PaletteIntent): PaletteView[] {
       return [root, { kind: "import-t3" }];
     case "go-to-task":
       return [root, { kind: "go-to-task" }];
-    case "new-idea":
-    case "new-task": {
-      const flow: TaskFlow = intent.kind === "new-idea" ? "idea" : "task";
+    case "new-task":
+    case "new-planned-task": {
+      const flow: TaskFlow = intent.kind === "new-task" ? "backlog" : "planned";
       return intent.projectId
         ? [root, { kind: "title", flow, projectId: intent.projectId }]
         : [root, { kind: "pick-project", flow }];
@@ -185,7 +186,7 @@ function InputAction(props: { label: string; shortcut: string; disabled: boolean
   );
 }
 
-/** A non-interactive context row above the results, e.g. the project a new idea goes to. */
+/** A non-interactive context row above the results, e.g. the project a new task goes to. */
 function ContextRow(props: { icon: ReactNode; title: ReactNode; description: ReactNode }) {
   return (
     <div className="p-2">
@@ -348,7 +349,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       {
         onSuccess: (task) => {
           setLastProjectId(projectId);
-          if (flow === "task") {
+          if (flow === "planned") {
             closePalette();
             void navigate({ to: "/", search: (prev) => ({ ...prev, task: task.id }) }).then(() =>
               usePanel.getState().requestPlanEditor(),
@@ -357,7 +358,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           }
           toastManager.add({
             type: "success",
-            title: "Idea added",
+            title: "Added to Backlog",
             description: `#${task.number} ${task.title}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
@@ -439,20 +440,20 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       case "root": {
         const actions: PaletteItem[] = [
           {
-            value: "action:new-idea",
-            title: "New idea…",
-            searchTerms: ["create", "capture", "add", "task"],
+            value: "action:new-task",
+            title: "New task…",
+            searchTerms: ["create", "capture", "add", "backlog", "idea", "todo"],
             icon: <LightbulbIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
-            run: () => pushView({ kind: "pick-project", flow: "idea" }),
+            run: () => pushView({ kind: "pick-project", flow: "backlog" }),
           },
           {
-            value: "action:new-task",
+            value: "action:new-planned-task",
             title: "New task with plan…",
             searchTerms: ["create", "plan", "add"],
             icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
-            run: () => pushView({ kind: "pick-project", flow: "task" }),
+            run: () => pushView({ kind: "pick-project", flow: "planned" }),
           },
           {
             value: "action:add-project",
@@ -629,7 +630,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         return [
           {
             value: "projects",
-            label: flow === "idea" ? "New idea in…" : "New task in…",
+            label: flow === "backlog" ? "New task in…" : "New task with plan in…",
             items: filterItems(items, query),
           },
         ];
@@ -703,7 +704,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     }
   }
 
-  /** In the description, Enter is a newline; Mod+Enter submits (Shift adds another idea). */
+  /** In the description, Enter is a newline; Mod+Enter submits (Shift adds another task). */
   function handleDescriptionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key !== "Enter" || isComposing(event) || !isPrimaryModifier(event)) return;
     claimKey(event);
@@ -806,7 +807,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       emptyStateMessage = projects.length === 0 ? "Add a project first." : "No matching projects.";
       break;
     case "title":
-      placeholder = view.flow === "idea" ? "Idea title…" : "Task title…";
+      placeholder = "Task title…";
       footerActionLabel = "Create";
       inputAccessory = (
         <InputAction
@@ -823,8 +824,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon={titleProject ? projectIcon(titleProject) : <FolderIcon className={ITEM_ICON_CLASS} />}
             title={titleProject?.title ?? "Unknown project"}
             description={
-              view.flow === "idea"
-                ? "Lands in Ideas · Shift+Enter to add another"
+              view.flow === "backlog"
+                ? "Lands in Backlog · Shift+Enter to add another"
                 : "Opens the task with the plan editor"
             }
           />

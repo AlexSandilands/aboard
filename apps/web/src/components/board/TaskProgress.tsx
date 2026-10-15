@@ -43,10 +43,10 @@ export function TaskSegments({
   );
 }
 
-/** Card line 3: segments, `done/total` and the current step, or a hint that an idea has no plan. */
+/** Card line 3: segments, `done/total` and the current step, or a hint that a backlog task has no plan. */
 export function TaskProgressLine({ task }: { task: TaskSummary }) {
   if (task.progress.total === 0) {
-    return task.status === "idea" ? <div className="text-xs text-muted-foreground/60">No plan yet</div> : null;
+    return task.status === "backlog" ? <div className="text-xs text-muted-foreground/60">No plan yet</div> : null;
   }
   return (
     <div className="flex h-4 min-w-0 items-center gap-1.5 text-xs">

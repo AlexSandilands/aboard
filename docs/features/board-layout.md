@@ -65,9 +65,9 @@ inactive threads are dimmed.
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
 `storageKey(...)`:
 
-- `board-view` holds the filters and the column collapse state. It is at version 1:
+- `board-view` holds the filters and the column collapse state. It is at version 2:
   `migrateBoardView` keeps version 0's filters and drops its per-lane `expandedDone`, which has no
-  per-column equivalent.
+  per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
   which validates it and keeps it referentially stable.
 
@@ -93,5 +93,5 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
-| `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 migration (tested)         |
+| `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores                                             |

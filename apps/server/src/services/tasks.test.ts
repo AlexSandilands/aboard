@@ -25,30 +25,30 @@ const expectCode = (fn: () => unknown, code: string) => {
 };
 
 describe("tasks", () => {
-  it("lands in idea without a plan and planned with one, numbering globally", () => {
+  it("lands in backlog without a plan and planned with one, numbering globally", () => {
     const { s, project } = setup();
-    const idea = s.tasks.create({ projectId: project.id, title: "Idea" });
+    const backlog = s.tasks.create({ projectId: project.id, title: "Backlog" });
     const planned = s.tasks.create({ projectId: project.id, title: "Planned", plan: plan("a", "b") });
-    expect(idea.status).toBe("idea");
+    expect(backlog.status).toBe("backlog");
     expect(planned.status).toBe("planned");
-    expect(planned.number).toBe(idea.number + 1);
+    expect(planned.number).toBe(backlog.number + 1);
     expect(s.tasks.resolveId(`#${planned.number}`)).toBe(planned.id);
-    expect(s.tasks.resolveId(String(idea.number))).toBe(idea.id);
+    expect(s.tasks.resolveId(String(backlog.number))).toBe(backlog.id);
     expect(planned.events.map((e) => e.type)).toEqual(["created", "plan_set"]);
   });
 
-  it("gates leaving idea on having plan steps", () => {
+  it("gates leaving backlog on having plan steps", () => {
     const { s, project } = setup();
-    const idea = s.tasks.create({ projectId: project.id, title: "Idea" });
-    expectCode(() => s.tasks.move(idea.id, { status: "in_progress" }, "user"), "PLAN_REQUIRED");
-    s.plans.setPlan(idea.id, plan("first"), "agent");
-    const moved = s.tasks.move(idea.id, { status: "in_progress" }, "agent");
+    const backlog = s.tasks.create({ projectId: project.id, title: "Backlog" });
+    expectCode(() => s.tasks.move(backlog.id, { status: "in_progress" }, "user"), "PLAN_REQUIRED");
+    s.plans.setPlan(backlog.id, plan("first"), "agent");
+    const moved = s.tasks.move(backlog.id, { status: "in_progress" }, "agent");
     expect(moved.status).toBe("in_progress");
-    const detail = s.tasks.detail(idea.id);
+    const detail = s.tasks.detail(backlog.id);
     expect(detail.events.at(-1)).toMatchObject({
       type: "status_changed",
       actor: "agent",
-      payload: { from: "idea", to: "in_progress" },
+      payload: { from: "backlog", to: "in_progress" },
     });
   });
 
@@ -132,7 +132,7 @@ describe("tasks", () => {
   it("links Jira keys in the title on create and rename, but not keys only in the description", () => {
     const { s, project } = setup();
     const jiraKeys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : []));
-    const idea = s.tasks.create({ projectId: project.id, title: "CORE-1245 Fix login", actor: "agent" });
+    const backlog = s.tasks.create({ projectId: project.id, title: "CORE-1245 Fix login", actor: "agent" });
     const planned = s.tasks.create({
       projectId: project.id,
       title: "Fix PAY-7 (UTF-8)",
@@ -140,14 +140,14 @@ describe("tasks", () => {
       plan: plan("a"),
       links: [{ value: "PAY-7" }],
     });
-    expect(jiraKeys(idea.id)).toEqual(["CORE-1245"]);
-    expect(idea.events.find((e) => e.type === "link_added")).toMatchObject({ actor: "agent" });
+    expect(jiraKeys(backlog.id)).toEqual(["CORE-1245"]);
+    expect(backlog.events.find((e) => e.type === "link_added")).toMatchObject({ actor: "agent" });
     expect(jiraKeys(planned.id)).toEqual(["PAY-7"]);
 
-    s.tasks.update(idea.id, { title: "CORE-1245 and CORE-1246 Fix login" }, "agent");
-    s.tasks.update(idea.id, { title: "CORE-1245 and CORE-1246: fix login" }, "agent");
-    expect(jiraKeys(idea.id)).toEqual(["CORE-1245", "CORE-1246"]);
-    expect(s.tasks.detail(idea.id).events.filter((e) => e.type === "link_added")).toHaveLength(2);
+    s.tasks.update(backlog.id, { title: "CORE-1245 and CORE-1246 Fix login" }, "agent");
+    s.tasks.update(backlog.id, { title: "CORE-1245 and CORE-1246: fix login" }, "agent");
+    expect(jiraKeys(backlog.id)).toEqual(["CORE-1245", "CORE-1246"]);
+    expect(s.tasks.detail(backlog.id).events.filter((e) => e.type === "link_added")).toHaveLength(2);
   });
 
   it("archives via update and records lastNote", () => {
@@ -344,11 +344,11 @@ describe("events", () => {
     it("moves a planless task to Done only through close, linking the delivering task", () => {
       const { s, project, events } = setup();
       const shipped = s.tasks.create({ projectId: project.id, title: "Shipped", plan: plan("a") });
-      const idea = s.tasks.create({ projectId: project.id, title: "Same thing" });
-      expectCode(() => s.tasks.move(idea.id, { status: "done" }, "user"), "PLAN_REQUIRED");
+      const backlog = s.tasks.create({ projectId: project.id, title: "Same thing" });
+      expectCode(() => s.tasks.move(backlog.id, { status: "done" }, "user"), "PLAN_REQUIRED");
 
       events.length = 0;
-      const closed = s.tasks.close(idea.id, { resolution: "completed", byTaskId: shipped.id }, "agent");
+      const closed = s.tasks.close(backlog.id, { resolution: "completed", byTaskId: shipped.id }, "agent");
       expect(closed).toMatchObject({
         status: "done",
         resolution: "completed",
@@ -357,16 +357,16 @@ describe("events", () => {
       expect(closed.events.at(-1)).toMatchObject({
         type: "closed",
         actor: "agent",
-        payload: { resolution: "completed", from: "idea", byTask: shipped.number },
+        payload: { resolution: "completed", from: "backlog", byTask: shipped.number },
       });
       expect(events).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: "task.upserted", task: expect.objectContaining({ id: idea.id }) }),
+          expect.objectContaining({ type: "task.upserted", task: expect.objectContaining({ id: backlog.id }) }),
           { type: "task.detail_changed", taskId: shipped.id },
         ]),
       );
       expect(s.tasks.detail(shipped.id).resolves).toEqual([
-        { id: idea.id, number: idea.number, title: "Same thing", resolution: "completed" },
+        { id: backlog.id, number: backlog.number, title: "Same thing", resolution: "completed" },
       ]);
     });
 
@@ -378,7 +378,7 @@ describe("events", () => {
       expectCode(() => s.tasks.close(a.id, { resolution: "duplicate", byTaskId: "nope" }, "user"), "NOT_FOUND");
       expectCode(() => s.tasks.close(a.id, { resolution: "completed", byTaskId: a.id }, "user"), "VALIDATION");
       expectCode(() => s.tasks.close(a.id, { resolution: "wont_do", byTaskId: b.id }, "user"), "VALIDATION");
-      expect(s.tasks.summary(a.id)).toMatchObject({ status: "idea", resolution: null });
+      expect(s.tasks.summary(a.id)).toMatchObject({ status: "backlog", resolution: null });
 
       const wontDo = s.tasks.close(a.id, { resolution: "wont_do" }, "user");
       expect(wontDo).toMatchObject({ status: "done", resolution: "wont_do", resolvedBy: null });
@@ -391,11 +391,11 @@ describe("events", () => {
       s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: original.id }, "user");
 
       events.length = 0;
-      const reopened = s.tasks.move(dupe.id, { status: "idea" }, "user");
-      expect(reopened).toMatchObject({ status: "idea", resolution: null, resolvedBy: null });
+      const reopened = s.tasks.move(dupe.id, { status: "backlog" }, "user");
+      expect(reopened).toMatchObject({ status: "backlog", resolution: null, resolvedBy: null });
       expect(s.tasks.detail(dupe.id).events.at(-1)).toMatchObject({
         type: "status_changed",
-        payload: { from: "done", to: "idea", clearedResolution: "duplicate" },
+        payload: { from: "done", to: "backlog", clearedResolution: "duplicate" },
       });
       expect(events).toContainEqual({ type: "task.detail_changed", taskId: original.id });
       expect(s.tasks.detail(original.id).resolves).toEqual([]);

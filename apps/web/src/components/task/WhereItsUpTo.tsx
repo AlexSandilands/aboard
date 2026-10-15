@@ -100,7 +100,7 @@ export function WhereItsUpTo({
       ) : total === 0 ? (
         <div className="mt-2 flex items-center gap-3 ps-7">
           <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {task.status === "idea" ? "Ideas need a plan before they can move on." : "This task has no steps."}
+            {task.status === "backlog" ? "Tasks need a plan before they can leave Backlog." : "This task has no steps."}
           </p>
           <Button size="xs" variant="outline" onClick={onWritePlan}>
             Write plan

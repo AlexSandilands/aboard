@@ -17,7 +17,7 @@ export const notFound = (what: string, id: string) => new AppError("NOT_FOUND", 
 export const planRequired = (taskNumber: number) =>
   new AppError(
     "PLAN_REQUIRED",
-    `Task #${taskNumber} has no plan. Only ideas may exist without a plan — add at least one plan step (set_plan) before moving it out of Ideas.`,
+    `Task #${taskNumber} has no plan. Only Backlog tasks may exist without a plan — add at least one plan step (set_plan) before moving it out of Backlog.`,
   );
 
 export function httpStatusFor(code: ApiErrorCode): 400 | 404 | 409 | 422 | 500 {

@@ -1,19 +1,19 @@
 ## Aboard (task board)
 
-Track work on the user's local task board via the `aboard` MCP server (Ideas → Planned → In Progress → Review → Done). Pass `workspacePath` = your cwd to identify the project. Tasks are `#42`, steps `"2.3"`.
+Track work on the user's local task board via the `aboard` MCP server (Backlog → Planned → In Progress → Review → Done). Pass `workspacePath` = your cwd to identify the project. Tasks are `#42`, steps `"2.3"`.
 
 - **Orient:** `board_overview` / `list_tasks` at the start of meaningful work.
 - **Resume:** always `get_task` before continuing an existing task; it has the plan, current step and handover notes. Add any **Missing links** it lists.
-- **Ideas:** something worth doing comes up mid-task? `create_idea` once, then carry on.
-- **Plan first:** tasks can't leave Ideas without a plan. `set_plan` (or `create_task` with a plan): phases with 3–8 concrete, verifiable steps, approach in `context`. Markdown checklists (`## Phase` / `- [ ] step`) are accepted. Then `move_task` → `in_progress`.
-- **Labels:** tag tasks with the kind of work (`labels: ["ui"]`, `["backend", "bug"]`) on `create_task` / `create_idea` or `update_task` (replaces the list). Reuse the labels `board_overview` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
+- **Backlog:** something worth doing comes up mid-task (an idea, a follow-up, a ticket for later)? `add_to_backlog` once, then carry on.
+- **Plan first:** tasks can't leave Backlog without a plan. `set_plan` (or `create_task` with a plan): phases with 3–8 concrete, verifiable steps, approach in `context`. Markdown checklists (`## Phase` / `- [ ] step`) are accepted. Then `move_task` → `in_progress`.
+- **Labels:** tag tasks with the kind of work (`labels: ["ui"]`, `["backend", "bug"]`) on `create_task` / `add_to_backlog` or `update_task` (replaces the list). Reuse the labels `board_overview` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
 - **Keep steps current:** `update_step` → `in_progress` when starting, `done` when finished, `blocked` + `appendNotes` when stuck or before asking the user a question and waiting (say what you need; back to `in_progress` once answered). `add_steps` for new work.
-- **Links:** link the Jira key when the task is created (`links` on `create_task` / `create_idea`, or `link`); keys in the title are linked automatically. `link` PRs as soon as they're open.
+- **Links:** link the Jira key when the task is created (`links` on `create_task` / `add_to_backlog`, or `link`); keys in the title are linked automatically. `link` PRs as soon as they're open.
 - **Status:** `review` when the work is done, `done` when merged/verified. On `PLAN_REQUIRED`, call `set_plan` first.
 - **Local review:** if moving to `review` says a review round is open, run the loop it describes before opening the PR: a fresh reviewer subagent per round (`submit_review`), fix and `resolve_finding` each blocking/major finding, `start_review` for the next round, until clean or the limit. Without auto-review, open and link the PR before moving to `review`.
 - **Already handled:** `close_task` with `completed`/`duplicate` + `byTask: "#N"`, or `wont_do`. No plan needed; don't archive these.
 - **Handover:** end every session with `add_note`: done, left, gotchas, next action.
-- **T3 Code:** if you have T3 tools, call `t3_thread_configuration` (→ threadId) and `t3_environment_read` (→ environmentId) once, and pass `t3Thread: {environmentId, threadId}` to `create_task` / `create_idea`, or to `link` whenever you start or resume an existing task.
+- **T3 Code:** if you have T3 tools, call `t3_thread_configuration` (→ threadId) and `t3_environment_read` (→ environmentId) once, and pass `t3Thread: {environmentId, threadId}` to `create_task` / `add_to_backlog`, or to `link` whenever you start or resume an existing task.
 
 Register the server (it runs on 127.0.0.1:4317):
 

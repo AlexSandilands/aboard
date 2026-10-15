@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskStatus, type Project, type TaskDetail } from "@repo/contracts";
+import { TaskStatusInput, type TaskStatus, type Project, type TaskDetail } from "@repo/contracts";
 import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel } from "../format.ts";
 import {
   findProject,
@@ -30,7 +30,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
       title: "Board overview",
       description:
         "Cheap orientation call. Shows every project on the user's board with task counts per status " +
-        "(Ideas, Planned, In Progress, Review, Done) and anything needing attention (blocked steps, failing PRs, " +
+        "(Backlog, Planned, In Progress, Review, Done) and anything needing attention (blocked steps, failing PRs, " +
         "threads awaiting input), plus the labels in use. Pass workspacePath (your cwd) to also list that project's open tasks. " +
         "Call this at the start of meaningful work.",
       inputSchema: { ...projectFields },
@@ -42,11 +42,11 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         const active = snapshot.tasks.filter((t) => !t.archivedAt);
         const lines: string[] = [];
         if (snapshot.projects.length === 0) {
-          lines.push("The board is empty. create_idea or create_task with your workspacePath to start a project.");
+          lines.push("The board is empty. add_to_backlog or create_task with your workspacePath to start a project.");
         }
         for (const project of snapshot.projects.filter((p) => !p.archivedAt)) {
           const tasks = active.filter((t) => t.projectId === project.id);
-          const counts = ["idea", "planned", "in_progress", "review", "done"]
+          const counts = ["backlog", "planned", "in_progress", "review", "done"]
             .map((s) => [s, tasks.filter((t) => t.status === s).length] as const)
             .filter(([, n]) => n > 0)
             .map(([s, n]) => `${statusLabel(s as TaskStatus)} ${n}`);
@@ -62,7 +62,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           lines.push("");
           if (!project) {
             lines.push(
-              `No project for ${args.workspacePath ?? args.projectId} yet — it is created on first create_idea/create_task.`,
+              `No project for ${args.workspacePath ?? args.projectId} yet — it is created on first add_to_backlog/create_task.`,
             );
           } else {
             const open = active.filter((t) => t.projectId === project.id && t.status !== "done");
@@ -104,7 +104,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         "#number, Jira keys, labels) or attentionOnly. Use it to find the task you should resume, then call get_task.",
       inputSchema: {
         ...projectFields,
-        status: TaskStatus.optional().describe("Only tasks in this status."),
+        status: TaskStatusInput.optional().describe("Only tasks in this status."),
         query: z.string().optional().describe("Free-text filter."),
         labels: z
           .array(z.string().min(1))

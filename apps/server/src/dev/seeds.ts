@@ -31,10 +31,11 @@ interface TaskSpec {
   links?: string[];
 }
 
-/** Creates a task and moves it to its column. Tasks past Ideas get a one-phase plan when none is given. */
+/** Creates a task and moves it to its column. Tasks past Backlog get a one-phase plan when none is given. */
 function addTask(s: Services, projectId: string, spec: TaskSpec): string {
   const plan =
-    spec.plan ?? (spec.status === "idea" ? undefined : steps("Do it", ["Implement", "Test"], spec.status === "done"));
+    spec.plan ??
+    (spec.status === "backlog" ? undefined : steps("Do it", ["Implement", "Test"], spec.status === "done"));
   const task = s.tasks.create({
     projectId,
     title: spec.title,
@@ -61,13 +62,13 @@ const basic: Scenario = (s, opts) => {
 
   addTask(s, shop.id, {
     title: "Dark mode for checkout",
-    status: "idea",
+    status: "backlog",
     description: "Customers asked for it in the last survey.",
   });
-  const planned = addTask(s, shop.id, { title: "Retry flaky payment webhooks", status: "idea" });
+  const planned = addTask(s, shop.id, { title: "Retry flaky payment webhooks", status: "backlog" });
   s.plans.setPlan(
     planned,
-    { context: "Idea with a plan already written.", ...steps("Retry", ["Add backoff", "Log final failures"]) },
+    { context: "Backlog task with a plan already written.", ...steps("Retry", ["Add backoff", "Log final failures"]) },
     AGENT,
   );
   addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
@@ -120,14 +121,14 @@ const basic: Scenario = (s, opts) => {
     "Compress hero images",
   ];
   const doneIds = doneTitles.map((title) => addTask(s, shop.id, { title, status: "done" }));
-  const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "idea" });
+  const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "backlog" });
   s.tasks.close(dup, { resolution: "duplicate", byTaskId: doneIds[0]! }, AGENT);
-  const dropped = addTask(s, shop.id, { title: "Support Internet Explorer", status: "idea" });
+  const dropped = addTask(s, shop.id, { title: "Support Internet Explorer", status: "backlog" });
   s.tasks.close(dropped, { resolution: "wont_do" }, "user");
   const archived = addTask(s, shop.id, { title: "Old launch checklist", status: "done" });
   s.tasks.update(archived, { archived: true }, "user");
 
-  addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "idea" });
+  addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
   addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });
   addTask(s, billing.id, { title: "Nightly reconciliation report", status: "done" });
 };

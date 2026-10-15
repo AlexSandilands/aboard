@@ -6,7 +6,7 @@ const initial: CollapseState = { collapsedColumns: { done: true }, cellOverrides
 describe("isCellCollapsed", () => {
   it("follows the column default", () => {
     expect(isCellCollapsed(initial, "p", "done")).toBe(true);
-    expect(isCellCollapsed(initial, "p", "idea")).toBe(false);
+    expect(isCellCollapsed(initial, "p", "backlog")).toBe(false);
   });
 
   it("prefers the project's override", () => {
@@ -18,10 +18,10 @@ describe("isCellCollapsed", () => {
 
 describe("toggleCell", () => {
   it("overrides only that project", () => {
-    const state = toggleCell(initial, "p", "idea");
-    expect(state.cellOverrides).toEqual({ "p:idea": true });
-    expect(isCellCollapsed(state, "p", "idea")).toBe(true);
-    expect(isCellCollapsed(state, "q", "idea")).toBe(false);
+    const state = toggleCell(initial, "p", "backlog");
+    expect(state.cellOverrides).toEqual({ "p:backlog": true });
+    expect(isCellCollapsed(state, "p", "backlog")).toBe(true);
+    expect(isCellCollapsed(state, "q", "backlog")).toBe(false);
   });
 
   it("prunes an override that returns to the column default", () => {
@@ -34,7 +34,7 @@ describe("isColumnMixed", () => {
 
   it("is mixed when a shown project overrides the column", () => {
     expect(isColumnMixed(state, "done", ["p", "q"])).toBe(true);
-    expect(isColumnMixed(state, "idea", ["p", "q"])).toBe(false);
+    expect(isColumnMixed(state, "backlog", ["p", "q"])).toBe(false);
   });
 
   it("ignores overrides of projects not shown", () => {
@@ -44,9 +44,9 @@ describe("isColumnMixed", () => {
 
 describe("toggleColumn", () => {
   it("flips the column and clears its overrides", () => {
-    const state = toggleCell(toggleCell(initial, "p", "idea"), "p", "done");
-    const next = toggleColumn(state, "idea", false);
-    expect(next.collapsedColumns).toEqual({ done: true, idea: true });
+    const state = toggleCell(toggleCell(initial, "p", "backlog"), "p", "done");
+    const next = toggleColumn(state, "backlog", false);
+    expect(next.collapsedColumns).toEqual({ done: true, backlog: true });
     expect(next.cellOverrides).toEqual({ "p:done": false });
   });
 

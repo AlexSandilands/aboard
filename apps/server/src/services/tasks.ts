@@ -122,7 +122,7 @@ export function createTasksService(
         const actor = input.actor ?? "user";
         const hasSteps = (input.plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
-        const status = hasSteps ? "planned" : "idea";
+        const status = hasSteps ? "planned" : "backlog";
         const task: TaskRecord = {
           id: randomUUID(),
           number: repos.tasks.nextNumber(),
@@ -202,7 +202,7 @@ export function createTasksService(
         const current = record(id);
         const status = input.status ?? current.status;
         const statusChanged = status !== current.status;
-        if (statusChanged && status !== "idea" && repos.plans.countSteps(id) === 0) {
+        if (statusChanged && status !== "backlog" && repos.plans.countSteps(id) === 0) {
           throw planRequired(current.number);
         }
         if (!statusChanged && !input.beforeId && !input.afterId) return;
