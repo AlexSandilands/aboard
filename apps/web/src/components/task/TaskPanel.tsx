@@ -8,14 +8,14 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandlers } from "~/hooks/useResizableWidth";
 import { ApiError } from "~/lib/api";
-import { useUpdateTask } from "~/state/mutations";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { usePanel } from "~/state/ui";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
 import { LinksSection } from "./LinksSection";
-import { MarkdownField } from "./MarkdownField";
+import { DetailsSection } from "./DetailsSection";
+import { ManagedSections } from "./ManagedSections";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
 import { ResolutionCallout } from "./ResolutionCallout";
@@ -168,7 +168,6 @@ function TaskPanelBody({
   titleActions: ReactNode;
 }) {
   const actions = usePlanActions(task.id);
-  const { mutate: updateTask } = useUpdateTask();
   return (
     <div className="flex flex-col pb-10">
       <div className="px-4 pt-4 pb-3">
@@ -181,23 +180,25 @@ function TaskPanelBody({
           <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
         )}
       </div>
-      <LabelsSection task={task} />
-      <LinksSection task={task} />
-      <ReviewSection task={task} />
-      <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />
-      <MarkdownField
-        title="Description"
-        value={task.description}
-        placeholder="Add a description…"
-        onSave={(description) => updateTask({ id: task.id, description })}
+      <ManagedSections
+        task={task}
+        render={(id) => {
+          switch (id) {
+            case "labels":
+              return <LabelsSection task={task} />;
+            case "links":
+              return <LinksSection task={task} />;
+            case "review":
+              return <ReviewSection task={task} />;
+            case "plan":
+              return <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />;
+            case "details":
+              return <DetailsSection task={task} />;
+            case "activity":
+              return <ActivityLog task={task} projects={projects} />;
+          }
+        }}
       />
-      <MarkdownField
-        title="Plan context"
-        value={task.planContext}
-        placeholder="Add plan context: goals, constraints, decisions…"
-        onSave={(planContext) => updateTask({ id: task.id, planContext })}
-      />
-      <ActivityLog task={task} projects={projects} />
     </div>
   );
 }

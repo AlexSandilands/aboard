@@ -19,12 +19,12 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
-import { CollapsibleSectionHeader } from "~/components/ui/collapsible-section-header";
 import { Input } from "~/components/ui/input";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useAddNote } from "~/state/mutations";
 import { describeEvent, type ActivityIcon } from "./activity.logic";
 import { stepIndexLabels } from "./plan.logic";
+import { TaskSection } from "./TaskSection";
 
 const ICON_CLASS = "size-3.5 text-muted-foreground/70";
 
@@ -50,7 +50,8 @@ const ICONS: Record<ActivityIcon, ReactNode> = {
 
 /** Handover input plus the task's event log, newest first (T3 WorkLog line style). */
 export function ActivityLog({ task, projects }: { task: TaskDetail; projects: ReadonlyArray<Project> }) {
-  const [expanded, setExpanded] = useState(task.events.length === 0);
+  // Held here rather than in the input: collapsing the section unmounts the input, not this.
+  const [draft, setDraft] = useState("");
   const lines = useMemo(() => {
     const ctx = {
       steps: stepIndexLabels(task.phases),
@@ -60,52 +61,52 @@ export function ActivityLog({ task, projects }: { task: TaskDetail; projects: Re
   }, [task.events, task.phases, projects]);
 
   return (
-    <section className="border-t border-border/65 px-2 pt-2 pb-2.5" aria-label="Activity">
-      <CollapsibleSectionHeader
-        variant="panel"
-        expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        accessory={<span className="text-2xs tabular-nums">{task.events.length}</span>}
-      >
-        Activity
-      </CollapsibleSectionHeader>
-      <div className="px-1.5 pt-1">
-        <AddNoteInput taskId={task.id} />
+    <TaskSection
+      title="Activity"
+      actions={<span className="text-2xs text-muted-foreground tabular-nums">{task.events.length}</span>}
+    >
+      <div className="px-1.5">
+        <AddNoteInput taskId={task.id} draft={draft} onDraftChange={setDraft} />
       </div>
-      {expanded ? (
-        <ol className="mt-2 flex flex-col px-1.5">
-          {lines.map(({ event, line }) => (
-            <li key={event.id} className="py-0.5">
-              <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-[13px] leading-relaxed">
-                <span className="flex size-5 shrink-0 items-center justify-center">{ICONS[line.icon]}</span>
-                <span className="min-w-0 flex-1 truncate text-secondary-label">
-                  <span className="font-medium text-foreground/80">{event.actor}</span> {line.text}
-                </span>
-                <time
-                  dateTime={event.at}
-                  title={new Date(event.at).toLocaleString()}
-                  className="shrink-0 text-2xs text-muted-foreground tabular-nums"
-                >
-                  {formatElapsedDurationLabel(event.at)}
-                </time>
+      <ol className="mt-2 flex flex-col px-1.5">
+        {lines.map(({ event, line }) => (
+          <li key={event.id} className="py-0.5">
+            <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-[13px] leading-relaxed">
+              <span className="flex size-5 shrink-0 items-center justify-center">{ICONS[line.icon]}</span>
+              <span className="min-w-0 flex-1 truncate text-secondary-label">
+                <span className="font-medium text-foreground/80">{event.actor}</span> {line.text}
+              </span>
+              <time
+                dateTime={event.at}
+                title={new Date(event.at).toLocaleString()}
+                className="shrink-0 text-2xs text-muted-foreground tabular-nums"
+              >
+                {formatElapsedDurationLabel(event.at)}
+              </time>
+            </div>
+            {line.quote ? (
+              <div className="mb-1 ms-6.5 border-l-2 border-border ps-2.5">
+                <Markdown size="xs">{line.quote}</Markdown>
               </div>
-              {line.quote ? (
-                <div className="mb-1 ms-6.5 border-l-2 border-border ps-2.5">
-                  <Markdown size="xs">{line.quote}</Markdown>
-                </div>
-              ) : null}
-            </li>
-          ))}
-          {lines.length === 0 ? <li className="py-1 text-xs text-muted-foreground">No activity yet.</li> : null}
-        </ol>
-      ) : null}
-    </section>
+            ) : null}
+          </li>
+        ))}
+        {lines.length === 0 ? <li className="py-1 text-xs text-muted-foreground">No activity yet.</li> : null}
+      </ol>
+    </TaskSection>
   );
 }
 
 /** Notes are handovers: what was done, what's next, anything surprising. */
-function AddNoteInput({ taskId }: { taskId: string }) {
-  const [draft, setDraft] = useState("");
+function AddNoteInput({
+  taskId,
+  draft,
+  onDraftChange: setDraft,
+}: {
+  taskId: string;
+  draft: string;
+  onDraftChange: (draft: string) => void;
+}) {
   const { mutate: addNote, isPending } = useAddNote();
   return (
     <Input

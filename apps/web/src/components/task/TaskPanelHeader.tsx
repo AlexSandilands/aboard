@@ -9,6 +9,7 @@ import { Separator } from "~/components/ui/separator";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
 import { resolutionLabel } from "./resolution.logic";
+import { SectionsMenu } from "./SectionsMenu";
 import { useSetTaskStatus } from "./useSetTaskStatus";
 
 const STATUS_ITEMS = TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }));
@@ -91,17 +92,15 @@ export function TaskPanelHeader({
           Archived
         </Badge>
       ) : null}
-      {task.status === "done" && !archived ? (
-        <Button
-          variant="outline"
-          size="xs"
-          className="ms-auto"
-          onClick={() => updateTask({ id: task.id, archived: true })}
-        >
-          <ArchiveIcon />
-          Archive
-        </Button>
-      ) : null}
+      <div className="ms-auto flex items-center gap-1.5">
+        {task.status === "done" && !archived ? (
+          <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
+            <ArchiveIcon />
+            Archive
+          </Button>
+        ) : null}
+        <SectionsMenu />
+      </div>
     </header>
   );
 }
