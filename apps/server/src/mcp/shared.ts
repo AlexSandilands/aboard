@@ -143,10 +143,22 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
-/** Mutating tools answer with a one-line confirmation plus the task's new state. */
-export function taskResult(services: Services, taskId: string, headline: string): CallToolResult {
+/**
+ * Mutating tools answer with a one-line confirmation plus the task's new state. `labelHint` adds the
+ * "Missing labels" nudge; only the planning moments (set_plan, create_task) ask for it, so it isn't noise elsewhere.
+ */
+export function taskResult(
+  services: Services,
+  taskId: string,
+  headline: string,
+  opts: { labelHint?: boolean } = {},
+): CallToolResult {
   const task = services.tasks.detail(taskId);
-  return textResult(`${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`);
+  const project = safeProject(services, task.projectId);
+  const body = opts.labelHint
+    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage() })
+    : renderTaskShort(task, project);
+  return textResult(`${headline}\n\n${body}`);
 }
 
 /** set_plan / create_task accept a structured plan or markdown; returns null when neither was given. */
