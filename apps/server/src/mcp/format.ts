@@ -3,6 +3,7 @@ import {
   findJiraKeys,
   formatPlanText,
   isGatingSeverity,
+  type LabelUsage,
   reviewBadgeLabel,
   type ReviewFinding,
   type Project,
@@ -76,7 +77,7 @@ function shortLink(link: TaskLink): string {
   }
 }
 
-/** One line per task: "#42 Title — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
+/** One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
 export function summaryLine(task: TaskSummary): string {
   const parts: string[] = [];
   const resolution = resolutionText(task);
@@ -91,7 +92,8 @@ export function summaryLine(task: TaskSummary): string {
   if (links.length) parts.push(links.join(", "));
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
-  return `#${task.number} ${task.title}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
+  const labels = task.labels.length ? ` ${task.labels.map((l) => `[${l}]`).join(" ")}` : "";
+  return `#${task.number} ${task.title}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /** Tasks grouped under status headings, in board column order. */
@@ -129,6 +131,12 @@ function eventText(event: TaskEvent): string {
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
       break;
+    case "labels_changed": {
+      const list = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[]) : []);
+      const changes = [...list("added").map((l) => `+${l}`), ...list("removed").map((l) => `-${l}`)];
+      what = `labels ${changes.join(" ")}`;
+      break;
+    }
     case "link_added":
       what = `linked ${str("kind") ?? ""} ${str("url") ?? ""}`.trimEnd();
       break;
@@ -174,6 +182,22 @@ export function missingLinkHints(task: TaskDetail): string[] {
     );
   }
   return hints;
+}
+
+/**
+ * A nudge to suggest labels for an open, unlabelled task, naming the labels already on the board so the agent
+ * reuses them. Suggest-only: the user approves before update_task, so the wording asks the agent to wait.
+ */
+export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsage>): string | null {
+  if (task.labels.length || task.resolution || task.status === "done" || task.archivedAt) return null;
+  // Generic examples only on an empty board, so they don't compete with the board's own vocabulary.
+  const source = labelsInUse.length
+    ? `Prefer labels already on the board: ${labelsInUse.map((l) => `${l.name} (${l.count})`).join(", ")}.`
+    : "No labels are in use yet; pick short type labels such as ui, backend, docs or bug.";
+  return (
+    `This task has no labels. Suggest 1-3 to the user. ${source} ` +
+    `Once they agree, call update_task(task: "#${task.number}", labels: [...]).`
+  );
 }
 
 function findingLine(f: ReviewFinding): string {
@@ -228,11 +252,12 @@ function reviewLines(task: TaskDetail): string[] {
 export function renderTaskDetail(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { events?: number } = {},
+  opts: { events?: number; labelsInUse?: ReadonlyArray<LabelUsage> } = {},
 ): string {
   const lines: string[] = [];
   lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
+  if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;
@@ -278,6 +303,8 @@ export function renderTaskDetail(
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
   }
+  const labels = opts.labelsInUse ? labelHint(task, opts.labelsInUse) : null;
+  if (labels) lines.push("", "Missing labels:", `- ${labels}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -289,6 +316,10 @@ export function renderTaskDetail(
 }
 
 /** Short post-mutation rendering: header, current step and the plan. */
-export function renderTaskShort(task: TaskDetail, project: Project | undefined): string {
-  return renderTaskDetail(task, project, { events: 0 });
+export function renderTaskShort(
+  task: TaskDetail,
+  project: Project | undefined,
+  opts: { labelsInUse?: ReadonlyArray<LabelUsage> } = {},
+): string {
+  return renderTaskDetail(task, project, { ...opts, events: 0 });
 }

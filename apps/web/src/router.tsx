@@ -2,10 +2,11 @@ import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet 
 import { z } from "zod";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 
-/** Board search params: `task` opens the detail panel, `project` scopes the board. */
+/** Board search params: `task` opens the detail panel, `project` scopes the board, `labels` (comma-separated) filters it. */
 export const BoardSearch = z.object({
   task: z.string().optional(),
   project: z.string().optional(),
+  labels: z.string().optional(),
 });
 export type BoardSearch = z.infer<typeof BoardSearch>;
 

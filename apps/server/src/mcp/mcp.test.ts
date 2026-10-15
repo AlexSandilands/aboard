@@ -336,4 +336,79 @@ describe("MCP endpoint", () => {
     );
     expect(s.tasks.summary(task.id).status).toBe("done");
   });
+
+  it("tags tasks with labels, filters and shows them", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    await call("create_idea", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
+    await call("create_task", {
+      title: "Add endpoint",
+      workspacePath,
+      markdown: "## Build\n- [ ] route",
+      labels: ["backend"],
+    });
+    await call("create_idea", { title: "Write docs", workspacePath });
+
+    const listed = await call("list_tasks", { workspacePath, labels: ["ui", "Backend"] });
+    expect(listed).toContain("Polish header [polish] [ui]");
+    expect(listed).toContain("Add endpoint [backend]");
+    expect(listed).not.toContain("Write docs");
+    expect(await call("list_tasks", { query: "polish" })).toContain("Polish header");
+    expect(await call("board_overview", {})).toContain("Labels in use: backend (1), polish (1), ui (1)");
+
+    const updated = await call("update_task", { task: "#1", labels: ["ui", "design"] });
+    expect(updated).toContain("Labels: design, ui");
+    const detail = await call("get_task", { task: "#1" });
+    expect(detail).toContain("labels +design -polish");
+
+    const rejected = await client.callTool({ name: "update_task", arguments: { task: "#1", labels: ["#"] } });
+    expect(rejected.isError).toBe(true);
+    expect(text(rejected)).toMatch(/^VALIDATION: Label "#" is empty/);
+  });
+
+  it("asks for labels when planning an unlabelled task, naming the labels in use", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    const markdown = "## Build\n- [ ] route";
+    await call("create_idea", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
+    await call("create_idea", { title: "Untagged", workspacePath });
+
+    const planned = await call("set_plan", { task: "#2", markdown });
+    expect(planned).toContain("Missing labels:");
+    expect(planned).toContain("Prefer labels already on the board: bug (1), ui (1).");
+    expect(planned).toContain('update_task(task: "#2", labels: [...])');
+    expect(await call("set_plan", { task: "#1", markdown })).not.toContain("Missing labels:");
+    // Only the planning moments carry it, not every mutation.
+    expect(await call("update_step", { task: "#2", step: "1.1", status: "in_progress" })).not.toContain(
+      "Missing labels:",
+    );
+
+    expect(await call("create_task", { title: "New", workspacePath, markdown })).toContain("Missing labels:");
+    expect(await call("create_task", { title: "Labelled", workspacePath, markdown, labels: ["ui"] })).not.toContain(
+      "Missing labels:",
+    );
+
+    expect(await call("get_task", { task: "#2" })).toContain("Missing labels:");
+    await call("close_task", { task: "#2", resolution: "wont_do" });
+    expect(await call("get_task", { task: "#2" })).not.toContain("Missing labels:");
+  });
+
+  it("offers generic label examples only when the board has no labels yet", async () => {
+    const created = await client.callTool({
+      name: "create_task",
+      arguments: { title: "First", workspacePath: "C:/Fake/proj", markdown: "## Build\n- [ ] route" },
+    });
+    expect(text(created)).toContain("No labels are in use yet; pick short type labels such as ui");
+    expect(text(created)).not.toContain("Prefer labels already on the board");
+  });
 });

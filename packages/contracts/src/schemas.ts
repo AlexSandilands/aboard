@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LabelHue } from "./labels.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -244,6 +245,8 @@ export const TaskSummary = z.object({
   createdAt: IsoDate,
   updatedAt: IsoDate,
   statusChangedAt: IsoDate,
+  /** Normalised labels (see normalizeLabel), sorted by name. */
+  labels: z.array(z.string()),
   resolution: TaskResolution.nullable(),
   /** The task that delivered or duplicates this one; null for "won't do" or once that task is deleted. */
   resolvedBy: TaskRef.nullable(),
@@ -286,6 +289,8 @@ export type T3IntegrationStatus = z.infer<typeof T3IntegrationStatus>;
 export const BoardSnapshot = z.object({
   projects: z.array(Project),
   tasks: z.array(TaskSummary),
+  /** Label colour overrides by label; labels not listed take a hue hashed from their name. */
+  labelColors: z.record(z.string(), LabelHue),
   integrations: z.object({ t3: T3IntegrationStatus }),
 });
 export type BoardSnapshot = z.infer<typeof BoardSnapshot>;
@@ -297,6 +302,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("task.deleted"), taskId: z.string() }),
   z.object({ type: z.literal("task.detail_changed"), taskId: z.string() }),
   z.object({ type: z.literal("integrations.changed"), t3: T3IntegrationStatus }),
+  /** Label colours are board-wide, so a change is sent whole rather than per task. */
+  z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -358,6 +365,8 @@ export const CreateTaskInput = z.object({
   description: z.string().optional(),
   plan: PlanInput.optional(),
   links: z.array(LinkInput).optional(),
+  /** Normalised by the server; see normalizeLabels. */
+  labels: z.array(z.string()).optional(),
   actor: z.string().optional(),
 });
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>;
@@ -370,6 +379,8 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
+  /** Replaces the whole label list. */
+  labels: z.array(z.string()).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 

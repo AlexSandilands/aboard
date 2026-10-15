@@ -1,5 +1,6 @@
 export * from "./brand.ts";
 export * from "./schemas.ts";
+export * from "./labels.ts";
 export * from "./reviews.ts";
 export * from "./reviewPrompt.ts";
 export * from "./derive.ts";

@@ -1,5 +1,6 @@
 import type { Db } from "../database.ts";
 import { createEventsRepo } from "./events.ts";
+import { createLabelsRepo } from "./labels.ts";
 import { createLinksRepo } from "./links.ts";
 import { createPlansRepo } from "./plans.ts";
 import { createProjectsRepo } from "./projects.ts";
@@ -17,6 +18,7 @@ export function createRepos(db: Db) {
     plans: createPlansRepo(sql),
     links: createLinksRepo(sql),
     events: createEventsRepo(sql),
+    labels: createLabelsRepo(sql),
     reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
   };

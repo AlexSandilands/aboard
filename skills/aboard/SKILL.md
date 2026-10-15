@@ -25,13 +25,24 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    task, or `create_task` for new work (plan included, lands in Planned). A good plan has phases with
    3–8 concrete, verifiable steps each ("Add links table migration", not "Backend"). Put the approach
    and key decisions in `context`. Markdown checklists work too:
+
    ```markdown
    ## Phase 1: Data
 
    - [ ] Add migration for links table
    - [ ] Repository + tests
    ```
+
    Then `move_task` to `in_progress`.
+
+   Tag tasks with `labels` for the kind of work, e.g. `["ui"]`, `["backend", "bug"]`, on
+   `create_task` / `create_idea`, or later with `update_task` (which replaces the list). Reuse the labels
+   `board_overview` lists rather than inventing near-duplicates. The user filters the board by them, and
+   `list_tasks` takes a `labels` filter too.
+   If a task you just planned has no labels (the `set_plan` / `create_task` / `get_task` result says so
+   under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
+   before calling `update_task`.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
    asking the user a question and waiting for the answer, mark the current step `blocked` with a note

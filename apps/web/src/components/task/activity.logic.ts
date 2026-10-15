@@ -93,6 +93,17 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const names = fields.map((f) => FIELD_LABEL[f] ?? f);
       return line("edit", names.length ? `edited the ${names.join(", ")}` : "edited the task");
     }
+    case "labels_changed": {
+      const list = (value: unknown) =>
+        Array.isArray(value) ? value.filter((l): l is string => typeof l === "string") : [];
+      const added = list(p.added);
+      const removed = list(p.removed);
+      const parts = [
+        added.length ? `added ${plural(added.length, "label")} ${added.join(", ")}` : null,
+        removed.length ? `removed ${removed.join(", ")}` : null,
+      ].filter(Boolean);
+      return line("edit", parts.length ? parts.join("; ") : "changed the labels");
+    }
     case "moved_project": {
       const title = ctx.projectTitle(str(p.to) ?? "");
       return line("project", title ? `moved to project ${title}` : "moved to another project");

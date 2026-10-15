@@ -1,13 +1,26 @@
 import type { Project } from "@repo/contracts";
+import { useMemo } from "react";
+import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
+import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
-import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useBoard } from "~/state/queries";
 import { useBoardView, usePalette } from "~/state/ui";
-import { useSelectedTaskId, useSetProjectFilter } from "./boardNavigation";
+import { useLabelFilter, useSelectedTaskId, useSetLabelFilter, useSetProjectFilter } from "./boardNavigation";
 import { cn } from "~/lib/utils";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -21,7 +34,9 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const setHasPrOnly = useBoardView((s) => s.setHasPrOnly);
   const showArchived = useBoardView((s) => s.showArchived);
   const setShowArchived = useBoardView((s) => s.setShowArchived);
-  const filtered = attentionOnly || hasPrOnly || showArchived;
+  const selectedLabels = useLabelFilter();
+  const setLabelFilter = useSetLabelFilter();
+  const filtered = attentionOnly || hasPrOnly || showArchived || selectedLabels.length > 0;
   const setProjectFilter = useSetProjectFilter();
   // With the task panel closed this header reaches the window's right edge and the native controls.
   const atRightEdge = useSelectedTaskId() === null;
@@ -57,6 +72,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       ) : (
         <h1 className="text-sm font-medium">Board</h1>
       )}
+      <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
         <Menu>
           <Tooltip>
@@ -86,6 +102,11 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
                 Show archived
               </MenuCheckboxItem>
             </MenuGroup>
+            <LabelFilterGroup
+              scopedProjectId={scopedProject?.id ?? null}
+              selected={selectedLabels}
+              onChange={(labels) => void setLabelFilter(labels)}
+            />
           </MenuPopup>
         </Menu>
         <Button variant="outline" size="xs" onClick={() => usePalette.getState().openPalette()}>
@@ -98,5 +119,73 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
         </Button>
       </div>
     </header>
+  );
+}
+
+/** The filter menu's label checkboxes, with how many cards in scope carry each. Selected labels stay listed. */
+function LabelFilterGroup({
+  scopedProjectId,
+  selected,
+  onChange,
+}: {
+  scopedProjectId: string | null;
+  selected: ReadonlyArray<string>;
+  onChange: (labels: string[]) => void;
+}) {
+  const tasks = useBoard().data?.tasks;
+  const colors = useLabelColors();
+  const counts = useMemo(() => {
+    const inScope = (tasks ?? []).filter((task) => !scopedProjectId || task.projectId === scopedProjectId);
+    const list = labelCounts(inScope);
+    for (const label of selected) if (!list.some((l) => l.name === label)) list.push({ name: label, count: 0 });
+    return list;
+  }, [tasks, scopedProjectId, selected]);
+  if (counts.length === 0) return null;
+  return (
+    <>
+      <MenuSeparator />
+      <MenuGroup>
+        <MenuGroupLabel>Labels (any)</MenuGroupLabel>
+        {counts.map(({ name, count }) => (
+          <MenuCheckboxItem
+            key={name}
+            checked={selected.includes(name)}
+            closeOnClick={false}
+            onCheckedChange={() => onChange(toggleLabel(selected, name))}
+          >
+            <span className="flex w-full min-w-0 items-center gap-2">
+              <LabelChip label={name} colors={colors} />
+              <span className="ms-auto text-xs tabular-nums text-muted-foreground">{count}</span>
+            </span>
+          </MenuCheckboxItem>
+        ))}
+        {selected.length ? <MenuItem onClick={() => onChange([])}>Clear labels</MenuItem> : null}
+      </MenuGroup>
+    </>
+  );
+}
+
+/** Selected label filters as removable chips beside the title. */
+function ActiveLabelFilters({
+  selected,
+  onChange,
+}: {
+  selected: ReadonlyArray<string>;
+  onChange: (labels: string[]) => void;
+}) {
+  const colors = useLabelColors();
+  if (selected.length === 0) return null;
+  return (
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden" aria-label="Label filters">
+      {selected.map((label) => (
+        <LabelChip
+          key={label}
+          label={label}
+          colors={colors}
+          size="default"
+          onRemove={() => onChange(selected.filter((l) => l !== label))}
+        />
+      ))}
+    </div>
   );
 }

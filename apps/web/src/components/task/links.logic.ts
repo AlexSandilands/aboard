@@ -83,6 +83,11 @@ export function threadStatusPresentation(status: T3ThreadStatus): ThreadStatusPr
 
 type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
 
+/** Settled or archived threads are finished with. Without a snapshot we can't tell, so it counts as active. */
+export function isActiveThread(snapshot: T3ThreadSnapshot | null): boolean {
+  return !snapshot?.settled && !snapshot?.archived;
+}
+
 const STATUS_RANK: Record<T3ThreadStatus, number> = {
   approval: 0,
   input: 0,

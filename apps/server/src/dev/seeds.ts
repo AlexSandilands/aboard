@@ -262,6 +262,23 @@ const threads: Scenario = (s, opts) => {
   thread("done", "Thread settled", { status: "done", settled: true });
   thread("done", "Thread archived", { status: "idle", archived: true });
 
+  // Cards show only active threads; the panel lists all three, settled and archived dimmed.
+  const mixed = addTask(s, project.id, {
+    title: "Threads active, settled and archived",
+    status: "in_progress",
+    links: ["active", "settled", "archived"].map((name) => `t3code://threads/sandbox-env/thread-mixed-${name}`),
+  });
+  const [active, settled, archivedThread] = s.tasks.detail(mixed).links;
+  const mixedSnapshot = { lastActivityAt: now, model: "claude-opus", branch: null };
+  s.links.setSnapshot(active!.id, { ...mixedSnapshot, title: "Active thread", status: "working" });
+  s.links.setSnapshot(settled!.id, { ...mixedSnapshot, title: "Settled thread", status: "done", settled: true });
+  s.links.setSnapshot(archivedThread!.id, {
+    ...mixedSnapshot,
+    title: "Archived thread",
+    status: "idle",
+    archived: true,
+  });
+
   addTask(s, project.id, {
     title: "Jira and plain links",
     status: "planned",

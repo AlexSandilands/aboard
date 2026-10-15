@@ -54,7 +54,7 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
             }
           }}
           placeholder="Search"
-          aria-label="Search tasks by title, #number or Jira key"
+          aria-label="Search tasks by title, #number, Jira key or label"
           className="min-w-0 flex-1"
         />
         {search ? (

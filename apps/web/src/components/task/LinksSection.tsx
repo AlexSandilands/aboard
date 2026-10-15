@@ -41,6 +41,7 @@ import { copyToClipboard } from "./InlineInput";
 import {
   describeLinkInput,
   hostnameOf,
+  isActiveThread,
   isWebUrl,
   jiraHref,
   orderLinks,
@@ -282,7 +283,7 @@ function T3ThreadRow({
         snapshot?.lastActivityAt ? formatRelativeTimeLabel(snapshot.lastActivityAt) : null,
       ].filter(Boolean)
     : [];
-  const dimmed = Boolean(snapshot?.settled || snapshot?.archived);
+  const dimmed = !isActiveThread(snapshot);
   const statusBadge = status ? (
     <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
       <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />

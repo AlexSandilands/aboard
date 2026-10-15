@@ -20,6 +20,7 @@ import type {
   SubmitReviewInput,
   T3ThreadSnapshot,
   TaskDetail,
+  LabelUsage,
   TaskEvent,
   TaskLink,
   TaskResolution,
@@ -49,6 +50,7 @@ export interface Services {
   settings: SettingsService;
   board: BoardService;
   reviews: ReviewsService;
+  labels: LabelsService;
 }
 
 export interface ProjectRef {
@@ -81,8 +83,10 @@ export interface TaskQuery {
   projectId?: string;
   status?: TaskStatus;
   includeArchived?: boolean;
-  /** Matches title, description, "#number" and Jira keys, case-insensitively. */
+  /** Matches title, description, "#number", Jira keys and labels, case-insensitively. */
   query?: string;
+  /** Tasks carrying any of these labels (normalised before matching). */
+  labels?: string[];
   attentionOnly?: boolean;
 }
 
@@ -214,6 +218,17 @@ export interface ReviewsService {
     status: Exclude<ReviewRoundStatus, "submitted">,
     opts: { actor: string; error?: string; from?: ReadonlyArray<ReviewRoundStatus> },
   ): TaskReview | null;
+}
+
+export interface LabelsService {
+  /** Labels on active tasks, by name, with counts and colour overrides. */
+  usage(): LabelUsage[];
+  /** Colour overrides by label. */
+  colors(): Record<string, number>;
+  /** Sets a label's colour override (the label need not be in use); returns all overrides. */
+  setColor(label: string, hue: number): Record<string, number>;
+  /** Drops the override so the label takes its hashed hue again; returns all overrides. */
+  clearColor(label: string): Record<string, number>;
 }
 
 export interface BoardService {

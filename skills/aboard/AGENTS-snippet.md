@@ -6,6 +6,7 @@ Track work on the user's local task board via the `aboard` MCP server (Ideas →
 - **Resume:** always `get_task` before continuing an existing task; it has the plan, current step and handover notes. Add any **Missing links** it lists.
 - **Ideas:** something worth doing comes up mid-task? `create_idea` once, then carry on.
 - **Plan first:** tasks can't leave Ideas without a plan. `set_plan` (or `create_task` with a plan): phases with 3–8 concrete, verifiable steps, approach in `context`. Markdown checklists (`## Phase` / `- [ ] step`) are accepted. Then `move_task` → `in_progress`.
+- **Labels:** tag tasks with the kind of work (`labels: ["ui"]`, `["backend", "bug"]`) on `create_task` / `create_idea` or `update_task` (replaces the list). Reuse the labels `board_overview` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
 - **Keep steps current:** `update_step` → `in_progress` when starting, `done` when finished, `blocked` + `appendNotes` when stuck or before asking the user a question and waiting (say what you need; back to `in_progress` once answered). `add_steps` for new work.
 - **Links:** link the Jira key when the task is created (`links` on `create_task` / `create_idea`, or `link`); keys in the title are linked automatically. `link` PRs as soon as they're open.
 - **Status:** `review` when the work is done, `done` when merged/verified. On `PLAN_REQUIRED`, call `set_plan` first.

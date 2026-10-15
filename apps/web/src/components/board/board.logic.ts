@@ -8,14 +8,40 @@ import {
 } from "@repo/contracts";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
-/** Done shows only the most recently finished tasks until the lane is expanded. */
-export const DONE_PREVIEW_COUNT = 5;
+/** A collapsed column shows only the first few cards of each lane until it is expanded. */
+export const COLUMN_PREVIEW_COUNT = 5;
 
 export type LaneCells = Readonly<Record<TaskStatus, ReadonlyArray<TaskSummary>>>;
 
 export interface Lane {
   project: Project;
   cells: LaneCells;
+}
+
+export interface VisibleCellTasks {
+  visible: ReadonlyArray<TaskSummary>;
+  /** Cards left out because the column is collapsed. */
+  hiddenCount: number;
+}
+
+/**
+ * The cards a cell renders. A collapsed column keeps the first few, plus any of `keepIds` that fall
+ * past them (the selected card, the card being dragged) so those are never hidden.
+ */
+export function visibleCellTasks(
+  tasks: ReadonlyArray<TaskSummary>,
+  collapsed: boolean,
+  keepIds: ReadonlyArray<string | null>,
+): VisibleCellTasks {
+  if (!collapsed || tasks.length <= COLUMN_PREVIEW_COUNT) return { visible: tasks, hiddenCount: 0 };
+  const visible = tasks.slice(0, COLUMN_PREVIEW_COUNT);
+  for (const task of tasks.slice(COLUMN_PREVIEW_COUNT)) if (keepIds.includes(task.id)) visible.push(task);
+  return { visible, hiddenCount: tasks.length - visible.length };
+}
+
+/** True when any cell in the lane is long enough to get a collapse toggle row. */
+export function laneHasCollapsibleCell(cells: LaneCells): boolean {
+  return STATUS_ORDER.some((status) => cells[status].length > COLUMN_PREVIEW_COUNT);
 }
 
 export interface BoardFilters {
@@ -25,6 +51,8 @@ export interface BoardFilters {
   attentionOnly: boolean;
   /** Only cards with at least one PR link. */
   hasPrOnly: boolean;
+  /** `?labels=`: only cards with any of these labels; empty shows all. */
+  labels: ReadonlyArray<string>;
 }
 
 function hasPr(task: TaskSummary): boolean {
@@ -37,13 +65,14 @@ export function jiraKeys(task: TaskSummary): string[] {
   return keys;
 }
 
-/** Matches a card against the sidebar search: title, `#number` / bare number, or Jira key. */
+/** Matches a card against the sidebar search: title, `#number` / bare number, Jira key or label. */
 export function matchesTaskSearch(task: TaskSummary, rawQuery: string): boolean {
   const query = rawQuery.trim().toLowerCase();
   if (!query) return true;
   if (task.title.toLowerCase().includes(query)) return true;
   const numberQuery = query.startsWith("#") ? query.slice(1) : query;
   if (/^\d+$/.test(numberQuery) && String(task.number).startsWith(numberQuery)) return true;
+  if (task.labels.some((label) => label.includes(query))) return true;
   return jiraKeys(task).some((key) => key.toLowerCase().includes(query));
 }
 
@@ -61,8 +90,8 @@ function emptyCells(): Record<TaskStatus, TaskSummary[]> {
 
 /**
  * Groups the board into one lane per project (in project order) and five cells per lane.
- * Cells are ordered by position, except Done which is newest-first. With a text, attention or PR
- * filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
+ * Cells are ordered by position, except Done which is newest-first. With a text, attention, PR or
+ * label filter active, lanes without a match are dropped so results are easy to scan. `archived` tasks
  * (Show archived) join their lanes; the snapshot's copy wins if a task is in both.
  */
 export function buildLanes(
@@ -71,7 +100,8 @@ export function buildLanes(
   archived: ReadonlyArray<TaskSummary> = [],
 ): Lane[] {
   const scoped = filters.projectId && board.projects.some((p) => p.id === filters.projectId) ? filters.projectId : null;
-  const filtering = filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly;
+  const filtering =
+    filters.search.trim() !== "" || filters.attentionOnly || filters.hasPrOnly || filters.labels.length > 0;
   const byProject = new Map<string, Record<TaskStatus, TaskSummary[]>>();
   const active = new Set(board.tasks.map((task) => task.id));
   const tasks = archived.length ? [...board.tasks, ...archived.filter((task) => !active.has(task.id))] : board.tasks;
@@ -79,6 +109,7 @@ export function buildLanes(
     if (scoped && task.projectId !== scoped) continue;
     if (filters.attentionOnly && task.attention.length === 0) continue;
     if (filters.hasPrOnly && !hasPr(task)) continue;
+    if (filters.labels.length && !task.labels.some((label) => filters.labels.includes(label))) continue;
     if (!matchesTaskSearch(task, filters.search)) continue;
     let cells = byProject.get(task.projectId);
     if (!cells) byProject.set(task.projectId, (cells = emptyCells()));

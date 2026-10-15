@@ -6,6 +6,7 @@ import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
   hasProjectRef,
+  labelsField,
   planFromArgs,
   planInputFields,
   projectFields,
@@ -53,6 +54,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
         links: linksField,
+        labels: labelsField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -67,6 +69,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
           ...(links.length ? { links } : {}),
+          ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
         return textResult(`Captured idea #${task.number} "${task.title}" in ${project.title}.`);
@@ -82,7 +85,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
-        "can jump back to your thread. " +
+        "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...). " +
         "For something you are not doing now, use create_idea instead.",
       inputSchema: {
         title: z.string().min(1),
@@ -90,6 +93,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         ...projectFields,
         ...planInputFields,
         links: linksField,
+        labels: labelsField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -112,9 +116,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.description ? { description: args.description } : {}),
           plan,
           ...(links.length ? { links } : {}),
+          ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
-        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`);
+        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, { labelHint: true });
       }),
   );
 
@@ -198,7 +203,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description or plan context, or archive/unarchive it. To move the task to a different " +
+        "Edit a task's title, description, plan context or labels, or archive/unarchive it. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist). " +
         "For plan steps use set_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
@@ -220,6 +225,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .nullable()
           .optional()
           .describe("Turn local review on or off for this task; null follows the board's setting."),
+        labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         actor: actorField,
       },
     },
@@ -239,6 +245,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(projectId ? { projectId } : {}),
             ...(args.archived !== undefined ? { archived: args.archived } : {}),
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
+            ...(args.labels !== undefined ? { labels: args.labels } : {}),
           },
           actor(args.actor),
         );

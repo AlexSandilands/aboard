@@ -153,6 +153,16 @@ describe("filterItems", () => {
     expect(filterItems(tasks, "#12").map((t) => t.title)).toEqual(["Fix login", "Other"]);
     expect(filterItems(tasks, "12")[0]?.title).toBe("Fix login");
   });
+  it("finds tasks by label", () => {
+    const tasks = [
+      {
+        title: "Fix login",
+        searchTerms: taskSearchTerms({ number: 1, title: "Fix login", labels: ["backend"] }, "web"),
+      },
+      { title: "Header", searchTerms: taskSearchTerms({ number: 2, title: "Header", labels: ["ui"] }, "web") },
+    ];
+    expect(filterItems(tasks, "backend").map((t) => t.title)).toEqual(["Fix login"]);
+  });
 });
 
 describe("normalizeDescription", () => {

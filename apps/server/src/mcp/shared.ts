@@ -34,6 +34,13 @@ export const actorField = z
   .optional()
   .describe("Who is acting, shown in the activity log. Defaults to your MCP client name.");
 
+export const labelsField = z
+  .array(z.string().min(1))
+  .describe(
+    'Short type labels such as "ui", "backend", "server", "docs", "bug" or "tech-debt". Lowercased and deduped; ' +
+      "reuse labels already on the board (board_overview lists them) rather than inventing near-duplicates.",
+  );
+
 export const t3ThreadField = z
   .object({
     environmentId: z.string().min(1).describe("From the T3 tool t3_environment_read."),
@@ -136,10 +143,22 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
-/** Mutating tools answer with a one-line confirmation plus the task's new state. */
-export function taskResult(services: Services, taskId: string, headline: string): CallToolResult {
+/**
+ * Mutating tools answer with a one-line confirmation plus the task's new state. `labelHint` adds the
+ * "Missing labels" nudge; only the planning moments (set_plan, create_task) ask for it, so it isn't noise elsewhere.
+ */
+export function taskResult(
+  services: Services,
+  taskId: string,
+  headline: string,
+  opts: { labelHint?: boolean } = {},
+): CallToolResult {
   const task = services.tasks.detail(taskId);
-  return textResult(`${headline}\n\n${renderTaskShort(task, safeProject(services, task.projectId))}`);
+  const project = safeProject(services, task.projectId);
+  const body = opts.labelHint
+    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage() })
+    : renderTaskShort(task, project);
+  return textResult(`${headline}\n\n${body}`);
 }
 
 /** set_plan / create_task accept a structured plan or markdown; returns null when neither was given. */
