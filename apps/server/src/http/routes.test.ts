@@ -46,8 +46,8 @@ describe("REST", () => {
     const old = await h.request(`/api/tasks/${h.task.id}/move`, { method: "POST", json: { status: "idea" } });
     expect(old.status).toBe(200);
     expect(((await old.json()) as TaskDetail).status).toBe("backlog");
-    const listed = await h.request(`/api/tasks?status=idea`);
-    expect(listed.status).toBe(200);
+    const listed = (await (await h.request("/api/tasks?status=idea")).json()) as TaskDetail[];
+    expect(listed.map((t) => [t.id, t.status])).toEqual([[h.task.id, "backlog"]]);
 
     const malformed = await h.request("/api/projects", {
       method: "POST",
