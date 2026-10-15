@@ -1,0 +1,60 @@
+# Docs
+
+These docs are for people and agents changing this repo. User-facing docs are in the root
+[README.md](../README.md). Conventions and commands are in [AGENTS.md](../AGENTS.md) and the AGENTS.md
+files under each app.
+
+## What goes where
+
+| Doc                                      | Holds                                                                                  | Write or update it when                                                                  |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [architecture.md](architecture.md)       | The system overview: packages, how a request flows, data model, guard, data dir        | A package, a cross-cutting flow, a table or an env var changes                           |
+| `features/<name>.md`                     | How one feature works, the decisions behind it, the alternatives turned down, its code | You add a feature, or change how one behaves                                             |
+| `decisions/NNNN-title.md`                | One cross-cutting decision (an ADR): context, decision, consequences                   | A choice constrains code beyond one feature. Never rewrite one; supersede it with a new one |
+| `reference/<name>.md`                    | Lookup material that isn't about our behaviour, such as where the styles come from     | The source it describes changes                                                          |
+| [templates/](templates/)                 | Starting points for feature docs and ADRs                                              | The shape of those docs changes                                                          |
+
+## Rules
+
+- **Docs describe the code as it is now.** Planned work belongs on the board, not here. A feature doc
+  doesn't say "will"; if part of a feature isn't built, the doc says what's missing.
+- **Docs change in the same PR as the behaviour they describe.** A PR that changes how a feature behaves
+  updates its feature doc; one that changes a flow, a table or an env var updates `architecture.md`.
+- **Decisions sit with what they decide.** A choice that only affects one feature goes in that feature
+  doc's Decisions section. A choice that constrains several features or the whole repo gets an ADR.
+- **ADRs are append-only.** To reverse one, write a new ADR and set the old one's status to
+  `Superseded by [NNNN](NNNN-title.md)`. The next number is the highest existing number plus one.
+- **Keep the product name out of prose** where a neutral phrase ("the board", "the server") works. The
+  name lives in the root `package.json`.
+- **Link with relative paths** and name code by path (`apps/server/src/services/tasks.ts`).
+  `pnpm docs:check` (part of `pnpm check`) fails on broken relative links in Markdown files and on
+  `docs/...` paths in source comments that don't exist.
+
+## Index
+
+- [architecture.md](architecture.md): start here.
+
+### Features
+
+- [Task lifecycle](features/task-lifecycle.md): statuses, the plan gate, closing, archiving, deleting, numbering
+- [Plans](features/plans.md): phases and steps, the current step, Markdown plans
+- [MCP](features/mcp.md): the agent API, its tools and how they're written
+- [Live sync](features/live-sync.md): server-sent events and the web app's cache
+- [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
+- [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards
+- [GitHub PRs](features/github-prs.md): live PR state through `gh`
+- [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
+- [Local review](features/local-review.md): the review loop before a PR
+- [Desktop app](features/desktop.md): the Electron shell
+
+### Decisions
+
+- [0001 Services hold all business logic](decisions/0001-service-layer.md)
+- [0002 SQLite through `node:sqlite`](decisions/0002-node-sqlite.md)
+- [0003 Localhost only, with an Origin check](decisions/0003-localhost-guard.md)
+- [0004 A task needs a plan to leave Ideas](decisions/0004-plan-gate.md)
+- [0005 Live updates patch the cache, with no replay](decisions/0005-sse-without-replay.md)
+
+### Reference
+
+- [Style reference](reference/style.md): where the UI's styles come from in T3 Code

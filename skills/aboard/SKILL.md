@@ -94,7 +94,7 @@ it. That includes existing tasks you pick up or resume, not only ones you create
    start or resume an existing task. A task can have several threads; each session adds its own.
 
 T3 Code exposes no environment variable for this, so you must call those tools. A thread started from
-the board is already linked; its first message says so (see `docs/integrations/agent-handoff.md` in the
+the board is already linked; its first message says so (see `docs/features/agent-handoff.md` in the
 board's repo).
 
 ## Setup

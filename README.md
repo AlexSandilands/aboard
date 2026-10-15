@@ -17,6 +17,11 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
   conversation), any URL. Failing checks, requested changes and blocked steps surface under
   **Needs attention**. Jira keys in a task title are linked automatically, and agents are told which
   Jira keys and T3 thread a task is still missing.
+- **Labels:** tag tasks with the kind of work (`ui`, `backend`, `bug`), from the task panel or by agents,
+  and filter the board to any of several labels. Agents are asked to suggest labels for tasks that have
+  none. Each label gets a colour you can change.
+- **Your layout:** collapse a column (Done starts collapsed) or just one project's cell, and collapse,
+  reorder or hide the task panel's sections. Layout is saved per browser.
 
 ## Run it
 
@@ -105,30 +110,30 @@ The card shows the review state, and the task panel lists every finding and how 
 The reviewer follows the built-in review skill, or any skill you have installed for Claude Code, Copilot or
 Codex (per project, if you like). When no agent runs a review, the board nudges the task's T3 thread, and
 can review it itself with Claude Code headless. See
-[docs/integrations/local-review.md](docs/integrations/local-review.md).
+[docs/features/local-review.md](docs/features/local-review.md).
 
 ## T3 Code integration (optional)
 
 When T3 Code is running, it is detected automatically.
 
-- **Thread links:** agents inside T3 Code attach their thread to the task. The card and detail
-  panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
+- **Thread links:** agents inside T3 Code attach their thread to the task. The card (while the thread
+  is active) and the detail panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
   choose in Settings).
 - **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
   touches T3 Code's data files (it only starts threads through T3's own API when you ask it to).
-- **Live thread status and Start in T3 Code:** in T3 Code, open Settings → Connections → Create link
+- **Live thread status and new threads:** in T3 Code, open Settings → Connections → Create link
   (allow "View environment" and "Operate tasks"), and paste the pairing link into Settings → T3 Code
   within 5 minutes. The board exchanges it for a 30-day token. If you have the `t3` CLI, you can
   paste a token from it instead:
   ```sh
   t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
   ```
-  Linked threads then show whether they're working, waiting for input, or done, and cards get a
-  **Start in T3 Code** button that opens a new thread for the task (model, access, worktree and
+  Linked threads then show whether they're working, waiting for input, or done, and the hand-off
+  menu gets **New T3 Code thread…**, which opens a new thread for the task (model, access, worktree and
   branch are picked in a dialog). `orchestration:read` alone is enough for status only.
-- **Copy prompt:** every open task has a button that copies a ready-to-paste prompt for any agent
+- **Copy prompt:** every open task has a hand-off menu that copies a ready-to-paste prompt for any agent
   (Claude Code, Copilot, …), with a planning variant for rough ideas. See
-  [docs/integrations/agent-handoff.md](docs/integrations/agent-handoff.md).
+  [docs/features/agent-handoff.md](docs/features/agent-handoff.md).
 
 ## Keyboard
 

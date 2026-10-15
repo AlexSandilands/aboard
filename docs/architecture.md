@@ -1,0 +1,143 @@
+# Architecture
+
+A local kanban board for coding agents. One Node process holds the data and serves three surfaces: a
+REST API and a live event stream for the web app, and an MCP endpoint for agents. Both surfaces call the
+same services, so an agent's change reaches open browsers within a second.
+
+```
+ browser (apps/web) ──REST /api/*──┐                     ┌── task_events row
+        ▲                          ├─► services/* ─► SQLite transaction ─┤
+        └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
+ agents ──MCP POST /mcp────────────┘
+ pollers (gh, T3 Code, review watchdog) ──► services/*
+```
+
+## Packages
+
+| Package              | Holds                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/contracts` | zod schemas and inferred types shared by server and web, plus pure helpers (`derive.ts`, `planMarkdown.ts`, `links.ts`, `brand.ts`). Exported as TS source. |
+| `apps/server`        | Hono on Node 24: REST, SSE, MCP, services, `node:sqlite`, and the GitHub, T3 Code and review integrations                         |
+| `apps/web`           | React 19 + Vite. Server state in the TanStack Query cache, kept fresh by SSE; UI-only state in zustand                            |
+| `apps/desktop`       | Electron shell that runs or attaches to the server and shows the web app. See [features/desktop.md](features/desktop.md)          |
+| `skills/`            | The skills and `AGENTS.md` snippet shipped to agents that use the board. Not loaded by the app, except that a test keeps `skills/aboard-review/SKILL.md` identical to the built-in review skill. |
+
+The product name, id and version come only from the root `package.json`, through `BRAND` in
+`packages/contracts/src/brand.ts`. Env vars (`brandEnv`), browser storage keys (`storageKey`), the
+data dir and the REST actor header (`ACTOR_HEADER`) are all derived from it.
+
+## Processes and ports
+
+- `pnpm dev`: the server on **4317** (`node --watch --import tsx`) and Vite on **5317**. Vite proxies
+  `/api`, `/mcp` and `/events` to the server.
+- `pnpm start`: builds the web app; the server serves `apps/web/dist` on 4317 after its API, SSE and MCP
+  routes, with an `index.html` fallback for client routes.
+- Desktop: the Electron main process attaches to a server already on the port, or runs the esbuild
+  bundle `apps/server/dist/server.mjs` in a `utilityProcess`.
+
+The server always binds `127.0.0.1`. Boot order is `apps/server/src/main.ts` → `startServer`
+(`server.ts`) → `createContext` (`context.ts`: database, bus, integrations, services) → `createApp`
+(`app.ts`: guard, `/api/health`, SSE, REST, MCP). The pollers start only when enabled.
+
+## Configuration
+
+Read once in `apps/server/src/config.ts`. Names are built with `brandEnv(KEY)`, which upper-cases the
+brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
+
+| Variable                  | Default                     | Meaning                                                            |
+| ------------------------- | --------------------------- | ------------------------------------------------------------------ |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files)                 |
+| `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
+| `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
+| `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
+| `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
+| `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
+| `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
+| `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
+
+Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
+vars. See `apps/server/src/services/settings.ts`.
+
+## The guard
+
+`apps/server/src/http/guard.ts` runs before every route ([ADR 0003](decisions/0003-localhost-guard.md)):
+
+- **Host** must be `127.0.0.1`, `localhost` or `[::1]` (any port). This stops DNS rebinding.
+- **Origin**, when present, must be http(s) on a local host and on the server's port or Vite's (`WEB_PORT`, 5317).
+  Requests without an Origin (agents, curl) pass.
+- **Token**, when configured: `/api/*` (except `/api/health`), `/mcp` and `/events` need
+  `Authorization: Bearer <token>` or a `token` query parameter (EventSource can't send headers). Static
+  files don't.
+
+## How a change flows
+
+Every mutation, whoever makes it, takes the same path ([ADR 0001](decisions/0001-service-layer.md)):
+
+1. **Edge.** A REST route (`http/routes/*.ts`) parses input with a contracts schema inside `handle`; an
+   MCP tool (`mcp/tools/*.ts`) does the same inside `run`. A poller calls services directly.
+2. **Service.** `services/*.ts` holds the rules and calls `core.write(fn)` (`services/core.ts`).
+3. **Transaction.** `write` runs `fn` in `BEGIN IMMEDIATE … COMMIT` (`transaction` in
+   `db/database.ts`). Nested writes join the outer one. `fn` gets `Effects`: `fx.log(taskId, actor,
+type, payload)` appends a `task_events` row (the activity log), and `fx.task(id)` / `fx.project(id)`
+   / `fx.detail(id)` mark what changed.
+4. **Publish.** After COMMIT, `flush` turns the marks into `BoardEvent`s and publishes them on the
+   in-process `EventBus` (`bus.ts`). A failed transaction publishes nothing.
+5. **Stream.** `GET /events` (`sse.ts`) sends every event to every connected browser, which patches its
+   Query cache ([ADR 0005](decisions/0005-sse-without-replay.md), [live sync](features/live-sync.md)).
+
+Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 400, `CONFLICT` 409,
+`PLAN_REQUIRED` 422, `INTERNAL` 500. REST returns `{error: {code, message, details}}`; MCP returns
+`CODE: message` as an error result, sometimes with a hint.
+
+`BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
+`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`
+and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_changed`.
+
+## Data model
+
+SQLite through `node:sqlite` ([ADR 0002](decisions/0002-node-sqlite.md)), with WAL, foreign keys on and
+a 5-second busy timeout. Migrations are `apps/server/src/db/migrations/NNN_name.sql`, applied in name
+order at startup, each in its own transaction, and recorded in `migrations`. Never edit a shipped one;
+add the next number. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
+ORM.
+
+| Table             | Holds                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
+| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override |
+| `plan_phases`     | Ordered phases of a task's plan                                                                                               |
+| `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
+| `task_links`      | PR, Jira, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
+| `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
+| `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
+| `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
+| `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
+| `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
+| `settings`        | Key/value JSON for app settings                                                                                               |
+
+Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
+task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
+attention) are computed when summaries are built, never stored.
+
+Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
+[local review](features/local-review.md), [labels](features/labels.md).
+
+## Integrations
+
+All optional, all in `apps/server/src/integrations/`, started together by `createIntegrations().start()`
+on independent timers:
+
+- **GitHub:** `gh pr view` every 2 minutes for GitHub PR links. See [github-prs.md](features/github-prs.md).
+- **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
+  every 20 seconds while a browser is connected and a token is set, project import, and thread launches
+  over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).
+- **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
+  [local-review.md](features/local-review.md).
+
+## Testing
+
+- Server: vitest through `apps/server/src/test/harness.ts`, which builds the real app on an in-memory
+  database with pollers off and calls it with `app.request` (no port). MCP tests use the SDK client against the same app.
+- Web: logic only (`*.logic.ts`, the board reducer) in a node environment, no DOM rendering.
+- Contracts: the pure helpers.
