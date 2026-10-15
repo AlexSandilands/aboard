@@ -87,6 +87,24 @@ export const useUpdateTask = (opts?: MutationOpts) =>
   );
 // ── Labels ───────────────────────────────────────────────────────────────
 
+/**
+ * Replaces a task's labels. Calls share a scope so they reach the server in order: each sends the whole list,
+ * so a later edit overtaking an earlier one would be undone by it.
+ */
+export const useSetTaskLabels = (taskId: string) =>
+  useMutation({
+    mutationFn: (labels: string[]) =>
+      api<TaskDetail>(`/api/tasks/${enc(taskId)}`, { method: "PATCH", body: { labels } }),
+    scope: { id: `task-labels:${taskId}` },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Couldn't update the labels",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+
 /** Sets a label's colour override, or clears it with `hue: null`; the cached board updates at once. */
 export function useSetLabelColor(opts?: MutationOpts) {
   const queryClient = useQueryClient();

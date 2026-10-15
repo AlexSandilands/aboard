@@ -1,4 +1,4 @@
-import { findJiraKeys, resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { findJiraKeys, normalizeLabel, resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -6,7 +6,7 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
-import { toLabels, type LabelsModule } from "./labels.ts";
+import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
 import type { CloseInput, ProjectsService, ReviewsService, TaskQuery, TasksService } from "./types.ts";
 
@@ -82,7 +82,8 @@ export function createTasksService(
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
       const records = repos.tasks.list(query);
-      const labels = query.labels?.length ? toLabels(query.labels) : null;
+      // A filter, not a label list: no cap, and a term that normalises to nothing just matches nothing.
+      const labels = query.labels?.length ? query.labels.map(normalizeLabel) : null;
       return [...assembleSummaries(repos, records).values()]
         .filter((t) => !query.query || matchesQuery(t, query.query))
         .filter((t) => !labels || t.summary.labels.some((l) => labels.includes(l)))

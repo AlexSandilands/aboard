@@ -66,6 +66,8 @@ describe("task labels", () => {
     s.tasks.create({ projectId: project.id, title: "Three", labels: ["docs"] });
     const ids = (labels: string[]) => s.tasks.summaries({ labels }).map((t) => t.id);
     expect(ids(["UI", "server"])).toEqual([ui.id, server.id]);
+    const many = Array.from({ length: 12 }, (_, i) => `l${i}`);
+    expect(ids([...many, " ", "x".repeat(40), "docs"])).toHaveLength(1);
     expect(s.tasks.summaries({ query: "serv" }).map((t) => t.id)).toEqual([server.id]);
   });
 

@@ -1,7 +1,6 @@
 import { LABELS_PER_TASK_MAX, type TaskDetail } from "@repo/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon, RotateCcwIcon, ShuffleIcon } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { PanelControl } from "~/components/task/PanelControl";
 import { TaskSection } from "~/components/task/TaskSection";
@@ -9,8 +8,8 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
-import { useSetLabelColor, useUpdateTask } from "~/state/mutations";
-import { queryKeys, useBoard } from "~/state/queries";
+import { useSetLabelColor, useSetTaskLabels } from "~/state/mutations";
+import { useBoard } from "~/state/queries";
 import { LabelChip, useLabelColors } from "./LabelChip";
 import { SUGGESTED_HUES, labelCounts, labelHue, labelStyle, shuffleHue, suggestLabels } from "./labels.logic";
 
@@ -18,37 +17,41 @@ const HUE_GRADIENT = `linear-gradient(to right, ${Array.from({ length: 13 }, (_,
 
 /** The task's labels: add from those in use or create one, remove, and pick each label's colour. */
 export function LabelsSection({ task }: { task: TaskDetail }) {
-  const queryClient = useQueryClient();
-  const { mutate: updateTask } = useUpdateTask();
+  const { mutate: setLabels } = useSetTaskLabels(task.id);
   const colors = useLabelColors();
+  // The list the user asked for while edits are in flight. Detail refetches between edits can still carry an
+  // older list, so the next edit builds on this one rather than on what the server last said.
+  const [pending, setPending] = useState<string[] | null>(null);
+  const inFlight = useRef(0);
+  const labels = pending ?? task.labels;
 
-  const save = (labels: string[]) => {
-    // Optimistic: the server's task.detail_changed refetch confirms it.
-    queryClient.setQueryData<TaskDetail>(queryKeys.task(task.id), (detail) =>
-      detail ? { ...detail, labels: [...labels].sort() } : detail,
-    );
-    updateTask(
-      { id: task.id, labels },
-      { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) }) },
-    );
+  const save = (next: string[]) => {
+    setPending([...next].sort());
+    inFlight.current += 1;
+    setLabels(next, {
+      onSettled: () => {
+        inFlight.current -= 1;
+        if (inFlight.current === 0) setPending(null);
+      },
+    });
   };
 
   return (
     <TaskSection title="Labels">
       <div className="flex flex-wrap items-center gap-1 px-1.5">
-        {task.labels.map((label) => (
+        {labels.map((label) => (
           <LabelChip
             key={label}
             label={label}
             colors={colors}
             size="default"
-            onRemove={() => save(task.labels.filter((l) => l !== label))}
+            onRemove={() => save(labels.filter((l) => l !== label))}
           >
             <ColorPopover label={label} colors={colors} />
           </LabelChip>
         ))}
-        {task.labels.length < LABELS_PER_TASK_MAX ? (
-          <AddLabelPopover current={task.labels} onAdd={(label) => save([...task.labels, label])} />
+        {labels.length < LABELS_PER_TASK_MAX ? (
+          <AddLabelPopover current={labels} onAdd={(label) => save([...labels, label])} />
         ) : null}
       </div>
     </TaskSection>
