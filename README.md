@@ -93,6 +93,18 @@ Then give your agent the workflow:
 Agents identify the project by passing their working directory, so there's nothing to configure
 per repo. Unknown folders become new projects automatically.
 
+## Local review (optional)
+
+Turn on **Settings → Local review** and agents get their work reviewed before they open a pull request.
+When an agent moves a task to Review, the board tells it to run a review loop: a fresh reviewer subagent
+records findings on the task, the agent fixes them, and the loop repeats until nothing blocking is left.
+The card shows the review state, and the task panel lists every finding and how it was resolved.
+
+The reviewer follows the built-in review skill, or any skill you have installed for Claude Code, Copilot or
+Codex (per project, if you like). When no agent runs a review, the board nudges the task's T3 thread, and
+can review it itself with Claude Code headless. See
+[docs/integrations/local-review.md](docs/integrations/local-review.md).
+
 ## T3 Code integration (optional)
 
 When T3 Code is running, it is detected automatically.

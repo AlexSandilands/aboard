@@ -195,4 +195,5 @@ choice, warn which folder will change, and refuse when the folder has uncommitte
 
 Choosing this option reverses the original v1 non-goal "no writes to T3 Code" in [PLAN.md](../PLAN.md).
 The board still never touches T3's database or files; it only acts through T3's own API, with a token you
-issue.
+issue. [Local review](local-review.md) uses the same channel for one more write: when nobody runs a review
+round, it posts a message into the task's linked thread (`orchestration.dispatchCommand`, `message.dispatch`).
