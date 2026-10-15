@@ -17,9 +17,11 @@ collapsed.
 
 - **Per project.** A cell with more cards than the preview gets a toggle row at its top that overrides
   the column for that project. The other cells in the lane keep a spacer so cards stay aligned.
-- **Mixed state.** When a shown project differs from its column, the header shows a mixed state. Pressing
-  it collapses the column and clears every override for that column, including those of projects hidden
-  by filters.
+- **Mixed state.** When a shown project differs from its column, the header shows a mixed state.
+- **The header wins.** Pressing it sets the column for every project (collapsing it when mixed) and
+  clears that column's overrides, including those of projects hidden by filters.
+- A collapsed cell ends with **Show N more**, which expands that cell. A card dropped past a collapsed
+  cell's preview expands the cell too, so it doesn't vanish.
 - **Never hidden:** the selected card and the card being dragged stay visible past the preview
   (`visibleCellTasks`).
 
@@ -31,8 +33,8 @@ An override equal to its column's setting is pruned, so any override present mea
 The panel's sections are Labels, Links, Local review, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the link count and
-any link problem, open findings, plan progress and the current step, the first line of the description,
-or the event count and the last activity.
+any link problem, open findings, plan progress and the current step, the first line of the description (or of the
+plan context), or the event count and how long ago the last one was.
 
 Until the user chooses, sections collapse by content (`collapsedByDefault`):
 
@@ -44,17 +46,19 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
 
-Collapse choices are stored only when they differ from that default, so picking the default again lets
-the smart default apply. The **Customize sections** popover in the panel's top bar reorders, shows and
+A collapse choice is stored only when it differs from that default, so picking the default again lets
+the smart default apply. **Collapse all** and **Expand all** store a choice for every section, which pins
+them until **Reset**. The **Customize sections** popover in the panel's top bar reorders, shows and
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended.
 
 ### Links on cards
 
-Cards show PRs and **active** T3 threads, in the panel's order (`cardLinks`). Settled and archived
-threads, and Jira and plain URL links, appear in the panel only, where inactive threads are dimmed. A
-thread with no snapshot yet counts as active, since it may be.
+The card's link row shows PRs and **active** T3 threads, in the panel's order (`cardLinks`). A thread
+with no snapshot yet counts as active, since it may be. The first Jira key shows as a badge in the card's
+top row. Settled and archived threads, other Jira keys and plain URLs appear in the panel only, where
+inactive threads are dimmed.
 
 ### Persistence
 

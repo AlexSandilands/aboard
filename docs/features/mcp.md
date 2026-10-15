@@ -53,9 +53,10 @@ ignored), then `agent`. The User-Agent step exists because a stateless server do
 Results are plain text, with no `structuredContent`: Claude Code shows `structuredContent` instead of the
 text when both are present.
 
-- Mutating tools return a headline plus the full task render without the activity log: status, labels,
-  progress, current step, description, plan context, the plan with step ids
-  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**.
+- Most mutating tools return a headline plus the full task render without the activity log: status,
+  labels, progress, current step, description, plan context, the plan with step ids
+  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `create_idea`, `link`, `add_note` and
+  `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting.
 - **Missing labels** appears in `set_plan`, `create_task` and `get_task` results when the task has no
@@ -63,7 +64,7 @@ text when both are present.
   the user before calling `update_task`. Other mutation results leave it out (`taskResult`'s
   `labelHint` option).
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
-  `#42 Title [ui] — 3/7, at 2.1 Write tests [~] · PR #12 open`.
+  `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`).
 

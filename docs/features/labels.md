@@ -12,7 +12,8 @@ them over MCP and are asked to suggest some when they plan an unlabelled task.
 
 Labels are free-form and board-wide: there is no list to manage, and a label exists while a task carries
 it. `normalizeLabel` (`packages/contracts/src/labels.ts`) makes `"UI"`, `" ui "` and `"#ui"` one label:
-trimmed, lowercased, a leading `#` dropped, runs of whitespace and commas turned into one `-`.
+trimmed, lowercased, leading `#`s dropped, runs of whitespace and commas turned into one `-`, and
+leading or trailing `-` removed (so `"ui,"` is `ui`).
 
 | Rule              | Limit                                       |
 | ----------------- | ------------------------------------------- |
@@ -42,7 +43,8 @@ shuffle (at least 40° from the current hue) and **Reset to auto**. Overrides ar
 | `PUT /api/labels/:name/color`     | `{hue}` (0–359) sets an override             |
 | `DELETE /api/labels/:name/color`  | Drops the override                           |
 
-Both writes return all overrides and publish `labels.colors_changed`, which carries the whole map
+Both writes return all overrides. `PUT` publishes `labels.colors_changed`, which carries the whole map;
+`DELETE` publishes it only when there was an override to remove
 ([live sync](live-sync.md)). The board snapshot has the same map as `labelColors`.
 
 ### Filtering and search

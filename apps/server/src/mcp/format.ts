@@ -77,7 +77,7 @@ function shortLink(link: TaskLink): string {
   }
 }
 
-/** One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
+/** One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". */
 export function summaryLine(task: TaskSummary): string {
   const parts: string[] = [];
   const resolution = resolutionText(task);
