@@ -18,6 +18,7 @@ import { useDeleteProject, useUpdateProject } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { FolderPicker } from "./FolderPicker";
+import { ProjectReviewSection } from "./ProjectReviewSection";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { useUnarchiveProject } from "./useArchivedProjects";
 
@@ -188,6 +189,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
         </SettingsSection>
+        <ProjectReviewSection project={project} />
         <SettingsSection title="Danger zone">
           <SettingsRow
             title="Archive project"

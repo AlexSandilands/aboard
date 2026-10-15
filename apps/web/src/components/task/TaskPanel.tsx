@@ -11,6 +11,7 @@ import { ApiError } from "~/lib/api";
 import { useUpdateTask } from "~/state/mutations";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { usePanel } from "~/state/ui";
+import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
 import { LinksSection } from "./LinksSection";
 import { MarkdownField } from "./MarkdownField";
@@ -180,6 +181,7 @@ function TaskPanelBody({
         )}
       </div>
       <LinksSection task={task} />
+      <ReviewSection task={task} />
       <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />
       <MarkdownField
         title="Description"
