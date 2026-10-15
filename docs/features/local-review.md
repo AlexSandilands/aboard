@@ -84,7 +84,7 @@ fallbacks in order:
    going. After a nudge the wait is 10 minutes. A round you opened yourself skips the first wait. The
    watchdog also waits while the task's T3 thread is busy (working, or waiting on you).
 2. **Nudge the T3 thread.** If the task has a linked T3 thread, the board posts the loop instructions into
-   it, and the agent there runs the loop. This uses the same token and WebSocket RPC as Start in T3 Code
+   it, and the agent there runs the loop. This uses the same token and WebSocket RPC as starting a T3 Code thread
    (`orchestration.dispatchCommand` with a `message.dispatch` command and `deliveryIntent: "auto"`, so T3
    starts a turn or queues it behind the running one). The command id is stable per round, so a retry
    doesn't post twice. It needs the `orchestration:operate` scope.

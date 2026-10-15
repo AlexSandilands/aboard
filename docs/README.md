@@ -40,6 +40,8 @@ files under each app.
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
+- [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
+- [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards
 - [GitHub PRs](features/github-prs.md): live PR state through `gh`
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Local review](features/local-review.md): the review loop before a PR

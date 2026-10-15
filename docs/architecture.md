@@ -90,8 +90,8 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 `CODE: message` as an error result, sometimes with a hint.
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
-`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed` and
-`integrations.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`
+and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -109,17 +109,19 @@ ORM.
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, Jira, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
+| `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
+| `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
-task cascades to its plan, links, events and reviews. Derived values (progress, the current step,
+task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
 attention) are computed when summaries are built, never stored.
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
-[local review](features/local-review.md).
+[local review](features/local-review.md), [labels](features/labels.md).
 
 ## Integrations
 

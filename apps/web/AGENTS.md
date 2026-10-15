@@ -9,14 +9,17 @@ React 19, Vite, Tailwind v4, Base UI, TanStack Query + zustand, TanStack Router.
   [docs/features/live-sync.md](../../docs/features/live-sync.md).
 - Mutation hooks (`state/mutations.ts`) don't write results into the cache; the server's event does.
   Edits that must feel instant patch the cache optimistically: card moves inside `useMoveTask` (rolled
-  back on error); lane collapse and order, plan edits and link removal in the caller (refetched on error).
-- UI-only state is in zustand stores in `state/ui.ts`. Persisted keys go through `storageKey()`.
+  back on error) and label colours inside `useSetLabelColor`; lane collapse and order, plan edits and
+  link removal in the caller (refetched on error).
+- UI-only state is in zustand stores in `state/ui.ts`. Persisted keys go through `storageKey()`. When a
+  persisted shape changes incompatibly, bump the store's `version` and add a `migrate` (see
+  `state/boardView.logic.ts`).
 - All requests go through `api()` in `lib/api.ts`.
 
 ## Components
 
-- `components/<area>/` per feature: `board`, `task`, `sidebar`, `command`, `settings`, `handoff`,
-  `review`, `project`, `stage`, `layout`, `markdown`.
+- `components/<area>/` per feature: `board`, `task`, `labels`, `sidebar`, `command`, `settings`,
+  `handoff`, `review`, `project`, `stage`, `layout`, `markdown`.
 - `components/ui/*` are primitives ported from T3 Code (MIT, see `NOTICE`). Keep diffs from upstream
   small. [docs/reference/style.md](../../docs/reference/style.md) maps where the styles come from.
   `/__gallery` (dev only, `dev/StyleGallery.tsx`) shows every primitive.

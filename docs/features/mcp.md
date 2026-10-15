@@ -14,8 +14,8 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 ([ADR 0003](../decisions/0003-localhost-guard.md)).
 
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
-`get_task` before resuming, plan before leaving Ideas, keep steps current, link the Jira issue and the
-T3 thread, finish with `add_note`.
+`get_task` before resuming, plan before leaving Ideas (and suggest labels if the task has none), keep
+steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 
 ### Tools
 
@@ -26,6 +26,10 @@ T3 thread, finish with `add_note`.
 | `tools/plans.ts`   | `set_plan`, `add_steps`, `update_step`                                                                  |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, or a T3 thread `{environmentId, threadId}`; idempotent)                  |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
+
+`create_idea`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
+`list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
+counts. See [labels.md](labels.md).
 
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).
@@ -49,11 +53,17 @@ ignored), then `agent`. The User-Agent step exists because a stateless server do
 Results are plain text, with no `structuredContent`: Claude Code shows `structuredContent` instead of the
 text when both are present.
 
-- Mutating tools return a headline plus the full task render without the activity log: status,
+- Mutating tools return a headline plus the full task render without the activity log: status, labels,
   progress, current step, description, plan context, the plan with step ids
   (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting.
+- **Missing labels** appears in `set_plan`, `create_task` and `get_task` results when the task has no
+  labels and is still open. It names the labels in use and asks the agent to suggest 1–3 and wait for
+  the user before calling `update_task`. Other mutation results leave it out (`taskResult`'s
+  `labelHint` option).
+- `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
+  `#42 Title [ui] — 3/7, at 2.1 Write tests [~] · PR #12 open`.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`).
 
@@ -66,8 +76,9 @@ Descriptions are written for agents, and they are most of what an agent knows ab
 - Say what good input looks like: 1–4 phases of 3–8 concrete, verifiable steps.
 - Explain the gate where it bites (`create_task`, `move_task`), and point to the cheap path
   (`create_idea`, `close_task`).
-- Put guidance agents must act on in **results** too (Missing links, review loop instructions): agents
-  follow a result they just got more reliably than instructions read once.
+- Put guidance agents must act on in **results** too (Missing links, Missing labels, review loop
+  instructions): agents follow a result they just got more reliably than instructions read once. Show
+  it only where it applies, or agents learn to skip it.
 - `get_task` must not tell a reviewer to start a reviewer: the review loop instructions come only from
   `move_task` and `start_review`.
 
@@ -97,7 +108,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `apps/server/src/mcp/server.ts`       | `registerMcp`, transport, `INSTRUCTIONS`, actor resolution           |
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
-| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`  |
+| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |

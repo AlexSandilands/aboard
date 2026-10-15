@@ -23,7 +23,7 @@ harness-specific way. It offers two levels:
 | Hand-off | Works with | What the board does | What you do |
 |---|---|---|---|
 | **Copy prompt** | Any harness with the MCP server registered | Copies a ready-to-paste prompt | Open a session, paste, send |
-| **Start in T3 Code** | T3 Code, with a token set | Creates the T3 thread, starts the agent and links the thread to the task | Pick model and workspace, press Send |
+| **New T3 Code thread** | T3 Code, with a token set | Creates the T3 thread, starts the agent and links the thread to the task | Pick model and workspace, press Send |
 
 Both hand-offs send the same kind of prompt, so the agent behaves the same either way.
 
@@ -73,27 +73,28 @@ database and never sent to the browser.
 The flag is `--scope`, repeated once per scope. Older instructions in this repo said `--scopes`, which T3's
 CLI doesn't accept.
 
-#### When the button appears
+#### When the menu appears
 
-Both buttons sit at the right of the card's bottom line and in the task panel header. They only show on
-open work: not on Done or archived tasks.
+The hand-off menu (a terminal icon) sits at the right of the card's bottom line and in the task panel
+header. It only shows on open work: not on Done or archived tasks.
 
-**Copy prompt** is always there. Its menu offers "Copy prompt" and "Copy planning prompt", with the one
-that suits the task marked _Suggested_.
-
-**Start in T3 Code** shows when all of these hold:
+It always offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked
+_Suggested_. **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
 
 - T3 Code is running (auto-detected from `~/.t3/userdata/server-runtime.json`);
 - a token is set;
-- the project has a T3 project id or a workspace folder T3 could know;
-- the task has no T3 thread linked yet. Once it does, the card shows **Open in T3 Code** instead.
+- the project has a T3 project id or a workspace folder T3 could know.
+
+Linked threads don't hide it: a task can have several (a follow-up for conflicts, a review). Each linked
+thread shows on the card while it is active, as a button that opens it in T3 Code; settled and archived
+threads are listed in the panel only ([board-layout.md](board-layout.md#links-on-cards)).
 
 Whether T3 really has the project (by its id, or the same folder) is checked when the dialog opens. If it
 doesn't, the dialog says so and offers to copy the prompt instead.
 
 #### The launch dialog
 
-Clicking the button opens a dialog modelled on T3's own new-thread screen:
+**New T3 Code thread…** opens a dialog modelled on T3's own new-thread screen:
 
 - the prompt, editable before sending, and the **Plan with me** toggle;
 - **model**: providers down the side with favorites first, search, a Legacy models section and NEW badges;

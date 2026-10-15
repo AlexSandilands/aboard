@@ -69,8 +69,10 @@ The rules for what goes where are in [docs/README.md](docs/README.md).
 | Plans, steps, the current step, Markdown plans                | [docs/features/plans.md](docs/features/plans.md)                                    |
 | MCP tools, their descriptions or results; the shipped skill   | [docs/features/mcp.md](docs/features/mcp.md)                                        |
 | SSE, the board reducer, mutations                             | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
+| Labels: normalizing, colours, filters, the MCP hint           | [docs/features/labels.md](docs/features/labels.md)                                  |
+| Column collapse, panel sections, which links a card shows     | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
 | PR links and the `gh` poller                                  | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
-| Copy prompt, Start in T3 Code, the T3 RPC client              | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
+| The hand-off menu (copy prompt, new T3 thread), T3 RPC client | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
 | Local review rounds, findings, the board reviewer             | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                            | [docs/features/desktop.md](docs/features/desktop.md)                                |
 | UI styles and primitives                                      | [docs/reference/style.md](docs/reference/style.md)                                  |
