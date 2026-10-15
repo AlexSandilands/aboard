@@ -17,4 +17,5 @@ The Electron shell. How it works: [docs/features/desktop.md](../../docs/features
   (from the root) builds the Windows installer in `apps/desktop/release/`.
 - Scripts in `scripts/` run on plain `node` (type stripping): erasable TypeScript only.
 - Pure logic goes in `src/shell.logic.ts`, with tests beside it. Changes under `apps/desktop` need a
-  restart of `pnpm desktop`.
+  restart of `pnpm desktop`. Its dev script waits on the fixed ports :4317 / :5317 and there is no
+  sandbox for the shell, so from a worktree ask the user to try shell changes rather than running it.
