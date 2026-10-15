@@ -1,6 +1,6 @@
 import type { BoardSnapshot, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { applyBoardEvent, cellTasks, optimisticMove } from "./boardReducer";
+import { applyBoardEvent, applyMove, cellTasks, moveWasReverted, optimisticMove, rollbackMove } from "./boardReducer";
 
 function task(id: string, status: TaskSummary["status"], position: string): TaskSummary {
   return {
@@ -114,5 +114,29 @@ describe("optimisticMove", () => {
     expect(moved?.statusChangedAt).not.toBe(task("c", "idea", "a0").statusChangedAt);
     const reordered = optimisticMove(b, "b", { status: "planned", beforeId: "a" }).tasks.find((t) => t.id === "b");
     expect(reordered?.statusChangedAt).toBe(task("b", "planned", "a1").statusChangedAt);
+  });
+});
+
+describe("move rollback", () => {
+  const before = board([task("a", "idea", "a0"), task("b", "planned", "a0")]);
+  const original = before.tasks[0]!;
+  const after = applyMove(before, { id: "a", status: "planned", afterId: "b" });
+  const moved = after.tasks.find((t) => t.id === "a")!;
+
+  it("spots a move undone by a cancelled fetch, but not one still in place", () => {
+    expect(moveWasReverted(before, original)).toBe(true);
+    expect(moveWasReverted(after, original)).toBe(false);
+  });
+
+  it("puts the task back but keeps fields that changed since", () => {
+    const updated = { ...after, tasks: after.tasks.map((t) => (t.id === "a" ? { ...t, title: "renamed" } : t)) };
+    const rolled = rollbackMove(updated, original, moved);
+    expect(rolled.tasks.find((t) => t.id === "a")).toMatchObject({ status: "idea", position: "a0", title: "renamed" });
+    expect(rolled.tasks.find((t) => t.id === "b")).toBe(updated.tasks.find((t) => t.id === "b"));
+  });
+
+  it("leaves the task alone once something newer has moved it", () => {
+    const newer = { ...after, tasks: after.tasks.map((t) => (t.id === "a" ? { ...t, status: "review" as const } : t)) };
+    expect(rollbackMove(newer, original, moved)).toBe(newer);
   });
 });

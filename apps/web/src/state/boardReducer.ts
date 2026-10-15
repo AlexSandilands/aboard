@@ -87,3 +87,37 @@ export function optimisticMove(
     }),
   };
 }
+
+/** optimisticMove for a move request, which may leave the status unchanged. */
+export const applyMove = (
+  board: BoardSnapshot,
+  {
+    id,
+    status,
+    beforeId,
+    afterId,
+  }: { id: string; status?: TaskStatus; beforeId?: string | null; afterId?: string | null },
+) =>
+  optimisticMove(board, id, {
+    status: status ?? board.tasks.find((t) => t.id === id)?.status ?? "idea",
+    beforeId,
+    afterId,
+  });
+
+/** True when the task is back where it was before its move, e.g. a cancelled fetch restored the cache. */
+export function moveWasReverted(board: BoardSnapshot, original: TaskSummary): boolean {
+  const task = board.tasks.find((t) => t.id === original.id);
+  return task?.status === original.status && task.position === original.position;
+}
+
+/**
+ * Undoes a failed optimistic move on the task as it is now, so newer fields from events survive.
+ * Leaves the task alone once something newer has replaced the optimistic placement.
+ */
+export function rollbackMove(board: BoardSnapshot, original: TaskSummary, moved: TaskSummary): BoardSnapshot {
+  const task = board.tasks.find((t) => t.id === original.id);
+  if (!task || task.status !== moved.status || task.position !== moved.position) return board;
+  const { status, position, statusChangedAt, resolution, resolvedBy } = original;
+  const restored = { ...task, status, position, statusChangedAt, resolution, resolvedBy };
+  return { ...board, tasks: board.tasks.map((t) => (t === task ? restored : t)) };
+}
