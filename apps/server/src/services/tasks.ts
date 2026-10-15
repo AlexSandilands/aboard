@@ -7,7 +7,7 @@ import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { LinksModule } from "./links.ts";
-import type { CloseInput, ProjectsService, TaskQuery, TasksService } from "./types.ts";
+import type { CloseInput, ProjectsService, ReviewsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -29,7 +29,12 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
 /** Task cards: creation, updates, moves between columns, notes. */
 export function createTasksService(
   core: Core,
-  deps: { projects: ProjectsService; plans: () => PlansModule; links: () => LinksModule },
+  deps: {
+    projects: ProjectsService;
+    plans: () => PlansModule;
+    links: () => LinksModule;
+    reviews: () => ReviewsService;
+  },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
 
@@ -83,7 +88,7 @@ export function createTasksService(
     summary: (id) => assembleOne(id).summary,
 
     detail(id): TaskDetail {
-      const { record: task, summary, phases } = assembleOne(id);
+      const { record: task, summary, phases, reviews } = assembleOne(id);
       return {
         ...summary,
         description: task.description,
@@ -93,6 +98,7 @@ export function createTasksService(
         resolves: repos.tasks
           .resolvedBy([id])
           .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
+        reviews,
       };
     },
 
@@ -127,6 +133,7 @@ export function createTasksService(
           statusChangedAt: now,
           resolution: null,
           resolvedByTaskId: null,
+          autoReview: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
@@ -158,6 +165,10 @@ export function createTasksService(
         if (input.planContext !== undefined && input.planContext !== current.planContext) {
           next.planContext = input.planContext;
           changed.push("planContext");
+        }
+        if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
+          next.autoReview = input.autoReview;
+          changed.push("autoReview");
         }
         if (input.projectId !== undefined && input.projectId !== current.projectId) {
           const project = deps.projects.get(input.projectId);
@@ -213,6 +224,10 @@ export function createTasksService(
           // A merge seen before the task reached Review was used up then; finish it now. Coming back from Done
           // is a deliberate reopen, so it stays put. The follow-up is its own move, logged as "github".
           if (status === "review" && current.status !== "done") deps.links().completeIfPrsDone(id);
+          // Still in Review (not completed by a merged PR just now): with auto-review on, a reviewer is due.
+          if (status === "review" && record(id).status === "review" && deps.reviews().effectiveAutoReview(id)) {
+            deps.reviews().openRoundIn(id, { trigger: "move", actor }, fx);
+          }
         } else fx.task(id);
       });
       return service.summary(id);

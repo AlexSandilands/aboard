@@ -7,9 +7,10 @@ import { createCore } from "./core.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
+import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTasksService } from "./tasks.ts";
-import type { Services } from "./types.ts";
+import type { ReviewsService, Services } from "./types.ts";
 
 export interface ServiceDeps {
   db: Db;
@@ -26,9 +27,16 @@ export function createServices(deps: ServiceDeps): Services {
 
   let plans: PlansModule | null = null;
   let links: LinksModule | null = null;
-  const tasks = createTasksService(core, { projects, plans: () => plans!, links: () => links! });
+  let reviews: ReviewsService | null = null;
+  const tasks = createTasksService(core, {
+    projects,
+    plans: () => plans!,
+    links: () => links!,
+    reviews: () => reviews!,
+  });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, { task: tasks.record, tasks: tasks.service, settings });
+  reviews = createReviewsService(core, { task: tasks.record });
 
   return {
     projects,
@@ -37,5 +45,6 @@ export function createServices(deps: ServiceDeps): Services {
     links: links.service,
     settings,
     board: createBoardService(core),
+    reviews,
   };
 }

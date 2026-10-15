@@ -10,6 +10,7 @@ import {
   FolderInputIcon,
   LinkIcon,
   ListTodoIcon,
+  ScanSearchIcon,
   MessageSquareTextIcon,
   PencilIcon,
   SparklesIcon,
@@ -41,6 +42,9 @@ const ICONS: Record<ActivityIcon, ReactNode> = {
   archive: <ArchiveIcon className={ICON_CLASS} />,
   project: <FolderInputIcon className={ICON_CLASS} />,
   delete: <Trash2Icon className={ICON_CLASS} />,
+  review: <ScanSearchIcon className={ICON_CLASS} />,
+  review_clean: <ScanSearchIcon className="size-3.5 text-success" />,
+  review_findings: <ScanSearchIcon className="size-3.5 text-warning" />,
   other: <DotIcon className={ICON_CLASS} />,
 };
 

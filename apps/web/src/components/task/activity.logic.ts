@@ -14,6 +14,9 @@ export type ActivityIcon =
   | "archive"
   | "project"
   | "delete"
+  | "review"
+  | "review_clean"
+  | "review_findings"
   | "other";
 
 export interface ActivityLine {
@@ -31,7 +34,13 @@ export interface ActivityContext {
 }
 
 const STATUS_LABEL = new Map<string, string>(TASK_STATUSES.map((s) => [s.value, s.label]));
-const FIELD_LABEL: Record<string, string> = { title: "title", description: "description", planContext: "plan context" };
+const FIELD_LABEL: Record<string, string> = {
+  title: "title",
+  description: "description",
+  planContext: "plan context",
+  autoReview: "auto-review setting",
+};
+const FINDING_STATUS_LABEL: Record<string, string> = { fixed: "fixed", wont_fix: "won't fix" };
 const LINK_KIND_LABEL: Record<string, string> = {
   pr: "a pull request",
   jira: "a Jira issue",
@@ -131,6 +140,44 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("link", `linked ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
     case "link_removed":
       return line("link", `removed ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
+    case "review_opened": {
+      const round = num(p.round);
+      const why = str(p.trigger) === "move" ? " (moved to Review)" : "";
+      return line("review", `opened review round ${round ?? "?"}${why}`);
+    }
+    case "review_submitted": {
+      const counts = (typeof p.findings === "object" && p.findings !== null ? p.findings : {}) as Record<
+        string,
+        unknown
+      >;
+      const parts = Object.entries(counts).flatMap(([severity, n]) =>
+        typeof n === "number" && n > 0 ? [`${n} ${severity}`] : [],
+      );
+      const round = num(p.round) ?? "?";
+      return parts.length
+        ? line("review_findings", `reviewed round ${round}: ${parts.join(", ")}`)
+        : line("review_clean", `reviewed round ${round}: no findings`);
+    }
+    case "finding_resolved": {
+      const label = str(p.finding) ?? "a finding";
+      const status = str(p.status) ?? "";
+      const text =
+        status === "open" ? `reopened ${label}` : `marked ${label} ${FINDING_STATUS_LABEL[status] ?? status}`;
+      return line(status === "fixed" ? "step_done" : "review", text, str(p.note));
+    }
+    case "review_status": {
+      const round = num(p.round) ?? "?";
+      const status = str(p.status);
+      const text =
+        status === "running"
+          ? `started reviewing round ${round}`
+          : status === "stalled"
+            ? `found no reviewer for round ${round}`
+            : status === "failed"
+              ? `couldn't review round ${round}`
+              : `reopened review round ${round}`;
+      return line(status === "failed" || status === "stalled" ? "step_blocked" : "review", text, str(p.error));
+    }
     default:
       return line("other", event.type.replace(/[_.]+/g, " "));
   }

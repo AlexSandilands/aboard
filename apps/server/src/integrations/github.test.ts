@@ -9,6 +9,7 @@ import {
   type GithubServices,
   type RunGh,
 } from "./github.ts";
+import { defaultSettings } from "../test/fixtures.ts";
 
 const pr = (overrides: Partial<GhPrJson> = {}): GhPrJson =>
   GhPrJson.parse({
@@ -99,7 +100,7 @@ function fakeServices(links: TaskLink[], settings: Partial<AppSettings> = {}) {
       setSnapshot: (id, snapshot) => void snapshots.set(id, snapshot),
     },
     settings: {
-      get: () => ({ jiraBaseUrl: null, githubPolling: true, t3LinkTarget: "desktop", t3TokenSet: false, ...settings }),
+      get: () => ({ ...defaultSettings, ...settings }),
     },
   };
   return { services, snapshots };

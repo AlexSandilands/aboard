@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskStatus, type Project } from "@repo/contracts";
+import { TaskStatus, type Project, type TaskDetail } from "@repo/contracts";
 import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel } from "../format.ts";
 import {
   findProject,
@@ -11,6 +11,16 @@ import {
   textResult,
   type ToolRegistrar,
 } from "../shared.ts";
+import { openRoundPointer } from "./reviews.ts";
+
+/**
+ * The reviewer reads the task through get_task too, so this must not tell it to start a reviewer itself:
+ * it only says who does what. The full loop instructions come from move_task and start_review.
+ */
+function withOpenRoundPointer(detail: string, task: TaskDetail): string {
+  const pointer = openRoundPointer(task);
+  return pointer ? `${detail}\n\n${pointer}` : detail;
+}
 
 /** Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task. */
 export const registerReadTools: ToolRegistrar = (server, { services }) => {
@@ -164,7 +174,8 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
     (args) =>
       run(() => {
         const task = services.tasks.detail(services.tasks.resolveId(args.task));
-        return textResult(renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 }));
+        const detail = renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 });
+        return textResult(withOpenRoundPointer(detail, task));
       }),
   );
 };

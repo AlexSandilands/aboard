@@ -16,6 +16,8 @@ export interface Config {
   t3Home: string;
   /** Disable background pollers (tests). */
   pollers: boolean;
+  /** The user's home folder, where harnesses install skills (`~/.claude/skills`). */
+  userHome: string;
 }
 
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
@@ -32,5 +34,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
+    userHome: homedir(),
   };
 }

@@ -11,18 +11,27 @@ import type {
   PlanStepInput,
   Project,
   PrSnapshot,
+  ResolveFindingInput,
+  ReviewFinding,
+  ReviewRoundStatus,
+  ReviewSkillRef,
+  ReviewTrigger,
   StepPatch,
+  SubmitReviewInput,
   T3ThreadSnapshot,
   TaskDetail,
   TaskEvent,
   TaskLink,
   TaskResolution,
+  TaskReview,
   TaskStatus,
   TaskSummary,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
 } from "@repo/contracts";
+import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { Effects } from "./core.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -39,6 +48,7 @@ export interface Services {
   links: LinksService;
   settings: SettingsService;
   board: BoardService;
+  reviews: ReviewsService;
 }
 
 export interface ProjectRef {
@@ -159,6 +169,51 @@ export interface SettingsService {
   update(input: UpdateSettingsInput): AppSettings;
   /** The stored T3 token (server-side only). */
   t3Token(): string | null;
+}
+
+export interface OpenRoundOptions {
+  trigger: ReviewTrigger;
+  actor: string;
+  /** Open a manual round even past the round limit (the user's explicit request). */
+  force?: boolean;
+}
+
+export interface ReviewsService {
+  /** Rounds oldest first, with findings. */
+  list(taskId: string): TaskReview[];
+  /** The task's override, else the global setting. */
+  effectiveAutoReview(taskId: string): boolean;
+  /** The project's override, else the global setting. */
+  skillFor(taskId: string): ReviewSkillRef;
+  /**
+   * Opens the next round as pending. An unfinished latest round is reused: a pending one is returned as is
+   * (a move onto a manual round starts a new cycle), a stalled or failed one goes back to pending. A move
+   * starts a new cycle; manual rounds past the cycle's limit throw VALIDATION unless forced. Throws CONFLICT
+   * while a round is running.
+   */
+  openRound(taskId: string, opts: OpenRoundOptions): TaskReview;
+  /** openRound inside an existing write (for tasks.move). */
+  openRoundIn(taskId: string, opts: OpenRoundOptions, fx: Effects): ReviewRecord;
+  /**
+   * Records findings on a round (default: the latest unsubmitted one, opening one if none is). Throws CONFLICT
+   * when that round was already submitted.
+   */
+  submit(taskId: string, input: SubmitReviewInput, actor: string): TaskReview;
+  /** Accepts a finding id or a "R2.3" label. wont_fix needs a note; "open" reopens. */
+  resolveFinding(taskId: string, ref: string, input: ResolveFindingInput, actor: string): ReviewFinding;
+  /** Rounds in a status on non-archived tasks, oldest first (for the board's fallbacks). */
+  roundsWithStatus(status: ReviewRoundStatus): ReviewRecord[];
+  /** Records that the board asked the task's T3 thread to run the round. False when it's no longer pending. */
+  markNudged(reviewId: string, actor: string): boolean;
+  /**
+   * For the board's own fallbacks: running, stalled, failed or back to pending. With `from`, only applies when
+   * the round is still in one of those statuses (checked in the same transaction) and returns null otherwise.
+   */
+  setRoundStatus(
+    reviewId: string,
+    status: Exclude<ReviewRoundStatus, "submitted">,
+    opts: { actor: string; error?: string; from?: ReadonlyArray<ReviewRoundStatus> },
+  ): TaskReview | null;
 }
 
 export interface BoardService {

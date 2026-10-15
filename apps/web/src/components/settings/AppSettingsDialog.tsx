@@ -30,6 +30,7 @@ import { cn } from "~/lib/utils";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
 import { useAppearance, useDialogs } from "~/state/ui";
+import { ReviewSettingsSection } from "./ReviewSettingsSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
 
@@ -93,6 +94,7 @@ function AppSettingsBody() {
             <T3Section settings={settings.data} status={integrations.data?.t3} />
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
+            <ReviewSettingsSection settings={settings.data} />
           </>
         ) : (
           <p className="px-4 text-sm text-muted-foreground">

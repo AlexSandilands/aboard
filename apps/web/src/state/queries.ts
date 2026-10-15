@@ -4,6 +4,7 @@ import type {
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  SkillInfo,
   T3LaunchOptions,
   T3ProjectCandidate,
   TaskDetail,
@@ -23,7 +24,19 @@ export const queryKeys = {
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
+  skills: (projectId: string | null) => ["skills", projectId] as const,
 };
+
+/** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
+export function useSkills(projectId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.skills(projectId),
+    queryFn: ({ signal }) =>
+      api<SkillInfo[]>(`/api/skills${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`, { signal }),
+    enabled,
+    staleTime: 0,
+  });
+}
 
 /** The whole board: projects, task summaries and T3 status. Kept live by useBoardEvents. */
 export function useBoard() {

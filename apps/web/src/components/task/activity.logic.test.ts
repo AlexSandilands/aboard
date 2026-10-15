@@ -27,6 +27,26 @@ describe("describeEvent", () => {
     });
   });
 
+  it("describes the local review loop", () => {
+    const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx);
+    expect(text("review_opened", { round: 1, trigger: "move" }).text).toBe("opened review round 1 (moved to Review)");
+    expect(text("review_submitted", { round: 2, findings: { blocking: 1, major: 0, nit: 2 } })).toMatchObject({
+      icon: "review_findings",
+      text: "reviewed round 2: 1 blocking, 2 nit",
+    });
+    expect(text("review_submitted", { round: 3, findings: { blocking: 0 } }).icon).toBe("review_clean");
+    expect(text("finding_resolved", { finding: "R1.2", status: "wont_fix", note: "By design" })).toEqual({
+      icon: "review",
+      text: "marked R1.2 won't fix",
+      quote: "By design",
+    });
+    expect(text("finding_resolved", { finding: "R1.2", status: "open" }).text).toBe("reopened R1.2");
+    expect(text("review_status", { round: 1, status: "failed", error: "CLI not found" })).toMatchObject({
+      icon: "step_blocked",
+      quote: "CLI not found",
+    });
+  });
+
   it("explains a resolution whose task was deleted", () => {
     expect(describeEvent(event("resolver_deleted", { number: 7, title: "Ship it" }), ctx)).toEqual({
       icon: "delete",

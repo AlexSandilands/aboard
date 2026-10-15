@@ -28,7 +28,9 @@ import {
   ShellThread,
   type FetchFn,
   type T3Services,
+  type ThreadLink,
 } from "./t3.ts";
+import { defaultSettings } from "../test/fixtures.ts";
 
 const ENV_ID = "19032d81-04ac-423c-a5b0-f71db3f71200";
 const ORIGIN = "http://127.0.0.1:3773";
@@ -262,7 +264,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
       t3Token: () => token,
       update: (input) => {
         if (input.t3Token !== undefined) token = input.t3Token;
-        return { jiraBaseUrl: null, githubPolling: true, t3LinkTarget: "desktop", t3TokenSet: Boolean(token) };
+        return { ...defaultSettings, t3TokenSet: Boolean(token) };
       },
     },
     tasks: {
@@ -281,6 +283,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
           workspaceKey: key,
           icon: input.icon ?? null,
           t3ProjectId: input.t3ProjectId ?? null,
+          reviewSkill: null,
           position: "a0",
           collapsed: false,
           archivedAt: null,
@@ -608,6 +611,7 @@ describe("T3 thread launch", () => {
     workspaceKey: normalizeWorkspaceKey("c:/code/acme"),
     icon: null,
     t3ProjectId: null,
+    reviewSkill: null,
     position: "a0",
     collapsed: false,
     archivedAt: null,
@@ -702,6 +706,33 @@ describe("T3 thread launch", () => {
       "lacks the orchestration:operate scope",
     );
     expect(forbidden.added).toEqual([]);
+  });
+
+  it("posts a message into a linked thread with T3 choosing how to deliver it", async () => {
+    const { t3, socket } = setup((frame) => success(frame.id, { sequence: 1 }));
+    await t3.sendToThread(threadLink("l1", "th-wt") as ThreadLink, "Review round 1 is waiting", "cmd-1");
+    expect(socket.sent.map((f) => f.tag)).toEqual(["orchestration.dispatchCommand"]);
+    expect(socket.sent[0]!.payload).toMatchObject({
+      type: "message.dispatch",
+      commandId: "cmd-1",
+      threadId: "th-wt",
+      text: "Review round 1 is waiting",
+      attachments: [],
+      deliveryIntent: "auto",
+    });
+    await expect(t3.sendToThread(threadLink("l2", "th-wt", "other-env") as ThreadLink, "x", "c")).rejects.toThrow(
+      "different T3 Code environment",
+    );
+  });
+
+  it("reads a linked thread's worktree from the shell", async () => {
+    const { t3 } = setup(() => undefined);
+    await t3.discover();
+    expect(await t3.threadWorkspace(threadLink("l1", "th-wt") as ThreadLink)).toEqual({
+      worktreePath: "C:/Users/me/.t3/worktrees/acme/t3-1",
+      branch: "t3/feature",
+    });
+    expect(await t3.threadWorkspace(threadLink("l2", "th-missing") as ThreadLink)).toBeNull();
   });
 });
 

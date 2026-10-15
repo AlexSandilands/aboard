@@ -42,8 +42,10 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    automatically. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
    as soon as the PR is open; GitHub PRs show live checks/review state on the board. `link` is
    idempotent, so linking twice is harmless.
-7. **Status transitions.** `in_progress` while implementing → `review` when a PR is up → `done` when
-   merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first.
+7. **Status transitions.** `in_progress` while implementing → `review` when the work is done → `done`
+   when merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first. If the move to
+   `review` says a local review round is open, run the review loop (below) **before** opening the PR;
+   otherwise open and link the PR, then move to `review`.
 8. **Close what's already handled.** If a task was delivered by another task, duplicates one, or is no
    longer wanted, `close_task` it with resolution `completed` / `duplicate` (plus `byTask: "#N"`) or
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
@@ -51,6 +53,24 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    only works on archived tasks; use it only when the user asks for a task to be deleted.
 9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
    exact next action. The next agent starts from `get_task`.
+
+## Local review
+
+The user can turn on automatic local review (globally, or per task). Then moving a task to `review`
+opens review round 1, and the `move_task` result tells you what to do. In short:
+
+1. Start a **reviewer subagent with fresh context** and give it the reviewer brief from the result. Wait
+   for it; it records its findings on the board with `submit_review`.
+2. `get_task`, fix every open **blocking** and **major** finding (minor and nit too when cheap), and mark
+   each with `resolve_finding`: `fixed`, or `wont_fix` with a note saying why. Findings are labelled
+   `R<round>.<n>`, e.g. `R1.2`.
+3. If the round raised blocking or major findings, `start_review` and repeat with a new reviewer. Stop
+   when a round comes back clean or the round limit is reached (the board refuses further rounds).
+4. Then open the PR and link it.
+
+If you are the reviewer: don't edit files, review the branch's changes against the task, and finish with
+`submit_review` (an empty findings list when the change is clean). If you can't start subagents, do the
+review as a separate pass yourself and `submit_review` with actor `self-review`.
 
 ## Running inside T3 Code
 

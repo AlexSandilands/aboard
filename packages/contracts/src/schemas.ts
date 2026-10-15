@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,8 @@ export const Project = z.object({
   workspaceKey: z.string().nullable(),
   icon: ProjectIcon.nullable(),
   t3ProjectId: z.string().nullable(),
+  /** Overrides the global review skill for this project's tasks; null inherits it. */
+  reviewSkill: ReviewSkillRef.nullable(),
   position: z.string(),
   collapsed: z.boolean(),
   archivedAt: IsoDate.nullable(),
@@ -195,6 +198,10 @@ export const AttentionReason = z.object({
     "pr_conflict",
     "thread_needs_input",
     "thread_failed",
+    "review_stalled",
+    "review_stuck",
+    "review_failed",
+    "review_unattended",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
@@ -247,6 +254,10 @@ export const TaskSummary = z.object({
   links: z.array(TaskLink),
   attention: z.array(AttentionReason),
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
+  /** Per-task auto-review override; null inherits the global setting. */
+  autoReview: z.boolean().nullable(),
+  /** Local review badge; null when the task has never been reviewed. */
+  review: TaskReviewSummary.nullable(),
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;
 
@@ -257,6 +268,8 @@ export const TaskDetail = TaskSummary.extend({
   events: z.array(TaskEvent),
   /** Tasks closed as done by, or duplicates of, this one. */
   resolves: z.array(TaskRef.extend({ resolution: TaskResolution })),
+  /** Local review rounds, oldest first, each with its findings. */
+  reviews: z.array(TaskReview),
 });
 export type TaskDetail = z.infer<typeof TaskDetail>;
 
@@ -326,6 +339,7 @@ export const UpdateProjectInput = z.object({
   icon: ProjectIcon.nullable().optional(),
   collapsed: z.boolean().optional(),
   archived: z.boolean().optional(),
+  reviewSkill: ReviewSkillRef.nullable().optional(),
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
@@ -354,6 +368,8 @@ export const UpdateTaskInput = z.object({
   planContext: z.string().nullable().optional(),
   projectId: z.string().optional(),
   archived: z.boolean().optional(),
+  /** null inherits the global auto-review setting. */
+  autoReview: z.boolean().nullable().optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
@@ -394,6 +410,16 @@ export const AppSettings = z.object({
   t3LinkTarget: z.enum(["desktop", "browser"]),
   /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
   t3TokenSet: z.boolean(),
+  /** Moving a task to Review opens a local review round, unless the task overrides it. */
+  autoReview: z.boolean(),
+  /** The skill reviewers follow, unless the task's project overrides it. */
+  reviewSkill: ReviewSkillRef,
+  reviewMaxRounds: z.number().int().min(1).max(10),
+  /** Let the board run a headless reviewer when no agent picks a round up. */
+  headlessReviewEnabled: z.boolean(),
+  /** The Claude Code CLI to run; null looks up `claude` on PATH. */
+  headlessReviewCli: z.string().nullable(),
+  headlessReviewBudgetUsd: z.number().positive().max(100),
 });
 export type AppSettings = z.infer<typeof AppSettings>;
 
@@ -401,6 +427,12 @@ export const UpdateSettingsInput = z.object({
   jiraBaseUrl: z.string().trim().nullable().optional(),
   githubPolling: z.boolean().optional(),
   t3LinkTarget: z.enum(["desktop", "browser"]).optional(),
+  autoReview: z.boolean().optional(),
+  reviewSkill: ReviewSkillRef.optional(),
+  reviewMaxRounds: z.number().int().min(1).max(10).optional(),
+  headlessReviewEnabled: z.boolean().optional(),
+  headlessReviewCli: z.string().trim().nullable().optional(),
+  headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

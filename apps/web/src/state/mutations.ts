@@ -10,10 +10,13 @@ import type {
   PlanStep,
   PlanStepInput,
   Project,
+  ResolveFindingInput,
+  ReviewFinding,
   StartT3ThreadInput,
   StepPatch,
   TaskDetail,
   TaskLink,
+  TaskReview,
   TaskStatus,
   TaskSummary,
   UpdateProjectInput,
@@ -134,6 +137,27 @@ export function useMoveTask() {
 export function isPlanRequired(error: unknown): boolean {
   return error instanceof ApiError && error.code === "PLAN_REQUIRED";
 }
+
+// ── Local review ─────────────────────────────────────────────────────────
+
+/** Opens the next review round (past the round limit too: it's the user asking). */
+export const useStartReview = (opts?: MutationOpts) =>
+  useApiMutation((taskId: string) => api<TaskReview>(`/api/tasks/${enc(taskId)}/reviews`, { body: {} }), opts);
+export const useResolveFinding = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ taskId, finding, ...input }: ResolveFindingInput & { taskId: string; finding: string }) =>
+      api<ReviewFinding>(`/api/tasks/${enc(taskId)}/findings/${enc(finding)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+
+export type ReviewCliCheck = { ok: true; path: string; version: string } | { ok: false; error: string };
+/** Checks the board reviewer's Claude Code CLI (the saved one unless `cli` is given). */
+export const useTestReviewCli = (opts?: MutationOpts) =>
+  useApiMutation((cli?: string | null) => api<ReviewCliCheck>("/api/review/test-cli", { body: { cli } }), opts);
+
+/** The review loop prompt for pasting into any harness. */
+export const fetchReviewPrompt = async (taskId: string): Promise<string> =>
+  (await api<{ prompt: string }>(`/api/tasks/${enc(taskId)}/review-prompt`)).prompt;
 
 // ── Plans ────────────────────────────────────────────────────────────────
 

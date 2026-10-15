@@ -8,7 +8,8 @@ Track work on the user's local task board via the `aboard` MCP server (Ideas →
 - **Plan first:** tasks can't leave Ideas without a plan. `set_plan` (or `create_task` with a plan): phases with 3–8 concrete, verifiable steps, approach in `context`. Markdown checklists (`## Phase` / `- [ ] step`) are accepted. Then `move_task` → `in_progress`.
 - **Keep steps current:** `update_step` → `in_progress` when starting, `done` when finished, `blocked` + `appendNotes` when stuck or before asking the user a question and waiting (say what you need; back to `in_progress` once answered). `add_steps` for new work.
 - **Links:** link the Jira key when the task is created (`links` on `create_task` / `create_idea`, or `link`); keys in the title are linked automatically. `link` PRs as soon as they're open.
-- **Status:** `review` when a PR is up, `done` when merged/verified. On `PLAN_REQUIRED`, call `set_plan` first.
+- **Status:** `review` when the work is done, `done` when merged/verified. On `PLAN_REQUIRED`, call `set_plan` first.
+- **Local review:** if moving to `review` says a review round is open, run the loop it describes before opening the PR: a fresh reviewer subagent per round (`submit_review`), fix and `resolve_finding` each blocking/major finding, `start_review` for the next round, until clean or the limit. Without auto-review, open and link the PR before moving to `review`.
 - **Already handled:** `close_task` with `completed`/`duplicate` + `byTask: "#N"`, or `wont_do`. No plan needed; don't archive these.
 - **Handover:** end every session with `add_note`: done, left, gotchas, next action.
 - **T3 Code:** if you have T3 tools, call `t3_thread_configuration` (→ threadId) and `t3_environment_read` (→ environmentId) once, and pass `t3Thread: {environmentId, threadId}` to `create_task` / `create_idea`, or to `link` whenever you start or resume an existing task.

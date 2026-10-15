@@ -179,6 +179,7 @@ describe("resolveT3Project", () => {
     workspaceKey: null,
     icon: null,
     t3ProjectId: null,
+    reviewSkill: null,
     position: "a0",
     collapsed: false,
     archivedAt: null,

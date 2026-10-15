@@ -16,6 +16,7 @@ import { useBoardContext } from "./BoardContext";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
+import { ReviewBadge } from "~/components/review/ReviewBadge";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -61,6 +62,7 @@ export const TaskCardContent = memo(function TaskCardContent({
           </Badge>
         ) : null}
         <ResolutionChip task={task} />
+        {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
         {task.archivedAt ? (
           <Badge variant="secondary" size="sm">
             Archived

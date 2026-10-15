@@ -54,11 +54,14 @@ function detail(phases: PlanPhase[]): TaskDetail {
     links: [],
     attention: [],
     lastNote: null,
+    autoReview: null,
+    review: null,
     description: null,
     planContext: null,
     phases,
     events: [],
     resolves: [],
+    reviews: [],
   };
 }
 

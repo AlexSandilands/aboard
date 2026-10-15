@@ -4,7 +4,14 @@ import type { BoardEvent } from "@repo/contracts";
 
 /** In-memory server context + app for tests. `events` collects everything published on the bus. */
 export function createTestHarness() {
-  const ctx = createContext({ dbPath: ":memory:", port: 4317, token: null, t3Home: "/nonexistent", pollers: false });
+  const ctx = createContext({
+    dbPath: ":memory:",
+    port: 4317,
+    token: null,
+    t3Home: "/nonexistent",
+    pollers: false,
+    userHome: "/nonexistent",
+  });
   const app = createApp(ctx);
   const events: BoardEvent[] = [];
   ctx.bus.subscribe((e) => events.push(e));
