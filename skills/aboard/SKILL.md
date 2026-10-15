@@ -39,6 +39,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `create_task` / `create_idea`, or later with `update_task` (which replaces the list). Reuse the labels
    `board_overview` lists rather than inventing near-duplicates. The user filters the board by them, and
    `list_tasks` takes a `labels` filter too.
+   If a task you just planned has no labels (the `set_plan` / `create_task` / `get_task` result says so
+   under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
+   before calling `update_task`.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before

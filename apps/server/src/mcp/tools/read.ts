@@ -181,7 +181,10 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
     (args) =>
       run(() => {
         const task = services.tasks.detail(services.tasks.resolveId(args.task));
-        const detail = renderTaskDetail(task, safeProject(services, task.projectId), { events: args.events ?? 10 });
+        const detail = renderTaskDetail(task, safeProject(services, task.projectId), {
+          events: args.events ?? 10,
+          labelsInUse: services.labels.usage(),
+        });
         return textResult(withOpenRoundPointer(detail, task));
       }),
   );

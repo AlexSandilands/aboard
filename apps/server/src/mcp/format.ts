@@ -3,6 +3,7 @@ import {
   findJiraKeys,
   formatPlanText,
   isGatingSeverity,
+  type LabelUsage,
   reviewBadgeLabel,
   type ReviewFinding,
   type Project,
@@ -183,6 +184,22 @@ export function missingLinkHints(task: TaskDetail): string[] {
   return hints;
 }
 
+/**
+ * A nudge to suggest labels for an open, unlabelled task, naming the labels already on the board so the agent
+ * reuses them. Suggest-only: the user approves before update_task, so the wording asks the agent to wait.
+ */
+export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsage>): string | null {
+  if (task.labels.length || task.resolution || task.status === "done" || task.archivedAt) return null;
+  // Generic examples only on an empty board, so they don't compete with the board's own vocabulary.
+  const source = labelsInUse.length
+    ? `Prefer labels already on the board: ${labelsInUse.map((l) => `${l.name} (${l.count})`).join(", ")}.`
+    : "No labels are in use yet; pick short type labels such as ui, backend, docs or bug.";
+  return (
+    `This task has no labels. Suggest 1-3 to the user. ${source} ` +
+    `Once they agree, call update_task(task: "#${task.number}", labels: [...]).`
+  );
+}
+
 function findingLine(f: ReviewFinding): string {
   const where = f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : "";
   const resolution = f.status === "open" ? "" : ` -> ${f.status}${f.resolutionNote ? `: ${f.resolutionNote}` : ""}`;
@@ -235,7 +252,7 @@ function reviewLines(task: TaskDetail): string[] {
 export function renderTaskDetail(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { events?: number } = {},
+  opts: { events?: number; labelsInUse?: ReadonlyArray<LabelUsage> } = {},
 ): string {
   const lines: string[] = [];
   lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
@@ -286,6 +303,8 @@ export function renderTaskDetail(
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
   }
+  const labels = opts.labelsInUse ? labelHint(task, opts.labelsInUse) : null;
+  if (labels) lines.push("", "Missing labels:", `- ${labels}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -297,6 +316,10 @@ export function renderTaskDetail(
 }
 
 /** Short post-mutation rendering: header, current step and the plan. */
-export function renderTaskShort(task: TaskDetail, project: Project | undefined): string {
-  return renderTaskDetail(task, project, { events: 0 });
+export function renderTaskShort(
+  task: TaskDetail,
+  project: Project | undefined,
+  opts: { labelsInUse?: ReadonlyArray<LabelUsage> } = {},
+): string {
+  return renderTaskDetail(task, project, { ...opts, events: 0 });
 }

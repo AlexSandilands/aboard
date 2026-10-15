@@ -370,4 +370,45 @@ describe("MCP endpoint", () => {
     expect(rejected.isError).toBe(true);
     expect(text(rejected)).toMatch(/^VALIDATION: Label "#" is empty/);
   });
+
+  it("asks for labels when planning an unlabelled task, naming the labels in use", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    const markdown = "## Build\n- [ ] route";
+    await call("create_idea", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
+    await call("create_idea", { title: "Untagged", workspacePath });
+
+    const planned = await call("set_plan", { task: "#2", markdown });
+    expect(planned).toContain("Missing labels:");
+    expect(planned).toContain("Prefer labels already on the board: bug (1), ui (1).");
+    expect(planned).toContain('update_task(task: "#2", labels: [...])');
+    expect(await call("set_plan", { task: "#1", markdown })).not.toContain("Missing labels:");
+    // Only the planning moments carry it, not every mutation.
+    expect(await call("update_step", { task: "#2", step: "1.1", status: "in_progress" })).not.toContain(
+      "Missing labels:",
+    );
+
+    expect(await call("create_task", { title: "New", workspacePath, markdown })).toContain("Missing labels:");
+    expect(await call("create_task", { title: "Labelled", workspacePath, markdown, labels: ["ui"] })).not.toContain(
+      "Missing labels:",
+    );
+
+    expect(await call("get_task", { task: "#2" })).toContain("Missing labels:");
+    await call("close_task", { task: "#2", resolution: "wont_do" });
+    expect(await call("get_task", { task: "#2" })).not.toContain("Missing labels:");
+  });
+
+  it("offers generic label examples only when the board has no labels yet", async () => {
+    const created = await client.callTool({
+      name: "create_task",
+      arguments: { title: "First", workspacePath: "C:/Fake/proj", markdown: "## Build\n- [ ] route" },
+    });
+    expect(text(created)).toContain("No labels are in use yet; pick short type labels such as ui");
+    expect(text(created)).not.toContain("Prefer labels already on the board");
+  });
 });

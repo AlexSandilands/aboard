@@ -119,7 +119,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
-        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`);
+        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, { labelHint: true });
       }),
   );
 
