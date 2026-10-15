@@ -109,7 +109,10 @@ interface ProcessInfo {
   commandLine: string;
 }
 
-/** Start time and command line of the given live pids. */
+/**
+ * Start time and command line of the given live pids. Exits when the lookup itself can't run: without it there's
+ * no telling this sandbox's processes from unrelated ones, so nothing may be killed or deleted.
+ */
 function processInfo(pids: number[]): Map<number, ProcessInfo> {
   const info = new Map<number, ProcessInfo>();
   const live = pids.filter(isAlive);
@@ -120,13 +123,20 @@ function processInfo(pids: number[]): Map<number, ProcessInfo> {
       `Get-CimInstance Win32_Process -Filter '${filter}' | ForEach-Object { '{0}|{1}|{2}' -f ` +
       "$_.ProcessId, ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds(), $_.CommandLine }";
     const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+    if (out.error || out.stdout === null)
+      fail(`can't list processes with powershell: ${out.error?.message ?? "no output"}`);
     for (const line of out.stdout.split(/\r?\n/)) {
       const [pid, startedAt, ...commandLine] = line.split("|");
       if (pid && startedAt) info.set(Number(pid), { startedAt: Number(startedAt), commandLine: commandLine.join("|") });
     }
     return info;
   }
-  const out = spawnSync("ps", ["-o", "pid=,lstart=,args=", "-p", live.join(",")], { encoding: "utf8" });
+  // The C locale keeps lstart in the English format Date.parse reads. ps exits 1 when a pid is gone; that's fine.
+  const out = spawnSync("ps", ["-o", "pid=,lstart=,args=", "-p", live.join(",")], {
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  if (out.error || out.stdout === null) fail(`can't list processes with ps: ${out.error?.message ?? "no output"}`);
   for (const line of out.stdout.split("\n")) {
     // lstart is always five fields, e.g. "Thu Oct 15 17:21:35 2026".
     const [pid, ...rest] = line.trim().split(/\s+/);
