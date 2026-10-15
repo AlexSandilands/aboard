@@ -34,6 +34,8 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
       return { ...board, tasks: board.tasks.filter((t) => t.id !== event.taskId) };
     case "integrations.changed":
       return { ...board, integrations: { ...board.integrations, t3: event.t3 } };
+    case "labels.colors_changed":
+      return { ...board, labelColors: event.labelColors };
     case "task.detail_changed":
       return board;
   }

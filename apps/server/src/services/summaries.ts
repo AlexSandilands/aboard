@@ -67,6 +67,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const resolvers = new Map(repos.tasks.getMany(resolverIds).map((t) => [t.id, t]));
   const roundsByTask = groupBy(repos.reviews.forTasks(ids), (r) => r.taskId);
   const findingsByTask = groupBy(repos.reviews.findingsFor(ids), (f) => f.taskId);
+  const labelsByTask = repos.labels.forTasks(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
   for (const record of records) {
@@ -93,6 +94,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       statusChangedAt: record.statusChangedAt,
+      labels: labelsByTask.get(record.id) ?? [],
       resolution: record.resolution,
       resolvedBy: taskRef(record.resolvedByTaskId ? resolvers.get(record.resolvedByTaskId) : undefined),
       progress: deriveProgress(phases),

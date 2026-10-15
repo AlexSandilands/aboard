@@ -18,6 +18,8 @@ const TaskListQuery = z.object({
   projectId: z.string().optional(),
   status: TaskStatus.optional(),
   q: z.string().optional(),
+  /** Comma-separated; tasks with any of them. */
+  labels: z.string().optional(),
   includeArchived: queryFlag,
   attention: queryFlag,
 });
@@ -35,6 +37,7 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
           projectId: q.projectId,
           status: q.status,
           query: q.q,
+          ...(q.labels ? { labels: q.labels.split(",").filter((l) => l.trim()) } : {}),
           includeArchived: q.includeArchived,
           attentionOnly: q.attention,
         }),

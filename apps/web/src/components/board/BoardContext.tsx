@@ -12,6 +12,7 @@ export interface BoardContextValue {
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
   projects: ReadonlyArray<Project>;
+  labelColors: Readonly<Record<string, number>>;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

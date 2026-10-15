@@ -16,6 +16,7 @@ import { useBoardContext } from "./BoardContext";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
+import { LabelChip } from "~/components/labels/LabelChip";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
 import { useCardFlip } from "./cardMotion";
 import type { DragData } from "./dnd.logic";
@@ -84,6 +85,7 @@ export const TaskCardContent = memo(function TaskCardContent({
         {archivable && task.status === "done" && !task.archivedAt ? <ArchiveButton task={task} /> : null}
       </div>
       <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
+      {task.labels.length ? <CardLabels labels={task.labels} /> : null}
       <TaskProgressLine task={task} />
       {hasCardLinks(task.links) || handoff ? (
         <div className="flex min-w-0 items-center gap-1">
@@ -98,6 +100,27 @@ export const TaskCardContent = memo(function TaskCardContent({
     </div>
   );
 });
+
+/** Cards show this many labels; the rest collapse into "+N". */
+const CARD_LABEL_LIMIT = 3;
+
+function CardLabels({ labels }: { labels: ReadonlyArray<string> }) {
+  const { labelColors } = useBoardContext();
+  const shown = labels.slice(0, CARD_LABEL_LIMIT);
+  const hidden = labels.slice(CARD_LABEL_LIMIT);
+  return (
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden" aria-label={`Labels: ${labels.join(", ")}`}>
+      {shown.map((label) => (
+        <LabelChip key={label} label={label} colors={labelColors} className="max-w-28" />
+      ))}
+      {hidden.length ? (
+        <span className="shrink-0 text-2xs text-muted-foreground" title={hidden.join(", ")}>
+          +{hidden.length}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 /** Quick archive for Done cards. Must not open the panel or start a drag, like the card's links. */
 function ArchiveButton({ task }: { task: TaskSummary }) {

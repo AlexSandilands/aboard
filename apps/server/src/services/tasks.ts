@@ -1,4 +1,4 @@
-import { findJiraKeys, resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { findJiraKeys, normalizeLabel, resolutionNeedsTask, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -6,12 +6,13 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core } from "./core.ts";
 import type { PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
+import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
 import type { CloseInput, ProjectsService, ReviewsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
-/** Case-insensitive text match over title, description, "#number" and Jira keys. */
+/** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -22,6 +23,7 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
     record.description ?? "",
     `#${record.number}`,
     ...summary.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])),
+    ...summary.labels,
   ];
   return haystack.some((text) => text.toLowerCase().includes(q));
 }
@@ -34,6 +36,7 @@ export function createTasksService(
     plans: () => PlansModule;
     links: () => LinksModule;
     reviews: () => ReviewsService;
+    labels: LabelsModule;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -79,8 +82,11 @@ export function createTasksService(
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
       const records = repos.tasks.list(query);
+      // A filter, not a label list: no cap, and a term that normalises to nothing just matches nothing.
+      const labels = query.labels?.length ? query.labels.map(normalizeLabel) : null;
       return [...assembleSummaries(repos, records).values()]
         .filter((t) => !query.query || matchesQuery(t, query.query))
+        .filter((t) => !labels || t.summary.labels.some((l) => labels.includes(l)))
         .filter((t) => !query.attentionOnly || t.summary.attention.length > 0)
         .map((t) => t.summary);
     },
@@ -137,6 +143,7 @@ export function createTasksService(
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
+        if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
         for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
@@ -182,6 +189,7 @@ export function createTasksService(
           fx.log(id, actor, input.archived ? "archived" : "unarchived");
         }
         repos.tasks.update(next);
+        if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);

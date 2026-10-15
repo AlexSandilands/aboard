@@ -15,6 +15,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     createdAt: "",
     updatedAt: "",
     statusChangedAt: "",
+    labels: [],
     resolution: null,
     resolvedBy: null,
     progress: { done: 0, total: 0 },
@@ -31,6 +32,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
 const board = (tasks: TaskSummary[]): BoardSnapshot => ({
   projects: [],
   tasks,
+  labelColors: {},
   integrations: {
     t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
   },
@@ -54,6 +56,13 @@ describe("applyBoardEvent", () => {
     expect(deleted.tasks.map((t) => t.id)).toEqual(["b"]);
     // Another client may already have dropped it (e.g. archived, so never on the board).
     expect(applyBoardEvent(deleted, { type: "task.deleted", taskId: "a" }).tasks.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("replaces the label colours", () => {
+    const b = { ...board([]), labelColors: { ui: 10, docs: 20 } };
+    expect(applyBoardEvent(b, { type: "labels.colors_changed", labelColors: { ui: 30 } }).labelColors).toEqual({
+      ui: 30,
+    });
   });
 });
 

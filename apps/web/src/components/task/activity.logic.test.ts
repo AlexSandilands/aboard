@@ -27,6 +27,13 @@ describe("describeEvent", () => {
     });
   });
 
+  it("describes label changes", () => {
+    const text = (payload: Record<string, unknown>) => describeEvent(event("labels_changed", payload), ctx).text;
+    expect(text({ added: ["ui", "bug"], removed: ["server"] })).toBe("added 2 labels ui, bug; removed server");
+    expect(text({ added: [], removed: ["ui"] })).toBe("removed ui");
+    expect(text({})).toBe("changed the labels");
+  });
+
   it("describes the local review loop", () => {
     const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx);
     expect(text("review_opened", { round: 1, trigger: "move" }).text).toBe("opened review round 1 (moved to Review)");

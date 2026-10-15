@@ -76,7 +76,7 @@ function shortLink(link: TaskLink): string {
   }
 }
 
-/** One line per task: "#42 Title — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
+/** One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests [~] · PR #12 open · ! 1 step blocked". */
 export function summaryLine(task: TaskSummary): string {
   const parts: string[] = [];
   const resolution = resolutionText(task);
@@ -91,7 +91,8 @@ export function summaryLine(task: TaskSummary): string {
   if (links.length) parts.push(links.join(", "));
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
-  return `#${task.number} ${task.title}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
+  const labels = task.labels.length ? ` ${task.labels.map((l) => `[${l}]`).join(" ")}` : "";
+  return `#${task.number} ${task.title}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /** Tasks grouped under status headings, in board column order. */
@@ -129,6 +130,12 @@ function eventText(event: TaskEvent): string {
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
       break;
+    case "labels_changed": {
+      const list = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[]) : []);
+      const changes = [...list("added").map((l) => `+${l}`), ...list("removed").map((l) => `-${l}`)];
+      what = `labels ${changes.join(" ")}`;
+      break;
+    }
     case "link_added":
       what = `linked ${str("kind") ?? ""} ${str("url") ?? ""}`.trimEnd();
       break;
@@ -233,6 +240,7 @@ export function renderTaskDetail(
   const lines: string[] = [];
   lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
+  if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;
