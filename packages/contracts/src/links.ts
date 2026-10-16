@@ -7,15 +7,16 @@ export type ClassifiedLink =
   | { kind: "url"; url: string };
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
-const GITHUB_PR = /^https?:\/\/(github\.com)\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/i;
+// Any host, since GitHub Enterprise lives on its own domains. The server decides which hosts to poll.
+const GITHUB_PR = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/pull\/(\d+)(?:[/?#]|$)/i;
 const ADO_PR = /^https?:\/\/[^/\s]*(dev\.azure\.com|visualstudio\.com)\/.+\/pullrequest\/(\d+)/i;
 const BITBUCKET_PR = /^https?:\/\/bitbucket\.org\/([^/\s]+\/[^/\s]+)\/pull-requests\/(\d+)/i;
 const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
 const JIRA_BROWSE = /\/browse\/([A-Z][A-Z0-9_]+-\d+)(?:[/?#]|$)/;
 
 /**
- * Infers link kind from user/agent input: GitHub/ADO/Bitbucket PR URLs, Jira keys or
- * /browse/ URLs, t3code:// thread deep links, otherwise a plain URL.
+ * Infers link kind from user/agent input: GitHub-style PR URLs on any host (`/<owner>/<repo>/pull/<n>`),
+ * ADO/Bitbucket PR URLs, Jira keys or /browse/ URLs, t3code:// thread deep links, otherwise a plain URL.
  */
 export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null } = {}): ClassifiedLink | null {
   const input = value.trim();
@@ -35,12 +36,12 @@ export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null 
     };
   }
 
+  if (ADO_PR.test(input) || BITBUCKET_PR.test(input)) {
+    return { kind: "pr", url: input, ref: null };
+  }
   const gh = GITHUB_PR.exec(input);
   if (gh) {
     return { kind: "pr", url: input, ref: { host: gh[1]!.toLowerCase(), repo: gh[2]!, number: Number(gh[3]) } };
-  }
-  if (ADO_PR.test(input) || BITBUCKET_PR.test(input)) {
-    return { kind: "pr", url: input, ref: null };
   }
 
   const jiraUrl = JIRA_BROWSE.exec(input);
