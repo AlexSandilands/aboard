@@ -88,7 +88,7 @@ describe("agent sessions over MCP", () => {
     const { client, task } = await setup();
     const before = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
     expect(before).toContain(
-      `Your session: link(task: "#${task.number}", agentSession: {harness: "claude-code", sessionId: <$CLAUDE_CODE_SESSION_ID>`,
+      `Your session: if you are the one working on this task, link(task: "#${task.number}", agentSession: {harness: "claude-code", sessionId: <$CLAUDE_CODE_SESSION_ID>`,
     );
     await client.callTool({
       name: "link",
@@ -99,6 +99,13 @@ describe("agent sessions over MCP", () => {
     });
     const after = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
     expect(after).not.toContain("Your session:");
+  });
+
+  it("doesn't ask for a session on an epic", async () => {
+    const { h, client, task } = await setup();
+    const epic = h.services.tasks.create({ projectId: task.projectId, title: "Feature", kind: "epic" });
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${epic.number}` } }));
+    expect(detail).not.toContain("Your session:");
   });
 
   it("doesn't ask other clients", async () => {

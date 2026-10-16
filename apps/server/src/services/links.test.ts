@@ -220,6 +220,20 @@ describe("agent session links", () => {
     expect(again.id).toBe(first.id);
     expect(copilot.id).not.toBe(first.id);
     expect(s.tasks.summary(task.id).links).toHaveLength(2);
+    expect(again).toMatchObject({ ref: { sessionId: ID } });
+    expect(s.tasks.detail(task.id).events.some((e) => e.type === "link_updated")).toBe(false);
+  });
+
+  it("takes the newest folder when a session is linked again", () => {
+    const { s, task } = setup("in_progress", []);
+    const first = s.links.add(task.id, session({ cwd: "/work" }), "claude-code");
+    const again = s.links.add(task.id, session({ cwd: "/work/alpha" }), "claude-code");
+    expect(again.id).toBe(first.id);
+    expect(s.links.get(first.id)).toMatchObject({ ref: { cwd: "/work/alpha" } });
+    expect(s.tasks.detail(task.id).events.at(-1)).toMatchObject({
+      type: "link_updated",
+      payload: { from: "/work", to: "/work/alpha" },
+    });
   });
 
   it("accepts a session the board started itself, in a worktree outside the project's folder", () => {

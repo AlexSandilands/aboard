@@ -100,6 +100,9 @@ export function createLinksRepo(sql: Sql) {
     insert(r: LinkRow): void {
       sql.insert("task_links", { ...r });
     },
+    setRef(id: string, refJson: string): void {
+      sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
+    },
     setSnapshot(id: string, snapshotJson: string | null, syncedAt: string): void {
       sql.run("UPDATE task_links SET snapshot_json = ?, synced_at = ? WHERE id = ?", snapshotJson, syncedAt, id);
     },

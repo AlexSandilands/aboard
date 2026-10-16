@@ -21,7 +21,8 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
   }
   if (input.agentSession) {
-    return { kind: "agent_session", url: agentSessionUrl(input.agentSession), ref: input.agentSession };
+    const ref = { ...input.agentSession, sessionId: input.agentSession.sessionId.toLowerCase() };
+    return { kind: "agent_session", url: agentSessionUrl(ref), ref };
   }
   const value = input.value?.trim();
   if (!value) {
@@ -147,7 +148,22 @@ export function createLinksService(
                 .forTasks([task.id])
                 .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
             : undefined);
-        if (existing) return toLink(existing);
+        if (existing) {
+          // A session is one link however often it is linked, but an agent may correct the folder it gave: Claude
+          // finds a conversation to resume by its folder, so the newest one wins.
+          const before = parseJson<{ cwd?: string }>(existing.ref_json)?.cwd;
+          if (classified.kind === "agent_session" && before !== classified.ref.cwd) {
+            repos.links.setRef(existing.id, refJson(classified)!);
+            fx.log(task.id, actor, "link_updated", {
+              linkId: existing.id,
+              kind: existing.kind,
+              from: before,
+              to: classified.ref.cwd,
+            });
+            return toLink(repos.links.row(existing.id)!);
+          }
+          return toLink(existing);
+        }
         const row: LinkRow = {
           id: randomUUID(),
           task_id: task.id,

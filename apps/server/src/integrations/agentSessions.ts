@@ -30,6 +30,7 @@ import {
   resolveTerminal,
   spawnTerminal,
   systemTerminalHost,
+  type LaunchSpec,
   type ResolvedTerminal,
   type SpawnTerminal,
   type TerminalHost,
@@ -375,7 +376,13 @@ export function createAgentSessionsIntegration(deps: {
       const { resolved, error, host: h } = terminal();
       const command = copyFor(resolved, h, ref, mode);
       if (!resolved) return { launched: false, command, error };
-      const spec = resolved.launch(resumeArgv(ref, mode), ref.cwd);
+      let spec: LaunchSpec;
+      try {
+        spec = resolved.launch(resumeArgv(ref, mode), ref.cwd);
+      } catch (launchError) {
+        // A folder this terminal can't be given safely: the user can still run the command by hand.
+        return { launched: false, command, error: messageOf(launchError) };
+      }
       try {
         await spawnFn(spec);
         return { launched: true, command, error: null };

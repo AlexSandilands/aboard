@@ -4,7 +4,7 @@ import { delimiter, join } from "node:path";
 import type { TerminalSetting, TerminalShell, WindowsTerminalProfile } from "@repo/contracts";
 
 // Opening a command in a new terminal window, per platform and per shell. Everything here is pure except the
-// `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0009-*.md).
+// `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0008-board-starts-local-processes.md).
 
 /** What the launcher needs from the machine. */
 export interface TerminalHost {
@@ -264,7 +264,17 @@ export class TerminalUnavailable extends Error {}
 /** The shell a user on this platform most likely types in, for the copy command when no terminal applies. */
 export const defaultShell = (platform: NodeJS.Platform): TerminalShell => (platform === "win32" ? "cmd" : "bash");
 
-const LINUX_TERMINALS = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"] as const;
+/**
+ * Linux terminals in the order tried, each with the flag after which the rest of its arguments are the command.
+ * xfce4-terminal's `-e` takes one string, so it gets `-x`; x-terminal-emulator is Debian's wrapper, which takes `-e`.
+ */
+const LINUX_TERMINALS = [
+  { name: "x-terminal-emulator", execFlag: "-e" },
+  { name: "gnome-terminal", execFlag: "--" },
+  { name: "konsole", execFlag: "-e" },
+  { name: "xfce4-terminal", execFlag: "-x" },
+  { name: "xterm", execFlag: "-e" },
+] as const;
 
 /** Resolves the terminal setting on this machine. Throws TerminalUnavailable with a reason when it can't run. */
 export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): ResolvedTerminal {
@@ -302,14 +312,22 @@ export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): R
           },
         };
       }
-      const found = LINUX_TERMINALS.map((name) => ({ name, path: host.which(name) })).find((t) => t.path);
+      const found = LINUX_TERMINALS.map((t) => ({ ...t, path: host.which(t.name) })).find((t) => t.path);
       if (!found) throw new TerminalUnavailable("No terminal found; choose a custom command in Settings → Terminal");
       return {
         shell: "bash",
         label: found.name,
         launch: (command, cwd) => ({
           file: found.path!,
-          args: [found.name === "gnome-terminal" ? "--" : "-e", "bash", ...shellArgs("bash", command)],
+          // Some terminals hand the window to a server process that doesn't keep our cwd, so the script changes to it.
+          args: [
+            found.execFlag,
+            "bash",
+            "-l",
+            "-i",
+            "-c",
+            `cd ${shQuote(cwd)} && ${command.map(shQuote).join(" ")}; exec bash`,
+          ],
           cwd,
         }),
       };
@@ -361,6 +379,9 @@ export function customTerminal(template: string, host: Pick<TerminalHost, "platf
     shell: windows ? "cmd" : "sh",
     label: "Custom command",
     launch: (command, cwd) => {
+      // cmd expands %NAME% even inside quotes, which would rewrite the folder before the terminal sees it.
+      if (windows && cwd.includes("%"))
+        throw new TerminalUnavailable(`Can't pass a folder containing % to cmd: ${cwd}`);
       const line = template
         .replaceAll("{cwd}", windows ? cmdQuote(cwd) : shQuote(cwd))
         .replaceAll("{command}", command.join(" "));

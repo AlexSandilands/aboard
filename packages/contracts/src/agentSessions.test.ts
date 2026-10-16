@@ -23,6 +23,16 @@ describe("AgentSessionRef", () => {
     expect(AgentSessionRef.safeParse({ harness: "claude-code", sessionId, cwd: "/home/x" }).success).toBe(false);
   });
 
+  it.each([
+    ["C:\\Code\\repo\\", "C:\\Code\\repo"],
+    ["/home/me/repo//", "/home/me/repo"],
+    ["C:\\", "C:\\"],
+    ["C:/", "C:/"],
+    ["/", "/"],
+  ])("trims trailing separators from %j but keeps a root", (cwd, expected) => {
+    expect(AgentSessionRef.parse({ harness: "claude-code", sessionId: ID, cwd }).cwd).toBe(expected);
+  });
+
   it("rejects relative folders and unknown harnesses", () => {
     expect(AgentSessionRef.safeParse({ harness: "claude-code", sessionId: ID, cwd: "repo" }).success).toBe(false);
     expect(AgentSessionRef.safeParse({ harness: "codex", sessionId: ID, cwd: "/x" }).success).toBe(false);

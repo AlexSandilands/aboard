@@ -21,8 +21,9 @@ var the agent reads with its shell:
 | Copilot CLI | `copilot-cli` | `$COPILOT_AGENT_SESSION_ID` | `copilot --resume=<id>` | none |
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
-session twice returns the first link. The id must be a UUID and the folder an absolute path
-(`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
+session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
+since Claude Code finds a conversation to resume by its folder. The id must be a UUID and the folder an
+absolute path, with trailing separators dropped (`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
 `services.links.add` with the same input; their folder can be a worktree outside the project.
 
 Agents are asked for it in three places: the `link` tool's description and the server instructions, the
@@ -75,10 +76,10 @@ quoted for the shell the terminal setting opens.
 | --- | --- |
 | Automatic, Windows | Windows Terminal's default profile, else a Command Prompt window |
 | Automatic, macOS | Terminal, through `osascript` |
-| Automatic, Linux | the first of `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xfce4-terminal`, `xterm` |
+| Automatic, Linux | the first of `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xfce4-terminal`, `xterm`, running `bash -c 'cd <folder> && <command>; exec bash'` |
 | A Windows Terminal profile | `wt -w new new-tab -p <guid> -d <folder> <shell> …` |
 | Command Prompt, Windows PowerShell | a console window through `cmd /c start` |
-| Custom command | the template, with `{cwd}` (quoted) and `{command}`, run by cmd on Windows and sh elsewhere |
+| Custom command | the template, with `{cwd}` (quoted) and `{command}`, run by cmd on Windows and sh elsewhere. On Windows a folder containing `%` is refused, as cmd would expand it |
 
 Windows Terminal's settings are read from the Store, Preview and unpackaged locations, with comments and
 trailing commas allowed. A profile's shell comes from its `commandline` (or its `source` for PowerShell 7

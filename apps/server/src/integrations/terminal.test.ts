@@ -250,7 +250,33 @@ describe("resolveTerminal", () => {
       { kind: "auto" },
       host({ platform: "linux", which: (n) => (n === "gnome-terminal" ? "/usr/bin/gnome-terminal" : null) }),
     );
-    expect(t.launch(RESUME, "/srv").args).toEqual(["--", "bash", "-l", "-i", "-c", `claude --resume ${ID}; exec bash`]);
+    expect(t.launch(RESUME, "/srv/my repo").args).toEqual([
+      "--",
+      "bash",
+      "-l",
+      "-i",
+      "-c",
+      `cd '/srv/my repo' && claude --resume ${ID}; exec bash`,
+    ]);
     expect(() => resolveTerminal({ kind: "auto" }, host({ platform: "linux" }))).toThrow(/No terminal found/);
+  });
+
+  it.each([
+    ["x-terminal-emulator", "-e"],
+    ["konsole", "-e"],
+    ["xfce4-terminal", "-x"],
+    ["xterm", "-e"],
+  ])("passes the command to %s after %s", (name, flag) => {
+    const t = resolveTerminal(
+      { kind: "auto" },
+      host({ platform: "linux", which: (n) => (n === name ? `/usr/bin/${n}` : null) }),
+    );
+    expect(t.label).toBe(name);
+    expect(t.launch(RESUME, "/srv").args.slice(0, 2)).toEqual([flag, "bash"]);
+  });
+
+  it("won't hand cmd a folder containing %, which it would expand", () => {
+    const t = customTerminal("wezterm start --cwd {cwd} -- {command}", { platform: "win32" });
+    expect(() => t.launch(RESUME, "C:\\100%PATH%x")).toThrow(/containing %/);
   });
 });

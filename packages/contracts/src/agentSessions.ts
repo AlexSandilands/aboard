@@ -13,6 +13,16 @@ export function isAbsolutePath(value: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\[^\\]|\/)/.test(value);
 }
 
+/**
+ * `C:\Code\` → `C:\Code`, keeping a root (`C:\`, `/`). A trailing backslash before a closing quote reads as an
+ * escaped quote to most Windows programs, which would swallow the rest of a command line.
+ */
+export function trimTrailingSeparators(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  if (!trimmed) return path.slice(0, 1);
+  return /^[A-Za-z]:$/.test(trimmed) ? `${trimmed}${path[2]}` : trimmed;
+}
+
 export const AgentSessionRef = z.object({
   harness: AgentHarness,
   // The id goes into the resume command, so it must be exactly a UUID and nothing a shell could read more into.
@@ -21,7 +31,7 @@ export const AgentSessionRef = z.object({
     .trim()
     .regex(UUID, "must be a UUID")
     .transform((id) => id.toLowerCase()),
-  cwd: z.string().trim().min(1).refine(isAbsolutePath, "must be an absolute path"),
+  cwd: z.string().trim().min(1).refine(isAbsolutePath, "must be an absolute path").transform(trimTrailingSeparators),
 });
 export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 
