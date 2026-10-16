@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createAutopilotEngine } from "../autopilot/engine.ts";
+import type { Automation, Runner } from "../autopilot/types.ts";
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
@@ -32,10 +34,14 @@ export interface IntegrationOverrides {
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   runGit?: RunGit;
+  /** Carries out Autopilot's agent actions. */
+  autopilotRunner?: Runner;
+  /** Replaces the Autopilot catalogue (read by the services, see createContext). */
+  automations?: readonly Automation[];
   log?: Logger;
 }
 
-/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations. */
+/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations, the review watchdog, backup and Autopilot. */
 export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
   const github = createGithubIntegration({
     services: deps.services,
@@ -69,6 +75,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const autopilot = createAutopilotEngine({
+    services: deps.services,
+    bus: deps.bus,
+    ...(overrides.autopilotRunner ? { runner: overrides.autopilotRunner } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -82,6 +94,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.start();
       reviews.start();
       backup.start();
+      autopilot.start();
     },
     stop() {
       started = false;
@@ -89,6 +102,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.stop();
       reviews.stop();
       backup.stop();
+      autopilot.stop();
     },
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),

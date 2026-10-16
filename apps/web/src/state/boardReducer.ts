@@ -36,6 +36,8 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
       return { ...board, integrations: { ...board.integrations, t3: event.t3 } };
     case "labels.colors_changed":
       return { ...board, labelColors: event.labelColors };
+    case "autopilot.changed":
+      return { ...board, autopilot: event.autopilot };
     case "task.detail_changed":
       return board;
   }

@@ -51,6 +51,17 @@ function seed() {
     "rev",
   );
   s.labels.setColor("ui", 120);
+  // Autopilot settings are exported; its runs are history and stay out.
+  h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+    ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
+    ('project', '${project.id}', 'noop', 'off', '{"days":3}', '2026-10-16T00:00:00.000Z')`);
+  s.autopilot.updateEngine({ maxConcurrent: 2, quietHours: { enabled: true } });
+  s.autopilot.setPaused(true);
+  s.autopilot.record({
+    automation: "noop",
+    candidate: { dedupeKey: "k", summary: "do it", taskId: a.id },
+    dryRun: false,
+  });
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
@@ -62,6 +73,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   projects: "id",
   label_colors: "label",
   counters: "name",
+  autopilot_settings: "scope_kind, scope_id, automation",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
@@ -134,6 +146,7 @@ describe("dump", () => {
         "projects.json",
         "labels.json",
         "counters.json",
+        "autopilot.json",
         `tasks/${a.createdAt.slice(0, 7)}/task-${a.number}.json`,
         `events/${a.createdAt.slice(0, 7)}.json`,
       ]),
@@ -202,6 +215,12 @@ describe("restore", () => {
         expect.arrayContaining([{ snapshot_json: null }]),
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 2 });
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_runs").get()).toEqual({ n: 0 });
+      const restoredRepos = createRepos(restored);
+      // Pause stays with the machine: a restore can't lift it, or set it.
+      expect(restoredRepos.settings.all().has("autopilotPaused")).toBe(false);
+      expect(restoredRepos.settings.all().get("autopilotEngine")).toMatchObject({ maxConcurrent: 2 });
     } finally {
       restored.close();
     }
@@ -219,6 +238,14 @@ describe("restore", () => {
     } finally {
       restored.close();
     }
+  });
+
+  it("reads a folder written before Autopilot, which has no autopilot.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "autopilot.json"));
+    expect(readDumpDir(dir).autopilot_settings).toEqual([]);
   });
 
   it("refuses to replace a board without force, and keeps machine settings and the old file when forced", () => {
@@ -270,10 +297,12 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns, no Autopilot.
+    const { autopilot_settings: _a, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
-      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
+      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
+      autopilot_settings: [],
       tasks: dump.tasks.map((bundle) => {
         const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
