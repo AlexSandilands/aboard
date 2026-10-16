@@ -142,4 +142,17 @@ describe("unblock dependents", () => {
     await pass();
     expect(notices()).toMatchObject([{ taskId: dependent.id }]);
   });
+
+  it("labels a won't-do blocker in the note", async () => {
+    const { s, task, pass, notices, turnOn } = setup();
+    const blocker = task("Blocker");
+    const dependent = task("Dependent", [blocker.id]);
+    turnOn();
+    s.tasks.close(blocker.id, { resolution: "wont_do" }, "agent");
+    await pass();
+    expect(notices()).toHaveLength(1);
+    expect(s.tasks.detail(dependent.id).events.find((e) => e.type === "note")?.payload).toMatchObject({
+      text: `Unblocked: #${blocker.number} (won't do) finished`,
+    });
+  });
 });
