@@ -76,7 +76,7 @@ import {
   SidebarTrigger,
 } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
-import { pillClassName, PillLabel } from "~/components/autopilot/AutopilotPill";
+import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -85,6 +85,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { formatElapsedDurationLabel, formatRelativeTimeLabel } from "~/lib/timestampFormat";
+import { cn } from "~/lib/utils";
 
 const BUTTON_VARIANTS = [
   "default",
@@ -439,10 +440,22 @@ export function StyleGallery() {
           <Separator className="w-full" />
         </Section>
 
-        <Section title="Autopilot pill (off, idle, paused, active) and card badge">
+        <Section title="Autopilot pill and epic button (off, idle, paused, active) and card badge">
           {(["off", "idle", "paused", "active"] as const).map((state) => (
             <span key={state} data-autopilot-state={state} className={pillClassName(state)}>
               <PillLabel state={state} />
+            </span>
+          ))}
+          {(["off", "idle", "paused", "active"] as const).map((state) => (
+            <span
+              key={state}
+              data-autopilot-state={state}
+              className={cn(
+                "autopilot-pill inline-flex size-5.5 items-center justify-center rounded-full border",
+                PILL_CLASS_NAME[state],
+              )}
+            >
+              <PillIcon state={state} />
             </span>
           ))}
           <Badge variant="info" size="sm">

@@ -49,7 +49,7 @@ export const DIGEST_FIELDS: AutopilotField[] = [
   },
   { key: "time", label: "Time", kind: "time", help: "When the daily digest is made, in the server's local time." },
   { key: "weekdaysOnly", label: "Weekdays only", kind: "boolean" },
-  { key: "skill", label: "Digest skill", kind: "skill", builtin: BUILTIN_DIGEST_SKILL_NAME },
+  { key: "skill", label: "Digest skill", kind: "skill", builtinLabel: BUILTIN_DIGEST_SKILL_NAME },
   { key: "budgetUsd", label: "Agent budget", kind: "number", min: 0.1, max: 100, step: 0.1, unit: "USD" },
   { key: "timeoutMinutes", label: "Agent timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
   {

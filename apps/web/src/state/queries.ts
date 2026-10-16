@@ -47,6 +47,8 @@ export const queryKeys = {
   autopilotScopeAll: ["autopilotScope"] as const,
   /** The board scope when `projectId` is null. */
   autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
+  /** An epic's scope, under its project's. */
+  autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
   autopilotRunsAll: ["autopilotRuns"] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
@@ -77,6 +79,20 @@ export function useAutopilotScope(projectId: string | null, enabled = true) {
     queryFn: ({ signal }) =>
       api<AutopilotScopeEntry[]>(
         projectId ? `/api/autopilot/projects/${encodeURIComponent(projectId)}` : "/api/autopilot/board",
+        { signal },
+      ),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Every automation as seen from an epic: its own switch and what it resolves to through its project and the board. */
+export function useAutopilotEpicScope(projectId: string, epicId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotEpicScope(projectId, epicId),
+    queryFn: ({ signal }) =>
+      api<AutopilotScopeEntry[]>(
+        `/api/autopilot/projects/${encodeURIComponent(projectId)}/epics/${encodeURIComponent(epicId)}`,
         { signal },
       ),
     enabled,

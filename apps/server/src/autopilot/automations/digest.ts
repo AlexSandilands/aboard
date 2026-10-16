@@ -27,6 +27,8 @@ export const digest = defineAutomation({
   needsAgent: false,
   // The summarised mode waits on an agent; the engine must not hold up its other automations for that.
   background: true,
+  // Never about a task, so an epic has nothing to switch.
+  epicScope: false,
   schema: DigestConfig,
   fields: DIGEST_FIELDS,
   defaults: DIGEST_DEFAULTS,

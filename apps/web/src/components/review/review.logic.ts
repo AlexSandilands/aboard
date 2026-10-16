@@ -95,8 +95,8 @@ export interface SkillOption {
 }
 
 /**
- * Options for a skill select: optionally "inherit" (project override), the built-in skill (named `builtinLabel`),
- * then the discovered skills. A configured skill that is no longer on disk stays listed so the select can show it.
+ * Options for a skill select: optionally "inherit" (project override), the built-in skill, then the discovered
+ * skills. A configured skill that is no longer on disk stays listed so the select can show it.
  */
 export function skillOptions(
   discovered: ReadonlyArray<SkillInfo>,
@@ -109,7 +109,6 @@ export function skillOptions(
   }
   options.push({
     value: "builtin",
-    // The built-in skill is the review skill unless another feature (an Autopilot field) names its own.
     label: opts.builtinLabel ?? BUILTIN_REVIEW_SKILL_NAME,
     detail: "Built in",
     skill: { source: "builtin" },

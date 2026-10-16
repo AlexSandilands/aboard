@@ -63,8 +63,8 @@ tasks Autopilot never touched don't show it.
 
 ### Autopilot on the board
 
-Three things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
-kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations. A fourth, the
+Four things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
+kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations. A fifth, the
 [digest button](#digest-of-what-changed), is always there:
 
 - **The lane's Autopilot pill**, after the lane's other header buttons (`AutopilotPill`). Off (no automation
@@ -74,6 +74,12 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
   each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
   "Recurring tasks…" link opens the project's settings at that section.
+- **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
+  in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
+  reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
+  run), and opens the same popover (`ScopePopover`) for the epic. Its Inherit labels read the project's entries,
+  which already resolve through the board ("Inherit (Off from project)"). Automations with `epicScope: false` (Auto-archive, Recurring) aren't listed and don't count. Off means nothing is on for the epic's
+  tasks, whether the epic or its project says so. It isn't shown for an archived epic.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
 - **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
@@ -143,7 +149,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
-| `apps/web/src/components/autopilot/AutopilotPill.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill and popover, header pause, card badge, panel section |
+| `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |
 | `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
 | `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |

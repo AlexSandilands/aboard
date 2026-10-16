@@ -2,9 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { AUTOPILOT_START_PLANNED } from "@repo/contracts";
-import { z } from "zod";
-import { defineAutomation } from "../autopilot/types.ts";
+import { AUTOPILOT_START_PLANNED, startPlanned } from "../autopilot/automations/startPlanned.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -22,19 +20,6 @@ async function connect(h: Harness) {
   await client.connect(transport);
   return client;
 }
-
-// A stand-in for the real automation, which has its own task: the hint only needs the key to resolve.
-const startPlanned = defineAutomation({
-  key: AUTOPILOT_START_PLANNED,
-  title: "Start planned tasks",
-  description: "Starts flagged Planned tasks.",
-  needsAgent: true,
-  schema: z.object({}),
-  fields: [],
-  defaults: {},
-  check: () => [],
-  act: () => ({}),
-});
 
 const HINT = "Autopilot flag not set:";
 const markdown = "## Build\n- [ ] route";
@@ -106,6 +91,21 @@ describe("the Autopilot flag over MCP", () => {
     const project = h.services.projects.resolve({ workspacePath }, { autoCreate: false });
     h.services.autopilot.setScope("project", project.id, AUTOPILOT_START_PLANNED, { mode: "off" });
     expect(await call("create_task", { title: "Off here", workspacePath, markdown })).not.toContain(HINT);
+  });
+
+  it("follows the task's epic: asked for a task in an epic that switches it on, not for a loose one", async () => {
+    await call("create_epic", { title: "Big", workspacePath });
+    const project = h.services.projects.resolve({ workspacePath }, { autoCreate: false });
+    h.services.autopilot.setScope("project", project.id, AUTOPILOT_START_PLANNED, { mode: "off" });
+    h.services.autopilot.setScope(
+      "epic",
+      h.services.tasks.resolveId("#1"),
+      AUTOPILOT_START_PLANNED,
+      { mode: "on" },
+      project.id,
+    );
+    expect(await call("create_task", { title: "In it", workspacePath, markdown, epic: "#1" })).toContain(HINT);
+    expect(await call("create_task", { title: "Loose", workspacePath, markdown })).not.toContain(HINT);
   });
 
   it("does not offer the flag to epics, closed or started tasks", async () => {

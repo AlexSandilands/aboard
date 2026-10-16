@@ -75,6 +75,23 @@ function setup(opts: { now?: () => Date } = {}) {
         .map((t) => ({ dedupeKey: `stray:${t.id}`, summary: "stray", taskId: t.id, projectId: null })),
     act: () => ({}),
   });
+  // Like Recurring tasks: one candidate per project, with no task.
+  const projectWide = defineAutomation({
+    key: "project_wide",
+    title: "Project-wide",
+    description: "Acts once per project.",
+    needsAgent: false,
+    schema: z.object({}),
+    fields: [],
+    defaults: {},
+    check: ({ projects }) =>
+      projects.map(({ project }) => ({
+        dedupeKey: `project_wide:${project.id}`,
+        summary: "act",
+        projectId: project.id,
+      })),
+    act: () => ({}),
+  });
   const started: Deferred[] = [];
   const runner: Runner = {
     start: ({ run }, update = () => {}) =>
@@ -82,7 +99,7 @@ function setup(opts: { now?: () => Date } = {}) {
         started.push({ run, resolve: (patch) => resolve({ ...patch, result: null }), reject, update });
       }),
   };
-  const h = createTestHarness({ integrations: { automations: [noop, agent, stray] } });
+  const h = createTestHarness({ integrations: { automations: [noop, agent, stray, projectWide] } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
@@ -143,6 +160,130 @@ describe("scopes", () => {
     await settle(engine);
     expect(runs("noop")).toHaveLength(1);
     expect(s.tasks.summary(task.id).labels).toEqual(["mine"]);
+  });
+});
+
+describe("epic scope", () => {
+  /** An epic holding one Planned task, next to the setup's loose task. */
+  function withEpic() {
+    const t = setup();
+    const child = t.s.tasks.create({ projectId: t.project.id, title: "In the epic", plan });
+    const epic = t.s.tasks.createEpic({ projectId: t.project.id, title: "Epic" }, [child.id], "agent");
+    const ran = () => t.runs("noop").flatMap((r) => (r.taskId ? [r.taskId] : []));
+    return { ...t, child, epic, ran };
+  }
+
+  it("switches an automation on for the epic's tasks only, while the project and board are off", async () => {
+    const { s, engine, epic, child, task, ran } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "on" }, epic.projectId);
+    await settle(engine);
+    expect(ran()).toEqual([child.id]);
+    expect(ran()).not.toContain(task.id);
+  });
+
+  it("lets an epic switch an automation off for its tasks while the project is on", async () => {
+    const { s, engine, epic, child, task, ran } = withEpic();
+    s.autopilot.setScope("project", epic.projectId, "noop", { mode: "on" });
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "off" }, epic.projectId);
+    await settle(engine);
+    expect(ran()).toContain(task.id);
+    expect(ran()).not.toContain(child.id);
+  });
+
+  it("follows the project, then the board, while the epic is on Inherit", async () => {
+    const { s, engine, epic, child, ran } = withEpic();
+    s.autopilot.setScope("board", null, "noop", { mode: "on" });
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "inherit" }, epic.projectId);
+    await settle(engine);
+    expect(ran()).toContain(child.id);
+  });
+
+  it("uses the epic's config over the project's for its tasks, and the project's for the rest", async () => {
+    const { s, engine, epic, child, task } = withEpic();
+    s.autopilot.setScope("project", epic.projectId, "noop", { mode: "on", config: { label: "project" } });
+    s.autopilot.setScope("epic", epic.id, "noop", { config: { label: "epic" } }, epic.projectId);
+    await settle(engine);
+    expect(s.tasks.summary(child.id).labels).toEqual(["epic"]);
+    expect(s.tasks.summary(task.id).labels).toEqual(["project"]);
+  });
+
+  it("stops counting an epic once it is archived, and counts it again when unarchived", () => {
+    const { s, epic, child } = withEpic();
+    const noop = s.autopilot.automations().find((a) => a.key === "noop")!;
+    s.autopilot.setScope("project", epic.projectId, "noop", { mode: "on", config: { label: "project" } });
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "off", config: { label: "epic" } }, epic.projectId);
+    const resolve = () => s.autopilot.resolve(noop, epic.projectId, epic.id);
+    expect(resolve()).toEqual({ enabled: false, config: { label: "epic" } });
+
+    // An epic can only be archived once its tasks are finished; the finished task then follows the project.
+    s.tasks.move(child.id, { status: "done" }, "agent");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    expect(resolve()).toEqual({ enabled: true, config: { label: "project" } });
+    expect(s.autopilot.projectsWithEpicOn(noop).size).toBe(0);
+
+    s.tasks.update(epic.id, { archived: false }, "user");
+    expect(resolve()).toEqual({ enabled: false, config: { label: "epic" } });
+  });
+
+  it("looks at a project for an epic that is on, but not for one that is off or archived", () => {
+    const { s, epic, child } = withEpic();
+    const noop = s.autopilot.automations().find((a) => a.key === "noop")!;
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "off" }, epic.projectId);
+    expect(s.autopilot.projectsWithEpicOn(noop).size).toBe(0);
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "on" }, epic.projectId);
+    expect([...s.autopilot.projectsWithEpicOn(noop)]).toEqual([epic.projectId]);
+    s.tasks.move(child.id, { status: "done" }, "agent");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    expect(s.autopilot.projectsWithEpicOn(noop).size).toBe(0);
+  });
+
+  it("doesn't look at a project for an archived epic that is on, in a real pass", async () => {
+    const { s, engine, epic, child, task, checks } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "on" }, epic.projectId);
+    s.tasks.move(child.id, { status: "done" }, "agent");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    await settle(engine);
+    expect(checks()).toBe(0);
+    expect(s.tasks.summary(task.id).labels).toEqual([]);
+  });
+
+  it("never lets an epic switch on an automation that has no task, like Recurring tasks", async () => {
+    const { s, engine, epic, runs } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "project_wide", { mode: "on" }, epic.projectId);
+    await settle(engine);
+    expect(runs("project_wide")).toEqual([]);
+
+    // The project's own switch still works, and an epic's Off doesn't hold it back.
+    s.autopilot.setScope("epic", epic.id, "project_wide", { mode: "off" }, epic.projectId);
+    s.autopilot.setScope("project", epic.projectId, "project_wide", { mode: "on" });
+    await settle(engine);
+    expect(runs("project_wide")).toMatchObject([{ projectId: epic.projectId, taskId: null, status: "succeeded" }]);
+  });
+
+  it("ignores an epic from another project", () => {
+    const { s, epic, other } = withEpic();
+    const noop = s.autopilot.automations().find((a) => a.key === "noop")!;
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "on" }, epic.projectId);
+    expect(s.autopilot.resolve(noop, other.id, epic.id).enabled).toBe(false);
+  });
+
+  it("files a run under its epic until it ends, so the epic's button can spin", async () => {
+    const { s, engine, epic, child, started } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "agent", { mode: "on" }, epic.projectId);
+    await engine.pass();
+    expect(s.autopilot.status().active).toMatchObject([{ taskId: child.id, epicId: epic.id }]);
+    started[0]!.resolve({});
+    await engine.idle();
+    expect(s.autopilot.status().active).toEqual([]);
+  });
+
+  it("gives a loose task's run no epic", async () => {
+    const { s, engine, task, started } = setup();
+    s.autopilot.setScope("project", task.projectId, "agent", { mode: "on" });
+    await engine.pass();
+    expect(s.autopilot.status().active).toMatchObject([{ taskId: task.id, epicId: null }]);
+    started[0]!.resolve({});
+    await engine.idle();
   });
 });
 
