@@ -24,17 +24,25 @@ interface Behaviour {
 
 function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
   const requests: RunnerRequest[] = [];
+  let threads = 0;
   const behaviour: Behaviour = opts.behaviour ?? {};
   const h = createTestHarness({ integrations: { automations: [startPlanned] } });
   const s = h.services;
   const runner: Runner = {
     start: (request, update = () => {}) => {
       requests.push(request);
+      const taskId = request.run.taskId!;
       const patch = behaviour.headless
         ? ({ runner: "headless", worktreePath: "/wt/1", sessionId: "s-1" } as const)
-        : ({ runner: "t3", threadUrl: "t3code://threads/x" } as const);
+        : ({
+            runner: "t3",
+            threadUrl: s.links.add(
+              taskId,
+              { t3Thread: { environmentId: "env-1", threadId: `thread-${++threads}` } },
+              "autopilot",
+            ).url,
+          } as const);
       update(patch);
-      const taskId = request.run.taskId!;
       if (behaviour.onStart) behaviour.onStart(request, taskId);
       else if (!behaviour.fail || behaviour.headless) s.tasks.move(taskId, { status: "in_progress" }, "agent");
       if (behaviour.fail) return Promise.reject(new Error(behaviour.fail));
@@ -65,10 +73,15 @@ function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
     await engine.pass();
     await engine.idle();
   };
+  /** What T3's poll would report for the task's thread. */
+  const thread = (taskId: string, status: "working" | "input" | "approval" | "idle" | "done", archived = false) => {
+    const link = s.tasks.detail(taskId).links.find((l) => l.kind === "t3_thread")!;
+    s.links.setSnapshot(link.id, { title: "T", status, archived, lastActivityAt: new Date().toISOString() });
+  };
   const runs = (): AutopilotRun[] => s.autopilot.runsForProject(project.id);
   const turnOn = (config?: Record<string, unknown>) =>
     s.autopilot.setScope("project", project.id, AUTOPILOT_START_PLANNED, { mode: "on", ...(config ? { config } : {}) });
-  return { ...h, s, behaviour, requests, engine, project, task, pass, runs, turnOn };
+  return { ...h, s, behaviour, requests, engine, project, task, pass, runs, turnOn, thread };
 }
 
 describe("start planned tasks: eligibility", () => {
@@ -128,7 +141,7 @@ describe("start planned tasks: eligibility", () => {
   });
 
   it("starts tasks in board order, as many as the cap allows", async () => {
-    const { s, task, engine, pass, requests, turnOn } = setup();
+    const { s, task, engine, pass, requests, turnOn, thread } = setup();
     const a = task("A");
     const b = task("B");
     const c = task("C");
@@ -139,6 +152,10 @@ describe("start planned tasks: eligibility", () => {
     await engine.pass();
     expect(requests.map((r) => r.run.taskId)).toEqual([c.id, a.id]);
     await engine.idle();
+    // Both threads are still working (as far as T3 has said): no room yet.
+    await pass();
+    expect(requests).toHaveLength(2);
+    thread(c.id, "idle");
     await pass();
     expect(requests.map((r) => r.run.taskId)).toEqual([c.id, a.id, b.id]);
   });
@@ -172,6 +189,78 @@ describe("start planned tasks: limits", () => {
     expect(requests).toHaveLength(1);
     await engine.pass();
     expect(requests).toHaveLength(1);
+  });
+
+  it("holds the next task while the first one's T3 thread is still working, and frees the slot when it settles", async () => {
+    const { s, task, pass, requests, turnOn, thread } = setup();
+    const a = task("A");
+    const b = task("B");
+    turnOn();
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id]);
+    expect(s.tasks.summary(a.id).status).toBe("in_progress");
+    // The run is over (the thread started), but T3's poll hasn't reported on the thread yet: it still counts.
+    await pass();
+    for (const status of ["working", "input", "approval"] as const) {
+      thread(a.id, status);
+      await pass();
+      expect(requests).toHaveLength(1);
+    }
+    thread(a.id, "idle");
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
+  });
+
+  it("frees the slot when the thread is archived or the task leaves In Progress", async () => {
+    const { s, task, pass, requests, turnOn, thread } = setup();
+    const a = task("A");
+    task("B");
+    task("C");
+    turnOn();
+    await pass();
+    thread(a.id, "working", true);
+    await pass();
+    expect(requests).toHaveLength(2);
+    // B's agent is working; moving it on to Review releases it.
+    const b = requests[1]!.run.taskId!;
+    thread(b, "working");
+    await pass();
+    expect(requests).toHaveLength(2);
+    s.tasks.move(b, { status: "review" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(3);
+  });
+
+  it("stops counting a thread T3 never reported on after ten minutes", async () => {
+    let later = 0;
+    const { task, pass, requests, turnOn } = setup({ now: () => new Date(Date.now() + later) });
+    task("A");
+    task("B");
+    turnOn();
+    await pass();
+    await pass();
+    expect(requests).toHaveLength(1);
+    later = 11 * 60_000;
+    await pass();
+    expect(requests).toHaveLength(2);
+  });
+
+  it("counts a larger cap's working threads, and ignores the cap in a dry run", async () => {
+    const { s, task, pass, requests, runs, turnOn, thread } = setup();
+    const a = task("A");
+    task("B");
+    task("C");
+    turnOn();
+    s.autopilot.updateEngine({ maxConcurrent: 2 });
+    await pass();
+    // Both slots go at once: the fake agents start and move their tasks within the pass.
+    expect(requests).toHaveLength(2);
+    thread(a.id, "working");
+    await pass();
+    expect(requests).toHaveLength(2);
+    s.autopilot.updateEngine({ dryRun: true });
+    await pass();
+    expect(runs().filter((r) => r.dryRun)).toHaveLength(1);
   });
 
   it("previews instead of starting in dry-run, and starts once dry-run is off", async () => {
@@ -309,7 +398,7 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
       {
         status: "failed",
         needsAttention: true,
-        threadUrl: "t3code://threads/x",
+        threadUrl: expect.stringContaining("thread-1"),
         error:
           "Autopilot couldn't start this task: the agent didn't move #" + t.number + " out of Planned within 2 minutes",
       },

@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #94 (start planned tasks), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #94 (start planned tasks), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per project or for
 the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -140,6 +140,22 @@ planned tasks on the next tick. It only reports blockers that finished in the la
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
 
+**Unstick stale tasks** (`unstick`, #88; `automations/unstick.ts`). Needs no agent and is off until switched on.
+Watches tasks In Progress for two things, each reported once:
+
+- **Quiet**: no activity for `staleHours` (default 24). Activity is any activity entry not written by `autopilot`
+  (its own notes and run entries don't count), or the move into In Progress. Puts "Stale: no activity for 26h" under
+  Needs attention, which clears on the next activity by anyone else (or when the task changes status). The dedupe
+  key is `stale:<taskId>:<lastActivityAt>`.
+- **Waiting**: the task's latest T3 thread has waited on input or approval for `waitingMinutes` (default 30), by
+  the snapshot's `lastActivityAt`. The thread already shows its own Needs attention reason, so only the run and the
+  notification are added. The dedupe key is `waiting:<threadLinkId>:<lastActivityAt>`.
+
+Either way it logs a note under `autopilot` and sends an `autopilot_notice`. With `nudge` on (off by default) it
+also posts `nudgeMessage` ("Continue, or report what's blocking you.") into the task's live thread through the
+nudge runner; it never starts a session, and a task with no live thread just says so in the run's summary. The
+nudge isn't an agent run, so quiet hours and the caps don't hold it back.
+
 **Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
 per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
 this automation's own switch decides whether a project's rules run. It has no config of its own.
@@ -205,9 +221,15 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
   and the engine notifies. Nothing retries it. The flag clears itself when the task changes status
   ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
-  run stays `running` and holds a concurrency slot. With T3 that is all the cap holds: the run ends once the agent
-  has moved the task, so `maxConcurrent` limits starts in flight, not threads still working (a headless run lasts as
-  long as its agent, so it does limit those).
+  run stays `running` and holds a concurrency slot.
+- **The cap counts working agents.** A T3 run ends once the thread has started (so a restart strands nothing), which
+  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress whose latest Start planned
+  run is a succeeded T3 run and whose thread (the run's `threadUrl`) is `working`, `input` or `approval` in its
+  snapshot, and returns only as many candidates as `maxConcurrent` leaves after those and the engine's running runs.
+  A thread no snapshot has reported on yet counts for ten minutes. The slot frees when the thread idles, finishes,
+  fails or is archived, or the task leaves In Progress; a thread stuck waiting holds it until
+  Unstick stale tasks flags it and someone acts. A headless run is a running run, which the engine counts. A dry
+  run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
   (15).
@@ -358,6 +380,7 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
+| `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
