@@ -1,0 +1,60 @@
+# Using the board
+
+The board has one swimlane per project and five columns: **Ideas → Planned → In Progress → Review →
+Done**. Agents move tasks along over MCP; you can do everything they can from the UI.
+
+![A task in Review with its labels, a PR with changes requested, review findings and its plan](../../.github/assets/task-panel.png)
+
+## Plans
+
+Ideas can be rough, but a task can't leave Ideas until it has a plan. A plan is a list of phases, each
+with a few concrete steps. The task panel shows exactly which step a task is on, and the card shows its
+progress.
+
+## Closing, archiving and deleting
+
+- **Closing without doing it:** a task that another task already delivered, a duplicate, or one you no
+  longer want can be closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or
+  `close_task` over MCP). It moves to Done without needing a plan, and the other task lists it under
+  "Also resolved". Moving it out of Done reopens it.
+- **Archiving** clears a card off the board. It's for tidying up, not for resolving work.
+- **Deleting** removes an archived task for good, with its plan, links and activity (task menu, or
+  `delete_task` over MCP). Archive first; active tasks can't be deleted.
+
+## Links
+
+A task can link to:
+
+- **GitHub PRs**, with their live state (checks, review, conflicts) through the `gh` CLI.
+- **Jira issues.** Keys in a task's title are linked automatically.
+- **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
+- **Any URL.**
+
+Failing checks, requested changes and blocked steps show up under **Needs attention** in the sidebar.
+Agents are told which Jira issue and T3 thread a task is still missing, so links tend to fill in on
+their own.
+
+## Labels
+
+Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or let agents do it; they
+are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
+gets a colour you can change.
+
+## Handing a task to an agent
+
+Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent
+(Claude Code, Copilot, …), with a planning variant for rough ideas. With [T3 Code](t3-code.md) paired,
+**New T3 Code thread…** starts a thread for the task directly.
+
+## Your layout
+
+Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the
+sections of the task panel. Your layout is saved per browser.
+
+## Keyboard
+
+| Key          | Action               |
+| ------------ | -------------------- |
+| `Ctrl/Cmd K` | Command palette      |
+| `N`          | New idea             |
+| `Esc`        | Close the task panel |

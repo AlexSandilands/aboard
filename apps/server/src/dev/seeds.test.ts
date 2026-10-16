@@ -68,4 +68,15 @@ describe("seed scenarios", () => {
     expect(snapshotStates).toEqual(expect.arrayContaining(["open", "draft", "merged", "closed", "working", "input"]));
     expect(links.some((l) => l.kind === "pr" && !l.snapshot)).toBe(true);
   });
+
+  it("showcase mixes labels, PRs, threads, review and a blocked step across projects", () => {
+    const { tasks, details } = seeded("showcase");
+    expect(new Set(tasks.map((t) => t.projectId)).size).toBeGreaterThanOrEqual(4);
+    expect(new Set(tasks.map((t) => t.status))).toEqual(new Set(["idea", "planned", "in_progress", "review", "done"]));
+    expect(tasks.some((t) => t.labels.length > 0)).toBe(true);
+    expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
+    const kinds = details.flatMap((t) => t.links.map((l) => l.kind));
+    expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "jira"]));
+    expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
+  });
 });

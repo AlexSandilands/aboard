@@ -1,13 +1,14 @@
 # Docs
 
-These docs are for people and agents changing this repo. User-facing docs are in the root
-[README.md](../README.md). Conventions and commands are in [AGENTS.md](../AGENTS.md) and the AGENTS.md
+These docs are for people and agents changing this repo, except [guide/](#guides), which is for people
+using the board and is linked from the root [README.md](../README.md). Conventions and commands are in [AGENTS.md](../AGENTS.md) and the AGENTS.md
 files under each app.
 
 ## What goes where
 
 | Doc                                      | Holds                                                                                  | Write or update it when                                                                  |
 | ---------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `guide/<name>.md`                        | How to use one part of the board, for users: what it does and how to set it up         | What a user sees or has to do changes. Keep the detail of how it works in the feature doc   |
 | [architecture.md](architecture.md)       | The system overview: packages, how a request flows, data model, guard, data dir        | A package, a cross-cutting flow, a table or an env var changes                           |
 | `features/<name>.md`                     | How one feature works, the decisions behind it, the alternatives turned down, its code | You add a feature, or change how one behaves                                             |
 | `decisions/NNNN-title.md`                | One cross-cutting decision (an ADR): context, decision, consequences                   | A choice constrains code beyond one feature. Never rewrite one; supersede it with a new one |
@@ -33,6 +34,14 @@ files under each app.
 ## Index
 
 - [architecture.md](architecture.md): start here.
+
+### Guides
+
+- [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
+- [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
+- [Local review](guide/local-review.md): turning on the review loop
+- [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
+- [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
 
 ### Features
 

@@ -29,6 +29,7 @@ interface TaskSpec {
   description?: string;
   plan?: PlanInput;
   links?: string[];
+  labels?: string[];
 }
 
 /** Creates a task and moves it to its column. Tasks past Ideas get a one-phase plan when none is given. */
@@ -41,6 +42,7 @@ function addTask(s: Services, projectId: string, spec: TaskSpec): string {
     description: spec.description,
     plan,
     links: spec.links?.map((value) => ({ value })),
+    labels: spec.labels,
     actor: AGENT,
   });
   if (spec.status !== task.status) s.tasks.move(task.id, { status: spec.status }, AGENT);
@@ -286,7 +288,203 @@ const threads: Scenario = (s, opts) => {
   });
 };
 
-export const SCENARIOS = { basic, review, threads } satisfies Record<string, Scenario>;
+/**
+ * A busy, realistic board for screenshots and the README demo: several projects with icons, labels, PRs and T3
+ * threads in mixed states, review findings, a blocked step and a handover, all on one screen.
+ */
+const showcase: Scenario = (s, opts) => {
+  const now = new Date().toISOString();
+  const shop = s.projects.create({
+    title: "storefront",
+    workspaceRoot: opts.workspaceRoot,
+    icon: { kind: "lucide", name: "shopping-bag", color: "violet" },
+  });
+  const payments = s.projects.create({
+    title: "payments-api",
+    icon: { kind: "lucide", name: "credit-card", color: "emerald" },
+  });
+  const mobile = s.projects.create({ title: "mobile-app", icon: { kind: "lucide", name: "smartphone", color: "sky" } });
+  const docs = s.projects.create({ title: "docs-site", icon: { kind: "lucide", name: "book-open", color: "amber" } });
+
+  s.labels.setColor("bug", 0);
+  s.labels.setColor("ui", 265);
+  s.labels.setColor("backend", 200);
+  s.labels.setColor("perf", 35);
+
+  const pr = (taskId: string, number: number, snapshot: Omit<PrSnapshot, "title" | "headRef" | "updatedAt">) => {
+    const link = s.links.add(taskId, { value: `https://github.com/example/shop/pull/${number}` }, AGENT);
+    const title = s.tasks.summary(taskId).title;
+    s.links.setSnapshot(link.id, { ...snapshot, title, headRef: `feat/pr-${number}`, updatedAt: now });
+  };
+  let threadNumber = 0;
+  const thread = (taskId: string, status: T3ThreadSnapshot["status"]) => {
+    threadNumber += 1;
+    const link = s.links.add(taskId, { value: `t3code://threads/sandbox-env/showcase-${threadNumber}` }, AGENT);
+    const title = s.tasks.summary(taskId).title;
+    s.links.setSnapshot(link.id, { status, title, lastActivityAt: now, model: "claude-opus", branch: null });
+  };
+  const done = (title: string, labels?: string[]) => addTask(s, shop.id, { title, status: "done", labels });
+
+  // storefront: the busiest lane.
+  addTask(s, shop.id, {
+    title: "Wishlist that syncs across devices",
+    status: "idea",
+    labels: ["ui", "backend"],
+    description: "Came up while building the cart drawer.",
+  });
+  addTask(s, shop.id, {
+    title: "Show delivery estimates on the product page",
+    status: "planned",
+    labels: ["ui"],
+    links: ["SHOP-412"],
+    plan: steps("Estimates", ["Call the carrier API", "Fall back to the static table", "Render under the price"]),
+  });
+
+  const drawer = addTask(s, shop.id, {
+    title: "Rewrite the cart drawer",
+    status: "in_progress",
+    labels: ["ui", "perf"],
+    links: ["SHOP-398"],
+    description: "The drawer re-renders the whole page on every quantity change.",
+    plan: {
+      context: "**Approach:** move cart state into a store and render the drawer from it.",
+      phases: [
+        {
+          title: "Store",
+          steps: [
+            { title: "Add a cart store", status: "done" },
+            { title: "Move quantity updates into the store", status: "done" },
+          ],
+        },
+        {
+          title: "Drawer",
+          steps: [
+            { title: "Render line items from the store", status: "done" },
+            { title: "Optimistic quantity changes", status: "in_progress", notes: "Rollback on error still to do." },
+            { title: "Wire promo codes", status: "todo" },
+            { title: "Remove the old drawer", status: "todo" },
+          ],
+        },
+        {
+          title: "Ship",
+          steps: [
+            { title: "Measure re-renders before and after", status: "todo" },
+            { title: "Open the PR", status: "todo" },
+          ],
+        },
+      ],
+    },
+  });
+  s.tasks.addNote(
+    drawer,
+    "## Handover\nStore done, line items render from it. Next: rollback for optimistic quantity changes, then promo codes.",
+    AGENT,
+  );
+  thread(drawer, "working");
+
+  const rounding = addTask(s, shop.id, {
+    title: "Fix currency rounding in the order summary",
+    status: "review",
+    labels: ["bug"],
+    plan: steps("Fix", ["Reproduce with JPY and BHD", "Round in minor units", "Add regression tests"], true),
+  });
+  pr(rounding, 214, { state: "open", checks: "passing", reviewDecision: "approved", mergeable: "mergeable" });
+  s.reviews.openRound(rounding, { trigger: "manual", actor: AGENT, force: true });
+  s.reviews.submit(
+    rounding,
+    { findings: [{ severity: "major", title: "Totals still use floats in the email" }] },
+    AGENT,
+  );
+  s.reviews.resolveFinding(rounding, "R1.1", { status: "fixed", note: "Shared formatter now." }, AGENT);
+  s.reviews.openRound(rounding, { trigger: "manual", actor: AGENT, force: true });
+  s.reviews.submit(rounding, { summary: "Rounding is correct for every currency now.", findings: [] }, AGENT);
+
+  const sitemap = done("Add a sitemap", ["seo"]);
+  done("Lazy-load product reviews", ["perf"]);
+  const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "idea" });
+  s.tasks.close(dup, { resolution: "duplicate", byTaskId: sitemap }, AGENT);
+
+  // payments-api: something needs attention.
+  addTask(s, payments.id, { title: "Invoice PDFs in the customer's language", status: "idea", labels: ["backend"] });
+  const refunds = addTask(s, payments.id, {
+    title: "Rate-limit the refunds endpoint",
+    status: "in_progress",
+    labels: ["backend"],
+    links: ["PAY-88"],
+    plan: {
+      phases: [
+        {
+          title: "Limits",
+          steps: [
+            { title: "Token bucket per merchant", status: "done" },
+            { title: "Return 429 with Retry-After", status: "done" },
+            {
+              title: "Agree limits with the finance team",
+              status: "blocked",
+              notes: "Waiting on numbers from finance before picking defaults.",
+            },
+          ],
+        },
+      ],
+    },
+  });
+  thread(refunds, "input");
+  const webhooks = addTask(s, payments.id, {
+    title: "Retry failed payment webhooks with backoff",
+    status: "review",
+    labels: ["backend", "bug"],
+    plan: steps("Retry", ["Exponential backoff", "Dead-letter after 10 tries", "Alert on dead letters"], true),
+  });
+  pr(webhooks, 87, { state: "open", checks: "failing", reviewDecision: "changes_requested", mergeable: "mergeable" });
+  s.reviews.openRound(webhooks, { trigger: "manual", actor: AGENT, force: true });
+  s.reviews.submit(
+    webhooks,
+    {
+      summary: "Retries work, but a crash mid-retry can send a webhook twice.",
+      findings: [
+        { severity: "blocking", title: "No idempotency key on retried webhooks", file: "src/webhooks/retry.ts" },
+        { severity: "minor", title: "Backoff constants duplicated", file: "src/webhooks/config.ts" },
+      ],
+    },
+    AGENT,
+  );
+  addTask(s, payments.id, { title: "Nightly reconciliation report", status: "done", labels: ["backend"] });
+
+  // mobile-app
+  addTask(s, mobile.id, { title: "Offline mode for the order list", status: "idea", labels: ["ui"] });
+  const push = addTask(s, mobile.id, {
+    title: "Push notifications when an order ships",
+    status: "planned",
+    labels: ["backend"],
+    plan: steps("Push", ["Register device tokens", "Send on shipment events", "Settings toggle"]),
+  });
+  thread(push, "idle");
+  const biometric = addTask(s, mobile.id, {
+    title: "Biometric sign-in",
+    status: "in_progress",
+    labels: ["ui"],
+    plan: steps("Sign-in", ["Face ID / fingerprint prompt", "Fallback to PIN", "Remember device"]),
+  });
+  const [first] = s.tasks.detail(biometric).phases[0]!.steps;
+  s.plans.updateStep(first!.id, { status: "done" }, AGENT);
+  thread(biometric, "working");
+  const crash = addTask(s, mobile.id, { title: "Crash on Android 15 when rotating", status: "done", labels: ["bug"] });
+  pr(crash, 33, { state: "merged", checks: "passing", reviewDecision: "approved", mergeable: "unknown" });
+
+  // docs-site
+  addTask(s, docs.id, { title: "Search across API reference", status: "idea", labels: ["docs"] });
+  addTask(s, docs.id, {
+    title: "Guide: taking your first payment",
+    status: "planned",
+    labels: ["docs"],
+    plan: steps("Guide", ["Outline", "Code samples in 3 languages", "Review with support"]),
+  });
+  addTask(s, docs.id, { title: "Dark mode", status: "done", labels: ["ui"] });
+  const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "idea" });
+  s.tasks.close(ie, { resolution: "wont_do" }, "user");
+};
+
+export const SCENARIOS = { basic, review, threads, showcase } satisfies Record<string, Scenario>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
 export const isScenarioName = (name: string): name is ScenarioName => Object.hasOwn(SCENARIOS, name);
