@@ -432,6 +432,8 @@ export function createGithubIntegration(deps: {
     },
     pollAll,
     async refresh(link) {
+      // Checked before ensureStatus so refreshing a T3 thread or Jira link never spawns gh.
+      if (link.kind !== "pr" || link.ref === null) return false;
       if (!isGithubPr(link, await ensureStatus())) return false;
       await requireGh(link);
       try {

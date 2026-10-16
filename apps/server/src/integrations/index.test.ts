@@ -129,13 +129,19 @@ describe("createIntegrations with real services", () => {
             ],
             archivedThreads: [],
           });
-    const { services, integrations } = setup({ fetch: fetchFn });
+    const ghCalls: string[][] = [];
+    const runGh: RunGh = async (args) => {
+      ghCalls.push(args);
+      return "";
+    };
+    const { services, integrations } = setup({ fetch: fetchFn, runGh });
     services.settings.update({ t3Token: "tok" });
     const project = services.projects.create({ title: "P", workspaceRoot: "C:/p" });
     const task = services.tasks.create({ projectId: project.id, title: "T" });
     const link = services.links.add(task.id, { value: `t3code://threads/${ENV_ID}/th1` }, "user");
     await integrations.refreshLink(link.id);
     expect(services.links.get(link.id)).toMatchObject({ snapshot: { title: "Agent thread", status: "approval" } });
+    expect(ghCalls).toEqual([]);
     expect(services.tasks.summary(task.id).attention.map((a) => a.kind)).toEqual(["thread_needs_input"]);
     expect(integrations.t3Status()).toMatchObject({ detected: true, environmentId: ENV_ID, liveStatus: "ok" });
   });
