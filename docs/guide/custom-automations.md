@@ -29,9 +29,15 @@ and keeps to the same pause, dry run, caps and quiet hours.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.
-     So a task title can't change what runs, even if it contains quotes, `;` or `&`. Commands run in `sh`, or in
-     Windows PowerShell on Windows: read a value as `"$ABOARD_TASK_TITLE"` in sh and `$env:ABOARD_TASK_TITLE` in
-     PowerShell. (Not cmd.exe: it fills `%VAR%` in before reading the line, so a title could add a command.)
+     So a task title can't change your command line, even if it contains quotes, `;` or `&`. Commands run in `sh`,
+     or in Windows PowerShell on Windows: read a value as `"$ABOARD_TASK_TITLE"` in sh and `$env:ABOARD_TASK_TITLE`
+     in PowerShell. (Not cmd.exe: it fills `%VAR%` in before reading the line, so a title could add a command.)
+
+     **On Windows, don't pass a value as an argument to a `.cmd` or `.bat` program**, which includes `npm`, `pnpm`,
+     `npx` and `yarn`. Windows hands those arguments to cmd.exe, which parses them again, so a title with `"` and
+     `&` in it can run a command (`pnpm run notify "$env:ABOARD_TASK_TITLE"` is unsafe). Have the script read the
+     variable itself instead (`pnpm run notify`, with `process.env.ABOARD_TASK_TITLE` in the script), or pass it
+     to a real program such as `node` or `git`.
 4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
    or the command with its variables.
 5. Save it, then switch it **On** in the Autopilot list (for the board) or in a project's Autopilot settings, or

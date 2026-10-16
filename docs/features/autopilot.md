@@ -220,7 +220,9 @@ the automation. Runs stay, under the old key.
   set to the PR's head branch. Its config is the shared runner options, per scope.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
-  `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command), in the
+  `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values
+  passed as arguments to a `.cmd`/`.bat` program are still re-parsed by cmd.exe, which only the guide can warn
+  about), in the
   project's `workspaceRoot`, with the
   server's environment minus every `brandEnv` variable (the API token) plus the values as `brandEnv` variables
   (`customShellEnv`). The command is never interpolated, and `{{…}}` in it is refused on save. A timeout kills the

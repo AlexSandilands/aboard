@@ -420,7 +420,10 @@ export function CustomAutomationEditorForm({
             </Field>
             <Alert variant="warning">
               <AlertDescription>
-                The command runs on this machine as you, whenever the trigger fires in a project it is on in.
+                The command runs on this machine as you, whenever the trigger fires in a project it is on in. On
+                Windows, don&apos;t pass a value as an argument to a .cmd or .bat program (npm, pnpm, npx, yarn):
+                Windows parses those arguments again, so a task title could add a command. Let the script read the
+                variable itself.
               </AlertDescription>
             </Alert>
           </>
