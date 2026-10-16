@@ -29,15 +29,15 @@ Inherit wins: epic over project over board. With nothing set anywhere, an automa
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
-card itself isn't "in" an epic, so it follows its project.
+card itself isn't "in" an epic, so it follows its project, except as an Auto-archive candidate, which the
+engine resolves on the epic itself.
 
 An automation says whether an epic can switch it with `epicScope` (default true; `describeAutomation` sends it to the
-UI). Set it false when its candidates are never tasks in an epic: Auto-archive Done (it skips them) and Recurring tasks
-(per project, no task) do, and so should Digest (#90) when it lands. For those the epic's popover leaves the automation out, the
+UI). Set it false when its candidates are never tasks in an epic: Recurring tasks (per project, no task) and the Digest
+do. For those the epic's popover leaves the automation out, the
 epic button's state ignores it, the epic's scope entries don't list it, `PUT` of an epic switch for it is a
 `VALIDATION` error, and an epic row left over from before the flag was set is ignored (`resolve` and
-`projectsWithEpicOn` skip the epic level). If Auto-archive ever starts archiving tasks in epics, flipping its flag
-brings the epic switch back.
+`projectsWithEpicOn` skip the epic level).
 
 Each automation also has config (a skill, a budget, a number of days). Config keys merge the same way, board
 first, then project, then epic, over the automation's defaults, whatever the modes: a project can tune an
@@ -158,9 +158,21 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 **Auto-archive Done** (`auto_archive`, #91; `automations/autoArchive.ts`). Needs no agent and is off until switched
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
-`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog, so an epic's
-switch for this automation isn't offered, see `epicScope`) and tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
-manual unarchive sticks until the task leaves Done and comes back.
+`autopilot`. It skips tasks in an epic (archiving them one by one would leave the epic with none counted and send it
+back to Backlog) and tasks with an open, draft or not-yet-polled PR. The dedupe key is
+`archive:<taskId>:<statusChangedAt>`, so a manual unarchive sticks until the task leaves Done and comes back.
+
+A **finished epic** is archived with its tasks instead: an epic that isn't archived, is in Done (so every unarchived
+task is Done, closed or not), has been there for more than `days` days (its `statusChangedAt`) and has no open, draft
+or not-yet-polled PR on it or on any of those tasks. The setting is resolved on the epic (epic, then project, then
+board; `epicScope: true`, so the epic's popover offers it, with its own days), and an epic that is switched on
+archives even while its project is off. The action is `tasks.archiveFinishedEpic`: one write that archives each
+unarchived task and then the epic, as `autopilot`, without re-deriving the epic's status in between (going through
+`update` would drop it to Backlog when the last task leaves its roll-up). It logs `archived` on each and the note
+"Archived by Autopilot with its N tasks after D days in Done" on the epic. Tasks already archived stay as they were.
+The dedupe key is `archive-epic:<epicId>:<statusChangedAt>`, so unarchiving the epic by hand sticks until it leaves
+Done and comes back. The engine resolves a candidate that is an epic on the epic itself; a dry run says "Would
+archive #N with its K tasks after D days in Done". Unarchiving a task inside an archived epic is #100's question.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
 switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or

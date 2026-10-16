@@ -68,29 +68,164 @@ describe("auto-archive Done", () => {
     });
   });
 
-  it("leaves younger tasks, epics, archived tasks and tasks outside Done alone", async () => {
+  it("leaves younger tasks, archived tasks and tasks outside Done alone", async () => {
     const { s, project, done, pass, archived, turnOn } = setup();
     const young = done("young");
     turnOn({ days: 30 });
     const open = s.tasks.create({ projectId: project.id, title: "open", plan });
-    const child = done("child");
-    const epic = s.tasks.createEpic({ projectId: project.id, title: "Epic" }, [child.id], "agent");
     const gone = done("gone");
     s.tasks.update(gone.id, { archived: true }, "user");
     await pass(20);
     expect(archived(young.id)).toBe(false);
     expect(archived(open.id)).toBe(false);
-    expect(archived(epic.id)).toBe(false);
-    expect(archived(child.id)).toBe(false);
     await pass(40);
     expect(archived(young.id)).toBe(true);
     expect(archived(open.id)).toBe(false);
-    expect(archived(epic.id)).toBe(false);
-    // Archiving the children would send a finished epic back to Backlog.
-    expect(archived(child.id)).toBe(false);
-    expect(s.tasks.summary(epic.id).status).toBe("done");
     // Already archived by someone else: no run for it.
     expect(s.autopilot.runsForTask(gone.id)).toEqual([]);
+  });
+
+  describe("finished epics", () => {
+    const epicOf = (h: ReturnType<typeof setup>, titles = ["one", "two"]) => {
+      const tasks = titles.map((t) => h.done(t));
+      const taskIds = tasks.map((t) => t.id);
+      const epic = h.s.tasks.createEpic({ projectId: h.project.id, title: "Epic" }, taskIds, "agent");
+      return { epic, tasks };
+    };
+    const scope = (
+      h: ReturnType<typeof setup>,
+      epicId: string,
+      input: { mode: "on" | "off"; config?: Record<string, unknown> },
+    ) => h.s.autopilot.setScope("epic", epicId, AUTOPILOT_AUTO_ARCHIVE, input, h.project.id);
+
+    it("archives the epic with its tasks together after the days, leaving it Done", async () => {
+      const h = setup();
+      const { s, pass, archived, turnOn } = h;
+      const { epic, tasks } = epicOf(h);
+      const all = [epic.id, ...tasks.map((t) => t.id)];
+      turnOn();
+      await pass(10);
+      expect(all.map(archived)).toEqual([false, false, false]);
+      await pass(15);
+      expect(all.map(archived)).toEqual([true, true, true]);
+      // Never through Backlog: the only status change on the epic is the one that made it Done.
+      const events = s.tasks.detail(epic.id).events;
+      expect(events.filter((e) => e.type === "status_changed").map((e) => e.payload)).toMatchObject([
+        { to: "done", fromChildren: true },
+      ]);
+      expect(s.tasks.summary(epic.id).status).toBe("done");
+      expect(events.find((e) => e.type === "archived")?.actor).toBe("autopilot");
+      expect(events.find((e) => e.type === "note")).toMatchObject({
+        actor: "autopilot",
+        payload: { text: "Archived by Autopilot with its 2 tasks after 14 days in Done" },
+      });
+      expect(s.tasks.detail(tasks[0]!.id).events.find((e) => e.type === "archived")?.actor).toBe("autopilot");
+    });
+
+    it("includes tasks already archived, and leaves an epic with an open task alone", async () => {
+      const h = setup();
+      const { s, project, done, pass, archived, turnOn } = h;
+      const { epic, tasks } = epicOf(h);
+      s.tasks.update(tasks[0]!.id, { archived: true }, "user");
+      const open = s.tasks.create({ projectId: project.id, title: "open", plan });
+      const busy = s.tasks.createEpic(
+        { projectId: project.id, title: "Busy" },
+        [open.id, done("finished").id],
+        "agent",
+      );
+      turnOn();
+      await pass(15);
+      expect(archived(epic.id)).toBe(true);
+      expect(archived(tasks[1]!.id)).toBe(true);
+      expect(archived(busy.id)).toBe(false);
+      expect(archived(open.id)).toBe(false);
+      expect(s.tasks.summaries({ epicId: busy.id }).some((t) => t.archivedAt !== null)).toBe(false);
+    });
+
+    it("waits for an unmerged PR on the epic or one of its tasks", async () => {
+      const h = setup();
+      const { s, project, pass, archived, turnOn } = h;
+      const prTask = s.tasks.create({
+        projectId: project.id,
+        title: "with pr",
+        plan,
+        links: [{ value: "https://github.com/acme/app/pull/7" }],
+      });
+      s.tasks.move(prTask.id, { status: "done" }, "agent");
+      const byTask = s.tasks.createEpic({ projectId: project.id, title: "Task PR" }, [prTask.id], "agent");
+      const own = epicOf(h, ["x"]);
+      s.links.add(own.epic.id, { value: "https://github.com/acme/app/pull/8" }, "agent");
+      turnOn();
+      await pass(15);
+      expect([byTask.id, own.epic.id].map(archived)).toEqual([false, false]);
+      for (const taskId of [prTask.id, own.epic.id]) {
+        s.links.setSnapshot(s.links.listByKind("pr").find((l) => l.taskId === taskId)!.id, pr("merged"));
+      }
+      await pass(16);
+      expect([byTask.id, own.epic.id].map(archived)).toEqual([true, true]);
+    });
+
+    it("stays unarchived after a manual unarchive, until the epic leaves Done and comes back", async () => {
+      const h = setup();
+      const { s, pass, archived, turnOn } = h;
+      const { epic, tasks } = epicOf(h);
+      turnOn();
+      await pass(15);
+      s.tasks.update(epic.id, { archived: false }, "user");
+      await pass(16);
+      expect(archived(epic.id)).toBe(false);
+      // A new open task takes it out of Done; finishing it puts it back, and the clock starts again.
+      const extra = s.tasks.create({ projectId: h.project.id, title: "extra", plan, epicId: epic.id });
+      expect(s.tasks.summary(epic.id).status).toBe("planned");
+      s.tasks.move(extra.id, { status: "done" }, "agent");
+      expect(s.tasks.summary(epic.id).status).toBe("done");
+      await pass(10);
+      expect(archived(epic.id)).toBe(false);
+      await pass(15);
+      expect(archived(epic.id)).toBe(true);
+      expect(archived(extra.id)).toBe(true);
+      expect(tasks.map((t) => archived(t.id))).toEqual([true, true]);
+    });
+
+    it("follows the epic's own setting: its own days, or off while the project is on", async () => {
+      const h = setup();
+      const { pass, archived, turnOn } = h;
+      const fast = epicOf(h, ["a"]);
+      const off = epicOf(h, ["b"]);
+      const slow = epicOf(h, ["c"]);
+      turnOn();
+      scope(h, fast.epic.id, { mode: "on", config: { days: 3 } });
+      scope(h, off.epic.id, { mode: "off" });
+      scope(h, slow.epic.id, { mode: "on", config: { days: 60 } });
+      await pass(20);
+      expect([fast, off, slow].map((e) => archived(e.epic.id))).toEqual([true, false, false]);
+    });
+
+    it("archives an epic that is on by itself while its project is off", async () => {
+      const h = setup();
+      const { pass, archived } = h;
+      const { epic, tasks } = epicOf(h);
+      scope(h, epic.id, { mode: "on", config: { days: 3 } });
+      await pass(5);
+      expect([epic.id, ...tasks.map((t) => t.id)].map(archived)).toEqual([true, true, true]);
+    });
+
+    it("only previews in dry-run", async () => {
+      const h = setup();
+      const { s, project, pass, archived, turnOn } = h;
+      const { epic, tasks } = epicOf(h);
+      s.autopilot.updateEngine({ dryRun: true });
+      turnOn();
+      await pass(15);
+      expect([epic.id, ...tasks.map((t) => t.id)].map(archived)).toEqual([false, false, false]);
+      expect(s.autopilot.runsForProject(project.id)).toMatchObject([
+        {
+          status: "skipped",
+          dryRun: true,
+          summary: `Would archive #${epic.number} with its 2 tasks after 14 days in Done`,
+        },
+      ]);
+    });
   });
 
   it("uses each project's own number of days", async () => {

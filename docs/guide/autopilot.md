@@ -14,7 +14,7 @@ An **epic** has the same switch, in a small round **Autopilot** button on its ba
 covers only the tasks in that epic, and Inherit follows the project ("Inherit (On from project)"). So you can
 switch an automation on for one epic in a project that has it off, or off for one epic in a project that has it
 on. The button looks like the pill: dim, a ring, or animated while one of the epic's tasks is being worked on.
-An epic only lists the automations that work on tasks in an epic (not Auto-archive Done or Recurring tasks, for
+An epic only lists the automations that work on tasks in an epic (not Recurring tasks or the Digest, for
 instance). An archived epic has no button and no say.
 
 **Settings → Autopilot** has the same switches for the whole board, and under each automation a **Settings**

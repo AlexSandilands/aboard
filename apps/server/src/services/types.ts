@@ -143,6 +143,13 @@ export interface TasksService {
    * completed/duplicate need `byTaskId` (an existing other task); wont_do must not have one.
    */
   close(id: string, input: CloseInput, actor: string): TaskDetail;
+  /**
+   * Archives a finished epic (every unarchived task Done) together with those tasks, in one write, and returns how
+   * many tasks went with it. The epic keeps its Done status: archiving the tasks one by one through `update` would
+   * leave it with none counted and send it to Backlog. Throws VALIDATION for a task that isn't an epic, an archived
+   * epic, or one with an open task.
+   */
+  archiveFinishedEpic(id: string, actor: string): number;
   addNote(id: string, text: string, actor: string): TaskEvent;
   /**
    * Permanently deletes an archived task with its activity, plan and links. Throws VALIDATION if it isn't

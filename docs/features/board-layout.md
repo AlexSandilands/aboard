@@ -78,7 +78,7 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
   run), and opens the same popover (`ScopePopover`) for the epic. Its Inherit labels read the project's entries,
-  which already resolve through the board ("Inherit (Off from project)"). Automations with `epicScope: false` (Auto-archive, Recurring) aren't listed and don't count. Off means nothing is on for the epic's
+  which already resolve through the board ("Inherit (Off from project)"). Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
   tasks, whether the epic or its project says so. It isn't shown for an archived epic.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.

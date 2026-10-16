@@ -193,14 +193,15 @@ export function createAutopilotEngine(deps: {
       // A task's run belongs to the task's project and epic, whatever the check said, so their switches apply.
       let epicId: string | null = null;
       if (candidate.taskId) {
-        let task: { projectId: string; parent: { id: string } | null };
+        let task: { projectId: string; kind: string; parent: { id: string } | null };
         try {
           task = s.tasks.summary(candidate.taskId);
         } catch {
           continue;
         }
         candidate = { ...candidate, projectId: task.projectId };
-        epicId = task.parent?.id ?? null;
+        // A candidate that is an epic (Auto-archive) is resolved on the epic itself.
+        epicId = task.kind === "epic" ? found.taskId! : (task.parent?.id ?? null);
       }
       const projectId = candidate.projectId ?? null;
       // Only where the automation is on: a check may return more than it was asked for.
