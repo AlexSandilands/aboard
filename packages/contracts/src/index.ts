@@ -15,3 +15,4 @@ export * from "./modelTiers.ts";
 export * from "./backup.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
+export * from "./recurring.ts";

@@ -32,6 +32,11 @@ export const queryKeys = {
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
   templates: ["templates"] as const,
+  /** Prefix of every project's recurring rules query. */
+  recurring: ["recurring"] as const,
+  recurringRules: (projectId: string) => ["recurring", projectId] as const,
+  /** A project's Autopilot switches; they say whether the Recurring tasks automation is on. */
+  autopilotScope: (projectId: string) => ["autopilotScope", projectId] as const,
 };
 
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
@@ -205,6 +210,12 @@ export function useBoardEvents() {
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+      }
+      // Recurring rules and the project's Autopilot switches aren't in the board snapshot; any change to them (and
+      // every run, which moves a rule's cursor) is announced as autopilot.changed.
+      if (event.type === "autopilot.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
+        void queryClient.invalidateQueries({ queryKey: ["autopilotScope"] });
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });

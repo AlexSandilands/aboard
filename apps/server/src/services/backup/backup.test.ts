@@ -60,6 +60,15 @@ function seed() {
     "rev",
   );
   s.labels.setColor("ui", 120);
+  // A recurring rule remembers the task it last made, so it must come back after the tasks.
+  const weekly = s.templates.list({ projectId: project.id }).find((t) => t.name === "Weekly review")!;
+  const rule = s.recurring.create(project.id, {
+    name: "Weekly review",
+    templateId: weekly.id,
+    schedule: { kind: "weekly", days: [1, 4], time: "09:00" },
+    flagAutopilot: true,
+  });
+  s.recurring.handled(rule.id, { dueAt: "2026-10-12T08:00:00.000Z", taskId: a.id });
   // Autopilot settings are exported; its runs are history and stay out.
   h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
     ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
@@ -84,6 +93,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   counters: "name",
   task_templates: "id",
   autopilot_settings: "scope_kind, scope_id, automation",
+  autopilot_recurring: "id",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
@@ -213,7 +223,7 @@ describe("dump", () => {
 
 describe("restore", () => {
   it("round-trips a board through a folder into a new database", () => {
-    const { s, db } = seed();
+    const { s, db, a } = seed();
     const dir = tempDir();
     writeDumpDir(dir, s.backup.dump());
 
@@ -234,6 +244,9 @@ describe("restore", () => {
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 2 });
+      expect(restored.prepare("SELECT flag_autopilot, last_task_id FROM autopilot_recurring").all()).toEqual([
+        { flag_autopilot: 1, last_task_id: a.id },
+      ]);
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_runs").get()).toEqual({ n: 0 });
       const restoredRepos = createRepos(restored);
       // Pause stays with the machine: a restore can't lift it, or set it.
@@ -256,6 +269,15 @@ describe("restore", () => {
     } finally {
       restored.close();
     }
+  });
+
+  it("reads a folder written before Recurring tasks, which has no recurring.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    expect(readDumpDir(dir).autopilot_recurring).toHaveLength(1);
+    rmSync(join(dir, "recurring.json"));
+    expect(readDumpDir(dir).autopilot_recurring).toEqual([]);
   });
 
   it("reads a folder written before Autopilot, which has no autopilot.json", () => {
@@ -320,10 +342,10 @@ describe("restore", () => {
     const dump = readDumpDir(dir);
     expect(dump.task_templates).toEqual([]);
     const dbPath = join(tempDir(), "data.sqlite");
-    // An older manifest doesn't count templates, and its tasks don't point at any.
-    const { task_templates: _n, ...counts } = dump.manifest.counts;
+    // An older manifest doesn't count templates, and its tasks and recurring rules don't point at any.
+    const { task_templates: _n, autopilot_recurring: _r, ...counts } = dump.manifest.counts;
     const tasks = dump.tasks.map((b) => ({ ...b, task: { ...b.task, template_id: null } }));
-    restoreBoard(dbPath, { ...dump, manifest: { ...dump.manifest, counts }, tasks });
+    restoreBoard(dbPath, { ...dump, manifest: { ...dump.manifest, counts }, autopilot_recurring: [], tasks });
     const restored = openDatabase(dbPath);
     try {
       expect(restored.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual(
@@ -339,13 +361,14 @@ describe("restore", () => {
     const dump = s.backup.dump();
     // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no
     // relations, no Autopilot settings.
-    const { autopilot_settings: _a, task_relations: _rel, ...counts } = dump.manifest.counts;
+    const { autopilot_settings: _a, autopilot_recurring: _rc, task_relations: _rel, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
       task_templates: [],
       task_relations: [],
       autopilot_settings: [],
+      autopilot_recurring: [],
       tasks: dump.tasks.map((bundle) => {
         const {
           suggested_tier: _t,

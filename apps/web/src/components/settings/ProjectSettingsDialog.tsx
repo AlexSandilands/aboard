@@ -2,6 +2,8 @@ import type { Project } from "@repo/contracts";
 import { lazy, Suspense, useState } from "react";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { RecurringSection, type RuleEdit } from "~/components/recurring/RecurringSection";
+import { RuleEditorForm } from "~/components/recurring/RuleEditorForm";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -58,6 +60,8 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The rule editor takes over the dialog, so it doesn't stack a second modal on this one.
+  const [editingRule, setEditingRule] = useState<RuleEdit | null>(null);
   const board = useBoard();
   const taskCount = board.data?.tasks.filter((t) => t.projectId === project.id).length ?? 0;
 
@@ -84,6 +88,18 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
           });
         },
       },
+    );
+  }
+
+  if (editingRule) {
+    return (
+      <RuleEditorForm
+        projectId={project.id}
+        ruleId={editingRule.ruleId}
+        initial={editingRule.initial}
+        onCancel={() => setEditingRule(null)}
+        onDone={() => setEditingRule(null)}
+      />
     );
   }
 
@@ -190,6 +206,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
           />
         </SettingsSection>
         <ProjectReviewSection project={project} />
+        <RecurringSection project={project} onEdit={setEditingRule} />
         <SettingsSection title="Danger zone">
           <SettingsRow
             title="Archive project"

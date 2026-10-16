@@ -52,6 +52,11 @@ export function dumpBoard(db: Db): BoardDump {
       "autopilot_settings",
       "SELECT * FROM autopilot_settings ORDER BY scope_kind, scope_id, automation",
     );
+    const recurring = rowsOf(
+      db,
+      "autopilot_recurring",
+      "SELECT * FROM autopilot_recurring ORDER BY project_id, created_at, id",
+    );
     const tasks = rowsOf(db, "tasks", "SELECT * FROM tasks ORDER BY number");
     const events = rowsOf(db, "task_events", "SELECT * FROM task_events ORDER BY id");
 
@@ -77,6 +82,7 @@ export function dumpBoard(db: Db): BoardDump {
       task_templates: templates.length,
       task_relations: relations.length,
       autopilot_settings: autopilot.length,
+      autopilot_recurring: recurring.length,
       tasks: tasks.length,
       task_events: events.length,
     };
@@ -101,6 +107,7 @@ export function dumpBoard(db: Db): BoardDump {
       task_templates: templates,
       task_relations: relations,
       autopilot_settings: autopilot,
+      autopilot_recurring: recurring,
       tasks: [...bundles.values()],
       task_events: events,
     };

@@ -14,6 +14,7 @@ import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
+import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTemplatesService } from "./templates.ts";
@@ -79,5 +80,6 @@ export function createServices(deps: ServiceDeps): Services {
     backup: createBackupService(core),
     templates,
     autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS }),
+    recurring: createRecurringService(core, { projects, templates }),
   };
 }

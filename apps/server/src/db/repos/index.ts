@@ -1,4 +1,5 @@
 import type { Db } from "../database.ts";
+import { createAutopilotRecurringRepo } from "./autopilotRecurring.ts";
 import { createAutopilotRunsRepo } from "./autopilotRuns.ts";
 import { createAutopilotSettingsRepo } from "./autopilotSettings.ts";
 import { createEventsRepo } from "./events.ts";
@@ -31,6 +32,7 @@ export function createRepos(db: Db) {
     templates: createTemplatesRepo(sql),
     autopilotSettings: createAutopilotSettingsRepo(sql),
     autopilotRuns: createAutopilotRunsRepo(sql),
+    autopilotRecurring: createAutopilotRecurringRepo(sql),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;
