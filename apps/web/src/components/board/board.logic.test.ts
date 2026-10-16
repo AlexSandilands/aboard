@@ -294,8 +294,9 @@ describe("epic bands", () => {
     expect(ids(lane!.cells.backlog)).toEqual([]);
   });
 
-  it("shows an empty epic in Backlog and stacks bands in the epics' order", () => {
-    const [lane] = buildLanes(board([epic("late", { position: "a2" }), epic("early", { position: "a1" })]), {
+  it("shows an empty epic in Backlog and stacks bands oldest epic first, whatever their column positions", () => {
+    const late = epic("late", { number: 9, position: "a1" });
+    const [lane] = buildLanes(board([late, epic("early", { number: 2, position: "a2" })]), {
       ...noFilters,
       projectId: "p",
     });

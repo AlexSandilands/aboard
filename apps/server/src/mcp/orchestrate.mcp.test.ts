@@ -94,6 +94,9 @@ describe("orchestrating an epic over MCP", () => {
     expect((await call(agent, "get_handoff_prompt", { task: "#3", mode: "plan", subagent: true })).text).toContain(
       "Only work prompts go to subagents",
     );
+    expect((await call(agent, "get_handoff_prompt", { task: "#3", subagent: true })).text).toContain(
+      "#3 has no plan yet",
+    );
   });
 
   it("start_review hands back the open round a subagent stopped at, without opening another", async () => {

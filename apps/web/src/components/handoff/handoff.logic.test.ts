@@ -128,6 +128,12 @@ describe("visibility", () => {
     expect(showHandoffActions({ ...task, archivedAt: "x" })).toBe(false);
   });
 
+  it("offers hand-off on open epics too, whose prompt starts their tasks", () => {
+    const epic = { ...task, kind: "epic" as const };
+    expect(showHandoffActions(epic)).toBe(true);
+    expect(showHandoffActions({ ...epic, status: "done" })).toBe(false);
+  });
+
   it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {
     expect(canStartT3Thread(task, project, t3, settings)).toBe(true);
     expect(canStartT3Thread(task, project, { detected: false }, settings)).toBe(false);
