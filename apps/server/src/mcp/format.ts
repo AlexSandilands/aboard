@@ -368,7 +368,7 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
   if (task.autopilot !== null || task.kind === "epic" || task.progress.total === 0) return null;
   if (task.resolution || task.archivedAt || (task.status !== "backlog" && task.status !== "planned")) return null;
   return (
-    "Autopilot's Start planned tasks is on for this task's project, and only starts tasks flagged for Autopilot. " +
+    "Autopilot's Start planned tasks is on for this task, and only starts tasks flagged for Autopilot. " +
     "Ask the user whether to flag this one, and never set it without their answer. Once they decide, call " +
     `update_task(task: "#${task.number}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
   );

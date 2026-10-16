@@ -19,6 +19,13 @@ const toEvent = (r: EventRow): TaskEvent => ({
   payload: JSON.parse(r.payload_json || "{}") as Record<string, unknown>,
 });
 
+/** An activity entry with the task it is about, for reports over a period. */
+export interface PeriodEvent extends TaskEvent {
+  number: number;
+  title: string;
+  projectId: string;
+}
+
 /** Typed access to the task_events activity log. */
 export function createEventsRepo(sql: Sql) {
   /** Latest event of any of these types per task. */
@@ -62,6 +69,18 @@ export function createEventsRepo(sql: Sql) {
         .all<EventRow>("SELECT * FROM task_events WHERE task_id = ? ORDER BY id DESC LIMIT ?", taskId, limit)
         .map(toEvent)
         .reverse();
+    },
+    /** Events of these types at or after `from` and before `to`, oldest first, with their task's number, title and project. */
+    between(types: readonly string[], from: string, to: string): PeriodEvent[] {
+      return sql
+        .all<EventRow & { number: number; title: string; project_id: string }>(
+          `SELECT e.*, t.number, t.title, t.project_id FROM task_events e JOIN tasks t ON t.id = e.task_id
+           WHERE e.at >= ? AND e.at < ? AND e.type IN (SELECT value FROM json_each(?)) ORDER BY e.id`,
+          from,
+          to,
+          jsonList(types),
+        )
+        .map((r) => ({ ...toEvent(r), number: r.number, title: r.title, projectId: r.project_id }));
     },
     /** Latest "note" event per task. */
     lastNotes(taskIds: readonly string[]): TaskEvent[] {

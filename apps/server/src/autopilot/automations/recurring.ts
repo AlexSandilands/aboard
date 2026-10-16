@@ -43,6 +43,8 @@ export const recurring = defineAutomation({
   title: "Recurring tasks",
   description: "Creates a task from a template on a schedule, such as a weekly dependency bump or audit.",
   needsAgent: false,
+  // Its candidates are per project, with no task, so no epic can hold one.
+  epicScope: false,
   schema: z.object({}),
   fields: [],
   defaults: {},

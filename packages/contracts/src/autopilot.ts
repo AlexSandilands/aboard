@@ -9,11 +9,14 @@ export const AUTOPILOT_ACTOR = "autopilot";
 /** The automation that starts flagged Planned tasks. Shared so hints can name it before it is registered. */
 export const AUTOPILOT_START_PLANNED = "start_planned";
 
+/** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
+export const AUTOPILOT_UNSTICK = "unstick";
+
 /** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
 
-/** Most specific last. Epic rows can be stored but aren't resolved yet. */
+/** Most specific last. An epic's setting applies to the tasks in it. */
 export const AutopilotScopeKind = z.enum(["board", "project", "epic"]);
 export type AutopilotScopeKind = z.infer<typeof AutopilotScopeKind>;
 
@@ -58,8 +61,9 @@ export interface ResolvedAutopilot {
 
 /**
  * The effective mode and config of one automation, given its settings from least to most specific scope (board,
- * then project). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys merge in the
- * same order whatever the modes, so a project can tune an automation that is switched on for the whole board.
+ * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys
+ * merge in the same order whatever the modes, so a project can tune an automation that is switched on for the whole
+ * board.
  */
 export function resolveAutopilot(
   chain: ReadonlyArray<Pick<AutopilotSetting, "scopeKind" | "mode" | "config"> | null | undefined>,
@@ -110,8 +114,15 @@ export const AutopilotField = z.discriminatedUnion("kind", [
     kind: z.literal("select"),
     options: z.array(z.object({ value: z.string(), label: z.string() })),
   }),
+  /** A time of day, "HH:MM" on a 24-hour clock in the server's local time. */
+  z.object({ ...FieldBase, kind: z.literal("time") }),
   /** A skill reference, picked the way the review skill is. */
-  z.object({ ...FieldBase, kind: z.literal("skill") }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("skill"),
+    /** What the built-in entry is called, when it isn't the review skill (e.g. "Default workflow"). */
+    builtinLabel: z.string().optional(),
+  }),
 ]);
 export type AutopilotField = z.infer<typeof AutopilotField>;
 
@@ -121,6 +132,8 @@ export const AutopilotAutomation = z.object({
   description: z.string(),
   /** Starts an agent, so it counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: z.boolean(),
+  /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
+  epicScope: z.boolean(),
   fields: z.array(AutopilotField),
   /** Every field's value when no scope sets it. */
   defaults: AutopilotConfig,
@@ -220,13 +233,16 @@ export const AutopilotRun = z.object({
 });
 export type AutopilotRun = z.infer<typeof AutopilotRun>;
 
-/** A run that hasn't finished, for spinners on lanes and cards. */
+/** A run that hasn't finished, for spinners on lanes, epic bands and cards. */
 export const AutopilotActiveRun = AutopilotRun.pick({
   id: true,
   automation: true,
   taskId: true,
   projectId: true,
   status: true,
+}).extend({
+  /** The epic the run's task is in, so an epic's button can spin; not stored, read from the task. */
+  epicId: z.string().nullable(),
 });
 export type AutopilotActiveRun = z.infer<typeof AutopilotActiveRun>;
 

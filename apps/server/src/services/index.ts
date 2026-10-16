@@ -1,4 +1,4 @@
-import { AUTOPILOT_RECURRING, customAutomationId, type T3IntegrationStatus } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, customAutomationId, epicArmKey, type T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -11,6 +11,7 @@ import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
 import { createCustomAutomationsService } from "./customAutomations.ts";
+import { createDigestsService } from "./digests.ts";
 import { createImportsService, type ImportsModule } from "./imports.ts";
 import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
@@ -43,6 +44,7 @@ export interface ServiceDeps {
 /** Builds the service layer over one database. */
 export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
+  const builtIn = deps.automations ?? AUTOMATIONS;
   const settings = createSettingsService(core);
   const notifications = createNotificationsService(core);
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
@@ -82,8 +84,9 @@ export function createServices(deps: ServiceDeps): Services {
   const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
   restartRecurring = (ids) => recurring.restart(ids);
   const customAutomations = createCustomAutomationsService(core);
-  const builtIn = deps.automations ?? AUTOMATIONS;
   const runShell = deps.runShell ?? runShellCommand;
+  // Read on every call, so a custom automation's edit applies from the next pass.
+  const automations = () => [...builtIn, ...customAutomations.list().map((c) => customAutomation(c, { runShell }))];
 
   return {
     projects,
@@ -99,8 +102,7 @@ export function createServices(deps: ServiceDeps): Services {
     templates,
     notifications,
     autopilot: createAutopilotService(core, {
-      // Read on every call, so a custom automation's edit applies from the next pass.
-      automations: () => [...builtIn, ...customAutomations.list().map((c) => customAutomation(c, { runShell }))],
+      automations,
       notifications,
       // Recurring rules keep their own schedule, and custom automations only act on what happens from now: switching
       // one on, or lifting Pause all, doesn't catch up.
@@ -109,8 +111,16 @@ export function createServices(deps: ServiceDeps): Services {
         const customId = customAutomationId(automation);
         if (customId) customAutomations.rearm(customId, projectIds);
       },
+      onEpicEnabled: (automation, epicIds) => {
+        const customId = customAutomationId(automation);
+        if (customId) customAutomations.rearm(customId, epicIds.map(epicArmKey));
+      },
     }),
     recurring,
     customAutomations,
+    digests: createDigestsService(core, {
+      notifications,
+      automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
+    }),
   };
 }

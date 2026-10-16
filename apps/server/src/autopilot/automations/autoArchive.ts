@@ -15,6 +15,8 @@ export const autoArchive = defineAutomation({
   title: "Auto-archive Done",
   description: "Archives tasks that have been in Done for more than the set number of days.",
   needsAgent: false,
+  // It skips tasks in an epic, so an epic's switch would change nothing.
+  epicScope: false,
   schema: z.object({ days: z.number().int().min(1).default(14) }),
   fields: [{ key: "days", label: "Days in Done", kind: "number", min: 1, step: 1, unit: "days" }],
   defaults: { days: 14 },

@@ -47,6 +47,8 @@ export const queryKeys = {
   autopilotScopeAll: ["autopilotScope"] as const,
   /** The board scope when `projectId` is null. */
   autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
+  /** An epic's scope, under its project's. */
+  autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
   autopilotRunsAll: ["autopilotRuns"] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
@@ -56,6 +58,7 @@ export const queryKeys = {
   recurring: ["recurring"] as const,
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
   customAutomations: ["customAutomations"] as const,
+  digests: ["digests"] as const,
 };
 
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
@@ -77,6 +80,20 @@ export function useAutopilotScope(projectId: string | null, enabled = true) {
     queryFn: ({ signal }) =>
       api<AutopilotScopeEntry[]>(
         projectId ? `/api/autopilot/projects/${encodeURIComponent(projectId)}` : "/api/autopilot/board",
+        { signal },
+      ),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Every automation as seen from an epic: its own switch and what it resolves to through its project and the board. */
+export function useAutopilotEpicScope(projectId: string, epicId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotEpicScope(projectId, epicId),
+    queryFn: ({ signal }) =>
+      api<AutopilotScopeEntry[]>(
+        `/api/autopilot/projects/${encodeURIComponent(projectId)}/epics/${encodeURIComponent(epicId)}`,
         { signal },
       ),
     enabled,
@@ -284,6 +301,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
       connectedOnce = true;
     };
@@ -315,6 +333,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
         void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });
+        // A digest is made, read or dropped.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
       if (event.type === "notification.created") {
         if (queryClient.getQueryData(queryKeys.notifications)) {

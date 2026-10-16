@@ -31,7 +31,11 @@ export interface CheckContext<C> {
   services: Services;
   engine: AutopilotEngineSettings;
   now: Date;
-  /** Projects where the automation is on. Only candidates in these (or board-wide ones while `board` is set) count. */
+  /**
+   * Projects where the automation is on, or has an epic it is on for (then the check sees the whole project, and the
+   * engine drops the tasks the epic's setting doesn't reach). `config` is the project's. Only candidates in these (or
+   * board-wide ones while `board` is set) count.
+   */
   projects: ReadonlyArray<ProjectScope<C>>;
   /** The board-level config when the automation is on for the board itself; null otherwise. */
   board: C | null;
@@ -47,6 +51,8 @@ export interface ActionContext<C> {
   /** Starts agent work; only for automations with needsAgent. What it records goes on this run as it happens. */
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
   engine: AutopilotEngineSettings;
+  /** Where the user opens the board, e.g. `http://127.0.0.1:5317`, for prompts that point an agent at a task. */
+  boardUrl: string;
   /** The effective config for the candidate's project (or the board's). */
   config: C;
   run: AutopilotRun;
@@ -78,10 +84,17 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
   /**
-   * Runs in the background like an agent action, without counting against the agent caps: a shell command that may
-   * take minutes. Other board-only actions are awaited one after another.
+   * The action can take long (a shell command, or waiting on an agent) without being an agent run for the caps, so
+   * the engine doesn't hold up the rest of its pass for it. At most AUTOPILOT_BACKGROUND_MAX of these that aren't
+   * agent runs go at once. Agent automations are always like this.
    */
   background?: boolean;
+  /**
+   * Whether an epic can switch it on or off for its tasks (default true). Set false when its candidates are never
+   * tasks in an epic: the epic's popover then leaves it out, the epic button ignores it, and the service refuses an
+   * epic-scope setting for it.
+   */
+  epicScope?: boolean;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
@@ -94,7 +107,10 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
 /** Keeps an automation's config type while letting registries hold automations with different ones. */
 export const defineAutomation = <C extends AutomationConfig>(automation: Automation<C>): Automation => automation;
 
-/** Agent work an automation asks for. Runs on a task: the run's task is the one the agent works on. */
+/**
+ * Agent work an automation asks for. Normally on a task: the run's task is the one the agent works on. A run with no
+ * task (a digest) is headless only, in an empty folder of its own, with no worktree, no session link and no nudge.
+ */
 export interface RunnerRequest {
   run: AutopilotRun;
   /** The prompt the agent starts with (or, for a nudge, the message posted). */
@@ -110,7 +126,7 @@ export interface RunnerRequest {
    * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
    */
   workspace?: { baseRef?: string | null; branch?: string | null };
-  /** Headless only: `read-only` can't edit files (a reviewer). Defaults to edit. */
+  /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
   tools?: readonly string[];

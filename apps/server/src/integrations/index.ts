@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
+import { createDigestGenerator } from "../autopilot/digest.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
 import type { RunShell } from "./shellCommand.ts";
 import type { EventBus } from "../bus.ts";
-import type { Config } from "../config.ts";
+import { boardUrlOf, type Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
@@ -23,7 +24,8 @@ import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir">;
+  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "port" | "webPort"> &
+    Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -118,7 +120,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
+    boardUrl: () => boardUrlOf(deps.config),
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const digests = createDigestGenerator({
+    services: deps.services,
+    runner,
+    ...(overrides.now ? { now: overrides.now } : {}),
   });
   const worktrees = createWorktreeCleanup({
     services: deps.services,
@@ -185,6 +193,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
+    generateDigest: () => digests.generate(),
+    digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };

@@ -1,5 +1,6 @@
 import type { Db } from "../database.ts";
 import { createAutopilotCustomRepo } from "./autopilotCustom.ts";
+import { createAutopilotDigestsRepo } from "./autopilotDigests.ts";
 import { createAutopilotRecurringRepo } from "./autopilotRecurring.ts";
 import { createAutopilotRunsRepo } from "./autopilotRuns.ts";
 import { createAutopilotSettingsRepo } from "./autopilotSettings.ts";
@@ -36,6 +37,7 @@ export function createRepos(db: Db) {
     autopilotRuns: createAutopilotRunsRepo(sql),
     autopilotRecurring: createAutopilotRecurringRepo(sql),
     autopilotCustom: createAutopilotCustomRepo(sql),
+    autopilotDigests: createAutopilotDigestsRepo(sql),
     notifications: createNotificationsRepo(sql),
   };
 }

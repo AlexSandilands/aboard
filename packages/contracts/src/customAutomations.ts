@@ -106,7 +106,10 @@ export const CustomAutomation = z.object({
    * somewhere and when Autopilot is resumed, so switching it on doesn't act on the board's history.
    */
   armedAt: z.string(),
-  /** Later arming times per project id, set when the automation is switched on there (or resumed). */
+  /**
+   * Later arming times per scope, set when the automation is switched on there (or resumed): keyed by project id, or
+   * by `epicArmKey(epicId)` for an epic whose own setting switched it on.
+   */
   armedProjects: z.record(z.string(), z.string()).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -115,10 +118,24 @@ export type CustomAutomation = z.infer<typeof CustomAutomation>;
 
 export type CustomDefinition = Pick<CustomAutomation, "name" | "trigger" | "filters" | "action">;
 
-/** When the automation was armed for a project: the later of its own arming and the project's. */
-export function customArmedAt(custom: Pick<CustomAutomation, "armedAt" | "armedProjects">, projectId: string): string {
-  const own = custom.armedProjects[projectId];
-  return own && Date.parse(own) > Date.parse(custom.armedAt) ? own : custom.armedAt;
+/** The `armedProjects` key of an epic. */
+export const epicArmKey = (epicId: string): string => `epic:${epicId}`;
+
+/**
+ * When the automation was armed for a task in this project (and epic): the latest of its own arming, the project's
+ * and the epic's.
+ */
+export function customArmedAt(
+  custom: Pick<CustomAutomation, "armedAt" | "armedProjects">,
+  projectId: string,
+  epicId?: string | null,
+): string {
+  const times = [
+    custom.armedAt,
+    custom.armedProjects[projectId],
+    epicId ? custom.armedProjects[epicArmKey(epicId)] : undefined,
+  ];
+  return times.filter((t): t is string => Boolean(t)).reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
 }
 
 export const CreateCustomAutomationInput = z.object(Definition);

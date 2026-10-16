@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AUTOPILOT_ACTOR, BRAND, type ModelTier, type ModelTiers, type TaskSummary } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
@@ -64,10 +67,7 @@ export function createAutopilotRunner(deps: {
   const newSessionId = deps.newSessionId ?? randomUUID;
   const log = deps.log ?? console;
 
-  const taskOf = (request: RunnerRequest): TaskSummary => {
-    if (!request.run.taskId) throw new Error("An agent run needs a task to work on");
-    return deps.services().tasks.summary(request.run.taskId);
-  };
+  const taskOf = (taskId: string): TaskSummary => deps.services().tasks.summary(taskId);
 
   const nudge = async (request: RunnerRequest, task: TaskSummary, update: (patch: RunPatch) => void) => {
     const thread = latestThread(task);
@@ -146,14 +146,14 @@ export function createAutopilotRunner(deps: {
     }
 
     const settings = s.settings.get();
-    const readOnly = request.access === "read-only";
+    const readOnly = request.access === "read-only" || request.access === "none";
     const stdout = await runAgent({
       cli: settings.headlessReviewCli,
       cwd: worktree.path,
       prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly)}`,
       timeoutMs: options.timeoutMinutes * 60_000,
       args: agentArgs({
-        access: readOnly ? "read-only" : "edit",
+        access: request.access ?? "edit",
         budgetUsd: options.budgetUsd,
         sessionId,
         model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
@@ -175,14 +175,57 @@ export function createAutopilotRunner(deps: {
     };
   };
 
+  /** A run with no task (a digest): headless, in an empty folder of its own that is removed afterwards. */
+  const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
+    const options = readRunnerOptions(request.options);
+    if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
+    if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
+    const settings = deps.services().settings.get();
+    const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
+    const sessionId = newSessionId();
+    update({ runner: "headless", sessionId });
+    try {
+      const stdout = await runAgent({
+        cli: settings.headlessReviewCli,
+        cwd,
+        prompt: request.prompt,
+        timeoutMs: options.timeoutMinutes * 60_000,
+        args: agentArgs({
+          access: request.access ?? "edit",
+          budgetUsd: options.budgetUsd,
+          sessionId,
+          model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
+          defaultBranch: null,
+          ...(request.tools ? { tools: request.tools } : {}),
+          ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
+        }),
+      });
+      const outcome = parseAgentOutput(stdout, Boolean(request.outputSchema));
+      if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
+      if (!outcome.ok) throw new Error(`Claude Code stopped: ${outcome.error ?? "unknown error"}`);
+      return {
+        runner: "headless",
+        sessionId,
+        ...(outcome.costUsd !== null ? { costUsd: outcome.costUsd } : {}),
+        result: outcome.result,
+        ...(request.outputSchema ? { output: outcome.output } : {}),
+      };
+    } finally {
+      await rm(cwd, { recursive: true, force: true }).catch((error: unknown) => {
+        log.warn(`[autopilot] couldn't remove ${cwd}: ${messageOf(error)}`);
+      });
+    }
+  };
+
   return {
     async start(request, update = () => {}) {
-      const task = taskOf(request);
+      if (!request.run.taskId) return startDetached(request, update);
+      const task = taskOf(request.run.taskId);
       if (request.kind === "nudge") return nudge(request, task, update);
       const options = readRunnerOptions(request.options);
       // A T3 thread can't be held to read-only, given tools or asked for structured output.
       const headlessOnly =
-        request.access === "read-only" || (request.tools?.length ?? 0) > 0 || Boolean(request.outputSchema);
+        (request.access ?? "edit") !== "edit" || (request.tools?.length ?? 0) > 0 || Boolean(request.outputSchema);
       if (headlessOnly) {
         if (options.runner === "t3")
           throw new Error("This action needs a headless run, but the automation runs only in T3 Code");

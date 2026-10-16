@@ -27,10 +27,11 @@ export interface CustomAutomationsService {
   /** Its switches go with it; its runs stay as history. */
   delete(id: string): void;
   /**
-   * Ignores events before now in these projects: the automation was just switched on there, or Autopilot resumed.
-   * Other projects keep events they haven't acted on yet (held for quiet hours or a cap).
+   * Ignores events before now in these scopes (project ids, or `epicArmKey(epicId)`): the automation was just
+   * switched on there, or Autopilot resumed. Other scopes keep events they haven't acted on yet (held for quiet hours
+   * or a cap).
    */
-  rearm(id: string, projectIds: readonly string[]): void;
+  rearm(id: string, scopeKeys: readonly string[]): void;
   /** The column each task last moved from, for status-change triggers with a `from`. */
   statusFrom(taskIds: readonly string[]): Map<string, TaskStatus | null>;
 }
@@ -132,14 +133,14 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
       });
     },
 
-    rearm(id, projectIds) {
-      if (projectIds.length === 0) return;
+    rearm(id, scopeKeys) {
+      if (scopeKeys.length === 0) return;
       core.write((fx) => {
         const current = repos.autopilotCustom.get(id);
         if (!current) return;
         const now = nowIso();
         const armedProjects = { ...current.armedProjects };
-        for (const projectId of projectIds) armedProjects[projectId] = now;
+        for (const key of scopeKeys) armedProjects[key] = now;
         repos.autopilotCustom.update({ ...current, armedProjects });
         fx.autopilot();
       });

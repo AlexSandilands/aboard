@@ -261,9 +261,38 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       expect(sent).toEqual([{ text: "Continue", commandId: `autopilot-${run.id}` }]);
     });
 
-    it("needs a task", async () => {
-      const { start } = setup();
-      await expect(start({ run: { taskId: null } as AutopilotRun })).rejects.toThrow("needs a task");
+    describe("a run with no task", () => {
+      it("runs headless in an empty folder of its own that is gone afterwards, with no worktree or link", async () => {
+        const { h, task, run, jobs, start, patches } = setup({ t3: T3_UP });
+        const out = await start({
+          run: { ...run, taskId: null },
+          access: "none",
+          tier: "light",
+          options: { budgetUsd: 1 },
+        });
+        expect(out).toEqual({ runner: "headless", sessionId: SESSION, costUsd: 0.75, result: "Done" });
+        expect(patches).toEqual([{ runner: "headless", sessionId: SESSION }, { costUsd: 0.75 }]);
+        const job = jobs[0]!;
+        expect(job.cwd).not.toContain("worktrees");
+        expect(existsSync(job.cwd)).toBe(false);
+        expect(job.prompt).toBe("Do the task");
+        expect(job.args).toContain("--strict-mcp-config");
+        expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+        expect(h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session")).toEqual([]);
+      });
+
+      it("never uses T3 Code or a nudge, and removes its folder when the agent fails", async () => {
+        const { run, jobs, launches, start } = setup({
+          t3: T3_UP,
+          agent: async () => result({ is_error: true, subtype: "error_max_budget_usd", total_cost_usd: 0.5 }),
+        });
+        const detached = { ...run, taskId: null };
+        await expect(start({ run: detached, options: { runner: "t3" } })).rejects.toThrow("can't run in T3 Code");
+        await expect(start({ run: detached, kind: "nudge" })).rejects.toThrow("no thread to nudge");
+        await expect(start({ run: detached, options: { runner: "auto" } })).rejects.toThrow("Claude Code stopped");
+        expect(launches).toHaveLength(0);
+        expect(existsSync(jobs[0]!.cwd)).toBe(false);
+      });
     });
   });
 });

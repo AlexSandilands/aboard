@@ -110,4 +110,13 @@ describe("review logic", () => {
       "skill:/h/.claude/skills/review-loop/SKILL.md",
     ]);
   });
+
+  it("labels the built-in skill as the review skill unless another name is given", () => {
+    expect(skillOptions([], null)[0]?.label).toBe("aboard-review");
+    expect(skillOptions([], null, { builtinLabel: "aboard-digest" })[0]).toMatchObject({
+      value: "builtin",
+      label: "aboard-digest",
+      detail: "Built in",
+    });
+  });
 });

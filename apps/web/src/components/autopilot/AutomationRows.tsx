@@ -19,8 +19,17 @@ import { cn } from "~/lib/utils";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
-import { entryFor, fieldText, inheritLabel, parentEntry, parseNumberField, withConfigValue } from "./autopilot.logic";
+import {
+  entryFor,
+  fieldText,
+  inheritLabel,
+  isClockTime,
+  parentEntry,
+  parseNumberField,
+  withConfigValue,
+} from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
+import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
 type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
@@ -260,8 +269,25 @@ function FieldControl({
           </SelectPopup>
         </Select>
       );
+    case "time":
+      return (
+        <TimeInput
+          label={label}
+          // Anything that isn't HH:MM shows blank, which a time input accepts.
+          value={typeof value === "string" && isClockTime(value) ? value : ""}
+          onSave={onSave}
+        />
+      );
     case "skill":
-      return <SkillField projectId={projectId} value={value} label={label} onSave={onSave} />;
+      return (
+        <SkillField
+          projectId={projectId}
+          value={value}
+          label={label}
+          builtinLabel={field.builtinLabel}
+          onSave={onSave}
+        />
+      );
   }
 }
 
@@ -319,11 +345,13 @@ function SkillField({
   projectId,
   value,
   label,
+  builtinLabel,
   onSave,
 }: {
   projectId: string | null;
   value: unknown;
   label: string;
+  builtinLabel: string | undefined;
   onSave: (next: unknown) => boolean;
 }) {
   const discovered = useSkills(projectId).data ?? [];
@@ -334,7 +362,7 @@ function SkillField({
   return (
     <ReviewSkillSelect
       ariaLabel={label}
-      options={skillOptions(skills, current)}
+      options={skillOptions(skills, current, builtinLabel ? { builtinLabel } : {})}
       value={current}
       onChange={(skill) => {
         if (skill) onSave(skill);

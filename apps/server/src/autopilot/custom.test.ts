@@ -204,7 +204,8 @@ describe("custom automations: triggers", () => {
     // The slot it was made in had passed already.
     expect(shellRuns).toHaveLength(0);
     await pass(HOUR);
-    await pass(HOUR + 60_000);
+    // The same slot again: no second run.
+    await pass(HOUR);
     expect(shellRuns).toHaveLength(1);
     expect(shellRuns[0]).toMatchObject({ cwd: "/work/alpha" });
     expect(shellRuns[0]!.env[brandEnv("TASK_NUMBER")]).toBe("");
@@ -309,6 +310,37 @@ describe("custom automations: filters and scopes", () => {
     s.autopilot.setScope("project", other.id, key, { mode: "on" });
     await pass();
     expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([here.id]);
+  });
+
+  it("applies per epic, and doesn't act on an epic's old events when switched on for it", async () => {
+    const { s, task, define, pass, shellRuns, project, shell } = setup();
+    const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+    const key = customAutomationKey(custom.id);
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const before = task("Moved before");
+    s.tasks.update(before.id, { epicId: epic.id }, "agent");
+    s.tasks.move(before.id, { status: "review" }, "agent");
+    await tick();
+    s.autopilot.setScope("epic", epic.id, key, { mode: "on" }, project.id);
+    const inEpic = task("In the epic");
+    s.tasks.update(inEpic.id, { epicId: epic.id }, "agent");
+    const outside = task("Outside it");
+    s.tasks.move(inEpic.id, { status: "review" }, "agent");
+    s.tasks.move(outside.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([inEpic.id]);
+  });
+
+  it("leaves a schedule out of epic scope, since it has no task", () => {
+    const { s, define, shell } = setup();
+    const scheduled = define(
+      { name: "Hourly", trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } }, action: shell() },
+      null,
+    );
+    const onTasks = define({ name: "Ping", trigger: { kind: "stale", hours: 2 }, action: shell() }, null);
+    const listed = s.autopilot.overview().automations;
+    expect(listed.find((a) => a.key === customAutomationKey(scheduled.id))?.epicScope).toBe(false);
+    expect(listed.find((a) => a.key === customAutomationKey(onTasks.id))?.epicScope).toBe(true);
   });
 
   it("does nothing while paused, and doesn't catch up on resume", async () => {

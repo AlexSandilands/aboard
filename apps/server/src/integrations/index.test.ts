@@ -45,6 +45,8 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         userHome: "/nonexistent",
         sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
         worktreesDir: "/nonexistent/worktrees",
+        port: 4317,
+        webPort: 5317,
       },
       bus,
       services: () => services!,

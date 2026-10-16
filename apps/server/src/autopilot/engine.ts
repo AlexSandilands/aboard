@@ -13,6 +13,7 @@ import {
 } from "./types.ts";
 
 export const AUTOPILOT_TICK_MS = 60_000;
+const DEFAULT_BOARD_URL = "http://127.0.0.1:5317";
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
 export const AUTOPILOT_DEBOUNCE_MS = 1_000;
 /** Background actions that aren't agents (shell commands) going at once; the rest wait for a later pass. */
@@ -47,6 +48,8 @@ export function createAutopilotEngine(deps: {
   services: () => Services;
   bus: EventBus;
   runner?: Runner;
+  /** Where the user opens the board; actions put it in agent prompts. */
+  boardUrl?: () => string;
   now?: () => Date;
   debounceMs?: number;
   tickMs?: number;
@@ -113,6 +116,7 @@ export function createAutopilotEngine(deps: {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
           engine: s.autopilot.engine(),
+          boardUrl: deps.boardUrl?.() ?? DEFAULT_BOARD_URL,
           config,
           run: started,
           actor: AUTOPILOT_ACTOR,
@@ -152,31 +156,51 @@ export function createAutopilotEngine(deps: {
 
   const runAutomation = async (s: Services, automation: Automation, engine: AutopilotEngineSettings, at: Date) => {
     const board = s.autopilot.resolve(automation, null);
+    // A project is looked at where it is on, and where one of its epics is: the check returns every task of the
+    // project there, and the per-task resolve below keeps the ones the epic's setting reaches.
+    const withEpicOn = s.autopilot.projectsWithEpicOn(automation);
     const projects = s.projects
       .list()
       .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
-        resolved.enabled && resolved.config ? [{ project, config: resolved.config }] : [],
+        (resolved.enabled || withEpicOn.has(project.id)) && resolved.config
+          ? [{ project, config: resolved.config }]
+          : [],
       );
     const boardConfig = board.enabled ? board.config : null;
     if (projects.length === 0 && !boardConfig) return;
 
+    // Settings are read once per project and epic, not per candidate: a Done column can hold many.
+    const resolutions = new Map<string, ReturnType<typeof s.autopilot.resolve>>();
+    const resolveFor = (projectId: string, epicId: string | null) => {
+      const key = `${projectId}:${epicId ?? ""}`;
+      let resolved = resolutions.get(key);
+      if (!resolved) {
+        resolved = s.autopilot.resolve(automation, projectId, epicId);
+        resolutions.set(key, resolved);
+      }
+      return resolved;
+    };
+
     const candidates = await automation.check({ services: s, engine, now: at, projects, board: boardConfig });
     for (const found of candidates) {
       let candidate = found;
-      // A task's run belongs to the task's project, whatever the check said, so that project's switch applies.
+      // A task's run belongs to the task's project and epic, whatever the check said, so their switches apply.
+      let epicId: string | null = null;
       if (candidate.taskId) {
-        let projectId: string;
+        let task: { projectId: string; parent: { id: string } | null };
         try {
-          projectId = s.tasks.summary(candidate.taskId).projectId;
+          task = s.tasks.summary(candidate.taskId);
         } catch {
           continue;
         }
-        candidate = { ...candidate, projectId };
+        candidate = { ...candidate, projectId: task.projectId };
+        epicId = task.parent?.id ?? null;
       }
       const projectId = candidate.projectId ?? null;
       // Only where the automation is on: a check may return more than it was asked for.
-      const config = projectId ? projects.find((p) => p.project.id === projectId)?.config : boardConfig;
+      const resolved = projectId ? resolveFor(projectId, epicId) : board;
+      const config = resolved.enabled ? resolved.config : null;
       if (!config) continue;
       if (s.autopilot.status().paused) return;
       if (engine.dryRun) {
@@ -192,7 +216,8 @@ export function createAutopilotEngine(deps: {
       const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;
       const done = launch(automation, run, candidate, config);
-      // Quick board changes run one after another; agent runs and shell commands go on in the background.
+      // Quick board changes run one after another; agent runs and slow actions (shell commands, digests) go on in
+      // the background.
       if (!automation.needsAgent && !automation.background) await done;
     }
   };

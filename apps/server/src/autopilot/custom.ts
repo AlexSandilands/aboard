@@ -153,7 +153,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
         taskEvents(
           trigger,
           task,
-          { armedAt: customArmedAt(custom, project.id), now, from, byId, prChanges },
+          { armedAt: customArmedAt(custom, project.id, task.parent?.id), now, from, byId, prChanges },
           services,
         ).map(({ key, data, what }): Candidate => {
           // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
@@ -178,6 +178,8 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     description: `${describeCustomTrigger(trigger)}: ${isAgent ? "start an agent" : "run a shell command"}.`,
     needsAgent: isAgent,
     background: !isAgent,
+    // A schedule has no task, so an epic has nothing to switch.
+    epicScope: trigger.kind !== "schedule",
     schema: isAgent ? AgentConfig : z.object({}),
     fields: isAgent ? RUNNER_FIELDS : [],
     defaults: isAgent ? RUNNER_DEFAULTS : {},
