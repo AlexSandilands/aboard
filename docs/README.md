@@ -42,6 +42,7 @@ files under each app.
 - [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop
+- [Autopilot](guide/autopilot.md): switching automations on, limits, pausing
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
 - [Notifications](guide/notifications.md): the inbox, pop-ups, taskbar badge and what you're told about

@@ -1,6 +1,11 @@
 import type {
   AddLinkResult,
   AppSettings,
+  AutopilotConfig,
+  AutopilotEngineSettings,
+  AutopilotOverview,
+  AutopilotScopeEntry,
+  AutopilotStatus,
   BoardSnapshot,
   CloseTaskInput,
   CreateTaskInput,
@@ -26,6 +31,8 @@ import type {
   TaskLink,
   TaskReview,
   TaskSummary,
+  UpdateAutopilotEngineInput,
+  UpdateAutopilotSettingInput,
   TaskTemplate,
   UpdateProjectInput,
   UpdateSettingsInput,
@@ -389,6 +396,92 @@ export function useUpdateSettings() {
       toastManager.add({
         type: "error",
         title: "Couldn't save settings",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+// ── Autopilot ────────────────────────────────────────────────────────────
+
+/**
+ * Sets one automation's mode and/or config at the board (`projectId` null) or a project. The server replaces a
+ * scope's whole config, so `config` is a function from the latest cached config to the new one: calls share a scope
+ * so they reach the server in order, and each is built when it runs, after the one before has updated the cache.
+ * Building it from what the component last rendered would let a quick second edit undo the first. The server's reply
+ * (the scope's entries) goes into the cache; other windows' changes arrive as autopilot.changed.
+ */
+export function useSetAutopilotScope(projectId: string | null, onRejected?: () => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      automation,
+      mode,
+      config,
+    }: {
+      automation: string;
+      mode?: UpdateAutopilotSettingInput["mode"];
+      config?: (current: AutopilotConfig) => AutopilotConfig;
+    }) => {
+      const entries = queryClient.getQueryData<AutopilotScopeEntry[]>(queryKeys.autopilotScope(projectId));
+      const current = entries?.find((entry) => entry.automation === automation)?.config ?? {};
+      const body: UpdateAutopilotSettingInput = { mode, config: config?.(current) };
+      return api<AutopilotScopeEntry[]>(
+        `/api/autopilot/${projectId ? `projects/${enc(projectId)}` : "board"}/${enc(automation)}`,
+        { method: "PUT", body },
+      );
+    },
+    scope: { id: `autopilot-scope:${projectId ?? "board"}` },
+    onSuccess: (entries) => {
+      queryClient.setQueryData(queryKeys.autopilotScope(projectId), entries);
+      // A board change moves what every project inherits.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
+    },
+    // Here rather than in mutate()'s options: those only run for the latest call, and a save can be queued behind.
+    onError: (error) => {
+      onRejected?.();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the Autopilot setting",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
+
+/** Updates the engine's limits; `quietHours` may be partial. */
+export function useUpdateAutopilotEngine() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateAutopilotEngineInput) =>
+      api<AutopilotEngineSettings>("/api/autopilot/engine", { method: "PATCH", body: input }),
+    onSuccess: (engine) =>
+      queryClient.setQueryData<AutopilotOverview>(queryKeys.autopilot, (current) =>
+        current ? { ...current, engine } : current,
+      ),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the Autopilot limits",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+/** Pause all, and back. Runs already going finish; the board's autopilot status arrives over /events. */
+export function useSetAutopilotPaused() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) =>
+      api<AutopilotStatus>(`/api/autopilot/${paused ? "pause" : "resume"}`, { body: {} }),
+    onSuccess: ({ paused }) =>
+      queryClient.setQueryData<AutopilotOverview>(queryKeys.autopilot, (current) =>
+        current ? { ...current, paused } : current,
+      ),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't change Pause all",
         description: error instanceof Error ? error.message : String(error),
       }),
   });

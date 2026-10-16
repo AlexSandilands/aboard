@@ -504,6 +504,43 @@ const showcase: Scenario = (s, opts) => {
   s.reviews.openRound(rounding, { trigger: "manual", actor: AGENT, force: true });
   s.reviews.submit(rounding, { summary: "Rounding is correct for every currency now.", findings: [] }, AGENT);
 
+  // Autopilot history. A run still going can't be seeded: the server fails runs a restart left running.
+  const autopilotRun = (
+    taskId: string,
+    automation: string,
+    key: string,
+    summary: string,
+    result: Parameters<typeof s.autopilot.finish>[1],
+    dryRun = false,
+  ) => {
+    const run = s.autopilot.record({ automation, candidate: { dedupeKey: key, summary, taskId }, dryRun });
+    if (!run || dryRun) return;
+    s.autopilot.start(run.id);
+    s.autopilot.finish(run.id, result);
+  };
+  autopilotRun(drawer, "start_planned", `start:${drawer}`, `start ${s.tasks.summary(drawer).title}`, {
+    summary: "Started a T3 Code thread",
+    runner: "t3",
+    threadUrl: "t3code://threads/sandbox-env/showcase-1",
+    costUsd: 0.42,
+  });
+  autopilotRun(rounding, "review_prs", `review:${rounding}:1`, "review the pull request", {
+    status: "failed",
+    error: "The review agent exited with code 1 before submitting findings",
+    runner: "headless",
+    sessionId: "6f1c2e0a-9d3b-4c52-8f7e-2a41b0c9d5e3",
+    costUsd: 0.07,
+    needsAttention: true,
+  });
+  autopilotRun(
+    drawer,
+    "fix_pr_findings",
+    `fix:${drawer}`,
+    "fix the open findings on the pull request",
+    { summary: "" },
+    true,
+  );
+
   const sitemap = done("Add a sitemap", ["seo"]);
   done("Lazy-load product reviews", ["perf"]);
   const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "backlog" });

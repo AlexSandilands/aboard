@@ -7,8 +7,8 @@ the whole board, that watch the board and act when something needs doing. The en
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine, the runners, the per-task flag and the automations that have landed (below). The rest
-of the catalogue is each its own task in the epic, and so is the UI (#86).
+This doc covers the engine, the runners, the per-task flag, the automations that have landed (below) and the
+settings UI. The rest of the catalogue is each its own task in the epic.
 
 ## How it works
 
@@ -132,6 +132,14 @@ per scope), logged as `archived` plus the note "Archived by Autopilot after N da
 tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
+**Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
+switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
+duplicate), it logs a note "Unblocked: #N finished" on the dependent and sends an `autopilot_notice` notification.
+A partially unblocked dependent waits. It starts nothing: a flagged Planned dependent just becomes eligible for Start
+planned tasks on the next tick. It only reports blockers that finished in the last 24 hours, so switching it on doesn't announce old work. The scope is the dependent's project. The dedupe key is
+`unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
+again, while two blockers finishing together give one notification.
+
 ### Runners
 
 An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
@@ -210,6 +218,26 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 
 An automation must never merge, close or delete tasks, force-push or push to the default branch.
 
+### The UI
+
+How Autopilot looks on the board (the lane pill, the header pause button, the card badge and the task panel's
+Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
+`components/autopilot/`:
+
+- **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
+  Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
+  rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
+- **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
+  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text or select
+  per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored
+  as a `ReviewSkillRef`, and an unset one is the built-in skill). The same rows appear in a project's settings,
+  where Inherit follows the board. Config set at a scope is sent whole (the server replaces it), so editing one
+  key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
+- Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
+  edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
+  (which every settings change also publishes) refetches the scopes, so another window's edit shows up too. The
+  forms wait for the real entries to load before they can be edited.
+
 ## Decisions
 
 - **The review watchdog stays separate.** It is part of local review, on whenever local review is, and must not
@@ -257,3 +285,4 @@ An automation must never merge, close or delete tasks, force-push or push to the
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
+| `apps/web/src/components/autopilot/` | The pill, badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |
