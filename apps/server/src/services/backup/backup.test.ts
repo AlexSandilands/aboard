@@ -68,7 +68,7 @@ function seed() {
     schedule: { kind: "weekly", days: [1, 4], time: "09:00" },
     flagAutopilot: true,
   });
-  s.recurring.handled(rule.id, { dueAt: "2026-10-12T08:00:00.000Z", taskId: a.id });
+  s.recurring.handled(rule.id, { dueAt: "2026-10-12T09:00:00", taskId: a.id });
   // Autopilot settings are exported; its runs are history and stay out.
   h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
     ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),

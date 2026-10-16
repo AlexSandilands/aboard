@@ -40,7 +40,9 @@ export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
   const settings = createSettingsService(core);
   const notifications = createNotificationsService(core);
-  const projects = createProjectsService(core);
+  // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
+  let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
+  const projects = createProjectsService(core, { onUnarchived: (id) => restartRecurring?.([id]) });
   const labels = createLabelsService(core);
   const templates = createTemplatesService(core, { projects });
 
@@ -73,6 +75,7 @@ export function createServices(deps: ServiceDeps): Services {
   reviews = createReviewsService(core, { task: tasks.record, notifications });
 
   const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
+  restartRecurring = (ids) => recurring.restart(ids);
 
   return {
     projects,

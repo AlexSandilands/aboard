@@ -7,7 +7,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useAutopilotScope, useBoard, useTemplates } from "~/state/queries";
+import { useAutopilotOverview, useAutopilotScope, useBoard, useTemplates } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   useAddSuggestedRule,
@@ -76,7 +76,8 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
   }, [wanted]);
   const templates = useTemplates();
   const paused = useBoard().data?.autopilot.paused ?? false;
-  const running = (automation?.enabled ?? false) && !paused;
+  const dryRun = useAutopilotOverview().data?.engine.dryRun ?? false;
+  const running = (automation?.enabled ?? false) && !paused && !dryRun;
   const update = useUpdateRecurringRule();
   const remove = useDeleteRecurringRule();
   const addSuggested = useAddSuggestedRule(project.id);

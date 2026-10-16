@@ -304,6 +304,8 @@ export function useBoardEvents() {
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        // A rule's "last task" line follows that task (done, archived).
+        void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {

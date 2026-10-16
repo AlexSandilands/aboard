@@ -126,6 +126,17 @@ describe("recurring rules", () => {
     expect(s.recurring.list(project.id)[0]?.lastTask).toMatchObject({ archived: true });
   });
 
+  it("starts a project's rules from now when it is unarchived", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 1, 12, 0));
+    const { s, project, template } = setup();
+    const rule = s.recurring.create(project.id, { name: "A", templateId: template.id, schedule: mondays });
+    s.projects.update(project.id, { archived: true });
+    vi.setSystemTime(new Date(2026, 9, 20, 12, 0));
+    s.projects.update(project.id, { archived: false });
+    expect(s.recurring.get(rule.id).lastDueAt).toBe(localStamp(new Date(2026, 9, 20, 12, 0)));
+  });
+
   it("never moves the cursor back when a slot is recorded late", () => {
     const { s, project, template } = setup();
     const rule = s.recurring.create(project.id, { name: "A", templateId: template.id, schedule: mondays });

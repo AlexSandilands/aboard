@@ -71,7 +71,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
   in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
   even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
-  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)").
+  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
+  "Recurring tasks…" link opens the project's settings at that section.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
 - **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
