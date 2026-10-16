@@ -183,12 +183,22 @@ export const reviewIsDone = (summary: TaskReviewSummary | null): boolean =>
   !reviewWantsAnotherRound(summary);
 
 /**
- * What the agent is told wherever the loop ends: the PR comes next, always, or work finished on the board never
- * reaches review on GitHub. At the round limit the open findings go in its description.
+ * What the agent is told wherever the loop has ended with nothing left to fix: the PR comes next, always, or
+ * work finished on the board never reaches review on GitHub.
  */
 export const REVIEW_DONE_NEXT =
-  "The review loop is done: open the pull request now, unless the user asked you not to, and link it with " +
-  "link (listing any findings still open in its description), then carry on.";
+  "The review loop is done: open the pull request now, listing any findings still open in its description, " +
+  "unless the user asked you not to; then link it and carry on.";
+
+/** The same for the round limit with blocking or major findings still open: fix what can be fixed first. */
+export const REVIEW_LIMIT_NEXT =
+  "That was the last allowed round, so don't start another: fix or wont_fix what's still open, then open the " +
+  "pull request, listing any findings still open in its description, unless the user asked you not to, and link it.";
+
+/** Step 4 of the loop and fix prompts, where the loop may still have rounds to run. */
+export const REVIEW_PR_STEP =
+  "When the loop ends (a clean round, or the round limit), always open the pull request, listing any findings " +
+  "still open in its description, unless the user asked you not to; then link it and carry on.";
 
 /** Short badge text for cards. */
 export function reviewBadgeLabel(summary: TaskReviewSummary): string {

@@ -3,6 +3,7 @@ import {
   FindingSeverity,
   FindingStatus,
   REVIEW_DONE_NEXT,
+  REVIEW_LIMIT_NEXT,
   reviewIsDone,
   reviewLoopInstructions,
   reviewWantsAnotherRound,
@@ -113,9 +114,11 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
           : "no findings";
         const task = services.tasks.summary(id);
         // Only the implementer opens the PR, but the reviewer's reply is how it learns the loop ended.
-        const ending = reviewIsDone(task.review)
-          ? " No further round is needed: add that the review loop is done and the implementing agent should open the pull request now, unless the user asked it not to, and link it."
-          : "";
+        const ending = !reviewIsDone(task.review)
+          ? ""
+          : task.review?.state === "stuck"
+            ? " No further round is allowed: add that the implementing agent should fix what it can, then open the pull request, listing the findings still open in its description, and link it."
+            : " No further round is needed: add that the review loop is done and the implementing agent should open the pull request now, unless the user asked it not to, and link it.";
         return textResult(
           `Recorded round ${review.round} on #${task.number}: ${tally}. ` +
             `Reply to the implementing agent with this tally; it reads the findings from the board.${ending}`,
@@ -154,9 +157,7 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
         let next: string;
         const stillOpen = `${gating} blocking/major finding${gating === 1 ? "" : "s"} still open.`;
         if (gating > 0) {
-          next = reviewIsDone(review)
-            ? `${stillOpen} That was the last allowed round, so don't start another. ${REVIEW_DONE_NEXT}`
-            : stillOpen;
+          next = reviewIsDone(review) ? `${stillOpen} ${REVIEW_LIMIT_NEXT}` : stillOpen;
         } else if (reviewWantsAnotherRound(review)) {
           next = `No blocking or major findings are open. Call start_review("#${task.number}") for the next round with a fresh reviewer.`;
         } else if (reviewIsDone(review)) {

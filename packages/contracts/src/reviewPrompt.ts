@@ -1,5 +1,5 @@
 import { BRAND } from "./brand.ts";
-import { REVIEW_DONE_NEXT, type ReviewSkillRef } from "./reviews.ts";
+import { REVIEW_PR_STEP, type ReviewSkillRef } from "./reviews.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 /**
@@ -106,7 +106,7 @@ export function reviewFixInstructions({
     cycleRound < maxRounds
       ? `3. Call start_review(${ref}) and follow what it returns: it runs the next round with a fresh reviewer, up to ${maxRounds} rounds.`
       : "3. That was the last review round: don't start another. Leave anything you can't fix open.",
-    `4. ${REVIEW_DONE_NEXT}`,
+    `4. ${REVIEW_PR_STEP}`,
   ].join("\n");
 }
 
@@ -123,7 +123,7 @@ export function reviewLoopInstructions(input: ReviewPromptInput): string {
     "1. Start a reviewer subagent with fresh context (Claude Code: the Agent tool; Copilot: a subagent) and give it the brief below. Wait for it to finish; it records its findings on the board.",
     `2. Call get_task(${ref}). Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).`,
     `3. If the round raised blocking or major findings, call start_review(${ref}) and repeat from step 1 with a new reviewer. Stop when a round comes back clean or after ${maxRounds} rounds.`,
-    `4. ${REVIEW_DONE_NEXT}`,
+    `4. ${REVIEW_PR_STEP}`,
     'If you can\'t start subagents, do the review yourself as a separate pass that follows the brief, and submit_review with actor "self-review".',
     "",
     "Reviewer brief:",
