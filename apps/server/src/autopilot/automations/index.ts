@@ -1,6 +1,7 @@
 import type { Automation } from "../types.ts";
 import { autoArchive } from "./autoArchive.ts";
 import { digest } from "./digest.ts";
+import { fixPrs } from "./fixPrs.ts";
 import { recurring } from "./recurring.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 import { startPlanned } from "./startPlanned.ts";
@@ -18,5 +19,6 @@ export const AUTOMATIONS: readonly Automation[] = [
   unstick,
   startPlanned,
   reviewPrs,
+  fixPrs,
   digest,
 ];

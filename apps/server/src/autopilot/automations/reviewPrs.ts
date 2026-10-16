@@ -60,7 +60,7 @@ type PrTarget = Pick<ReviewData, "host" | "repo" | "number">;
 const shortSha = (sha: string) => sha.slice(0, 7);
 
 /** The flag that names a GitHub Enterprise host to `gh`; github.com needs none. */
-const hostFlag = (pr: PrTarget) => (pr.host.toLowerCase() === "github.com" ? "" : ` --hostname ${pr.host}`);
+export const hostFlag = (pr: PrTarget) => (pr.host.toLowerCase() === "github.com" ? "" : ` --hostname ${pr.host}`);
 
 /** The PR's canonical URL: `gh pr` takes it for any repository and host, so it needs no `-R` and no guess at the cwd. */
 export const prUrl = (pr: PrTarget): string => `https://${pr.host}/${pr.repo}/pull/${pr.number}`;

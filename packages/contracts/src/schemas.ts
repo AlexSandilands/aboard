@@ -169,6 +169,32 @@ export type IssueSnapshot = z.infer<typeof IssueSnapshot>;
 export const MergeMethod = z.enum(["squash", "merge", "rebase"]);
 export type MergeMethod = z.infer<typeof MergeMethod>;
 
+/** A review on a pull request, as the poll last read it. */
+export const PrReviewInfo = z.object({
+  /** GitHub's databaseId, as Autopilot's review runs record it. */
+  id: z.number().int().nullable(),
+  author: z.string().nullable(),
+  state: z.enum(["approved", "changes_requested", "commented", "dismissed"]),
+  submittedAt: IsoDate.nullable(),
+  /** Written by the signed-in `gh` account, which is also the account Autopilot posts as. */
+  own: z.boolean(),
+  /** The author is an owner, member or collaborator of the repository. */
+  trusted: z.boolean(),
+});
+export type PrReviewInfo = z.infer<typeof PrReviewInfo>;
+
+/** An inline review comment on a thread that isn't resolved. No body: the snapshot only says who wrote what when. */
+export const PrReviewCommentInfo = z.object({
+  id: z.number().int(),
+  author: z.string().nullable(),
+  createdAt: IsoDate,
+  /** The review the comment was posted in (every inline comment is in one). */
+  reviewId: z.number().int().nullable(),
+  own: z.boolean(),
+  trusted: z.boolean(),
+});
+export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
+
 export const PrSnapshot = z.object({
   state: z.enum(["open", "draft", "merged", "closed"]),
   title: z.string(),
@@ -189,6 +215,10 @@ export const PrSnapshot = z.object({
   headOid: z.string().nullable().optional(),
   /** Whether the head branch is in another repository (a fork), so not on the base repo's `origin`. */
   isCrossRepository: z.boolean().optional(),
+  /** The newest reviews, oldest first. Optional, as below, so older snapshots still parse. */
+  reviews: z.array(PrReviewInfo).optional(),
+  /** Comments on the newest unresolved review threads, oldest first. */
+  reviewComments: z.array(PrReviewCommentInfo).optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 

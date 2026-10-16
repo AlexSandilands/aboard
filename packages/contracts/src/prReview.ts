@@ -10,6 +10,9 @@ import { FINDING_SEVERITIES, FindingSeverity, type SeverityCounts } from "./revi
 /** The automation's key, stored in settings and runs. */
 export const AUTOPILOT_REVIEW_PRS = "review_prs";
 
+/** The fix automation's key (docs/features/autopilot.md#fix-prs), which acts on the reviews' hand-off. */
+export const AUTOPILOT_FIX_PRS = "fix_prs";
+
 /** The first line of the review's summary, and so how a reader tells Autopilot's review from the user's own. */
 export const prReviewHeader = (): string => `🤖 ${BRAND.name} Autopilot review`;
 

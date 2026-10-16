@@ -9,6 +9,7 @@ import { z } from "zod";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { t3RunWorking } from "../threads.ts";
 import { defineAutomation, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
 
 export { AUTOPILOT_START_PLANNED };
@@ -91,16 +92,6 @@ function unattendedNote(skill: ReviewSkillRef): string {
   return lines.join("\n");
 }
 
-/** T3 thread statuses that mean an agent is at work: `waiting` is idle with subagents or monitors still going. */
-const BUSY_THREAD = new Set(["working", "waiting", "input", "approval"]);
-
-/**
- * How long a thread counts as working without a snapshot (just started, T3's poll hasn't seen it) or with one the poll
- * hasn't refreshed (T3 is gone, or the thread was deleted). Every live poll refreshes the snapshots of the threads it
- * sees, so a stale one means the board can't see the thread any more.
- */
-const UNSEEN_MS = 10 * 60_000;
-
 /**
  * How many agents Start planned started are still working. A headless run is a running run, which the engine counts
  * itself. A T3 run ends once its thread has started, so this counts the tasks (In Progress, In Review where the agent
@@ -122,16 +113,7 @@ export function workingAgents(services: Services, now: Date): number {
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");
-    if (!run || run.status === "running" || run.runner !== "t3" || !run.threadUrl) return false;
-    const thread = task.links.find((l) => l.kind === "t3_thread" && l.url === run.threadUrl);
-    if (thread?.kind !== "t3_thread") return false;
-    const { snapshot } = thread;
-    if (snapshot?.archived || snapshot?.settled) return false;
-    const endedAt = run.finishedAt ?? run.updatedAt;
-    const reported = snapshot && thread.syncedAt !== null && Date.parse(thread.syncedAt) >= Date.parse(endedAt);
-    const seenAt = reported ? thread.syncedAt! : endedAt;
-    if (at - Date.parse(seenAt) >= UNSEEN_MS) return false;
-    return reported ? BUSY_THREAD.has(snapshot.status) : true;
+    return run ? t3RunWorking(task, run, at) : false;
   }).length;
 }
 
