@@ -102,6 +102,7 @@ export function createPlans(
                 title: step.title,
                 status: step.status,
                 hasNotes: Boolean(step.notes?.trim()),
+                phaseDropped: phase.steps.every((s) => !kept.has(s.id)),
               },
             ],
       ),
@@ -113,7 +114,12 @@ export function createPlans(
     gate(task, stepCount);
     const deleted = deletionsOf(task.id, plan);
     if (opts?.protectStarted) {
-      const protectedSteps = deleted.filter((d) => d.status !== "todo" || d.hasNotes);
+      // A call that keeps some existing steps but drops a whole phase is a partial update (the #25 mistake),
+      // not a rewrite, so it is protected even when the dropped steps are untouched todos.
+      const keepsExisting = deleted.length < repos.plans.countSteps(task.id);
+      const protectedSteps = deleted.filter(
+        (d) => d.status !== "todo" || d.hasNotes || (keepsExisting && d.phaseDropped),
+      );
       if (protectedSteps.length > 0) throw wouldDelete(protectedSteps);
     }
     const now = nowIso();
@@ -209,7 +215,6 @@ export function createPlans(
       core.write(() => {
         // Resolve every reference first: a move early in the batch must not shift what a later `2.3` points to.
         const plan = phasesOf(taskId);
-        const phaseOf = new Map(plan.flatMap((p) => p.steps.map((s) => [s.id, p.id] as const)));
         const resolvePhase = (ref: string): string => {
           const trimmed = ref.trim();
           const found = /^\d+$/.test(trimmed) ? plan[Number(trimmed) - 1] : plan.find((p) => p.id === trimmed);
@@ -223,14 +228,14 @@ export function createPlans(
           const stepId = resolveIn(plan, taskId, step);
           const changes = Object.values(patch).some((v) => v !== undefined);
           if (!changes && !move) throw new AppError("VALIDATION", `Step ${step}: nothing to change.`);
-          let to: Parameters<PlansService["moveStep"]>[1] | undefined;
+          let to: { phaseId?: string; beforeId?: string; afterId?: string } | undefined;
           if (move) {
             if (move.before && move.after) {
               throw new AppError("VALIDATION", `Step ${step}: pass either before or after in move, not both.`);
             }
             const beforeId = move.before ? resolveIn(plan, taskId, move.before) : undefined;
             const afterId = move.after ? resolveIn(plan, taskId, move.after) : undefined;
-            const phaseId = move.phase ? resolvePhase(move.phase) : (phaseOf.get((beforeId ?? afterId)!) ?? undefined);
+            const phaseId = move.phase ? resolvePhase(move.phase) : undefined;
             if (!phaseId && !beforeId && !afterId) {
               throw new AppError("VALIDATION", `Step ${step}: move needs a phase, before or after.`);
             }
@@ -246,7 +251,13 @@ export function createPlans(
         for (const { phaseId, title } of renames) service.updatePhase(phaseId, { title }, actor);
         for (const { stepId, patch, to } of edits) {
           if (patch) service.updateStep(stepId, patch, actor);
-          if (to) service.moveStep(stepId, to, actor);
+          if (to) {
+            // With no phase given, the step joins the anchor's phase as it is now, so an anchor moved earlier in
+            // the batch is followed rather than rejected.
+            const anchorId = to.beforeId ?? to.afterId;
+            const phaseId = to.phaseId ?? (anchorId ? repos.plans.step(anchorId)?.phaseId : undefined);
+            service.moveStep(stepId, { ...to, ...(phaseId ? { phaseId } : {}) }, actor);
+          }
         }
       });
       return deps.detail(taskId);
@@ -379,13 +390,17 @@ const SHOWN_DELETIONS = 12;
 /** CONFLICT for a replace that would drop steps with progress or notes; says which, so the agent can see what it'd lose. */
 function wouldDelete(steps: PlanDeletion[]): AppError {
   const shown = steps.slice(0, SHOWN_DELETIONS).map((d) => {
-    const why = [...(d.status !== "todo" ? [d.status] : []), ...(d.hasNotes ? ["notes"] : [])].join(", ");
+    const why = [
+      ...(d.status !== "todo" ? [d.status] : []),
+      ...(d.hasNotes ? ["notes"] : []),
+      ...(d.status === "todo" && !d.hasNotes ? ["its whole phase is left out"] : []),
+    ].join(", ");
     return `${d.label} "${d.title}" (${why})`;
   });
   const more = steps.length - shown.length;
   return new AppError(
     "CONFLICT",
-    `This plan would delete ${steps.length} step(s) that have progress or notes: ${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}. ` +
+    `This plan would delete ${steps.length} step(s) that have progress or notes, or that sit in a phase it leaves out: ${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}. ` +
       "Steps and phases you leave out (or pass without their id) are deleted.",
     { steps },
   );

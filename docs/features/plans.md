@@ -41,12 +41,13 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
   - Anything without a matching id is new; anything omitted is deleted.
   - Positions are regenerated in input order. `context` updates the plan context only when given.
 - **The guard on `set_plan`.** Agents used it to update a few steps and wiped the rest of the plan, so the
-  MCP tool refuses with `CONFLICT` when the call would delete a step that isn't `todo` or has notes. The
-  error lists those steps and points to `update_plan`; `allowDeletes: true` overrides it. Steps that are
-  untouched `todo`s can still be dropped, so a first plan and a rewrite of an unstarted plan go through.
-  A markdown plan carries no ids, so replacing a started plan with one trips the guard too. The guard is
-  the service's `protectStarted` option; REST, the panel editor and `create_task` don't pass it, because
-  there someone is deliberately writing the whole plan.
+  MCP tool refuses with `CONFLICT` in two cases: the call would delete a step that isn't `todo` or has
+  notes, or it keeps some existing steps but drops a whole phase (a partial update, not a rewrite, even
+  when the dropped steps are untouched todos). The error lists those steps and points to `update_plan`;
+  `allowDeletes: true` overrides it. A first plan, and a rewrite that keeps no existing steps (a markdown
+  plan carries no ids) of a plan with no progress, go through; a markdown plan replacing a started plan
+  trips the guard. The guard is the service's `protectStarted` option; REST, the panel editor and
+  `create_task` don't pass it, because there someone is deliberately writing the whole plan.
 - **What was deleted.** A `set_plan` result that deleted steps says so (`Deleted 2 step(s): 1.1 a, 1.2 b.`),
   and the `plan_set` activity entry records the deleted `label title` strings, so a plan wiped by mistake
   can be rebuilt from the log.

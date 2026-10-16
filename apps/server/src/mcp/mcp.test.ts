@@ -198,13 +198,23 @@ describe("MCP endpoint", () => {
       expect(after).toContain("2.1 [ ] c");
     });
 
+    it("refuses a set_plan that passes only the current phase and would drop later phases", async () => {
+      await call("set_plan", { markdown });
+      const refused = await call("set_plan", { markdown: "## One\n- [x] a\n- [x] b\n" });
+      expect(refused.error).toBe(true);
+      expect(refused.body).toMatch(/^CONFLICT: /);
+      expect(refused.body).toContain('2.1 "c" (its whole phase is left out)');
+      expect(await planText()).toContain("2.2 [ ] d");
+    });
+
     it("lets set_plan delete started steps with allowDeletes and lists what went", async () => {
       await call("set_plan", { markdown });
       const result = await call("set_plan", { markdown: "## Two\n- [ ] c\n", allowDeletes: true });
       expect(result.error).toBe(false);
       expect(result.body).toContain("Deleted 4 step(s): 1.1 a, 1.2 b, 2.1 c, 2.2 d.");
       expect(await planText()).toContain("1.1 [ ] c");
-      expect((await call("get_task", {})).body).toContain("deleted");
+      // The activity log keeps every deleted title, uncut, so the plan can be rebuilt.
+      expect((await call("get_task", {})).body).toContain("deleted 4: 1.1 a, 1.2 b, 2.1 c, 2.2 d");
     });
 
     it("lets a first plan and a replace that only drops untouched steps through", async () => {

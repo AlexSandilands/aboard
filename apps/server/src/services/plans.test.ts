@@ -72,7 +72,7 @@ describe("plans", () => {
 
     // b is untouched (todo, no notes), so dropping it is fine.
     expect(s.plans.deletionsOf(task.id, keepA)).toEqual([
-      { label: "1.2", title: "b", status: "todo", hasNotes: false },
+      { label: "1.2", title: "b", status: "todo", hasNotes: false, phaseDropped: false },
     ]);
     s.plans.setPlan(task.id, keepA, "agent", { protectStarted: true });
     expect(s.tasks.detail(task.id).events.at(-1)).toMatchObject({
@@ -89,6 +89,34 @@ describe("plans", () => {
     // Without the option (REST, create_task) the replace goes through.
     s.plans.setPlan(task.id, replaceAll, "user");
     expect(s.tasks.detail(task.id).phases.map((p) => p.title)).toEqual(["Other"]);
+  });
+
+  it("setPlan with protectStarted refuses a partial update that drops whole phases of untouched steps", () => {
+    const { s, task } = setup();
+    const second = s.plans.addPhase(task.id, "Two", "agent");
+    s.plans.addSteps(second.id, [{ title: "c" }], "agent");
+    const [a, b] = s.tasks.detail(task.id).phases[0]!.steps;
+    const onlyPhaseOne = {
+      phases: [
+        {
+          id: task.phases[0]!.id,
+          title: "One",
+          steps: [
+            { id: a!.id, title: "a" },
+            { id: b!.id, title: "b" },
+          ],
+        },
+      ],
+    };
+    const refused = () => s.plans.setPlan(task.id, onlyPhaseOne, "agent", { protectStarted: true });
+    expect(codeOf(refused)).toBe("CONFLICT");
+    expect(s.tasks.detail(task.id).phases.map((p) => p.title)).toEqual(["One", "Two"]);
+
+    // Replacing everything with new steps (keeping none) is a rewrite, not a partial update.
+    s.plans.setPlan(task.id, { phases: [{ title: "Fresh", steps: [{ title: "x" }] }] }, "agent", {
+      protectStarted: true,
+    });
+    expect(s.tasks.detail(task.id).phases.map((p) => p.title)).toEqual(["Fresh"]);
   });
 
   it("setPlan with protectStarted also protects todo steps that have notes", () => {
@@ -197,6 +225,21 @@ describe("plans", () => {
       );
       expect(titles()).toEqual([["b"], ["c renamed", "d", "a"]]);
       expect(s.tasks.detail(task.id).phases[0]!.steps[0]).toMatchObject({ title: "b", status: "done" });
+    });
+
+    it("follows an anchor that was moved earlier in the same call", () => {
+      const { s, task, titles } = setupBig();
+      s.plans.updatePlan(
+        task.id,
+        {
+          steps: [
+            { step: "1.1", move: { phase: "2" } },
+            { step: "1.2", move: { before: "1.1" } },
+          ],
+        },
+        "agent",
+      );
+      expect(titles()).toEqual([[], ["c", "d", "b", "a"]]);
     });
 
     it("moves a step within a phase and next to a step in another phase", () => {

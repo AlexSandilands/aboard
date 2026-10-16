@@ -30,8 +30,9 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
         "steps, rename phases), update_step (one step) or add_steps (append). Use set_plan to write the first plan or " +
         "to deliberately rewrite one: give structured `phases` or a `markdown` checklist, plus optional `context` " +
         "(approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. When rewriting, pass " +
-        "the phase/step ids from get_task to keep their statuses and notes. If the call would delete steps that are " +
-        "done, in progress, blocked or have notes it is refused unless you pass `allowDeletes: true`. A task needs a " +
+        "the phase/step ids from get_task to keep their statuses and notes. A call that would delete steps with " +
+        "progress (any status but todo) or notes, or a whole phase while keeping other steps, is refused unless you " +
+        "pass `allowDeletes: true`. A task needs a " +
         "plan before it can leave Backlog. If the task has no labels, the result asks you to suggest some: propose " +
         "1-3 to the user and apply them with update_task once they agree.",
       inputSchema: {
@@ -41,7 +42,7 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
           .boolean()
           .optional()
           .describe(
-            "Set true to let this call delete steps that are started, done or have notes. Without it such a call is refused.",
+            "Set true to let this call delete steps with progress (any status but todo) or notes, or whole phases while keeping other steps. Without it such a call is refused.",
           ),
         actor: actorField,
       },

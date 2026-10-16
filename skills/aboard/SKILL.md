@@ -54,7 +54,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
    **`set_plan` replaces the whole plan.** Every phase or step you don't pass back with its id is deleted,
    with its status and notes. Use it to write a plan or deliberately rewrite one, never to update a few
-   steps. A call that would delete started, done or noted steps is refused with `CONFLICT` unless you pass
+   steps. A call that would delete steps with progress (any status but `todo`) or notes, or a whole phase while keeping
+   other steps, is refused with `CONFLICT` unless you pass
    `allowDeletes: true`; when it deletes anything, the result lists it.
 
 6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in

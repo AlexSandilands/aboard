@@ -117,11 +117,15 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     case "plan_set": {
       const steps = num(p.steps);
       const phases = num(p.phases);
+      const deleted = Array.isArray(p.deleted) ? p.deleted.filter((d): d is string => typeof d === "string") : [];
       return line(
         "plan",
         steps !== null && phases !== null
           ? `set the plan (${plural(phases, "phase")}, ${plural(steps, "step")})`
           : "set the plan",
+        deleted.length
+          ? `Deleted ${plural(deleted.length, "step")}:\n\n${deleted.map((d) => `- ${d}`).join("\n")}`
+          : null,
       );
     }
     case "phase_added":

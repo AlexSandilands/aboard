@@ -133,6 +133,8 @@ export interface PlanDeletion {
   title: string;
   status: StepStatus;
   hasNotes: boolean;
+  /** Every step of its phase is deleted too. */
+  phaseDropped: boolean;
 }
 
 /** In-place edits to a plan. Refs (`2.3` labels, step/phase ids, phase numbers) resolve against the plan before any edit. */
