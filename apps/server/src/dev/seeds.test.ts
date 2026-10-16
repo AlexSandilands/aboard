@@ -92,7 +92,7 @@ describe("seed scenarios", () => {
     const { details } = seeded("threads");
     const sessions = details.flatMap((t) => t.links.filter((l) => l.kind === "agent_session"));
     expect(sessions.map((l) => (l.kind === "agent_session" ? (l.snapshot?.status ?? null) : null))).toEqual(
-      expect.arrayContaining(["busy", "idle", "not_running", "running", null]),
+      expect.arrayContaining(["busy", "idle", "not_running", "running", "finished", "failed", null]),
     );
     const withThread = details.find((t) => t.title === "Session inside a T3 thread");
     expect(withThread?.links.map((l) => l.kind).sort()).toEqual(["agent_session", "t3_thread"]);

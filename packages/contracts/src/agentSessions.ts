@@ -38,14 +38,17 @@ export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 /**
  * Whether the session's process is alive, read from the harness's own files. busy and idle are Claude Code's;
  * Copilot CLI only says whether it is running. unknown: the files weren't where or what we expected.
+ * finished and failed are only for sessions Autopilot ran: they come from the run, not the files.
  */
-export const AgentSessionStatus = z.enum(["busy", "idle", "running", "not_running", "unknown"]);
+export const AgentSessionStatus = z.enum(["busy", "idle", "running", "not_running", "unknown", "finished", "failed"]);
 export type AgentSessionStatus = z.infer<typeof AgentSessionStatus>;
 
 export const AgentSessionSnapshot = z.object({
   status: AgentSessionStatus,
   /** Running inside an app on the Agent SDK (T3 Code) rather than in a terminal. */
   inApp: z.boolean(),
+  /** When an Autopilot run's session ended (finished or failed). */
+  endedAt: z.string().optional(),
 });
 export type AgentSessionSnapshot = z.infer<typeof AgentSessionSnapshot>;
 

@@ -34,7 +34,12 @@ import { useState, type ReactNode } from "react";
 
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
 import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
-import { folderName, sessionStatusPresentation, type SessionLink } from "~/components/sessions/sessions.logic";
+import {
+  folderName,
+  isSettledSession,
+  sessionStatusPresentation,
+  type SessionLink,
+} from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
@@ -497,7 +502,7 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
   const status = sessionStatusPresentation(link.snapshot);
   const harness = AGENT_HARNESSES[link.ref.harness].label;
   return (
-    <PanelSplitGroup className={cn(link.snapshot?.status === "not_running" && "opacity-80 hover:opacity-100")}>
+    <PanelSplitGroup className={cn(isSettledSession(link.snapshot) && "opacity-80 hover:opacity-100")}>
       <PanelControl
         part="primary"
         title={`Open in a terminal: ${harness} session ${link.ref.sessionId} in ${link.ref.cwd}`}
@@ -511,7 +516,7 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
         </span>
         <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
           <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
-          {link.snapshot?.inApp && link.snapshot.status !== "not_running" ? `${status.label} in T3` : status.label}
+          {link.snapshot?.inApp && !isSettledSession(link.snapshot) ? `${status.label} in T3` : status.label}
         </span>
       </PanelControl>
       <PanelSplitSeparator />
