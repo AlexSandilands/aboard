@@ -9,7 +9,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (GitHub, T3 Code, review watchdog) ──► services/*
+ pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
 ```
 
 ## Packages
@@ -90,8 +90,8 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 `CODE: message` as an error result, sometimes with a hint.
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
-`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`
-and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
+`labels.colors_changed` and `autopilot.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -119,6 +119,8 @@ ORM.
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
+| `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
+| `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
@@ -146,6 +148,9 @@ on independent timers:
   [issue-import.md](features/issue-import.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
+- **Autopilot:** a rule engine in `apps/server/src/autopilot/`, passing over the board after board events and
+  every 60 seconds, and acting where an automation is switched on ([ADR 0008](decisions/0008-autopilot-engine.md),
+  [autopilot.md](features/autopilot.md)). Runs a restart left going are failed at startup, pollers or not.
 
 ## Testing
 

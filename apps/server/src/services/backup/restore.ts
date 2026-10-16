@@ -14,6 +14,8 @@ const TABLES = [
   "counters",
   "task_relations",
   "tasks",
+  // After tasks: an epic scope points at one.
+  "autopilot_settings",
   ...TASK_BUNDLE_TABLES,
   "task_events",
 ] as const;
@@ -26,6 +28,7 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   counters: dump.counters,
   task_relations: dump.task_relations,
   tasks: dump.tasks.map((b) => b.task),
+  autopilot_settings: dump.autopilot_settings,
   plan_phases: dump.tasks.flatMap((b) => b.plan_phases),
   plan_steps: dump.tasks.flatMap((b) => b.plan_steps),
   task_links: dump.tasks.flatMap((b) => b.task_links),

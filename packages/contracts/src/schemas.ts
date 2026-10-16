@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
@@ -244,6 +245,7 @@ export const AttentionReason = z.object({
     "review_failed",
     "review_unattended",
     "import_failed",
+    "autopilot",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
@@ -379,6 +381,7 @@ export const BoardSnapshot = z.object({
   /** Label colour overrides by label; labels not listed take a hue hashed from their name. */
   labelColors: z.record(z.string(), LabelHue),
   integrations: z.object({ t3: T3IntegrationStatus }),
+  autopilot: AutopilotStatus,
 });
 export type BoardSnapshot = z.infer<typeof BoardSnapshot>;
 
@@ -391,6 +394,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("integrations.changed"), t3: T3IntegrationStatus }),
   /** Label colours are board-wide, so a change is sent whole rather than per task. */
   z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
+  /** A run started or finished, or Autopilot settings or pause changed. Sent whole: it is small and board-wide. */
+  z.object({ type: z.literal("autopilot.changed"), autopilot: AutopilotStatus }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 

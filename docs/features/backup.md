@@ -23,6 +23,7 @@ projects.json
 labels.json          label colour overrides
 relations.json       blocks / blocked-by pairs
 counters.json
+autopilot.json       Autopilot switches and config per scope (optional: older dumps have none)
 tasks/2026-10/task-42.json   one task with its phases, steps, links, labels, reviews and findings
 events/2026-10.json          the activity log for the month the events happened
 ```
@@ -42,7 +43,9 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
 - **Settings** are exported from an allow-list (`EXPORTED_SETTINGS` in `apps/server/src/services/settings.ts`).
   The T3 token and the backup settings themselves (they describe this machine) stay out, and so does any key
   nobody has added to the list. A test fails when a new setting is in neither the allow-list nor the
-  machine-only list.
+  machine-only list. Autopilot's engine settings (`autopilotEngine`) are exported;
+  its pause (`autopilotPaused`) isn't, so restoring a backup can't lift Pause all.
+- **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)).
 - **A link's `snapshot_json` and `synced_at`** are the GitHub and T3 pollers' cache, rewritten on every poll.
   Dumping them would make every scheduled run a commit; the pollers refill them after a restore.
 

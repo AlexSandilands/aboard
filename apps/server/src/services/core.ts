@@ -4,6 +4,7 @@ import type { EventBus } from "../bus.ts";
 import { nowIso, transaction, type Db } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
+import { loadAutopilotStatus } from "./autopilot.ts";
 import { assembleSummaries } from "./summaries.ts";
 
 /** Change notes collected during a write; turned into BoardEvents after commit. */
@@ -17,6 +18,8 @@ export interface Effects {
   taskDeleted(id: string): void;
   /** Label colour overrides changed (publishes labels.colors_changed). */
   labelColors(): void;
+  /** Autopilot runs, settings or pause changed (publishes autopilot.changed). */
+  autopilot(): void;
   /** Appends a task_events row and marks the task's card changed. */
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
 }
@@ -28,6 +31,7 @@ interface Pending {
   deletedProjects: Set<string>;
   deletedTasks: Set<string>;
   labelColors: boolean;
+  autopilot: boolean;
 }
 
 export interface Core {
@@ -55,6 +59,9 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
     taskDeleted: (id) => p.deletedTasks.add(id),
     labelColors: () => {
       p.labelColors = true;
+    },
+    autopilot: () => {
+      p.autopilot = true;
     },
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
@@ -88,6 +95,7 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
       if (!p.tasks.has(taskId) && !p.deletedTasks.has(taskId)) events.push({ type: "task.detail_changed", taskId });
     }
     if (p.labelColors) events.push({ type: "labels.colors_changed", labelColors: repos.labels.colors() });
+    if (p.autopilot) events.push({ type: "autopilot.changed", autopilot: loadAutopilotStatus(repos) });
     for (const event of events) bus.publish(event);
   };
 
@@ -105,6 +113,7 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
         deletedProjects: new Set(),
         deletedTasks: new Set(),
         labelColors: false,
+        autopilot: false,
       };
       pending = p;
       let result: T;

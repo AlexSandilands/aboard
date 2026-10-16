@@ -1,4 +1,6 @@
 import type { Db } from "../database.ts";
+import { createAutopilotRunsRepo } from "./autopilotRuns.ts";
+import { createAutopilotSettingsRepo } from "./autopilotSettings.ts";
 import { createEventsRepo } from "./events.ts";
 import { createImportsRepo } from "./imports.ts";
 import { createLabelsRepo } from "./labels.ts";
@@ -25,6 +27,8 @@ export function createRepos(db: Db) {
     relations: createRelationsRepo(sql),
     reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
+    autopilotSettings: createAutopilotSettingsRepo(sql),
+    autopilotRuns: createAutopilotRunsRepo(sql),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

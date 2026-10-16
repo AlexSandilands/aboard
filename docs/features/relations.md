@@ -110,7 +110,7 @@ Starting blocked tasks automatically is the autopilot's job and reads `blocked`;
 
 | File                                                   | What it does                                                            |
 | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `apps/server/src/db/migrations/010_task_relations.sql` | The table                                                               |
+| `apps/server/src/db/migrations/011_task_relations.sql` | The table                                                               |
 | `apps/server/src/db/repos/relations.ts`                | Rows, neighbours and `path` (the cycle check)                           |
 | `apps/server/src/services/relations.ts`                | Add and remove with cycle detection, activity on both tasks             |
 | `apps/server/src/services/summaries.ts`, `core.ts`     | `blockedBy`, `blocks`, `blocked`; neighbours refreshed on publish       |
