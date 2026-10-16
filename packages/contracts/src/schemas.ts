@@ -3,6 +3,7 @@ import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
+import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -342,6 +343,8 @@ export const TaskSummary = z.object({
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
+  /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
+  autopilot: z.boolean().nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */
@@ -396,6 +399,18 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
   /** A run started or finished, or Autopilot settings or pause changed. Sent whole: it is small and board-wide. */
   z.object({ type: z.literal("autopilot.changed"), autopilot: AutopilotStatus }),
+  /**
+   * Something worth the user's attention happened. `unread` counts every unread notification; `popup` is false when
+   * quiet hours keep it to the inbox. The window shows the OS notification and badge from this.
+   */
+  z.object({
+    type: z.literal("notification.created"),
+    notification: InboxNotification,
+    unread: z.number(),
+    popup: z.boolean(),
+  }),
+  /** Notifications were read or removed (their task was deleted); the inbox refetches. */
+  z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -470,6 +485,8 @@ export const CreateTaskInput = z
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
+    /** The Autopilot flag: null or omitted is Default. */
+    autopilot: z.boolean().nullable().optional(),
     /** Tasks that block this one (uuid, "#42" or "42"). */
     blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
@@ -477,10 +494,20 @@ export const CreateTaskInput = z
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
      */
     sourceUrl: z.string().trim().min(1).optional(),
+    /**
+     * A template (id or name) to start from. Its title pattern, description, labels and plan fill in whatever the
+     * other fields leave out; fields given here win. See templates.ts.
+     */
+    template: z.string().trim().min(1).optional(),
+    /**
+     * Where the task lands. Defaults to "planned" when a plan is given and to "backlog" otherwise, so a template's
+     * plan is copied into a Backlog task unless "planned" is asked for.
+     */
+    status: z.enum(["backlog", "planned"]).optional(),
     actor: z.string().optional(),
   })
-  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined, {
-    message: "Provide a title or a sourceUrl",
+  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined || input.template !== undefined, {
+    message: "Provide a title, a sourceUrl or a template",
     path: ["title"],
   })
   .refine((input) => input.sourceUrl === undefined || input.plan === undefined, {
@@ -498,6 +525,8 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
+  /** null is Default: Start planned tasks never starts the task. */
+  autopilot: z.boolean().nullable().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
   /** null clears it. */
@@ -576,6 +605,8 @@ export const AppSettings = z
     issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Which notifications are recorded, and whether quiet hours silence their popups. */
+    notifications: NotificationSettings,
   })
   .extend(BackupSettings.shape);
 
@@ -598,6 +629,8 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  /** Merges into the notification settings: kinds left out keep their switch. */
+  notifications: UpdateNotificationSettingsInput.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

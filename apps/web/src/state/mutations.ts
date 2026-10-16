@@ -9,9 +9,12 @@ import type {
   BoardSnapshot,
   CloseTaskInput,
   CreateTaskInput,
+  CreateTemplateInput,
   LinkInput,
   MergePrInput,
   MoveTaskInput,
+  InboxNotification,
+  NotificationList,
   PlanInput,
   PlanPhase,
   PlanStep,
@@ -28,9 +31,11 @@ import type {
   TaskSummary,
   UpdateAutopilotEngineInput,
   UpdateAutopilotSettingInput,
+  TaskTemplate,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
+  UpdateTemplateInput,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -53,9 +58,14 @@ export interface MutationOpts {
   silent?: boolean;
 }
 
-function useApiMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, opts?: MutationOpts) {
+function useApiMutation<TVars, TResult>(
+  fn: (vars: TVars) => Promise<TResult>,
+  opts?: MutationOpts,
+  onSuccess?: () => void,
+) {
   return useMutation({
     mutationFn: fn,
+    onSuccess,
     onError: (error) => {
       if (opts?.silent) return;
       toastManager.add({
@@ -101,6 +111,30 @@ export const useUpdateTask = (opts?: MutationOpts) =>
       api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
     opts,
   );
+// ── Templates ───────────────────────────────────────────────────────────
+
+/** Templates aren't part of the board snapshot or its events (only the UI edits them), so each change refetches the list. */
+function useTemplateMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>, opts?: MutationOpts) {
+  const queryClient = useQueryClient();
+  return useApiMutation(fn, opts, () => void queryClient.invalidateQueries({ queryKey: queryKeys.templates }));
+}
+
+export const useCreateTemplate = (opts?: MutationOpts) =>
+  useTemplateMutation((input: CreateTemplateInput) => api<TaskTemplate>("/api/templates", { body: input }), opts);
+export const useUpdateTemplate = (opts?: MutationOpts) =>
+  useTemplateMutation(
+    ({ id, ...input }: UpdateTemplateInput & { id: string }) =>
+      api<TaskTemplate>(`/api/templates/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+export const useDuplicateTemplate = (opts?: MutationOpts) =>
+  useTemplateMutation(
+    (id: string) => api<TaskTemplate>(`/api/templates/${enc(id)}/duplicate`, { method: "POST", body: {} }),
+    opts,
+  );
+export const useDeleteTemplate = (opts?: MutationOpts) =>
+  useTemplateMutation((id: string) => api<void>(`/api/templates/${enc(id)}`, { method: "DELETE" }), opts);
+
 // ── Labels ───────────────────────────────────────────────────────────────
 
 /**
@@ -439,4 +473,18 @@ export function useSetAutopilotPaused() {
         description: error instanceof Error ? error.message : String(error),
       }),
   });
+}
+
+/** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
+export function useMarkNotificationRead() {
+  return useApiMutation(
+    (id: string) => api<InboxNotification>(`/api/notifications/${enc(id)}/read`, { method: "POST" }),
+    {
+      silent: true,
+    },
+  );
+}
+
+export function useMarkAllNotificationsRead() {
+  return useApiMutation(() => api<NotificationList>("/api/notifications/read-all", { method: "POST" }));
 }

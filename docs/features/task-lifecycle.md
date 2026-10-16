@@ -27,6 +27,10 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
 - A Jira key or URL, or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
   Backlog titled after the issue, and its details are filled in in the background
   ([issue import](issue-import.md)).
+- `add_to_backlog`, `create_task` and `POST /api/tasks` can set the task's Autopilot flag at creation; it
+  defaults to unset ([autopilot.md](autopilot.md#the-per-task-flag)).
+- A `template` (id or name) on `POST /api/tasks`, or on either MCP create tool: the template fills in what the
+  input leaves out, and the task lands in Backlog unless `status: "planned"` is asked for ([templates](templates.md)).
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
   keys in the title are linked automatically (on later title edits too).
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
@@ -75,7 +79,8 @@ The plan side of the gate (a plan can't be emptied outside Backlog) is in [plans
 
 Archive clears a card away without resolving it. `archived_at` is set and the position kept. Archived
 tasks drop out of the board and lists unless asked for (`includeArchived`, **Show archived**).
-Unarchiving puts the task at the end of its lane.
+Unarchiving puts the task at the end of its lane. The Autopilot **Auto-archive Done** automation can archive
+tasks that have sat in Done for N days (as the actor `autopilot`); see [autopilot.md](autopilot.md#automations).
 
 ### Deleting
 

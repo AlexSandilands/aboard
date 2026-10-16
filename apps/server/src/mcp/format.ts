@@ -11,6 +11,7 @@ import {
   type ReviewFinding,
   type Project,
   type TaskDetail,
+  type TaskTemplate,
   type TaskEvent,
   type TaskLink,
   type TaskRelation,
@@ -139,6 +140,21 @@ export function renderTaskGroups(tasks: ReadonlyArray<TaskSummary>, indent = "")
   return lines.join("\n");
 }
 
+/** One template for list_templates: name, scope, what it fills in, and its plan. */
+export function renderTemplate(template: TaskTemplate, project: Project | undefined): string {
+  const scope = template.projectId ? `project ${project?.title ?? "?"}` : "board-wide";
+  const lines = [`${template.name}  (${scope})`];
+  if (template.titlePattern) lines.push(`  title: ${template.titlePattern}`);
+  if (template.labels.length) lines.push(`  labels: ${template.labels.join(", ")}`);
+  const headline = template.description?.split("\n").find((line) => line.trim());
+  if (headline) lines.push(`  description: ${headline.slice(0, 80)}${headline.length > 80 ? "..." : ""}`);
+  if (template.suggestedTier) lines.push(`  suggested model: ${template.suggestedTier}`);
+  for (const phase of template.phases) {
+    lines.push(`  plan: ${phase.title}: ${phase.steps.map((step) => step.title).join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
 export function eventText(event: TaskEvent): string {
   const p = event.payload;
   const str = (k: string) => (typeof p[k] === "string" ? p[k] : undefined);
@@ -198,6 +214,7 @@ export function eventText(event: TaskEvent): string {
     case "created":
       what = `created ${p.kind === "epic" ? "the epic" : `in ${statusLabel((str("status") ?? "backlog") as TaskStatus)}`}`;
       if (typeof p.epic === "number") what += ` in epic #${p.epic}`;
+      if (str("template")) what += ` from template "${str("template")}"`;
       break;
     case "epic_changed": {
       const num = (k: string) => (typeof p[k] === "number" ? `#${p[k]}` : null);
@@ -309,6 +326,21 @@ export function suggestedModelHint(task: TaskDetail): string | null {
   );
 }
 
+/**
+ * A nudge, at planning moments, to ask the user whether to flag a planned task for Autopilot. Only worth saying when
+ * Start planned tasks is on for the task's scope, since the flag does nothing otherwise. The agent must ask: the
+ * flag lets the board start an agent on the task unattended, so it is the user's call.
+ */
+export function autopilotFlagHint(task: TaskDetail): string | null {
+  if (task.autopilot !== null || task.kind === "epic" || task.progress.total === 0) return null;
+  if (task.resolution || task.archivedAt || (task.status !== "backlog" && task.status !== "planned")) return null;
+  return (
+    "Autopilot's Start planned tasks is on for this task's project, and only starts tasks flagged for Autopilot. " +
+    "Ask the user whether to flag this one, and never set it without their answer. Once they decide, call " +
+    `update_task(task: "#${task.number}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
+  );
+}
+
 function findingLine(f: ReviewFinding): string {
   const where = f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : "";
   const resolution = f.status === "open" ? "" : ` -> ${f.status}${f.resolutionNote ? `: ${f.resolutionNote}` : ""}`;
@@ -405,6 +437,8 @@ export function renderTaskDetail(
     events?: number;
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
+    autopilotHint?: boolean;
     /** For an epic: each child's newest activity, shown in its overview. */
     childActivity?: ChildActivity;
   } = {},
@@ -420,6 +454,7 @@ export function renderTaskDetail(
     const { tier, reason } = task.suggestedModel;
     lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
   }
+  if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;
@@ -488,6 +523,8 @@ export function renderTaskDetail(
   if (labels) lines.push("", "Missing labels:", `- ${labels}`);
   const model = opts.modelHint ? suggestedModelHint(task) : null;
   if (model) lines.push("", "Missing suggested model:", `- ${model}`);
+  const autopilot = opts.autopilotHint ? autopilotFlagHint(task) : null;
+  if (autopilot) lines.push("", "Autopilot flag not set:", `- ${autopilot}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -502,7 +539,7 @@ export function renderTaskDetail(
 export function renderTaskShort(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean } = {},
+  opts: { labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean; autopilotHint?: boolean } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });
 }

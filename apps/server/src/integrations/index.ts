@@ -38,6 +38,8 @@ export interface IntegrationOverrides {
   autopilotRunner?: Runner;
   /** Replaces the Autopilot catalogue (read by the services, see createContext). */
   automations?: readonly Automation[];
+  /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
+  now?: () => Date;
   log?: Logger;
 }
 

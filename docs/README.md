@@ -38,18 +38,21 @@ files under each app.
 ### Guides
 
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
+- [Templates](guide/templates.md): Bug, Spike, Feature and your own starting points for tasks
 - [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop
 - [Autopilot](guide/autopilot.md): switching automations on, limits, pausing
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
+- [Notifications](guide/notifications.md): the inbox, pop-ups, taskbar badge and what you're told about
 
 ### Features
 
 - [Task lifecycle](features/task-lifecycle.md): statuses, the plan gate, closing, archiving, deleting, numbering
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
 - [Epics](features/epics.md): grouping a feature's tasks, derived status, bands on the board
+- [Templates](features/templates.md): starting points for tasks: title pattern, labels, plan, per project or board-wide
 - [Task relations](features/relations.md): blocks / blocked by, the card lock, dependency lines
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
@@ -60,6 +63,7 @@ files under each app.
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
+- [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges
 - [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
 

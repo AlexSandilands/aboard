@@ -91,7 +91,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed` and `autopilot.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created` and `notifications.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -113,6 +113,7 @@ ORM.
 | `task_links`      | PR, Jira, GitHub issue, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
+| `task_templates`  | Starting points for new tasks, board-wide or per project; `tasks.template_id` records which one a task came from ([templates](features/templates.md)) |
 | `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
@@ -121,6 +122,7 @@ ORM.
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
+| `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
@@ -130,7 +132,8 @@ status, derived from its tasks but stored so lists and filters treat it like any
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
-[local review](features/local-review.md), [labels](features/labels.md), [relations](features/relations.md), [issue import](features/issue-import.md).
+[local review](features/local-review.md), [labels](features/labels.md), [relations](features/relations.md), [issue import](features/issue-import.md),
+[templates](features/templates.md).
 
 ## Integrations
 

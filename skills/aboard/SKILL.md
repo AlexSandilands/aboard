@@ -44,6 +44,15 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
    before calling `update_task`.
 
+   **Templates.** The user keeps task templates (Bug, Spike and Feature to start with, plus their own),
+   each a starting point with a description, labels and a plan. `list_templates` (with `workspacePath`) shows
+   them. Pass `template: "Bug"` to `add_to_backlog` or `create_task` to start from one: what you leave out
+   is filled in from it (the title too, when it has a title pattern), what you pass wins, and labels you pass
+   replace its labels. `add_to_backlog` keeps the task in Backlog with the template's plan copied in;
+   `create_task` needs no plan of its own when the template has one, and lands in Planned. Use a template
+   when one clearly fits the work; don't make one up. You can't create or edit templates; the user does that
+   in Settings.
+
    When you write the plan, also set `suggestedModel` on `set_plan` / `create_task`: the tier the session
    that implements it needs, with a one-line `reason`. The user maps each tier to a model, and hand-offs
    from the board start on (or remind the user to switch to) that model.
@@ -53,6 +62,12 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
    Change it later with `update_task` (`null` clears it). A suggestion is advice to the user: keep working on
    whatever model you are on.
+
+   Autopilot can start Planned tasks by itself, but only the ones flagged for it. When Start planned tasks is
+   on for the task's project, the `set_plan` / `create_task` result says **Autopilot flag not set**: ask the
+   user whether to flag the task, and once they answer call `update_task` with `autopilot: "on"` or `"off"`
+   (`"default"` clears it). Never set the flag on your own, since it lets an agent start on the task unattended.
+   You can flag tasks, but you can't change Autopilot's own settings: only the user can.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before

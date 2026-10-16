@@ -5,12 +5,14 @@ import { createEventsRepo } from "./events.ts";
 import { createImportsRepo } from "./imports.ts";
 import { createLabelsRepo } from "./labels.ts";
 import { createLinksRepo } from "./links.ts";
+import { createNotificationsRepo } from "./notifications.ts";
 import { createPlansRepo } from "./plans.ts";
 import { createProjectsRepo } from "./projects.ts";
 import { createRelationsRepo } from "./relations.ts";
 import { createReviewsRepo } from "./reviews.ts";
 import { createSettingsRepo } from "./settings.ts";
 import { createSql } from "./sql.ts";
+import { createTemplatesRepo } from "./templates.ts";
 import { createTasksRepo } from "./tasks.ts";
 
 /** All table repositories over one database. */
@@ -27,8 +29,10 @@ export function createRepos(db: Db) {
     relations: createRelationsRepo(sql),
     reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
+    templates: createTemplatesRepo(sql),
     autopilotSettings: createAutopilotSettingsRepo(sql),
     autopilotRuns: createAutopilotRunsRepo(sql),
+    notifications: createNotificationsRepo(sql),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

@@ -4,6 +4,7 @@ import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { NotificationsBell } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
@@ -84,6 +85,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
         <PauseAllButton />
+        <NotificationsBell />
         <Menu>
           <Tooltip>
             <TooltipTrigger

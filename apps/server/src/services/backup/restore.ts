@@ -12,6 +12,7 @@ const TABLES = [
   "projects",
   "label_colors",
   "counters",
+  "task_templates",
   "task_relations",
   "tasks",
   // After tasks: an epic scope points at one.
@@ -26,6 +27,7 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   projects: dump.projects,
   label_colors: dump.label_colors,
   counters: dump.counters,
+  task_templates: dump.task_templates,
   task_relations: dump.task_relations,
   tasks: dump.tasks.map((b) => b.task),
   autopilot_settings: dump.autopilot_settings,

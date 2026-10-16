@@ -13,4 +13,6 @@ export * from "./handoff.ts";
 export * from "./t3Launch.ts";
 export * from "./modelTiers.ts";
 export * from "./backup.ts";
+export * from "./templates.ts";
 export * from "./autopilot.ts";
+export * from "./notifications.ts";

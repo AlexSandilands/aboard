@@ -9,6 +9,13 @@ export const AUTOPILOT_TICK_MS = 60_000;
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
 export const AUTOPILOT_DEBOUNCE_MS = 1_000;
 
+const IGNORED_EVENTS: ReadonlySet<string> = new Set([
+  "task.detail_changed",
+  "labels.colors_changed",
+  "notification.created",
+  "notifications.changed",
+]);
+
 export interface AutopilotEngine {
   /** One pass over every automation; resolves when the pass is done (agent runs it started may still be going). */
   pass(): Promise<void>;
@@ -216,7 +223,8 @@ export function createAutopilotEngine(deps: {
     start() {
       if (unsubscribe) return;
       unsubscribe = deps.bus.subscribe((event) => {
-        if (own > 0 || event.type === "task.detail_changed" || event.type === "labels.colors_changed") return;
+        // Notifications are the board telling the user something, not a change an automation could act on.
+        if (own > 0 || IGNORED_EVENTS.has(event.type)) return;
         schedule();
       });
       timer = setInterval(() => void pass(), deps.tickMs ?? AUTOPILOT_TICK_MS);
