@@ -122,7 +122,7 @@ describe("templates over MCP", () => {
     h.services.templates.create({ name: "Notes", description: "Just text" });
     const planless = await call(agent, "create_task", { title: "No steps", workspacePath, template: "Notes" });
     expect(planless.isError).toBe(true);
-    expect(planless.text).toContain("needs a plan");
+    expect(planless.text).toContain("has no plan");
   });
 
   it("doesn't create a project when the template isn't found", async () => {
@@ -131,6 +131,13 @@ describe("templates over MCP", () => {
     expect(h.services.projects.list().map((p) => p.title)).toEqual(["Alpha"]);
     const planned = await call(agent, "create_task", { title: "x", workspacePath: "/work/new", template: "Nope" });
     expect(planned.isError).toBe(true);
+    expect(h.services.projects.list()).toHaveLength(1);
+    // Nor when the call would be refused for a missing title or plan.
+    const untitled = await call(agent, "add_to_backlog", { workspacePath: "/work/new", template: "Bug" });
+    expect(untitled.isError).toBe(true);
+    h.services.templates.create({ name: "Notes", description: "Just text" });
+    const planless = await call(agent, "create_task", { title: "x", workspacePath: "/work/new", template: "Notes" });
+    expect(planless.isError).toBe(true);
     expect(h.services.projects.list()).toHaveLength(1);
     const ok = await call(agent, "add_to_backlog", { title: "x", workspacePath: "/work/new", template: "Bug" });
     expect(ok.isError).toBe(false);

@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { CloseTaskInput, TaskResolution, TaskStatusInput, type LinkInput, type T3ThreadRef } from "@repo/contracts";
+import {
+  CloseTaskInput,
+  TaskResolution,
+  templateHasPlan,
+  TaskStatusInput,
+  type LinkInput,
+  type T3ThreadRef,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
 import { resolutionText, statusLabel } from "../format.ts";
@@ -42,11 +49,32 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
 
 /**
  * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
- * that doesn't exist yet has no templates of its own, only the board-wide ones.
+ * that doesn't exist yet has no templates of its own, only the board-wide ones. Also checks what the service would
+ * refuse later (no title anywhere, or a planned task with no plan), for the same reason.
  */
-function templateFor(services: Services, args: ProjectRefArgs & { template?: string | undefined }) {
-  if (!args.template) return null;
-  return services.templates.resolve(args.template, findProject(services, args)?.id ?? "");
+function templateFor(
+  services: Services,
+  args: ProjectRefArgs & { template?: string | undefined; title?: string | undefined },
+  opts: { needsPlan?: boolean; hasPlan?: boolean } = {},
+) {
+  const template = args.template
+    ? services.templates.resolve(args.template, findProject(services, args)?.id ?? "")
+    : null;
+  if (!args.title && !template?.titlePattern) {
+    throw new AppError(
+      "VALIDATION",
+      template ? `Pass a title: template "${template.name}" has no title pattern.` : "Pass a title.",
+    );
+  }
+  if (opts.needsPlan && !opts.hasPlan && !(template && templateHasPlan(template))) {
+    throw new AppError(
+      "VALIDATION",
+      template
+        ? `Template "${template.name}" has no plan; pass a plan (phases or markdown), or use add_to_backlog.`
+        : "create_task needs a plan (phases or markdown), or a template that has one. Use add_to_backlog for unplanned work.",
+    );
+  }
+  return template;
 }
 
 /**
@@ -144,13 +172,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       run(() => {
         requireProjectRef(args);
         const plan = planFromArgs(args);
-        if (!plan && !args.template) {
-          throw new AppError(
-            "VALIDATION",
-            "create_task needs a plan (phases or markdown), or a template that has one. Use add_to_backlog for unplanned work.",
-          );
-        }
-        const template = templateFor(services, args);
+        const template = templateFor(services, args, { needsPlan: true, hasPlan: plan !== null });
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
         const links = linkInputs(args);
         const task = services.tasks.create({
