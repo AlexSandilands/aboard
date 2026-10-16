@@ -102,7 +102,7 @@ Merging is UI only: there's no MCP tool for it.
 
 When a task in Review has every polled PR finished and at least one merged, it moves to Done as actor
 `github`. This happens when a poll (or a merge) sees the last PR finish, and when a task enters Review
-with its PRs already finished. PRs that aren't polled (other sites, or GitHub hosts `gh` isn't signed in
+with its PRs already finished. PRs that aren't polled and were never fetched (other sites, or GitHub hosts `gh` isn't signed in
 to) never hold it back, except on github.com, which always counts (`holdsTasks`): while `gh`'s status is
 still unknown, one merge mustn't finish a task whose other PR is open.
 

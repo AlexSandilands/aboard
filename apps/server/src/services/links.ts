@@ -54,10 +54,11 @@ const isFinished = (state: PrSnapshot["state"] | null | undefined): boolean => s
 
 /**
  * A task's polled PRs. Links without a ref, or on a host that isn't polled (not GitHub, or `gh` isn't
- * signed in to it), are never fetched, so they can't hold a task back.
+ * signed in to it), are never fetched, so they can't hold a task back. One fetched before still counts,
+ * so a sign-in check that fails for a moment can't let its open PR be skipped.
  */
 const polledPrs = (links: readonly TaskLink[], polls: (host: string) => boolean): PolledPr[] =>
-  links.filter((l): l is PolledPr => l.kind === "pr" && l.ref !== null && polls(l.ref.host));
+  links.filter((l): l is PolledPr => l.kind === "pr" && l.ref !== null && (l.snapshot !== null || polls(l.ref.host)));
 
 /**
  * True when a task's pull requests are done with: every polled PR is merged or closed, and at least one merged.
