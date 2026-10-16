@@ -91,30 +91,44 @@ function unattendedNote(skill: ReviewSkillRef): string {
   return lines.join("\n");
 }
 
-/** T3 thread statuses that mean an agent is at work (or waiting on the user, who hasn't released it). */
-const BUSY_THREAD = new Set(["working", "input", "approval"]);
+/** T3 thread statuses that mean an agent is at work: `waiting` is idle with subagents or monitors still going. */
+const BUSY_THREAD = new Set(["working", "waiting", "input", "approval"]);
 
-/** How long a thread no snapshot has reported on yet still counts as working: T3's poll may not have seen it. */
+/**
+ * How long a thread counts as working without a snapshot (just started, T3's poll hasn't seen it) or with one the poll
+ * hasn't refreshed (T3 is gone, or the thread was deleted). Every live poll refreshes the snapshots of the threads it
+ * sees, so a stale one means the board can't see the thread any more.
+ */
 const UNSEEN_MS = 10 * 60_000;
 
 /**
  * How many agents Start planned started are still working. A headless run is a running run, which the engine counts
- * itself. A T3 run ends once its thread has started, so this counts the tasks whose latest Start planned run is a
- * T3 thread that is still busy: the task is In Progress and the thread is working or waiting on the user. A thread
- * the poll hasn't reported on yet counts for a few minutes. It frees its slot when the thread settles, idles or is
- * archived, or the task leaves In Progress.
+ * itself. A T3 run ends once its thread has started, so this counts the tasks (In Progress, or In Review, where the
+ * agent runs its review loop) whose latest Start planned run began a T3 thread that is still busy: working, waiting
+ * on subagents, or waiting on the user, and not settled or archived. A thread no snapshot has reported on, or that the
+ * poll stopped refreshing, counts for ten minutes. The slot frees when the thread idles, finishes, fails, settles or
+ * is archived, or the task leaves In Progress and Review. A run that failed at the grace period still counts: its
+ * thread may yet move the task.
  */
 export function workingAgents(services: Services, now: Date): number {
-  return services.tasks.summaries({ status: "in_progress" }).filter((task) => {
+  const at = now.getTime();
+  const open = [
+    ...services.tasks.summaries({ status: "in_progress" }),
+    ...services.tasks.summaries({ status: "review" }),
+  ];
+  return open.filter((task) => {
     if (task.kind === "epic" || task.archivedAt !== null) return false;
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");
-    if (run?.status !== "succeeded" || run.runner !== "t3" || !run.threadUrl) return false;
+    if (!run || run.status === "running" || run.runner !== "t3" || !run.threadUrl) return false;
     const thread = task.links.find((l) => l.kind === "t3_thread" && l.url === run.threadUrl);
-    if (thread?.kind !== "t3_thread" || thread.snapshot?.archived) return false;
-    if (!thread.snapshot) return now.getTime() - Date.parse(run.finishedAt ?? run.updatedAt) < UNSEEN_MS;
-    return BUSY_THREAD.has(thread.snapshot.status);
+    if (thread?.kind !== "t3_thread") return false;
+    const { snapshot } = thread;
+    if (snapshot?.archived || snapshot?.settled) return false;
+    const seenAt = snapshot ? thread.syncedAt : (run.finishedAt ?? run.updatedAt);
+    if (!seenAt || at - Date.parse(seenAt) >= UNSEEN_MS) return false;
+    return snapshot ? BUSY_THREAD.has(snapshot.status) : true;
   }).length;
 }
 
@@ -172,13 +186,16 @@ export const startPlanned = defineAutomation({
     );
     // A dry run only previews, whatever is working.
     if (engine.dryRun || candidates.length === 0) return candidates;
+    // Tasks that already had their attempt (failed, or still starting) are the engine's to skip: they mustn't use up
+    // the room the tasks below them need.
+    const fresh = candidates.filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
     // The engine's cap counts runs, which for T3 end once the thread starts: leave room for the threads still working.
     const agents = services.autopilot
       .automations()
       .filter((a) => a.needsAgent)
       .map((a) => a.key);
     const running = services.autopilot.usage(agents, new Date(0).toISOString()).active;
-    return candidates.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now)));
+    return fresh.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now)));
   },
   act: async (candidate, { services, runner, run, config, boardUrl }) => {
     const task = services.tasks.summary(candidate.taskId!);

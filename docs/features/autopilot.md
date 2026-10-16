@@ -223,13 +223,16 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
   run stays `running` and holds a concurrency slot.
 - **The cap counts working agents.** A T3 run ends once the thread has started (so a restart strands nothing), which
-  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress whose latest Start planned
-  run is a succeeded T3 run and whose thread (the run's `threadUrl`) is `working`, `input` or `approval` in its
-  snapshot, and returns only as many candidates as `maxConcurrent` leaves after those and the engine's running runs.
-  A thread no snapshot has reported on yet counts for ten minutes. The slot frees when the thread idles, finishes,
-  fails or is archived, or the task leaves In Progress; a thread stuck waiting holds it until
-  Unstick stale tasks flags it and someone acts. A headless run is a running run, which the engine counts. A dry
-  run ignores this.
+  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress or In Review (the agent runs
+  its review loop there) whose latest Start planned run began a T3 thread (the run's `threadUrl`, whatever the run's
+  outcome: one that failed at the grace period may still move the task) that is `working`, `waiting` (subagents still
+  going), `input` or `approval` in its snapshot, and not settled or archived. `check` drops candidates that already
+  have a run (a failed or still-starting task would otherwise use up the room of those below it) and returns only as
+  many as `maxConcurrent` leaves after those and the engine's running runs. A thread no snapshot has reported on, or
+  whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts for ten minutes. The slot frees when
+  the thread idles, finishes, fails, settles or is archived, or the task leaves In Progress and Review; a thread stuck
+  waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
+  the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
   (15).

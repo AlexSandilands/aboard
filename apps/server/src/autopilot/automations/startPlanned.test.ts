@@ -74,9 +74,13 @@ function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
     await engine.idle();
   };
   /** What T3's poll would report for the task's thread. */
-  const thread = (taskId: string, status: "working" | "input" | "approval" | "idle" | "done", archived = false) => {
+  const thread = (
+    taskId: string,
+    status: "working" | "waiting" | "input" | "approval" | "idle" | "done",
+    flags: { archived?: boolean; settled?: boolean } = {},
+  ) => {
     const link = s.tasks.detail(taskId).links.find((l) => l.kind === "t3_thread")!;
-    s.links.setSnapshot(link.id, { title: "T", status, archived, lastActivityAt: new Date().toISOString() });
+    s.links.setSnapshot(link.id, { title: "T", status, ...flags, lastActivityAt: new Date().toISOString() });
   };
   const runs = (): AutopilotRun[] => s.autopilot.runsForProject(project.id);
   const turnOn = (config?: Record<string, unknown>) =>
@@ -201,7 +205,7 @@ describe("start planned tasks: limits", () => {
     expect(s.tasks.summary(a.id).status).toBe("in_progress");
     // The run is over (the thread started), but T3's poll hasn't reported on the thread yet: it still counts.
     await pass();
-    for (const status of ["working", "input", "approval"] as const) {
+    for (const status of ["working", "waiting", "input", "approval"] as const) {
       thread(a.id, status);
       await pass();
       expect(requests).toHaveLength(1);
@@ -211,24 +215,93 @@ describe("start planned tasks: limits", () => {
     expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
   });
 
-  it("frees the slot when the thread is archived or the task leaves In Progress", async () => {
+  it("frees the slot when the thread is archived or settled, or the task is Done, but not while it is in Review", async () => {
     const { s, task, pass, requests, turnOn, thread } = setup();
     const a = task("A");
     task("B");
     task("C");
+    task("D");
     turnOn();
     await pass();
-    thread(a.id, "working", true);
+    thread(a.id, "working", { archived: true });
     await pass();
     expect(requests).toHaveLength(2);
-    // B's agent is working; moving it on to Review releases it.
+    // B's agent is working. Moving the task to Review doesn't free the slot: the agent runs its review loop there.
     const b = requests[1]!.run.taskId!;
-    thread(b, "working");
-    await pass();
-    expect(requests).toHaveLength(2);
-    s.tasks.move(b, { status: "review" }, "agent");
+    thread(b, "input", { settled: true });
     await pass();
     expect(requests).toHaveLength(3);
+    const c = requests[2]!.run.taskId!;
+    thread(c, "working");
+    s.tasks.move(c, { status: "review" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(3);
+    s.tasks.move(c, { status: "done" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(4);
+  });
+
+  it("doesn't let a failed task at the top of Planned use up the room of the tasks below it", async () => {
+    const { s, task, pass, requests, runs, turnOn, behaviour } = setup({ behaviour: { fail: "T3 isn't connected" } });
+    const a = task("A");
+    const b = task("B");
+    turnOn();
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id]);
+    delete behaviour.fail;
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
+    expect(runs().filter((r) => r.status === "failed")).toHaveLength(1);
+    expect(s.tasks.summary(b.id).status).toBe("in_progress");
+  });
+
+  it("doesn't count a task still in its grace period twice", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    const { s, task, engine, requests, turnOn, behaviour } = setup();
+    const a = task("A");
+    const b = task("B");
+    turnOn();
+    // A's agent hasn't moved it yet: its run is going and it is still in Planned, at the top of the column.
+    behaviour.onStart = () => {};
+    await engine.pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id]);
+    s.autopilot.updateEngine({ maxConcurrent: 2 });
+    await engine.pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
+  });
+
+  it("still counts a thread whose agent moved the task after the grace period ended", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    const { s, task, engine, requests, runs, turnOn, behaviour, thread } = setup();
+    const a = task("A");
+    task("B");
+    turnOn({ graceMinutes: 1 });
+    behaviour.onStart = () => {};
+    const first = engine.pass();
+    await vi.advanceTimersByTimeAsync(60_000 + START_POLL_MS);
+    await first;
+    await engine.idle();
+    expect(runs()).toMatchObject([{ status: "failed" }]);
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    thread(a.id, "working");
+    await engine.pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("stops counting a thread whose snapshot T3 stopped refreshing", async () => {
+    let later = 0;
+    const { task, pass, requests, turnOn, thread } = setup({ now: () => new Date(Date.now() + later) });
+    const a = task("A");
+    task("B");
+    turnOn();
+    await pass();
+    thread(a.id, "working");
+    later = 5 * 60_000;
+    await pass();
+    expect(requests).toHaveLength(1);
+    later = 11 * 60_000;
+    await pass();
+    expect(requests).toHaveLength(2);
   });
 
   it("stops counting a thread T3 never reported on after ten minutes", async () => {
