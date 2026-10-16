@@ -200,11 +200,19 @@ describe("MCP endpoint", () => {
 
     it("refuses a set_plan that passes only the current phase and would drop later phases", async () => {
       await call("set_plan", { markdown });
-      const refused = await call("set_plan", { markdown: "## One\n- [x] a\n- [x] b\n" });
+      const one = h.services.tasks.detail(h.services.tasks.resolveId(task)).phases[0]!;
+      // Phase One passed back with its ids and both steps done: untouched todos in phase Two would be dropped.
+      const onlyPhaseOne = {
+        phases: [
+          { id: one.id, title: "One", steps: one.steps.map((s) => ({ id: s.id, title: s.title, status: "done" })) },
+        ],
+      };
+      const refused = await call("set_plan", onlyPhaseOne);
       expect(refused.error).toBe(true);
       expect(refused.body).toMatch(/^CONFLICT: /);
       expect(refused.body).toContain('2.1 "c" (its whole phase is left out)');
       expect(await planText()).toContain("2.2 [ ] d");
+      expect((await call("set_plan", { ...onlyPhaseOne, allowDeletes: true })).error).toBe(false);
     });
 
     it("lets set_plan delete started steps with allowDeletes and lists what went", async () => {
