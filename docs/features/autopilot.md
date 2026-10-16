@@ -7,8 +7,8 @@ the whole board, that watch the board and act when something needs doing. The en
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine. The catalogue ships empty: each automation is its own task in the epic, and so are
-the runners (#85) and the UI (#86). Until a runner is configured, every agent action fails with "No agent runner
+This doc covers the engine and the automations that have landed (below). The rest of the catalogue is each its own
+task in the epic, and so are the runners (#85) and the UI (#86). Until a runner is configured, every agent action fails with "No agent runner
 is available yet".
 
 ## How it works
@@ -107,6 +107,14 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
 
+### Automations
+
+**Auto-archive Done** (`auto_archive`, #91; `automations/autoArchive.ts`). Needs no agent and is off until switched
+on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
+per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
+`autopilot`. It skips epics and tasks with an open, draft or not-yet-polled PR. The dedupe key is
+`archive:<taskId>:<statusChangedAt>`, so a manual unarchive sticks until the task leaves Done and comes back.
+
 ### Writing an automation
 
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
@@ -157,4 +165,5 @@ An automation must never merge, close or delete tasks, force-push or push to the
 | `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner` |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
+| `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
