@@ -131,6 +131,14 @@ function eventText(event: TaskEvent): string {
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
       break;
+    case "plan_set": {
+      // Uncut, unlike the generic fallback: the deleted titles are how a wiped plan gets rebuilt.
+      const deleted = Array.isArray(p.deleted) ? p.deleted.filter((d): d is string => typeof d === "string") : [];
+      const counts =
+        typeof p.phases === "number" && typeof p.steps === "number" ? ` (${p.phases} phases, ${p.steps} steps)` : "";
+      what = `set the plan${counts}${deleted.length ? `; deleted ${deleted.length}: ${deleted.join(", ")}` : ""}`;
+      break;
+    }
     case "labels_changed": {
       const list = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[]) : []);
       const changes = [...list("added").map((l) => `+${l}`), ...list("removed").map((l) => `-${l}`)];

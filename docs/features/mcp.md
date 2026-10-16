@@ -24,7 +24,7 @@ steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
 | `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task` (all read-only)                             |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`       |
-| `tools/plans.ts`   | `set_plan`, `add_steps`, `update_step`                                                                  |
+| `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, or a T3 thread `{environmentId, threadId}`; idempotent)                  |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 
@@ -75,7 +75,9 @@ text when both are present.
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
-  `PLAN_REQUIRED` (call `set_plan`, or use `close_task`).
+  `PLAN_REQUIRED` (call `set_plan`, or use `close_task`); `set_plan` adds one to `CONFLICT` (use
+  `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says
+  `Deleted N step(s): 1.2 Title, …`. See [plans.md](plans.md#writing-a-plan).
 
 ### Writing tool descriptions
 
@@ -84,6 +86,8 @@ Descriptions are written for agents, and they are most of what an agent knows ab
 - Say **when** to call the tool, not only what it does (`get_task` is "the 'where was I' call", and the
   instructions say to call it before resuming).
 - Say what good input looks like: 1–4 phases of 3–8 concrete, verifiable steps.
+- Lead with the hazard when a tool is destructive: `set_plan` opens with "REPLACES the whole plan" and
+  points to `update_plan`, because agents grabbed it for bulk updates when nothing else did that.
 - Explain the gate where it bites (`create_task`, `move_task`), and point to the cheap path
   (`add_to_backlog`, `close_task`).
 - Put guidance agents must act on in **results** too (Missing links, Missing labels, review loop

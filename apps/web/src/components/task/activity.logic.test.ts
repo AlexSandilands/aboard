@@ -102,6 +102,10 @@ describe("describeEvent", () => {
       quote: "Handover: tests pass",
     });
     expect(describeEvent(event("plan_set", { phases: 2, steps: 1 }), ctx).text).toBe("set the plan (2 phases, 1 step)");
+    expect(describeEvent(event("plan_set", { phases: 1, steps: 1, deleted: ["1.1 a", "1.2 b"] }), ctx)).toMatchObject({
+      text: "set the plan (1 phase, 1 step)",
+      quote: "Deleted 2 steps:\n\n- 1.1 a\n- 1.2 b",
+    });
     expect(describeEvent(event("moved_project", { to: "p2" }), ctx).text).toBe("moved to project storefront");
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",
