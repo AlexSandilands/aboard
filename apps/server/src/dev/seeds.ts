@@ -199,22 +199,66 @@ const threads: Scenario = (s, opts) => {
   let prNumber = 100;
   let threadNumber = 0;
 
+  /** What the poller reads about a repo the signed-in account can push to. */
+  const mergeable = {
+    mergeMethods: ["merge", "squash"],
+    autoMergeAllowed: true,
+    canMerge: true,
+    autoMerge: null,
+  } satisfies Partial<PrSnapshot>;
   const pr = (
     status: TaskStatus,
     title: string,
     snapshot: Omit<PrSnapshot, "title" | "headRef" | "updatedAt"> | null,
+    host = "github.com",
   ) => {
     prNumber += 1;
-    const id = addTask(s, project.id, { title, status, links: [`https://github.com/example/shop/pull/${prNumber}`] });
+    const id = addTask(s, project.id, { title, status, links: [`https://${host}/example/shop/pull/${prNumber}`] });
     const link = s.tasks.detail(id).links[0]!;
     if (snapshot)
-      s.links.setSnapshot(link.id, { ...snapshot, title, headRef: `feature/pr-${prNumber}`, updatedAt: now });
+      s.links.setSnapshot(link.id, {
+        ...snapshot,
+        title,
+        headRef: `feature/pr-${prNumber}`,
+        headOid: `head-${prNumber}`,
+        updatedAt: now,
+      });
   };
   pr("review", "PR open, checks passing, approved", {
     state: "open",
     checks: "passing",
     reviewDecision: "approved",
     mergeable: "mergeable",
+    ...mergeable,
+  });
+  pr("review", "PR checks running, ready for auto-merge", {
+    state: "open",
+    checks: "pending",
+    reviewDecision: "approved",
+    mergeable: "mergeable",
+    ...mergeable,
+  });
+  pr("review", "PR with auto-merge on", {
+    state: "open",
+    checks: "pending",
+    reviewDecision: "approved",
+    mergeable: "mergeable",
+    ...mergeable,
+    autoMerge: "squash",
+  });
+  pr(
+    "review",
+    "PR on a GitHub Enterprise host",
+    { state: "open", checks: "passing", reviewDecision: null, mergeable: "mergeable", ...mergeable },
+    "github.example.com",
+  );
+  pr("review", "PR the signed-in account can't merge", {
+    state: "open",
+    checks: "passing",
+    reviewDecision: "approved",
+    mergeable: "mergeable",
+    ...mergeable,
+    canMerge: false,
   });
   pr("in_progress", "PR draft, checks pending", {
     state: "draft",

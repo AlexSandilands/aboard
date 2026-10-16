@@ -14,7 +14,8 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
   reopens it. Archive is for clearing cards away, not for resolving them.
 - **Deleting:** an archived task can be deleted permanently, with its plan, links and activity (task
   menu, or `delete_task` over MCP). Archive first; active tasks can't be deleted.
-- **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
+- **Links:** GitHub PRs, on github.com or GitHub Enterprise (live state, and a **Merge** button once the
+  task is in Review, through the account `gh` is signed in with), Jira keys, T3 Code threads (one click back to the
   conversation), any URL. Failing checks, requested changes and blocked steps surface under
   **Needs attention**. Jira keys in a task title are linked automatically, and agents are told which
   Jira keys and T3 thread a task is still missing.
