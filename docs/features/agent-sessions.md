@@ -89,7 +89,7 @@ command line on `;`, quotes or not, so every `;` is passed as `\;`. A profile we
 Cloud Shell) keeps its look and runs cmd. The settings page shows what the current setting runs for an
 example session.
 
-The rules for starting processes are in [ADR 0008](../decisions/0008-board-starts-local-processes.md).
+The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md).
 
 ### On the card and in the panel
 
@@ -125,7 +125,7 @@ Copilot CLI support is unit-tested only.
 | `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `TerminalSetting`, REST shapes |
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller, resume and terminal info |
 | `apps/server/src/integrations/terminal.ts` | Quoting, Windows Terminal detection, the launch for each terminal and shell, spawning |
-| `apps/server/src/db/migrations/010_agent_session_links.sql` | Adds the `agent_session` link kind |
+| `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |

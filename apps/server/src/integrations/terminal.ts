@@ -4,7 +4,7 @@ import { delimiter, join } from "node:path";
 import type { TerminalSetting, TerminalShell, WindowsTerminalProfile } from "@repo/contracts";
 
 // Opening a command in a new terminal window, per platform and per shell. Everything here is pure except the
-// `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0008-board-starts-local-processes.md).
+// `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0009-board-starts-local-processes.md).
 
 /** What the launcher needs from the machine. */
 export interface TerminalHost {

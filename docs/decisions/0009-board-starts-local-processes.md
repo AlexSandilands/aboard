@@ -1,4 +1,4 @@
-# 0008 The board may start a terminal, from a stored link only
+# 0009 The board may start a terminal, from a stored link only
 
 Status: Accepted
 
