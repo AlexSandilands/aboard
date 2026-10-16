@@ -52,7 +52,7 @@ function readChunk(path: string, start: number, length: number): string {
   }
 }
 
-const tidy = (value: unknown): string | null => {
+export const tidy = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const title = value.replace(/\s+/g, " ").trim();
   if (!title) return null;

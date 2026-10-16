@@ -496,7 +496,7 @@ function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" 
   );
 }
 
-/** An agent session: "Open in terminal" with the harness, folder and live status, and the rest in its menu. */
+/** An agent session: its name, folder and live status; a click opens it in a terminal, the rest is in its menu. */
 function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionLink; onRemove: () => void }) {
   const { open, pending } = useSessionActions(taskId);
   const status = sessionStatusPresentation(link.snapshot);

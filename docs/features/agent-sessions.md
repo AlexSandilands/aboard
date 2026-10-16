@@ -23,7 +23,7 @@ var the agent reads with its shell:
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
 since Claude Code finds a conversation to resume by its folder. The `label` says what the session does
-("Implementing #107", "Planning #107", "Reviewing #107 round 2"; see [Names](#names)); linking again with a
+("Implementing #107", "Planning #107"; see [Names](#names)); linking again with a
 different label renames the session (also logged as `link_updated`). The id must be a UUID and the folder an
 absolute path, with trailing separators dropped (`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
 `services.links.add` with the same input; their folder can be a worktree outside the project.

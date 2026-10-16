@@ -192,7 +192,9 @@ link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", c
 ```
 
 - `label` is the name the board shows for the session, so say what it does: "Implementing #42", "Planning #42",
-  "Reviewing #42 round 2". Linking the same session again with a new label renames it (when the work changes).
+  Linking the same session again with a new label renames it (when the work changes). A subagent (a reviewer, say)
+  has the same session id as the session that started it: only the main session links, and a subagent must never
+  link or relabel it.
 
 - Claude Code puts the id in `$CLAUDE_CODE_SESSION_ID`, Copilot CLI in `$COPILOT_AGENT_SESSION_ID`
   (harness `"copilot-cli"`). Read it with the shell (`echo $CLAUDE_CODE_SESSION_ID`); never guess it.

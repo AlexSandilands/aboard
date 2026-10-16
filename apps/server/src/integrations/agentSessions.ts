@@ -21,7 +21,7 @@ import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";
-import { createTitleReader } from "./claudeSessionTitle.ts";
+import { createTitleReader, tidy } from "./claudeSessionTitle.ts";
 import { messageOf } from "./github.ts";
 import {
   copyCommand,
@@ -151,8 +151,8 @@ export function createSessionStatusReader(deps: {
 
   /** A live session's own name, unless Claude only derived it from the folder, then the transcript's title. */
   const titleOf = (ref: AgentSessionRef, live: readonly ClaudeSessionFile[]): string | null => {
-    const named = live.find((s) => s.name?.trim() && s.nameSource !== "derived");
-    return named?.name?.trim() || titles.read(ref.sessionId, ref.cwd);
+    const named = live.find((s) => tidy(s.name) && s.nameSource !== "derived");
+    return tidy(named?.name) ?? titles.read(ref.sessionId, ref.cwd);
   };
 
   const claude = async (refs: readonly AgentSessionRef[], out: Map<string, AgentSessionSnapshot>) => {

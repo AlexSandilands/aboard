@@ -350,6 +350,17 @@ describe("Claude Code session titles", () => {
     expect(out.get(sessionKey(claude(B)))).toEqual({ status: "idle", inApp: false, title: "Generated for B" });
   });
 
+  it("tidies a live name the way it does a transcript title", async () => {
+    const home = tempHome();
+    const name = `  Two
+ lines ${"x".repeat(300)}`;
+    home.claudeFile(100, { sessionId: A, status: "busy", name, nameSource: "flag" });
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([100]).probe });
+    const title = (await reader.read([claude(A)])).get(sessionKey(claude(A)))?.title ?? "";
+    expect(title).toHaveLength(120);
+    expect(title.startsWith("Two lines xxx")).toBe(true);
+  });
+
   it("still finds a title when the sessions folder can't be read", async () => {
     const home = tempHome();
     rmSync(join(home.dirs.claudeDir, "sessions"), { recursive: true });
