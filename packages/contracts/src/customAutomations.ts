@@ -80,8 +80,8 @@ export const CustomAction = z.discriminatedUnion("kind", [
   /**
    * A command run in the project's folder by /bin/sh, or PowerShell on Windows. Task values reach it only as
    * environment variables (customShellEnv): the command is never filled in, so a task title can't change the command
-   * line. (What the command does with a value is the user's: on Windows, a value passed as an argument to a .cmd or
-   * .bat program is parsed again by cmd.exe, which the guide warns about.)
+   * line. (What the command does with a value is the user's: on Windows, a value passed as an argument to another
+   * program isn't escaped by PowerShell, and a .cmd or .bat program parses it again in cmd.exe; the guide warns.)
    */
   z.object({
     kind: z.literal("shell"),

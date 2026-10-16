@@ -421,9 +421,9 @@ export function CustomAutomationEditorForm({
             <Alert variant="warning">
               <AlertDescription>
                 The command runs on this machine as you, whenever the trigger fires in a project it is on in. On
-                Windows, don&apos;t pass a value as an argument to a .cmd or .bat program (npm, pnpm, npx, yarn):
-                Windows parses those arguments again, so a task title could add a command. Let the script read the
-                variable itself.
+                Windows, don&apos;t pass a value as an argument to another program: PowerShell doesn&apos;t escape the
+                quotes in it, and .cmd programs such as npm and pnpm hand it to cmd.exe, so a task title could add a
+                command. Let the program read the variable itself.
               </AlertDescription>
             </Alert>
           </>

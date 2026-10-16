@@ -8,8 +8,9 @@ import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
 // Off Windows the command runs in /bin/sh, which expands "$VAR" after parsing, so a value can't become syntax. On
 // Windows it runs in PowerShell, not cmd.exe: cmd expands %VAR% before it parses the line, so a task title with
 // `& …` in it would run as a command whatever the quoting. PowerShell's $env:VAR is a value, like sh's. One hole
-// stays, and it is Windows': arguments to a .cmd or .bat program (npm, pnpm, npx) are parsed again by cmd.exe, so a
-// command that passes a value to one is injectable. The guide and the editor say so; nothing here can prevent it.
+// stays, and it is Windows': Windows PowerShell doesn't escape quotes in the arguments it passes to programs, and a
+// .cmd or .bat program (npm, pnpm, npx) parses them again in cmd.exe, so a command that passes a value as an
+// argument is injectable. The guide and the editor say so; nothing here can prevent it.
 
 /** How much of the output a run keeps: the end, where errors usually are. */
 export const SHELL_OUTPUT_TAIL = 4_000;
