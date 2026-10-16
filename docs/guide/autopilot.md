@@ -17,6 +17,10 @@ on. The button looks like the pill: dim, a ring, or animated while one of the ep
 An epic only lists the automations that work on tasks in an epic (not Recurring tasks or the Digest, for
 instance). An archived epic has no button and no say.
 
+Auto-archive Done on an epic works on the epic as a whole: once the epic is finished (every task Done) and has been in
+Done for the set days, it is archived together with its tasks. A task in an epic is never archived on its own, and
+the epic's own switch and days decide.
+
 **Settings → Autopilot** has the same switches for the whole board, and under each automation a **Settings**
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings.

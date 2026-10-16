@@ -147,7 +147,7 @@ export interface TasksService {
    * Archives a finished epic (every unarchived task Done) together with those tasks, in one write, and returns how
    * many tasks went with it. The epic keeps its Done status: archiving the tasks one by one through `update` would
    * leave it with none counted and send it to Backlog. Throws VALIDATION for a task that isn't an epic, an archived
-   * epic, or one with an open task.
+   * epic, one with an open task, or one that isn't in Done.
    */
   archiveFinishedEpic(id: string, actor: string): number;
   addNote(id: string, text: string, actor: string): TaskEvent;

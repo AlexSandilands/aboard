@@ -29,8 +29,8 @@ Inherit wins: epic over project over board. With nothing set anywhere, an automa
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
-card itself isn't "in" an epic, so it follows its project, except as an Auto-archive candidate, which the
-engine resolves on the epic itself.
+card itself isn't "in" an epic, so it follows its project, except as a candidate that is the epic card itself
+(today only Auto-archive's), which the engine resolves on the epic.
 
 An automation says whether an epic can switch it with `epicScope` (default true; `describeAutomation` sends it to the
 UI). Set it false when its candidates are never tasks in an epic: Recurring tasks (per project, no task) and the Digest

@@ -200,7 +200,7 @@ export function createAutopilotEngine(deps: {
           continue;
         }
         candidate = { ...candidate, projectId: task.projectId };
-        // A candidate that is an epic (Auto-archive) is resolved on the epic itself.
+        // A candidate that is an epic card (today only Auto-archive's) is resolved on the epic itself.
         epicId = task.kind === "epic" ? found.taskId! : (task.parent?.id ?? null);
       }
       const projectId = candidate.projectId ?? null;

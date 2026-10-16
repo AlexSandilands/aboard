@@ -10,6 +10,8 @@ const DAY_MS = 86_400_000;
 const hasUnmergedPr = (t: Pick<TaskSummary, "links">): boolean =>
   t.links.some((l) => l.kind === "pr" && (l.snapshot === null || ["open", "draft"].includes(l.snapshot.state)));
 
+const tasksOf = (n: number): string => `${n} task${n === 1 ? "" : "s"}`;
+
 /**
  * Archives tasks that have sat in Done for a while, so the column stays readable. Needs no agent, and archives
  * rather than deletes. The dedupe key carries `statusChangedAt`: a task someone unarchives stays unarchived until
@@ -53,7 +55,7 @@ export const autoArchive = defineAutomation({
           return [
             {
               dedupeKey: `archive-epic:${epic.id}:${epic.statusChangedAt}`,
-              summary: `archive #${epic.number} with its ${children.length} tasks after ${days} days in Done`,
+              summary: `archive #${epic.number} with its ${tasksOf(children.length)} after ${days} days in Done`,
               taskId: epic.id,
               data: { days },
             },
@@ -67,8 +69,9 @@ export const autoArchive = defineAutomation({
     const epicDays = (candidate.data as { days: number } | undefined)?.days;
     if (epicDays !== undefined) {
       const count = services.tasks.archiveFinishedEpic(id, actor);
-      services.tasks.addNote(id, `Archived by Autopilot with its ${count} tasks after ${epicDays} days in Done`, actor);
-      return { summary: `Archived with its ${count} tasks after ${epicDays} days in Done` };
+      const what = `with its ${tasksOf(count)} after ${epicDays} days in Done`;
+      services.tasks.addNote(id, `Archived by Autopilot ${what}`, actor);
+      return { summary: `Archived ${what}` };
     }
     services.tasks.update(id, { archived: true }, actor);
     services.tasks.addNote(id, `Archived by Autopilot after ${config.days} days in Done`, actor);

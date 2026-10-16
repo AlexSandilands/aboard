@@ -532,6 +532,8 @@ export function createTasksService(
             `Epic #${epic.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")})`,
           );
         }
+        if (epic.status !== "done")
+          throw new AppError("VALIDATION", `Epic #${epic.number} isn't finished (not in Done)`);
         const now = nowIso();
         // Not through `update`: archiving the last task there re-derives the epic from no tasks and drops it to
         // Backlog. Archived with its tasks, it stays as it was (Done).
