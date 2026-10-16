@@ -143,7 +143,8 @@ export function createAutopilotEngine(deps: {
     const candidates = await automation.check({ services: s, engine, now: at, projects, board: boardConfig });
     for (const found of candidates) {
       let candidate = found;
-      if (candidate.taskId && candidate.projectId === undefined) {
+      // A task's run belongs to the task's project, whatever the check said, so that project's switch applies.
+      if (candidate.taskId) {
         let projectId: string;
         try {
           projectId = s.tasks.summary(candidate.taskId).projectId;

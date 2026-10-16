@@ -51,6 +51,21 @@ function setup(opts: { now?: () => Date } = {}) {
     check: (ctx) => plannedCandidates("agent", ctx),
     act: async (_candidate, ctx) => ctx.runner.start({ run: ctx.run, prompt: "go", tier: null, options: ctx.config }),
   });
+  // Ignores its scopes and claims every Planned task is board-wide.
+  const stray = defineAutomation({
+    key: "stray",
+    title: "Stray",
+    description: "Returns more than it was asked for.",
+    needsAgent: false,
+    schema: z.object({}),
+    fields: [],
+    defaults: {},
+    check: ({ services }) =>
+      services.tasks
+        .summaries({ status: "planned" })
+        .map((t) => ({ dedupeKey: `stray:${t.id}`, summary: "stray", taskId: t.id, projectId: null })),
+    act: () => ({}),
+  });
   const started: Deferred[] = [];
   const runner: Runner = {
     start: ({ run }) =>
@@ -58,7 +73,7 @@ function setup(opts: { now?: () => Date } = {}) {
         started.push({ run, resolve, reject });
       }),
   };
-  const h = createTestHarness({ integrations: { automations: [noop, agent] } });
+  const h = createTestHarness({ integrations: { automations: [noop, agent, stray] } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
@@ -119,6 +134,17 @@ describe("scopes", () => {
     await settle(engine);
     expect(runs("noop")).toHaveLength(1);
     expect(s.tasks.summary(task.id).labels).toEqual(["mine"]);
+  });
+});
+
+describe("candidates", () => {
+  it("files a task's run under the task's project, so that project's Off switch holds", async () => {
+    const { s, engine, task, other, runs } = setup();
+    const b = s.tasks.create({ projectId: other.id, title: "Two", plan });
+    s.autopilot.setScope("board", null, "stray", { mode: "on" });
+    s.autopilot.setScope("project", task.projectId, "stray", { mode: "off" });
+    await settle(engine);
+    expect(runs("stray").map((r) => [r.taskId, r.projectId])).toEqual([[b.id, other.id]]);
   });
 });
 
@@ -276,17 +302,27 @@ describe("failures and attention", () => {
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
   });
 
-  it("clears the flag when a later run on the task succeeds", async () => {
+  it("clears the flag when a later run of the same automation succeeds, not another automation's", async () => {
     const { s, engine, task, started } = setup();
     s.autopilot.setScope("board", null, "agent", { mode: "on" });
     await engine.pass();
     started[0]!.reject(new Error("boom"));
     await engine.idle();
-    expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("autopilot");
+    const kinds = () => s.tasks.summary(task.id).attention.map((a) => a.kind);
+    expect(kinds()).toContain("autopilot");
 
     s.autopilot.setScope("board", null, "noop", { mode: "on" });
     await settle(engine);
-    expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+    expect(kinds()).toContain("autopilot");
+
+    const again = s.autopilot.record({
+      automation: "agent",
+      candidate: { dedupeKey: "agent:again", summary: "start it", taskId: task.id, projectId: task.projectId },
+      dryRun: false,
+    })!;
+    s.autopilot.start(again.id);
+    s.autopilot.finish(again.id, {});
+    expect(kinds()).not.toContain("autopilot");
   });
 
   it("fails and flags runs a restart left going", () => {

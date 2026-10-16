@@ -50,7 +50,8 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
 
 Quiet hours and the caps only hold back automations with `needsAgent`; board-only actions (archiving a card)
-go ahead. **Pause all** stops every new run; runs already going finish.
+go ahead. **Pause all** stops every new run; runs already going finish. Backups carry the engine settings but not
+the pause, so a restore never lifts it.
 
 ### A pass
 
@@ -91,7 +92,7 @@ hide work it only previewed.
 
 A flagged run puts an `autopilot` attention reason on its task, with the run's error. It isn't cleared by a
 write: `autopilotRuns.attentionFor` stops reporting it once the task changes status after the run, or a later
-real run on the task succeeds.
+real run of the same automation on the task succeeds.
 
 ### API
 

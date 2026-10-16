@@ -218,7 +218,8 @@ describe("restore", () => {
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 2 });
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_runs").get()).toEqual({ n: 0 });
       const restoredRepos = createRepos(restored);
-      expect(restoredRepos.settings.all().get("autopilotPaused")).toBe(true);
+      // Pause stays with the machine: a restore can't lift it, or set it.
+      expect(restoredRepos.settings.all().has("autopilotPaused")).toBe(false);
       expect(restoredRepos.settings.all().get("autopilotEngine")).toMatchObject({ maxConcurrent: 2 });
     } finally {
       restored.close();

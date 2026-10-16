@@ -12,7 +12,7 @@ export interface Candidate {
   /** What the action will do, as a phrase that reads after "Would" ("archive #42"): the run's summary, prefixed in dry-run. */
   summary: string;
   taskId?: string | null;
-  /** Filled in from the task when left out. Null (with no task) is a board-wide candidate. */
+  /** Only for candidates with no task (a task's project is used); null is a board-wide candidate. */
   projectId?: string | null;
   /** Anything the check found that the action needs. */
   data?: unknown;

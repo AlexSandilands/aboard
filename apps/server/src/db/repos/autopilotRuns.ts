@@ -141,8 +141,8 @@ export function createAutopilotRunsRepo(sql: Sql) {
       );
     },
     /**
-     * Per task, the message of its latest run flagged needs_attention, while it stands: no real run on the task has
-     * succeeded since, and the task hasn't changed status since.
+     * Per task, the message of its latest run flagged needs_attention, while it stands: no real run of the same
+     * automation on the task has succeeded since, and the task hasn't changed status since.
      */
     attentionFor(taskIds: readonly string[]): Map<string, string> {
       const rows = sql.all<{ task_id: string; message: string }>(
@@ -152,7 +152,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
            AND r.updated_at >= t.status_changed_at
            AND NOT EXISTS (
              SELECT 1 FROM autopilot_runs s
-             WHERE s.task_id = r.task_id AND s.status = 'succeeded' AND s.dry_run = 0 AND s.finished_at > r.updated_at
+             WHERE s.task_id = r.task_id AND s.automation = r.automation AND s.status = 'succeeded' AND s.dry_run = 0 AND s.finished_at > r.updated_at
            )
          ORDER BY r.updated_at, r.id`,
         jsonList(taskIds),

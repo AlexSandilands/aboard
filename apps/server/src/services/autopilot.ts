@@ -21,7 +21,7 @@ import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
 
-/** Settings-table keys for the engine. Both are exported in backups (see EXPORTED_SETTINGS). */
+/** Settings-table keys for the engine. Only the settings are exported in backups; pause stays with the machine. */
 export const AUTOPILOT_ENGINE_KEY = "autopilotEngine";
 export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
 
