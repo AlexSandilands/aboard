@@ -173,8 +173,7 @@ unarchived task and then the epic, as `autopilot`, without re-deriving the epic'
 "Archived by Autopilot with its N tasks after D days in Done" on the epic. Tasks already archived stay as they were.
 The dedupe key is `archive-epic:<epicId>:<statusChangedAt>`, so unarchiving the epic by hand sticks until it leaves
 Done and comes back. The engine resolves a candidate that is an epic on the epic itself; a dry run says "Would
-archive #N with its K tasks after D days in Done". The archive itself is the shared `archiveWithEpic` that archiving an epic by hand uses too. Unarchiving a task inside
-an archived epic is #100's question.
+archive #N with its K tasks after D days in Done". Unarchiving a task inside an archived epic is #100's question.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
 switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or

@@ -60,9 +60,10 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
 export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: Effects): void {
   const epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
-  // An archived epic keeps the status it left with (Done), so a task of it archived or reopened later can't move it.
-  if (epic.archivedAt !== null) return;
   fx.task(epicId);
+  // An archived epic keeps the status it left with (Done), so a task of it archived or reopened later can't move it.
+  // Its card is still republished: the roll-up may have changed.
+  if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
   const status = deriveEpicStatus(deriveEpicRollup(children));
   if (status === epic.status) return;
@@ -146,7 +147,8 @@ export function createTasksService(
 
   /**
    * Archives an epic's unarchived `tasks` (all Done) along with it, stamped with the epic's `archivedAt` so
-   * unarchiving the epic can tell them from tasks archived on their own. Not through `update`: that would re-derive
+   * unarchiving the epic can tell them from tasks archived on their own (best effort: a task Auto-archive archived
+   * one at a time later has its own stamp, so it stays archived). Not through `update`: that would re-derive
    * the epic from its remaining tasks, and archiving the last one drops it to Backlog.
    */
   const archiveWithEpic = (epic: TaskRecord, tasks: TaskRecord[], actor: string, fx: Effects): void => {

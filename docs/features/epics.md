@@ -55,7 +55,8 @@ moves the epic to the end of its new column.
   same write: each gets the epic's `archived_at` and an `archived` event with `withEpic`. They aren't archived
   through `update`, which would re-derive the epic from its remaining tasks and drop it to Backlog. Unarchiving
   the epic unarchives the tasks with that same `archived_at` (`unarchived` with `withEpic`, at the end of their
-  lane) and re-derives it; tasks archived on their own earlier stay archived.
+  lane) and re-derives it; tasks archived on their own earlier stay archived, and so do leftover tasks Auto-archive
+  archived one at a time (the match is on the stamp, so it is best effort). `archiveFinishedEpic` uses the same helper.
 - `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
   this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
   and Auto-archive treats such a Done task as loose. There is no migration for these.

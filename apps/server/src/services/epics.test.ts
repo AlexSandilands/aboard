@@ -266,7 +266,7 @@ describe("epics", () => {
   });
 
   it("archives an epic with its Done tasks, and unarchiving it brings back only those", () => {
-    const { s, epic, child } = setup();
+    const { s, events, epic, child } = setup();
     const a = child("A");
     const b = child("B");
     const early = child("Early");
@@ -277,8 +277,11 @@ describe("epics", () => {
     vi.setSystemTime(Date.now() + 1000);
     const archivedAt = (id: string) => s.tasks.summary(id).archivedAt;
 
+    events.length = 0;
     const archived = s.tasks.update(epic.id, { archived: true }, "user");
     expect(archived.status).toBe("done");
+    const published = () => events.flatMap((e) => (e.type === "task.upserted" ? [e.task.id] : []));
+    expect(published()).toEqual(expect.arrayContaining([epic.id, a.id, b.id]));
     // Same stamp as the epic, and the earlier one keeps its own.
     expect(archivedAt(a.id)).toBe(archived.archivedAt);
     expect(archivedAt(b.id)).toBe(archived.archivedAt);
@@ -289,8 +292,10 @@ describe("epics", () => {
     });
     expect(s.tasks.summary(a.id).parent?.id).toBe(epic.id);
 
+    events.length = 0;
     const back = s.tasks.update(epic.id, { archived: false }, "user");
     expect(back.status).toBe("done");
+    expect(published()).toEqual(expect.arrayContaining([epic.id, a.id, b.id]));
     expect(archivedAt(a.id)).toBeNull();
     expect(archivedAt(b.id)).toBeNull();
     expect(archivedAt(early.id)).not.toBeNull();

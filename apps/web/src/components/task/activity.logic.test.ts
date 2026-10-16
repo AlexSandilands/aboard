@@ -126,6 +126,9 @@ describe("describeEvent", () => {
       quote: "Deleted 2 steps:\n\n- 1.1 a\n- 1.2 b",
     });
     expect(describeEvent(event("moved_project", { to: "p2" }), ctx).text).toBe("moved to project storefront");
+    expect(describeEvent(event("archived"), ctx).text).toBe("archived this");
+    expect(describeEvent(event("archived", { withEpic: 12 }), ctx).text).toBe("archived this with epic #12");
+    expect(describeEvent(event("unarchived", { withEpic: 12 }), ctx).text).toBe("unarchived this with epic #12");
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",
     );

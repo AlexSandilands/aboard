@@ -124,9 +124,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       );
     }
     case "archived":
-      return line("archive", "archived this");
-    case "unarchived":
-      return line("archive", "unarchived this");
+    case "unarchived": {
+      const withEpic = num(p.withEpic);
+      return line("archive", `${event.type} this${withEpic !== null ? ` with epic #${withEpic}` : ""}`);
+    }
     case "note":
       return line("note", "left a note", str(p.text));
     case "plan_set": {
