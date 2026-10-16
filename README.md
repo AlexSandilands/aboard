@@ -96,6 +96,7 @@ by their working directory, so there's nothing to set up per repo.
 | [Local review](docs/guide/local-review.md)         | Have agents' work reviewed on the board before they open a PR       |
 | [T3 Code](docs/guide/t3-code.md)                   | Thread links, live thread status, starting threads from a task      |
 | [Configuration](docs/guide/configuration.md)       | Data folder, ports, access token, the desktop app's tray            |
+| [Notifications](docs/guide/notifications.md)       | The inbox, pop-ups, the taskbar badge and what you're told about    |
 | [Contributing](CONTRIBUTING.md)                    | Developing, checks, and where the design docs are                   |
 
 <br>

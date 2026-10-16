@@ -549,6 +549,30 @@ const showcase: Scenario = (s, opts) => {
   addTask(s, docs.id, { title: "Dark mode", status: "done", labels: ["ui"] });
   const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "backlog" });
   s.tasks.close(ie, { resolution: "wont_do" }, "user");
+
+  // The attention inbox: what the board has told you, newest last. The first two are read.
+  const label = (taskId: string) => `#${s.tasks.summary(taskId).number} ${s.tasks.summary(taskId).title}`;
+  const inbox = [
+    { kind: "review_finished", taskId: drawer, title: "Review round 1 finished", detail: "2 major, 1 nit" },
+    { kind: "pr_changes_requested", taskId: crash, title: "Changes requested on PR #33", detail: "" },
+    { kind: "pr_checks_failing", taskId: drawer, title: "Checks failing on PR #7", detail: "" },
+    {
+      kind: "thread_waiting",
+      taskId: biometric,
+      title: "Thread waiting for input",
+      detail: "Use Face ID on iOS only, or Android too?",
+    },
+  ] as const;
+  inbox.forEach((n, index) => {
+    const made = s.notifications.notify({
+      kind: n.kind,
+      taskId: n.taskId,
+      title: n.title,
+      body: [label(n.taskId), n.detail].filter(Boolean).join("\n"),
+      dedupeKey: `seed:${index}`,
+    });
+    if (made && index < 2) s.notifications.markRead(made.id);
+  });
 };
 
 export const SCENARIOS = { basic, review, threads, showcase } satisfies Record<string, Scenario>;

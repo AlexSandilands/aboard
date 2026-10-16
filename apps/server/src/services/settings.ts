@@ -1,4 +1,11 @@
-import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings, type ModelTiers } from "@repo/contracts";
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_REVIEW_MAX_ROUNDS,
+  EMPTY_MODEL_TIERS,
+  type AppSettings,
+  type ModelTiers,
+  type NotificationSettings,
+} from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
@@ -23,6 +30,7 @@ const DEFAULTS: StoredSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -53,6 +61,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "issueImportBudgetUsd",
     "issueImportJiraTools",
     "modelTiers",
+    "notifications",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -67,14 +76,23 @@ const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): Model
   ),
 });
 
+/** The stored notification settings over the defaults, so a kind added later starts on. */
+const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
+  muteInQuietHours: stored?.muteInQuietHours ?? DEFAULT_NOTIFICATION_SETTINGS.muteInQuietHours,
+  kinds: { ...DEFAULT_NOTIFICATION_SETTINGS.kinds, ...stored?.kinds },
+});
+
 /** Stored settings over their defaults. Also read by summaries, which derive review state from max rounds. */
 export function loadSettings(repos: Repos): StoredSettings {
   const stored = repos.settings.all();
   const pick = <K extends keyof StoredSettings>(key: K): StoredSettings[K] =>
     stored.has(key) ? (stored.get(key) as StoredSettings[K]) : DEFAULTS[key];
-  return Object.fromEntries(
-    (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
-  ) as unknown as StoredSettings;
+  return {
+    ...(Object.fromEntries(
+      (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
+    ) as unknown as StoredSettings),
+    notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
+  };
 }
 
 /** App settings stored as key/value JSON. The T3 token never leaves the server. */
@@ -131,6 +149,13 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
+        if (input.notifications !== undefined) {
+          const current = load().notifications;
+          repos.settings.set("notifications", {
+            muteInQuietHours: input.notifications.muteInQuietHours ?? current.muteInQuietHours,
+            kinds: { ...current.kinds, ...input.notifications.kinds },
+          } satisfies NotificationSettings);
+        }
       });
       return get();
     },

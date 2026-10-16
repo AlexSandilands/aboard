@@ -91,7 +91,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed` and `autopilot.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created` and `notifications.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -122,6 +122,7 @@ ORM.
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
+| `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a

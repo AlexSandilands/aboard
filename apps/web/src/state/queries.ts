@@ -2,9 +2,11 @@ import type {
   AppSettings,
   BackupStatus,
   BoardEvent,
+  AutopilotOverview,
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  NotificationList,
   SkillInfo,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -15,6 +17,8 @@ import type {
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { deliverNotification } from "~/components/notifications/delivery";
+import { withCreated } from "~/components/notifications/notifications.logic";
 import { api, eventsUrl } from "~/lib/api";
 import { applyBoardEvent } from "./boardReducer";
 
@@ -25,6 +29,8 @@ export const queryKeys = {
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
   backupStatus: ["backupStatus"] as const,
+  notifications: ["notifications"] as const,
+  autopilotOverview: ["autopilot", "overview"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -86,6 +92,23 @@ export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings,
     queryFn: ({ signal }) => api<AppSettings>("/api/settings", { signal }),
+  });
+}
+
+/** Autopilot's engine settings and catalogue. */
+export function useAutopilotOverview() {
+  return useQuery({
+    queryKey: queryKeys.autopilotOverview,
+    queryFn: ({ signal }) => api<AutopilotOverview>("/api/autopilot", { signal }),
+    staleTime: 0,
+  });
+}
+
+/** The attention inbox, newest first, with the unread count. Kept live by useBoardEvents. */
+export function useNotifications() {
+  return useQuery({
+    queryKey: queryKeys.notifications,
+    queryFn: ({ signal }) => api<NotificationList>("/api/notifications", { signal }),
   });
 }
 
@@ -186,6 +209,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
       }
       connectedOnce = true;
     };
@@ -201,10 +225,26 @@ export function useBoardEvents() {
       // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
       if (event.type === "task.deleted") {
         void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
+        // Its notifications went with it, read or not.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
       }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+      }
+      if (event.type === "notification.created") {
+        if (queryClient.getQueryData(queryKeys.notifications)) {
+          queryClient.setQueryData<NotificationList>(queryKeys.notifications, (list) =>
+            list ? withCreated(list, event.notification, event.unread) : list,
+          );
+        } else {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        }
+        deliverNotification(event.notification, event.popup);
+      }
+      // Read elsewhere (another window, the REST API), or removed with their task.
+      if (event.type === "notifications.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });

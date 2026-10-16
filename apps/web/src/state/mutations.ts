@@ -8,6 +8,8 @@ import type {
   LinkInput,
   MergePrInput,
   MoveTaskInput,
+  InboxNotification,
+  NotificationList,
   PlanInput,
   PlanPhase,
   PlanStep,
@@ -378,4 +380,18 @@ export function useUpdateSettings() {
         description: error instanceof Error ? error.message : String(error),
       }),
   });
+}
+
+/** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
+export function useMarkNotificationRead() {
+  return useApiMutation(
+    (id: string) => api<InboxNotification>(`/api/notifications/${enc(id)}/read`, { method: "POST" }),
+    {
+      silent: true,
+    },
+  );
+}
+
+export function useMarkAllNotificationsRead() {
+  return useApiMutation(() => api<NotificationList>("/api/notifications/read-all", { method: "POST" }));
 }
