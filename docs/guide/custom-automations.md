@@ -47,8 +47,12 @@ and keeps to the same pause, dry run, caps and quiet hours.
 ## What it does
 
 - It only acts on what happens **after** it is switched on: tasks already in Review when you make a "moves into
-  Review" automation are left alone. Changing its trigger or filters, switching it on, and lifting **Pause all** each start it
-  from that moment. A stale-task trigger is the exception: a task that was already stuck counts.
+  Review" automation are left alone. Changing its trigger or filters starts it from that moment; switching it on in
+  a project, or lifting **Pause all**, starts it from that moment in those projects. A stale-task trigger is the
+  exception: a task that was already stuck counts.
+- Pull request triggers go by when the board saw the change: **new commits** means commits pushed after the PR was
+  linked, **checks fail** fires each time they go from passing to failing (not again on every push while they stay
+  red), and a comment on a long-merged PR doesn't count as a merge.
 - Each thing it acts on is done once: a task moving into Review twice gets two runs, but the same move never
   gets a second one, even if the first failed.
 - An agent action waits out quiet hours and counts against the agent caps. A command doesn't, but at most four

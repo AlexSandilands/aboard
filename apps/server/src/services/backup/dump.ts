@@ -14,7 +14,7 @@ import { EXPORTED_SETTINGS } from "../settings.ts";
  * it would make every scheduled backup a commit. The pollers refill it after a restore.
  */
 const EXCLUDED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
-  task_links: ["snapshot_json", "synced_at"],
+  task_links: ["snapshot_json", "synced_at", "pr_changes_json"],
 };
 
 /** Per-task rows, each in a stable order that also reads naturally (plan order, round order). */

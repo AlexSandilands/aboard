@@ -200,17 +200,23 @@ the automation. Runs stay, under the old key.
 | Trigger            | Candidate                                   | Dedupe key                                     |
 | ------------------ | ------------------------------------------- | ---------------------------------------------- |
 | `status_change`    | A task in `to` (moved from `from`, if set, by its latest `status_changed` or `closed` event) | `status:<taskId>:<statusChangedAt>` |
-| `pr_event`         | Per PR link: `linked`, `new_head` (headOid), `checks_failing`, `conflict`, `merged` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<oid>`, `pr_conflict:<link>:<oid>`, `pr_merged:<link>` |
+| `pr_event`         | Per PR link: `linked`, `new_head`, `checks_failing`, `conflict`, `merged`, timed by `PrChanges` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<began>`, `pr_conflict:<link>:<began>`, `pr_merged:<link>` |
 | `stale`            | A task in `status` for `hours`              | `stale:<taskId>:<statusChangedAt>`             |
 | `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
 | `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<projectId>:<local slot stamp>` |
 
-- **Arming.** Events before `armed_at` don't fire, so switching an automation on doesn't act on the board's history.
-  It is set at creation, when the trigger or filters change, when the automation's switch turns on somewhere (`onEnabled`)
-  and when Pause all is lifted. Event times are `statusChangedAt`, the blocker's, or for a PR the later of the link's
-  creation and the PR's `updatedAt` (so a PR whose state predates the automation is left alone). `stale` is a state,
-  not an event, and ignores it. The board keeps no PR head history, so `new_head` fires for the head it sees after
-  arming, including the one a PR has when it is linked, or an older head when only the PR's `updatedAt` moved.
+- **Arming.** Events before the automation was armed don't fire, so switching it on doesn't act on the board's
+  history. `armed_at` is set at creation and when the trigger or filters change (which also clears the per-project
+  times). When its switch turns on for some projects, or Pause all is lifted (`onEnabled`), only those projects are
+  armed again (`armed_projects_json`), so events another project is still waiting on (held by quiet hours or a cap)
+  aren't lost; `customArmedAt` takes the later of the two. `stale` is a state, not an event, and ignores arming.
+- **Event times** are `statusChangedAt`, the latest blocker's, a PR link's creation, or for PR states the time the
+  board saw the state begin. `setSnapshot` keeps that in `task_links.pr_changes_json` (`PrChanges`,
+  `nextPrChanges` in contracts): when the PR merged, its checks started failing, a conflict appeared and its head
+  moved from one commit to another. The PR's own `updatedAt` isn't used: a comment moves it. A fact true on the first
+  snapshot counts as beginning then; the first head doesn't, so `new_head` means commits pushed after linking. Checks
+  that keep failing across pushes are one failure; passing and failing again is a new one. The column is a cache like
+  `snapshot_json`, left out of backups; until it's filled, PR state triggers see nothing new.
 - **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
   contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
   project filter (`checkCustomDefinition`, run by the service and the form).

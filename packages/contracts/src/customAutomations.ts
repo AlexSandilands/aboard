@@ -106,12 +106,20 @@ export const CustomAutomation = z.object({
    * somewhere and when Autopilot is resumed, so switching it on doesn't act on the board's history.
    */
   armedAt: z.string(),
+  /** Later arming times per project id, set when the automation is switched on there (or resumed). */
+  armedProjects: z.record(z.string(), z.string()).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type CustomAutomation = z.infer<typeof CustomAutomation>;
 
 export type CustomDefinition = Pick<CustomAutomation, "name" | "trigger" | "filters" | "action">;
+
+/** When the automation was armed for a project: the later of its own arming and the project's. */
+export function customArmedAt(custom: Pick<CustomAutomation, "armedAt" | "armedProjects">, projectId: string): string {
+  const own = custom.armedProjects[projectId];
+  return own && Date.parse(own) > Date.parse(custom.armedAt) ? own : custom.armedAt;
+}
 
 export const CreateCustomAutomationInput = z.object(Definition);
 export type CreateCustomAutomationInput = z.input<typeof CreateCustomAutomationInput>;

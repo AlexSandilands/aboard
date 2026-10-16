@@ -26,8 +26,11 @@ export interface CustomAutomationsService {
   update(id: string, input: UpdateCustomAutomationInput): CustomAutomation;
   /** Its switches go with it; its runs stay as history. */
   delete(id: string): void;
-  /** Ignores events before now: the automation was just switched on somewhere, or Autopilot resumed. */
-  rearm(ids: readonly string[]): void;
+  /**
+   * Ignores events before now in these projects: the automation was just switched on there, or Autopilot resumed.
+   * Other projects keep events they haven't acted on yet (held for quiet hours or a cap).
+   */
+  rearm(id: string, projectIds: readonly string[]): void;
   /** The column each task last moved from, for status-change triggers with a `from`. */
   statusFrom(taskIds: readonly string[]): Map<string, TaskStatus | null>;
 }
@@ -79,6 +82,7 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
           id: randomUUID(),
           ...checked(def),
           armedAt: now,
+          armedProjects: {},
           createdAt: now,
           updatedAt: now,
         };
@@ -102,16 +106,15 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
           id,
         );
         const now = nowIso();
+        // Under another trigger, or over tasks it didn't cover, what happened before isn't what the user asked to act
+        // on.
+        const rearmed =
+          JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ||
+          JSON.stringify(def.filters) !== JSON.stringify(current.filters);
         const next: CustomAutomation = {
           ...current,
           ...def,
-          // Under another trigger, or over tasks it didn't cover, what happened before isn't what the user asked to
-          // act on.
-          armedAt:
-            JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ||
-            JSON.stringify(def.filters) !== JSON.stringify(current.filters)
-              ? now
-              : current.armedAt,
+          ...(rearmed ? { armedAt: now, armedProjects: {} } : {}),
           updatedAt: now,
         };
         repos.autopilotCustom.update(next);
@@ -129,14 +132,15 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
       });
     },
 
-    rearm(ids) {
-      if (ids.length === 0) return;
+    rearm(id, projectIds) {
+      if (projectIds.length === 0) return;
       core.write((fx) => {
+        const current = repos.autopilotCustom.get(id);
+        if (!current) return;
         const now = nowIso();
-        for (const id of ids) {
-          const current = repos.autopilotCustom.get(id);
-          if (current) repos.autopilotCustom.update({ ...current, armedAt: now });
-        }
+        const armedProjects = { ...current.armedProjects };
+        for (const projectId of projectIds) armedProjects[projectId] = now;
+        repos.autopilotCustom.update({ ...current, armedProjects });
         fx.autopilot();
       });
     },

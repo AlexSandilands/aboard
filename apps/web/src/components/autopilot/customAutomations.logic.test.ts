@@ -33,6 +33,7 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   filters: { projectIds: [], labels: [], epicId: null },
   action: { kind: "shell", command: "make", timeoutSeconds: 60 },
   armedAt: "2026-10-01T00:00:00.000Z",
+  armedProjects: {},
   createdAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   ...over,

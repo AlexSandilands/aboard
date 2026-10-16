@@ -8,6 +8,7 @@ interface CustomRow {
   filters_json: string;
   action_json: string;
   armed_at: string;
+  armed_projects_json: string;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +21,7 @@ const toCustom = (r: CustomRow): CustomAutomation => ({
   filters: CustomFilters.parse(JSON.parse(r.filters_json)),
   action: CustomAction.parse(JSON.parse(r.action_json)),
   armedAt: r.armed_at,
+  armedProjects: JSON.parse(r.armed_projects_json || "{}") as Record<string, string>,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -31,6 +33,7 @@ const toRow = (c: CustomAutomation) => ({
   filters_json: JSON.stringify(c.filters),
   action_json: JSON.stringify(c.action),
   armed_at: c.armedAt,
+  armed_projects_json: JSON.stringify(c.armedProjects),
   created_at: c.createdAt,
   updated_at: c.updatedAt,
 });

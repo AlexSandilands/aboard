@@ -9,6 +9,8 @@ CREATE TABLE autopilot_custom (
   action_json TEXT NOT NULL,
   -- Events before this don't fire, so switching an automation on doesn't act on the board's history.
   armed_at TEXT NOT NULL,
+  -- {projectId: time}: armed again for one project when it is switched on there, so other projects keep their events.
+  armed_projects_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -22,3 +24,7 @@ END;
 -- A shell action's output tail and exit code; for a dry run, what would have run.
 ALTER TABLE autopilot_runs ADD COLUMN detail TEXT;
 ALTER TABLE autopilot_runs ADD COLUMN exit_code INTEGER;
+
+-- When each pull request fact began (PrChanges), for Autopilot's PR triggers. A cache the poller rebuilds, so, like
+-- snapshot_json, it isn't backed up.
+ALTER TABLE task_links ADD COLUMN pr_changes_json TEXT;

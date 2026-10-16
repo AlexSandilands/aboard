@@ -1,5 +1,6 @@
 import {
   customAgentPrompt,
+  customArmedAt,
   customAutomationKey,
   customTaskMatches,
   customValues,
@@ -15,6 +16,7 @@ import {
   type CustomTrigger,
   type CustomData,
   type CustomValues,
+  type PrChanges,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
@@ -35,7 +37,13 @@ const after = (at: string | null | undefined, armedAt: string): boolean =>
 function taskEvents(
   trigger: Exclude<CustomTrigger, { kind: "schedule" }>,
   task: TaskSummary,
-  ctx: { armedAt: string; now: Date; from: Map<string, string | null>; byId: Map<string, TaskSummary> },
+  ctx: {
+    armedAt: string;
+    now: Date;
+    from: Map<string, string | null>;
+    byId: Map<string, TaskSummary>;
+    prChanges: Map<string, PrChanges>;
+  },
   services: Services,
 ): Array<{ key: string; data: CustomData; what: string }> {
   switch (trigger.kind) {
@@ -63,30 +71,26 @@ function taskEvents(
     case "pr_event":
       return prLinksOf(task).flatMap((link) => {
         const snap = link.snapshot;
-        // When the board last saw the pull request change; a state older than the automation isn't news.
-        const seen = [link.createdAt, snap?.updatedAt ?? null].reduce<string | null>(
-          (latest, at) => (at && (!latest || Date.parse(at) > Date.parse(latest)) ? at : latest),
-          null,
-        );
-        const head = snap?.headOid ?? snap?.updatedAt ?? "";
+        // When the board saw the fact begin (nextPrChanges), not the PR's updatedAt, which any comment moves.
+        const changes = ctx.prChanges.get(link.id) ?? {};
         const data = { prLinkId: link.id };
         switch (trigger.event) {
           case "linked":
             return after(link.createdAt, ctx.armedAt) ? [{ key: `pr_linked:${link.id}`, data, what: "PR linked" }] : [];
           case "new_head":
-            return snap?.headOid && after(seen, ctx.armedAt)
+            return snap?.headOid && after(changes.newHead, ctx.armedAt)
               ? [{ key: `pr_head:${link.id}:${snap.headOid}`, data, what: "new commits" }]
               : [];
           case "checks_failing":
-            return snap?.checks === "failing" && after(seen, ctx.armedAt)
-              ? [{ key: `pr_checks:${link.id}:${head}`, data, what: "checks failing" }]
+            return snap?.checks === "failing" && after(changes.checksFailing, ctx.armedAt)
+              ? [{ key: `pr_checks:${link.id}:${changes.checksFailing}`, data, what: "checks failing" }]
               : [];
           case "conflict":
-            return snap?.mergeable === "conflicting" && after(seen, ctx.armedAt)
-              ? [{ key: `pr_conflict:${link.id}:${head}`, data, what: "merge conflict" }]
+            return snap?.mergeable === "conflicting" && after(changes.conflict, ctx.armedAt)
+              ? [{ key: `pr_conflict:${link.id}:${changes.conflict}`, data, what: "merge conflict" }]
               : [];
           case "merged":
-            return snap?.state === "merged" && after(seen, ctx.armedAt)
+            return snap?.state === "merged" && after(changes.merged, ctx.armedAt)
               ? [{ key: `pr_merged:${link.id}`, data, what: "PR merged" }]
               : [];
         }
@@ -116,44 +120,54 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     const scoped = inScope(ctx);
     if (trigger.kind === "schedule") {
       const s = trigger.schedule;
-      const slot =
-        s.kind === "hourly"
-          ? latestHourlySlot(s.everyHours, now)
-          : latestDue(s, now, localStamp(new Date(custom.armedAt)));
-      if (!slot || slot.getTime() <= Date.parse(custom.armedAt)) return [];
-      const stamp = localStamp(slot);
-      return scoped.map(({ project }) => ({
-        dedupeKey: `schedule:${project.id}:${stamp}`,
-        summary: `run "${custom.name}" in ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
-        projectId: project.id,
-        data: {} satisfies CustomData,
-        preview: preview(customValues(custom, project, null), null, services),
-      }));
+      return scoped.flatMap(({ project }): Candidate[] => {
+        const armedAt = customArmedAt(custom, project.id);
+        const slot =
+          s.kind === "hourly" ? latestHourlySlot(s.everyHours, now) : latestDue(s, now, localStamp(new Date(armedAt)));
+        if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
+        const stamp = localStamp(slot);
+        return [
+          {
+            dedupeKey: `schedule:${project.id}:${stamp}`,
+            summary: `run "${custom.name}" in ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
+            projectId: project.id,
+            data: {} satisfies CustomData,
+            preview: preview(customValues(custom, project, null), null, services),
+          },
+        ];
+      });
     }
     return scoped.flatMap(({ project }) => {
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
       const eligible = tasks.filter(matches);
+      const prChanges =
+        trigger.kind === "pr_event"
+          ? services.links.prChanges(eligible.flatMap((t) => prLinksOf(t).map((l) => l.id)))
+          : new Map<string, PrChanges>();
       const from =
         trigger.kind === "status_change" && trigger.from
           ? services.customAutomations.statusFrom(eligible.filter((t) => t.status === trigger.to).map((t) => t.id))
           : new Map<string, string | null>();
       return eligible.flatMap((task) =>
-        taskEvents(trigger, task, { armedAt: custom.armedAt, now, from, byId }, services).map(
-          ({ key, data, what }): Candidate => {
-            // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
-            const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, ctx.engine.dryRun);
-            return {
-              dedupeKey: key,
-              summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
-              taskId: task.id,
-              data,
-              ...(fresh && ctx.engine.dryRun
-                ? { preview: preview(customValues(custom, project, task, data), task, services) }
-                : {}),
-            };
-          },
-        ),
+        taskEvents(
+          trigger,
+          task,
+          { armedAt: customArmedAt(custom, project.id), now, from, byId, prChanges },
+          services,
+        ).map(({ key, data, what }): Candidate => {
+          // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
+          const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, ctx.engine.dryRun);
+          return {
+            dedupeKey: key,
+            summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
+            taskId: task.id,
+            data,
+            ...(fresh && ctx.engine.dryRun
+              ? { preview: preview(customValues(custom, project, task, data), task, services) }
+              : {}),
+          };
+        }),
       );
     });
   };

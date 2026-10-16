@@ -13,6 +13,7 @@ import type {
   PlanStep,
   PlanStepInput,
   Project,
+  PrChanges,
   PrSnapshot,
   ResolveFindingInput,
   ReviewFinding,
@@ -233,6 +234,8 @@ export interface LinksService {
    *   completes the task instead when it later enters Review.
    */
   setSnapshot(linkId: string, snapshot: LinkSnapshot | null): void;
+  /** When each pull request fact began on these links (see nextPrChanges); links with none are left out. */
+  prChanges(linkIds: readonly string[]): Map<string, PrChanges>;
 }
 
 export interface SettingsService {

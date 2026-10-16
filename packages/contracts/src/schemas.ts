@@ -190,6 +190,42 @@ export const PrSnapshot = z.object({
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
+/**
+ * When the board saw each pull request fact begin, from one snapshot to the next (`nextPrChanges`): the merge, the
+ * checks starting to fail, a conflict appearing, and the head moving from one commit to another. Server-side only,
+ * for Autopilot's PR triggers; the snapshot alone can't say when a state began.
+ */
+export const PrChanges = z.object({
+  merged: IsoDate.optional(),
+  checksFailing: IsoDate.optional(),
+  conflict: IsoDate.optional(),
+  newHead: IsoDate.optional(),
+});
+export type PrChanges = z.infer<typeof PrChanges>;
+
+/**
+ * The PR changes after a new snapshot at `at`. A fact that became true is stamped; one that holds keeps its stamp.
+ * The first snapshot stamps what is already true (the board just learned it), except the head, which is only new
+ * when it replaces another.
+ */
+export function nextPrChanges(
+  prev: PrSnapshot | null,
+  next: PrSnapshot | null,
+  changes: PrChanges,
+  at: string,
+): PrChanges {
+  if (!next) return changes;
+  const out: PrChanges = { ...changes };
+  const began = (was: boolean | undefined, is: boolean, key: "merged" | "checksFailing" | "conflict") => {
+    if (is && !was) out[key] = at;
+  };
+  began(prev?.state === "merged", next.state === "merged", "merged");
+  began(prev?.checks === "failing", next.checks === "failing", "checksFailing");
+  began(prev?.mergeable === "conflicting", next.mergeable === "conflicting", "conflict");
+  if (prev?.headOid && next.headOid && prev.headOid !== next.headOid) out.newHead = at;
+  return out;
+}
+
 export const T3ThreadRef = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),

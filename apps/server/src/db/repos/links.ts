@@ -4,6 +4,7 @@ import type {
   IssueRef,
   IssueSnapshot,
   LinkKind,
+  PrChanges,
   PrRef,
   PrSnapshot,
   T3ThreadRef,
@@ -105,6 +106,17 @@ export function createLinksRepo(sql: Sql) {
     },
     setSnapshot(id: string, snapshotJson: string | null, syncedAt: string): void {
       sql.run("UPDATE task_links SET snapshot_json = ?, synced_at = ? WHERE id = ?", snapshotJson, syncedAt, id);
+    },
+    setPrChanges(id: string, changes: PrChanges): void {
+      sql.run("UPDATE task_links SET pr_changes_json = ? WHERE id = ?", JSON.stringify(changes), id);
+    },
+    /** When each PR fact began, per link id; links with none recorded are left out. */
+    prChanges(ids: readonly string[]): Map<string, PrChanges> {
+      const rows = sql.all<{ id: string; pr_changes_json: string | null }>(
+        "SELECT id, pr_changes_json FROM task_links WHERE id IN (SELECT value FROM json_each(?)) AND pr_changes_json IS NOT NULL",
+        jsonList(ids),
+      );
+      return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);

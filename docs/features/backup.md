@@ -49,7 +49,8 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
   machine-only list. Autopilot's engine settings (`autopilotEngine`) are exported;
   its pause (`autopilotPaused`) isn't, so restoring a backup can't lift Pause all.
 - **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)).
-- **A link's `snapshot_json` and `synced_at`** are the GitHub and T3 pollers' cache, rewritten on every poll.
+- **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on
+  every poll (`pr_changes_json` is when each PR state began, for Autopilot's custom PR triggers).
   Dumping them would make every scheduled run a commit; the pollers refill them after a restore.
 
 ### Restoring a board

@@ -107,7 +107,7 @@ export function createServices(deps: ServiceDeps): Services {
       onEnabled: (automation, projectIds) => {
         if (automation === AUTOPILOT_RECURRING) recurring.restart(projectIds);
         const customId = customAutomationId(automation);
-        if (customId && projectIds.length > 0) customAutomations.rearm([customId]);
+        if (customId) customAutomations.rearm(customId, projectIds);
       },
     }),
     recurring,

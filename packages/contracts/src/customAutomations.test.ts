@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { brandEnv } from "./brand.ts";
+import { nextPrChanges, type PrSnapshot } from "./schemas.ts";
 import {
   checkCustomDefinition,
   customShellEnv,
@@ -94,5 +95,34 @@ describe("triggers", () => {
   it("counts hourly slots from local midnight", () => {
     expect(latestHourlySlot(6, new Date(2026, 9, 17, 13, 45))).toEqual(new Date(2026, 9, 17, 12));
     expect(latestHourlySlot(24, new Date(2026, 9, 17, 23, 59))).toEqual(new Date(2026, 9, 17, 0));
+  });
+});
+
+describe("nextPrChanges", () => {
+  const snap = (patch: Partial<PrSnapshot> = {}): PrSnapshot => ({
+    state: "open",
+    title: "x",
+    checks: "passing",
+    reviewDecision: null,
+    mergeable: "mergeable",
+    headRef: "b",
+    updatedAt: null,
+    headOid: "a1",
+    ...patch,
+  });
+
+  it("stamps facts when they begin, keeps them while they hold, and the head only when it moves", () => {
+    const first = nextPrChanges(null, snap({ checks: "failing" }), {}, "t1");
+    expect(first).toEqual({ checksFailing: "t1" });
+    const still = nextPrChanges(snap({ checks: "failing" }), snap({ checks: "failing", headOid: "b2" }), first, "t2");
+    expect(still).toEqual({ checksFailing: "t1", newHead: "t2" });
+    const again = nextPrChanges(
+      snap(),
+      snap({ checks: "failing", mergeable: "conflicting", state: "merged" }),
+      still,
+      "t3",
+    );
+    expect(again).toEqual({ checksFailing: "t3", newHead: "t2", conflict: "t3", merged: "t3" });
+    expect(nextPrChanges(snap(), null, again, "t4")).toBe(again);
   });
 });
