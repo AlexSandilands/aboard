@@ -5,7 +5,7 @@ import { AttentionIcon } from "~/components/board/attention";
 import { topAttention } from "~/components/board/board.logic";
 import { THREAD_STATUS } from "~/components/board/CardLinks";
 import { useOpenTask } from "~/components/board/boardNavigation";
-import { EpicRollupBar } from "~/components/board/EpicBand";
+import { EpicRollupBar } from "~/components/board/EpicRollupBar";
 import { TaskSegments } from "~/components/board/TaskProgress";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";

@@ -500,6 +500,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                 key={lane.project.id}
                 project={lane.project}
                 cells={lane.cells}
+                epicChildren={lane.epicChildren}
                 selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
                 bands={lane.bands}
                 draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}

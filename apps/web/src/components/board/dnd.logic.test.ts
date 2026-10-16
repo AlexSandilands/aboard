@@ -125,6 +125,7 @@ describe("previewMove", () => {
   const lane = (id: string, cells: Partial<Record<TaskStatus, string[]>>): Lane => ({
     project: { id } as Project,
     bands: [],
+    epicChildren: {},
     cells: {
       backlog: (cells.backlog ?? []).map(card),
       planned: (cells.planned ?? []).map(card),

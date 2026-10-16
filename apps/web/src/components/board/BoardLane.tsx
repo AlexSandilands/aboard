@@ -9,7 +9,14 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
-import { laneCounts, laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band, type LaneCells } from "./board.logic";
+import {
+  laneCounts,
+  laneHasCollapsibleCell,
+  STATUS_ORDER,
+  type EpicBand as Band,
+  type Lane,
+  type LaneCells,
+} from "./board.logic";
 import { BoardCell } from "./BoardCell";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
@@ -27,6 +34,7 @@ export const BoardLane = memo(function BoardLane({
   project,
   bands,
   cells,
+  epicChildren,
   selectedTaskId,
   draggingTaskId,
   draggingRowId,
@@ -36,6 +44,7 @@ export const BoardLane = memo(function BoardLane({
   project: Project;
   bands: ReadonlyArray<Band>;
   cells: LaneCells;
+  epicChildren: Lane["epicChildren"];
   selectedTaskId: string | null;
   /** The card being dragged, when it belongs to this lane. */
   draggingTaskId: string | null;
@@ -134,6 +143,7 @@ export const BoardLane = memo(function BoardLane({
                   gridRow={bands.length ? bands.length + 1 : undefined}
                   status={status}
                   tasks={cells[status]}
+                  epicChildren={epicChildren}
                   toggleRow={toggleRow}
                   selectedTaskId={selectedTaskId}
                   draggingTaskId={draggingTaskId}

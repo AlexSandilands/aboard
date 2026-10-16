@@ -10,6 +10,8 @@ on the server.
 ## How it works
 
 A lane stacks its epic bands above its loose cards; how bands are laid out is in [epics.md](epics.md#on-the-board).
+A finished epic has no band: it is one card in the lane's Done cell, so it counts as one card for the column
+counts and the collapsed preview below.
 
 ### Collapsing columns
 

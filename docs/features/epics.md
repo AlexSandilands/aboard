@@ -77,6 +77,17 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - Filters keep the tasks that match in their band, and all of an epic's tasks when the epic itself matches.
   `?epic=<id>` shows only that band, with a chip in the board header to clear it.
 - Under bands, a lane with no loose cards hides its empty loose row.
+- **A finished epic is a card, not a band.** Once an epic is Done, its band would sit above everything in Done and
+  several of them would push the column down. So it drops into the lane's Done cell as one card (`EpicCard.tsx`),
+  ordered with the other Done cards by when it finished (its `statusChangedAt`, which `syncEpic` sets). The card is
+  the band's header in card form: icon, `#N`, title, roll-up bar, `done/total` and the quick Archive button.
+  Clicking it opens the epic's panel. The chevron unfolds its tasks inside the card (folded by default; opening
+  one of them from elsewhere unfolds it). Those tasks are in `Lane.epicChildren`, not in the lane's cells, so
+  they don't also show loose. The card has no Autopilot button (nothing is left to run; the panel keeps it) and
+  can't be dragged. When a task leaves Done, the epic's status changes and the band comes back.
+  Filters, search, column counts and the collapsed-column preview treat the card like any Done card; a filter
+  that matches only a task inside it keeps the card, listing only the matching tasks. `?epic=` is the exception:
+  filtering to a finished epic shows its band, since that filter is for looking at its tasks.
 
 ### In the panel
 
@@ -241,7 +252,7 @@ launch has no suggested model and returns the thread instead of a link.
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | A separate `epics` table                     | Duplicates numbering, links, notes, labels and activity, which an epic needs as much as a task does  |
 | Epics as a label                             | No roll-up, no description or links of its own, and nothing stops a task carrying two                |
-| An epic as an ordinary card in its column    | Its tasks would be scattered around it; the band shows them together                                 |
+| An epic as an ordinary card in its column    | Its tasks would be scattered around it; the band shows them together (a finished epic is the exception: it is a card in Done, with its tasks folded inside) |
 | Nested epics                                 | Not needed for a feature-sized grouping, and every rule above would need a recursive version         |
 
 ## Code map
@@ -253,7 +264,9 @@ launch has no suggested model and returns the thread instead of a link.
 | `apps/server/src/services/summaries.ts`                | `parent` and `rollup` on summaries                                    |
 | `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |
 | `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
-| `apps/web/src/components/board/EpicBand.tsx`           | The band, its roll-up bar and its Autopilot button                    |
+| `apps/web/src/components/board/EpicBand.tsx`           | The band and its Autopilot button                                     |
+| `apps/web/src/components/board/EpicRollupBar.tsx`      | The roll-up bar, shared by the band, the card and the panel           |
+| `apps/web/src/components/board/EpicCard.tsx`           | The finished epic's card in Done, with its folded tasks               |
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
 | `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
 | `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |
