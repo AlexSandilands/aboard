@@ -223,13 +223,15 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
   run stays `running` and holds a concurrency slot.
 - **The cap counts working agents.** A T3 run ends once the thread has started (so a restart strands nothing), which
-  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress or In Review (the agent runs
-  its review loop there) whose latest Start planned run began a T3 thread (the run's `threadUrl`, whatever the run's
+  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress, In Review (the agent runs
+  its review loop there) or still Planned (the thread hasn't moved them yet) whose latest Start planned run began a T3 thread (the run's `threadUrl`, whatever the run's
   outcome: one that failed at the grace period may still move the task) that is `working`, `waiting` (subagents still
   going), `input` or `approval` in its snapshot, and not settled or archived. `check` drops candidates that already
   have a run (a failed or still-starting task would otherwise use up the room of those below it) and returns only as
-  many as `maxConcurrent` leaves after those and the engine's running runs. A thread no snapshot has reported on, or
-  whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts for ten minutes. The slot frees when
+  many as `maxConcurrent` leaves after those and the engine's running runs. A snapshot only counts as
+  evidence when it was taken after the run ended (the launch-time poll sees a thread that hasn't run yet, "idle"). A
+  thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
+  for ten minutes from the run's end or the snapshot. The slot frees when
   the thread idles, finishes, fails, settles or is archived, or the task leaves In Progress and Review; a thread stuck
   waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
   the engine counts. A dry run ignores this.

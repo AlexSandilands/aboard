@@ -103,19 +103,20 @@ const UNSEEN_MS = 10 * 60_000;
 
 /**
  * How many agents Start planned started are still working. A headless run is a running run, which the engine counts
- * itself. A T3 run ends once its thread has started, so this counts the tasks (In Progress, or In Review, where the
- * agent runs its review loop) whose latest Start planned run began a T3 thread that is still busy: working, waiting
- * on subagents, or waiting on the user, and not settled or archived. A thread no snapshot has reported on, or that the
- * poll stopped refreshing, counts for ten minutes. The slot frees when the thread idles, finishes, fails, settles or
- * is archived, or the task leaves In Progress and Review. A run that failed at the grace period still counts: its
- * thread may yet move the task.
+ * itself. A T3 run ends once its thread has started, so this counts the tasks (In Progress, In Review where the agent
+ * runs its review loop, or still Planned when the thread hasn't moved them yet) whose latest Start planned run began a
+ * T3 thread that is still busy: working, waiting on subagents, or waiting on the user, and not settled or archived. A
+ * snapshot only counts as evidence when the live poll took it after the run ended: the launch-time poll sees a thread
+ * that hasn't run yet ("idle"). Without one, or when the poll stopped refreshing it, the thread counts for ten minutes
+ * from the run's end or the snapshot. The slot frees when the thread idles, finishes, fails, settles or is archived, or
+ * the task leaves In Progress and Review. A run that failed at the grace period still counts: its thread may yet move
+ * the task.
  */
 export function workingAgents(services: Services, now: Date): number {
   const at = now.getTime();
-  const open = [
-    ...services.tasks.summaries({ status: "in_progress" }),
-    ...services.tasks.summaries({ status: "review" }),
-  ];
+  const open = (["planned", "in_progress", "review"] as const).flatMap((status) =>
+    services.tasks.summaries({ status }),
+  );
   return open.filter((task) => {
     if (task.kind === "epic" || task.archivedAt !== null) return false;
     const run = services.autopilot
@@ -126,9 +127,11 @@ export function workingAgents(services: Services, now: Date): number {
     if (thread?.kind !== "t3_thread") return false;
     const { snapshot } = thread;
     if (snapshot?.archived || snapshot?.settled) return false;
-    const seenAt = snapshot ? thread.syncedAt : (run.finishedAt ?? run.updatedAt);
-    if (!seenAt || at - Date.parse(seenAt) >= UNSEEN_MS) return false;
-    return snapshot ? BUSY_THREAD.has(snapshot.status) : true;
+    const endedAt = run.finishedAt ?? run.updatedAt;
+    const reported = snapshot && thread.syncedAt !== null && Date.parse(thread.syncedAt) >= Date.parse(endedAt);
+    const seenAt = reported ? thread.syncedAt! : endedAt;
+    if (at - Date.parse(seenAt) >= UNSEEN_MS) return false;
+    return reported ? BUSY_THREAD.has(snapshot.status) : true;
   }).length;
 }
 
@@ -185,10 +188,11 @@ export const startPlanned = defineAutomation({
         })),
     );
     // A dry run only previews, whatever is working.
-    if (engine.dryRun || candidates.length === 0) return candidates;
+    if (engine.dryRun) return candidates;
     // Tasks that already had their attempt (failed, or still starting) are the engine's to skip: they mustn't use up
     // the room the tasks below them need.
     const fresh = candidates.filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
+    if (fresh.length === 0) return fresh;
     // The engine's cap counts runs, which for T3 end once the thread starts: leave room for the threads still working.
     const agents = services.autopilot
       .automations()

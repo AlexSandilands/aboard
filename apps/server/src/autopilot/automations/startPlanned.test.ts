@@ -34,14 +34,16 @@ function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
       const taskId = request.run.taskId!;
       const patch = behaviour.headless
         ? ({ runner: "headless", worktreePath: "/wt/1", sessionId: "s-1" } as const)
-        : ({
-            runner: "t3",
-            threadUrl: s.links.add(
-              taskId,
-              { t3Thread: { environmentId: "env-1", threadId: `thread-${++threads}` } },
-              "autopilot",
-            ).url,
-          } as const);
+        : behaviour.fail
+          ? ({ runner: "t3" } as const)
+          : ({
+              runner: "t3",
+              threadUrl: s.links.add(
+                taskId,
+                { t3Thread: { environmentId: "env-1", threadId: `thread-${++threads}` } },
+                "autopilot",
+              ).url,
+            } as const);
       update(patch);
       if (behaviour.onStart) behaviour.onStart(request, taskId);
       else if (!behaviour.fail || behaviour.headless) s.tasks.move(taskId, { status: "in_progress" }, "agent");
@@ -288,6 +290,45 @@ describe("start planned tasks: limits", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("doesn't take the launch-time poll's idle thread for a finished agent", async () => {
+    const { s, task, pass, requests, turnOn, behaviour } = setup();
+    task("A");
+    task("B");
+    turnOn();
+    // T3's poll right after the launch finds a thread that hasn't run yet, before the agent has moved the task.
+    behaviour.onStart = (_request, id) => {
+      const link = s.tasks.detail(id).links.findLast((l) => l.kind === "t3_thread")!;
+      s.links.setSnapshot(link.id, { title: "T", status: "idle", lastActivityAt: new Date().toISOString() });
+      // The agent takes a moment: the run ends after the snapshot was taken.
+      for (const start = Date.now(); Date.now() - start < 5;);
+      s.tasks.move(id, { status: "in_progress" }, "agent");
+    };
+    await pass();
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("holds the cap for a thread that is waiting for approval before it has moved its task", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    const { s, task, engine, requests, runs, turnOn, behaviour, thread } = setup();
+    const a = task("A");
+    task("B");
+    turnOn({ graceMinutes: 1 });
+    behaviour.onStart = () => {};
+    const first = engine.pass();
+    await vi.advanceTimersByTimeAsync(60_000 + START_POLL_MS);
+    await first;
+    await engine.idle();
+    expect(runs()).toMatchObject([{ status: "failed" }]);
+    expect(s.tasks.summary(a.id).status).toBe("planned");
+    thread(a.id, "approval");
+    await engine.pass();
+    expect(requests).toHaveLength(1);
+    thread(a.id, "idle");
+    await engine.pass();
+    expect(requests).toHaveLength(2);
+  });
+
   it("stops counting a thread whose snapshot T3 stopped refreshing", async () => {
     let later = 0;
     const { task, pass, requests, turnOn, thread } = setup({ now: () => new Date(Date.now() + later) });
@@ -352,7 +393,7 @@ describe("start planned tasks: limits", () => {
 
 describe("start planned tasks: one attempt per entry into Planned", () => {
   it("doesn't start a task again once it has a run, but does when it re-enters Planned", async () => {
-    const { s, task, pass, requests, turnOn, behaviour } = setup();
+    const { s, task, pass, requests, turnOn, behaviour, thread } = setup();
     const t = task("Flagged");
     behaviour.onStart = (_r, id) => {
       s.tasks.move(id, { status: "in_progress" }, "agent");
@@ -361,6 +402,8 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
     await pass();
     await pass();
     expect(requests).toHaveLength(1);
+    // Its thread finished; the user sends the task back to Planned.
+    thread(t.id, "idle");
     s.tasks.move(t.id, { status: "planned" }, "user");
     await pass();
     expect(requests).toHaveLength(2);
