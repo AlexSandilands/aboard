@@ -1,4 +1,4 @@
-import { MODEL_TIERS, TEMPLATE_PLACEHOLDERS, type ModelTier } from "@repo/contracts";
+import { MODEL_TIERS, TEMPLATE_NAME_MAX, TEMPLATE_PLACEHOLDERS, type ModelTier } from "@repo/contracts";
 import { PlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { OutlineEditor } from "~/components/task/PlanEditor";
@@ -87,6 +87,7 @@ export function TemplateEditorForm({
               autoFocus
               size="sm"
               aria-label="Template name"
+              maxLength={TEMPLATE_NAME_MAX}
               value={form.name}
               placeholder="Bug"
               onChange={(event) => patch({ name: event.currentTarget.value })}

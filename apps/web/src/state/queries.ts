@@ -77,6 +77,8 @@ export function useTemplates() {
   return useQuery({
     queryKey: queryKeys.templates,
     queryFn: ({ signal }) => api<TaskTemplate[]>("/api/templates", { signal }),
+    // No SSE event covers templates, so refetch whenever a picker or Settings mounts.
+    staleTime: 0,
   });
 }
 

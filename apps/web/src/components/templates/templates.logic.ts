@@ -1,4 +1,5 @@
 import {
+  TEMPLATE_NAME_MAX,
   normalizeLabel,
   renderTemplateText,
   templateHasPlan,
@@ -119,7 +120,7 @@ export function draftFromTask(
   >,
 ): CreateTemplateInput {
   return {
-    name: task.title,
+    name: task.title.slice(0, TEMPLATE_NAME_MAX),
     projectId: task.projectId,
     titlePattern: task.title,
     description: task.description,
@@ -132,6 +133,22 @@ export function draftFromTask(
         steps: phase.steps.map((step) => ({ title: step.title, ...(step.notes ? { notes: step.notes } : {}) })),
       })),
     suggestedTier: task.suggestedModel?.tier ?? null,
+  };
+}
+
+/**
+ * What a template adds to the create request from the New task palette. `planFromTemplate` is set when the
+ * "with plan" flow has a plan to start from, so the task goes straight to Planned and there is nothing to write.
+ */
+export function templateRequest(
+  template: Pick<TaskTemplate, "id" | "phases"> | undefined,
+  flow: "backlog" | "planned" | "epic",
+): { fields: { template?: string; status?: "planned" }; planFromTemplate: boolean } {
+  if (!template) return { fields: {}, planFromTemplate: false };
+  const planFromTemplate = flow === "planned" && templateHasPlan(template);
+  return {
+    fields: { template: template.id, ...(planFromTemplate ? { status: "planned" as const } : {}) },
+    planFromTemplate,
   };
 }
 

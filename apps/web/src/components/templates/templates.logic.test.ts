@@ -11,6 +11,7 @@ import {
   prefillFrom,
   scopeLabel,
   templateSummary,
+  templateRequest,
   templatesFor,
 } from "./templates.logic";
 
@@ -131,6 +132,22 @@ describe("draftFromTask", () => {
   });
 });
 
+describe("draftFromTask names", () => {
+  it("keeps a long title within the template name limit", () => {
+    const draft = draftFromTask({
+      title: "x".repeat(200),
+      description: null,
+      labels: [],
+      planContext: null,
+      phases: [],
+      suggestedModel: null,
+      projectId: "p1",
+    });
+    expect(draft.name).toHaveLength(80);
+    expect(draft.titlePattern).toHaveLength(200);
+  });
+});
+
 describe("templatesFor", () => {
   it("lists board-wide templates first, then the project's, and leaves other projects out", () => {
     const all = [
@@ -150,6 +167,25 @@ describe("prefillFrom", () => {
       new Date(2026, 9, 6),
     );
     expect(filled).toEqual({ title: "Review 2026-10-06", description: "For Alpha" });
+  });
+});
+
+describe("templateRequest", () => {
+  it("adds nothing without a template", () => {
+    expect(templateRequest(undefined, "planned")).toEqual({ fields: {}, planFromTemplate: false });
+  });
+  it("sends the template, and Planned when the plan flow has a plan to start from", () => {
+    expect(templateRequest(template(), "backlog")).toEqual({ fields: { template: "t1" }, planFromTemplate: false });
+    expect(templateRequest(template(), "planned")).toEqual({
+      fields: { template: "t1", status: "planned" },
+      planFromTemplate: true,
+    });
+  });
+  it("leaves a planless template in the plan editor flow", () => {
+    expect(templateRequest(template({ phases: [] }), "planned")).toEqual({
+      fields: { template: "t1" },
+      planFromTemplate: false,
+    });
   });
 });
 

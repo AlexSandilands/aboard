@@ -1,4 +1,5 @@
 import {
+  TEMPLATE_NAME_MAX,
   normalizeLabels,
   type CreateTemplateInput,
   type TaskTemplate,
@@ -134,8 +135,10 @@ export function createTemplatesService(core: Core, deps: { projects: ProjectsSer
     duplicate(id) {
       return core.write(() => {
         const source = get(id);
-        let name = `${source.name} copy`;
-        for (let n = 2; repos.templates.byName(name, source.projectId); n++) name = `${source.name} copy ${n}`;
+        // The base is cut so "<name> copy 12" still fits the name limit.
+        const base = source.name.slice(0, TEMPLATE_NAME_MAX - " copy 99".length).trimEnd();
+        let name = `${base} copy`;
+        for (let n = 2; repos.templates.byName(name, source.projectId); n++) name = `${base} copy ${n}`;
         const now = nowIso();
         const copy: TaskTemplate = { ...source, id: randomUUID(), name, createdAt: now, updatedAt: now };
         repos.templates.insert(copy);

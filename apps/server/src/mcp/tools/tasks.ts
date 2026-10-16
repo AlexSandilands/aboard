@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { CloseTaskInput, TaskResolution, TaskStatusInput, type LinkInput, type T3ThreadRef } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
+import type { Services } from "../../services/types.ts";
 import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
   epicField,
+  findProject,
   hasProjectRef,
   labelsField,
   suggestedModelField,
@@ -20,6 +22,7 @@ import {
   taskField,
   taskResult,
   textResult,
+  type ProjectRefArgs,
   type ToolRegistrar,
 } from "../shared.ts";
 
@@ -35,6 +38,15 @@ const linksField = z
 
 function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined }): LinkInput[] {
   return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
+}
+
+/**
+ * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
+ * that doesn't exist yet has no templates of its own, only the board-wide ones.
+ */
+function templateFor(services: Services, args: ProjectRefArgs & { template?: string | undefined }) {
+  if (!args.template) return null;
+  return services.templates.resolve(args.template, findProject(services, args)?.id ?? "");
 }
 
 /**
@@ -77,8 +89,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     (args) =>
       run(() => {
         requireProjectRef(args);
+        const template = templateFor(services, args);
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
-        const template = args.template ? services.templates.resolve(args.template, project.id) : null;
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
@@ -138,8 +150,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             "create_task needs a plan (phases or markdown), or a template that has one. Use add_to_backlog for unplanned work.",
           );
         }
+        const template = templateFor(services, args);
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
-        const template = args.template ? services.templates.resolve(args.template, project.id) : null;
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,

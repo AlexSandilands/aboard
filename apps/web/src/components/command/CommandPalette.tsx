@@ -1,11 +1,5 @@
 // View-stack command palette, modelled on T3 Code's CommandPalette (MIT) — see NOTICE.
-import {
-  TASK_STATUSES,
-  templateHasPlan,
-  type Project,
-  type T3ProjectCandidate,
-  type TaskSummary,
-} from "@repo/contracts";
+import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
@@ -26,7 +20,7 @@ import {
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
-import { followTemplate, prefillFrom, templatesFor } from "~/components/templates/templates.logic";
+import { followTemplate, prefillFrom, templatesFor, templateRequest } from "~/components/templates/templates.logic";
 import { Button } from "~/components/ui/button";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "~/components/ui/command";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
@@ -383,16 +377,17 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     const issue = issueImportRow(title, flow);
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
     const template = issue ? undefined : availableTemplates.find((t) => t.id === templateId);
-    // A template's plan lets the task start in Planned, so "with plan" has nothing left to write.
-    const planFromTemplate = flow === "planned" && template !== undefined && templateHasPlan(template);
+    const { fields: templateFields, planFromTemplate } = templateRequest(template, flow);
     createTask.mutate(
       {
         projectId,
-        ...(issue ? { sourceUrl: issue.sourceUrl } : { title, description: normalizeDescription(description) }),
+        // Blank text is sent as "" with a template, so clearing its pre-filled description sticks.
+        ...(issue
+          ? { sourceUrl: issue.sourceUrl }
+          : { title, description: normalizeDescription(description) ?? (template ? "" : undefined) }),
         ...(flow === "epic" ? { kind: "epic" as const } : {}),
         ...(epicId ? { epicId } : {}),
-        ...(template ? { template: template.id } : {}),
-        ...(planFromTemplate ? { status: "planned" as const } : {}),
+        ...templateFields,
       },
       {
         onSuccess: (task) => {

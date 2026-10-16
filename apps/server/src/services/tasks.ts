@@ -237,9 +237,15 @@ export function createTasksService(
           );
         }
         // An imported task takes its description from the issue, and only while it is still empty.
+        // A description given, even a blank one, is explicit: blank means none, not "use the template's".
         const description =
-          input.description ??
-          (source || !template?.description ? undefined : renderTemplateText(template.description, context));
+          input.description !== undefined
+            ? input.description.trim()
+              ? input.description
+              : undefined
+            : source || !template?.description
+              ? undefined
+              : renderTemplateText(template.description, context);
         const plan: PlanInput | undefined =
           input.plan ??
           (templatePlan

@@ -97,6 +97,15 @@ describe("template CRUD", () => {
     expect(names()).toHaveLength(5);
   });
 
+  it("keeps a duplicate's name within the limit", () => {
+    const { s } = setup();
+    const long = s.templates.create({ name: "x".repeat(80) });
+    const copy = s.templates.duplicate(long.id);
+    expect(copy.name.length).toBeLessThanOrEqual(80);
+    expect(copy.name.endsWith(" copy")).toBe(true);
+    expect(s.templates.duplicate(long.id).name.length).toBeLessThanOrEqual(80);
+  });
+
   it("duplicates into a free name in the same scope", () => {
     const { s, project } = setup();
     const own = s.templates.create({ name: "Mine", projectId: project.id, labels: ["x"] });
@@ -184,6 +193,20 @@ describe("creating a task from a template", () => {
     expect(task.phases.map((p) => p.title)).toEqual(["Mine"]);
     expect(task.phases[0]!.steps.map((st) => st.title)).toEqual(["Only step"]);
     expect(task.suggestedModel).toBeNull();
+  });
+
+  it("takes an explicitly blank description over the template's", () => {
+    const { s, project } = setup();
+    const plain = s.templates.create({ name: "Plain", description: "From the template" });
+    expect(s.tasks.create({ projectId: project.id, template: plain.id, title: "a" }).description).toBe(
+      "From the template",
+    );
+    expect(
+      s.tasks.create({ projectId: project.id, template: plain.id, title: "b", description: "" }).description,
+    ).toBeNull();
+    expect(
+      s.tasks.create({ projectId: project.id, template: plain.id, title: "c", description: "  " }).description,
+    ).toBeNull();
   });
 
   it("is Backlog by default and Planned when asked, which needs a plan", () => {

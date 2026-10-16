@@ -125,6 +125,18 @@ describe("templates over MCP", () => {
     expect(planless.text).toContain("needs a plan");
   });
 
+  it("doesn't create a project when the template isn't found", async () => {
+    const missing = await call(agent, "add_to_backlog", { title: "x", workspacePath: "/work/new", template: "Nope" });
+    expect(missing.isError).toBe(true);
+    expect(h.services.projects.list().map((p) => p.title)).toEqual(["Alpha"]);
+    const planned = await call(agent, "create_task", { title: "x", workspacePath: "/work/new", template: "Nope" });
+    expect(planned.isError).toBe(true);
+    expect(h.services.projects.list()).toHaveLength(1);
+    const ok = await call(agent, "add_to_backlog", { title: "x", workspacePath: "/work/new", template: "Bug" });
+    expect(ok.isError).toBe(false);
+    expect(h.services.projects.list()).toHaveLength(2);
+  });
+
   it("names the templates available when one is not found", async () => {
     const missing = await call(agent, "add_to_backlog", { title: "x", workspacePath, template: "Nope" });
     expect(missing.isError).toBe(true);

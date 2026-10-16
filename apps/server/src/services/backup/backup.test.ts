@@ -276,6 +276,28 @@ describe("restore", () => {
     expect(readdirSync(join(dbPath, ".."))).toEqual([]);
   });
 
+  it("reads a folder written before templates existed, with no templates.json", () => {
+    const { s, db } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "templates.json"));
+    const dump = readDumpDir(dir);
+    expect(dump.task_templates).toEqual([]);
+    const dbPath = join(tempDir(), "data.sqlite");
+    // An older manifest doesn't count templates, and its tasks don't point at any.
+    const { task_templates: _n, ...counts } = dump.manifest.counts;
+    const tasks = dump.tasks.map((b) => ({ ...b, task: { ...b.task, template_id: null } }));
+    restoreBoard(dbPath, { ...dump, manifest: { ...dump.manifest, counts }, tasks });
+    const restored = openDatabase(dbPath);
+    try {
+      expect(restored.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual(
+        db.prepare("SELECT count(*) AS n FROM tasks").get(),
+      );
+    } finally {
+      restored.close();
+    }
+  });
+
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
@@ -307,6 +329,9 @@ describe("restore", () => {
     try {
       const statuses = restored.prepare("SELECT status FROM tasks").all() as Array<{ status: string }>;
       expect(statuses.map((r) => r.status)).not.toContain("idea");
+      // The migrations after the dump's schema seed the starter templates.
+      const names = restored.prepare("SELECT name FROM task_templates ORDER BY name").all();
+      expect(names).toEqual([{ name: "Bug" }, { name: "Feature" }, { name: "Spike" }]);
       const created = restored
         .prepare("SELECT payload_json FROM task_events WHERE task_id = ? AND type = 'created'")
         .get(a.id) as { payload_json: string };
