@@ -31,6 +31,8 @@ interface BoardViewState extends CollapseState {
   /** `rowId`: a project id for its loose cards, or an epic id for its band. */
   toggleCellCollapsed: (rowId: string, status: TaskStatus) => void;
   toggleEpicCollapsed: (epicId: string) => void;
+  /** Drops collapsed epics that are no longer on the board. */
+  pruneCollapsedEpics: (epicIds: ReadonlySet<string>) => void;
   setSearch: (value: string) => void;
 }
 
@@ -52,6 +54,13 @@ export const useBoardView = create<BoardViewState>()(
         set(({ collapsedEpics: { [epicId]: was, ...rest } }) => ({
           collapsedEpics: was ? rest : { ...rest, [epicId]: true },
         })),
+      pruneCollapsedEpics: (epicIds) =>
+        set(({ collapsedEpics }) => {
+          const kept = Object.keys(collapsedEpics).filter((id) => epicIds.has(id));
+          return kept.length === Object.keys(collapsedEpics).length
+            ? {}
+            : { collapsedEpics: Object.fromEntries(kept.map((id) => [id, true as const])) };
+        }),
       setSearch: (search) => set({ search }),
     }),
     {

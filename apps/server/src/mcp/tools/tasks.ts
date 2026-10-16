@@ -175,18 +175,25 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
               `#${child.number} is in another project; an epic's tasks share its project`,
             );
           }
+          if (child.parent) {
+            throw new AppError(
+              "VALIDATION",
+              `#${child.number} is already in epic #${child.parent.number}. To move it, call update_task(task, epic) after creating this epic.`,
+            );
+          }
         }
         const links = linkInputs(args);
-        const epic = services.tasks.create({
-          projectId: project.id,
-          title: args.title,
-          kind: "epic",
-          ...(args.description ? { description: args.description } : {}),
-          ...(links.length ? { links } : {}),
-          ...(args.labels?.length ? { labels: args.labels } : {}),
-          actor: actor(args.actor),
-        });
-        for (const child of children) services.tasks.update(child.id, { epicId: epic.id }, actor(args.actor));
+        const epic = services.tasks.createEpic(
+          {
+            projectId: project.id,
+            title: args.title,
+            ...(args.description ? { description: args.description } : {}),
+            ...(links.length ? { links } : {}),
+            ...(args.labels?.length ? { labels: args.labels } : {}),
+          },
+          children.map((c) => c.id),
+          actor(args.actor),
+        );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
         return taskResult(services, epic.id, `Created epic #${epic.number} in ${project.title}${added}.`);
       }),
