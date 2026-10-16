@@ -16,7 +16,10 @@ afterEach(() => {
 interface Behaviour {
   /** What the fake agent does once it is started: by default it moves the task to In Progress, as a real one does. */
   onStart?: (request: RunnerRequest, taskId: string) => void;
+  /** The runner rejects with this once the agent has done its thing. */
   fail?: string;
+  /** Which runner it is, and so what it records: a thread, or a worktree and a session. */
+  headless?: boolean;
 }
 
 function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
@@ -27,12 +30,15 @@ function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
   const runner: Runner = {
     start: (request, update = () => {}) => {
       requests.push(request);
-      if (behaviour.fail) return Promise.reject(new Error(behaviour.fail));
-      update({ runner: "t3", threadUrl: "t3code://threads/x" });
+      const patch = behaviour.headless
+        ? ({ runner: "headless", worktreePath: "/wt/1", sessionId: "s-1" } as const)
+        : ({ runner: "t3", threadUrl: "t3code://threads/x" } as const);
+      update(patch);
       const taskId = request.run.taskId!;
       if (behaviour.onStart) behaviour.onStart(request, taskId);
-      else s.tasks.move(taskId, { status: "in_progress" }, "agent");
-      return Promise.resolve({ runner: "t3", threadUrl: "t3code://threads/x", result: null });
+      else if (!behaviour.fail || behaviour.headless) s.tasks.move(taskId, { status: "in_progress" }, "agent");
+      if (behaviour.fail) return Promise.reject(new Error(behaviour.fail));
+      return Promise.resolve({ ...patch, result: null });
     },
   };
   const engine = createAutopilotEngine({
@@ -227,6 +233,62 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
     await pass();
     expect(requests).toHaveLength(2);
     expect(s.tasks.summary(t.id).status).toBe("in_progress");
+  });
+
+  it("keeps what the runner recorded on a failed start", async () => {
+    const { task, pass, runs, turnOn } = setup({ behaviour: { fail: "no worktree today", headless: true } });
+    // The agent moves the task before it stops, as a headless run that hit its budget does.
+    task("Flagged");
+    turnOn();
+    await pass();
+    expect(runs()).toMatchObject([
+      {
+        status: "failed",
+        needsAttention: true,
+        runner: "headless",
+        worktreePath: "/wt/1",
+        sessionId: "s-1",
+        error: "Autopilot's agent stopped before finishing: no worktree today",
+      },
+    ]);
+  });
+
+  it("says it couldn't start a task whose agent never began", async () => {
+    const { task, pass, runs, turnOn } = setup({
+      behaviour: { fail: "no worktree today", headless: true, onStart: () => {} },
+    });
+    task("Flagged");
+    turnOn();
+    await pass();
+    expect(runs()).toMatchObject([
+      { status: "failed", worktreePath: "/wt/1", error: "Autopilot couldn't start this task: no worktree today" },
+    ]);
+  });
+
+  it("fails a headless run that ended with the task still in Planned without waiting out the grace period", async () => {
+    const { task, pass, runs, turnOn } = setup({ behaviour: { headless: true, onStart: () => {} } });
+    const t = task("Flagged");
+    turnOn();
+    // No fake timers: the run ends at once, or the test times out waiting.
+    await pass();
+    expect(runs()).toMatchObject([
+      {
+        status: "failed",
+        needsAttention: true,
+        runner: "headless",
+        error: `Autopilot couldn't start this task: the agent didn't move #${t.number} out of Planned within 15 minutes`,
+      },
+    ]);
+  });
+
+  it("says a headless run started the task in its summary", async () => {
+    const { task, pass, runs, turnOn } = setup({ behaviour: { headless: true } });
+    const t = task("Flagged");
+    turnOn();
+    await pass();
+    expect(runs()).toMatchObject([
+      { status: "succeeded", summary: `Started #${t.number} headless`, worktreePath: "/wt/1" },
+    ]);
   });
 
   it("flags a task the agent left in Planned past the grace period", async () => {

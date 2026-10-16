@@ -199,11 +199,15 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   (no one to ask: block the step and stop) and, for a chosen skill, a line pointing at its `SKILL.md`. `tier` is the
   task's suggested tier. The agent moves the task to In Progress itself.
 - **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the action
-  began and checked once the runner returns (a T3 thread returns when it has started, a headless run when the agent
-  is done). The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
+  began. A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
+  the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
+  error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
+  finishing" instead. The run fails with "Autopilot couldn't start this task: â€¦" and `needsAttention`, so the task is flagged
   and the engine notifies. Nothing retries it. The flag clears itself when the task changes status
   ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
-  run stays `running` and holds a concurrency slot.
+  run stays `running` and holds a concurrency slot. With T3 that is all the cap holds: the run ends once the agent
+  has moved the task, so `maxConcurrent` limits starts in flight, not threads still working (a headless run lasts as
+  long as its agent, so it does limit those).
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
   (15).

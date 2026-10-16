@@ -48,6 +48,9 @@ suggested tier. Its settings:
 - **Start from**: the branch its worktree starts from; blank is the project's default branch.
 - **Start grace period** (15 minutes): the agent moves the task to In Progress itself.
 
+**Agent runs at once** limits how many agents are being started or run headless; a T3 Code thread stops counting
+once it has taken the task, so with T3 Code several threads can be working together.
+
 It tries a task once each time it enters Planned. If the run fails, or the task is still in Planned when the
 grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
 a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with

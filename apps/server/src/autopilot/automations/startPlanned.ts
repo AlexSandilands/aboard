@@ -80,9 +80,10 @@ export function notStartable(task: TaskSummary): string | null {
 function unattendedNote(skill: ReviewSkillRef): string {
   const lines = [
     "",
-    "You were started by Autopilot and nobody is watching this session, so you can't ask the user anything. " +
-      "If you need an answer, mark the current step blocked with a note saying what you need, add a note and stop. " +
-      "Move the task to in_progress when you start, and to review when the work is done.",
+    "You were started by Autopilot and nobody is watching this session, so you can't ask the user anything, " +
+      "the Autopilot flag included. First move the task to in_progress with move_task, even if you then have to " +
+      "stop; Autopilot reads a task still in Planned as not started. If you need an answer, mark the current step " +
+      "blocked with a note saying what you need, and stop. Move the task to review when the work is done.",
   ];
   if (skill.source !== "builtin") {
     lines.push(`For how to implement the work, read the skill "${skill.name}" at ${skill.path} and follow it.`);
@@ -162,12 +163,21 @@ export const startPlanned = defineAutomation({
         ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
       });
     } catch (error) {
-      return failed(messageOf(error));
+      // A headless run only ends when the agent does: one that hit its budget or timeout did start.
+      const begun = services.tasks.summary(task.id).status !== "planned";
+      return begun
+        ? {
+            status: "failed",
+            error: `Autopilot's agent stopped before finishing: ${messageOf(error)}`,
+            needsAttention: true,
+          }
+        : failed(messageOf(error));
     }
 
-    // A T3 thread is up once started and a headless run is over, so the task should have moved by now or soon.
+    // A T3 thread is only up, and has the grace period to move the task; a headless agent is over, so it either
+    // moved the task or never will.
     const patch = patchOf(started);
-    if (!(await leftPlanned(services, task.id, deadline))) {
+    if (!(await leftPlanned(services, task.id, started.runner === "headless" ? Date.now() : deadline))) {
       return failed(
         `the agent didn't move #${task.number} out of Planned within ${config.graceMinutes} minutes`,
         patch,
