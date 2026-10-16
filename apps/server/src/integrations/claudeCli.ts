@@ -151,8 +151,12 @@ export async function runClaude({ cli, cwd, prompt, args, timeoutMs }: ClaudeJob
 }
 
 /** Runs `claude <args>` for its stdout (e.g. `mcp list`). Throws when the CLI can't run or exits non-zero. */
-export async function claudeOutput(cli: string | null, args: string[], timeoutMs: number): Promise<string> {
-  const result = await run(cliPath(cli), args, { timeoutMs });
+export async function claudeOutput(
+  cli: string | null,
+  args: string[],
+  opts: { timeoutMs: number; cwd?: string },
+): Promise<string> {
+  const result = await run(cliPath(cli), args, opts);
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || `claude ${args[0] ?? ""} exited with code ${result.code}`);
   }

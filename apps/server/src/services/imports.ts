@@ -96,9 +96,8 @@ export function createImportsService(core: Core, deps: { tasks: () => TasksServi
     retry(taskId, actor) {
       core.write((fx) => {
         const record = recordOf(taskId);
-        if (record.status !== "failed") {
-          throw new AppError("CONFLICT", `Only a failed import can be retried; this one is ${record.status}`);
-        }
+        // A pending one may be stuck (its task was archived at a restart, say) or running, which a retry leaves alone.
+        if (record.status === "done") throw new AppError("CONFLICT", "This import already finished");
         repos.imports.update({ ...record, status: "pending", error: null, attempts: 0, updatedAt: nowIso() });
         fx.log(taskId, actor, "import_retried", { source: record.sourceUrl });
       });

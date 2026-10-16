@@ -41,16 +41,19 @@ describe("issue import REST routes", () => {
     expect(untitled.status).toBe(400);
   });
 
-  it("retries only a failed import", async () => {
+  it("retries a failed or pending import, but not a finished one", async () => {
     const h = setup();
     const task = h.services.tasks.create({ projectId: h.project.id, sourceUrl: "PROJ-1" });
     const early = await h.request(`/api/tasks/${task.id}/import/retry`, { method: "POST" });
-    expect(early.status).toBe(409);
+    expect(early.status).toBe(200);
 
     h.services.imports.fail(task.id, "No Jira tool available");
     const retried = await h.request(`/api/tasks/${task.id}/import/retry`, { method: "POST" });
     expect(retried.status).toBe(200);
     expect(((await retried.json()) as TaskSummary).import).toMatchObject({ status: "pending", error: null });
+
+    h.services.imports.complete(task.id, { title: "Done", description: null, labels: [] });
+    expect((await h.request(`/api/tasks/${task.id}/import/retry`, { method: "POST" })).status).toBe(409);
 
     const plain = h.services.tasks.create({ projectId: h.project.id, title: "Plain" });
     expect((await h.request(`/api/tasks/${plain.id}/import/retry`, { method: "POST" })).status).toBe(404);

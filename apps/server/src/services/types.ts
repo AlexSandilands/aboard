@@ -292,7 +292,10 @@ export interface ImportsService {
   complete(taskId: string, result: ImportResult): void;
   /** Marks the import failed with the reason; the card shows it as a warning. */
   fail(taskId: string, error: string): void;
-  /** Puts a failed import back to pending with a fresh attempt count. Throws CONFLICT when it isn't failed. */
+  /**
+   * Puts a failed (or stuck pending) import back to pending with a fresh attempt count. Throws CONFLICT when it is
+   * done. Starting it again is the caller's job; one already running ignores that.
+   */
   retry(taskId: string, actor: string): void;
 }
 

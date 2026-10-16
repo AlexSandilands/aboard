@@ -41,6 +41,7 @@ export async function startServer(config: Config): Promise<RunningServer> {
   const address = server.address();
   runtime.port = typeof address === "object" && address ? address.port : runtime.port;
   if (runtime.pollers) ctx.integrations.start();
+  ctx.integrations.resumeImports();
 
   let closing: Promise<void> | null = null;
   return {

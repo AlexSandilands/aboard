@@ -3,13 +3,20 @@ import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
 import { messageOf, type IssueDetails } from "./github.ts";
-import { discoverJiraTools, runIssueImport, type RunImport } from "./headlessImport.ts";
+import {
+  jiraToolRules,
+  listConnectedMcpServers,
+  runIssueImport,
+  writeToolDenyRules,
+  type RunImport,
+} from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 
 /** Runs an import may start before it is given up on; each restart mid-import counts as one. */
 export const MAX_IMPORT_ATTEMPTS = 3;
 /** Imports running at once. */
 const CONCURRENCY = 3;
+const SERVERS_TTL_MS = 5 * 60_000;
 /** How much of a GitHub issue's body becomes the description when no model is available to summarise it. */
 const RAW_BODY_MAX = 4_000;
 
@@ -32,12 +39,14 @@ export function createIssueImporter(deps: {
   services: () => Services;
   github: { fetchIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails> };
   runImport?: RunImport;
-  discoverJiraTools?: (cli: string | null) => Promise<string[]>;
+  listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   log?: Logger;
 }): IssueImporter {
   const runImport = deps.runImport ?? runIssueImport;
-  const discover = deps.discoverJiraTools ?? discoverJiraTools;
+  const listServers = deps.listMcpServers ?? listConnectedMcpServers;
   const log = deps.log ?? console;
+  /** `claude mcp list` health-checks every server, which takes seconds; the answer is kept for a while. */
+  const serversByCwd = new Map<string, { at: number; servers: string[] }>();
   const queue: string[] = [];
   const running = new Set<string>();
   let idleWaiters: Array<() => void> = [];
@@ -94,12 +103,23 @@ export function createIssueImporter(deps: {
         },
         boardLabels: s.labels.usage().map((l) => l.name),
         jiraTools: [],
+        denyTools: [],
       });
       return { title: outcome.title, description: outcome.description, labels: outcome.labels };
     } catch (error) {
       log.warn(`[import] ${record.sourceUrl}: summarising failed, using the issue as written: ${messageOf(error)}`);
       return raw();
     }
+  };
+
+  /** The connected MCP servers, or none when the CLI can't list them. */
+  const connectedServers = async (cli: string | null, cwd: string): Promise<string[]> => {
+    const cached = serversByCwd.get(cwd);
+    if (cached && Date.now() - cached.at < SERVERS_TTL_MS) return cached.servers;
+    const servers = await listServers(cli, cwd).catch(() => []);
+    // A failed listing isn't kept, so the next import asks again.
+    if (servers.length > 0) serversByCwd.set(cwd, { at: Date.now(), servers });
+    return servers;
   };
 
   const importJira = async (record: ImportRecord): Promise<ImportResult> => {
@@ -110,9 +130,9 @@ export function createIssueImporter(deps: {
     }
     const source = parseIssueSource(record.sourceUrl, settings);
     if (source?.kind !== "jira") throw new Error(`${record.sourceUrl} is not a Jira issue`);
-    const jiraTools = settings.issueImportJiraTools.length
-      ? settings.issueImportJiraTools
-      : await discover(settings.headlessReviewCli).catch(() => []);
+    const cwd = workingDir(record.taskId);
+    const servers = await connectedServers(settings.headlessReviewCli, cwd);
+    const jiraTools = settings.issueImportJiraTools.length ? settings.issueImportJiraTools : jiraToolRules(servers);
     if (jiraTools.length === 0) {
       throw new Error(
         "No Jira tool available: connect a Jira MCP server to Claude Code (claude mcp add), or list its tools in Settings",
@@ -120,12 +140,13 @@ export function createIssueImporter(deps: {
     }
     const outcome = await runImport({
       cli: settings.headlessReviewCli,
-      cwd: workingDir(record.taskId),
+      cwd,
       model: settings.issueImportModel,
       budgetUsd: settings.issueImportBudgetUsd,
       source: { kind: "jira", key: source.key, url: source.url },
       boardLabels: s.labels.usage().map((l) => l.name),
       jiraTools,
+      denyTools: writeToolDenyRules(servers, jiraTools),
     });
     return { title: outcome.title, description: outcome.description, labels: outcome.labels };
   };

@@ -28,7 +28,7 @@ export interface IntegrationOverrides {
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
   runImport?: RunImport;
-  discoverJiraTools?: (cli: string | null) => Promise<string[]>;
+  listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   log?: Logger;
 }
 
@@ -58,7 +58,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     github,
     ...(overrides.runImport ? { runImport: overrides.runImport } : {}),
-    ...(overrides.discoverJiraTools ? { discoverJiraTools: overrides.discoverJiraTools } : {}),
+    ...(overrides.listMcpServers ? { listMcpServers: overrides.listMcpServers } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   let started = false;
@@ -73,7 +73,6 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       github.start();
       t3.start();
       reviews.start();
-      importer.resume();
     },
     stop() {
       started = false;
@@ -82,6 +81,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       reviews.stop();
     },
     startImport: (taskId) => importer.start(taskId),
+    resumeImports: () => importer.resume(),
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
     async refreshLink(linkId) {

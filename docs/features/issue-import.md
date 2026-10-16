@@ -37,12 +37,14 @@ combined with a plan.
   into a concise title, a summary and labels. The issue text goes in the prompt, so the run has no tools and
   no MCP servers. If the model can't run (import turned off, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
-- **Jira.** Only the model can read it, through the user's own Jira MCP server: the run keeps the user's MCP
-  configuration (no `--strict-mcp-config`) but may call only the Jira read tools. If there is none, or the
-  model can't read the issue, the import fails and says why.
+- **Jira.** Only the model can read it, through the user's own Jira MCP server, so the run keeps the user's
+  MCP configuration (no `--strict-mcp-config`) and runs in the project's folder, where project-scoped servers
+  load. If there is no Jira tool, or the model can't read the issue, the import fails and says why.
 
-Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell) and
-`--max-budget-usd`, with the result as structured output (`{found, reason?, title, description, labels}`).
+Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
+`--setting-sources user` (the project's and local settings files, with their allow rules and hooks, don't apply;
+the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as structured output
+(`{found, reason?, title, description, labels}`).
 `found: false` is how the model reports an issue it couldn't read. The CLI path is the board reviewer's
 (`headlessReviewCli`).
 
@@ -58,19 +60,27 @@ Claude Code's allow rules take a glob only after a literal `mcp__<server>__` pre
 part is skipped), so "any read-only Jira tool on any server" can't be written. The board does this instead:
 
 - If **Settings → Issue import → Jira tools** lists rules, those are allowed as written.
-- Otherwise it runs `claude mcp list`, takes the connected servers and allows `get_jira_issue`,
-  `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the servers we know of.
-  A rule for a tool a server lacks does nothing. The list is read for each Jira import, which costs a few
-  seconds.
+- Otherwise it runs `claude mcp list` in the project's folder, takes the connected servers and allows
+  `get_jira_issue`, `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the
+  servers we know of. A rule for a tool a server lacks does nothing. The list takes seconds, so it is kept
+  for five minutes per folder.
 - With no connected server the import fails with "No Jira tool available" rather than running a model that
   can't read anything.
+
+`dontAsk` denies what nothing allows, but it does allow whatever the user's own settings already allow, and a
+blanket rule such as `mcp__atlassian` there would let an injected request create or comment on an issue. So
+the run also denies, on every connected MCP server and every server a Jira rule names, the tools whose names
+look like writes (`*reate*`, `*pdate*`, `*ost*`, `*omment*`, … , both `createIssue` and `CreateIssue`). Deny
+rules win over allow rules in every mode. A tool a Jira rule allows by name is never denied. This is a
+best effort by name, kept under the Windows command-line limit (the servers of the Jira rules go first); it
+isn't a sandbox.
 
 ### Untrusted text
 
 Whatever an issue says is data. The prompt tells the model so, fences the issue in tags with a random name
 (so text inside the issue can't close the fence and pass itself off as instructions), and puts every
-instruction before it. A Jira run can't act on an injected request beyond the read tools it is allowed,
-and its result is only a title, a description and labels. Nothing a run produces is executed.
+instruction before it. A GitHub run has no tools at all. A Jira run has the user's MCP servers, limited as
+above, and its result is only a title, a description and labels. Nothing a run produces is executed.
 
 ### States
 
@@ -78,11 +88,14 @@ and its result is only a title, a description and labels. Nothing a run produces
 after success so the task still says where it came from.
 
 - **Pending.** The card and the panel header show "Fetching details…", and the panel a callout. A run is
-  counted when it starts (`claim`), so an import interrupted by restarts is picked up again at startup (when
-  pollers are on) and gives up after three runs.
+  counted when it starts (`claim`), so an import interrupted by restarts is picked up again at startup
+  (`resumeImports`, whether or not the pollers run) and gives up after three runs. One left pending with
+  nothing running it (its task was archived over a restart) can be started again with the callout's Retry,
+  which a running import ignores.
 - **Failed.** The card shows the warning icon, from the `import_failed` attention reason, which also lists
   the task under "Needs attention". The panel says why and has **Retry** (`POST /api/tasks/:id/import/retry`,
-  which puts it back to pending with a fresh count). The placeholder task stays usable.
+  which puts it back to pending with a fresh count; a finished import answers 409). The placeholder task stays
+  usable.
 - **Done.** Nothing shows; the activity log has an `imported` entry by actor `import`.
 
 ### The `issue` link

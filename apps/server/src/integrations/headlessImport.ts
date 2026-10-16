@@ -48,6 +48,8 @@ export interface ImportJob {
   boardLabels: string[];
   /** Permission rules for the Jira tools the run may call. Only used for Jira. */
   jiraTools: string[];
+  /** Rules denying the write-looking tools of every MCP server, which win over any allow rule. Only used for Jira. */
+  denyTools: string[];
 }
 
 export interface ImportOutcome {
@@ -59,7 +61,9 @@ export interface ImportOutcome {
 
 export type RunImport = (job: ImportJob) => Promise<ImportOutcome>;
 
-export function importArgs(job: Pick<ImportJob, "model" | "budgetUsd" | "source" | "jiraTools">): string[] {
+export function importArgs(
+  job: Pick<ImportJob, "model" | "budgetUsd" | "source" | "jiraTools" | "denyTools">,
+): string[] {
   const args = [
     "-p",
     "--output-format",
@@ -75,13 +79,20 @@ export function importArgs(job: Pick<ImportJob, "model" | "budgetUsd" | "source"
     "--tools",
     "",
     "--disable-slash-commands",
+    // Not the project's or the local settings files: their allow rules and hooks are the repo's, not ours.
+    // The user's own stay, since that is where sign-in can live.
+    "--setting-sources",
+    "user",
     "--max-budget-usd",
     String(job.budgetUsd),
     "--no-session-persistence",
   ];
   // A GitHub issue is in the prompt already, so no MCP server is needed. A Jira one is read through the user's own.
   if (job.source.kind === "issue") args.push("--strict-mcp-config");
-  else args.push("--allowedTools", ...job.jiraTools);
+  else {
+    args.push("--allowedTools", ...job.jiraTools);
+    if (job.denyTools.length > 0) args.push("--disallowedTools", ...job.denyTools);
+  }
   return args;
 }
 
@@ -160,8 +171,41 @@ export const runIssueImport: RunImport = async (job) => {
 /** The tool names a Jira MCP server commonly reads one issue with. */
 export const JIRA_READ_TOOLS = ["get_jira_issue", "getJiraIssue", "jira_get_issue"];
 
+/**
+ * Stems of words that mark a tool as one that changes something (create, update, delete, post, …), without their
+ * first letter so one glob catches both `createIssue` and `CreateIssue`. Denied on the MCP servers of a Jira run,
+ * so an injected request to comment, transition or post can't be carried out by a tool the user's own settings
+ * already allow. A best effort by name, not a guarantee.
+ */
+const WRITE_STEMS = [
+  "reate",
+  "pdate",
+  "elete",
+  "emove",
+  "dit",
+  "dd",
+  "ost",
+  "end",
+  "rite",
+  "ransition",
+  "ssign",
+  "omment",
+  "erge",
+  "ush",
+  "lose",
+  "eply",
+  "pload",
+  "atch",
+  "xecute",
+];
+/** The deny rules go on the command line, which a Windows .cmd shim limits to 8191 characters in all. */
+const DENY_RULES_MAX_CHARS = 4_000;
+
 /** Claude Code names a server's tools `mcp__<server>__<tool>`, with anything but letters, digits, `_` and `-` as `_`. */
 const toolPrefix = (server: string): string => `mcp__${server.replace(/[^A-Za-z0-9_-]/g, "_")}__`;
+
+/** `mcp__<server>__` of a tool rule; null when the rule isn't an MCP tool. */
+const prefixOfRule = (rule: string): string | null => /^(mcp__.+?__)/.exec(rule)?.[1] ?? null;
 
 /** Servers `claude mcp list` reports as connected. Lines read `name: command-or-url - ✔ Connected`. */
 export function parseConnectedMcpServers(stdout: string): string[] {
@@ -178,8 +222,34 @@ export function jiraToolRules(servers: readonly string[]): string[] {
   return servers.flatMap((server) => JIRA_READ_TOOLS.map((tool) => `${toolPrefix(server)}${tool}`));
 }
 
-/** Looks for Jira read tools on the MCP servers the user has configured. Empty when none are connected. */
-export async function discoverJiraTools(cli: string | null): Promise<string[]> {
-  const stdout = await claudeOutput(cli, ["mcp", "list"], MCP_LIST_TIMEOUT_MS);
-  return jiraToolRules(parseConnectedMcpServers(stdout));
+/** Whether the glob (`*` matches anything) matches the whole text. */
+function globMatches(glob: string, text: string): boolean {
+  const escaped = glob.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join(".*")}$`).test(text);
+}
+
+/**
+ * Deny rules for the write-looking tools of every server in `servers` and of every server the allowed rules name,
+ * except a tool the rules allow by name. Deny rules win over allow rules in every mode, including ones from the
+ * user's settings. The allowed rules' servers come first, for when there are too many for the command line.
+ */
+export function writeToolDenyRules(servers: readonly string[], allowed: readonly string[]): string[] {
+  const prefixes = new Set([...allowed.flatMap((rule) => prefixOfRule(rule) ?? []), ...servers.map(toolPrefix)]);
+  const rules: string[] = [];
+  let size = 0;
+  for (const prefix of prefixes) {
+    const forServer = WRITE_STEMS.map((stem) => `${prefix}*${stem}*`).filter(
+      (rule) => !allowed.some((allow) => globMatches(rule, allow)),
+    );
+    const added = forServer.reduce((sum, rule) => sum + rule.length + 1, 0);
+    if (size + added > DENY_RULES_MAX_CHARS) break;
+    rules.push(...forServer);
+    size += added;
+  }
+  return rules;
+}
+
+/** The MCP servers the user has connected, as `claude mcp list` shows them from `cwd` (so project-scoped ones count). */
+export async function listConnectedMcpServers(cli: string | null, cwd: string): Promise<string[]> {
+  return parseConnectedMcpServers(await claudeOutput(cli, ["mcp", "list"], { timeoutMs: MCP_LIST_TIMEOUT_MS, cwd }));
 }

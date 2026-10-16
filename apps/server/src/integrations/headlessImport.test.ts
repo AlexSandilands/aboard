@@ -5,6 +5,7 @@ import {
   IMPORT_OUTPUT_SCHEMA,
   jiraToolRules,
   parseConnectedMcpServers,
+  writeToolDenyRules,
   type IssueSource,
 } from "./headlessImport.ts";
 
@@ -21,13 +22,19 @@ const jira: IssueSource = { kind: "jira", key: "PROJ-7", url: "https://jira.exam
 
 describe("import arguments", () => {
   it("runs a GitHub issue with no tools and no MCP servers", () => {
-    const args = importArgs({ model: "haiku", budgetUsd: 0.5, source: github, jiraTools: ["ignored"] });
+    const args = importArgs({ model: "haiku", budgetUsd: 0.5, source: github, jiraTools: ["ignored"], denyTools: [] });
     expect(args[args.indexOf("--model") + 1]).toBe("haiku");
     expect(args[args.indexOf("--tools") + 1]).toBe("");
     expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
     expect(args[args.indexOf("--max-budget-usd") + 1]).toBe("0.5");
     expect(args).toContain("--strict-mcp-config");
     expect(args).not.toContain("--allowedTools");
+    expect(args).not.toContain("--disallowedTools");
+    // Not the project's settings, whose allow rules and hooks belong to the repo.
+    expect(args.slice(args.indexOf("--setting-sources"), args.indexOf("--setting-sources") + 2)).toEqual([
+      "--setting-sources",
+      "user",
+    ]);
     expect(JSON.parse(args[args.indexOf("--json-schema") + 1]!)).toEqual(IMPORT_OUTPUT_SCHEMA);
   });
 
@@ -37,8 +44,10 @@ describe("import arguments", () => {
       budgetUsd: 0.5,
       source: jira,
       jiraTools: ["mcp__jira__get_jira_issue", "mcp__jira__search*"],
+      denyTools: ["mcp__jira__*reate*"],
     });
     expect(args).not.toContain("--strict-mcp-config");
+    expect(args.slice(args.indexOf("--disallowedTools") + 1)).toEqual(["mcp__jira__*reate*"]);
     expect(args[args.indexOf("--tools") + 1]).toBe("");
     expect(args.slice(args.indexOf("--allowedTools") + 1, args.indexOf("--allowedTools") + 3)).toEqual([
       "mcp__jira__get_jira_issue",
@@ -102,5 +111,29 @@ describe("finding Jira tools", () => {
       "mcp__claude_ai_Atlassian__jira_get_issue",
     ]);
     expect(jiraToolRules([])).toEqual([]);
+  });
+
+  it("denies the write-looking tools of every server, which no allow rule can override", () => {
+    const allowed = ["mcp__jira__get_jira_issue"];
+    const rules = writeToolDenyRules(["jira", "slack"], allowed);
+    expect(rules).toEqual(
+      expect.arrayContaining(["mcp__jira__*reate*", "mcp__jira__*omment*", "mcp__slack__*ost*", "mcp__slack__*end*"]),
+    );
+    // Both createIssue and CreateIssue, and a server only the allow rules name.
+    expect(writeToolDenyRules([], ["mcp__corp__read_ticket"])).toContain("mcp__corp__*reate*");
+  });
+
+  it("leaves out a deny rule that would match a tool the rules allow by name", () => {
+    const rules = writeToolDenyRules(["corp"], ["mcp__corp__send_status_read"]);
+    expect(rules).not.toContain("mcp__corp__*end*");
+    expect(rules).toContain("mcp__corp__*reate*");
+  });
+
+  it("keeps the deny rules short enough for a Windows command line", () => {
+    const servers = Array.from({ length: 60 }, (_, i) => `server${i}`);
+    const rules = writeToolDenyRules(servers, ["mcp__server59__getJiraIssue"]);
+    expect(rules.join(" ").length).toBeLessThanOrEqual(4_000);
+    // The server of the allowed tool is covered first.
+    expect(rules[0]).toMatch(/^mcp__server59__/);
   });
 });

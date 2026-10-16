@@ -24,13 +24,15 @@ function setup(
   opts: {
     fetchIssue?: () => Promise<IssueDetails>;
     runImport?: (job: ImportJob) => Promise<ImportOutcome>;
-    jiraTools?: string[];
+    /** The MCP servers the CLI reports as connected. */
+    servers?: string[];
   } = {},
 ) {
   const h = createTestHarness();
   const s = h.services;
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const jobs: ImportJob[] = [];
+  const listed: string[] = [];
   const warnings: string[] = [];
   const importer = createIssueImporter({
     services: () => s,
@@ -39,7 +41,10 @@ function setup(
       jobs.push(job);
       return opts.runImport ? opts.runImport(job) : Promise.resolve(outcome);
     },
-    discoverJiraTools: () => Promise.resolve(opts.jiraTools ?? ["mcp__jira__get_jira_issue"]),
+    listMcpServers: (_cli, cwd) => {
+      listed.push(cwd);
+      return Promise.resolve(opts.servers ?? ["jira"]);
+    },
     log: { warn: (message: string) => void warnings.push(message) },
   });
   const create = (sourceUrl: string) => s.tasks.create({ projectId: project.id, sourceUrl });
@@ -48,7 +53,7 @@ function setup(
     await importer.idle();
     return s.tasks.detail(taskId);
   };
-  return { h, s, project, importer, jobs, warnings, create, run };
+  return { h, s, project, importer, jobs, listed, warnings, create, run };
 }
 
 describe("issue import", () => {
@@ -101,25 +106,41 @@ describe("issue import", () => {
   });
 
   it("reads a Jira issue through the user's Jira tools", async () => {
-    const { create, run, jobs } = setup({ runImport: () => Promise.resolve({ ...outcome, labels: ["Jira"] }) });
+    const { create, run, jobs, listed } = setup({
+      servers: ["jira", "slack"],
+      runImport: () => Promise.resolve({ ...outcome, labels: ["Jira"] }),
+    });
     const done = await run(create("PROJ-7").id);
     expect(done).toMatchObject({ title: outcome.title, labels: ["jira"], import: { status: "done" } });
     expect(jobs[0]).toMatchObject({
       source: { kind: "jira", key: "PROJ-7" },
-      jiraTools: ["mcp__jira__get_jira_issue"],
+      jiraTools: expect.arrayContaining(["mcp__jira__get_jira_issue", "mcp__slack__get_jira_issue"]),
     });
+    // The run and the look for servers are both in the project's folder, where its own servers load.
     expect(jobs[0]!.cwd).toBe("/work/alpha");
+    expect(listed).toEqual(["/work/alpha"]);
+    // Every server's write-looking tools are denied, whatever the user's settings allow.
+    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__jira__*reate*", "mcp__slack__*ost*"]));
+  });
+
+  it("asks which servers are connected once for several imports", async () => {
+    const { create, run, listed } = setup();
+    await run(create("PROJ-7").id);
+    await run(create("PROJ-8").id);
+    expect(listed).toHaveLength(1);
   });
 
   it("uses the tools listed in Settings instead of looking for them", async () => {
-    const { s, create, run, jobs } = setup({ jiraTools: ["mcp__other__get_jira_issue"] });
+    const { s, create, run, jobs } = setup({ servers: ["other"] });
     s.settings.update({ issueImportJiraTools: ["mcp__corp__read_ticket"] });
     await run(create("PROJ-7").id);
     expect(jobs[0]!.jiraTools).toEqual(["mcp__corp__read_ticket"]);
+    // The server the rule names is covered by the deny rules too, though the CLI didn't list it.
+    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__corp__*reate*", "mcp__other__*reate*"]));
   });
 
   it("fails a Jira import that has no Jira tool, or that is turned off, saying so", async () => {
-    const none = setup({ jiraTools: [] });
+    const none = setup({ servers: [] });
     const noTool = await none.run(none.create("PROJ-7").id);
     expect(noTool.import).toMatchObject({ status: "failed" });
     expect(noTool.import?.error).toContain("No Jira tool available");
@@ -159,6 +180,30 @@ describe("issue import", () => {
     fail = false;
     s.imports.retry(id, "user");
     expect(await run(id)).toMatchObject({ title: outcome.title, import: { status: "done" } });
+  });
+
+  it("lets an import finish for a task deleted or archived while it ran", async () => {
+    const gate: { release: () => void } = { release: () => {} };
+    const slow = () =>
+      new Promise<IssueDetails>((resolve) => {
+        gate.release = () => resolve(issue);
+      });
+    const deleted = setup({ fetchIssue: slow });
+    const gone = deleted.create(GH_URL);
+    deleted.importer.start(gone.id);
+    deleted.s.tasks.update(gone.id, { archived: true }, "user");
+    deleted.s.tasks.delete(gone.id, "user");
+    gate.release();
+    await deleted.importer.idle();
+    expect(deleted.s.imports.get(gone.id)).toBeNull();
+
+    const archived = setup({ fetchIssue: slow });
+    const task = archived.create(GH_URL);
+    archived.importer.start(task.id);
+    archived.s.tasks.update(task.id, { archived: true }, "user");
+    gate.release();
+    await archived.importer.idle();
+    expect(archived.s.tasks.summary(task.id).import?.status).toBe("done");
   });
 
   it("does nothing for a task that has no pending import", async () => {

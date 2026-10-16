@@ -123,6 +123,11 @@ describe("imports service", () => {
     s.imports.retry(task.id, "user");
     expect(s.tasks.summary(task.id)).toMatchObject({ import: { status: "pending", error: null }, attention: [] });
     expect(s.imports.pending().map((i) => i.taskId)).toEqual([task.id]);
+    // Still pending, which is how a stuck one looks: retrying it starts the count over and is harmless.
+    s.imports.claim(task.id);
+    s.imports.retry(task.id, "user");
+    expect(s.imports.get(task.id)?.attempts).toBe(0);
+    s.imports.complete(task.id, { title: "T", description: null, labels: [] });
     expect(codeOf(() => s.imports.retry(task.id, "user"))).toBe("CONFLICT");
   });
 

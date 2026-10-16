@@ -9,7 +9,7 @@ import type { IntegrationOverrides } from "../integrations/index.ts";
 const NO_PROCESSES: IntegrationOverrides = {
   runGh: () => Promise.reject(new GhError("gh is not available in tests", false)),
   runImport: () => Promise.reject(new Error("Claude Code is not available in tests")),
-  discoverJiraTools: () => Promise.resolve([]),
+  listMcpServers: () => Promise.resolve([]),
 };
 
 export function createTestHarness(overrides: { webPort?: number; integrations?: IntegrationOverrides } = {}) {

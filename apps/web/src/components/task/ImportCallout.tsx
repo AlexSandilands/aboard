@@ -30,12 +30,22 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
       ) : (
         <>
           <Spinner size="md" tone="muted" className="mt-0.5 shrink-0" />
-          <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="font-semibold text-foreground/90">{pending}</span>
             <span className="text-muted-foreground">
               Reading {importSourceLabel(task.import!.sourceUrl)} to fill in the title, description and labels.
             </span>
           </div>
+          {/* An import can be left pending with nothing running it (its task was archived over a restart). */}
+          <Button
+            size="xs"
+            variant="ghost"
+            title="Start the import again if it seems stuck"
+            disabled={isPending}
+            onClick={() => retry(task.id)}
+          >
+            Retry
+          </Button>
         </>
       )}
     </div>
