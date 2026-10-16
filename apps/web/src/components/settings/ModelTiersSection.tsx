@@ -35,7 +35,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
         <SettingsRow
           key={tier}
           title={label}
-          description={`${description} Agents suggest a tier when they plan a task.`}
+          description={description}
           control={
             <BlurInput
               size="sm"

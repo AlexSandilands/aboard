@@ -54,7 +54,7 @@ function SuggestedModelField({ task }: { task: TaskDetail }) {
             updateTask({ id: task.id, suggestedModel: tier.success ? { tier: tier.data } : null });
           }}
         >
-          <SelectTrigger size="xs" className="min-w-28" aria-label="Suggested model tier">
+          <SelectTrigger size="xs" className="w-auto min-w-28" aria-label="Suggested model tier">
             <SelectValue />
           </SelectTrigger>
           <SelectPopup>
