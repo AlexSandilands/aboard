@@ -80,6 +80,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
   /**
+   * The action can take long (it waits on an agent) without being an agent run for the caps, so the engine doesn't
+   * hold up the rest of its pass for it. Agent automations are always like this.
+   */
+  background?: boolean;
+  /**
    * Whether an epic can switch it on or off for its tasks (default true). Set false when its candidates are never
    * tasks in an epic: the epic's popover then leaves it out, the epic button ignores it, and the service refuses an
    * epic-scope setting for it.
@@ -97,7 +102,10 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
 /** Keeps an automation's config type while letting registries hold automations with different ones. */
 export const defineAutomation = <C extends AutomationConfig>(automation: Automation<C>): Automation => automation;
 
-/** Agent work an automation asks for. Runs on a task: the run's task is the one the agent works on. */
+/**
+ * Agent work an automation asks for. Normally on a task: the run's task is the one the agent works on. A run with no
+ * task (a digest) is headless only, in an empty folder of its own, with no worktree, no session link and no nudge.
+ */
 export interface RunnerRequest {
   run: AutopilotRun;
   /** The prompt the agent starts with (or, for a nudge, the message posted). */
@@ -113,7 +121,7 @@ export interface RunnerRequest {
    * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
    */
   workspace?: { baseRef?: string | null; branch?: string | null };
-  /** Headless only: `read-only` can't edit files (a reviewer). Defaults to edit. */
+  /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
   tools?: readonly string[];

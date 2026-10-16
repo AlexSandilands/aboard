@@ -57,6 +57,7 @@ export const queryKeys = {
   /** Prefix of every project's recurring rules query. */
   recurring: ["recurring"] as const,
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
+  digests: ["digests"] as const,
 };
 
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
@@ -299,6 +300,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
       connectedOnce = true;
     };
@@ -329,6 +331,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
+        // A digest is made, read or dropped.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
       if (event.type === "notification.created") {
         if (queryClient.getQueryData(queryKeys.notifications)) {

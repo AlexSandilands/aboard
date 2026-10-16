@@ -8,6 +8,7 @@ import { createAutopilotService } from "./autopilot.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
+import { createDigestsService } from "./digests.ts";
 import { createImportsService, type ImportsModule } from "./imports.ts";
 import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
@@ -38,6 +39,7 @@ export interface ServiceDeps {
 /** Builds the service layer over one database. */
 export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
+  const automations = deps.automations ?? AUTOMATIONS;
   const settings = createSettingsService(core);
   const notifications = createNotificationsService(core);
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
@@ -91,7 +93,7 @@ export function createServices(deps: ServiceDeps): Services {
     templates,
     notifications,
     autopilot: createAutopilotService(core, {
-      automations: deps.automations ?? AUTOMATIONS,
+      automations,
       notifications,
       // Recurring rules keep their own schedule: switching the automation on, or lifting Pause all, doesn't catch up.
       onEnabled: (automation, projectIds) => {
@@ -99,5 +101,9 @@ export function createServices(deps: ServiceDeps): Services {
       },
     }),
     recurring,
+    digests: createDigestsService(core, {
+      notifications,
+      automationTitle: (key) => automations.find((a) => a.key === key)?.title ?? key,
+    }),
   };
 }

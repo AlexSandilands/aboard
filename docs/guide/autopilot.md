@@ -65,6 +65,9 @@ grace period ends, the card goes under **Needs attention** with "Autopilot could
 a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
 **Dry run** to see which tasks it would start.
 
+Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
+[Digest of what changed](digest.md).
+
 ## Limits
 
 In **Settings → Autopilot**:

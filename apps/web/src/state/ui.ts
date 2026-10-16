@@ -203,6 +203,8 @@ interface DialogsState {
   /** A section of project settings to scroll to when it opens. */
   projectSettingsSection: "recurring" | null;
   appSettingsOpen: boolean;
+  /** The Autopilot digest panel, from the header button or the palette. */
+  digestOpen: boolean;
   /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
   t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
@@ -212,6 +214,7 @@ interface DialogsState {
   openProjectSettings: (projectId: string, section?: "recurring") => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
+  setDigestOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
   openProjectT3Launch: (projectId: string) => void;
   closeT3Launch: () => void;
@@ -229,6 +232,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
   projectSettingsSection: null,
   appSettingsOpen: false,
+  digestOpen: false,
   t3Launch: null,
   mergePr: null,
   sessionWarning: null,
@@ -237,6 +241,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
     set({ projectSettingsId, projectSettingsSection: section ?? null }),
   closeProjectSettings: () => set({ projectSettingsId: null, projectSettingsSection: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
+  setDigestOpen: (digestOpen) => set({ digestOpen }),
   openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   closeT3Launch: () => set({ t3Launch: null }),

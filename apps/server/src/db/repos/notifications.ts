@@ -1,5 +1,5 @@
 import type { InboxNotification, NotificationKind } from "@repo/contracts";
-import type { Sql } from "./sql.ts";
+import { jsonList, type Sql } from "./sql.ts";
 
 interface NotificationRow {
   id: string;
@@ -56,6 +56,18 @@ export function createNotificationsRepo(sql: Sql) {
         created_at: n.createdAt,
         read_at: n.readAt,
       });
+    },
+    /** Of these kinds, made at or after `from` and before `to`, oldest first. */
+    between(kinds: readonly NotificationKind[], from: string, to: string): InboxNotification[] {
+      return sql
+        .all<NotificationRow>(
+          `SELECT * FROM notifications WHERE created_at >= ? AND created_at < ? AND kind IN (SELECT value FROM json_each(?))
+           ORDER BY created_at, rowid`,
+          from,
+          to,
+          jsonList(kinds),
+        )
+        .map(toNotification);
     },
     unread(since: string): number {
       return (

@@ -19,8 +19,17 @@ import { cn } from "~/lib/utils";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
-import { entryFor, fieldText, inheritLabel, parentEntry, parseNumberField, withConfigValue } from "./autopilot.logic";
+import {
+  entryFor,
+  fieldText,
+  inheritLabel,
+  isClockTime,
+  parentEntry,
+  parseNumberField,
+  withConfigValue,
+} from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
+import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
 type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
@@ -259,6 +268,15 @@ function FieldControl({
             ))}
           </SelectPopup>
         </Select>
+      );
+    case "time":
+      return (
+        <TimeInput
+          label={label}
+          // Anything that isn't HH:MM shows blank, which a time input accepts.
+          value={typeof value === "string" && isClockTime(value) ? value : ""}
+          onSave={onSave}
+        />
       );
     case "skill":
       return (

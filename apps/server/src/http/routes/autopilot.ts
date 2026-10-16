@@ -12,7 +12,7 @@ const epicParam = (c: Context): string => c.req.param("epicId") ?? "";
  * /api/autopilot: engine settings, pause, per-scope switches and run history. REST only: there is deliberately no
  * MCP tool for any of this, so agents can't turn Autopilot on or lift its limits (docs/decisions/0008-autopilot-engine.md).
  */
-export function registerAutopilotRoutes(app: Hono, { services }: AppContext): void {
+export function registerAutopilotRoutes(app: Hono, { services, integrations }: AppContext): void {
   const autopilot = services.autopilot;
 
   app.get(
@@ -53,6 +53,24 @@ export function registerAutopilotRoutes(app: Hono, { services }: AppContext): vo
         autopilot.setScope("project", idParam(c), automationParam(c), await parseBody(c, UpdateAutopilotSettingInput)),
       ),
     ),
+  );
+
+  // The digest of what changed (docs/features/autopilot.md#automations). Registered before /:id/read.
+  app.get(
+    "/api/autopilot/digests",
+    handle((c) => c.json(services.digests.list())),
+  );
+  app.post(
+    "/api/autopilot/digests",
+    handle(async (c) => {
+      const started = await integrations.generateDigest();
+      // 202: an agent is writing it, and the digest arrives with autopilot.changed.
+      return c.json(started, started.digest ? 201 : 202);
+    }),
+  );
+  app.post(
+    "/api/autopilot/digests/:id/read",
+    handle((c) => c.json(services.digests.markRead(idParam(c)))),
   );
 
   // An epic's switches: only for an epic in that project, anything else is not found.

@@ -114,6 +114,8 @@ export const AutopilotField = z.discriminatedUnion("kind", [
     kind: z.literal("select"),
     options: z.array(z.object({ value: z.string(), label: z.string() })),
   }),
+  /** A time of day, "HH:MM" on a 24-hour clock in the server's local time. */
+  z.object({ ...FieldBase, kind: z.literal("time") }),
   /** A skill reference, picked the way the review skill is. */
   z.object({
     ...FieldBase,
