@@ -26,6 +26,7 @@ function setup(
     runImport?: (job: ImportJob) => Promise<ImportOutcome>;
     /** The MCP servers the CLI reports as connected. */
     servers?: string[];
+    listServers?: () => Promise<string[]>;
   } = {},
 ) {
   const h = createTestHarness();
@@ -43,7 +44,7 @@ function setup(
     },
     listMcpServers: (_cli, cwd) => {
       listed.push(cwd);
-      return Promise.resolve(opts.servers ?? ["jira"]);
+      return opts.listServers ? opts.listServers() : Promise.resolve(opts.servers ?? ["jira"]);
     },
     log: { warn: (message: string) => void warnings.push(message) },
   });
@@ -116,11 +117,11 @@ describe("issue import", () => {
       source: { kind: "jira", key: "PROJ-7" },
       jiraTools: expect.arrayContaining(["mcp__jira__get_jira_issue", "mcp__slack__get_jira_issue"]),
     });
-    // The run and the look for servers are both in the project's folder, where its own servers load.
-    expect(jobs[0]!.cwd).toBe("/work/alpha");
-    expect(listed).toEqual(["/work/alpha"]);
+    // Not the project's folder: its .mcp.json and settings are the repo's, and the run doesn't load them.
+    expect(jobs[0]!.cwd).toBe(tmpdir());
+    expect(listed).toEqual([tmpdir()]);
     // Every server's write-looking tools are denied, whatever the user's settings allow.
-    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__jira__*reate*", "mcp__slack__*ost*"]));
+    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__jira__create*", "mcp__slack__post*"]));
   });
 
   it("asks which servers are connected once for several imports", async () => {
@@ -130,13 +131,34 @@ describe("issue import", () => {
     expect(listed).toHaveLength(1);
   });
 
+  it("shares one listing of MCP servers between imports that start together", async () => {
+    let release: (servers: string[]) => void = () => {};
+    const { s, create, importer, listed } = setup({
+      listServers: () => new Promise<string[]>((resolve) => (release = resolve)),
+    });
+    importer.start(create("PROJ-7").id);
+    importer.start(create("PROJ-8").id);
+    await Promise.resolve();
+    release(["jira"]);
+    await importer.idle();
+    expect(listed).toHaveLength(1);
+    expect(s.imports.pending()).toEqual([]);
+  });
+
+  it("asks again after a listing that came back empty", async () => {
+    const { create, run, listed } = setup({ servers: [] });
+    await run(create("PROJ-7").id);
+    await run(create("PROJ-8").id);
+    expect(listed).toHaveLength(2);
+  });
+
   it("uses the tools listed in Settings instead of looking for them", async () => {
     const { s, create, run, jobs } = setup({ servers: ["other"] });
     s.settings.update({ issueImportJiraTools: ["mcp__corp__read_ticket"] });
     await run(create("PROJ-7").id);
     expect(jobs[0]!.jiraTools).toEqual(["mcp__corp__read_ticket"]);
     // The server the rule names is covered by the deny rules too, though the CLI didn't list it.
-    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__corp__*reate*", "mcp__other__*reate*"]));
+    expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__corp__create*", "mcp__other__create*"]));
   });
 
   it("fails a Jira import that has no Jira tool, or that is turned off, saying so", async () => {

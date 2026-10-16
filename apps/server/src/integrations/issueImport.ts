@@ -46,7 +46,7 @@ export function createIssueImporter(deps: {
   const listServers = deps.listMcpServers ?? listConnectedMcpServers;
   const log = deps.log ?? console;
   /** `claude mcp list` health-checks every server, which takes seconds; the answer is kept for a while. */
-  const serversByCwd = new Map<string, { at: number; servers: string[] }>();
+  let listing: { at: number; list: Promise<string[]> } | null = null;
   const queue: string[] = [];
   const running = new Set<string>();
   let idleWaiters: Array<() => void> = [];
@@ -61,15 +61,6 @@ export function createIssueImporter(deps: {
       .services()
       .tasks.summary(taskId)
       .links.find((l): l is Extract<TaskLink, { kind: "issue" }> => l.kind === "issue");
-
-  /**
-   * The model's cwd for a Jira import: the project's folder, so project-scoped MCP servers are there. A GitHub
-   * import needs nothing from the project, and running in it would show the model its CLAUDE.md.
-   */
-  const workingDir = (taskId: string): string => {
-    const s = deps.services();
-    return s.projects.get(s.tasks.summary(taskId).projectId).workspaceRoot ?? tmpdir();
-  };
 
   const importGithub = async (record: ImportRecord): Promise<ImportResult> => {
     const s = deps.services();
@@ -112,14 +103,23 @@ export function createIssueImporter(deps: {
     }
   };
 
-  /** The connected MCP servers, or none when the CLI can't list them. */
-  const connectedServers = async (cli: string | null, cwd: string): Promise<string[]> => {
-    const cached = serversByCwd.get(cwd);
-    if (cached && Date.now() - cached.at < SERVERS_TTL_MS) return cached.servers;
-    const servers = await listServers(cli, cwd).catch(() => []);
-    // A failed listing isn't kept, so the next import asks again.
-    if (servers.length > 0) serversByCwd.set(cwd, { at: Date.now(), servers });
-    return servers;
+  /**
+   * The connected MCP servers, or none when the CLI can't list them. Imports that start together share one
+   * listing, and a failed one isn't kept, so the next import asks again.
+   */
+  const connectedServers = (cli: string | null): Promise<string[]> => {
+    if (listing && Date.now() - listing.at < SERVERS_TTL_MS) return listing.list;
+    const entry = {
+      at: Date.now(),
+      list: listServers(cli, tmpdir())
+        .catch(() => [])
+        .then((list) => {
+          if (list.length === 0 && listing === entry) listing = null;
+          return list;
+        }),
+    };
+    listing = entry;
+    return entry.list;
   };
 
   const importJira = async (record: ImportRecord): Promise<ImportResult> => {
@@ -130,8 +130,7 @@ export function createIssueImporter(deps: {
     }
     const source = parseIssueSource(record.sourceUrl, settings);
     if (source?.kind !== "jira") throw new Error(`${record.sourceUrl} is not a Jira issue`);
-    const cwd = workingDir(record.taskId);
-    const servers = await connectedServers(settings.headlessReviewCli, cwd);
+    const servers = await connectedServers(settings.headlessReviewCli);
     const jiraTools = settings.issueImportJiraTools.length ? settings.issueImportJiraTools : jiraToolRules(servers);
     if (jiraTools.length === 0) {
       throw new Error(
@@ -140,7 +139,8 @@ export function createIssueImporter(deps: {
     }
     const outcome = await runImport({
       cli: settings.headlessReviewCli,
-      cwd,
+      // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
+      cwd: tmpdir(),
       model: settings.issueImportModel,
       budgetUsd: settings.issueImportBudgetUsd,
       source: { kind: "jira", key: source.key, url: source.url },

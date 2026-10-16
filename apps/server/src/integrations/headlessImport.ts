@@ -1,4 +1,8 @@
+import { BRAND } from "@repo/contracts";
 import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { z } from "zod";
 import { claudeOutput, parseClaudeOutput, runClaude } from "./claudeCli.ts";
 
@@ -61,8 +65,18 @@ export interface ImportOutcome {
 
 export type RunImport = (job: ImportJob) => Promise<ImportOutcome>;
 
+/** What the Jira run's permissions are: the tools it may call and the ones denied whatever else allows them. */
+export function importSettings(job: Pick<ImportJob, "jiraTools" | "denyTools">): string {
+  return JSON.stringify({ permissions: { allow: job.jiraTools, deny: job.denyTools } });
+}
+
+/**
+ * The CLI arguments for one import. A Jira run's permissions are in a settings file (`settingsPath`) rather than
+ * `--allowedTools` and `--disallowedTools`: the deny rules run to hundreds of characters, and a Windows .cmd shim
+ * can't take a command line past 8191.
+ */
 export function importArgs(
-  job: Pick<ImportJob, "model" | "budgetUsd" | "source" | "jiraTools" | "denyTools">,
+  job: Pick<ImportJob, "model" | "budgetUsd" | "source"> & { settingsPath: string | null },
 ): string[] {
   const args = [
     "-p",
@@ -79,8 +93,8 @@ export function importArgs(
     "--tools",
     "",
     "--disable-slash-commands",
-    // Not the project's or the local settings files: their allow rules and hooks are the repo's, not ours.
-    // The user's own stay, since that is where sign-in can live.
+    // Not the project's or the local settings files: their allow rules, hooks and MCP servers are the repo's, not
+    // ours. The user's own stay, since that is where sign-in can live.
     "--setting-sources",
     "user",
     "--max-budget-usd",
@@ -89,10 +103,7 @@ export function importArgs(
   ];
   // A GitHub issue is in the prompt already, so no MCP server is needed. A Jira one is read through the user's own.
   if (job.source.kind === "issue") args.push("--strict-mcp-config");
-  else {
-    args.push("--allowedTools", ...job.jiraTools);
-    if (job.denyTools.length > 0) args.push("--disallowedTools", ...job.denyTools);
-  }
+  else if (job.settingsPath) args.push("--settings", job.settingsPath);
   return args;
 }
 
@@ -154,13 +165,24 @@ export function importPrompt(
 
 /** Runs one import with Claude Code headless. Throws with the CLI's own message when it fails or can't read the issue. */
 export const runIssueImport: RunImport = async (job) => {
-  const stdout = await runClaude({
-    cli: job.cli,
-    cwd: job.cwd,
-    prompt: importPrompt(job.source, job.boardLabels),
-    args: importArgs(job),
-    timeoutMs: job.source.kind === "jira" ? JIRA_TIMEOUT_MS : GITHUB_TIMEOUT_MS,
-  });
+  const dir = job.source.kind === "jira" ? await mkdtemp(join(tmpdir(), `${BRAND.id}-import-`)) : null;
+  let stdout: string;
+  try {
+    let settingsPath: string | null = null;
+    if (dir) {
+      settingsPath = join(dir, "settings.json");
+      await writeFile(settingsPath, importSettings(job));
+    }
+    stdout = await runClaude({
+      cli: job.cli,
+      cwd: job.cwd,
+      prompt: importPrompt(job.source, job.boardLabels),
+      args: importArgs({ ...job, settingsPath }),
+      timeoutMs: job.source.kind === "jira" ? JIRA_TIMEOUT_MS : GITHUB_TIMEOUT_MS,
+    });
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
   const { output, costUsd } = parseClaudeOutput(stdout, ImportOutput, "import");
   if (!output.found) throw new Error(output.reason?.trim() || "the issue couldn't be read");
   const title = output.title?.trim();
@@ -172,40 +194,62 @@ export const runIssueImport: RunImport = async (job) => {
 export const JIRA_READ_TOOLS = ["get_jira_issue", "getJiraIssue", "jira_get_issue"];
 
 /**
- * Stems of words that mark a tool as one that changes something (create, update, delete, post, …), without their
- * first letter so one glob catches both `createIssue` and `CreateIssue`. Denied on the MCP servers of a Jira run,
- * so an injected request to comment, transition or post can't be carried out by a tool the user's own settings
- * already allow. A best effort by name, not a guarantee.
+ * Verbs that mark a tool as one that changes something. Denied on the MCP servers of a Jira run, so an injected
+ * request to comment, transition or post can't be carried out by a tool the user's own settings already allow. A
+ * best effort by name, not a guarantee.
  */
-const WRITE_STEMS = [
-  "reate",
-  "pdate",
-  "elete",
-  "emove",
-  "dit",
-  "dd",
-  "ost",
-  "end",
-  "rite",
-  "ransition",
-  "ssign",
-  "omment",
-  "erge",
-  "ush",
-  "lose",
-  "eply",
-  "pload",
-  "atch",
-  "xecute",
+const WRITE_VERBS = [
+  "create",
+  "update",
+  "delete",
+  "remove",
+  "edit",
+  "add",
+  "post",
+  "send",
+  "write",
+  "transition",
+  "assign",
+  "move",
+  "comment",
+  "merge",
+  "push",
+  "close",
+  "reply",
+  "upload",
+  "set",
+  "link",
+  "register",
+  "submit",
+  "resolve",
+  "put",
+  "patch",
+  "execute",
+  "run",
+  "start",
+  "stop",
+  "cancel",
+  "publish",
+  "archive",
+  "apply",
+  "approve",
+  "import",
+  "save",
+  "rename",
+  "reorder",
+  "trigger",
+  "invoke",
 ];
-/** The deny rules go on the command line, which a Windows .cmd shim limits to 8191 characters in all. */
-const DENY_RULES_MAX_CHARS = 4_000;
+const capitalised = (word: string): string => `${word[0]!.toUpperCase()}${word.slice(1)}`;
 
 /** Claude Code names a server's tools `mcp__<server>__<tool>`, with anything but letters, digits, `_` and `-` as `_`. */
 const toolPrefix = (server: string): string => `mcp__${server.replace(/[^A-Za-z0-9_-]/g, "_")}__`;
 
-/** `mcp__<server>__` of a tool rule; null when the rule isn't an MCP tool. */
-const prefixOfRule = (rule: string): string | null => /^(mcp__.+?__)/.exec(rule)?.[1] ?? null;
+/** `mcp__<server>__` of a tool rule, which may name just the server (`mcp__atlassian`); null for any other rule. */
+const prefixOfRule = (rule: string): string | null => {
+  const server = /^mcp__(.+?)(?:__|$)/.exec(rule)?.[1];
+  return server ? `mcp__${server}__` : null;
+};
 
 /** Servers `claude mcp list` reports as connected. Lines read `name: command-or-url - ✔ Connected`. */
 export function parseConnectedMcpServers(stdout: string): string[] {
@@ -223,33 +267,30 @@ export function jiraToolRules(servers: readonly string[]): string[] {
 }
 
 /** Whether the glob (`*` matches anything) matches the whole text. */
-function globMatches(glob: string, text: string): boolean {
+export function globMatches(glob: string, text: string): boolean {
   const escaped = glob.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
   return new RegExp(`^${escaped.join(".*")}$`).test(text);
 }
 
 /**
  * Deny rules for the write-looking tools of every server in `servers` and of every server the allowed rules name,
- * except a tool the rules allow by name. Deny rules win over allow rules in every mode, including ones from the
- * user's settings. The allowed rules' servers come first, for when there are too many for the command line.
+ * except a tool the rules allow by name. A verb counts at the start of a tool name or after a word break, in snake
+ * and camel case (`set_due_date`, `getAndSetX`), so `get_…` is never mistaken for `set`. Deny rules win over allow
+ * rules in every mode, including ones from the user's settings.
  */
 export function writeToolDenyRules(servers: readonly string[], allowed: readonly string[]): string[] {
   const prefixes = new Set([...allowed.flatMap((rule) => prefixOfRule(rule) ?? []), ...servers.map(toolPrefix)]);
-  const rules: string[] = [];
-  let size = 0;
-  for (const prefix of prefixes) {
-    const forServer = WRITE_STEMS.map((stem) => `${prefix}*${stem}*`).filter(
-      (rule) => !allowed.some((allow) => globMatches(rule, allow)),
-    );
-    const added = forServer.reduce((sum, rule) => sum + rule.length + 1, 0);
-    if (size + added > DENY_RULES_MAX_CHARS) break;
-    rules.push(...forServer);
-    size += added;
-  }
-  return rules;
+  return [...prefixes].flatMap((prefix) =>
+    WRITE_VERBS.flatMap((verb) => [
+      `${prefix}${verb}*`,
+      `${prefix}${capitalised(verb)}*`,
+      `${prefix}*_${verb}*`,
+      `${prefix}*${capitalised(verb)}*`,
+    ]).filter((rule) => !allowed.some((allow) => globMatches(rule, allow))),
+  );
 }
 
-/** The MCP servers the user has connected, as `claude mcp list` shows them from `cwd` (so project-scoped ones count). */
+/** The MCP servers the user has connected, as `claude mcp list` shows them from `cwd`. */
 export async function listConnectedMcpServers(cli: string | null, cwd: string): Promise<string[]> {
   return parseConnectedMcpServers(await claudeOutput(cli, ["mcp", "list"], { timeoutMs: MCP_LIST_TIMEOUT_MS, cwd }));
 }

@@ -38,13 +38,16 @@ combined with a plan.
   no MCP servers. If the model can't run (import turned off, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
 - **Jira.** Only the model can read it, through the user's own Jira MCP server, so the run keeps the user's
-  MCP configuration (no `--strict-mcp-config`) and runs in the project's folder, where project-scoped servers
-  load. If there is no Jira tool, or the model can't read the issue, the import fails and says why.
+  MCP configuration (no `--strict-mcp-config`). It runs in the temp folder, not the project's: the project's
+  `.mcp.json` and settings belong to the repo, and a repo shouldn't get to start servers or allow tools in a
+  run that reads text from outside. So the Jira server has to be one of the user's (`claude mcp add --scope
+  user`, or a plugin or connector); a server scoped to one project isn't used. If there is no Jira tool, or the
+  model can't read the issue, the import fails and says why.
 
 Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
-`--setting-sources user` (the project's and local settings files, with their allow rules and hooks, don't apply;
-the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as structured output
-(`{found, reason?, title, description, labels}`).
+`--setting-sources user` (the project's and local settings files, with their allow rules, hooks and MCP servers,
+don't apply; the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as
+structured output (`{found, reason?, title, description, labels}`).
 `found: false` is how the model reports an issue it couldn't read. The CLI path is the board reviewer's
 (`headlessReviewCli`).
 
@@ -60,20 +63,25 @@ Claude Code's allow rules take a glob only after a literal `mcp__<server>__` pre
 part is skipped), so "any read-only Jira tool on any server" can't be written. The board does this instead:
 
 - If **Settings → Issue import → Jira tools** lists rules, those are allowed as written.
-- Otherwise it runs `claude mcp list` in the project's folder, takes the connected servers and allows
-  `get_jira_issue`, `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the
-  servers we know of. A rule for a tool a server lacks does nothing. The list takes seconds, so it is kept
-  for five minutes per folder.
+- Otherwise it runs `claude mcp list`, takes the connected servers and allows `get_jira_issue`,
+  `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the servers we know of.
+  A rule for a tool a server lacks does nothing. The list takes seconds, so imports that start together share
+  one, and it is kept for five minutes (not when it came back empty).
 - With no connected server the import fails with "No Jira tool available" rather than running a model that
   can't read anything.
 
 `dontAsk` denies what nothing allows, but it does allow whatever the user's own settings already allow, and a
 blanket rule such as `mcp__atlassian` there would let an injected request create or comment on an issue. So
-the run also denies, on every connected MCP server and every server a Jira rule names, the tools whose names
-look like writes (`*reate*`, `*pdate*`, `*ost*`, `*omment*`, … , both `createIssue` and `CreateIssue`). Deny
-rules win over allow rules in every mode. A tool a Jira rule allows by name is never denied. This is a
-best effort by name, kept under the Windows command-line limit (the servers of the Jira rules go first); it
-isn't a sandbox.
+the run also denies, on every connected MCP server and every server a Jira rule names (even one allowed as a
+whole), the tools whose names look like writes: a verb from a list (`create`, `update`, `post`, `set`, `link`,
+`move`, `transition`, `comment`, …) at the start of the name or after a word break, in snake and camel case
+(`set_due_date`, `addCommentToIssue`), so `get_…` is never mistaken for `set`. Deny rules win over allow rules
+in every mode. A tool a Jira rule allows by name is never denied. This is a best effort by name, not a
+sandbox.
+
+The allow and deny rules go in a settings file in a temp folder, passed with `--settings` and deleted after the
+run. On the command line they would run past the 8191 characters a Windows `.cmd` shim (an npm-installed
+`claude`) accepts once a few servers are connected.
 
 ### Untrusted text
 
