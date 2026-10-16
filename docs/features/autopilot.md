@@ -136,7 +136,7 @@ manual unarchive sticks until the task leaves Done and comes back.
 switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
 duplicate), it logs a note "Unblocked: #N finished" on the dependent and sends an `autopilot_notice` notification.
 A partially unblocked dependent waits. It starts nothing: a flagged Planned dependent just becomes eligible for Start
-planned tasks on the next tick. The scope is the dependent's project. The dedupe key is
+planned tasks on the next tick. It only reports blockers that finished in the last 24 hours, so switching it on doesn't announce old work. The scope is the dependent's project. The dedupe key is
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
 

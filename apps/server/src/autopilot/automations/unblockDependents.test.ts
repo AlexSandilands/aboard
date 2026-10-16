@@ -11,10 +11,13 @@ afterEach(() => {
 });
 
 function setup() {
+  // The engine's clock is ours: boards are "now" for real, and the engine looks at them `daysLater` days on.
+  let daysLater = 0;
   const h = createTestHarness({ integrations: { automations: [unblockDependents] } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
+    now: () => new Date(Date.now() + daysLater * 86_400_000),
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -28,7 +31,8 @@ function setup() {
   const finish = (id: string) => {
     s.tasks.move(id, { status: "done" }, "agent");
   };
-  const pass = async () => {
+  const pass = async (days = 0) => {
+    daysLater = days;
     await engine.pass();
     await engine.idle();
   };
@@ -81,7 +85,7 @@ describe("unblock dependents", () => {
     await pass();
     s.tasks.move(blocker.id, { status: "in_progress" }, "agent");
     await pass();
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 20));
     finish(blocker.id);
     await pass();
     expect(notices()).toHaveLength(2);
@@ -110,5 +114,32 @@ describe("unblock dependents", () => {
     await pass();
     expect(notices()).toHaveLength(0);
     expect(s.autopilot.runsForProject(project.id).some((r) => r.dryRun)).toBe(true);
+  });
+
+  it("ignores blockers finished long ago, and Done or archived dependents", async () => {
+    const { s, task, finish, pass, notices, turnOn } = setup();
+    const old = task("Old blocker");
+    task("Dependent of old", [old.id]);
+    finish(old.id);
+    const b = task("Blocker");
+    const done = task("Done dependent", [b.id]);
+    const archived = task("Archived dependent", [b.id]);
+    s.tasks.move(done.id, { status: "done" }, "agent");
+    s.tasks.update(archived.id, { archived: true }, "user");
+    finish(b.id);
+    turnOn();
+    await pass(2);
+    expect(notices()).toHaveLength(0);
+  });
+
+  it("notifies when a blocker is closed as a duplicate", async () => {
+    const { s, task, pass, notices, turnOn } = setup();
+    const blocker = task("Blocker");
+    const original = task("Original");
+    const dependent = task("Dependent", [blocker.id]);
+    turnOn();
+    s.tasks.close(blocker.id, { resolution: "duplicate", byTaskId: original.id }, "agent");
+    await pass();
+    expect(notices()).toMatchObject([{ taskId: dependent.id }]);
   });
 });

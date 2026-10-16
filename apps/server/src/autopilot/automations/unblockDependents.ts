@@ -3,6 +3,9 @@ import { defineAutomation, type Candidate } from "../types.ts";
 
 export const AUTOPILOT_UNBLOCK_DEPENDENTS = "unblock_dependents";
 
+/** How long after its last blocker finished a dependent still counts as just unblocked. */
+const RECENT_MS = 86_400_000;
+
 /**
  * Tells the user when a task's last unfinished blocker reaches Done. Needs no agent and starts nothing: a flagged
  * Planned dependent becomes eligible for Start planned tasks on its own once it is no longer blocked. The dedupe
@@ -17,29 +20,41 @@ export const unblockDependents = defineAutomation({
   schema: z.object({}),
   fields: [],
   defaults: {},
-  check: ({ services, projects }) =>
-    projects.flatMap(({ project }): Candidate[] =>
-      services.tasks
-        .summaries({ projectId: project.id })
-        .filter(
-          (t) =>
-            t.kind !== "epic" && t.archivedAt === null && t.status !== "done" && t.blockedBy.length > 0 && !t.blocked,
-        )
-        .map((t) => {
-          const blockers = t.blockedBy.map((b) => services.tasks.summary(b.id));
-          const lastDoneAt = blockers
-            .map((b) => b.statusChangedAt)
-            .sort()
-            .at(-1)!;
-          const names = blockers.map((b) => `#${b.number}`).join(", ");
-          return {
+  check: ({ services, projects, now }) =>
+    projects.flatMap(({ project }): Candidate[] => {
+      const summaries = services.tasks.summaries({ projectId: project.id });
+      const byId = new Map(summaries.map((t) => [t.id, t]));
+      const since = now.getTime() - RECENT_MS;
+      return summaries.flatMap((t): Candidate[] => {
+        if (
+          t.kind === "epic" ||
+          t.archivedAt !== null ||
+          t.status === "done" ||
+          t.blockedBy.length === 0 ||
+          t.blocked
+        ) {
+          return [];
+        }
+        // Blockers in other projects aren't in the map.
+        const blockers = t.blockedBy.map((b) => byId.get(b.id) ?? services.tasks.summary(b.id));
+        const lastDoneAt = blockers
+          .map((b) => b.statusChangedAt)
+          .sort()
+          .at(-1)!;
+        // About something that just happened: not blockers finished long ago (when the automation is first switched
+        // on, or a Done task is attached as a blocker).
+        if (Date.parse(lastDoneAt) < since) return [];
+        const names = blockers.map((b) => `#${b.number}${b.resolution === "wont_do" ? " (won't do)" : ""}`).join(", ");
+        return [
+          {
             dedupeKey: `unblock:${t.id}:${lastDoneAt}`,
             summary: `tell you #${t.number} is unblocked (${names} finished)`,
             taskId: t.id,
             data: { names },
-          };
-        }),
-    ),
+          },
+        ];
+      });
+    }),
   act: (candidate, { services, actor }) => {
     const task = services.tasks.summary(candidate.taskId!);
     const { names } = candidate.data as { names: string };
