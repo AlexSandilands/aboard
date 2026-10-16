@@ -74,7 +74,9 @@ describe("seed scenarios", () => {
   it("showcase mixes labels, PRs, threads, review and a blocked step across projects", () => {
     const { tasks, details } = seeded("showcase");
     expect(new Set(tasks.map((t) => t.projectId)).size).toBeGreaterThanOrEqual(4);
-    expect(new Set(tasks.map((t) => t.status))).toEqual(new Set(["idea", "planned", "in_progress", "review", "done"]));
+    expect(new Set(tasks.map((t) => t.status))).toEqual(
+      new Set(["backlog", "planned", "in_progress", "review", "done"]),
+    );
     expect(tasks.some((t) => t.labels.length > 0)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
     const kinds = details.flatMap((t) => t.links.map((l) => l.kind));

@@ -329,7 +329,7 @@ const showcase: Scenario = (s, opts) => {
   // storefront: the busiest lane.
   addTask(s, shop.id, {
     title: "Wishlist that syncs across devices",
-    status: "idea",
+    status: "backlog",
     labels: ["ui", "backend"],
     description: "Came up while building the cart drawer.",
   });
@@ -402,11 +402,11 @@ const showcase: Scenario = (s, opts) => {
 
   const sitemap = done("Add a sitemap", ["seo"]);
   done("Lazy-load product reviews", ["perf"]);
-  const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "idea" });
+  const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "backlog" });
   s.tasks.close(dup, { resolution: "duplicate", byTaskId: sitemap }, AGENT);
 
   // payments-api: something needs attention.
-  addTask(s, payments.id, { title: "Invoice PDFs in the customer's language", status: "idea", labels: ["backend"] });
+  addTask(s, payments.id, { title: "Invoice PDFs in the customer's language", status: "backlog", labels: ["backend"] });
   const refunds = addTask(s, payments.id, {
     title: "Rate-limit the refunds endpoint",
     status: "in_progress",
@@ -452,7 +452,7 @@ const showcase: Scenario = (s, opts) => {
   addTask(s, payments.id, { title: "Nightly reconciliation report", status: "done", labels: ["backend"] });
 
   // mobile-app
-  addTask(s, mobile.id, { title: "Offline mode for the order list", status: "idea", labels: ["ui"] });
+  addTask(s, mobile.id, { title: "Offline mode for the order list", status: "backlog", labels: ["ui"] });
   const push = addTask(s, mobile.id, {
     title: "Push notifications when an order ships",
     status: "planned",
@@ -473,7 +473,7 @@ const showcase: Scenario = (s, opts) => {
   pr(crash, 33, { state: "merged", checks: "passing", reviewDecision: "approved", mergeable: "unknown" });
 
   // docs-site
-  addTask(s, docs.id, { title: "Search across API reference", status: "idea", labels: ["docs"] });
+  addTask(s, docs.id, { title: "Search across API reference", status: "backlog", labels: ["docs"] });
   addTask(s, docs.id, {
     title: "Guide: taking your first payment",
     status: "planned",
@@ -481,7 +481,7 @@ const showcase: Scenario = (s, opts) => {
     plan: steps("Guide", ["Outline", "Code samples in 3 languages", "Review with support"]),
   });
   addTask(s, docs.id, { title: "Dark mode", status: "done", labels: ["ui"] });
-  const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "idea" });
+  const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "backlog" });
   s.tasks.close(ie, { resolution: "wont_do" }, "user");
 };
 
