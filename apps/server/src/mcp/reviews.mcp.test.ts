@@ -105,14 +105,19 @@ describe("local review loop over MCP", () => {
       note: "Quoting added with a test",
     });
     expect(fixed.text).toContain("R1.1 marked fixed.");
+    // The last gating finding is resolved: the board opened round 2 itself.
+    expect(fixed.text).toContain("The board opened review round 2");
     expect(fixed.text).toContain(`start_review("${taskRef}")`);
     expect(fixed.text).not.toContain("open the pull request");
+    expect(h.services.reviews.list(id)[1]).toMatchObject({ round: 2, status: "pending", openedBy: "board" });
     // Mid-loop there is no PR to ask for yet.
     expect((await call(agent, "get_task", { task: taskRef })).text).not.toContain("PR: the review loop has ended");
 
-    // 4. Round 2 with a fresh reviewer comes back clean, and the reviewer's reply says to open the PR.
+    // 4. start_review hands over the brief of that round (it doesn't open a third); a fresh reviewer finds it clean,
+    // and the reviewer's reply says to open the PR.
     const second = await call(agent, "start_review", { task: taskRef });
     expect(second.text).toContain("Round 2 is open");
+    expect(h.services.reviews.list(id)).toHaveLength(2);
     expect(second.text).toContain(`round: 2`);
     const clean = await call(reviewer, "submit_review", { task: taskRef, findings: [] });
     expect(clean.text).toContain("implementing agent should open the pull request now");
@@ -138,6 +143,21 @@ describe("local review loop over MCP", () => {
     const linked = await call(agent, "get_task", { task: taskRef });
     expect(linked.text).not.toContain("PR: the review loop has ended");
     await reviewer.close();
+  });
+
+  it("tells an agent whose PR is already linked to finish the loop first and push fixes to it", async () => {
+    h.services.settings.update({ autoReview: true });
+    await call(agent, "link", { task: taskRef, value: "https://github.com/acme/app/pull/3" });
+    const moved = await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(moved.text).toContain("A pull request is already linked. Finish the local review loop below first");
+    expect(moved.text).toContain("Local review is on for this task: round 1 is open");
+
+    // Without a linked PR the result doesn't say it.
+    await call(agent, "move_task", { task: taskRef, status: "in_progress" });
+    const prLink = h.services.tasks.summary(h.services.tasks.resolveId(taskRef)).links.find((l) => l.kind === "pr")!;
+    h.services.links.remove(prLink.id, "agent");
+    const again = await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(again.text).not.toContain("A pull request is already linked. Finish");
   });
 
   it("refuses rounds past the limit, and says to open the PR with the open findings", async () => {

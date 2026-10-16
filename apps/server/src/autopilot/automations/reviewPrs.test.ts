@@ -212,6 +212,81 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("waits for the task's local review to finish, then reviews the head", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    // Round 1 is pending, then raised a major: the fixes are still to be reviewed.
+    await pass();
+    expect(requests).toHaveLength(0);
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    await pass();
+    expect(requests).toHaveLength(0);
+    // Resolving it makes the board open round 2: still waiting.
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    expect(s.tasks.summary(task.id).review?.state).toBe("pending");
+    await pass();
+    expect(requests).toHaveLength(0);
+    // A stalled round (no one could run it) holds the PR back too.
+    s.reviews.setRoundStatus(s.reviews.list(task.id).at(-1)!.id, "stalled", { actor: "board reviewer" });
+    await pass();
+    expect(requests).toHaveLength(0);
+    // The loop ends clean: the current head is reviewed.
+    s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.submit(task.id, { findings: [] }, "reviewer");
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain(`head commit ${SHA_A}`);
+  });
+
+  it("reviews the PR once the local loop ends at the round limit, stuck or not", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true, reviewMaxRounds: 1 });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.reviews.submit(task.id, { findings: [{ severity: "blocking", title: "x" }] }, "reviewer");
+    expect(s.tasks.summary(task.id).review?.state).toBe("stuck");
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("doesn't hold a PR for fixes nobody will re-review because auto-review is off for the task", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    // A one-off round on request: the major is fixed, and the board won't open round 2 with auto-review off.
+    s.reviews.openRound(task.id, { trigger: "manual", actor: "user" });
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    expect(s.tasks.summary(task.id).review?.state).toBe("fixed");
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("isn't held back by tasks without local review, or by a loop on a task that left Review", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    expect(s.tasks.summary(task.id).review).toBeNull();
+    await pass();
+    expect(requests).toHaveLength(1);
+
+    const other = setup();
+    other.s.settings.update({ autoReview: true });
+    other.turnOn();
+    other.setPr();
+    other.s.tasks.move(other.task.id, { status: "review" }, "agent");
+    other.s.tasks.move(other.task.id, { status: "in_progress" }, "agent");
+    expect(other.s.tasks.summary(other.task.id).review?.state).toBe("pending");
+    await other.pass();
+    expect(other.requests).toHaveLength(1);
+  });
+
   it("reviews each head commit once, and a new one again as the next round", async () => {
     const { requests, setPr, pass, turnOn, runs } = setup();
     turnOn();

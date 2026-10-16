@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BOARD_ACTOR,
   FindingSeverity,
   FindingStatus,
   REVIEW_DONE_NEXT,
@@ -59,10 +60,11 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
       title: "Open a local review round",
       description:
         "Open the next local review round on a task and get the reviewer brief to hand to a fresh reviewer " +
-        "subagent. Moving a task to Review opens round 1 by itself when auto-review is on; call this for each " +
-        "further round after fixing findings, or to review a task on request. When a round is already waiting for " +
-        "its reviewer (say a subagent stopped at it and reported back), it returns that round's brief instead of " +
-        "opening another. Refused once the round limit is reached.",
+        "subagent. Moving a task to Review opens round 1 by itself when auto-review is on, and the board opens " +
+        "each further round itself once the last blocking or major finding of a round is resolved; call this for " +
+        "the brief of the round that is open, or to review a task on request. When a round is already waiting for " +
+        "its reviewer (say the board just opened it, or a subagent stopped at it and reported back), it returns " +
+        "that round's brief instead of opening another. Refused once the round limit is reached.",
       inputSchema: { task: taskField, actor: actorField },
     },
     (args) =>
@@ -134,8 +136,9 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
       title: "Resolve a review finding",
       description:
         "Implementer: mark a review finding fixed once the fix is in, or wont_fix with a note saying why. Refer " +
-        'to it by label ("R1.2" = round 1, finding 2) or id. status open reopens it. The result says whether ' +
-        "another review round is due.",
+        'to it by label ("R1.2" = round 1, finding 2) or id. status open reopens it. Resolving the last open ' +
+        "blocking or major finding of a round makes the board open the next round (under the round limit); the " +
+        "result says so, or what comes next.",
       inputSchema: {
         task: taskField,
         finding: z.string().min(1).describe('Finding label like "R1.2", or its id.'),
@@ -160,6 +163,11 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
         const stillOpen = `${gating} blocking/major finding${gating === 1 ? "" : "s"} still open.`;
         if (gating > 0) {
           next = reviewIsDone(review) ? `${stillOpen} ${REVIEW_LIMIT_NEXT}` : stillOpen;
+        } else if (review?.state === "pending") {
+          // The board opens the next round when the last gating finding is resolved (services/reviews.ts).
+          const open = services.reviews.list(id).at(-1);
+          const by = open?.openedBy === BOARD_ACTOR ? "The board opened" : "There is";
+          next = `No blocking or major findings are open. ${by} review round ${open?.round}: call start_review("#${task.number}") for its reviewer brief and run it with a fresh reviewer. Hold the PR until the loop ends.`;
         } else if (reviewWantsAnotherRound(review)) {
           next = `No blocking or major findings are open. Call start_review("#${task.number}") for the next round with a fresh reviewer.`;
         } else if (reviewIsDone(review)) {

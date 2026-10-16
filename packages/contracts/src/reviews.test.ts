@@ -5,6 +5,7 @@ import {
   deriveReviewSummary,
   reviewBadgeLabel,
   reviewIsDone,
+  reviewIsInProgress,
   reviewWantsAnotherRound,
   type FindingSeverity,
   type FindingStatus,
@@ -107,6 +108,34 @@ describe("reviewIsDone", () => {
     const rounds = [round(1), round(2), round(3)];
     expect(done(rounds, [finding(3, "major")])).toBe(true);
     expect(done(rounds, [finding(3, "major", "fixed")])).toBe(true);
+  });
+});
+
+describe("reviewIsInProgress", () => {
+  const inProgress = (rounds: ReturnType<typeof round>[], findings: ReturnType<typeof finding>[], auto = true) =>
+    reviewIsInProgress(deriveReviewSummary(rounds, findings, 3), auto);
+
+  it("is true while a round is pending, running or stalled", () => {
+    for (const status of ["pending", "running", "stalled"] as const) {
+      expect(inProgress([round(1, status)], [])).toBe(true);
+      expect(inProgress([round(1, status)], [], false)).toBe(true);
+    }
+  });
+
+  it("is true while fixes await a re-review, but only with auto-review on", () => {
+    expect(inProgress([round(1)], [finding(1, "major")])).toBe(true);
+    expect(inProgress([round(1)], [finding(1, "major", "fixed")])).toBe(true);
+    expect(inProgress([round(1)], [finding(1, "major")], false)).toBe(false);
+    expect(inProgress([round(1)], [finding(1, "major", "fixed")], false)).toBe(false);
+  });
+
+  it("is false with no review, a failed round, a clean round, or a loop that ended at the limit", () => {
+    expect(reviewIsInProgress(null, true)).toBe(false);
+    expect(inProgress([round(1, "failed")], [])).toBe(false);
+    expect(inProgress([round(1)], [finding(1, "nit")])).toBe(false);
+    const rounds = [round(1), round(2), round(3)];
+    expect(inProgress(rounds, [finding(3, "major")])).toBe(false);
+    expect(inProgress(rounds, [finding(3, "major", "fixed")])).toBe(false);
   });
 });
 

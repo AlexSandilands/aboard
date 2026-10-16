@@ -211,7 +211,7 @@ A subagent can't ask the user anything, and most harnesses don't let it start su
 The orchestrator then runs the loop for it. It reads the task first: when the board's own reviewer already
 submitted the round and left blocking or major findings open, it goes straight to the fixes. Otherwise `start_review(task)` returns the brief of the round that is already
 open (it doesn't open another), a fresh reviewer subagent in the task's worktree submits its findings, an implementer subagent in the
-task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
+task's worktree fixes them and calls `resolve_finding`; the board opens the next round once the last blocking or major finding is resolved, and `start_review` returns its brief.
 When the loop ends, the implementer opens and links the PR. If the board's own reviewer has already taken the round
 (`start_review` says it is being reviewed), the orchestrator waits for it. The `move_task` result still describes
 the loop to the subagent, so its prompt says to ignore that. Sessions the user started run their own loop.
