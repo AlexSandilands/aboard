@@ -100,6 +100,7 @@ describe("start planned tasks: eligibility", () => {
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
     expect(request.tier).toBe("deep");
+    expect(request.label).toBe(`Start planned · #${t.number}`);
     expect(request.prompt).toContain(`Let's work on #${t.number} "Flagged"`);
     expect(request.prompt).toContain(`get_task("${t.id}")`);
     expect(request.prompt).toContain("http://127.0.0.1:5317/?task=");

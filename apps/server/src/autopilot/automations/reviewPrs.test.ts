@@ -168,6 +168,7 @@ describe("review PRs: triggers", () => {
     setPr();
     await pass();
     expect(requests).toHaveLength(1);
+    expect(requests[0]!.label).toBe("Review PRs · PR #7 round 1");
     expect(runs()).toHaveLength(1);
   });
 
@@ -225,6 +226,7 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(2);
     expect(runs()).toHaveLength(2);
     expect(requests[1]!.prompt).toContain("review round 2 of 3");
+    expect(requests[1]!.label).toBe("Review PRs · PR #7 round 2");
   });
 
   it("waits for a review that is still running, and skips it (no failure, no round) if the head moved meanwhile", async () => {

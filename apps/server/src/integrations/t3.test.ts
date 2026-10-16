@@ -720,6 +720,22 @@ describe("T3 thread launch", () => {
     expect(launched).toMatchObject({ runtimeMode: "full-access", suggestionUnavailable: null });
   });
 
+  it("titles an unattended launch with the title it was given", async () => {
+    const { t3, socket } = setup((frame) => {
+      if (frame.tag === "server.getConfig") return success(frame.id, SERVER_CONFIG);
+      if (frame.tag === "vcs.listRefs") return success(frame.id, { isRepo: true, refs: [] });
+      return success(frame.id, { threadId: "th-auto", resumed: false });
+    });
+    await t3.launchTaskThread(
+      "task-1",
+      { prompt: "x", commandId: "c", work: true, baseRef: "main", title: "Autopilot · Start planned · #9" },
+      "orch",
+    );
+    expect(socket.sent.find((f) => f.tag === "orchestration.launchThread")!.payload).toMatchObject({
+      title: "Autopilot · Start planned · #9",
+    });
+  });
+
   it("starts a thread about a whole project, titled by the caller, without linking it", async () => {
     const { t3, socket, added } = setup((frame) => success(frame.id, { threadId: "th-proj", resumed: false }));
     const ref = await t3.startProjectThread("proj-acme", LAUNCH, "Suggest epics: Acme");

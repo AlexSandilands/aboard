@@ -132,6 +132,11 @@ export interface RunnerRequest {
   run: AutopilotRun;
   /** The prompt the agent starts with (or, for a nudge, the message posted). */
   prompt: string;
+  /**
+   * What the run is, short, for the session's name: "Review PRs · PR #73 round 1". The runner prefixes it with
+   * "Autopilot · " and uses it as the session link's label, the `claude --name` and the T3 thread's title.
+   */
+  label?: string;
   /** The task's suggested tier, mapped to a model through the user's tier settings. */
   tier: ModelTier | null;
   /** The automation's config; the runner reads its RunnerOptions fields (runner choice, budget, timeout, access). */

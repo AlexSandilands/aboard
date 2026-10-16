@@ -218,6 +218,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
         const branch = action.onPrBranch ? (prOfTask(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
         const result = await ctx.runner.start({
           run: ctx.run,
+          label: `${custom.name} · #${task.number}`,
           prompt,
           tier: action.tier ?? task.suggestedModel?.tier ?? null,
           options: ctx.config,
