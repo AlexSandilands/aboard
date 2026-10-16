@@ -1,5 +1,10 @@
 import type {
   AppSettings,
+  AutopilotOverview,
+  AutopilotActiveRun,
+  AutopilotRun,
+  AutopilotScopeEntry,
+  AutopilotStatus,
   BackupStatus,
   BoardEvent,
   BoardSnapshot,
@@ -14,6 +19,7 @@ import type {
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { api, eventsUrl } from "~/lib/api";
 import { applyBoardEvent } from "./boardReducer";
 
@@ -30,7 +36,51 @@ export const queryKeys = {
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
+  autopilot: ["autopilot"] as const,
+  /** The board scope when `projectId` is null. */
+  autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
+  /** Every runs query, for invalidation. */
+  autopilotRunsAll: ["autopilotRuns"] as const,
+  autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
 };
+
+export type AutopilotRunsScope = { taskId: string } | { projectId: string };
+
+/** Pause, engine limits and the automation catalogue. Re-read when a settings page or popover opens. */
+export function useAutopilotOverview(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilot,
+    queryFn: ({ signal }) => api<AutopilotOverview>("/api/autopilot", { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Every automation as seen from the board (`projectId` null) or one project: its own switch and what it resolves to. */
+export function useAutopilotScope(projectId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotScope(projectId),
+    queryFn: ({ signal }) =>
+      api<AutopilotScopeEntry[]>(
+        projectId ? `/api/autopilot/projects/${encodeURIComponent(projectId)}` : "/api/autopilot/board",
+        { signal },
+      ),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** A task's or project's runs, newest first. Invalidated by every autopilot.changed. */
+export function useAutopilotRuns(scope: AutopilotRunsScope | null) {
+  return useQuery({
+    queryKey: queryKeys.autopilotRuns(scope ?? { taskId: "" }),
+    queryFn: ({ signal }) => {
+      const query = scope && "taskId" in scope ? `taskId=${scope.taskId}` : `projectId=${scope!.projectId}`;
+      return api<AutopilotRun[]>(`/api/autopilot/runs?${query}`, { signal });
+    },
+    enabled: !!scope,
+  });
+}
 
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
 export function useSkills(projectId: string | null, enabled = true) {
@@ -45,7 +95,22 @@ export function useSkills(projectId: string | null, enabled = true) {
 
 /** The whole board: projects, task summaries and T3 status. Kept live by useBoardEvents. */
 export function useBoard() {
-  return useQuery({ queryKey: queryKeys.board, queryFn: ({ signal }) => api<BoardSnapshot>("/api/board", { signal }) });
+  return useQuery(boardQuery);
+}
+
+const boardQuery = {
+  queryKey: queryKeys.board,
+  queryFn: ({ signal }: { signal: AbortSignal }) => api<BoardSnapshot>("/api/board", { signal }),
+};
+
+/** Pause and the runs in flight, from the board snapshot; re-renders only when they change. */
+export function useAutopilotStatus(): AutopilotStatus | undefined {
+  return useQuery({ ...boardQuery, select: (board) => board.autopilot }).data;
+}
+
+/** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
+export function useTaskActiveRun(taskId: string): AutopilotActiveRun | undefined {
+  return useQuery({ ...boardQuery, select: (board) => taskActiveRun(board.autopilot, taskId) }).data;
 }
 
 /**
@@ -174,6 +239,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
       }
       connectedOnce = true;
     };
@@ -193,6 +260,10 @@ export function useBoardEvents() {
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+      }
+      if (event.type === "autopilot.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });

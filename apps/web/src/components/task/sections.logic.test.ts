@@ -47,7 +47,7 @@ describe("normalizeSectionLayout", () => {
 
   it("drops unknown and duplicate ids and appends missing sections", () => {
     const layout = normalizeSectionLayout({ order: ["plan", "nope", "plan", 3, "activity"] });
-    expect(layout.order).toEqual(["plan", "activity", "labels", "links", "review", "details"]);
+    expect(layout.order).toEqual(["plan", "activity", "labels", "links", "review", "autopilot", "details"]);
   });
 
   it("keeps known hidden ids in default order and only boolean collapsed choices", () => {
@@ -77,6 +77,7 @@ describe("collapsedByDefault", () => {
     expect(SECTION_IDS.filter((id) => collapsedByDefault(id, empty))).toEqual([
       "links",
       "review",
+      "autopilot",
       "details",
       "activity",
     ]);
@@ -84,7 +85,14 @@ describe("collapsedByDefault", () => {
 
   it("opens sections with content", () => {
     const full = task({ links: [link], reviews: [round([])], planContext: "Why" });
-    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["activity"]);
+    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["autopilot", "activity"]);
+  });
+
+  it("opens Autopilot only when a run needs attention", () => {
+    const flagged = task({ attention: [{ kind: "autopilot", severity: "warning", message: "Start planned failed" }] });
+    expect(collapsedByDefault("autopilot", task())).toBe(true);
+    expect(collapsedByDefault("autopilot", flagged)).toBe(false);
+    expect(summarizeSection("autopilot", flagged)).toBe("Start planned failed");
   });
 
   it("treats whitespace-only text as empty", () => {

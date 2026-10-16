@@ -2,7 +2,7 @@ import { reviewBadgeLabel, type TaskDetail } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
-export const SECTION_IDS = ["labels", "links", "review", "plan", "details", "activity"] as const;
+export const SECTION_IDS = ["labels", "links", "review", "autopilot", "plan", "details", "activity"] as const;
 
 export type SectionId = (typeof SECTION_IDS)[number];
 
@@ -10,6 +10,7 @@ export const SECTION_TITLES: Record<SectionId, string> = {
   labels: "Labels",
   links: "Links",
   review: "Local review",
+  autopilot: "Autopilot",
   plan: "Plan",
   details: "Details",
   activity: "Activity",
@@ -86,6 +87,9 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
       return task.links.length === 0;
     case "review":
       return task.reviews.length === 0;
+    // The runs aren't in the task detail; open it when one needs attention, since that is why you'd look.
+    case "autopilot":
+      return !task.attention.some((a) => a.kind === "autopilot");
     case "details":
       return !hasText(task.description) && !hasText(task.planContext);
     case "activity":
@@ -144,6 +148,8 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       const open = task.reviews.flatMap((r) => r.findings).filter((f) => f.status === "open").length;
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
+    case "autopilot":
+      return task.attention.find((a) => a.kind === "autopilot")?.message ?? "Runs on this task";
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";

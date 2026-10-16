@@ -8,6 +8,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { AutopilotSettingsSection } from "~/components/autopilot/AutopilotSettingsSection";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
 import {
@@ -99,6 +100,7 @@ function AppSettingsBody() {
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
+            <AutopilotSettingsSection />
             <IssueImportSection settings={settings.data} />
             <BackupSection settings={settings.data} />
           </>

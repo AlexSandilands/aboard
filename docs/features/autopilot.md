@@ -7,8 +7,8 @@ the whole board, that watch the board and act when something needs doing. The en
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine. The catalogue ships empty: each automation is its own task in the epic, and so are
-the runners (#85) and the UI (#86). Until a runner is configured, every agent action fails with "No agent runner
+This doc covers the engine and its settings UI. The catalogue ships empty: each automation is its own task in the
+epic, and so are the runners (#85). Until a runner is configured, every agent action fails with "No agent runner
 is available yet".
 
 ## How it works
@@ -124,6 +124,24 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 
 An automation must never merge, close or delete tasks, force-push or push to the default branch.
 
+### The UI
+
+How Autopilot looks on the board (the lane pill, the header pause button, the card badge and the task panel's
+Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
+`components/autopilot/`:
+
+- **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
+  Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
+  rounds and the fix threshold. A number that is out of range is put back with a toast; an empty cap means no cap.
+- **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
+  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text or select
+  per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored
+  as a `ReviewSkillRef`, and an unset one is the built-in skill). The same rows appear in a project's settings,
+  where Inherit follows the board. Config set at a scope is sent whole (the server replaces it), so editing one
+  key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
+- Settings aren't pushed over `/events`: mutations write the server's reply into the query cache, and a change to
+  the board scope refetches the projects' scopes.
+
 ## Decisions
 
 - **The review watchdog stays separate.** It is part of local review, on whenever local review is, and must not
@@ -158,3 +176,4 @@ An automation must never merge, close or delete tasks, force-push or push to the
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
+| `apps/web/src/components/autopilot/` | The pill, badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

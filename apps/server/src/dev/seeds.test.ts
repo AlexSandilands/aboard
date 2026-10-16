@@ -27,8 +27,9 @@ function seeded(scenario: ScenarioName) {
   });
   const tasks = ctx.services.tasks.summaries({ includeArchived: true });
   const details = tasks.map((t) => ctx.services.tasks.detail(t.id));
+  const runs = tasks.flatMap((t) => ctx.services.autopilot.runsForTask(t.id));
   ctx.db.close();
-  return { tasks, details };
+  return { tasks, details, runs };
 }
 
 describe("seed scenarios", () => {
@@ -95,5 +96,12 @@ describe("seed scenarios", () => {
     const kinds = details.flatMap((t) => t.links.map((l) => l.kind));
     expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "jira"]));
     expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
+  });
+
+  it("showcase has Autopilot history: a finished run, a failed one that needs attention, and a dry run", () => {
+    const { runs } = seeded("showcase");
+    expect(runs.some((r) => r.status === "succeeded" && r.threadUrl && r.costUsd)).toBe(true);
+    expect(runs.some((r) => r.status === "failed" && r.needsAttention && r.error)).toBe(true);
+    expect(runs.some((r) => r.dryRun && r.status === "skipped")).toBe(true);
   });
 });

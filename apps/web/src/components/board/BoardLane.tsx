@@ -2,6 +2,7 @@ import { TASK_STATUSES, type Project } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
 import { canStartProjectT3Thread } from "~/components/handoff/handoff.logic";
+import { AutopilotPill } from "~/components/autopilot/AutopilotPill";
 import { SuggestEpicsMenu } from "~/components/handoff/HandoffActions";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
@@ -106,6 +107,7 @@ export const BoardLane = memo(function BoardLane({
           <TooltipPopup>Add epic</TooltipPopup>
         </Tooltip>
         <SuggestEpicsMenu project={project} canStartT3={canStartProjectT3Thread(project, t3, settings)} />
+        <AutopilotPill project={project} />
       </header>
       {collapsed ? null : (
         <div className={cn(BOARD_GRID_CLASS_NAME, "mt-1")}>

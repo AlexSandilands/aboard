@@ -1,6 +1,10 @@
 import type {
   AddLinkResult,
   AppSettings,
+  AutopilotEngineSettings,
+  AutopilotOverview,
+  AutopilotScopeEntry,
+  AutopilotStatus,
   BoardSnapshot,
   CloseTaskInput,
   CreateTaskInput,
@@ -21,6 +25,8 @@ import type {
   TaskLink,
   TaskReview,
   TaskSummary,
+  UpdateAutopilotEngineInput,
+  UpdateAutopilotSettingInput,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
@@ -343,6 +349,72 @@ export function useUpdateSettings() {
       toastManager.add({
         type: "error",
         title: "Couldn't save settings",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+// ── Autopilot ────────────────────────────────────────────────────────────
+
+/**
+ * Sets one automation's mode and/or config at the board (`projectId` null) or a project. The server returns the
+ * scope's entries, so the cache takes them at once; nothing is pushed over /events for settings.
+ */
+export function useSetAutopilotScope(projectId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ automation, ...input }: UpdateAutopilotSettingInput & { automation: string }) =>
+      api<AutopilotScopeEntry[]>(
+        `/api/autopilot/${projectId ? `projects/${enc(projectId)}` : "board"}/${enc(automation)}`,
+        { method: "PUT", body: input },
+      ),
+    onSuccess: (entries) => {
+      queryClient.setQueryData(queryKeys.autopilotScope(projectId), entries);
+      // A board change moves what every project inherits.
+      void queryClient.invalidateQueries({ queryKey: ["autopilotScope"] });
+    },
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the Autopilot setting",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+/** Updates the engine's limits; `quietHours` may be partial. */
+export function useUpdateAutopilotEngine() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateAutopilotEngineInput) =>
+      api<AutopilotEngineSettings>("/api/autopilot/engine", { method: "PATCH", body: input }),
+    onSuccess: (engine) =>
+      queryClient.setQueryData<AutopilotOverview>(queryKeys.autopilot, (current) =>
+        current ? { ...current, engine } : current,
+      ),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the Autopilot limits",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+/** Pause all, and back. Runs already going finish; the board's autopilot status arrives over /events. */
+export function useSetAutopilotPaused() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) =>
+      api<AutopilotStatus>(`/api/autopilot/${paused ? "pause" : "resume"}`, { body: {} }),
+    onSuccess: ({ paused }) =>
+      queryClient.setQueryData<AutopilotOverview>(queryKeys.autopilot, (current) =>
+        current ? { ...current, paused } : current,
+      ),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't change Pause all",
         description: error instanceof Error ? error.message : String(error),
       }),
   });
