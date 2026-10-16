@@ -44,6 +44,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
 | Links                | The task has no links                             |
+| Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
 | Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
 | Details              | No description and no plan context                |
@@ -74,6 +75,11 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
 - **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
+
+### Dependency lines
+
+Hovering a card, or opening one, draws lines to the cards it blocks and is blocked by; Shift shows the whole
+chain. The overlay and its rules are in [relations.md](relations.md#on-the-board).
 
 ### Links on cards
 

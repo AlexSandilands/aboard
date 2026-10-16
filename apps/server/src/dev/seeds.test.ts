@@ -51,6 +51,15 @@ describe("seed scenarios", () => {
     expect(epic?.status).toBe("backlog");
   });
 
+  it("basic has a dependency chain across projects, with a finished blocker", () => {
+    const { tasks } = seeded("basic");
+    const blocked = tasks.filter((t) => t.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(blocked.map((t) => t.projectId)).size).toBeGreaterThan(1);
+    expect(tasks.some((t) => t.blockedBy.some((b) => b.status === "done"))).toBe(true);
+    expect(tasks.some((t) => t.blocks.length > 0 && t.blockedBy.length > 0)).toBe(true);
+  });
+
   it("review covers every round status and finding severity", () => {
     const { details } = seeded("review");
     const rounds = details.flatMap((t) => t.reviews);

@@ -1,4 +1,4 @@
-import type { TaskLink, TaskReview, TaskReviewSummary } from "@repo/contracts";
+import type { TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   collapsedByDefault,
@@ -17,6 +17,8 @@ function task(patch: Partial<SectionTask> = {}): SectionTask {
   return {
     labels: [],
     links: [],
+    blockedBy: [],
+    blocks: [],
     attention: [],
     review: null,
     reviews: [],
@@ -29,6 +31,13 @@ function task(patch: Partial<SectionTask> = {}): SectionTask {
   };
 }
 
+const relation = (number: number, status: TaskRelation["status"]): TaskRelation => ({
+  id: `t${number}`,
+  number,
+  title: `Task ${number}`,
+  status,
+  archived: false,
+});
 const link = { id: "l", kind: "url", url: "https://example.com" } as TaskLink;
 const round = (statuses: Array<"open" | "fixed">) =>
   ({ findings: statuses.map((status) => ({ status })) }) as unknown as TaskReview;
@@ -47,7 +56,16 @@ describe("normalizeSectionLayout", () => {
 
   it("drops unknown and duplicate ids and appends missing sections", () => {
     const layout = normalizeSectionLayout({ order: ["plan", "nope", "plan", 3, "activity"] });
-    expect(layout.order).toEqual(["plan", "activity", "labels", "links", "review", "autopilot", "details"]);
+    expect(layout.order).toEqual([
+      "plan",
+      "activity",
+      "labels",
+      "links",
+      "relations",
+      "review",
+      "autopilot",
+      "details",
+    ]);
   });
 
   it("keeps known hidden ids in default order and only boolean collapsed choices", () => {
@@ -76,6 +94,7 @@ describe("collapsedByDefault", () => {
     const empty = task();
     expect(SECTION_IDS.filter((id) => collapsedByDefault(id, empty))).toEqual([
       "links",
+      "relations",
       "review",
       "autopilot",
       "details",
@@ -84,7 +103,12 @@ describe("collapsedByDefault", () => {
   });
 
   it("opens sections with content", () => {
-    const full = task({ links: [link], reviews: [round([])], planContext: "Why" });
+    const full = task({
+      links: [link],
+      blocks: [relation(2, "planned")],
+      reviews: [round([])],
+      planContext: "Why",
+    });
     expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["autopilot", "activity"]);
   });
 
@@ -135,6 +159,17 @@ describe("summarizeSection", () => {
       { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },
     ] as SectionTask["attention"];
     expect(summarizeSection("links", task({ links: [link], attention }))).toBe("1 · PR #4 checks failing");
+  });
+
+  it("relations, naming only the blockers still open", () => {
+    expect(summarizeSection("relations", task())).toBe("None");
+    expect(summarizeSection("relations", task({ blockedBy: [relation(4, "planned"), relation(5, "done")] }))).toBe(
+      "blocked by #4",
+    );
+    expect(summarizeSection("relations", task({ blockedBy: [relation(5, "done")] }))).toBe("Unblocked");
+    expect(
+      summarizeSection("relations", task({ blockedBy: [relation(4, "review")], blocks: [relation(8, "backlog")] })),
+    ).toBe("blocked by #4 · blocks #8");
   });
 
   it("review", () => {

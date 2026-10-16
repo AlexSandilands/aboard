@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
-import { ArchiveIcon } from "lucide-react";
+import { ArchiveIcon, LockIcon } from "lucide-react";
 import { memo, useCallback, useRef, type KeyboardEvent } from "react";
 import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
 import { Badge } from "~/components/ui/badge";
@@ -16,6 +16,7 @@ import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
+import { blockedLabel } from "./dependencies.logic";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
@@ -46,6 +47,7 @@ export const TaskCardContent = memo(function TaskCardContent({
   archivable?: boolean;
 }) {
   const attention = topAttention(task.attention);
+  const blocked = blockedLabel(task);
   const fetching = importPendingLabel(task);
   const jiraKey = jiraKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
@@ -79,6 +81,12 @@ export const TaskCardContent = memo(function TaskCardContent({
           <span className="flex min-w-0 shrink-0 items-center gap-1 text-muted-foreground">
             <Spinner size="xs" />
             {fetching}
+          </span>
+        ) : null}
+        {blocked ? (
+          <span title={blocked} className="flex shrink-0 text-muted-foreground">
+            <LockIcon aria-hidden className="size-3.5" />
+            <span className="sr-only">{blocked}</span>
           </span>
         ) : null}
         {attention ? (
