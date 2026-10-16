@@ -109,7 +109,7 @@ const UNSEEN_MS = 10 * 60_000;
  * snapshot only counts as evidence when the live poll took it after the run ended: the launch-time poll sees a thread
  * that hasn't run yet ("idle"). Without one, or when the poll stopped refreshing it, the thread counts for ten minutes
  * from the run's end or the snapshot. The slot frees when the thread idles, finishes, fails, settles or is archived, or
- * the task leaves In Progress and Review. A run that failed at the grace period still counts: its thread may yet move
+ * the task is Done, archived or back in Backlog. A run that failed at the grace period still counts: its thread may yet move
  * the task.
  */
 export function workingAgents(services: Services, now: Date): number {

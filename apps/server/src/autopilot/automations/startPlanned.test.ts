@@ -197,7 +197,7 @@ describe("start planned tasks: limits", () => {
     expect(requests).toHaveLength(1);
   });
 
-  it("holds the next task while the first one's T3 thread is still working, and frees the slot when it settles", async () => {
+  it("holds the next task while the first one's T3 thread is still working, and frees the slot when it goes idle", async () => {
     const { s, task, pass, requests, turnOn, thread } = setup();
     const a = task("A");
     const b = task("B");

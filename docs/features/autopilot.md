@@ -232,7 +232,7 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   evidence when it was taken after the run ended (the launch-time poll sees a thread that hasn't run yet, "idle"). A
   thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
   for ten minutes from the run's end or the snapshot. The slot frees when
-  the thread idles, finishes, fails, settles or is archived, or the task leaves In Progress and Review; a thread stuck
+  the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
   waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
   the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
