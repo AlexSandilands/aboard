@@ -398,6 +398,7 @@ export function createAutopilotService(
         costUsd: null,
         error: null,
         needsAttention: false,
+        output: null,
         createdAt: at,
         startedAt: null,
         finishedAt: dryRun ? at : null,

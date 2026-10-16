@@ -11,8 +11,8 @@ import type { T3Integration } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
-import type { Runner, RunnerRequest, RunnerResult, RunPatch } from "./types.ts";
-import { createWorktree, defaultBranchOf, type Worktree } from "./worktrees.ts";
+import { WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult, type RunPatch } from "./types.ts";
+import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "./worktrees.ts";
 
 // Carries out Autopilot's agent actions (docs/features/autopilot.md#runners): a new T3 Code thread, a nudge into
 // the task's live thread, or `claude -p` in a worktree of its own.
@@ -115,6 +115,20 @@ export function createAutopilotRunner(deps: {
     return { runner: "t3", threadUrl: launch.link.url, result: null };
   };
 
+  /** Throws when the worktree isn't at `expected`, saying whether the branch merely moved ahead of it. */
+  const checkHead = async (cwd: string, expected: string): Promise<void> => {
+    const head = (await runGit(["rev-parse", "HEAD"], cwd)).stdout.trim();
+    if (head === expected) return;
+    const moved = (await runGit(["merge-base", "--is-ancestor", expected, head], cwd)).code === 0;
+    throw new WorktreeHeadError(
+      moved
+        ? `The branch moved on: the worktree is at ${head.slice(0, 7)}, past ${expected.slice(0, 7)}`
+        : `The worktree is at ${head.slice(0, 7)}, not the PR's head ${expected.slice(0, 7)}: is the branch on origin up to date, and is it the PR's repository?`,
+      head,
+      moved,
+    );
+  };
+
   const startHeadless = async (
     request: RunnerRequest,
     task: TaskSummary,
@@ -131,7 +145,21 @@ export function createAutopilotRunner(deps: {
       runId: request.run.id,
       baseRef: request.workspace?.baseRef,
       branch: request.workspace?.branch,
+      // A reviewer can't push, so it may read the default branch too.
+      readOnly: request.access === "read-only",
     });
+    // Before the agent costs anything: it must be reading the commit it was asked about.
+    if (request.expectHead) {
+      try {
+        await checkHead(worktree.path, request.expectHead);
+      } catch (error) {
+        // The run records no worktree yet, so cleanup would never find this one: remove it now, with its branch (the
+        // agent never ran, so the branch holds nothing of its own).
+        await removeWorktree(runGit, worktree.path).catch(() => null);
+        await runGit(["branch", "-D", worktree.branch], project.workspaceRoot).catch(() => null);
+        throw error;
+      }
+    }
     const sessionId = newSessionId();
     update({ runner: "headless", worktreePath: worktree.path, sessionId });
     try {
@@ -159,6 +187,7 @@ export function createAutopilotRunner(deps: {
         model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
+        ...(request.untrustedInput ? { untrusted: true } : {}),
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       }),
     });

@@ -1,4 +1,5 @@
 import { AUTOPILOT_ACTOR, AUTOPILOT_UNSTICK, type AutopilotRun, type AutopilotRunStatus } from "@repo/contracts";
+import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
 
 interface RunRow {
@@ -17,6 +18,7 @@ interface RunRow {
   cost_usd: number | null;
   error: string | null;
   needs_attention: number;
+  output_json: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -39,6 +41,7 @@ const toRun = (r: RunRow): AutopilotRun => ({
   costUsd: r.cost_usd,
   error: r.error,
   needsAttention: r.needs_attention === 1,
+  output: parseJson<Record<string, unknown>>(r.output_json),
   createdAt: r.created_at,
   startedAt: r.started_at,
   finishedAt: r.finished_at,
@@ -61,6 +64,7 @@ const toRow = (r: AutopilotRun) => ({
   cost_usd: r.costUsd,
   error: r.error,
   needs_attention: r.needsAttention ? 1 : 0,
+  output_json: r.output ? JSON.stringify(r.output) : null,
   created_at: r.createdAt,
   started_at: r.startedAt,
   finished_at: r.finishedAt,

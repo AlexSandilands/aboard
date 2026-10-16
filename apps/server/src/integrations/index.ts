@@ -117,6 +117,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
+    github,
     boardUrl: () => boardUrlOf(deps.config),
     ...(overrides.log ? { log: overrides.log } : {}),
   });

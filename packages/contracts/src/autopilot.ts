@@ -222,6 +222,8 @@ export const AutopilotRun = z.object({
   costUsd: z.number().nullable(),
   error: z.string().nullable(),
   needsAttention: z.boolean(),
+  /** A structured result the action left for later automations to read (the PR review's verdict); null when none. */
+  output: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string(),
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),

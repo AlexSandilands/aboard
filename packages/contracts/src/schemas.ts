@@ -187,6 +187,8 @@ export const PrSnapshot = z.object({
   /** Whether the signed-in account can push to the repo, and so merge. */
   canMerge: z.boolean().optional(),
   headOid: z.string().nullable().optional(),
+  /** Whether the head branch is in another repository (a fork), so not on the base repo's `origin`. */
+  isCrossRepository: z.boolean().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
