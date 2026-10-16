@@ -105,6 +105,8 @@ export function agentArgs(input: AgentArgsInput): string[] {
     String(input.budgetUsd),
     "--session-id",
     input.sessionId,
+    // Nothing to resume: a no-tools run has no worktree or card, so its transcript would only pile up.
+    ...(none ? ["--no-session-persistence"] : []),
     ...(input.model ? ["--model", input.model] : []),
   ];
 }

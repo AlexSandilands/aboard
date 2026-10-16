@@ -53,6 +53,7 @@ describe("headless agent", () => {
     });
     expect(after(args, "--tools")).toBe("");
     expect(args).toContain("--strict-mcp-config");
+    expect(args).toContain("--no-session-persistence");
     expect(after(args, "--permission-mode")).toBe("dontAsk");
     expect(args).not.toContain("--allowedTools");
     for (const tool of ["Read", "Bash(gh pr review *)", `mcp__${BRAND.id}`]) expect(args).not.toContain(tool);

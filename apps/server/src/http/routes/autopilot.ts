@@ -54,7 +54,7 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
     ),
   );
 
-  // The digest of what changed (docs/features/autopilot.md#digest-of-what-changed). Registered before /:id/read.
+  // The digest of what changed (docs/features/autopilot.md#automations). Registered before /:id/read.
   app.get(
     "/api/autopilot/digests",
     handle((c) => c.json(services.digests.list())),
