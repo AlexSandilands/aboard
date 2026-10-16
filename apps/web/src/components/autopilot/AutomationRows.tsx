@@ -1,5 +1,6 @@
 import {
   ReviewSkillRef,
+  type AutopilotConfig,
   type AutopilotAutomation,
   type AutopilotField,
   type AutopilotScopeEntry,
@@ -21,6 +22,9 @@ import { toastManager } from "~/components/ui/toast";
 import { entryFor, fieldText, inheritLabel, parentEntry, parseNumberField, withConfigValue } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
 
+/** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
+type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
+
 /**
  * One row per automation at a scope: its Inherit / On / Off switch, and a form for its config generated from the
  * automation's field descriptors. `projectId` null is the board. Config set here applies at this scope only; a key
@@ -31,9 +35,18 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
   const scope = useAutopilotScope(projectId);
   const board = useAutopilotScope(null, projectId !== null);
   const set = useSetAutopilotScope(projectId);
+  // Bumped when the server rejects a save, so the form controls drop the text it refused.
+  const [rejected, setRejected] = useState(0);
   const automations = overview.data?.automations;
-  if (!automations) {
-    return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">Loading automations...</p>;
+  const failed = overview.error ?? scope.error ?? board.error;
+  // The forms send a scope's whole config, so they wait for the real entries rather than editing stand-ins.
+  const loaded = automations && scope.data && (projectId === null || board.data);
+  if (!loaded) {
+    return (
+      <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
+        {failed ? failed.message : "Loading automations..."}
+      </p>
+    );
   }
   if (automations.length === 0) {
     return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">No automations are installed yet.</p>;
@@ -51,7 +64,10 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
             projectId={projectId}
             pending={set.isPending}
             onMode={(mode) => set.mutate({ automation: automation.key, mode })}
-            onConfig={(config) => set.mutate({ automation: automation.key, config })}
+            rejected={rejected}
+            onConfig={(config) =>
+              set.mutate({ automation: automation.key, config }, { onError: () => setRejected((n) => n + 1) })
+            }
           />
         );
       })}
@@ -65,6 +81,7 @@ function AutomationRow({
   inherited,
   projectId,
   pending,
+  rejected,
   onMode,
   onConfig,
 }: {
@@ -73,8 +90,9 @@ function AutomationRow({
   inherited: AutopilotScopeEntry | null;
   projectId: string | null;
   pending: boolean;
+  rejected: number;
   onMode: (mode: AutopilotScopeEntry["mode"]) => void;
-  onConfig: (config: AutopilotScopeEntry["config"]) => void;
+  onConfig: ConfigUpdate;
 }) {
   const [open, setOpen] = useState(false);
   const where = projectId ? "this project" : "the board";
@@ -112,6 +130,7 @@ function AutomationRow({
                   field={field}
                   entry={entry}
                   projectId={projectId}
+                  rejected={rejected}
                   onConfig={onConfig}
                 />
               ))}
@@ -128,17 +147,24 @@ function FieldRow({
   field,
   entry,
   projectId,
+  rejected,
   onConfig,
 }: {
   automation: AutopilotAutomation;
   field: AutopilotField;
   entry: AutopilotScopeEntry;
   projectId: string | null;
-  onConfig: (config: AutopilotScopeEntry["config"]) => void;
+  rejected: number;
+  onConfig: ConfigUpdate;
 }) {
   const overridden = field.key in entry.config;
   const value = field.key in entry.effectiveConfig ? entry.effectiveConfig[field.key] : automation.defaults[field.key];
-  const save = (next: unknown) => onConfig(withConfigValue(entry.config, field.key, next));
+  // Clearing a key that isn't set here changes nothing; the control puts the inherited value back.
+  const save = (next: unknown) => {
+    if (next === undefined && !overridden) return false;
+    onConfig((current) => withConfigValue(current, field.key, next));
+    return true;
+  };
   return (
     <div className="flex flex-col gap-2 py-2.5 @min-[32rem]/settings-row:flex-row @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:justify-between @min-[32rem]/settings-row:gap-6">
       <div className="min-w-0">
@@ -146,7 +172,14 @@ function FieldRow({
         {field.help ? <p className="max-w-md text-2xs text-muted-foreground/80">{field.help}</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <FieldControl field={field} value={value} projectId={projectId} onSave={save} label={field.label} />
+        <FieldControl
+          key={rejected}
+          field={field}
+          value={value}
+          projectId={projectId}
+          onSave={save}
+          label={field.label}
+        />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -179,7 +212,8 @@ function FieldControl({
   field: AutopilotField;
   value: unknown;
   projectId: string | null;
-  onSave: (next: unknown) => void;
+  /** Returns false when nothing was saved, so a text control can put the shown value back. */
+  onSave: (next: unknown) => boolean;
   label: string;
 }) {
   switch (field.kind) {
@@ -197,8 +231,10 @@ function FieldControl({
           placeholder={field.placeholder}
           defaultValue={fieldText(value)}
           onBlur={(event) => {
-            const next = event.currentTarget.value.trim();
-            if (next !== fieldText(value)) onSave(next === "" ? undefined : next);
+            const input = event.currentTarget;
+            const next = input.value.trim();
+            if (next === fieldText(value)) return;
+            if (!onSave(next === "" ? undefined : next)) input.value = fieldText(value);
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
@@ -239,7 +275,7 @@ function NumberField({
 }: {
   field: Extract<AutopilotField, { kind: "number" }>;
   value: unknown;
-  onSave: (next: unknown) => void;
+  onSave: (next: unknown) => boolean;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -260,7 +296,9 @@ function NumberField({
               title: `${field.label} not saved`,
               description: rangeHint(field),
             });
-          } else if (next !== (typeof value === "number" ? value : undefined)) onSave(next);
+          } else if (next !== (typeof value === "number" ? value : undefined) && !onSave(next)) {
+            input.value = fieldText(value);
+          }
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
@@ -288,7 +326,7 @@ function SkillField({
   projectId: string | null;
   value: unknown;
   label: string;
-  onSave: (next: unknown) => void;
+  onSave: (next: unknown) => boolean;
 }) {
   const discovered = useSkills(projectId).data ?? [];
   // The board's skill can't come from one project's folder, as with the review skill.

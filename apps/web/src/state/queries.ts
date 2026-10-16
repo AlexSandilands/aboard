@@ -37,6 +37,8 @@ export const queryKeys = {
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
   autopilot: ["autopilot"] as const,
+  /** Every scope's query, for invalidation. */
+  autopilotScopeAll: ["autopilotScope"] as const,
   /** The board scope when `projectId` is null. */
   autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
   /** Every runs query, for invalidation. */
@@ -75,7 +77,7 @@ export function useAutopilotRuns(scope: AutopilotRunsScope | null) {
   return useQuery({
     queryKey: queryKeys.autopilotRuns(scope ?? { taskId: "" }),
     queryFn: ({ signal }) => {
-      const query = scope && "taskId" in scope ? `taskId=${scope.taskId}` : `projectId=${scope!.projectId}`;
+      const query = new URLSearchParams(scope ?? {});
       return api<AutopilotRun[]>(`/api/autopilot/runs?${query}`, { signal });
     },
     enabled: !!scope,
@@ -239,6 +241,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
       }
@@ -261,7 +264,9 @@ export function useBoardEvents() {
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
       }
+      // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
       }

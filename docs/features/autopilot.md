@@ -139,8 +139,10 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
   as a `ReviewSkillRef`, and an unset one is the built-in skill). The same rows appear in a project's settings,
   where Inherit follows the board. Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
-- Settings aren't pushed over `/events`: mutations write the server's reply into the query cache, and a change to
-  the board scope refetches the projects' scopes.
+- Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
+  edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
+  (which every settings change also publishes) refetches the scopes, so another window's edit shows up too. The
+  forms wait for the real entries to load before they can be edited.
 
 ## Decisions
 

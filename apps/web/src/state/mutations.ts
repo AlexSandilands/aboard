@@ -1,6 +1,7 @@
 import type {
   AddLinkResult,
   AppSettings,
+  AutopilotConfig,
   AutopilotEngineSettings,
   AutopilotOverview,
   AutopilotScopeEntry,
@@ -357,28 +358,46 @@ export function useUpdateSettings() {
 // ── Autopilot ────────────────────────────────────────────────────────────
 
 /**
- * Sets one automation's mode and/or config at the board (`projectId` null) or a project. The server returns the
- * scope's entries, so the cache takes them at once; nothing is pushed over /events for settings.
+ * Sets one automation's mode and/or config at the board (`projectId` null) or a project. The server replaces a
+ * scope's whole config, so `config` is a function from the latest cached config to the new one: calls share a scope
+ * so they reach the server in order, and each is built when it runs, after the one before has updated the cache.
+ * Building it from what the component last rendered would let a quick second edit undo the first. The server's reply
+ * (the scope's entries) goes into the cache; other windows' changes arrive as autopilot.changed.
  */
 export function useSetAutopilotScope(projectId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ automation, ...input }: UpdateAutopilotSettingInput & { automation: string }) =>
-      api<AutopilotScopeEntry[]>(
+    mutationFn: ({
+      automation,
+      mode,
+      config,
+    }: {
+      automation: string;
+      mode?: UpdateAutopilotSettingInput["mode"];
+      config?: (current: AutopilotConfig) => AutopilotConfig;
+    }) => {
+      const entries = queryClient.getQueryData<AutopilotScopeEntry[]>(queryKeys.autopilotScope(projectId));
+      const current = entries?.find((entry) => entry.automation === automation)?.config ?? {};
+      const body: UpdateAutopilotSettingInput = { mode, config: config?.(current) };
+      return api<AutopilotScopeEntry[]>(
         `/api/autopilot/${projectId ? `projects/${enc(projectId)}` : "board"}/${enc(automation)}`,
-        { method: "PUT", body: input },
-      ),
+        { method: "PUT", body },
+      );
+    },
+    scope: { id: `autopilot-scope:${projectId ?? "board"}` },
     onSuccess: (entries) => {
       queryClient.setQueryData(queryKeys.autopilotScope(projectId), entries);
       // A board change moves what every project inherits.
-      void queryClient.invalidateQueries({ queryKey: ["autopilotScope"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
     },
-    onError: (error) =>
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
       toastManager.add({
         type: "error",
         title: "Couldn't save the Autopilot setting",
         description: error instanceof Error ? error.message : String(error),
-      }),
+      });
+    },
   });
 }
 
