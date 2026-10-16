@@ -54,10 +54,13 @@ describe("PR review verdict", () => {
     expect(describeCounts({ blocking: 0, major: 0, minor: 0, nit: 0 })).toBe("no issues");
   });
 
-  it("parses the agent's answer, and rejects one with no commit", () => {
-    const ok = { headSha: "abc1234", summary: "s", issues: [{ severity: "major", title: "t", fyi: false }] };
+  it("parses the agent's answer, and rejects one that isn't a review", () => {
+    const ok = { summary: "s", issues: [{ severity: "major", title: "t", fyi: false }] };
     expect(PrReviewVerdict.safeParse(ok).success).toBe(true);
-    expect(PrReviewVerdict.safeParse({ ...ok, headSha: "" }).success).toBe(false);
+    expect(PrReviewVerdict.safeParse({ summary: "s" }).success).toBe(false);
+    expect(PrReviewVerdict.safeParse({ ...ok, issues: [{ severity: "major", title: "", fyi: false }] }).success).toBe(
+      false,
+    );
     expect(PrReviewVerdict.safeParse({ ...ok, issues: [{ severity: "huge", title: "t", fyi: false }] }).success).toBe(
       false,
     );

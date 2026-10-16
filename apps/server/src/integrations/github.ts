@@ -232,11 +232,28 @@ export interface PostedReview {
   folded: number;
 }
 
-/** The body, with comments that can't be placed on the diff added under it. */
+/** GitHub refuses a review body past 65536 characters. */
+const MAX_REVIEW_BODY = 60_000;
+
+const clipBody = (text: string): string =>
+  text.length > MAX_REVIEW_BODY ? `${text.slice(0, MAX_REVIEW_BODY)}\n\n_…cut off_` : text;
+
+/** The body, with comments that can't be placed on the diff added under it, cut to what GitHub takes. */
 export function foldReviewComments(body: string, comments: readonly ReviewComment[]): string {
-  if (comments.length === 0) return body;
+  if (comments.length === 0) return clipBody(body);
   const items = comments.map((c) => `**\`${c.path}:${c.line}\`**\n\n${c.body}`);
-  return `${body}\n\n### Inline comments\n\n${items.join("\n\n")}`;
+  return clipBody(`${body}\n\n### Inline comments\n\n${items.join("\n\n")}`);
+}
+
+/** The PR's head isn't the commit that was reviewed: it moved while the review ran. Nothing was posted. */
+export class StaleReviewError extends AppError {
+  constructor(
+    readonly head: string,
+    reviewed: string,
+  ) {
+    super("CONFLICT", `The PR's head is ${head.slice(0, 7)}, not the ${reviewed.slice(0, 7)} that was reviewed`);
+    this.name = "StaleReviewError";
+  }
 }
 
 /** States in which GitHub merges at once rather than waiting, as `gh pr merge --auto` treats them. */
@@ -623,10 +640,7 @@ export function createGithubIntegration(deps: {
         const { id, headRefOid: head } = parsed.data.repository.pullRequest;
         const sha = input.reviewedSha.toLowerCase();
         if (sha.length < 7 || !(head.toLowerCase().startsWith(sha) || sha.startsWith(head.toLowerCase()))) {
-          throw new AppError(
-            "CONFLICT",
-            `The PR's head is ${head.slice(0, 7)}, not the ${input.reviewedSha.slice(0, 7)} the reviewer read`,
-          );
+          throw new StaleReviewError(head, input.reviewedSha);
         }
         const post = (comments: readonly ReviewComment[], body: string) =>
           api.graphql(ref.host, POST_REVIEW_MUTATION, {

@@ -200,23 +200,31 @@ as comments only.
   setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
   posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (#96) counts its
   own attempts against the same limit; each fix is followed by at most one new head and so one review.
-- **The agent only reads.** It runs headless in a worktree on the PR's branch with `access: "read-only"`, no board
-  tools and no other MCP servers (`boardTools: false`), the extra tools `gh pr view <n>`, `gh pr diff <n>` and two
-  exact, wildcard-free `gh api` reads of the PR's comments and reviews, and an output schema. It has no way to write
-  to GitHub. A review has to be held to read-only, which a T3 thread can't be, so the runner setting is Auto or
-  Headless and both run headless. It has its own budget (default $2) and timeout (20 minutes), and follows the
-  **Review skill** chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The
-  prompt calls the PR's text untrusted, and says nothing is recorded on the board.
-- **The server posts.** The agent answers with the commit it read, a summary and every point (severity, file, line,
-  body, suggestion, `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot
-  review` (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the
-  rest as inline comments starting with `🤖 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview`
-  sends it with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or
-  request changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses (the
-  run fails, flagged) when that isn't the commit the agent read, which catches a stale or wrong checkout. GitHub
-  refuses a whole review over one comment on a line outside the diff, so it then posts again with the inline
-  comments in the body. The agent doesn't post because Claude Code's permission rules can't scope `gh api` writes
-  to a review, and it refuses the JSON payload in a heredoc.
+- **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
+  `access: "read-only"`, the extra tools `gh pr view <n>`, `gh pr diff <n>` and two exact, wildcard-free `gh api`
+  reads of the PR's comments and reviews, and an output schema. It has no way to write to GitHub. Because it reads
+  text anyone can write (the PR's description and comments), the request sets `untrustedInput`: no board tools and
+  no other MCP servers (`--strict-mcp-config`), file tools scoped to the worktree (`Read(./**)` and so on, where a
+  bare `Read` reaches any file the user can), and `git --no-index` and `git -C` denied. Before the agent starts the
+  runner checks the worktree is at the commit the run is about (`expectHead`, `WorktreeHeadError`): a branch that
+  moved past it skips the run, a worktree that isn't descended from it (a stale `origin`, a fork's branch name that
+  exists on `origin`, a PR in another repository) fails it, flagged, before any budget is spent. A review has to be
+  held to read-only, which a T3 thread can't be, so the runner setting is Auto or Headless and both run headless.
+  It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill** chosen (the built-in
+  `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the PR's text untrusted,
+  and says nothing is recorded on the board.
+- **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
+  `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot review`
+  (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
+  inline comments starting with `🤖 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
+  with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or request
+  changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses with
+  `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
+  the run is skipped, and the new head is reviewed next as the same round. GitHub refuses a whole review over one
+  comment on a line outside the diff, so it then posts again with the inline comments in the body; a body is cut to
+  what GitHub takes. The agent doesn't post itself because Claude Code's permission rules can't scope `gh api`
+  writes to a review (and can't see an `event` inside a heredoc), it refuses a JSON payload in a heredoc, and
+  `gh api -f` can't build the inline comments reliably.
 - **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** (engine
   setting, default major) are the actionable ones.
 - **Anti-spiral.** From round 2 the prompt carries the round ("round 2 of 3"), the earlier Autopilot reviews with
@@ -227,7 +235,7 @@ as comments only.
 - **What the board keeps.** The task gets a note "Autopilot reviewed PR #N at `<sha>` (round R of M): review on
   GitHub", linking the review, and the run gets its verdict in `output` (`PrReviewRunOutput`: review URL and id, the
   head commit in full, round, counts, FYI count, threshold, actionable count and `handoff`). An answer that isn't a
-  review fails the run, flagged, and nothing is posted. A run is never retried, so there is one review per head
+  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too. A run is never retried, so there is one review per head
   commit even when posting failed.
 - **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
   (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
@@ -257,6 +265,9 @@ with that error.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
   (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
+  Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers,
+  file tools limited to the worktree) and **`expectHead`**, the commit the worktree must be at, checked before the
+  agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
 `RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):

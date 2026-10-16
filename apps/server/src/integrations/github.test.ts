@@ -4,7 +4,14 @@ import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
 import { defaultSettings } from "../test/fixtures.ts";
 import { GhError, type RunGh } from "./gh.ts";
-import { createGithubIntegration, isGithubHost, mapPrSnapshot, pollQuery, type GithubServices } from "./github.ts";
+import {
+  createGithubIntegration,
+  isGithubHost,
+  mapPrSnapshot,
+  pollQuery,
+  StaleReviewError,
+  type GithubServices,
+} from "./github.ts";
 import type { LinkSnapshot } from "../services/types.ts";
 
 const repo = {
@@ -466,6 +473,20 @@ describe("github postReview", () => {
     ]);
   });
 
+  it("cuts a body that would be too long for GitHub, also after folding the comments in", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    gh.failNextThreadedReview();
+    await github.postReview(ref, {
+      reviewedSha: "abcdef1",
+      body: "x".repeat(50_000),
+      comments: [{ path: "a.ts", line: 1, body: "y".repeat(40_000) }],
+    });
+    const retried = gh.mutations[1]!.input.body as string;
+    expect(retried.length).toBeLessThan(65_536);
+    expect(retried.endsWith("_…cut off_")).toBe(true);
+  });
+
   it("posts a review with no inline comments without a threads field", async () => {
     const { gh, github } = setup([ghLink("l1", 7)]);
     gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
@@ -476,10 +497,12 @@ describe("github postReview", () => {
   it("refuses when the PR's head isn't the commit the reviewer read", async () => {
     const { gh, github } = setup([ghLink("l1", 7)]);
     gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
-    await expect(github.postReview(ref, { reviewedSha: "1234567", body: "x", comments })).rejects.toMatchObject({
-      code: "CONFLICT",
-      message: expect.stringContaining("abcdef1"),
-    });
+    const refusal = await github
+      .postReview(ref, { reviewedSha: "1234567", body: "x", comments })
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(StaleReviewError);
+    expect(refusal).toMatchObject({ code: "CONFLICT", head: "abcdef1234567890" });
+    expect((refusal as Error).message).toContain("abcdef1");
     expect(gh.mutations).toEqual([]);
   });
 

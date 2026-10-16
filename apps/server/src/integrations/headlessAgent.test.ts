@@ -42,14 +42,23 @@ describe("headless agent", () => {
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
   });
 
-  it("can keep a read-only agent away from the board and every other MCP server", () => {
+  it("keeps a read-only agent that reads untrusted text to its worktree, away from MCP servers", () => {
     const base = { access: "read-only", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: null } as const;
     const open = agentArgs(base);
     expect(open).toContain(`mcp__${BRAND.id}`);
+    expect(open).toContain("Read");
     expect(open).not.toContain("--strict-mcp-config");
-    const closed = agentArgs({ ...base, boardTools: false });
+    const closed = agentArgs({ ...base, untrusted: true });
     expect(closed).not.toContain(`mcp__${BRAND.id}`);
     expect(closed).toContain("--strict-mcp-config");
+    // File tools only reach the working directory: a bare Read would reach any file the user can.
+    expect(closed).toEqual(expect.arrayContaining(["Read(./**)", "Grep(./**)", "Glob(./**)", "Bash(git diff *)"]));
+    for (const bare of ["Read", "Grep", "Glob"]) expect(closed).not.toContain(bare);
+    // git can read other files and repositories too.
+    const denied = closed.slice(closed.indexOf("--disallowedTools") + 1);
+    expect(denied).toEqual(expect.arrayContaining(["Bash(git *--no-index*)", "Bash(git -C *)"]));
+    // Untrusted only means something for a read-only agent.
+    expect(agentArgs({ ...base, access: "edit", untrusted: true })).not.toContain("--strict-mcp-config");
   });
 
   it("denies force-pushes, pushes to the default branch and merging, in every written form", () => {

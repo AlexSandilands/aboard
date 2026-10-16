@@ -10,10 +10,10 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import type { PostReviewInput } from "../../integrations/github.ts";
+import { StaleReviewError, type PostReviewInput } from "../../integrations/github.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import type { GithubActions, Runner, RunnerRequest, RunnerResult } from "../types.ts";
+import { WorktreeHeadError, type GithubActions, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
 import { earlierReviews, renderReview, reviewHandoff, reviewPrs, reviewTools } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -21,7 +21,6 @@ const SHA_A = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const SHA_B = "b2c3d4e5f60718293a4b5c6d7e8f9012345678a1";
 const SHA_C = "c3d4e5f60718293a4b5c6d7e8f9012345678a1b2";
 const SHA_D = "d4e5f60718293a4b5c6d7e8f9012345678a1b2c3";
-const KNOWN = [SHA_A, SHA_B, SHA_C, SHA_D];
 
 const snapshot = (over: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
@@ -64,15 +63,16 @@ function setup() {
   let answer: ((request: RunnerRequest) => unknown) | null = null;
   let hold: Promise<void> | null = null;
   let postError: string | null = null;
-  const headIn = (prompt: string) => /at head commit ([0-9a-f]{40})/.exec(prompt)?.[1] ?? "unknown";
+  let runnerError: Error | null = null;
+  /** The PR's head on GitHub right now: what the snapshot says, as in the real integration. */
+  let live: () => string = () => SHA_A;
   const runner: Runner = {
     start: async (request, update = () => {}): Promise<RunnerResult> => {
       requests.push(request);
       update({ runner: "headless", costUsd: 0.5 });
+      if (runnerError) throw runnerError;
       if (hold) await hold;
-      const output = answer
-        ? answer(request)
-        : { headSha: headIn(request.prompt), summary: "Looks reasonable.", issues };
+      const output = answer ? answer(request) : { summary: "Looks reasonable.", issues };
       return { runner: "headless", result: null, output };
     },
   };
@@ -80,8 +80,10 @@ function setup() {
     postReview: async (ref, input) => {
       posts.push({ ...ref, input });
       if (postError) throw new Error(postError);
+      // As the real one: refuse when the PR's head isn't the commit that was reviewed.
+      const headOid = live();
+      if (!headOid.startsWith(input.reviewedSha)) throw new StaleReviewError(headOid, input.reviewedSha);
       const id = 100 + posts.length;
-      const headOid = KNOWN.find((sha) => sha.startsWith(input.reviewedSha)) ?? input.reviewedSha;
       return { id, url: `https://github.com/acme/app/pull/7#pullrequestreview-${id}`, headOid, folded: 0 };
     },
   };
@@ -106,6 +108,10 @@ function setup() {
   });
   const linkId = () => s.tasks.summary(task.id).links.find((l) => l.kind === "pr")!.id;
   const setPr = (over: Partial<PrSnapshot> = {}) => s.links.setSnapshot(linkId(), snapshot(over));
+  live = () => {
+    const link = s.tasks.summary(task.id).links.find((l) => l.kind === "pr");
+    return (link?.kind === "pr" && link.snapshot?.headOid) || SHA_A;
+  };
   const pass = async () => {
     await engine.pass();
     await engine.idle();
@@ -136,6 +142,7 @@ function setup() {
       hold = promise;
     },
     failPost: (message: string | null) => (postError = message),
+    failRunner: (error: Error | null) => (runnerError = error),
     setPr,
     pass,
     turnOn,
@@ -214,8 +221,8 @@ describe("review PRs: triggers", () => {
     expect(requests[1]!.prompt).toContain("review round 2 of 3");
   });
 
-  it("waits for a review that is still running, then reviews the latest head with it in view", async () => {
-    const { requests, setPr, pass, turnOn, holdRunner, runs, engine } = setup();
+  it("waits for a review that is still running, and skips it (no failure, no round) if the head moved meanwhile", async () => {
+    const { requests, posts, setPr, pass, turnOn, holdRunner, runs, engine } = setup();
     turnOn();
     let release!: () => void;
     holdRunner(new Promise<void>((resolve) => (release = resolve)));
@@ -229,11 +236,55 @@ describe("review PRs: triggers", () => {
     holdRunner(null);
     release();
     await engine.idle();
+    // Round 1 read the old head: GitHub's is the new one, so nothing was posted and nothing failed.
+    expect(posts).toHaveLength(1);
+    expect(runs().find((r) => r.dedupeKey.endsWith(SHA_A))).toMatchObject({
+      status: "skipped",
+      summary: "PR #7 moved on while it was being reviewed",
+      needsAttention: false,
+    });
+    // The latest head is reviewed next, and it is still the first round.
     await pass();
     expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("review round 1 of 3");
+    expect(requests[1]!.prompt).toContain(`head commit ${SHA_B}`);
+    expect(runs().filter((r) => r.status === "succeeded")).toHaveLength(1);
+  });
+
+  it("reviews the next head with the earlier review in view when the first one finished", async () => {
+    const { requests, setPr, pass, turnOn } = setup();
+    turnOn();
+    setPr();
+    await pass();
+    setPr({ headOid: SHA_B });
+    await pass();
     expect(requests[1]!.prompt).toContain("review round 2 of 3");
     expect(requests[1]!.prompt).toContain("Earlier reviews");
-    expect(runs().filter((r) => r.status === "succeeded")).toHaveLength(2);
+  });
+
+  it("skips, without a failure or a round, when the branch moved past the commit before the agent started", async () => {
+    const { setPr, pass, turnOn, failRunner, runs, posts, requests } = setup();
+    turnOn();
+    failRunner(new WorktreeHeadError("The branch moved on", SHA_B, true));
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false });
+    expect(posts).toEqual([]);
+    failRunner(null);
+    setPr({ headOid: SHA_B });
+    await pass();
+    expect(requests[1]!.prompt).toContain("review round 1 of 3");
+  });
+
+  it("fails the run, flagged, when the worktree is at a commit that was never the PR's", async () => {
+    const { setPr, pass, turnOn, failRunner, runs, posts } = setup();
+    turnOn();
+    failRunner(new WorktreeHeadError("The worktree is at 9999999, not the PR's head a1b2c3d", "9999999", false));
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "failed", needsAttention: true });
+    expect(runs()[0]!.error).toContain("not the PR's head");
+    expect(posts).toEqual([]);
   });
 
   it("stops after the rounds the engine allows for a PR", async () => {
@@ -313,9 +364,10 @@ describe("review PRs: the agent", () => {
     expect(request).toMatchObject({
       access: "read-only",
       workspace: { branch: "feat/thing" },
-      boardTools: false,
+      untrustedInput: true,
+      expectHead: SHA_A,
     });
-    expect(request!.outputSchema).toMatchObject({ required: ["headSha", "summary", "issues"] });
+    expect(request!.outputSchema).toMatchObject({ required: ["summary", "issues"] });
     expect(request!.options).toMatchObject({ runner: "headless", budgetUsd: 2 });
   });
 
@@ -346,6 +398,7 @@ describe("review PRs: the agent", () => {
     expect(prompt).toContain("Don't post anything to GitHub");
     expect(prompt).toContain("untrusted text");
     expect(prompt).toContain(`head commit ${SHA_A}`);
+    expect(prompt).not.toContain("git rev-parse");
     expect(prompt).toContain("round 1 of 3");
     expect(prompt).not.toContain("Earlier reviews");
     // Nothing in it asks for a review event: the server decides that.
@@ -367,7 +420,7 @@ describe("review PRs: the agent", () => {
 
   it("fails the run, flagged, when the answer isn't a review, and posts nothing", async () => {
     const { setPr, pass, turnOn, answerWith, runs, notes, posts } = setup();
-    answerWith(() => ({ summary: "no sha" }));
+    answerWith(() => ({ summary: "no issues list" }));
     turnOn();
     setPr();
     await pass();
@@ -377,14 +430,14 @@ describe("review PRs: the agent", () => {
     expect(notes()).toEqual([]);
   });
 
-  it("fails the run, flagged, when GitHub refuses the review (for example a stale checkout)", async () => {
+  it("fails the run, flagged, when GitHub refuses the review, keeping what the agent cost", async () => {
     const { setPr, pass, turnOn, failPost, runs, notes } = setup();
-    failPost("The PR's head is a1b2c3d, not the 9999999 the reviewer read");
+    failPost("Could not resolve to a PullRequest");
     turnOn();
     setPr();
     await pass();
     expect(runs()[0]).toMatchObject({ status: "failed", needsAttention: true, costUsd: 0.5 });
-    expect(runs()[0]!.error).toContain("not the 9999999");
+    expect(runs()[0]!.error).toContain("Could not resolve");
     expect(notes()).toEqual([]);
   });
 

@@ -38,8 +38,6 @@ export type PrReviewIssue = z.infer<typeof PrReviewIssue>;
 
 /** What the review agent returns as its structured answer. The server posts it; the agent posts nothing. */
 export const PrReviewVerdict = z.object({
-  /** The commit the agent read (`git rev-parse HEAD`). */
-  headSha: z.string().min(7),
   summary: z.string(),
   /** Every point in the review, the FYI ones too. */
   issues: z.array(PrReviewIssue),
@@ -50,7 +48,6 @@ export type PrReviewVerdict = z.infer<typeof PrReviewVerdict>;
 export const PR_REVIEW_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
-    headSha: { type: "string", description: "The commit you reviewed: the output of `git rev-parse HEAD`." },
     summary: { type: "string", description: "One paragraph: your overall verdict and the main risks." },
     issues: {
       type: "array",
@@ -74,7 +71,7 @@ export const PR_REVIEW_OUTPUT_SCHEMA = {
       },
     },
   },
-  required: ["headSha", "summary", "issues"],
+  required: ["summary", "issues"],
 } as const;
 
 /** What the review means for the loop: nothing to fix, hand over to the fix automation, or out of rounds. */

@@ -121,8 +121,28 @@ export interface RunnerRequest {
   tools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
-  /** Headless read-only only: `false` keeps the agent from the board's tools and every other MCP server. Default true. */
-  boardTools?: boolean;
+  /**
+   * Headless read-only only: the agent reads text anyone can write (a PR's description and comments). It gets no
+   * board tools, no MCP servers and no files outside its worktree.
+   */
+  untrustedInput?: boolean;
+  /**
+   * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
+   * throws `WorktreeHeadError`.
+   */
+  expectHead?: string;
+}
+
+/** The worktree isn't at the commit `expectHead` named. `moved` is true when it is ahead of it: the branch moved on. */
+export class WorktreeHeadError extends Error {
+  constructor(
+    message: string,
+    readonly head: string,
+    readonly moved: boolean,
+  ) {
+    super(message);
+    this.name = "WorktreeHeadError";
+  }
 }
 
 /** What a runner did. A T3 run returns once the thread is started; a headless run once the agent finished. */

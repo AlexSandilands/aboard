@@ -60,6 +60,17 @@ export function pushDenyRules(defaultBranch: string | null): string[] {
   return rules;
 }
 
+/**
+ * The read-only tools with the file tools limited to the working directory: a bare `Read` reaches any file the user
+ * can, which a prompt injection could post publicly through the review.
+ */
+const SCOPED_READ_ONLY_TOOLS = READ_ONLY_TOOLS.map((tool) =>
+  tool === "Read" || tool === "Grep" || tool === "Glob" ? `${tool}(./**)` : tool,
+);
+
+/** git can read any file with `--no-index`, or any repository with `-C`: not for an agent that reads untrusted text. */
+const UNTRUSTED_DENY_RULES = ["Bash(git *--no-index*)", "Bash(git -C *)", "Bash(git * -C *)"];
+
 export interface AgentArgsInput {
   access: AgentAccess;
   budgetUsd: number;
@@ -72,8 +83,11 @@ export interface AgentArgsInput {
   tools?: readonly string[];
   /** A JSON schema the agent's final answer must match (`--json-schema`). */
   outputSchema?: object | null;
-  /** Whether a read-only agent may call this board's tools (default true). Off also drops every other MCP server. */
-  boardTools?: boolean;
+  /**
+   * The agent reads text anyone can write, so a prompt injection could try to steal or misuse what it can reach: it
+   * gets no MCP servers (the board's included), and its file tools only reach its own worktree. Read-only agents only.
+   */
+  untrusted?: boolean;
 }
 
 /** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
@@ -88,13 +102,14 @@ export function agentArgs(input: AgentArgsInput): string[] {
     "--permission-mode",
     readOnly ? "dontAsk" : "acceptEdits",
     "--allowedTools",
-    ...(readOnly ? [...READ_ONLY_TOOLS, ...(input.boardTools === false ? [] : [`mcp__${BRAND.id}`])] : EDIT_TOOLS),
+    ...(readOnly ? (input.untrusted ? SCOPED_READ_ONLY_TOOLS : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]) : EDIT_TOOLS),
     ...(input.tools ?? []),
     "--disallowedTools",
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
+    ...(readOnly && input.untrusted ? UNTRUSTED_DENY_RULES : []),
     ...pushDenyRules(input.defaultBranch),
     // No MCP servers at all: a reviewer of untrusted text has no use for them.
-    ...(input.boardTools === false ? ["--strict-mcp-config"] : []),
+    ...(readOnly && input.untrusted ? ["--strict-mcp-config"] : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",

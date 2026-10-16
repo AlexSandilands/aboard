@@ -22,9 +22,9 @@ import {
   type SeverityCounts,
 } from "@repo/contracts";
 import { z } from "zod";
-import type { ReviewComment } from "../../integrations/github.ts";
+import { StaleReviewError, type PostedReview, type ReviewComment } from "../../integrations/github.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
+import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
 
@@ -150,7 +150,7 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
     "",
     "## Your answer",
     "",
-    `Answer with the structured result and nothing else: the commit you read (\`git rev-parse HEAD\`; it should be ${shortSha(pr.headOid)}), a summary (one paragraph: your verdict and the main risks), and every point you found. A point tied to code has \`file\` and \`line\`, a line of the file at that commit that the PR's diff touches; a point with no location leaves them out. Say what goes wrong and when in \`body\`, and give a \`suggestion\`. A clean change has no points.`,
+    `Answer with the structured result and nothing else: a summary (one paragraph: your verdict and the main risks) and every point you found. A point tied to code has \`file\` and \`line\`, a line of the file at that commit that the PR's diff touches; a point with no location leaves them out. Say what goes wrong and when in \`body\`, and give a \`suggestion\`. A clean change has no points.`,
   );
   return lines.join("\n");
 }
@@ -158,6 +158,9 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
 const clip = (text: string) => (text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}\n\n_…cut off_` : text);
 
 const where = (issue: PrReviewIssue) => (issue.file ? ` \`${issue.file}${issue.line ? `:${issue.line}` : ""}\`` : "");
+
+/** An inline comment is cut here; the point's own words matter more than the last paragraph of a long essay. */
+const MAX_COMMENT = 8_000;
 
 const detail = (issue: PrReviewIssue) => [
   ...(issue.body ? ["", issue.body] : []),
@@ -185,7 +188,9 @@ export function renderReview(
       comments.push({
         path: issue.file,
         line: issue.line,
-        body: [`${prReviewMarker()} · ${issue.severity}`, "", `**${issue.title}**`, ...detail(issue)].join("\n"),
+        body: [`${prReviewMarker()} · ${issue.severity}`, "", `**${issue.title}**`, ...detail(issue)]
+          .join("\n")
+          .slice(0, MAX_COMMENT),
       });
     } else unplaced.push(issue);
   }
@@ -364,37 +369,48 @@ export const reviewPrs = defineAutomation({
     }
 
     const threshold = effectiveFixThreshold(engine.prFixThreshold, data.round, data.maxRounds);
-    const result = await runner.start({
-      run,
-      prompt: reviewPrompt({
-        task,
-        pr: data,
-        round: data.round,
-        maxRounds: data.maxRounds,
-        threshold,
-        earlier: data.earlier,
-        skill: config.skill,
-      }),
-      tier: task.suggestedModel?.tier ?? null,
-      options: config,
-      access: "read-only",
-      tools: reviewTools(data),
-      boardTools: false,
-      outputSchema: PR_REVIEW_OUTPUT_SCHEMA,
-      workspace: { branch: data.headRef },
-    });
-
-    const parsed = PrReviewVerdict.safeParse(result.output);
-    if (!parsed.success) {
-      throw new Error(`The reviewer's answer wasn't a review: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+    let verdict: PrReviewVerdict;
+    let posted: PostedReview;
+    try {
+      const result = await runner.start({
+        run,
+        prompt: reviewPrompt({
+          task,
+          pr: data,
+          round: data.round,
+          maxRounds: data.maxRounds,
+          threshold,
+          earlier: data.earlier,
+          skill: config.skill,
+        }),
+        tier: task.suggestedModel?.tier ?? null,
+        options: config,
+        access: "read-only",
+        tools: reviewTools(data),
+        untrustedInput: true,
+        // Checked before the agent starts: it reads the commit this run is about, or nothing.
+        expectHead: data.headOid,
+        outputSchema: PR_REVIEW_OUTPUT_SCHEMA,
+        workspace: { branch: data.headRef },
+      });
+      const parsed = PrReviewVerdict.safeParse(result.output);
+      if (!parsed.success) {
+        throw new Error(`The reviewer's answer wasn't a review: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+      }
+      verdict = parsed.data;
+      const rendered = renderReview(verdict, data);
+      posted = await github.postReview(
+        { host: data.host, repo: data.repo, number: data.number },
+        { reviewedSha: data.headOid, body: rendered.body, comments: rendered.comments },
+      );
+    } catch (error) {
+      // The branch moved on before or while the agent read it: nothing was posted, and the new head is reviewed next.
+      // That isn't a failure, nor a round used. A worktree at some other commit is one: it never matched.
+      if (error instanceof StaleReviewError || (error instanceof WorktreeHeadError && error.moved)) {
+        return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
+      }
+      throw error;
     }
-    const verdict = parsed.data;
-    const { body, comments } = renderReview(verdict, data);
-    // Refused (and the run failed) when the PR's head isn't the commit the agent read: a stale or wrong checkout.
-    const posted = await github.postReview(
-      { host: data.host, repo: data.repo, number: data.number },
-      { reviewedSha: verdict.headSha, body, comments },
-    );
 
     const { counts, fyi } = countReviewIssues(verdict.issues);
     const actionable = actionableCount(counts, threshold);
