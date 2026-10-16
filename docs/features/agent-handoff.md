@@ -174,6 +174,26 @@ The workspace and branch choices map to T3's `workspaceStrategy`:
 | A branch that already has its own worktree, or Previous worktree | Runs the thread in that existing worktree folder. |
 | Current checkout | Runs the thread in the project folder on whatever branch is checked out. |
 
+### Linking an existing thread
+
+**Add link** (panel) and `link` (MCP) accept what T3 gives you for a thread, besides `t3code://threads/…`:
+
+- A bare thread ID, as T3's "Copy thread ID" produces (a UUID, or `thread:…`). It carries no environment, so
+  it needs a detected T3 (`classifyLink`'s `t3` option, `packages/contracts/src/links.ts`); without one the
+  panel says T3 isn't running.
+- A browser URL of the detected T3, `<origin>/<environmentId>/<threadId>`. Other URLs stay plain links.
+
+The REST route and the `link` tool call `Integrations.resolveLinkInput` before `links.add`
+(`T3Integration.resolveThread`), which asks the live shell whether the thread exists (exact ID, archived
+threads included):
+
+| T3 | Result |
+|---|---|
+| Connected, thread exists | Linked in the detected environment |
+| Connected, no such thread | Rejected: "No T3 Code thread with ID …" |
+| Detected but unpaired or unreachable | Linked unchecked; the response carries a `warning` (a toast in the panel, a `Warning:` line from `link`) |
+| Not detected | A bare ID is rejected; a browser URL is just a URL |
+
 ## Decisions
 
 ### No branch switching in the current checkout

@@ -2,6 +2,7 @@ import type { T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
+import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
 import { createImportsService, type ImportsModule } from "./imports.ts";
@@ -63,5 +64,6 @@ export function createServices(deps: ServiceDeps): Services {
     reviews,
     labels: labels.service,
     imports: imports.service,
+    backup: createBackupService(core),
   };
 }

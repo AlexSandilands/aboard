@@ -47,6 +47,9 @@ gets a colour you can change.
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
 each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it.
 
+The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
+or clear the tier from the dropdown there; picking one drops the planner's reason.
+
 ## Handing a task to an agent
 
 Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent

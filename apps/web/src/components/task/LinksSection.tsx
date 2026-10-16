@@ -55,6 +55,7 @@ import {
   threadDetails,
   threadModelsDiffer,
   threadStatusPresentation,
+  unrecognisedLinkHint,
 } from "./links.logic";
 import {
   PANEL_ICON_CLASS,
@@ -145,7 +146,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
             onRemove={() => remove(link.id)}
           />
         ))}
-        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} />
+        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} t3={t3} />
       </div>
     </TaskSection>
   );
@@ -496,11 +497,19 @@ function Hint({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function AddLinkPopover({ taskId, jiraBaseUrl }: { taskId: string; jiraBaseUrl: string | null }) {
+function AddLinkPopover({
+  taskId,
+  jiraBaseUrl,
+  t3,
+}: {
+  taskId: string;
+  jiraBaseUrl: string | null;
+  t3: T3IntegrationStatus;
+}) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const { mutate: addLink, isPending } = useAddLink();
-  const classified = classifyLink(value, { jiraBaseUrl });
+  const classified = classifyLink(value, { jiraBaseUrl, t3 });
   const preview = describeLinkInput(classified);
   const PreviewIcon = preview ? LINK_KIND_ICON[preview.kind] : null;
 
@@ -553,7 +562,7 @@ function AddLinkPopover({ taskId, jiraBaseUrl }: { taskId: string; jiraBaseUrl: 
                 <span className="ms-auto shrink-0">Enter to add</span>
               </>
             ) : value.trim() ? (
-              <span>Not recognised. Paste a full URL or a Jira key like ABC-123.</span>
+              <span>{unrecognisedLinkHint(value, t3)}</span>
             ) : (
               <span>Detects GitHub PRs, Jira keys, T3 Code threads and URLs.</span>
             )}

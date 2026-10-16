@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  BackupStatus,
   BoardEvent,
   BoardSnapshot,
   FsBrowseResult,
@@ -22,6 +23,7 @@ export const queryKeys = {
   task: (id: string) => ["task", id] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
+  backupStatus: ["backupStatus"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -80,6 +82,15 @@ export function useIntegrationsStatus(enabled = true) {
     queryFn: ({ signal }) => api<IntegrationsStatus>("/api/integrations/status", { signal }),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/** The last git backup run. Polled while shown, quickly while a run is in progress. */
+export function useBackupStatus() {
+  return useQuery({
+    queryKey: queryKeys.backupStatus,
+    queryFn: ({ signal }) => api<BackupStatus>("/api/backup/status", { signal }),
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : 15_000),
   });
 }
 

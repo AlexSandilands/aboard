@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LabelHue } from "./labels.ts";
+import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
@@ -403,13 +404,16 @@ export const UpdateProjectInput = z.object({
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
 export const LinkInput = z.object({
-  /** URL, Jira key (ABC-123), GitHub PR URL, or t3code:// thread link. Kind is inferred when omitted. */
+  /** URL, Jira key (ABC-123), GitHub PR URL, t3code:// thread link or T3 thread id. Kind is inferred when omitted. */
   value: z.string().trim().min(1).optional(),
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
+
+/** What adding a link returns: the link, plus a warning when it was accepted with something unverified. */
+export type AddLinkResult = TaskLink & { warning?: string };
 
 export const CreateTaskInput = z
   .object({
@@ -436,6 +440,7 @@ export const CreateTaskInput = z
     message: "A task imported from an issue can't be created with a plan",
     path: ["plan"],
   });
+
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>;
 
 export const UpdateTaskInput = z.object({
@@ -483,36 +488,39 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-export const AppSettings = z.object({
-  jiraBaseUrl: z.string().nullable(),
-  githubPolling: z.boolean(),
-  /** Which T3 link the primary "Open in T3 Code" action uses. */
-  t3LinkTarget: z.enum(["desktop", "browser"]),
-  /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
-  t3TokenSet: z.boolean(),
-  /** Moving a task to Review opens a local review round, unless the task overrides it. */
-  autoReview: z.boolean(),
-  /** The skill reviewers follow, unless the task's project overrides it. */
-  reviewSkill: ReviewSkillRef,
-  reviewMaxRounds: z.number().int().min(1).max(10),
-  /** Let the board run a headless reviewer when no agent picks a round up. */
-  headlessReviewEnabled: z.boolean(),
-  /** The Claude Code CLI to run; null looks up `claude` on PATH. */
-  headlessReviewCli: z.string().nullable(),
-  headlessReviewBudgetUsd: z.number().positive().max(100),
-  /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
-  issueImportEnabled: z.boolean(),
-  /** The model `claude -p` runs for an import, as `--model` takes it (an alias like "haiku" or a full id). */
-  issueImportModel: z.string(),
-  issueImportBudgetUsd: z.number().positive().max(100),
-  /**
-   * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
-   * the server). Empty looks for the common read-only Jira tools on every configured MCP server.
-   */
-  issueImportJiraTools: z.array(z.string()),
-  /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
-  modelTiers: ModelTiers,
-});
+export const AppSettings = z
+  .object({
+    jiraBaseUrl: z.string().nullable(),
+    githubPolling: z.boolean(),
+    /** Which T3 link the primary "Open in T3 Code" action uses. */
+    t3LinkTarget: z.enum(["desktop", "browser"]),
+    /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
+    t3TokenSet: z.boolean(),
+    /** Moving a task to Review opens a local review round, unless the task overrides it. */
+    autoReview: z.boolean(),
+    /** The skill reviewers follow, unless the task's project overrides it. */
+    reviewSkill: ReviewSkillRef,
+    reviewMaxRounds: z.number().int().min(1).max(10),
+    /** Let the board run a headless reviewer when no agent picks a round up. */
+    headlessReviewEnabled: z.boolean(),
+    /** The Claude Code CLI to run; null looks up `claude` on PATH. */
+    headlessReviewCli: z.string().nullable(),
+    headlessReviewBudgetUsd: z.number().positive().max(100),
+    /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
+    issueImportEnabled: z.boolean(),
+    /** The model `claude -p` runs for an import, as `--model` takes it (an alias like "haiku" or a full id). */
+    issueImportModel: z.string(),
+    issueImportBudgetUsd: z.number().positive().max(100),
+    /**
+     * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
+     * the server). Empty looks for the common read-only Jira tools on every configured MCP server.
+     */
+    issueImportJiraTools: z.array(z.string()),
+    /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
+    modelTiers: ModelTiers,
+  })
+  .extend(BackupSettings.shape);
+
 export type AppSettings = z.infer<typeof AppSettings>;
 
 export const UpdateSettingsInput = z.object({
@@ -531,6 +539,10 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  backupEnabled: z.boolean().optional(),
+  backupDir: z.string().trim().nullable().optional(),
+  backupRemote: z.string().trim().nullable().optional(),
+  backupIntervalMinutes: BackupSettings.shape.backupIntervalMinutes.optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

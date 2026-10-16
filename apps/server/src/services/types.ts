@@ -35,6 +35,7 @@ import type {
 } from "@repo/contracts";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { BackupService } from "./backup/index.ts";
 import type { Effects } from "./core.ts";
 
 /**
@@ -55,6 +56,7 @@ export interface Services {
   reviews: ReviewsService;
   labels: LabelsService;
   imports: ImportsService;
+  backup: BackupService;
 }
 
 export interface ProjectRef {

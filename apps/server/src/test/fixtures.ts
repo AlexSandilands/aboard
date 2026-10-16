@@ -17,4 +17,8 @@ export const defaultSettings: AppSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  backupEnabled: false,
+  backupDir: null,
+  backupRemote: null,
+  backupIntervalMinutes: 60,
 };

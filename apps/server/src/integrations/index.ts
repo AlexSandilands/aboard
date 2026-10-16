@@ -1,6 +1,7 @@
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
 import type { RunImport } from "./headlessImport.ts";
@@ -29,6 +30,7 @@ export interface IntegrationOverrides {
   runHeadless?: RunHeadless;
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
+  runGit?: RunGit;
   log?: Logger;
 }
 
@@ -61,6 +63,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.listMcpServers ? { listMcpServers: overrides.listMcpServers } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const backup = createBackupIntegration({
+    services: deps.services,
+    ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -73,12 +80,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       github.start();
       t3.start();
       reviews.start();
+      backup.start();
     },
     stop() {
       started = false;
       github.stop();
       t3.stop();
       reviews.stop();
+      backup.stop();
     },
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
@@ -97,5 +106,15 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
+    async resolveLinkInput(input) {
+      // An explicit kind other than t3_thread means the caller chose how to read the value.
+      if (input.t3Thread || !input.value || (input.kind && input.kind !== "t3_thread")) return { input };
+      const resolved = await t3.resolveThread(input.value);
+      if (!resolved) return { input };
+      const { value: _value, ...rest } = input;
+      return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
+    },
+    backupStatus: () => backup.status(),
+    runBackup: () => backup.run(),
   };
 }

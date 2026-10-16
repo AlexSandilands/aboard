@@ -1,4 +1,5 @@
 import type {
+  AddLinkResult,
   AppSettings,
   BoardSnapshot,
   CloseTaskInput,
@@ -299,11 +300,12 @@ export const useDeleteStep = (opts?: MutationOpts) =>
 // ── Links ────────────────────────────────────────────────────────────────
 
 export const useAddLink = (opts?: MutationOpts) =>
-  useApiMutation(
-    ({ taskId, ...input }: LinkInput & { taskId: string }) =>
-      api<TaskLink>(`/api/tasks/${enc(taskId)}/links`, { body: input }),
-    opts,
-  );
+  useApiMutation(async ({ taskId, ...input }: LinkInput & { taskId: string }) => {
+    const link = await api<AddLinkResult>(`/api/tasks/${enc(taskId)}/links`, { body: input });
+    // The link is in; the warning says what the server couldn't check (e.g. that a T3 thread exists).
+    if (link.warning) toastManager.add({ type: "warning", title: "Link added", description: link.warning });
+    return link;
+  }, opts);
 export const useStartT3Thread = (opts?: MutationOpts) =>
   useApiMutation(
     ({ taskId, ...input }: StartT3ThreadInput & { taskId: string }) =>

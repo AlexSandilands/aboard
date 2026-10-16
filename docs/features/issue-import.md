@@ -111,6 +111,12 @@ after success so the task still says where it came from.
 A GitHub issue URL is classified as an `issue` link (`ref` host, repo and number; `snapshot` state and
 title). The snapshot is read once, at import. Nothing polls issue state.
 
+### Backups
+
+[Backups](backup.md) don't carry `task_imports`, so a restored task has no import state (nothing runs again, and
+a task that was still pending keeps its placeholder title). They also leave out link snapshots as the pollers'
+cache; nothing polls an issue, so a restored `issue` link shows no open/closed badge.
+
 ### Settings
 
 | Setting                | Default | What it does                                                                |
