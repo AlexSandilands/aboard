@@ -38,6 +38,7 @@ import type { ReviewRecord } from "../db/repos/reviews.ts";
 import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { Effects } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -59,6 +60,7 @@ export interface Services {
   imports: ImportsService;
   backup: BackupService;
   autopilot: AutopilotService;
+  notifications: NotificationsService;
 }
 
 export interface ProjectRef {

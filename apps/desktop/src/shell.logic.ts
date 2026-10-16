@@ -1,4 +1,4 @@
-import { BRAND, Health, type DesktopTheme } from "@repo/contracts";
+import { BRAND, Health, type DesktopBadge, type DesktopNotification, type DesktopTheme } from "@repo/contracts";
 
 /** True when a `/api/health` body comes from our server, not some other app holding the port. */
 export function isOwnHealth(body: unknown): boolean {
@@ -47,4 +47,37 @@ export class LogTail {
   toString(): string {
     return [...this.lines, this.partial].filter(Boolean).join("\n");
   }
+}
+
+const text = (value: unknown, max: number): string | null =>
+  typeof value === "string" && value.length <= max ? value : null;
+
+/** Validates a notification sent over IPC by the page; the shell shows only what it recognises. */
+export function parseDesktopNotification(value: unknown): DesktopNotification | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { id, title, body, taskId } = value as Record<string, unknown>;
+  const checked = { id: text(id, 100), title: text(title, 300), body: text(body, 1000) };
+  if (checked.id === null || checked.title === null || checked.body === null) return null;
+  if (taskId !== null && text(taskId, 100) === null) return null;
+  return { id: checked.id, title: checked.title, body: checked.body, taskId: taskId as string | null };
+}
+
+const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
+/** A 32px badge PNG is a few hundred bytes; this leaves room and still refuses anything big. */
+const MAX_OVERLAY_LENGTH = 50_000;
+
+/** Validates the badge sent over IPC: a count, a description, and an overlay that really is a small PNG data URL. */
+export function parseDesktopBadge(value: unknown): DesktopBadge | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { count, description, overlay } = value as Record<string, unknown>;
+  if (typeof count !== "number" || !Number.isInteger(count) || count < 0 || count > 1_000_000) return null;
+  const described = text(description, 200);
+  if (described === null) return null;
+  if (
+    overlay !== null &&
+    !(typeof overlay === "string" && overlay.length <= MAX_OVERLAY_LENGTH && PNG_DATA_URL.test(overlay))
+  ) {
+    return null;
+  }
+  return { count, description: described, overlay };
 }

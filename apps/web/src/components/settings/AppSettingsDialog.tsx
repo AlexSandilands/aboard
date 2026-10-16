@@ -8,6 +8,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
 import {
@@ -88,7 +89,7 @@ function AppSettingsBody() {
     <>
       <DialogHeader>
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Appearance, integrations, backup and agent setup.</DialogDescription>
+        <DialogDescription>Appearance, notifications, integrations, backup and agent setup.</DialogDescription>
       </DialogHeader>
       <DialogPanel className="space-y-6">
         <AppearanceSection />
@@ -96,6 +97,7 @@ function AppSettingsBody() {
           <>
             <T3Section settings={settings.data} status={integrations.data?.t3} />
             <ModelTiersSection settings={settings.data} t3={integrations.data?.t3} />
+            <NotificationsSection settings={settings.data} />
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />

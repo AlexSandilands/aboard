@@ -20,6 +20,7 @@ import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 
 /** Settings-table keys for the engine. Only the settings are exported in backups; pause stays with the machine. */
 export const AUTOPILOT_ENGINE_KEY = "autopilotEngine";
@@ -111,7 +112,10 @@ export interface AutopilotService {
 
 const RUN_LIMIT = 50;
 
-export function createAutopilotService(core: Core, deps: { automations: readonly Automation[] }): AutopilotService {
+export function createAutopilotService(
+  core: Core,
+  deps: { automations: readonly Automation[]; notifications: NotificationsService },
+): AutopilotService {
   const { repos } = core;
   const byKey = new Map(deps.automations.map((a) => [a.key, a]));
   const titleOf = (key: string) => byKey.get(key)?.title ?? key;
@@ -179,10 +183,25 @@ export function createAutopilotService(core: Core, deps: { automations: readonly
     });
   };
 
+  /** A real run that failed, or that ended asking for the user, goes to the inbox once. */
+  const notifyEnded = (run: AutopilotRun) => {
+    if (run.dryRun || (run.status !== "failed" && !run.needsAttention)) return;
+    const task = run.taskId ? repos.tasks.get(run.taskId) : null;
+    const title = titleOf(run.automation);
+    deps.notifications.notify({
+      kind: "autopilot_failed",
+      taskId: run.taskId,
+      title: run.status === "failed" ? `${title} failed` : `${title} needs you`,
+      body: [task ? `#${task.number} ${task.title}` : null, run.error ?? run.summary].filter(Boolean).join("\n"),
+      dedupeKey: `autopilot:${run.id}`,
+    });
+  };
+
   const save = (run: AutopilotRun, opts: { log?: boolean } = {}): AutopilotRun => {
     core.write((fx) => {
       repos.autopilotRuns.update(run);
       if (opts.log) logRun(fx, run);
+      if (run.finishedAt) notifyEnded(run);
       // The card's attention reason may change with the run.
       else if (run.taskId) fx.task(run.taskId);
       fx.autopilot();
@@ -345,6 +364,7 @@ export function createAutopilotService(core: Core, deps: { automations: readonly
           };
           repos.autopilotRuns.update(failed);
           logRun(fx, failed);
+          notifyEnded(failed);
         }
         fx.autopilot();
       });

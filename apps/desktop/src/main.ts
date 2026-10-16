@@ -1,11 +1,23 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND, brandEnv } from "@repo/contracts";
-import { BrowserWindow, Menu, Tray, app, clipboard, dialog, ipcMain, nativeTheme, shell } from "electron";
+import { BRAND, brandEnv, type DesktopBadge } from "@repo/contracts";
+import {
+  BrowserWindow,
+  Menu,
+  Notification,
+  Tray,
+  app,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  shell,
+} from "electron";
 import { appIcon, trayIcon } from "./icon.ts";
-import { SET_THEME_CHANNEL } from "./ipc.ts";
+import { NOTIFICATION_CLICK_CHANNEL, NOTIFY_CHANNEL, SET_BADGE_CHANNEL, SET_THEME_CHANNEL } from "./ipc.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
-import { decideNavigation, isDesktopTheme } from "./shell.logic.ts";
+import { decideNavigation, isDesktopTheme, parseDesktopBadge, parseDesktopNotification } from "./shell.logic.ts";
 import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
 
 const port = parsePort(process.env[brandEnv("PORT")]);
@@ -30,6 +42,10 @@ let server: BoardServer | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+/** The unread count the page last reported, kept to restyle a window created later. */
+let badge: DesktopBadge = { count: 0, description: "", overlay: null };
+/** Shown notifications, held until they close: Electron drops the click handler of one that is garbage collected. */
+const shown = new Set<Notification>();
 /** Tray clicks and second launches before the server is ready; the window opens once it is. */
 let showRequested = false;
 
@@ -70,6 +86,7 @@ function createWindow(show: boolean): BrowserWindow {
   // navigator.windowControlsOverlay stuck at visible=false (Electron 44), so the board would lay out
   // as if there were no title bar. The page reports its theme while loading, so apply it on show.
   win.on("show", () => syncTitleBar(win, nativeTheme.shouldUseDarkColors));
+  win.once("ready-to-show", () => applyWindowBadge(win));
   // Closing hides to the tray so the MCP endpoint stays up for agents.
   win.on("close", (event) => {
     if (quitting) return;
@@ -88,6 +105,21 @@ function createWindow(show: boolean): BrowserWindow {
   });
   void win.loadURL(withToken(boardUrl(), "hash"));
   return win;
+}
+
+/** Windows has no numeric badge, only an overlay image the page drew; macOS and Linux take the count itself. */
+function applyWindowBadge(win: BrowserWindow): void {
+  if (win.isDestroyed() || process.platform !== "win32") return;
+  const overlay = badge.count > 0 && badge.overlay ? nativeImage.createFromDataURL(badge.overlay) : null;
+  win.setOverlayIcon(overlay, overlay ? badge.description : "");
+}
+
+function applyBadge(next: DesktopBadge): void {
+  badge = next;
+  if (window) applyWindowBadge(window);
+  if (process.platform !== "win32") app.setBadgeCount(next.count);
+  tray?.setImage(trayIcon(next.count > 0));
+  tray?.setToolTip(next.count > 0 ? `${BRAND.name}: ${next.description}` : BRAND.name);
 }
 
 function showWindow(): void {
@@ -183,6 +215,25 @@ if (app.requestSingleInstanceLock()) {
     const sender = event.senderFrame?.url ?? "";
     if (!isDesktopTheme(theme) || decideNavigation(sender, boardUrl()) !== "allow") return;
     nativeTheme.themeSource = theme;
+  });
+  // Only the board page may ask for notifications and badges.
+  const fromBoard = (event: Electron.IpcMainEvent) =>
+    decideNavigation(event.senderFrame?.url ?? "", boardUrl()) === "allow";
+  ipcMain.on(NOTIFY_CHANNEL, (event, value: unknown) => {
+    const notification = parseDesktopNotification(value);
+    if (!notification || !fromBoard(event) || !Notification.isSupported()) return;
+    const toast = new Notification({ title: notification.title, body: notification.body, icon: appIcon() });
+    shown.add(toast);
+    toast.on("click", () => {
+      showWindow();
+      window?.webContents.send(NOTIFICATION_CLICK_CHANNEL, notification);
+    });
+    toast.on("close", () => shown.delete(toast));
+    toast.show();
+  });
+  ipcMain.on(SET_BADGE_CHANNEL, (event, value: unknown) => {
+    const next = parseDesktopBadge(value);
+    if (next && fromBoard(event)) applyBadge(next);
   });
   nativeTheme.on("updated", () => {
     // Hidden windows catch up on "show" (see createWindow).

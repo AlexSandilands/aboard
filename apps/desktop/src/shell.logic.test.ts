@@ -1,6 +1,13 @@
 import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { LogTail, decideNavigation, isDesktopTheme, isOwnHealth } from "./shell.logic.ts";
+import {
+  LogTail,
+  decideNavigation,
+  isDesktopTheme,
+  isOwnHealth,
+  parseDesktopBadge,
+  parseDesktopNotification,
+} from "./shell.logic.ts";
 
 describe("isOwnHealth", () => {
   it("accepts only our brand id", () => {
@@ -46,5 +53,52 @@ describe("isDesktopTheme", () => {
     expect(["light", "dark", "system"].every(isDesktopTheme)).toBe(true);
     expect(isDesktopTheme("blue")).toBe(false);
     expect(isDesktopTheme({ toString: () => "dark" })).toBe(false);
+  });
+});
+
+describe("parseDesktopNotification", () => {
+  const ok = { id: "n1", title: "Checks failing on PR #7", body: "#1 Ship it", taskId: "t1" };
+
+  it("accepts a notification, with or without a task", () => {
+    expect(parseDesktopNotification(ok)).toEqual(ok);
+    expect(parseDesktopNotification({ ...ok, taskId: null })).toEqual({ ...ok, taskId: null });
+  });
+
+  it("drops anything else, including extra keys and oversized text", () => {
+    expect(parseDesktopNotification({ ...ok, extra: 1 })).toEqual(ok);
+    expect(parseDesktopNotification({ ...ok, title: 1 })).toBeNull();
+    expect(parseDesktopNotification({ ...ok, body: "x".repeat(5000) })).toBeNull();
+    expect(parseDesktopNotification({ ...ok, taskId: 3 })).toBeNull();
+    expect(parseDesktopNotification({ id: "n1" })).toBeNull();
+    expect(parseDesktopNotification(null)).toBeNull();
+    expect(parseDesktopNotification("hi")).toBeNull();
+  });
+});
+
+describe("parseDesktopBadge", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+
+  it("accepts a count with an overlay, or none", () => {
+    expect(parseDesktopBadge({ count: 3, description: "3 unread", overlay: png })).toEqual({
+      count: 3,
+      description: "3 unread",
+      overlay: png,
+    });
+    expect(parseDesktopBadge({ count: 0, description: "", overlay: null })).toEqual({
+      count: 0,
+      description: "",
+      overlay: null,
+    });
+  });
+
+  it("refuses a bad count and anything but a small PNG data URL", () => {
+    expect(parseDesktopBadge({ count: -1, description: "", overlay: null })).toBeNull();
+    expect(parseDesktopBadge({ count: 1.5, description: "", overlay: null })).toBeNull();
+    expect(parseDesktopBadge({ count: 1, description: "", overlay: "https://evil.example/x.png" })).toBeNull();
+    expect(parseDesktopBadge({ count: 1, description: "", overlay: "data:image/svg+xml;base64,AAAA" })).toBeNull();
+    expect(
+      parseDesktopBadge({ count: 1, description: "", overlay: `data:image/png;base64,${"A".repeat(60_000)}` }),
+    ).toBeNull();
+    expect(parseDesktopBadge({ count: 1, overlay: null })).toBeNull();
   });
 });

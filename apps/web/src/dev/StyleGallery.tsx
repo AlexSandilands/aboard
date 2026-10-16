@@ -12,6 +12,7 @@ import {
   MonitorIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { BellBadge, NotificationRow } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
@@ -498,6 +499,43 @@ export function StyleGallery() {
                 Toast: {type}
               </Button>
             ))}
+          </div>
+        </Section>
+
+        <Section title="Notification bell and inbox rows">
+          <div className="flex items-center gap-3">
+            {[0, 3, 12].map((count) => (
+              <Button key={count} variant="ghost-muted" size="icon-sm" aria-label={`Notifications, ${count} unread`}>
+                <BellIcon />
+                <BellBadge count={count} />
+              </Button>
+            ))}
+          </div>
+          <div className="w-96 rounded-lg border bg-popover py-1">
+            <NotificationRow
+              notification={{
+                id: "unread",
+                kind: "pr_checks_failing",
+                taskId: null,
+                title: "Checks failing on PR #7",
+                body: "#12 Rewrite the cart drawer",
+                createdAt: SAMPLE_UPDATED_AT,
+                readAt: null,
+              }}
+              onOpen={() => {}}
+            />
+            <NotificationRow
+              notification={{
+                id: "read",
+                kind: "review_finished",
+                taskId: null,
+                title: "Review round 1 finished",
+                body: "#12 Rewrite the cart drawer\n2 major, 1 nit",
+                createdAt: SAMPLE_STARTED_AT,
+                readAt: SAMPLE_UPDATED_AT,
+              }}
+              onOpen={() => {}}
+            />
           </div>
         </Section>
 

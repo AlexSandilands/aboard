@@ -74,6 +74,7 @@ and to this table.
 | The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
+| Notifications: the inbox, pop-ups, badges, their producers     | [docs/features/notifications.md](docs/features/notifications.md)                    |
 | Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
 | Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
