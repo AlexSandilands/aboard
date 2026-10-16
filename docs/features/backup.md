@@ -69,7 +69,9 @@ file left by a crashed server doesn't block a restore.
 and history, and logs a `restored` event. It refuses a task that is still on the board unless forced (which
 replaces it), needs the task's project to be on the board, takes a new number if another task holds the old
 one, drops a "closed by" pointer to a task that no longer exists, and keeps other tasks' "closed by" pointers to
-a task it replaces. A dump at an older schema is first
+a task it replaces. Epics work the same way: a task goes back into its epic only if that is still an epic in its
+project (else it comes back loose), a replaced epic keeps its tasks, and the epics involved re-derive their
+status ([epics](epics.md)). A dump at an older schema is first
 loaded into an in-memory database, migrated and dumped again, so its rows fit the current tables. The CLI
 sends it to the running server (`POST /api/backup/restore-task`) so open boards update, or writes the
 database directly when no server is running.

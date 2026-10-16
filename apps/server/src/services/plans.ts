@@ -49,6 +49,13 @@ export function withSuggestedModel(
   return { ...task, suggestedModel: next };
 }
 
+/** Epics carry no plan: their children do, and the epic's status follows them. */
+function noPlanOnEpic(task: TaskRecord): void {
+  if (task.kind === "epic") {
+    throw new AppError("VALIDATION", `#${task.number} is an epic, which has no plan; plan its child tasks instead`);
+  }
+}
+
 const toPlanStep = ({ taskId: _taskId, ...step }: StepRecord): PlanStep => step;
 
 export interface PlansModule {
@@ -135,6 +142,7 @@ export function createPlans(
   };
 
   const replacePlan: PlansModule["replacePlan"] = (task, plan, actor, fx, opts) => {
+    noPlanOnEpic(task);
     const stepCount = plan.phases.reduce((n, p) => n + p.steps.length, 0);
     gate(task, stepCount);
     const deleted = deletionsOf(task.id, plan);
@@ -292,6 +300,7 @@ export function createPlans(
     addPhase(taskId, title, actor, opts) {
       return core.write((fx) => {
         const task = deps.task(taskId);
+        noPlanOnEpic(task);
         const now = nowIso();
         const siblings = repos.plans.phasesFor([taskId]);
         const phase: PhaseRecord = {

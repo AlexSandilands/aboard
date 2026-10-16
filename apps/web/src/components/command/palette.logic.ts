@@ -174,7 +174,7 @@ export interface IssueImportRow {
  * Recognises a pasted Jira key or URL, or GitHub issue URL, in the title box. Only for tasks that land in Backlog:
  * a task that opens the plan editor is titled by the user.
  */
-export function issueImportRow(query: string, flow: "backlog" | "planned"): IssueImportRow | null {
+export function issueImportRow(query: string, flow: "backlog" | "planned" | "epic"): IssueImportRow | null {
   if (flow !== "backlog") return null;
   const source = parseIssueSource(query);
   if (!source) return null;

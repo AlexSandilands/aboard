@@ -33,6 +33,13 @@ export type TaskResolution = z.infer<typeof TaskResolution>;
 /** Resolutions that point at the task that delivered (or duplicates) the closed one. */
 export const resolutionNeedsTask = (resolution: TaskResolution): boolean => resolution !== "wont_do";
 
+/**
+ * A task is a card with a plan; an epic groups child tasks. An epic has no plan, and its status follows its
+ * children (see deriveEpicStatus). Epics don't nest.
+ */
+export const TaskKind = z.enum(["task", "epic"]);
+export type TaskKind = z.infer<typeof TaskKind>;
+
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
@@ -280,10 +287,23 @@ export type TaskImport = z.infer<typeof TaskImport>;
 export const TaskRef = z.object({ id: z.string(), number: z.number().int(), title: z.string() });
 export type TaskRef = z.infer<typeof TaskRef>;
 
+/** An epic's children counted by status. Archived children don't count; closed ones count as done. */
+export const EpicRollup = z.object({
+  total: z.number().int(),
+  done: z.number().int(),
+  byStatus: z.record(TaskStatus, z.number().int()),
+});
+export type EpicRollup = z.infer<typeof EpicRollup>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
   projectId: z.string(),
+  kind: TaskKind,
+  /** The epic this task belongs to; null for loose tasks and for epics. */
+  parent: TaskRef.nullable(),
+  /** Children counted by status; null unless this is an epic. */
+  rollup: EpicRollup.nullable(),
   title: z.string(),
   status: TaskStatus,
   position: z.string(),
@@ -324,6 +344,8 @@ export const TaskDetail = TaskSummary.extend({
   resolves: z.array(TaskRef.extend({ resolution: TaskResolution })),
   /** Local review rounds, oldest first, each with its findings. */
   reviews: z.array(TaskReview),
+  /** An epic's children, archived ones included, in board order; empty for a task. */
+  children: z.array(TaskSummary),
 });
 export type TaskDetail = z.infer<typeof TaskDetail>;
 
@@ -422,6 +444,10 @@ export const CreateTaskInput = z
     title: z.string().trim().min(1).optional(),
     description: z.string().optional(),
     plan: PlanInput.optional(),
+    /** "epic" makes an epic, which takes no plan. Defaults to "task". */
+    kind: TaskKind.optional(),
+    /** The epic to put the task in (uuid, "#42" or "42"); it must be in the same project. */
+    epicId: z.string().trim().min(1).optional(),
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
@@ -455,6 +481,8 @@ export const UpdateTaskInput = z.object({
   labels: z.array(z.string()).optional(),
   /** null clears it. */
   suggestedModel: SuggestedModelInput.nullable().optional(),
+  /** The epic to put the task in (uuid, "#42" or "42"); null takes it out of its epic. */
+  epicId: z.string().trim().min(1).nullable().optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 

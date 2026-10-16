@@ -1,5 +1,6 @@
 import {
   TASK_STATUSES,
+  describeEpicRollup,
   findJiraKeys,
   formatPlanText,
   isGatingSeverity,
@@ -84,23 +85,30 @@ function shortLink(link: TaskLink): string {
   }
 }
 
-/** One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". */
-export function summaryLine(task: TaskSummary): string {
+/**
+ * One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". An epic shows its
+ * roll-up instead of progress, and a child says which epic it is in (unless `inEpic` is false, as under its epic).
+ */
+export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}): string {
   const parts: string[] = [];
   const resolution = resolutionText(task);
   if (resolution) parts.push(resolution);
-  if (task.progress.total > 0) {
+  if (task.rollup) {
+    parts.push(describeEpicRollup(task.rollup));
+  } else if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
   } else if (task.status === "backlog") {
     parts.push("no plan");
   }
+  if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
   const links = task.links.map(shortLink);
   if (links.length) parts.push(links.join(", "));
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
   const labels = task.labels.length ? ` ${task.labels.map((l) => `[${l}]`).join(" ")}` : "";
-  return `#${task.number} ${task.title}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
+  const epic = task.kind === "epic" ? " [epic]" : "";
+  return `#${task.number} ${task.title}${epic}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /** Tasks grouped under status headings, in board column order. */
@@ -115,7 +123,7 @@ export function renderTaskGroups(tasks: ReadonlyArray<TaskSummary>, indent = "")
   return lines.join("\n");
 }
 
-function eventText(event: TaskEvent): string {
+export function eventText(event: TaskEvent): string {
   const p = event.payload;
   const str = (k: string) => (typeof p[k] === "string" ? p[k] : undefined);
   let what: string;
@@ -124,7 +132,7 @@ function eventText(event: TaskEvent): string {
       what = `note: ${str("text") ?? ""}`;
       break;
     case "status_changed":
-      what = `status ${str("from") ?? "?"} -> ${str("to") ?? "?"}`;
+      what = `status ${str("from") ?? "?"} -> ${str("to") ?? "?"}${p.fromChildren ? " (follows its tasks)" : ""}`;
       if (str("clearedResolution")) what += ` (reopened, was ${str("clearedResolution")})`;
       break;
     case "closed": {
@@ -171,6 +179,28 @@ function eventText(event: TaskEvent): string {
         ? `suggested model ${str("tier")}${str("reason") ? ` (${str("reason")})` : ""}`
         : "suggested model cleared";
       break;
+    case "created":
+      what = `created ${p.kind === "epic" ? "the epic" : `in ${statusLabel((str("status") ?? "backlog") as TaskStatus)}`}`;
+      if (typeof p.epic === "number") what += ` in epic #${p.epic}`;
+      break;
+    case "epic_changed": {
+      const num = (k: string) => (typeof p[k] === "number" ? `#${p[k]}` : null);
+      const [from, to] = [num("from"), num("to")];
+      what = to
+        ? from
+          ? `moved from epic ${from} to ${to}`
+          : `added to epic ${to}`
+        : `removed from epic ${from ?? "?"}`;
+      if (p.epicDeleted) what += " (epic deleted)";
+      break;
+    }
+    case "child_added":
+    case "child_removed": {
+      const child = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      what =
+        event.type === "child_added" ? `task ${child} added` : `task ${child} ${p.deleted ? "deleted" : "removed"}`;
+      break;
+    }
     case "finding_resolved":
       what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
       break;
@@ -285,15 +315,64 @@ function reviewLines(task: TaskDetail): string[] {
   return lines;
 }
 
+/** What an epic's overview knows about a child beyond its summary: its newest activity entry. */
+export type ChildActivity = ReadonlyMap<string, TaskEvent>;
+
+/**
+ * An epic's children grouped by status, each with its summary line, then its live T3 thread, latest note and
+ * newest activity: what an orchestrating agent checks to see how each child is getting on, whichever way it was
+ * started.
+ */
+export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = new Map()): string {
+  const lines = [`Tasks (${epic.rollup ? describeEpicRollup(epic.rollup) : "none"}):`];
+  if (epic.children.length === 0) {
+    lines.push(
+      `  none yet. Create them with create_task or add_to_backlog (epic: "#${epic.number}"), or attach existing ` +
+        `tasks with update_task(task, epic: "#${epic.number}").`,
+    );
+    return lines.join("\n");
+  }
+  for (const { value, label } of TASK_STATUSES) {
+    const inStatus = epic.children.filter((t) => t.status === value);
+    if (inStatus.length === 0) continue;
+    lines.push(`  ${label} (${inStatus.length}):`);
+    for (const child of inStatus) {
+      lines.push(`    ${summaryLine(child, { inEpic: false })}${child.archivedAt ? " (archived)" : ""}`);
+      const threads = child.links.flatMap((l) => (l.kind === "t3_thread" && l.snapshot ? [l.snapshot] : []));
+      const live = threads.find((t) => !t.settled && !t.archived);
+      if (live) lines.push(`      thread: ${live.title} (${live.status})`);
+      if (child.lastNote) {
+        const text = child.lastNote.text.replace(/\s+/g, " ").trim();
+        lines.push(
+          `      last note (${child.lastNote.actor}, ${child.lastNote.at.slice(0, 16).replace("T", " ")}): ` +
+            (text.length > 200 ? `${text.slice(0, 197)}...` : text),
+        );
+      }
+      const last = activity.get(child.id);
+      if (last && last.type !== "note") lines.push(`      last activity: ${eventText(last)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { events?: number; labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean } = {},
+  opts: {
+    events?: number;
+    labelsInUse?: ReadonlyArray<LabelUsage>;
+    modelHint?: boolean;
+    /** For an epic: each child's newest activity, shown in its overview. */
+    childActivity?: ChildActivity;
+  } = {},
 ): string {
   const lines: string[] = [];
-  lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
+  const epic = task.kind === "epic";
+  const status = epic ? `Epic · ${statusLabel(task.status)}` : statusLabel(task.status);
+  lines.push(`#${task.number} ${task.title} [${status}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
+  if (task.parent) lines.push(`Epic: #${task.parent.number} ${task.parent.title}`);
   if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
   if (task.suggestedModel) {
     const { tier, reason } = task.suggestedModel;
@@ -324,7 +403,14 @@ export function renderTaskDetail(
   if (task.planContext?.trim()) lines.push("", "Plan context:", task.planContext.trim());
 
   lines.push("");
-  if (task.phases.some((p) => p.steps.length > 0)) {
+  if (epic) {
+    lines.push(
+      "An epic has no plan of its own and its status follows its tasks (the furthest-back open one sets it; Done " +
+        "once they all are). Plan, move and review the tasks instead.",
+      "",
+      renderEpicChildren(task, opts.childActivity),
+    );
+  } else if (task.phases.some((p) => p.steps.length > 0)) {
     lines.push("Plan:", formatPlanText(task.phases, task.currentStep));
     const withNotes = task.phases.flatMap((phase, pi) =>
       phase.steps.flatMap((step, si) => (step.notes?.trim() ? [`  ${pi + 1}.${si + 1}: ${step.notes.trim()}`] : [])),

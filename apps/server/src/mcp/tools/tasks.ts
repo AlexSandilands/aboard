@@ -5,6 +5,7 @@ import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
+  epicField,
   hasProjectRef,
   labelsField,
   suggestedModelField,
@@ -35,7 +36,10 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
   return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
 }
 
-/** Task lifecycle tools: add_to_backlog, create_task, move_task, close_task, update_task, delete_task, add_note. */
+/**
+ * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
+ * add_note.
+ */
 export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
   server.registerTool(
     "add_to_backlog",
@@ -46,8 +50,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
-        "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, and " +
-        "t3Thread when running inside T3 Code.",
+        "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
+        "epic when it is part of a larger feature, and t3Thread when running inside T3 Code.",
       inputSchema: {
         title: z.string().min(1).describe("Short imperative title."),
         description: z
@@ -55,6 +59,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .optional()
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
+        epic: epicField.optional(),
         links: linksField,
         labels: labelsField.optional(),
         t3Thread: t3ThreadField.optional(),
@@ -70,11 +75,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           projectId: project.id,
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
+          ...(args.epic ? { epicId: args.epic } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
-        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}.`);
+        const where = task.parent ? ` in epic #${task.parent.number}` : "";
+        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}.`);
       }),
   );
 
@@ -88,12 +95,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
-        "suggestedModel to the tier its implementation needs. " +
+        "suggestedModel to the tier its implementation needs, and epic when it is part of a larger feature. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z.string().min(1),
         description: z.string().optional().describe("Markdown: what and why."),
         ...projectFields,
+        epic: epicField.optional(),
         ...planInputFields,
         links: linksField,
         labels: labelsField.optional(),
@@ -117,6 +125,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           projectId: project.id,
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
+          ...(args.epic ? { epicId: args.epic } : {}),
           plan,
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
@@ -125,6 +134,68 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
           planningHints: true,
         });
+      }),
+  );
+
+  server.registerTool(
+    "create_epic",
+    {
+      title: "Create an epic",
+      description:
+        "Create an epic: a large feature that groups several tasks in one project, shown as a band across the " +
+        "columns its tasks are in. An epic has no plan and no column of its own: its tasks carry the plans, and its " +
+        "status follows them (the furthest-back open task sets it; Done once they all are). Pass tasks to put " +
+        'existing tasks in it now; add new ones later with create_task or add_to_backlog (epic: "#N"). Epics don\'t ' +
+        "nest. Link the T3 thread that will coordinate it with t3Thread.",
+      inputSchema: {
+        title: z.string().min(1).describe("Short name for the feature."),
+        description: z.string().optional().describe("Markdown: the goal, scope and how the tasks fit together."),
+        ...projectFields,
+        tasks: z
+          .array(z.string().min(1))
+          .optional()
+          .describe('Existing tasks to put in the epic: "#42", "42" or uuids, all in the same project.'),
+        links: linksField,
+        labels: labelsField.optional(),
+        t3Thread: t3ThreadField.optional(),
+        actor: actorField,
+      },
+    },
+    (args) =>
+      run(() => {
+        requireProjectRef(args);
+        const project = services.projects.resolve(projectRef(args), { autoCreate: true });
+        // Check every task first, so a bad reference doesn't leave a half-filled epic behind.
+        const children = (args.tasks ?? []).map((ref) => services.tasks.summary(services.tasks.resolveId(ref)));
+        for (const child of children) {
+          if (child.kind === "epic") throw new AppError("VALIDATION", `#${child.number} is an epic; epics don't nest`);
+          if (child.projectId !== project.id) {
+            throw new AppError(
+              "VALIDATION",
+              `#${child.number} is in another project; an epic's tasks share its project`,
+            );
+          }
+          if (child.parent) {
+            throw new AppError(
+              "VALIDATION",
+              `#${child.number} is already in epic #${child.parent.number}. To move it, call update_task(task, epic) after creating this epic.`,
+            );
+          }
+        }
+        const links = linkInputs(args);
+        const epic = services.tasks.createEpic(
+          {
+            projectId: project.id,
+            title: args.title,
+            ...(args.description ? { description: args.description } : {}),
+            ...(links.length ? { links } : {}),
+            ...(args.labels?.length ? { labels: args.labels } : {}),
+          },
+          children.map((c) => c.id),
+          actor(args.actor),
+        );
+        const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
+        return taskResult(services, epic.id, `Created epic #${epic.number} in ${project.title}${added}.`);
       }),
   );
 
@@ -209,7 +280,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       title: "Update task fields",
       description:
         "Edit a task's title, description, plan context, labels or suggested model, or archive/unarchive it. To move the task to a different " +
-        "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist). " +
+        "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
+        "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
+        "to another), or epic: null to take it out. " +
         "For plan steps use set_plan/update_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
         task: taskField,
@@ -232,6 +305,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .describe("Turn local review on or off for this task; null follows the board's setting."),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
+        epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         actor: actorField,
       },
     },
@@ -253,6 +327,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
+            ...(args.epic !== undefined ? { epicId: args.epic } : {}),
           },
           actor(args.actor),
         );

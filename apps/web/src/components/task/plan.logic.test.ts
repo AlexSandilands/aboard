@@ -38,6 +38,9 @@ function detail(phases: PlanPhase[]): TaskDetail {
     id: "t",
     number: 1,
     projectId: "p",
+    kind: "task",
+    parent: null,
+    rollup: null,
     title: "T",
     status: "planned",
     position: "a",
@@ -65,6 +68,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     events: [],
     resolves: [],
     reviews: [],
+    children: [],
   };
 }
 

@@ -31,7 +31,7 @@ const CHECKS: Record<Exclude<PrSnapshot["checks"], "none">, { label: string; dot
   passing: { label: "Checks passing", dot: "bg-emerald-500" },
 };
 
-const THREAD_STATUS: Record<T3ThreadStatus, { label: string; dot: string }> = {
+export const THREAD_STATUS: Record<T3ThreadStatus, { label: string; dot: string }> = {
   working: { label: "Working", dot: "bg-primary" },
   waiting: { label: "Waiting", dot: "bg-muted-foreground/60" },
   input: { label: "Needs input", dot: "bg-warning" },

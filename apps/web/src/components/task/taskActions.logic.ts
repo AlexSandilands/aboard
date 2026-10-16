@@ -8,7 +8,7 @@ export const PINNABLE_ACTIONS = ["plan", "reopen", "archive", "copy-link", "copy
 
 export type PinnableAction = (typeof PINNABLE_ACTIONS)[number];
 
-type TaskState = Pick<TaskDetail, "resolution" | "archivedAt" | "status">;
+type TaskState = Pick<TaskDetail, "resolution" | "archivedAt" | "status" | "kind">;
 
 /** Pins in menu order, with duplicates and unknown ids (e.g. from older storage) dropped. */
 export function normalizePins(pins: ReadonlyArray<unknown>): PinnableAction[] {
@@ -22,6 +22,8 @@ export function togglePin(pins: ReadonlyArray<unknown>, id: PinnableAction): Pin
 
 /** Pinnable actions the More menu lists for this task. */
 export function menuActions(task: TaskState): PinnableAction[] {
+  // An epic has no plan, and its status follows its tasks, so there is nothing to reopen.
+  if (task.kind === "epic") return PINNABLE_ACTIONS.filter((id) => id !== "plan" && id !== "reopen");
   return PINNABLE_ACTIONS.filter((id) => id !== "reopen" || task.resolution !== null);
 }
 
@@ -29,6 +31,6 @@ export function menuActions(task: TaskState): PinnableAction[] {
 export function pinnedButtons(pins: ReadonlyArray<unknown>, task: TaskState): PinnableAction[] {
   const menu = menuActions(task);
   // The top bar already offers Archive on finished tasks; a pinned copy would sit right below it.
-  const topBarArchive = task.status === "done" && task.archivedAt === null;
+  const topBarArchive = task.status === "done" && task.archivedAt === null && task.kind !== "epic";
   return normalizePins(pins).filter((id) => menu.includes(id) && !(id === "archive" && topBarArchive));
 }

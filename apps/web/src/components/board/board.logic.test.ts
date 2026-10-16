@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   attentionTasks,
   buildLanes,
+  columnCounts,
   COLUMN_PREVIEW_COUNT,
+  findRow,
   laneHasCollapsibleCell,
   matchesTaskSearch,
+  openTaskCounts,
   reuseUnchangedLanes,
+  rowIndex,
   visibleCellTasks,
 } from "./board.logic";
 
@@ -32,6 +36,9 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     id,
     number: 1,
     projectId: "p",
+    kind: "task",
+    parent: null,
+    rollup: null,
     title: id,
     status: "backlog",
     position: "a0",
@@ -258,5 +265,95 @@ describe("laneHasCollapsibleCell", () => {
 
   it("is false when every cell fits in the preview", () => {
     expect(laneHasCollapsibleCell({ ...empty, done: many.slice(0, COLUMN_PREVIEW_COUNT) })).toBe(false);
+  });
+});
+
+describe("epic bands", () => {
+  const epic = (id: string, overrides: Partial<TaskSummary> = {}) => task(id, { kind: "epic", ...overrides });
+  const child = (id: string, epicId: string, overrides: Partial<TaskSummary> = {}) =>
+    task(id, { parent: { id: epicId, number: 1, title: epicId }, ...overrides });
+  const ids = (cells: ReadonlyArray<TaskSummary>) => cells.map((t) => t.id);
+
+  it("puts an epic's children in its band, spanning their first to last column", () => {
+    const [lane] = buildLanes(
+      board([
+        epic("e"),
+        child("a", "e", { status: "planned" }),
+        child("b", "e", { status: "review" }),
+        task("loose", { status: "planned" }),
+      ]),
+      { ...noFilters, projectId: "p" },
+    );
+    expect(lane!.bands).toHaveLength(1);
+    const band = lane!.bands[0]!;
+    expect(band).toMatchObject({ id: "e", start: 1, end: 3 });
+    expect(ids(band.cells.planned)).toEqual(["a"]);
+    expect(ids(band.cells.review)).toEqual(["b"]);
+    // Epics aren't cards, and children aren't loose.
+    expect(ids(lane!.cells.planned)).toEqual(["loose"]);
+    expect(ids(lane!.cells.backlog)).toEqual([]);
+  });
+
+  it("shows an empty epic in Backlog and stacks bands oldest epic first, whatever their column positions", () => {
+    const late = epic("late", { number: 9, position: "a1" });
+    const [lane] = buildLanes(board([late, epic("early", { number: 2, position: "a2" })]), {
+      ...noFilters,
+      projectId: "p",
+    });
+    expect(lane!.bands.map((b) => [b.id, b.start, b.end])).toEqual([
+      ["early", 0, 0],
+      ["late", 0, 0],
+    ]);
+  });
+
+  it("leaves children loose when their epic isn't on the board", () => {
+    const [lane] = buildLanes(board([child("a", "gone")]), { ...noFilters, projectId: "p" });
+    expect(lane!.bands).toEqual([]);
+    expect(ids(lane!.cells.backlog)).toEqual(["a"]);
+  });
+
+  it("keeps matching children when filtering, and all of them when the epic matches", () => {
+    const tasks = [
+      epic("e", { title: "Checkout" }),
+      child("a", "e", { title: "Address" }),
+      child("b", "e", { title: "Payment" }),
+    ];
+    const [byChild] = buildLanes(board(tasks), { ...noFilters, search: "pay" });
+    expect(ids(byChild!.bands[0]!.cells.backlog)).toEqual(["b"]);
+    const [byEpic] = buildLanes(board(tasks), { ...noFilters, search: "checkout" });
+    expect(ids(byEpic!.bands[0]!.cells.backlog).sort()).toEqual(["a", "b"]);
+    expect(buildLanes(board(tasks), { ...noFilters, search: "nothing" })).toEqual([]);
+  });
+
+  it("filters to one epic with ?epic=, ignoring unknown ids", () => {
+    const tasks = [epic("e"), epic("f"), child("a", "e"), child("b", "f"), task("loose")];
+    const lanes = buildLanes(board(tasks), { ...noFilters, epicId: "e" });
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]!.bands.map((b) => b.id)).toEqual(["e"]);
+    expect(ids(lanes[0]!.cells.backlog)).toEqual([]);
+    expect(buildLanes(board(tasks), { ...noFilters, epicId: "nope", projectId: "p" })[0]!.bands).toHaveLength(2);
+  });
+
+  it("indexes rows and counts band cards in their columns, but not epics as open tasks", () => {
+    const tasks = [epic("e"), child("a", "e"), task("loose")];
+    const lanes = buildLanes(board(tasks), { ...noFilters, projectId: "p" });
+    expect(rowIndex(lanes)).toEqual(
+      new Map([
+        ["a", "e"],
+        ["loose", "p"],
+      ]),
+    );
+    expect(findRow(lanes, "e")?.projectId).toBe("p");
+    expect(columnCounts(lanes).backlog).toBe(2);
+    expect(openTaskCounts(tasks).get("p")).toBe(2);
+  });
+
+  it("reuses an unchanged band across rebuilds", () => {
+    const snapshot = board([epic("e"), child("a", "e"), task("loose")]);
+    const first = buildLanes(snapshot, noFilters);
+    const changed = { ...snapshot, tasks: [...snapshot.tasks.slice(0, 2), task("loose", { title: "renamed" })] };
+    const second = reuseUnchangedLanes(first, buildLanes(changed, noFilters));
+    expect(second[0]!.bands[0]).toBe(first[0]!.bands[0]);
+    expect(second[0]!.cells).not.toBe(first[0]!.cells);
   });
 });

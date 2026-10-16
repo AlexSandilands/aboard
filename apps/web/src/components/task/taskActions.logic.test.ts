@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { menuActions, normalizePins, pinnedButtons, togglePin } from "./taskActions.logic";
 
-const open = { resolution: null, archivedAt: null, status: "in_progress" } as const;
+const open = { resolution: null, archivedAt: null, status: "in_progress", kind: "task" } as const;
 
 describe("normalizePins", () => {
   it("keeps menu order and drops duplicates and unknown ids", () => {
@@ -23,6 +23,11 @@ describe("menuActions", () => {
   it("offers reopen only on closed tasks", () => {
     expect(menuActions(open)).not.toContain("reopen");
     expect(menuActions({ ...open, resolution: "wont_do", status: "done" })).toContain("reopen");
+  });
+  it("offers an epic no plan or reopen", () => {
+    const epic = { ...open, kind: "epic" } as const;
+    expect(menuActions(epic)).toEqual(["archive", "copy-link", "copy-reference"]);
+    expect(pinnedButtons(["archive"], { ...epic, status: "done" })).toEqual(["archive"]);
   });
 });
 

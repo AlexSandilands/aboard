@@ -64,6 +64,7 @@ and to this table.
 | Anything cross-cutting: request flow, tables, env vars, guard  | [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/) |
 | Statuses, closing, archiving, deleting, numbering              | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
 | Plans, steps, the current step, Markdown plans                 | [docs/features/plans.md](docs/features/plans.md)                                    |
+| Epics: grouping tasks, derived status, bands, epic tools       | [docs/features/epics.md](docs/features/epics.md)                                    |
 | MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |

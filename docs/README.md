@@ -48,6 +48,7 @@ files under each app.
 
 - [Task lifecycle](features/task-lifecycle.md): statuses, the plan gate, closing, archiving, deleting, numbering
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
+- [Epics](features/epics.md): grouping a feature's tasks, derived status, bands on the board
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
@@ -67,6 +68,7 @@ files under each app.
 - [0004 A task needs a plan to leave Ideas](decisions/0004-plan-gate.md)
 - [0005 Live updates patch the cache, with no replay](decisions/0005-sse-without-replay.md)
 - [0006 GitHub through its GraphQL API, with the token `gh` holds](decisions/0006-github-graphql-via-gh-token.md)
+- [0007 An epic is a task with kind 'epic'](decisions/0007-epic-is-a-task-kind.md)
 
 ### Reference
 

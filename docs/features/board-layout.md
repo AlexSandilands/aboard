@@ -9,6 +9,8 @@ on the server.
 
 ## How it works
 
+A lane stacks its epic bands above its loose cards; how bands are laid out is in [epics.md](epics.md#on-the-board).
+
 ### Collapsing columns
 
 Every column header has a collapse toggle. A collapsed column shows the first five cards of each lane
@@ -65,7 +67,8 @@ inactive threads are dimmed.
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
 `storageKey(...)`:
 
-- `board-view` holds the filters and the column collapse state. It is at version 2:
+- `board-view` holds the filters, the column collapse state and which epic bands are folded
+  (`collapsedEpics`, added without a version bump: a stored view without it takes the default). It is at version 2:
   `migrateBoardView` keeps version 0's filters and drops its per-lane `expandedDone`, which has no
   per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,

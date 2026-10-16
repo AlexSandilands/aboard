@@ -2,11 +2,15 @@ import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet 
 import { z } from "zod";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 
-/** Board search params: `task` opens the detail panel, `project` scopes the board, `labels` (comma-separated) filters it. */
+/**
+ * Board search params: `task` opens the detail panel, `project` scopes the board, `labels` (comma-separated)
+ * filters it, and `epic` shows only that epic's band.
+ */
 export const BoardSearch = z.object({
   task: z.string().optional(),
   project: z.string().optional(),
   labels: z.string().optional(),
+  epic: z.string().optional(),
 });
 export type BoardSearch = z.infer<typeof BoardSearch>;
 

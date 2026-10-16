@@ -2,6 +2,7 @@ import {
   deriveAttention,
   deriveReviewSummary,
   deriveCurrentStep,
+  deriveEpicRollup,
   deriveProgress,
   type PlanPhase,
   type PlanStep,
@@ -69,8 +70,15 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const stepsByPhase = groupBy(repos.plans.stepsFor(ids), (s) => s.phaseId);
   const linksByTask = groupBy(repos.links.forTasks(ids).map(toLink), (l) => l.taskId);
   const notes = new Map(repos.events.lastNotes(ids).map((e) => [e.taskId, e]));
-  const resolverIds = [...new Set(records.flatMap((r) => (r.resolvedByTaskId ? [r.resolvedByTaskId] : [])))];
-  const resolvers = new Map(repos.tasks.getMany(resolverIds).map((t) => [t.id, t]));
+  const refIds = [
+    ...new Set(records.flatMap((r) => [r.resolvedByTaskId, r.parentId].filter((id): id is string => id !== null))),
+  ];
+  const referenced = new Map(repos.tasks.getMany(refIds).map((t) => [t.id, t]));
+  const epicIds = records.filter((r) => r.kind === "epic").map((r) => r.id);
+  const childrenByEpic = groupBy(
+    repos.tasks.childrenOf(epicIds).filter((c) => c.archivedAt === null),
+    (c) => c.parentId!,
+  );
   const roundsByTask = groupBy(repos.reviews.forTasks(ids), (r) => r.taskId);
   const findingsByTask = groupBy(repos.reviews.findingsFor(ids), (f) => f.taskId);
   const labelsByTask = repos.labels.forTasks(ids);
@@ -94,6 +102,9 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       id: record.id,
       number: record.number,
       projectId: record.projectId,
+      kind: record.kind,
+      parent: taskRef(record.parentId ? referenced.get(record.parentId) : undefined),
+      rollup: record.kind === "epic" ? deriveEpicRollup(childrenByEpic.get(record.id) ?? []) : null,
       title: record.title,
       status: record.status,
       position: record.position,
@@ -104,7 +115,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       statusChangedAt: record.statusChangedAt,
       labels: labelsByTask.get(record.id) ?? [],
       resolution: record.resolution,
-      resolvedBy: taskRef(record.resolvedByTaskId ? resolvers.get(record.resolvedByTaskId) : undefined),
+      resolvedBy: taskRef(record.resolvedByTaskId ? referenced.get(record.resolvedByTaskId) : undefined),
       progress: deriveProgress(phases),
       stepStatuses: phases.flatMap((p) => p.steps.map((s) => s.status)),
       currentStep: deriveCurrentStep(phases),

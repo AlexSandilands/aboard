@@ -1,4 +1,6 @@
 import {
+  deriveEpicRollup,
+  deriveEpicStatus,
   findJiraKeys,
   normalizeLabel,
   parseIssueSource,
@@ -8,9 +10,10 @@ import {
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
+import type { Repos } from "../db/repos/index.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
-import { positionAmong, type Core } from "./core.ts";
+import { positionAmong, type Core, type Effects } from "./core.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { ImportsModule } from "./imports.ts";
@@ -34,6 +37,24 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
     ...summary.labels,
   ];
   return haystack.some((text) => text.toLowerCase().includes(q));
+}
+
+/**
+ * Re-derives an epic's status from its children (see deriveEpicStatus) and marks its card changed, since the
+ * roll-up may have moved. Call inside the write after any change to a child's status, epic, project or archive
+ * state. A no-op for an id that isn't an epic.
+ */
+export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: Effects): void {
+  const epic = repos.tasks.get(epicId);
+  if (!epic || epic.kind !== "epic") return;
+  fx.task(epicId);
+  const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
+  const status = deriveEpicStatus(deriveEpicRollup(children));
+  if (status === epic.status) return;
+  const now = nowIso();
+  const lane = repos.tasks.lane(epic.projectId, status).filter((t) => t.id !== epic.id);
+  repos.tasks.update({ ...epic, status, position: positionAmong(lane, {}), updatedAt: now, statusChangedAt: now });
+  fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
 }
 
 /** Task cards: creation, updates, moves between columns, notes. */
@@ -89,6 +110,36 @@ export function createTasksService(
     return by;
   };
 
+  /** The epic `ref` names, checked as a home for a task in `projectId`. */
+  const epicFor = (ref: string, projectId: string): TaskRecord => {
+    const epic = record(service.resolveId(ref));
+    if (epic.kind !== "epic") throw new AppError("VALIDATION", `#${epic.number} is not an epic`);
+    if (epic.archivedAt !== null)
+      throw new AppError("VALIDATION", `Epic #${epic.number} is archived; unarchive it first`);
+    if (epic.projectId !== projectId) {
+      throw new AppError(
+        "VALIDATION",
+        `Epic #${epic.number} is in another project; a task and its epic share a project`,
+      );
+    }
+    return epic;
+  };
+
+  const syncEpic = (epicId: string, actor: string, fx: Effects): void => syncEpicStatus(repos, epicId, actor, fx);
+
+  /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
+  const logEpicChange = (
+    task: TaskRecord,
+    from: TaskRecord | null,
+    to: TaskRecord | null,
+    actor: string,
+    fx: Effects,
+  ) => {
+    fx.log(task.id, actor, "epic_changed", { from: from?.number ?? null, to: to?.number ?? null });
+    if (from) fx.log(from.id, actor, "child_removed", { task: task.number, title: task.title });
+    if (to) fx.log(to.id, actor, "child_added", { task: task.number, title: task.title });
+  };
+
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
       const records = repos.tasks.list(query);
@@ -98,6 +149,7 @@ export function createTasksService(
         .filter((t) => !query.query || matchesQuery(t, query.query))
         .filter((t) => !labels || t.summary.labels.some((l) => labels.includes(l)))
         .filter((t) => !query.attentionOnly || t.summary.attention.length > 0)
+        .filter((t) => !query.epicId || t.record.parentId === query.epicId)
         .map((t) => t.summary);
     },
 
@@ -111,6 +163,10 @@ export function createTasksService(
         planContext: task.planContext,
         phases,
         events: repos.events.recent(id, DETAIL_EVENT_LIMIT),
+        children:
+          task.kind === "epic"
+            ? [...assembleSummaries(repos, repos.tasks.childrenOf([id])).values()].map((c) => c.summary)
+            : [],
         resolves: repos.tasks
           .resolvedBy([id])
           .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
@@ -130,6 +186,15 @@ export function createTasksService(
       const id = core.write((fx) => {
         const project = deps.projects.get(input.projectId);
         const actor = input.actor ?? "user";
+        const kind = input.kind ?? "task";
+        if (kind === "epic" && input.plan) {
+          throw new AppError("VALIDATION", "An epic has no plan; create its child tasks with plans instead");
+        }
+        if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
+        if (kind === "epic" && input.sourceUrl) {
+          throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
+        }
+        const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
         const source = input.sourceUrl ? parseIssueSource(input.sourceUrl, deps.settings.get()) : null;
         if (input.sourceUrl && !source) {
           throw new AppError("VALIDATION", `Not a Jira issue key or URL, or a GitHub issue URL: ${input.sourceUrl}`);
@@ -145,6 +210,8 @@ export function createTasksService(
           id: randomUUID(),
           number: repos.tasks.nextNumber(),
           projectId: project.id,
+          kind,
+          parentId: epic?.id ?? null,
           title,
           description: input.description ?? null,
           planContext: null,
@@ -161,7 +228,15 @@ export function createTasksService(
           suggestedModel: null,
         };
         repos.tasks.insert(task);
-        fx.log(task.id, actor, "created", { status });
+        fx.log(task.id, actor, "created", {
+          status,
+          ...(kind === "epic" ? { kind } : {}),
+          ...(epic ? { epic: epic.number } : {}),
+        });
+        if (epic) {
+          fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title });
+          syncEpic(epic.id, actor, fx);
+        }
         if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
         if (source) {
@@ -171,6 +246,16 @@ export function createTasksService(
         for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
         return task.id;
+      });
+      return service.detail(id);
+    },
+
+    createEpic(input, taskIds, actor) {
+      // One write, so a task that can't join doesn't leave a half-filled epic behind.
+      const id = core.write(() => {
+        const epic = service.create({ ...input, kind: "epic", actor });
+        for (const taskId of taskIds) service.update(taskId, { epicId: epic.id }, actor);
+        return epic.id;
       });
       return service.detail(id);
     },
@@ -187,6 +272,8 @@ export function createTasksService(
           // Cards of tasks this one resolved show its title, and so does the "Also resolved" list of its resolver.
           for (const resolved of repos.tasks.resolvedBy([id])) fx.task(resolved.id);
           if (current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
+          // An epic's tasks show its title on their cards and in their panels.
+          if (current.kind === "epic") for (const child of repos.tasks.childrenOf([id])) fx.task(child.id);
         }
         if (input.description !== undefined && input.description !== current.description) {
           next.description = input.description;
@@ -200,18 +287,67 @@ export function createTasksService(
           next.autoReview = input.autoReview;
           changed.push("autoReview");
         }
-        if (input.projectId !== undefined && input.projectId !== current.projectId) {
-          const project = deps.projects.get(input.projectId);
+        const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
+        if (movedProject) {
+          const project = deps.projects.get(input.projectId!);
           next.projectId = project.id;
           next.position = endOfLane(next);
           fx.log(id, actor, "moved_project", { from: current.projectId, to: project.id });
         }
+        if (input.epicId && current.kind === "epic") {
+          throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
+        }
+        // A task and its epic share a project, so a task moved elsewhere leaves its epic unless given one there.
+        const parentId =
+          input.epicId !== undefined
+            ? input.epicId && epicFor(input.epicId, next.projectId).id
+            : movedProject
+              ? null
+              : current.parentId;
+        if (parentId !== current.parentId) {
+          next.parentId = parentId;
+          const from = current.parentId ? record(current.parentId) : null;
+          logEpicChange(next, from, parentId ? record(parentId) : null, actor, fx);
+        }
         if (input.archived !== undefined && input.archived !== (current.archivedAt !== null)) {
+          // An archived epic leaves the board, so its open tasks would show loose while still claiming it.
+          if (input.archived && current.kind === "epic") {
+            const open = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null && c.status !== "done");
+            if (open.length > 0) {
+              throw new AppError(
+                "VALIDATION",
+                `Epic #${current.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")}). ` +
+                  "Finish, close or archive them, or take them out of the epic, before archiving it.",
+              );
+            }
+          }
           next.archivedAt = input.archived ? now : null;
           if (!input.archived) next.position = endOfLane(next);
           fx.log(id, actor, input.archived ? "archived" : "unarchived");
         }
         repos.tasks.update(withSuggestedModel(next, input.suggestedModel, actor, fx));
+        // An epic takes its children along, since they must share its project.
+        if (movedProject && current.kind === "epic") {
+          for (const child of repos.tasks.childrenOf([id])) {
+            repos.tasks.update({
+              ...child,
+              projectId: next.projectId,
+              position: endOfLane({ ...child, projectId: next.projectId }),
+              updatedAt: now,
+            });
+            fx.log(child.id, actor, "moved_project", {
+              from: current.projectId,
+              to: next.projectId,
+              withEpic: current.number,
+            });
+          }
+        }
+        const archivedChanged = next.archivedAt !== current.archivedAt;
+        if (current.parentId && (current.parentId !== next.parentId || archivedChanged)) {
+          syncEpic(current.parentId, actor, fx);
+        }
+        if (next.parentId && (next.parentId !== current.parentId || archivedChanged))
+          syncEpic(next.parentId, actor, fx);
         if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
@@ -225,6 +361,12 @@ export function createTasksService(
         const current = record(id);
         const status = input.status ?? current.status;
         const statusChanged = status !== current.status;
+        if (statusChanged && current.kind === "epic") {
+          throw new AppError(
+            "VALIDATION",
+            `#${current.number} is an epic; its status follows its child tasks, so move those instead`,
+          );
+        }
         if (statusChanged && status !== "backlog" && repos.plans.countSteps(id) === 0) {
           throw planRequired(current.number);
         }
@@ -259,6 +401,7 @@ export function createTasksService(
           if (status === "review" && record(id).status === "review" && deps.reviews().effectiveAutoReview(id)) {
             deps.reviews().openRoundIn(id, { trigger: "move", actor }, fx);
           }
+          if (current.parentId) syncEpic(current.parentId, actor, fx);
         } else fx.task(id);
       });
       return service.summary(id);
@@ -267,6 +410,9 @@ export function createTasksService(
     close(id, input: CloseInput, actor) {
       core.write((fx) => {
         const current = record(id);
+        if (current.kind === "epic") {
+          throw new AppError("VALIDATION", `#${current.number} is an epic; it is done once its child tasks are`);
+        }
         const by = closingTask(current, input);
         const now = nowIso();
         const statusChanged = current.status !== "done";
@@ -286,6 +432,7 @@ export function createTasksService(
         });
         if (by) fx.detail(by.id);
         if (current.resolvedByTaskId && current.resolvedByTaskId !== by?.id) fx.detail(current.resolvedByTaskId);
+        if (current.parentId) syncEpic(current.parentId, actor, fx);
       });
       return service.detail(id);
     },
@@ -316,8 +463,16 @@ export function createTasksService(
           fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
         }
         if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+        // Its children stay as loose tasks (parent_id is SET NULL); their log records which epic they were in.
+        for (const child of repos.tasks.childrenOf([id])) {
+          fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
+        }
         repos.tasks.delete(id);
         fx.taskDeleted(id);
+        if (task.parentId) {
+          fx.log(task.parentId, actor, "child_removed", { task: task.number, title: task.title, deleted: true });
+          syncEpic(task.parentId, actor, fx);
+        }
       });
     },
   };

@@ -22,7 +22,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -36,7 +36,10 @@ import {
   buildLanes,
   COLUMN_PREVIEW_COUNT,
   columnCounts,
+  findRow,
+  laneRows,
   reuseUnchangedLanes,
+  rowIndex,
   STATUS_ORDER,
   visibleCellTasks,
   type Lane,
@@ -45,7 +48,7 @@ import { isCellCollapsed, isColumnMixed } from "./columnCollapse.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
-import { useLabelFilter, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
+import { useEpicFilter, useLabelFilter, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
 import { dropAnimation } from "./cardMotion";
 import {
   cellDroppableId,
@@ -58,6 +61,7 @@ import {
   readDragData,
   samePlacement,
   type DragPlacement,
+  type OverCell,
 } from "./dnd.logic";
 import { TaskCardOverlay } from "./TaskCard";
 
@@ -88,7 +92,7 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
   if (!active || !collisionRect || !at) return undefined;
   const status = STATUS_ORDER[STATUS_ORDER.indexOf(at.status) + step];
   if (!status) return undefined;
-  const cell = droppableContainers.get(cellDroppableId(at.projectId, status));
+  const cell = droppableContainers.get(cellDroppableId(at.rowId, status));
   const cellRect = cell ? droppableRects.get(cell.id) : undefined;
   if (!cell?.node.current || !cellRect) return undefined;
   const firstCard = cell.node.current.querySelector<HTMLElement>(
@@ -106,6 +110,11 @@ const autoScroll = { threshold: { x: 0.12, y: 0.15 }, acceleration: 6 };
 export function Board() {
   const boardQuery = useBoard();
   const projectFilter = useProjectFilter();
+  const boardTasks = boardQuery.data?.tasks;
+  useEffect(() => {
+    if (!boardTasks) return;
+    useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
+  }, [boardTasks]);
   const scopedProject = boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null;
 
   return (
@@ -167,7 +176,7 @@ function describeOver(
   activeId: UniqueIdentifier,
   over: Over | null,
   tasksById: ReadonlyMap<string, TaskSummary>,
-  projectTitle: (projectId: string) => string,
+  rowOf: (taskId: string) => string | undefined,
 ): string | undefined {
   const task = tasksById.get(String(activeId));
   const data = over?.data.current as
@@ -176,17 +185,11 @@ function describeOver(
   // A card's sortable container follows the drag preview; its own status doesn't.
   const target = parseCellKey(data?.sortable?.containerId) ?? readDragData(data);
   if (!task || !over || !target) return undefined;
-  if (target.projectId !== task.projectId) return `Can't move to ${projectTitle(target.projectId)}.`;
+  if (target.rowId !== rowOf(task.id)) return "Can't move there. Change a task's project or epic in its panel.";
   const column = STATUS_LABEL[target.status];
   if (target.status === "done") return `Over ${column}; it goes on top.`;
   const sortable = data?.sortable;
   return sortable ? `Over ${column}, position ${sortable.index + 1} of ${sortable.items.length}.` : `Over ${column}.`;
-}
-
-interface OverCell {
-  projectId: string;
-  status: TaskStatus;
-  invalid: boolean;
 }
 
 function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: string | null }) {
@@ -195,6 +198,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const attentionOnly = useBoardView((s) => s.attentionOnly);
   const hasPrOnly = useBoardView((s) => s.hasPrOnly);
   const labels = useLabelFilter();
+  const epicId = useEpicFilter();
   const showArchived = useBoardView((s) => s.showArchived);
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
@@ -208,8 +212,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const updateProject = useUpdateProject();
 
   const builtLanes = useMemo(
-    () => buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels }, archivedTasks),
-    [board, projectFilter, search, attentionOnly, hasPrOnly, labels, archivedTasks],
+    () =>
+      buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels, epicId }, archivedTasks),
+    [board, projectFilter, search, attentionOnly, hasPrOnly, labels, epicId, archivedTasks],
   );
   // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
   const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });
@@ -218,7 +223,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     lanes = reuseUnchangedLanes(stableLanes.lanes, builtLanes);
     setStableLanes({ built: builtLanes, lanes });
   }
-  const laneProjectIds = useMemo(() => lanes.map((lane) => lane.project.id), [lanes]);
+  // Every row's cells can be collapsed on their own: a lane's loose cells and each epic band.
+  const rowIds = useMemo(() => lanes.flatMap((lane) => laneRows(lane).map((row) => row.id)), [lanes]);
+  const rows = useMemo(() => rowIndex(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
@@ -260,15 +267,14 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const shownLanes = useMemo(() => previewMove(lanes, placement), [lanes, placement]);
   const counts = useMemo(() => columnCounts(shownLanes), [shownLanes]);
   const activeTask = activeId ? (tasksById.get(activeId) ?? null) : null;
+  const activeRowId = activeTask ? (rows.get(activeTask.id) ?? null) : null;
+  /** A card as the drag logic sees it: in its row rather than just its project. */
+  const inRow = (task: TaskSummary) => ({ ...task, rowId: rows.get(task.id) ?? task.projectId });
 
   /** A cell's cards and the ones it renders, as BoardCell works them out; drops anchor on the latter. */
-  const renderedCell = (
-    source: ReadonlyArray<Lane>,
-    at: { projectId: string; status: TaskStatus },
-    draggedId: string,
-  ) => {
-    const cell = source.find((l) => l.project.id === at.projectId)?.cells[at.status] ?? [];
-    const collapsed = isCellCollapsed(useBoardView.getState(), at.projectId, at.status);
+  const renderedCell = (source: ReadonlyArray<Lane>, at: { rowId: string; status: TaskStatus }, draggedId: string) => {
+    const cell = findRow(source, at.rowId)?.cells[at.status] ?? [];
+    const collapsed = isCellCollapsed(useBoardView.getState(), at.rowId, at.status);
     return { cell, collapsed, visible: visibleCellTasks(cell, collapsed, [selectedTaskId, draggedId]).visible };
   };
 
@@ -288,28 +294,24 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
-    const task = tasksById.get(String(active.id));
+    const found = tasksById.get(String(active.id));
     // Over its own placeholder the card stays put; over nothing (a gap) keeps the last preview.
-    if (!task || !over || over.id === active.id) return;
+    if (!found || !over || over.id === active.id) return;
+    const task = inRow(found);
     const target = readDragData(over.data.current);
     if (!target) return;
     setOverCell((current) => {
       // The card's own cell needs no highlight.
-      if (target.projectId === task.projectId && target.status === task.status) return null;
-      const invalid = target.projectId !== task.projectId;
-      if (
-        current &&
-        current.projectId === target.projectId &&
-        current.status === target.status &&
-        current.invalid === invalid
-      )
+      if (target.rowId === task.rowId && target.status === task.status) return null;
+      const invalid = target.rowId !== task.rowId;
+      if (current && current.rowId === target.rowId && current.status === target.status && current.invalid === invalid)
         return current;
-      return { projectId: target.projectId, status: target.status, invalid };
+      return { rowId: target.rowId, status: target.status, invalid };
     });
     setPlacement((current) => {
       // Inside the cell the card already shows in, sortable moves the cards; the preview stays.
       const shownIn = current ?? task;
-      if (target.projectId === shownIn.projectId && target.status === shownIn.status) return current;
+      if (target.rowId === shownIn.rowId && target.status === shownIn.status) return current;
       const cell = renderedCell(lanes, target, task.id).visible;
       const overTaskId = target.type === "task" ? String(over.id) : null;
       const activeRect = active.rect.current.translated;
@@ -334,8 +336,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const handleDragEnd = (event: DragEndEvent) => {
     endDrag();
     const { active, over } = event;
-    const task = tasksById.get(String(active.id));
-    if (!task || !over) return;
+    const found = tasksById.get(String(active.id));
+    if (!found || !over) return;
+    const task = inRow(found);
     // Dropped on its own placeholder: it lands where the preview shows it.
     const target = over.id === active.id ? (placement ?? task) : readDragData(over.data.current);
     if (!target) return;
@@ -349,7 +352,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     // card) would vanish, so show the whole cell instead. Archived cards take preview slots too.
     const before = renderedCell(lanes, target, task.id).cell.map((t) => t.id);
     if (shown.collapsed && landsPastPreview(result, task.id, before, COLUMN_PREVIEW_COUNT)) {
-      useBoardView.getState().toggleCellCollapsed(target.projectId, target.status);
+      useBoardView.getState().toggleCellCollapsed(target.rowId, target.status);
     }
     setPlacement(
       placementAfterDrop(
@@ -381,16 +384,15 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     );
   };
 
-  const projectTitle = (projectId: string) =>
-    board.projects.find((p) => p.id === projectId)?.title ?? "another project";
+  const rowOf = (taskId: string) => rows.get(taskId);
   const announcements: Announcements = {
     onDragStart: ({ active }) => {
       const task = tasksById.get(String(active.id));
       return task ? `Picked up #${task.number} in ${STATUS_LABEL[task.status]}.` : undefined;
     },
-    onDragOver: ({ active, over }) => describeOver(active.id, over, tasksById, projectTitle),
+    onDragOver: ({ active, over }) => describeOver(active.id, over, tasksById, rowOf),
     onDragEnd: ({ active, over }) => {
-      const where = describeOver(active.id, over, tasksById, projectTitle);
+      const where = describeOver(active.id, over, tasksById, rowOf);
       return where ? `Dropped. ${where}` : "Dropped.";
     },
     onDragCancel: () => "Cancelled. The card is back where it was.",
@@ -439,7 +441,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => {
-                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, laneProjectIds);
+                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, rowIds);
                 const collapsed = !mixed && !!collapsedColumns[value];
                 const action = `${collapsed ? "Expand" : "Collapse"} ${label} for every project`;
                 return (
@@ -492,9 +494,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                 project={lane.project}
                 cells={lane.cells}
                 selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
+                bands={lane.bands}
                 draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
-                overStatus={overCell?.projectId === lane.project.id ? overCell.status : null}
-                overInvalid={overCell?.projectId === lane.project.id ? overCell.invalid : false}
+                draggingRowId={activeTask?.projectId === lane.project.id ? activeRowId : null}
+                overCell={overCell && laneRows(lane).some((row) => row.id === overCell.rowId) ? overCell : null}
                 onToggleCollapsed={handleToggleCollapsed}
               />
             ))}

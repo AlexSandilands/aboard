@@ -75,6 +75,8 @@ export function createCore(deps: { db: Db; repos: Repos; bus: EventBus; t3Status
     if (upserts.length > 0) {
       for (const { summary } of assembleSummaries(repos, repos.tasks.getMany(upserts)).values()) {
         events.push({ type: "task.upserted", task: summary }, { type: "task.detail_changed", taskId: summary.id });
+        // An epic's detail lists its children's cards.
+        if (summary.parent && !p.tasks.has(summary.parent.id)) p.details.add(summary.parent.id);
       }
     }
     for (const taskId of p.details) {

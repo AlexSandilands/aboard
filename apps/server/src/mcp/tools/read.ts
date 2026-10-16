@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { TaskStatusInput, type TaskStatus, type Project, type TaskDetail } from "@repo/contracts";
-import { projectLabel, renderTaskDetail, renderTaskGroups, statusLabel } from "../format.ts";
+import { AppError } from "../../errors.ts";
 import {
+  projectLabel,
+  renderEpicChildren,
+  renderTaskDetail,
+  renderTaskGroups,
+  statusLabel,
+  summaryLine,
+} from "../format.ts";
+import {
+  childActivity,
   findProject,
   hasProjectRef,
   projectFields,
@@ -22,7 +31,7 @@ function withOpenRoundPointer(detail: string, task: TaskDetail): string {
   return pointer ? `${detail}\n\n${pointer}` : detail;
 }
 
-/** Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task. */
+/** Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task, epic_overview. */
 export const registerReadTools: ToolRegistrar = (server, { services }) => {
   server.registerTool(
     "board_overview",
@@ -45,7 +54,9 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           lines.push("The board is empty. add_to_backlog or create_task with your workspacePath to start a project.");
         }
         for (const project of snapshot.projects.filter((p) => !p.archivedAt)) {
-          const tasks = active.filter((t) => t.projectId === project.id);
+          const inProject = active.filter((t) => t.projectId === project.id);
+          // Epics group tasks rather than being work items, so they are listed apart from the counts.
+          const tasks = inProject.filter((t) => t.kind !== "epic");
           const counts = ["backlog", "planned", "in_progress", "review", "done"]
             .map((s) => [s, tasks.filter((t) => t.status === s).length] as const)
             .filter(([, n]) => n > 0)
@@ -53,6 +64,9 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           lines.push(
             `${projectLabel(project)} — ${counts.length ? counts.join(", ") : "no tasks"}  [id: ${project.id}]`,
           );
+          for (const epic of inProject.filter((t) => t.kind === "epic" && t.status !== "done")) {
+            lines.push(`  epic ${summaryLine(epic)}`);
+          }
           for (const t of tasks.filter((task) => task.attention.length > 0)) {
             lines.push(`  ! #${t.number} ${t.title}: ${t.attention.map((a) => a.message).join("; ")}`);
           }
@@ -101,10 +115,12 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
       description:
         "Lists tasks as compact one-line summaries grouped by status (progress, current step, links, attention). " +
         "Filter by project (workspacePath/projectId), status, labels (any of), free text (matches title, description, " +
-        "#number, Jira keys, labels) or attentionOnly. Use it to find the task you should resume, then call get_task.",
+        "#number, Jira keys, labels), epic or attentionOnly. Epics are listed too, marked [epic], and a task in one " +
+        "says which. Use it to find the task you should resume, then call get_task.",
       inputSchema: {
         ...projectFields,
         status: TaskStatusInput.optional().describe("Only tasks in this status."),
+        epic: z.string().min(1).optional().describe('Only the tasks in this epic: "#12", "12" or its uuid.'),
         query: z.string().optional().describe("Free-text filter."),
         labels: z
           .array(z.string().min(1))
@@ -131,6 +147,7 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.attentionOnly ? { attentionOnly: true } : {}),
           ...(args.includeArchived ? { includeArchived: true } : {}),
+          ...(args.epic ? { epicId: services.tasks.resolveId(args.epic) } : {}),
         });
         if (tasks.length === 0) return textResult("No matching tasks.");
         const limit = args.limit ?? 100;
@@ -184,8 +201,39 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
         const detail = renderTaskDetail(task, safeProject(services, task.projectId), {
           events: args.events ?? 10,
           labelsInUse: services.labels.usage(),
+          ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));
+      }),
+  );
+
+  server.registerTool(
+    "epic_overview",
+    {
+      title: "Epic overview",
+      description:
+        "How every task in an epic is getting on, in one call: each task's status, progress and current step, " +
+        "anything needing attention (blocked steps, failing PRs, open review findings), its review round, its live " +
+        "T3 thread, its latest note and its newest activity. Use it to monitor an epic's tasks, however they were " +
+        "started (T3 threads, subagents or sessions the user opened). get_task on the epic shows the same list.",
+      inputSchema: { task: taskField.describe('The epic: "#12", "12" or its uuid.') },
+      annotations: { readOnlyHint: true },
+    },
+    (args) =>
+      run(() => {
+        const epic = services.tasks.detail(services.tasks.resolveId(args.task));
+        if (epic.kind !== "epic") {
+          throw new AppError(
+            "VALIDATION",
+            epic.parent
+              ? `#${epic.number} is a task in epic #${epic.parent.number}; call epic_overview on that`
+              : `#${epic.number} is a task, not an epic; use get_task`,
+          );
+        }
+        const header = `Epic #${epic.number} ${epic.title} [${statusLabel(epic.status)}]  ·  ${projectLabel(
+          safeProject(services, epic.projectId),
+        )}`;
+        return textResult(`${header}\n\n${renderEpicChildren(epic, childActivity(services, epic))}`);
       }),
   );
 };

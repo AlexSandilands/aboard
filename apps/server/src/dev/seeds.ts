@@ -30,6 +30,7 @@ interface TaskSpec {
   plan?: PlanInput;
   links?: string[];
   labels?: string[];
+  epicId?: string;
 }
 
 /** Creates a task and moves it to its column. Tasks past Backlog get a one-phase plan when none is given. */
@@ -44,6 +45,7 @@ function addTask(s: Services, projectId: string, spec: TaskSpec): string {
     plan,
     links: spec.links?.map((value) => ({ value })),
     labels: spec.labels,
+    epicId: spec.epicId,
     actor: AGENT,
   });
   if (spec.status !== task.status) s.tasks.move(task.id, { status: spec.status }, AGENT);
@@ -129,6 +131,19 @@ const basic: Scenario = (s, opts) => {
   s.tasks.close(dropped, { resolution: "wont_do" }, "user");
   const archived = addTask(s, shop.id, { title: "Old launch checklist", status: "done" });
   s.tasks.update(archived, { archived: true }, "user");
+
+  // An epic whose children span Backlog to Review, so its band covers four columns.
+  const checkout = s.tasks.create({
+    projectId: shop.id,
+    title: "One-page checkout",
+    kind: "epic",
+    description: "Replace the three-step checkout with a single page.",
+    actor: AGENT,
+  }).id;
+  addTask(s, shop.id, { title: "Address autocomplete", status: "backlog", epicId: checkout });
+  addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
+  addTask(s, shop.id, { title: "Merge shipping and billing steps", status: "review", epicId: checkout });
+  s.tasks.create({ projectId: billing.id, title: "Usage-based pricing", kind: "epic", actor: AGENT });
 
   addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
   addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });

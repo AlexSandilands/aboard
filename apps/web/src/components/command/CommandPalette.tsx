@@ -8,6 +8,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  GroupIcon,
   ImportIcon,
   LayersIcon,
   LightbulbIcon,
@@ -49,8 +50,8 @@ import {
 } from "./palette.logic";
 import { useAddProject, useFolderBrowse } from "./useFolderBrowse";
 
-/** Where the new task lands: Backlog with just a title, or Planned via the plan editor. */
-type TaskFlow = "backlog" | "planned";
+/** Where the new task lands: Backlog with just a title, Planned via the plan editor, or a new epic. */
+type TaskFlow = "backlog" | "planned" | "epic";
 
 type PaletteView =
   | { kind: "root" }
@@ -59,7 +60,8 @@ type PaletteView =
   | { kind: "import-t3" }
   | { kind: "no-folder" }
   | { kind: "pick-project"; flow: TaskFlow }
-  | { kind: "title"; flow: TaskFlow; projectId: string }
+  /** `epicId` puts the new task in that epic. */
+  | { kind: "title"; flow: TaskFlow; projectId: string; epicId?: string }
   | { kind: "go-to-task" }
   | { kind: "go-to-project" };
 
@@ -75,10 +77,12 @@ function initialStack(intent: PaletteIntent): PaletteView[] {
     case "go-to-task":
       return [root, { kind: "go-to-task" }];
     case "new-task":
-    case "new-planned-task": {
-      const flow: TaskFlow = intent.kind === "new-task" ? "backlog" : "planned";
+    case "new-planned-task":
+    case "new-epic": {
+      const flow: TaskFlow = intent.kind === "new-task" ? "backlog" : intent.kind === "new-epic" ? "epic" : "planned";
+      const epicId = intent.kind === "new-epic" ? undefined : intent.epicId;
       return intent.projectId
-        ? [root, { kind: "title", flow, projectId: intent.projectId }]
+        ? [root, { kind: "title", flow, projectId: intent.projectId, epicId }]
         : [root, { kind: "pick-project", flow }];
     }
   }
@@ -345,12 +349,15 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (view.kind !== "title") return;
     const title = query.trim();
     if (!title || createTask.isPending) return;
-    const { flow, projectId } = view;
+    const { flow, projectId, epicId } = view;
     const issue = issueImportRow(title, flow);
     createTask.mutate(
-      issue
-        ? { projectId, sourceUrl: issue.sourceUrl }
-        : { projectId, title, description: normalizeDescription(description) },
+      {
+        projectId,
+        ...(issue ? { sourceUrl: issue.sourceUrl } : { title, description: normalizeDescription(description) }),
+        ...(flow === "epic" ? { kind: "epic" as const } : {}),
+        ...(epicId ? { epicId } : {}),
+      },
       {
         onSuccess: (task) => {
           setLastProjectId(projectId);
@@ -363,7 +370,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           }
           toastManager.add({
             type: "success",
-            title: "Added to Backlog",
+            title: flow === "epic" ? "Epic created" : "Added to Backlog",
             description: `#${task.number} ${task.title}${issue ? " · fetching details" : ""}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
@@ -463,6 +470,14 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
             run: () => pushView({ kind: "pick-project", flow: "planned" }),
+          },
+          {
+            value: "action:new-epic",
+            title: "New epic…",
+            searchTerms: ["create", "epic", "feature", "group"],
+            icon: <GroupIcon className={ITEM_ICON_CLASS} />,
+            submenu: true,
+            run: () => pushView({ kind: "pick-project", flow: "epic" }),
           },
           {
             value: "action:add-project",
@@ -639,7 +654,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         return [
           {
             value: "projects",
-            label: flow === "backlog" ? "New task in…" : "New task with plan in…",
+            label: flow === "backlog" ? "New task in…" : flow === "epic" ? "New epic in…" : "New task with plan in…",
             items: filterItems(items, query),
           },
         ];
@@ -679,6 +694,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const isSubmenu = stack.length > 1;
   const hasHighlightedFolder = view.kind === "browse" && highlighted !== null && highlighted.startsWith("browse:");
   const titleProject = view.kind === "title" ? projectById.get(view.projectId) : undefined;
+  const titleEpic = view.kind === "title" && view.epicId ? tasks.find((t) => t.id === view.epicId) : undefined;
   const importRow = view.kind === "title" ? issueImportRow(query, view.flow) : null;
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -817,7 +833,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       emptyStateMessage = projects.length === 0 ? "Add a project first." : "No matching projects.";
       break;
     case "title":
-      placeholder = "Task title…";
+      placeholder = view.flow === "epic" ? "Epic title…" : "Task title…";
       footerActionLabel = importRow ? "Import" : "Create";
       inputAccessory = (
         <InputAction
@@ -836,9 +852,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon={titleProject ? projectIcon(titleProject) : <FolderIcon className={ITEM_ICON_CLASS} />}
             title={titleProject?.title ?? "Unknown project"}
             description={
-              view.flow === "backlog"
-                ? "Lands in Backlog · Shift+Enter to add another"
-                : "Opens the task with the plan editor"
+              view.flow === "epic"
+                ? "Groups tasks; its column follows theirs"
+                : view.flow === "planned"
+                  ? "Opens the task with the plan editor"
+                  : titleEpic
+                    ? `In epic #${titleEpic.number} ${titleEpic.title} · Shift+Enter to add another`
+                    : "Lands in Backlog · Shift+Enter to add another"
             }
           />
           {importRow ? (

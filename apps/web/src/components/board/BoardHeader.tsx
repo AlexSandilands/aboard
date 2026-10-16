@@ -2,7 +2,7 @@ import type { Project } from "@repo/contracts";
 import { useMemo } from "react";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
-import { ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
@@ -20,7 +20,14 @@ import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useBoard } from "~/state/queries";
 import { useBoardView, usePalette } from "~/state/ui";
-import { useLabelFilter, useSelectedTaskId, useSetLabelFilter, useSetProjectFilter } from "./boardNavigation";
+import {
+  useEpicFilter,
+  useLabelFilter,
+  useSelectedTaskId,
+  useSetEpicFilter,
+  useSetLabelFilter,
+  useSetProjectFilter,
+} from "./boardNavigation";
 import { cn } from "~/lib/utils";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -72,6 +79,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       ) : (
         <h1 className="text-sm font-medium">Board</h1>
       )}
+      <ActiveEpicFilter />
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
         <Menu>
@@ -162,6 +170,29 @@ function LabelFilterGroup({
         {selected.length ? <MenuItem onClick={() => onChange([])}>Clear labels</MenuItem> : null}
       </MenuGroup>
     </>
+  );
+}
+
+/** The `?epic=` filter as a removable chip; nothing when it names no epic on the board. */
+function ActiveEpicFilter() {
+  const epicId = useEpicFilter();
+  const setEpicFilter = useSetEpicFilter();
+  const epic = useBoard().data?.tasks.find((t) => t.id === epicId && t.kind === "epic");
+  if (!epic) return null;
+  return (
+    <span className="inline-flex h-6 max-w-64 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/40 ps-1.5 pe-0.5 text-xs text-foreground/80">
+      <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+      <span className="min-w-0 truncate">{epic.title}</span>
+      <Button
+        variant="ghost-muted"
+        size="icon-micro"
+        aria-label={`Stop filtering to epic #${epic.number}`}
+        onClick={() => void setEpicFilter(null)}
+      >
+        <XIcon />
+      </Button>
+    </span>
   );
 }
 

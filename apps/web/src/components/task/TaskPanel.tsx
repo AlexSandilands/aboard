@@ -25,10 +25,15 @@ import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPa
 import { TaskTitle } from "./TaskTitle";
 import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
+import { EpicChildren } from "./EpicChildren";
+import { useSetEpicFilter } from "~/components/board/boardNavigation";
+import type { SectionId } from "./sections.logic";
 
 const MIN_WIDTH = 380;
 const DEFAULT_WIDTH = 540;
 const EMPTY_PROJECTS: ReadonlyArray<Project> = [];
+/** An epic has no plan and isn't reviewed itself; its children are. */
+const EPIC_HIDDEN_SECTIONS: ReadonlyArray<SectionId> = ["plan", "review"];
 
 /**
  * Highest usePanel.planEditorRequest already acted on. Module-level so a request made just
@@ -169,6 +174,7 @@ function TaskPanelBody({
   titleActions: ReactNode;
 }) {
   const actions = usePlanActions(task.id);
+  const setEpicFilter = useSetEpicFilter();
   return (
     <div className="flex flex-col pb-10">
       <div className="px-4 pt-4 pb-3">
@@ -177,13 +183,16 @@ function TaskPanelBody({
       <div className="flex flex-col gap-2 px-3 pb-3">
         <ImportCallout task={task} />
         <ResolutionCallout task={task} />
-        {/* A task closed without a plan has nothing to be up to. */}
-        {task.resolution && task.progress.total === 0 ? null : (
+        {task.kind === "epic" ? (
+          <EpicChildren task={task} onFilter={() => void setEpicFilter(task.id)} />
+        ) : // A task closed without a plan has nothing to be up to.
+        task.resolution && task.progress.total === 0 ? null : (
           <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
         )}
       </div>
       <ManagedSections
         task={task}
+        exclude={task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined}
         render={(id) => {
           switch (id) {
             case "labels":

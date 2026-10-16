@@ -15,6 +15,10 @@ import { SectionsMenu } from "./SectionsMenu";
 import { useSetTaskStatus } from "./useSetTaskStatus";
 
 const STATUS_ITEMS = TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }));
+const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<
+  TaskDetail["status"],
+  string
+>;
 
 /** Top bar classes, shared with the loading skeleton so the layout doesn't shift. */
 export const PANEL_TOP_BAR_CLASS =
@@ -63,28 +67,38 @@ export function TaskPanelHeader({
     <header className={PANEL_TOP_BAR_CLASS}>
       <ClosePanelButton onClose={onClose} />
       <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
-      <Select
-        value={task.status}
-        items={STATUS_ITEMS}
-        onValueChange={(value) => {
-          if (value) setStatus(value);
-        }}
-      >
-        <SelectTrigger variant="ghost" size="xs" aria-label="Status">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectPopup alignItemWithTrigger={false} matchTriggerWidth={false}>
-          {STATUS_ITEMS.map((status) => {
-            const gated = !hasPlan && status.value !== "backlog";
-            return (
-              <SelectItem key={status.value} value={status.value} disabled={gated}>
-                {status.label}
-                {gated ? <span className="text-muted-foreground"> · needs a plan</span> : null}
-              </SelectItem>
-            );
-          })}
-        </SelectPopup>
-      </Select>
+      {task.kind === "epic" ? (
+        // An epic's column follows its tasks, so there is nothing to pick.
+        <Tooltip>
+          <TooltipTrigger render={<span className="shrink-0 px-1.5 text-xs text-foreground/80" />}>
+            Epic · {STATUS_LABEL[task.status]}
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">Sits where its furthest-back open task is; Done once they all are</TooltipPopup>
+        </Tooltip>
+      ) : (
+        <Select
+          value={task.status}
+          items={STATUS_ITEMS}
+          onValueChange={(value) => {
+            if (value) setStatus(value);
+          }}
+        >
+          <SelectTrigger variant="ghost" size="xs" aria-label="Status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup alignItemWithTrigger={false} matchTriggerWidth={false}>
+            {STATUS_ITEMS.map((status) => {
+              const gated = !hasPlan && status.value !== "backlog";
+              return (
+                <SelectItem key={status.value} value={status.value} disabled={gated}>
+                  {status.label}
+                  {gated ? <span className="text-muted-foreground"> · needs a plan</span> : null}
+                </SelectItem>
+              );
+            })}
+          </SelectPopup>
+        </Select>
+      )}
       {resolution ? (
         <Badge variant="secondary" size="sm">
           {resolution}
@@ -102,7 +116,7 @@ export function TaskPanelHeader({
         </span>
       ) : null}
       <div className="ms-auto flex items-center gap-1.5">
-        {task.status === "done" && !archived ? (
+        {task.status === "done" && !archived && task.kind !== "epic" ? (
           <Button variant="outline" size="xs" onClick={() => updateTask({ id: task.id, archived: true })}>
             <ArchiveIcon />
             Archive

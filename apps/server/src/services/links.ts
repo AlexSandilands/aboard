@@ -94,7 +94,8 @@ export function createLinksService(
   /** `creditLinkId` names the PR recorded as the merge, when it is one of the merged ones. */
   const completeIfPrsDone = (taskId: string, creditLinkId?: string): void => {
     const task = deps.task(taskId);
-    if (task.status !== "review" || task.archivedAt !== null) return;
+    // An epic's status follows its children, so its own PRs don't move it.
+    if (task.status !== "review" || task.archivedAt !== null || task.kind === "epic") return;
     const links = repos.links.forTasks([task.id]).map(toLink);
     if (!prsCompleteTask(links, deps.polls)) return;
     const merged = polledPrs(links, deps.polls).filter((l) => l.snapshot?.state === "merged");

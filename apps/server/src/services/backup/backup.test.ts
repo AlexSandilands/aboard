@@ -270,12 +270,12 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model columns.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns.
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
       tasks: dump.tasks.map((bundle) => {
-        const { suggested_tier: _t, suggested_reason: _r, ...task } = bundle.task;
+        const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
       }),
       task_events: dump.task_events.map((e) =>
@@ -357,5 +357,50 @@ describe("restoreTask", () => {
     const restored = s.backup.restoreTask(dump, a.number, { actor: "user" });
     expect(restored.number).toBeGreaterThan(b.number);
     expectCode(() => s.backup.restoreTask(dump, 999, { actor: "user" }), "NOT_FOUND");
+  });
+
+  it("puts a task back into its epic, or loose when the epic is gone, and keeps a replaced epic's tasks", () => {
+    const { s, project } = seed();
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const child = s.tasks.create({ projectId: project.id, title: "Child", plan, epicId: epic.id });
+    const dump = s.backup.dump();
+
+    s.tasks.update(child.id, { archived: true }, "user");
+    s.tasks.delete(child.id, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("backlog");
+    s.backup.restoreTask(dump, child.number, { actor: "user" });
+    expect(s.tasks.summary(child.id).parent?.id).toBe(epic.id);
+    expect(s.tasks.summary(epic.id).status).toBe("planned");
+
+    // Replacing the epic keeps its tasks in it.
+    s.backup.restoreTask(dump, epic.number, { actor: "user", force: true });
+    expect(s.tasks.summary(child.id).parent?.id).toBe(epic.id);
+
+    // With the epic gone, the task comes back loose.
+    s.tasks.update(child.id, { archived: true }, "user");
+    s.tasks.delete(child.id, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    s.tasks.delete(epic.id, "user");
+    s.backup.restoreTask(dump, child.number, { actor: "user" });
+    expect(s.tasks.summary(child.id).parent).toBeNull();
+  });
+
+  it("leaves out of a restored epic any task that moved to another project since", () => {
+    const { s, project } = seed();
+    const other = s.projects.create({ title: "Other", workspaceRoot: "/work/other" });
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const stays = s.tasks.create({ projectId: project.id, title: "Stays", plan, epicId: epic.id });
+    const moves = s.tasks.create({ projectId: project.id, title: "Moves", plan, epicId: epic.id });
+    const dump = s.backup.dump();
+
+    // The epic moves (taking its tasks along), then one task comes back to the first project in it.
+    s.tasks.update(epic.id, { projectId: other.id }, "user");
+    s.tasks.update(stays.id, { projectId: project.id, epicId: null }, "user");
+    s.tasks.update(stays.id, { projectId: other.id, epicId: epic.id }, "user");
+    s.backup.restoreTask(dump, epic.number, { actor: "user", force: true });
+    // The restored epic is back in the first project; its tasks that are now elsewhere stay loose.
+    expect(s.tasks.summary(epic.id).projectId).toBe(project.id);
+    expect(s.tasks.summary(moves.id).parent).toBeNull();
+    expect(s.tasks.summary(stays.id).parent).toBeNull();
   });
 });

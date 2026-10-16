@@ -8,8 +8,10 @@ import {
   parsePlanMarkdown,
   SUGGESTED_MODEL_REASON_MAX,
   type Project,
+  type TaskDetail,
+  type TaskEvent,
 } from "@repo/contracts";
-import { renderTaskShort } from "./format.ts";
+import { renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
@@ -35,6 +37,11 @@ export const projectFields = {
 };
 
 export const taskField = z.string().min(1).describe('Task reference: "#42", "42", or the task uuid.');
+
+export const epicField = z
+  .string()
+  .min(1)
+  .describe('The epic this task belongs to: "#12", "12" or its uuid. It must be in the same project.');
 
 export const actorField = z
   .string()
@@ -154,6 +161,18 @@ export function findProject(services: Services, args: ProjectRefArgs) {
     if (error instanceof AppError && error.code === "NOT_FOUND") return null;
     throw error;
   }
+}
+
+/** Each child's newest activity entry, for an epic's overview. */
+export function childActivity(services: Services, epic: TaskDetail): ChildActivity {
+  const activity = new Map<string, TaskEvent>();
+  for (const child of epic.children) {
+    const newest = services.tasks
+      .detail(child.id)
+      .events.reduce<TaskEvent | null>((latest, e) => (!latest || e.id > latest.id ? e : latest), null);
+    if (newest) activity.set(child.id, newest);
+  }
+  return activity;
 }
 
 export function safeProject(services: Services, id: string): Project | undefined {

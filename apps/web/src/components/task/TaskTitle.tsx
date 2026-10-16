@@ -1,12 +1,14 @@
 import type { Project, TaskDetail } from "@repo/contracts";
 import { useState, type ReactNode } from "react";
 
+import { GroupIcon } from "lucide-react";
+import { useOpenTask } from "~/components/board/boardNavigation";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { useUpdateTask } from "~/state/mutations";
 import { InlineInput } from "./InlineInput";
 
-/** Click-to-edit title with the project chip and provenance underneath, and `actions` beside the title or, on narrow panels, the meta row. */
+/** Click-to-edit title with the project (and epic) chips and provenance underneath, and `actions` beside the title or, on narrow panels, the meta row. */
 export function TaskTitle({
   task,
   project,
@@ -18,6 +20,7 @@ export function TaskTitle({
 }) {
   const [editing, setEditing] = useState(false);
   const { mutate: updateTask } = useUpdateTask();
+  const openTask = useOpenTask();
   // One grid, two layouts: actions sit beside the title when the panel (the @container) has room,
   // otherwise on the meta row so a wrapping title keeps the full width.
   return (
@@ -60,6 +63,18 @@ export function TaskTitle({
             <ProjectFavicon title={project.title} icon={project.icon} />
             <span className="min-w-0 truncate">{project.title}</span>
           </span>
+        ) : null}
+        {task.parent ? (
+          <button
+            type="button"
+            title={`In epic #${task.parent.number} ${task.parent.title}`}
+            onClick={() => void openTask(task.parent!.id)}
+            className="inline-flex h-6 max-w-[40%] min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/40 px-1.5 text-foreground/80 outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="shrink-0 tabular-nums text-muted-foreground">#{task.parent.number}</span>
+            <span className="min-w-0 truncate">{task.parent.title}</span>
+          </button>
         ) : null}
         <span className="min-w-0 truncate">
           Created by {task.createdBy} · {formatRelativeTimeLabel(task.createdAt)}
