@@ -1,4 +1,4 @@
-import type { RecurringRuleView, RecurringSchedule } from "@repo/contracts";
+import { localStamp, type RecurringRuleView, type RecurringSchedule } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -40,8 +40,9 @@ describe("recurring rules", () => {
       flagAutopilot: false,
       enabled: true,
       lastTaskId: null,
-      lastDueAt: new Date(2026, 9, 16, 12, 0).toISOString(),
+      lastDueAt: localStamp(new Date(2026, 9, 16, 12, 0)),
       nextDueAt: new Date(2026, 9, 19, 9, 0).toISOString(),
+      lastTask: null,
     });
     expect(s.recurring.list(project.id)).toEqual([rule]);
   });
@@ -101,14 +102,28 @@ describe("recurring rules", () => {
     expect(s.recurring.get(rule.id).lastDueAt).toBe(created);
 
     vi.setSystemTime(new Date(2026, 9, 14, 12, 0));
-    expect(s.recurring.update(rule.id, { enabled: true }).lastDueAt).toBe(new Date(2026, 9, 14, 12, 0).toISOString());
+    expect(s.recurring.update(rule.id, { enabled: true }).lastDueAt).toBe(localStamp(new Date(2026, 9, 14, 12, 0)));
 
     vi.setSystemTime(new Date(2026, 9, 15, 12, 0));
     const changed = s.recurring.update(rule.id, { schedule: { kind: "weekly", days: [2], time: "09:00" } });
-    expect(changed.lastDueAt).toBe(new Date(2026, 9, 15, 12, 0).toISOString());
+    expect(changed.lastDueAt).toBe(localStamp(new Date(2026, 9, 15, 12, 0)));
     // Saving the same schedule again changes nothing.
     vi.setSystemTime(new Date(2026, 9, 16, 12, 0));
     expect(s.recurring.update(rule.id, { schedule: changed.schedule }).lastDueAt).toBe(changed.lastDueAt);
+  });
+
+  it("says what became of the task a rule made last", () => {
+    const { s, project, template } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "Made" });
+    const rule = s.recurring.create(project.id, { name: "A", templateId: template.id, schedule: mondays });
+    s.recurring.handled(rule.id, { dueAt: localStamp(new Date()), taskId: task.id });
+    expect(s.recurring.list(project.id)[0]?.lastTask).toEqual({
+      number: task.number,
+      status: "backlog",
+      archived: false,
+    });
+    s.tasks.update(task.id, { archived: true }, "user");
+    expect(s.recurring.list(project.id)[0]?.lastTask).toMatchObject({ archived: true });
   });
 
   it("never moves the cursor back when a slot is recorded late", () => {
@@ -123,7 +138,7 @@ describe("recurring rules", () => {
     const { s, project, template, db } = setup();
     const task = s.tasks.create({ projectId: project.id, title: "Made" });
     const rule = s.recurring.create(project.id, { name: "A", templateId: template.id, schedule: mondays });
-    s.recurring.handled(rule.id, { dueAt: new Date().toISOString(), taskId: task.id });
+    s.recurring.handled(rule.id, { dueAt: localStamp(new Date()), taskId: task.id });
 
     s.templates.delete(template.id);
     expect(s.recurring.get(rule.id).templateId).toBeNull();

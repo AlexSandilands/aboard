@@ -194,7 +194,7 @@ export function RuleEditorForm({
           <span className="space-y-0.5">
             <span className="block text-sm font-medium">Enabled</span>
             <span className="block text-xs text-muted-foreground">
-              A paused rule makes nothing, and doesn&apos;t catch up when it is switched on again.
+              A paused rule makes nothing, and doesn&apos;t catch up on slots it missed when it is switched on again.
             </span>
           </span>
           <Switch

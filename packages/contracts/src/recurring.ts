@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { TaskStatus } from "./schemas.ts";
+import { isoDate } from "./templates.ts";
 
 // Recurring tasks: an Autopilot automation that creates a task from a template on a schedule. A rule belongs to one
 // project; the schedule maths here is shared so the UI can show when a rule is next due (docs/features/autopilot.md).
@@ -56,7 +58,11 @@ export const RecurringRule = z.object({
   /** Whether the tasks it creates carry the Autopilot flag (On). */
   flagAutopilot: z.boolean(),
   enabled: z.boolean(),
-  /** Slots up to here are dealt with: created, skipped or deliberately passed over. The next one is after it. */
+  /**
+   * Slots up to here are dealt with: created, skipped or deliberately passed over. A local wall-clock stamp
+   * (`YYYY-MM-DDTHH:mm:ss`, see `localStamp`), not an instant: slots are local times, so a move to another time zone
+   * can't make a slot that was handled look new.
+   */
   lastDueAt: z.string(),
   /** The task the rule created last, for the skip-while-open check. */
   lastTaskId: z.string().nullable(),
@@ -69,6 +75,8 @@ export type RecurringRule = z.infer<typeof RecurringRule>;
 export const RecurringRuleView = RecurringRule.extend({
   /** The first slot after `lastDueAt`; in the past when it is waiting for the next pass or is being skipped. */
   nextDueAt: z.string().nullable(),
+  /** What the rule made last, for the row's "last task" line. */
+  lastTask: z.object({ number: z.number().int(), status: TaskStatus, archived: z.boolean() }).nullable(),
 });
 export type RecurringRuleView = z.infer<typeof RecurringRuleView>;
 
@@ -87,12 +95,18 @@ export type UpdateRecurringRuleInput = z.infer<typeof UpdateRecurringRuleInput>;
 
 const DAY_MS = 86_400_000;
 
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+/** A local wall-clock stamp, `YYYY-MM-DDTHH:mm:ss`: what a rule's cursor holds, and sorts as text. */
+export const localStamp = (date: Date): string =>
+  `${isoDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
 /** Whole days since the epoch of a local calendar date, so day arithmetic never meets a DST change. */
 const dayNumber = (date: Date): number =>
   Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS);
 
 const dayOfDate = (value: string): number => {
-  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const [y, m, d] = value.slice(0, 10).split("-").map(Number) as [number, number, number];
   return Math.floor(Date.UTC(y, m - 1, d) / DAY_MS);
 };
 
@@ -113,37 +127,37 @@ const isSlotDay = (schedule: RecurringSchedule, day: number): boolean => {
 };
 
 /**
- * The first slot strictly after `after`, in local time. Null only when none falls within a year of it (or of the
- * start date, for an interval).
+ * The first slot after `after` (a `localStamp`), in local time. Slots are compared with the cursor as local
+ * wall-clock text, so a repeated hour or a change of time zone never makes a handled slot look new. Null only when
+ * none falls within a year of it (or of the start date, for an interval).
  */
-export function nextDue(schedule: RecurringSchedule, after: Date): Date | null {
-  const first = dayNumber(after);
+export function nextDue(schedule: RecurringSchedule, after: string): Date | null {
+  const first = dayOfDate(after);
   const startDay = schedule.kind === "every" ? dayOfDate(schedule.startDate) : first;
   // A year and a bit covers the longest interval; starting at the start date skips the empty days before it.
   const from = Math.max(first, startDay);
   for (let day = from; day <= from + RECURRING_EVERY_DAYS_MAX + 7; day++) {
     if (!isSlotDay(schedule, day)) continue;
     const slot = at(day, schedule.time);
-    if (slot.getTime() > after.getTime()) return slot;
+    if (localStamp(slot) > after) return slot;
   }
   return null;
 }
 
 /**
- * The latest slot after `after` that is already due at `now`, or null. Only the latest: a board that was off for
- * three Mondays gets one catch-up task, not three.
+ * The latest slot after `after` (a `localStamp`) that is already due at `now`, or null. Only the latest: a board that
+ * was off for three Mondays gets one catch-up task, not three.
  */
-export function latestDue(schedule: RecurringSchedule, now: Date, after: Date): Date | null {
-  const floor = dayNumber(after) - 1;
+export function latestDue(schedule: RecurringSchedule, now: Date, after: string): Date | null {
+  const floor = dayOfDate(after) - 1;
   for (let day = dayNumber(now); day >= floor; day--) {
     if (!isSlotDay(schedule, day)) continue;
     const slot = at(day, schedule.time);
     if (slot.getTime() > now.getTime()) continue;
-    return slot.getTime() > after.getTime() ? slot : null;
+    return localStamp(slot) > after ? slot : null;
   }
   return null;
 }
-
 export const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 /** "Mondays and Thursdays at 09:00", "Every 14 days at 09:00". */

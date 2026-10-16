@@ -1,4 +1,5 @@
 import {
+  localStamp,
   nextDue,
   type CreateRecurringRuleInput,
   type RecurringRule,
@@ -9,11 +10,11 @@ import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
-import type { ProjectsService, TemplatesService } from "./types.ts";
+import type { ProjectsService, TasksService, TemplatesService } from "./types.ts";
 
 /** What the Recurring tasks automation records about a slot it dealt with. */
 export interface RecurringHandled {
-  /** The slot, an ISO time; the rule won't look for slots up to here again. */
+  /** The slot, a `localStamp`; the rule won't look for slots up to here again. */
   dueAt: string;
   /** The task created for it, if any. */
   taskId?: string;
@@ -31,21 +32,34 @@ export interface RecurringService {
    */
   update(id: string, input: UpdateRecurringRuleInput): RecurringRuleView;
   delete(id: string): void;
+  /**
+   * Starts the enabled rules of these projects from now, so slots that passed while the automation was off or
+   * Autopilot paused aren't caught up. Only downtime of the board itself gets a catch-up.
+   */
+  restart(projectIds: readonly string[]): void;
   /** Records that the automation dealt with a slot (created a task, skipped it or failed), so the next one is after it. */
   handled(id: string, done: RecurringHandled): void;
 }
 
-/** The rule as the API returns it. */
-const viewOf = (rule: RecurringRule): RecurringRuleView => ({
-  ...rule,
-  nextDueAt: nextDue(rule.schedule, new Date(rule.lastDueAt))?.toISOString() ?? null,
-});
-
 export function createRecurringService(
   core: Core,
-  deps: { projects: ProjectsService; templates: TemplatesService },
+  deps: { projects: ProjectsService; templates: TemplatesService; tasks: TasksService },
 ): RecurringService {
   const { repos } = core;
+
+  /** The rule as the API returns it. */
+  const viewOf = (rule: RecurringRule): RecurringRuleView => {
+    let lastTask: RecurringRuleView["lastTask"] = null;
+    if (rule.lastTaskId) {
+      try {
+        const task = deps.tasks.summary(rule.lastTaskId);
+        lastTask = { number: task.number, status: task.status, archived: task.archivedAt !== null };
+      } catch {
+        // Deleted since: the rule's last_task_id is cleared by the database, so this is a race at most.
+      }
+    }
+    return { ...rule, nextDueAt: nextDue(rule.schedule, rule.lastDueAt)?.toISOString() ?? null, lastTask };
+  };
 
   const get = (id: string): RecurringRule => {
     const rule = repos.autopilotRecurring.get(id);
@@ -93,7 +107,7 @@ export function createRecurringService(
           schedule: input.schedule,
           flagAutopilot: input.flagAutopilot ?? false,
           enabled: input.enabled ?? true,
-          lastDueAt: now,
+          lastDueAt: localStamp(new Date()),
           lastTaskId: null,
           createdAt: now,
           updatedAt: now,
@@ -124,7 +138,7 @@ export function createRecurringService(
           // Slots that passed while the rule was off, or under another schedule, aren't owed.
           lastDueAt:
             (enabled && !current.enabled) || JSON.stringify(schedule) !== JSON.stringify(current.schedule)
-              ? now
+              ? localStamp(new Date())
               : current.lastDueAt,
           updatedAt: now,
         };
@@ -138,6 +152,19 @@ export function createRecurringService(
       core.write((fx) => {
         get(id);
         repos.autopilotRecurring.delete(id);
+        fx.autopilot();
+      });
+    },
+
+    restart(projectIds) {
+      core.write((fx) => {
+        const stamp = localStamp(new Date());
+        for (const projectId of projectIds) {
+          for (const rule of repos.autopilotRecurring.forProject(projectId)) {
+            if (!rule.enabled || rule.lastDueAt >= stamp) continue;
+            repos.autopilotRecurring.update({ ...rule, lastDueAt: stamp, updatedAt: nowIso() });
+          }
+        }
         fx.autopilot();
       });
     },

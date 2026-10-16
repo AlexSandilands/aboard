@@ -77,7 +77,8 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
   const automation = useRecurringAutomation(project.id);
   const setAutomation = useSetRecurringAutomation(project.id);
   const templates = useTemplates();
-  const tasks = useBoard().data?.tasks ?? [];
+  const paused = useBoard().data?.autopilot.paused ?? false;
+  const running = (automation.data?.enabled ?? false) && !paused;
   const update = useUpdateRecurringRule();
   const remove = useDeleteRecurringRule();
   const addSuggested = useAddSuggestedRule(project.id);
@@ -125,7 +126,7 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
           />
         ) : (
           list.map((rule) => {
-            const last = lastTaskLabel(rule, tasks);
+            const last = lastTaskLabel(rule);
             return (
               <SettingsRow
                 key={rule.id}
@@ -147,7 +148,7 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
                 description={[
                   describeSchedule(rule.schedule),
                   templateName(rule),
-                  rule.enabled ? `Next: ${nextDueLabel(rule)}` : null,
+                  rule.enabled ? `Next: ${nextDueLabel(rule, running)}` : null,
                   last ? `Last: ${last}` : null,
                   rule.flagAutopilot ? "Flagged for Autopilot" : null,
                 ]

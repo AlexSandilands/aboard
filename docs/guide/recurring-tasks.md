@@ -27,8 +27,10 @@ Each rule shows when it is next due and what became of the last task it made. Th
 - If the task it made last time is still open (not Done, closed or archived), the slot is **skipped** and
   logged, so a chore nobody has done doesn't pile up.
 - If the board was off when a slot came, it makes **one** task when it is back, not one per missed slot.
-- A new rule, a rule switched back on and a rule whose schedule you change start from now: they don't catch up
-  on slots that passed before.
+- A new rule, a rule switched back on, a rule whose schedule you change, and every rule of a project when you
+  switch **Create recurring tasks here** on or lift Pause all, start from now: they don't catch up on slots that
+  passed before. Only the board being off does.
+- A task made late has the date it was made in its title, not the date of the slot.
 - With **dry-run** on, it only records what it would create.
 
 Rules are part of the board's [backup](../features/backup.md). Agents can't see or change them.

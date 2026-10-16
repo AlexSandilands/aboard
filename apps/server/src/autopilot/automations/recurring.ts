@@ -1,4 +1,11 @@
-import { AUTOPILOT_RECURRING, latestDue, templateHasPlan, type RecurringRule, type TaskSummary } from "@repo/contracts";
+import {
+  AUTOPILOT_RECURRING,
+  latestDue,
+  localStamp,
+  templateHasPlan,
+  type RecurringRule,
+  type TaskSummary,
+} from "@repo/contracts";
 import { z } from "zod";
 import type { Services } from "../../services/types.ts";
 import { defineAutomation, type Candidate } from "../types.ts";
@@ -7,7 +14,7 @@ export { AUTOPILOT_RECURRING };
 
 interface RecurringData {
   ruleId: string;
-  /** The slot, an ISO time. */
+  /** The slot, a local wall-clock stamp: the same time on a clock keeps one key whatever the zone. */
   dueAt: string;
 }
 
@@ -43,9 +50,9 @@ export const recurring = defineAutomation({
     projects.flatMap(({ project }): Candidate[] =>
       services.recurring.list(project.id).flatMap((rule): Candidate[] => {
         if (!rule.enabled) return [];
-        const due = latestDue(rule.schedule, now, new Date(rule.lastDueAt));
+        const due = latestDue(rule.schedule, now, rule.lastDueAt);
         if (!due) return [];
-        const dueAt = due.toISOString();
+        const dueAt = localStamp(due);
         const open = openTaskOf(services, rule);
         return [
           {

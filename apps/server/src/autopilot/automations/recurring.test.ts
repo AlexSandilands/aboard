@@ -1,4 +1,4 @@
-import type { RecurringSchedule } from "@repo/contracts";
+import { localStamp, type RecurringSchedule } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
@@ -74,7 +74,7 @@ describe("recurring tasks", () => {
       actor: "autopilot",
       payload: { text: "Created by Autopilot from recurring rule Weekly bump" },
     });
-    expect(s.recurring.get(r.id)).toMatchObject({ lastTaskId: task!.id, lastDueAt: at(12, 9).toISOString() });
+    expect(s.recurring.get(r.id)).toMatchObject({ lastTaskId: task!.id, lastDueAt: localStamp(at(12, 9)) });
     expect(runs()).toMatchObject([
       { automation: "recurring", status: "succeeded", summary: `Created #${task!.number} from "Weekly bump"` },
     ]);
@@ -128,6 +128,44 @@ describe("recurring tasks", () => {
     expect(tasks()).toHaveLength(1);
   });
 
+  it("doesn't catch up when the project's automation is switched back on", async () => {
+    const { s, project, turnOn, rule, pass, tasks } = setup();
+    turnOn();
+    rule({});
+    await pass(at(6, 12));
+    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" });
+    // Monday the 12th passes while it is off.
+    await pass(at(13, 12));
+    expect(tasks()).toEqual([]);
+    turnOn();
+    await pass(at(13, 12, 1));
+    expect(tasks()).toEqual([]);
+    // The 19th is on again.
+    await pass(at(19, 9, 1));
+    expect(tasks()).toHaveLength(1);
+  });
+
+  it("doesn't catch up when the board is switched on, or Pause all is lifted", async () => {
+    const { s, project, rule, pass, tasks } = setup();
+    s.autopilot.setScope("board", null, AUTOPILOT_RECURRING, { mode: "on" });
+    rule({});
+    await pass(at(6, 12));
+    s.autopilot.setPaused(true);
+    await pass(at(13, 12));
+    s.autopilot.setPaused(false);
+    await pass(at(13, 12, 1));
+    expect(tasks()).toEqual([]);
+
+    // A project that sets its own switch off, then inherits the board's On again, starts afresh too.
+    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" });
+    await pass(at(20, 12));
+    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "inherit" });
+    await pass(at(20, 12, 1));
+    expect(tasks()).toEqual([]);
+    await pass(at(26, 9, 1));
+    expect(tasks()).toHaveLength(1);
+  });
+
   it("creates one catch-up task after downtime, not one per missed slot", async () => {
     const { s, turnOn, rule, pass, tasks, runs } = setup();
     turnOn();
@@ -135,7 +173,7 @@ describe("recurring tasks", () => {
     // Mondays the 12th, 19th and 26th all pass with no pass in between.
     await pass(at(28, 10));
     expect(tasks()).toHaveLength(1);
-    expect(s.recurring.get(r.id).lastDueAt).toBe(at(26, 9).toISOString());
+    expect(s.recurring.get(r.id).lastDueAt).toBe(localStamp(at(26, 9)));
     expect(runs()).toHaveLength(1);
     await pass(at(28, 11));
     expect(tasks()).toHaveLength(1);
@@ -172,7 +210,7 @@ describe("recurring tasks", () => {
       summary: `Skipped "Weekly bump": #${first!.number} is still open`,
     });
     // The skipped slot is dealt with: the rule isn't due again until the next Monday.
-    expect(s.recurring.get(r.id).lastDueAt).toBe(at(19, 9).toISOString());
+    expect(s.recurring.get(r.id).lastDueAt).toBe(localStamp(at(19, 9)));
     await pass(at(19, 12));
     expect(runs()).toHaveLength(2);
   });
@@ -204,7 +242,7 @@ describe("recurring tasks", () => {
       { status: "skipped", dryRun: true, summary: 'Would create a task from recurring rule "Weekly bump"' },
     ]);
     // The preview doesn't use the slot up.
-    expect(s.recurring.get(r.id).lastDueAt).not.toBe(at(12, 9).toISOString());
+    expect(s.recurring.get(r.id).lastDueAt).not.toBe(localStamp(at(12, 9)));
 
     s.autopilot.updateEngine({ dryRun: false });
     await pass(at(12, 9, 2));
@@ -222,7 +260,7 @@ describe("recurring tasks", () => {
     expect(runs()).toMatchObject([
       { status: "failed", error: expect.stringContaining('template of "Weekly bump" was deleted') },
     ]);
-    expect(s.recurring.get(r.id).lastDueAt).toBe(at(12, 9).toISOString());
+    expect(s.recurring.get(r.id).lastDueAt).toBe(localStamp(at(12, 9)));
   });
 
   it("works on an every-N-days schedule from a start date", async () => {

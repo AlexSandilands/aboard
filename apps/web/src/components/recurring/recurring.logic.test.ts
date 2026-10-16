@@ -1,4 +1,4 @@
-import { CreateRecurringRuleInput, type RecurringRuleView, type TaskSummary, type TaskTemplate } from "@repo/contracts";
+import { CreateRecurringRuleInput, type RecurringRuleView, type TaskTemplate } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   RULE_SUGGESTIONS,
@@ -20,11 +20,12 @@ const rule = (over: Partial<RecurringRuleView> = {}): RecurringRuleView => ({
   schedule: { kind: "weekly", days: [1, 4], time: "09:00" },
   flagAutopilot: true,
   enabled: true,
-  lastDueAt: "2026-10-12T08:00:00.000Z",
+  lastDueAt: "2026-10-12T09:00:00",
   lastTaskId: null,
   createdAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   nextDueAt: "2026-10-15T08:00:00.000Z",
+  lastTask: null,
   ...over,
 });
 
@@ -110,22 +111,20 @@ describe("labels", () => {
   const now = new Date("2026-10-14T00:00:00.000Z");
 
   it("shows when a rule is next due, or why it isn't", () => {
-    expect(nextDueLabel(rule(), now)).not.toMatch(/Due now|Paused/);
-    expect(nextDueLabel(rule({ nextDueAt: "2026-10-13T08:00:00.000Z" }), now)).toBe("Due now");
-    expect(nextDueLabel(rule({ enabled: false }), now)).toBe("Paused");
-    expect(nextDueLabel(rule({ nextDueAt: null }), now)).toBe("No upcoming slot");
+    expect(nextDueLabel(rule(), true, now)).not.toMatch(/Due now|Paused|Not running/);
+    expect(nextDueLabel(rule({ nextDueAt: "2026-10-13T08:00:00.000Z" }), true, now)).toBe("Due now");
+    expect(nextDueLabel(rule({ nextDueAt: "2026-10-13T08:00:00.000Z" }), false, now)).toBe("Not running");
+    expect(nextDueLabel(rule({ enabled: false }), true, now)).toBe("Paused");
+    expect(nextDueLabel(rule({ nextDueAt: null }), true, now)).toBe("No upcoming slot");
   });
 
   it("says what became of the last task", () => {
-    const task = (over: Partial<TaskSummary>) =>
-      ({ id: "x", number: 7, status: "backlog", archivedAt: null, ...over }) as TaskSummary;
-    expect(lastTaskLabel(rule(), [])).toBeNull();
-    expect(lastTaskLabel(rule({ lastTaskId: "x" }), [task({})])).toBe("#7 still open");
-    expect(lastTaskLabel(rule({ lastTaskId: "x" }), [task({ status: "done" })])).toBe("#7 done");
-    expect(lastTaskLabel(rule({ lastTaskId: "x" }), [task({ archivedAt: "2026-10-01T00:00:00.000Z" })])).toBe(
-      "#7 archived",
-    );
-    expect(lastTaskLabel(rule({ lastTaskId: "gone" }), [task({})])).toBe("Last task is gone");
+    expect(lastTaskLabel(rule())).toBeNull();
+    const last = (over: Partial<NonNullable<RecurringRuleView["lastTask"]>>) =>
+      rule({ lastTask: { number: 7, status: "backlog", archived: false, ...over } });
+    expect(lastTaskLabel(last({}))).toBe("#7 still open");
+    expect(lastTaskLabel(last({ status: "done" }))).toBe("#7 done");
+    expect(lastTaskLabel(last({ archived: true }))).toBe("#7 archived");
   });
 });
 

@@ -6,7 +6,6 @@ import {
   type CreateTemplateInput,
   type RecurringRuleView,
   type RecurringSchedule,
-  type TaskSummary,
   type TaskTemplate,
 } from "@repo/contracts";
 
@@ -120,20 +119,24 @@ const WHEN = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
-/** "Mon, 19 Oct, 09:00", or what is happening when the slot has already come. */
-export function nextDueLabel(rule: RecurringRuleView, now: Date = new Date()): string {
+/**
+ * "Mon, 19 Oct, 09:00", or what is happening when the slot has already come. `running` is whether the rules of the
+ * project act at all (the automation on, Autopilot not paused); without it a slot that came stays "Not running"
+ * rather than "Due now".
+ */
+export function nextDueLabel(rule: RecurringRuleView, running: boolean, now: Date = new Date()): string {
   if (!rule.enabled) return "Paused";
   if (!rule.nextDueAt) return "No upcoming slot";
   const due = new Date(rule.nextDueAt);
-  return due.getTime() <= now.getTime() ? "Due now" : WHEN.format(due);
+  if (due.getTime() > now.getTime()) return WHEN.format(due);
+  return running ? "Due now" : "Not running";
 }
 
 /** What became of the last task the rule made, for the row's second line. */
-export function lastTaskLabel(rule: RecurringRuleView, tasks: readonly TaskSummary[]): string | null {
-  if (!rule.lastTaskId) return null;
-  const task = tasks.find((t) => t.id === rule.lastTaskId);
-  if (!task) return "Last task is gone";
-  return `#${task.number} ${task.archivedAt ? "archived" : task.status === "done" ? "done" : "still open"}`;
+export function lastTaskLabel(rule: Pick<RecurringRuleView, "lastTask">): string | null {
+  const task = rule.lastTask;
+  if (!task) return null;
+  return `#${task.number} ${task.archived ? "archived" : task.status === "done" ? "done" : "still open"}`;
 }
 
 /** An example rule: a template to create for the project, and the schedule to run it on. */

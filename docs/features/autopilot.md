@@ -142,18 +142,23 @@ this automation's own switch decides whether a project's rules run. It has no co
   `packages/contracts/src/recurring.ts`). Slots are found by calendar day, so a DST change never shifts them: a
   time the clock skips runs an hour later, a repeated one runs the first time.
 - `check` returns, per enabled rule, the latest slot after the rule's cursor `last_due_at` that is due. Only the
-  latest: after downtime there is one catch-up task, not one per missed slot. The dedupe key is
-  `recurring:<ruleId>:<slot>`.
+  latest: after downtime of the board there is one catch-up task, not one per missed slot. The dedupe key is
+  `recurring:<ruleId>:<slot>`. The cursor and the key hold the slot as a local wall-clock stamp
+  (`2026-10-12T09:00:00`, `localStamp`), not an instant, so a machine that moves to another time zone doesn't see a
+  handled slot as new.
 - `act` creates the task through `services.tasks.create` with the template: Planned when the template has a plan,
   Backlog otherwise, flagged On when the rule says so, under the actor `autopilot`, then adds the note "Created by
-  Autopilot from recurring rule <name>". The title and description render `{{date}}` and `{{project}}`.
+  Autopilot from recurring rule <name>". The title and description render `{{date}}` and `{{project}}` as of when the
+  task is made, so a catch-up task carries the day it was made, not the day of the slot it stands for.
 - It skips (the run is `skipped`, with the reason) while the task the rule made last is still open: not Done
   (closed tasks are Done) and not archived. A deleted template fails the run with "pick another one".
 - Whatever the outcome, `act` moves the cursor to the slot (`recurring.handled`), so the next pass looks for the
   slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
   doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
 - A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
-  changes, so slots from before that aren't caught up.
+  changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
+  for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
+  project's rules restart from now (`recurring.restart`). Only downtime of the board itself catches up.
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
   example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
   The swimlane pill's "Recurring tasks…" link arrives with the Autopilot UI (#86).

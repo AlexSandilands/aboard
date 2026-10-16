@@ -1,4 +1,4 @@
-import type { T3IntegrationStatus } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, type T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -72,6 +72,8 @@ export function createServices(deps: ServiceDeps): Services {
   });
   reviews = createReviewsService(core, { task: tasks.record, notifications });
 
+  const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
+
   return {
     projects,
     tasks: tasks.service,
@@ -85,7 +87,14 @@ export function createServices(deps: ServiceDeps): Services {
     backup: createBackupService(core),
     templates,
     notifications,
-    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS, notifications }),
-    recurring: createRecurringService(core, { projects, templates }),
+    autopilot: createAutopilotService(core, {
+      automations: deps.automations ?? AUTOMATIONS,
+      notifications,
+      // Recurring rules keep their own schedule: switching the automation on, or lifting Pause all, doesn't catch up.
+      onEnabled: (automation, projectIds) => {
+        if (automation === AUTOPILOT_RECURRING) recurring.restart(projectIds);
+      },
+    }),
+    recurring,
   };
 }
