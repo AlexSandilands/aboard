@@ -103,6 +103,10 @@ export function scopeAutomations<T extends Pick<AutopilotAutomation, "epicScope"
   return forEpic ? automations.filter((a) => a.epicScope) : [...automations];
 }
 
+/** Whether an epic has anything to switch: its button and popover are pointless when no automation applies to epics. */
+export const hasEpicAutomations = (automations: ReadonlyArray<Pick<AutopilotAutomation, "epicScope">>): boolean =>
+  automations.some((a) => a.epicScope);
+
 /** The entry for an automation, or an inherit-everything stand-in while the scope loads. */
 export function entryFor(
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined,

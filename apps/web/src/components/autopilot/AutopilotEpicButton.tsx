@@ -3,14 +3,14 @@ import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotEpicScope, useAutopilotOverview, useAutopilotScope, useAutopilotStatus } from "~/state/queries";
-import { epicActiveRuns, epicPillState, pillTooltip } from "./autopilot.logic";
+import { epicActiveRuns, epicPillState, hasEpicAutomations, pillTooltip } from "./autopilot.logic";
 import { PILL_CLASS_NAME, PillIcon } from "./AutopilotPill";
 import { ScopePopover } from "./ScopePopover";
 
 /**
  * The Autopilot button on an epic's band and in its panel: the lane pill's three states and its sweep while a run
  * on one of the epic's tasks is going, as a small circle. Opens the epic's switches, whose Inherit follows the
- * project. Nothing shows while the catalogue is empty, nor for an archived epic (it no longer counts as a scope).
+ * project. Nothing shows while the catalogue has no automation an epic can switch, nor for an archived epic (it no longer counts as a scope).
  */
 export function AutopilotEpicButton({
   epic,
@@ -24,7 +24,7 @@ export function AutopilotEpicButton({
   const scope = useAutopilotEpicScope(epic.projectId, epic.id);
   const projectScope = useAutopilotScope(epic.projectId);
   const set = useSetAutopilotScope(epic.projectId, undefined, epic.id);
-  if (!overview.data || overview.data.automations.length === 0 || epic.archivedAt !== null) return null;
+  if (!overview.data || !hasEpicAutomations(overview.data.automations) || epic.archivedAt !== null) return null;
 
   const state = epicPillState(status, epic.id, scope.data);
   const active = epicActiveRuns(status, epic.id).length;

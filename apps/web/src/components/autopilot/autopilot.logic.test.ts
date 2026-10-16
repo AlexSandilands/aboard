@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   automationTitle,
   entryFor,
+  hasEpicAutomations,
   scopeAutomations,
   epicActiveRuns,
   epicPillState,
@@ -76,9 +77,10 @@ describe("scopeAutomations", () => {
     expect(scopeAutomations(all, true).map((a) => a.key)).toEqual(["unblock"]);
   });
 
-  it("leaves an epic's button off when only automations that don't apply to epics are on", () => {
-    // The server leaves them out of an epic's entries, so nothing enabled is left to light the button.
-    expect(epicPillState(status(), "e1", [])).toBe("off");
+  it("has nothing for an epic's button to open unless some automation applies to epics", () => {
+    expect(hasEpicAutomations(all)).toBe(true);
+    expect(hasEpicAutomations(all.filter((a) => !a.epicScope))).toBe(false);
+    expect(hasEpicAutomations([])).toBe(false);
   });
 });
 
