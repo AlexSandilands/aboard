@@ -46,7 +46,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files)                 |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files) and `server.json` while a server runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -56,7 +56,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
-vars. See `apps/server/src/services/settings.ts`.
+vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
 
 ## The guard
 

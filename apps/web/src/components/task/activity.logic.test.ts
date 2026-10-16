@@ -71,6 +71,12 @@ describe("describeEvent", () => {
     });
   });
 
+  it("describes a task restored from a backup", () => {
+    expect(describeEvent(event("restored", { backupNumber: 42 }), ctx).text).toBe(
+      "restored this from a backup (as #42)",
+    );
+  });
+
   it("describes closing and reopening", () => {
     const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx).text;
     expect(text("closed", { resolution: "completed", byTask: 4 })).toBe("closed this as done by #4");

@@ -142,6 +142,26 @@ When T3 Code is running, it is detected automatically.
   (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. See
   [docs/features/agent-handoff.md](docs/features/agent-handoff.md).
 
+## Backup and restore
+
+The board is one SQLite file in the data dir. To keep a copy off the machine, open **Settings → Backup**,
+choose an empty folder and, optionally, a remote, and turn it on. The server writes the board as JSON into
+that folder (one file per task), commits when anything changed, and pushes using your machine's git
+credentials, so no token is stored. Use a private repo: task text, notes and links end
+up in its history for good. The T3 token and the backup settings are never exported.
+
+From the command line:
+
+```sh
+pnpm backup export                       # into <data dir>/backup (or --dir <folder>, --file board.json)
+pnpm backup import <folder|file>         # restore a whole board; stop the server first
+pnpm backup import <folder|file> --force # replace an existing board (the old file is kept beside it)
+pnpm backup restore-task <folder|file> 42   # put task #42 back, with its plan and history
+```
+
+A backup taken by an older version restores into a newer one. See
+[docs/features/backup.md](docs/features/backup.md).
+
 ## Keyboard
 
 | Key          | Action                 |

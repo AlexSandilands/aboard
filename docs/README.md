@@ -46,6 +46,7 @@ files under each app.
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
+- [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
 
 ### Decisions
 

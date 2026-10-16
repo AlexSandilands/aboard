@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BRAND } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Config } from "./config.ts";
 import { startServer } from "./server.ts";
+import { runningServerUrl } from "./serverFile.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -58,5 +59,20 @@ describe("startServer", { timeout: 20_000 }, () => {
     // The failed attempt must not leave the DB file locked (Windows can't delete open files).
     rmSync(config.homeDir, { recursive: true, force: true });
     await first.close();
+  });
+
+  it("records itself in the data dir while running, so a restore can refuse", async () => {
+    const config = testConfig();
+    expect(await runningServerUrl(config.homeDir)).toBeNull();
+    const server = await startServer(config);
+    expect(await runningServerUrl(config.homeDir)).toBe(server.url);
+    await server.close();
+    expect(await runningServerUrl(config.homeDir)).toBeNull();
+  });
+
+  it("ignores a server file left by a server that is gone", async () => {
+    const config = testConfig();
+    writeFileSync(join(config.homeDir, "server.json"), JSON.stringify({ pid: 1, url: "http://127.0.0.1:1" }));
+    expect(await runningServerUrl(config.homeDir)).toBeNull();
   });
 });

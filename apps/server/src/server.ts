@@ -5,6 +5,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.ts";
 import type { Config } from "./config.ts";
 import { createContext } from "./context.ts";
+import { removeServerFile, writeServerFile } from "./serverFile.ts";
 
 export interface RunningServer {
   /** The bound port (differs from `config.port` when that was 0). */
@@ -41,14 +42,17 @@ export async function startServer(config: Config): Promise<RunningServer> {
   const address = server.address();
   runtime.port = typeof address === "object" && address ? address.port : runtime.port;
   if (runtime.pollers) ctx.integrations.start();
+  const url = `http://${runtime.host}:${runtime.port}`;
+  writeServerFile(runtime.homeDir, url);
 
   let closing: Promise<void> | null = null;
   return {
     port: runtime.port,
-    url: `http://${runtime.host}:${runtime.port}`,
+    url,
     close() {
       closing ??= new Promise<void>((resolve) => {
         ctx.integrations.stop();
+        removeServerFile(runtime.homeDir);
         server.close(() => {
           ctx.db.close();
           resolve();

@@ -17,7 +17,29 @@ const DEFAULTS: StoredSettings = {
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
   modelTiers: EMPTY_MODEL_TIERS,
+  backupEnabled: false,
+  backupDir: null,
+  backupRemote: null,
+  backupIntervalMinutes: 60,
 };
+
+/**
+ * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
+ * someone decides otherwise. Left out: the T3 token, and the backup settings themselves, which describe this
+ * machine; a forced restore keeps them from the database it replaces.
+ */
+export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<keyof StoredSettings>([
+  "jiraBaseUrl",
+  "githubPolling",
+  "t3LinkTarget",
+  "autoReview",
+  "reviewSkill",
+  "reviewMaxRounds",
+  "headlessReviewEnabled",
+  "headlessReviewCli",
+  "headlessReviewBudgetUsd",
+  "modelTiers",
+]);
 
 /** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
 const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): ModelTiers => ({
@@ -76,6 +98,12 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
+        }
+        if (input.backupEnabled !== undefined) repos.settings.set("backupEnabled", input.backupEnabled);
+        if (input.backupDir !== undefined) repos.settings.set("backupDir", blankToNull(input.backupDir));
+        if (input.backupRemote !== undefined) repos.settings.set("backupRemote", blankToNull(input.backupRemote));
+        if (input.backupIntervalMinutes !== undefined) {
+          repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));

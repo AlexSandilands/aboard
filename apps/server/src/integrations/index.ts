@@ -1,6 +1,7 @@
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createBackupIntegration, type RunGit } from "./backup.ts";
 import { createGithubIntegration, type RunGh } from "./github.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
@@ -22,6 +23,7 @@ export interface IntegrationOverrides {
   fetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
+  runGit?: RunGit;
   log?: Logger;
 }
 
@@ -46,6 +48,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const backup = createBackupIntegration({
+    services: deps.services,
+    ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -57,12 +64,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       github.start();
       t3.start();
       reviews.start();
+      backup.start();
     },
     stop() {
       started = false;
       github.stop();
       t3.stop();
       reviews.stop();
+      backup.stop();
     },
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
@@ -76,5 +85,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
+    backupStatus: () => backup.status(),
+    runBackup: () => backup.run(),
   };
 }
