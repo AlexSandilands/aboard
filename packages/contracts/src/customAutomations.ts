@@ -122,18 +122,20 @@ export type CustomDefinition = Pick<CustomAutomation, "name" | "trigger" | "filt
 export const epicArmKey = (epicId: string): string => `epic:${epicId}`;
 
 /**
- * When the automation was armed for a task in this project (and epic): the latest of its own arming, the project's
- * and the epic's.
+ * When the automation was armed for a task: the latest of its own arming, its scope's (the epic's when the epic has
+ * a setting of its own, else the project's; an epic's stamp counts either way), and when the task came into that
+ * scope (`joinedAt`: it moved to the project or epic, or the epic was unarchived).
  */
 export function customArmedAt(
   custom: Pick<CustomAutomation, "armedAt" | "armedProjects">,
-  projectId: string,
-  epicId?: string | null,
+  scope: { projectId: string; epicId?: string | null; epicOwnSetting?: boolean; joinedAt?: string | null },
 ): string {
+  const { projectId, epicId, epicOwnSetting, joinedAt } = scope;
   const times = [
     custom.armedAt,
-    custom.armedProjects[projectId],
+    epicId && epicOwnSetting ? undefined : custom.armedProjects[projectId],
     epicId ? custom.armedProjects[epicArmKey(epicId)] : undefined,
+    joinedAt,
   ];
   return times.filter((t): t is string => Boolean(t)).reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
 }

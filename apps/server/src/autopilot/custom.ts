@@ -28,6 +28,9 @@ import { defineAutomation, type ActionResult, type Automation, type Candidate, t
 // A custom automation as a catalogue entry (docs/features/autopilot.md#custom-automations): the trigger is the check,
 // the filters narrow it, and the action is an agent through the runners or a shell command in the project's folder.
 
+const latest = (a: string | undefined, b: string | undefined): string | undefined =>
+  !a ? b : !b ? a : Date.parse(b) > Date.parse(a) ? b : a;
+
 // An event at the arming instant counts: the automation was there for it.
 // Compared as instants: GitHub's stamps have no milliseconds, the board's do.
 const after = (at: string | null | undefined, armedAt: string): boolean =>
@@ -121,7 +124,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     if (trigger.kind === "schedule") {
       const s = trigger.schedule;
       return scoped.flatMap(({ project }): Candidate[] => {
-        const armedAt = customArmedAt(custom, project.id);
+        const armedAt = customArmedAt(custom, { projectId: project.id });
         const slot =
           s.kind === "hourly" ? latestHourlySlot(s.everyHours, now) : latestDue(s, now, localStamp(new Date(armedAt)));
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
@@ -141,6 +144,11 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
       const eligible = tasks.filter(matches);
+      const ownEpics = services.autopilot.epicsWithOwnSetting({ key: customAutomationKey(custom.id) });
+      const scopeChanged = services.customAutomations.scopeChangedAt([
+        ...eligible.map((t) => t.id),
+        ...new Set(eligible.flatMap((t) => (t.parent ? [t.parent.id] : []))),
+      ]);
       const prChanges =
         trigger.kind === "pr_event"
           ? services.links.prChanges(eligible.flatMap((t) => prLinksOf(t).map((l) => l.id)))
@@ -153,7 +161,18 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
         taskEvents(
           trigger,
           task,
-          { armedAt: customArmedAt(custom, project.id, task.parent?.id), now, from, byId, prChanges },
+          {
+            armedAt: customArmedAt(custom, {
+              projectId: project.id,
+              epicId: task.parent?.id,
+              epicOwnSetting: Boolean(task.parent && ownEpics.has(task.parent.id)),
+              joinedAt: latest(scopeChanged.get(task.id), task.parent ? scopeChanged.get(task.parent.id) : undefined),
+            }),
+            now,
+            from,
+            byId,
+            prChanges,
+          },
           services,
         ).map(({ key, data, what }): Candidate => {
           // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.

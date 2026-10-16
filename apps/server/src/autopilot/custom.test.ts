@@ -331,6 +331,88 @@ describe("custom automations: filters and scopes", () => {
     expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([inEpic.id]);
   });
 
+  describe("epic arming", () => {
+    const epicSetup = () => {
+      const ctx = setup();
+      const { s, project, define, shell } = ctx;
+      const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+      const key = customAutomationKey(custom.id);
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const inEpic = (title: string) => {
+        const t = ctx.task(title);
+        s.tasks.update(t.id, { epicId: epic.id }, "agent");
+        return t;
+      };
+      const setEpic = (mode: "on" | "off" | "inherit") =>
+        s.autopilot.setScope("epic", epic.id, key, { mode }, project.id);
+      const setProject = (mode: "on" | "off" | "inherit") => s.autopilot.setScope("project", project.id, key, { mode });
+      const ran = () => ctx.shellRuns.map((r) => r.env[brandEnv("TASK_ID")]);
+      return { ...ctx, key, epic, inEpic, setEpic, setProject, ran };
+    };
+
+    it("arms an epic set back to Inherit in a project that is on, so its Off time doesn't run", async () => {
+      const { s, inEpic, setEpic, setProject, pass, ran } = epicSetup();
+      setProject("on");
+      setEpic("off");
+      const t = inEpic("Moved while the epic was off");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await pass();
+      await tick();
+      setEpic("inherit");
+      await pass();
+      expect(ran()).toEqual([]);
+      const later = inEpic("Moved after");
+      s.tasks.move(later.id, { status: "review" }, "agent");
+      await pass();
+      expect(ran()).toEqual([later.id]);
+    });
+
+    it("doesn't act on what a task did before it joined an epic that is on", async () => {
+      const { s, task, epic, setEpic, pass, ran } = epicSetup();
+      setEpic("on");
+      const t = task("Outside, then in");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      s.tasks.update(t.id, { epicId: epic.id }, "agent");
+      await pass();
+      expect(ran()).toEqual([]);
+    });
+
+    it("keeps an epic's waiting events when its project is switched on as well", async () => {
+      const { s, inEpic, setEpic, setProject, pass, ran } = epicSetup();
+      setEpic("on");
+      const t = inEpic("Waiting");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      setProject("on");
+      await pass();
+      expect(ran()).toEqual([t.id]);
+    });
+
+    it("arms epics that are on again when Autopilot resumes", async () => {
+      const { s, inEpic, setEpic, pass, ran } = epicSetup();
+      setEpic("on");
+      s.autopilot.setPaused(true);
+      const t = inEpic("Moved while paused");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      s.autopilot.setPaused(false);
+      await pass();
+      expect(ran()).toEqual([]);
+    });
+
+    it("drops the epic switches when the trigger becomes a schedule", () => {
+      const { s, key, epic, setEpic } = epicSetup();
+      setEpic("on");
+      const id = key.slice("custom:".length);
+      s.customAutomations.update(id, { trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } } });
+      s.customAutomations.update(id, { trigger: { kind: "status_change", to: "review" } });
+      expect(s.autopilot.scope("epic", epic.id, epic.projectId).find((e) => e.automation === key)?.mode).toBe(
+        "inherit",
+      );
+    });
+  });
+
   it("leaves a schedule out of epic scope, since it has no task", () => {
     const { s, define, shell } = setup();
     const scheduled = define(

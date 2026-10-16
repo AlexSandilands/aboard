@@ -338,14 +338,21 @@ the automation. Runs stay, under the old key.
 | `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
 | `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<projectId>:<local slot stamp>` |
 
-- **Arming.** Events before the automation was armed don't fire, so switching it on doesn't act on the board's
-  history. `armed_at` is set at creation and when the trigger or filters change (which also clears the per-project
-  times). When its switch turns on for some projects, or Pause all is lifted (`onEnabled`), only those projects are
-  armed again (`armed_projects_json`), so events another project is still waiting on (held by quiet hours or a cap)
-  aren't lost. Switching it on for an epic whose project has it off arms that epic (`onEpicEnabled`, key
-  `epic:<id>`); `customArmedAt` takes the latest of the automation's, the project's and the task's epic's time.
+- **Arming.** Events before a task came into the automation's scope don't fire, so switching it on doesn't act on
+  the board's history. `customArmedAt` takes the latest of:
+  - `armed_at`: set at creation and when the trigger or filters change (which also clears the times below);
+  - the scope's time in `armed_projects_json`: a project's when its switch turns on there (`onEnabled`), an epic's
+    (`epic:<id>`) when its effective state goes from off to on for an epic with a setting of its own
+    (`onEpicEnabled`, which also covers it going back to Inherit). Lifting Pause all stamps every project and such
+    epic that is on. A task in an epic with its own setting follows the epic, not the project, so switching the
+    project doesn't drop events the epic is waiting on (held by quiet hours or a cap);
+  - when the task came into that scope: its latest `epic_changed`, `moved_project` or `unarchived` event, or its
+    epic's `unarchived` (`scopeChangedAt`).
+
+  `stale` is a state, not an event, and ignores arming.
 - **Epic scope.** Task-based custom automations can be switched per epic like the built-in ones (the engine
-  resolves each task's epic). A schedule has no task, so it has `epicScope: false` and epics don't list it. `stale` is a state, not an event, and ignores arming.
+  resolves each task's epic). A schedule has no task, so it has `epicScope: false`, epics don't list it, and changing
+  a trigger to a schedule deletes its epic switches.
 - **Event times** are `statusChangedAt`, the latest blocker's, a PR link's creation, or for PR states the time the
   board saw the state begin. `setSnapshot` keeps that in `task_links.pr_changes_json` (`PrChanges`,
   `nextPrChanges` in contracts): when the PR merged, its checks started failing, a conflict appeared and its head

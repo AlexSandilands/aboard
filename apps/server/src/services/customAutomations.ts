@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   checkCustomDefinition,
+  customAutomationKey,
   CreateCustomAutomationInput,
   normalizeLabels,
   TaskStatus,
@@ -32,6 +33,11 @@ export interface CustomAutomationsService {
    * or a cap).
    */
   rearm(id: string, scopeKeys: readonly string[]): void;
+  /**
+   * When each of these tasks or epics last changed scope: moved project, moved epic, or was unarchived. Events before
+   * then happened outside the scope the automation is looking at now.
+   */
+  scopeChangedAt(ids: readonly string[]): Map<string, string>;
   /** The column each task last moved from, for status-change triggers with a `from`. */
   statusFrom(taskIds: readonly string[]): Map<string, TaskStatus | null>;
 }
@@ -119,6 +125,14 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
           updatedAt: now,
         };
         repos.autopilotCustom.update(next);
+        // A schedule has no task, so epics have no say: drop their switches rather than leave them hidden, to come back
+        // if the trigger changes again.
+        if (def.trigger.kind === "schedule") {
+          const key = customAutomationKey(id);
+          for (const s of repos.autopilotSettings.all()) {
+            if (s.scopeKind === "epic" && s.automation === key) repos.autopilotSettings.delete("epic", s.scopeId, key);
+          }
+        }
         fx.autopilot();
         return next;
       });
@@ -144,6 +158,12 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
         repos.autopilotCustom.update({ ...current, armedProjects });
         fx.autopilot();
       });
+    },
+
+    scopeChangedAt(ids) {
+      return new Map(
+        repos.events.latestOfType(ids, ["epic_changed", "moved_project", "unarchived"]).map((e) => [e.taskId, e.at]),
+      );
     },
 
     statusFrom(taskIds) {

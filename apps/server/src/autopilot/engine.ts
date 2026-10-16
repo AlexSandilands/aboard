@@ -16,7 +16,7 @@ export const AUTOPILOT_TICK_MS = 60_000;
 const DEFAULT_BOARD_URL = "http://127.0.0.1:5317";
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
 export const AUTOPILOT_DEBOUNCE_MS = 1_000;
-/** Background actions that aren't agents (shell commands) going at once; the rest wait for a later pass. */
+/** Background actions that aren't agents (shell commands, digests) going at once; the rest wait for a later pass. */
 export const AUTOPILOT_BACKGROUND_MAX = 4;
 
 const IGNORED_EVENTS: ReadonlySet<string> = new Set([
