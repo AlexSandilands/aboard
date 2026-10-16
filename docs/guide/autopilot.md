@@ -43,6 +43,33 @@ agent itself only reads the pull request and reports its findings; Autopilot pos
 - Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
   which first.
 
+## Fix PRs
+
+**Fix PRs** sends an agent to a pull request linked to a task when something needs fixing. Each reason has its own
+switch, all on by default:
+
+- **Failing checks**: the agent reads the failed run's log and fixes the cause.
+- **Merge conflicts**: it merges the base branch in. It never rebases, since it can't force-push.
+- **Changes requested**: a review asking for changes.
+- **Review comments**: new comments on review threads that aren't resolved. Autopilot posts as your own `gh`
+  account, so it can't tell your comments from its own replies, and only other people's comments count. They also
+  have to be from someone with access to the repository (an owner, member or collaborator), not just anyone who can
+  comment on it.
+- **Autopilot's review**: when **Review PRs** found points at or above the **fix threshold**. The agent fixes only
+  those and leaves the rest, and the FYI section, alone.
+
+If the task's T3 Code thread is still there, it gets the fix as a message. Otherwise a new session starts on the
+PR's branch, using the runner you chose. Reasons that come up together go into one attempt. The agent pushes to
+the PR's branch and replies on the threads it addressed, starting each reply with Autopilot's mark.
+
+- Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
+- It makes at most 2 attempts on one head commit and **PR review rounds** (3 by default) per PR. After that the
+  card says "Autopilot gave up" under Needs attention and you get a notification.
+- It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch
+  isn't on `origin`.
+- Its settings: the five switches, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
+  ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
+
 ## How agents run
 
 An automation that needs an agent picks its **runner** in its settings:
