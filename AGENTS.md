@@ -1,8 +1,8 @@
 # AGENTS.md
 
 Local kanban board for coding agents: agents add tasks to a backlog, write plans and move them along over MCP; the web UI
-updates live. User-facing docs are in `README.md`; docs for changing the code are in `docs/` (start at
-[docs/README.md](docs/README.md)).
+updates live. User-facing docs are the root `README.md` and the guides in `docs/guide/`; docs for changing
+the code are the rest of `docs/` (start at [docs/README.md](docs/README.md)).
 
 ## Must
 
@@ -59,20 +59,21 @@ Read the doc for the area before changing it, and update it in the same PR when 
 rules for docs, ADRs and templates are in [docs/README.md](docs/README.md); add new docs to its index
 and to this table.
 
-| Changing…                                                     | Read                                                                                |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Anything cross-cutting: request flow, tables, env vars, guard | [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/) |
-| Statuses, closing, archiving, deleting, numbering             | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
-| Plans, steps, the current step, Markdown plans                | [docs/features/plans.md](docs/features/plans.md)                                    |
-| MCP tools, their descriptions or results; the shipped skill   | [docs/features/mcp.md](docs/features/mcp.md)                                        |
-| SSE, the board reducer, mutations                             | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
-| Labels: normalizing, colours, filters, the MCP hint           | [docs/features/labels.md](docs/features/labels.md)                                  |
-| Column collapse, panel sections, which links a card shows     | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
-| PR links and the `gh` poller                                  | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
-| The hand-off menu (copy prompt, new T3 thread), T3 RPC client | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
-| Local review rounds, findings, the board reviewer             | [docs/features/local-review.md](docs/features/local-review.md)                      |
-| The Electron shell                                            | [docs/features/desktop.md](docs/features/desktop.md)                                |
-| UI styles and primitives                                      | [docs/reference/style.md](docs/reference/style.md)                                  |
+| Changing…                                                      | Read                                                                                |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Anything cross-cutting: request flow, tables, env vars, guard  | [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/) |
+| Statuses, closing, archiving, deleting, numbering              | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
+| Plans, steps, the current step, Markdown plans                 | [docs/features/plans.md](docs/features/plans.md)                                    |
+| MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
+| SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
+| Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
+| Column collapse, panel sections, which links a card shows      | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
+| PR links and the `gh` poller                                   | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
+| The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
+| Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
+| The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
+| What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
+| UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
 
 ## What agents are told
 
