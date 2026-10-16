@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BRAND, brandEnv } from "@repo/contracts";
@@ -25,6 +25,15 @@ export interface Config {
   sessionDirs: SessionDirs;
   /** Where Autopilot's headless runs get their git worktrees. */
   worktreesDir: string;
+}
+
+/** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
+export function boardUrlOf({
+  webDist,
+  port,
+  webPort,
+}: Pick<Config, "port" | "webPort"> & Partial<Pick<Config, "webDist">>): string {
+  return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
 }
 
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */

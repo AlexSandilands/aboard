@@ -4,7 +4,7 @@ import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
 import type { EventBus } from "../bus.ts";
-import type { Config } from "../config.ts";
+import { boardUrlOf, type Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
@@ -22,7 +22,8 @@ import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir">;
+  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "port" | "webPort"> &
+    Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -116,6 +117,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     bus: deps.bus,
     runner,
     github,
+    boardUrl: () => boardUrlOf(deps.config),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const worktrees = createWorktreeCleanup({

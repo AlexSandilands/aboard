@@ -1,6 +1,7 @@
 import { describeEpicRollup, ROLLUP_ORDER, type EpicRollup, type TaskStatus } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, type CSSProperties } from "react";
+import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardView } from "~/state/ui";
@@ -121,6 +122,7 @@ export const EpicBand = memo(function EpicBand({
             </span>
           </span>
         </button>
+        <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
       </header>
       {collapsed
         ? null

@@ -494,6 +494,7 @@ describe("review PRs: the agent", () => {
         prHead: () => Promise.reject(new Error("must not read")),
       },
       engine: s.autopilot.engine(),
+      boardUrl: "http://127.0.0.1:5317",
       config: reviewPrs.defaults,
       run: { id: "r" } as never,
       actor: "autopilot",

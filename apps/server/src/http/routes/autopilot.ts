@@ -6,6 +6,7 @@ import { AppError } from "../../errors.ts";
 import { handle, idParam, parseBody, parseQuery } from "../respond.ts";
 
 const automationParam = (c: Context): string => c.req.param("automation") ?? "";
+const epicParam = (c: Context): string => c.req.param("epicId") ?? "";
 
 /**
  * /api/autopilot: engine settings, pause, per-scope switches and run history. REST only: there is deliberately no
@@ -50,6 +51,26 @@ export function registerAutopilotRoutes(app: Hono, { services }: AppContext): vo
     handle(async (c) =>
       c.json(
         autopilot.setScope("project", idParam(c), automationParam(c), await parseBody(c, UpdateAutopilotSettingInput)),
+      ),
+    ),
+  );
+
+  // An epic's switches: only for an epic in that project, anything else is not found.
+  app.get(
+    "/api/autopilot/projects/:id/epics/:epicId",
+    handle((c) => c.json(autopilot.scope("epic", epicParam(c), idParam(c)))),
+  );
+  app.put(
+    "/api/autopilot/projects/:id/epics/:epicId/:automation",
+    handle(async (c) =>
+      c.json(
+        autopilot.setScope(
+          "epic",
+          epicParam(c),
+          automationParam(c),
+          await parseBody(c, UpdateAutopilotSettingInput),
+          idParam(c),
+        ),
       ),
     ),
   );

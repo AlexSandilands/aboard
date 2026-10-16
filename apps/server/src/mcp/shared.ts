@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -15,6 +14,7 @@ import {
 } from "@repo/contracts";
 import { renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
+import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
 
@@ -208,8 +208,7 @@ export function childActivity(services: Services, epic: TaskDetail): ChildActivi
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
 export function boardUrl(ctx: AppContext): string {
-  const { webDist, port, webPort } = ctx.config;
-  return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
+  return boardUrlOf(ctx.config);
 }
 
 /**
@@ -235,10 +234,10 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
-/** Whether Start planned tasks is on for a project, from the board or the project itself. False while it isn't registered. */
-function startPlannedOn(services: Services, projectId: string): boolean {
+/** Whether Start planned tasks is on for a task, from the board, its project or its epic. False while it isn't registered. */
+function startPlannedOn(services: Services, projectId: string, epicId: string | null): boolean {
   const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
-  return automation !== undefined && services.autopilot.resolve(automation, projectId).enabled;
+  return automation !== undefined && services.autopilot.resolve(automation, projectId, epicId).enabled;
 }
 
 /**
@@ -258,7 +257,7 @@ export function taskResult(
     ? renderTaskShort(task, project, {
         labelsInUse: services.labels.usage(),
         modelHint: true,
-        autopilotHint: startPlannedOn(services, task.projectId),
+        autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
       })
     : renderTaskShort(task, project);
   return textResult(`${headline}\n\n${body}`);

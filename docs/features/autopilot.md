@@ -1,9 +1,9 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #95 (PR review), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #94 (start planned tasks), #95 (PR review), in epic #101.
 
-Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per project or for
-the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
+Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
+for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
@@ -15,23 +15,45 @@ settings UI. The rest of the catalogue is each its own task in the epic.
 ### Switches and scopes
 
 Each automation has a mode at each scope: **Inherit**, **On** or **Off**. The most specific scope that isn't
-Inherit wins: project over board. With nothing set anywhere, an automation is off.
+Inherit wins: epic over project over board. With nothing set anywhere, an automation is off.
 
-| Board | Project | Effective      |
-| ----- | ------- | -------------- |
-| —     | —       | Off (default)  |
-| On    | Inherit | On (board)     |
-| On    | Off     | Off (project)  |
-| Off   | On      | On (project)   |
+| Board | Project | Epic    | Effective      |
+| ----- | ------- | ------- | -------------- |
+| —     | —       | —       | Off (default)  |
+| On    | Inherit | Inherit | On (board)     |
+| On    | Off     | Inherit | Off (project)  |
+| Off   | On      | Inherit | On (project)   |
+| Off   | Off     | On      | On (epic)      |
+| On    | On      | Off     | Off (epic)     |
+
+An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
+task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
+card itself isn't "in" an epic, so it follows its project.
+
+An automation says whether an epic can switch it with `epicScope` (default true; `describeAutomation` sends it to the
+UI). Set it false when its candidates are never tasks in an epic: Auto-archive Done (it skips them) and Recurring tasks
+(per project, no task) do, and so should Digest (#90) when it lands. For those the epic's popover leaves the automation out, the
+epic button's state ignores it, the epic's scope entries don't list it, `PUT` of an epic switch for it is a
+`VALIDATION` error, and an epic row left over from before the flag was set is ignored (`resolve` and
+`projectsWithEpicOn` skip the epic level). If Auto-archive ever starts archiving tasks in epics, flipping its flag
+brings the epic switch back.
 
 Each automation also has config (a skill, a budget, a number of days). Config keys merge the same way, board
-first and project last, over the automation's defaults, whatever the modes: a project can tune an automation
-the board switches on. `resolveAutopilot` in `packages/contracts/src/autopilot.ts` is the rule, and
+first, then project, then epic, over the automation's defaults, whatever the modes: a project can tune an
+automation the board switches on, and an epic can tune one for its tasks. `resolveAutopilot` in `packages/contracts/src/autopilot.ts` is the rule, and
 `describeInherited` gives the UI its "Inherit (On from board)" label.
 
-Rows live in `autopilot_settings`, keyed by scope and automation. The board scope has an empty `scope_id`. An
-epic scope can be stored but isn't resolved yet (#93), and the service refuses to set one. Deleting a project
-(or an epic) deletes its rows, through triggers, since `scope_id` can't carry a foreign key.
+Rows live in `autopilot_settings`, keyed by scope and automation. The board scope has an empty `scope_id`. The
+service reads or sets an epic scope only for an epic in the project it is given (`NOT_FOUND` otherwise: another
+project's epic, a plain task, an id that doesn't exist). Deleting a project (or an epic) deletes its rows, through
+triggers, since `scope_id` can't carry a foreign key.
+
+The engine resolves per task: `resolve(automation, projectId, epicId)` in `services/autopilot.ts`. A pass looks at
+a project where the automation is on, and also where one of its unarchived epics switches it on
+(`projectsWithEpicOn`), since the project itself may be off. A `check` sees the whole project there, and the engine
+drops every candidate whose task doesn't resolve to on, using the task's own epic. So `check` gets the *project's*
+config, while `act` gets the task's effective config, epic keys included; a config key that changes what a `check`
+finds can't be tuned per epic.
 
 ### Engine settings and pause
 
@@ -60,11 +82,12 @@ The engine (`apps/server/src/autopilot/engine.ts`) runs a pass a second after a 
 so they need no hook of their own. Events published while the engine itself writes start no pass. A pass:
 
 1. Stops if paused.
-2. For each automation, works out the projects where it's on (and whether it's on for the board itself) and
-   skips it if it's on nowhere.
+2. For each automation, works out the projects where it's on or has an epic it's on for (and whether it's on for
+   the board itself) and skips it if it's on nowhere.
 3. Calls the automation's `check`, which returns candidates: a dedupe key, a one-line summary, and usually a
    task.
-4. Drops candidates outside the scopes it's on in, and candidates whose dedupe key already has a run.
+4. Drops candidates outside the scopes it's on in (per task: its epic, then its project), and candidates whose
+   dedupe key already has a run.
 5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up.
@@ -86,7 +109,8 @@ verdict there. Runs are history, so backups leave them out.
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
 - Every change to a run publishes `autopilot.changed` with the pause state and the runs in flight; the board
-  snapshot carries the same `autopilot` object, so lanes and cards can show what's running.
+  snapshot carries the same `autopilot` object, so lanes, epic bands and cards can show what's running. Each run
+  in flight carries its task's `epicId`, read from the task when the status is built (it isn't stored on the run).
 - An action that throws fails its run and flags it **needs attention**. The server marks runs a restart left
   `queued` or `running` as failed and flagged, at startup, whether or not the pollers run.
 
@@ -105,8 +129,8 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
 - The user sets it in the task panel's Details section. Agents set it with `autopilot: "default" | "on" | "off"`
   on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
   as an `updated` activity entry naming `autopilot`.
-- After `set_plan` or `create_task`, when Start planned tasks resolves On for the task's project and the flag is
-  Default, the result says **Autopilot flag not set** and tells the agent to ask the user (`autopilotFlagHint`).
+- After `set_plan` or `create_task`, when Start planned tasks resolves On for the task (its epic, project or the board)
+  and the flag is Default, the result says **Autopilot flag not set** and tells the agent to ask the user (`autopilotFlagHint`).
   Without the automation switched on there is nothing to opt into, so there's no hint.
 - Backups carry the column (the dump is `SELECT *` and the restore inserts by column name); a dump from before
   the column restores with every task at Default.
@@ -121,8 +145,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 | `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's field descriptors and defaults) |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
-| `GET /api/autopilot/board`, `/projects/:id`     | Each automation at that scope: its own mode and config, and what it resolves to |
-| `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation` | Sets mode and/or config; Inherit with no config removes the row |
+| `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
+| `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
 
 ### Automations
@@ -130,8 +154,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 **Auto-archive Done** (`auto_archive`, #91; `automations/autoArchive.ts`). Needs no agent and is off until switched
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
-`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog) and
-tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
+`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog, so an epic's
+switch for this automation isn't offered, see `epicScope`) and tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
@@ -274,6 +298,43 @@ as comments only.
   runs are how it tells Autopilot's own reviews from other people's.
 - **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
   commit; dry run shows which first.
+**Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
+the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
+
+- **Eligible** (`notStartable` is the rule; the action re-checks it, so a flag turned off between the check and the
+  action skips the run): not an epic or archived, in Planned, `task.autopilot === true` (Default and Off never
+  start), a plan (`progress.total > 0`) and not `blocked` by unfinished tasks. The caps and quiet hours are the
+  engine's. Candidates go in board position per project, and the engine starts as many as the cap leaves room for.
+- **Dedupe** `start:<taskId>:<statusChangedAt>`: once per entry into Planned, so moving a task out and back in is the
+  way to try again.
+- **Action**: `ctx.runner.start` with `taskHandoffPrompt` in work mode (`linkedThread: true`: the board links the
+  thread or session itself, and the model line is left out, since the tier picks the model) plus an unattended note
+  (no one to ask: block the step and stop) and, for a chosen skill, a line pointing at its `SKILL.md`. `tier` is the
+  task's suggested tier. The agent moves the task to In Progress itself.
+- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the action
+  began. A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
+  the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
+  error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
+  finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
+  and the engine notifies. Nothing retries it. The flag clears itself when the task changes status
+  ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
+  run stays `running` and holds a concurrency slot.
+- **The cap counts working agents.** A T3 run ends once the thread has started (so a restart strands nothing), which
+  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress, In Review (the agent runs
+  its review loop there) or still Planned (the thread hasn't moved them yet) whose latest Start planned run began a T3 thread (the run's `threadUrl`, whatever the run's
+  outcome: one that failed at the grace period may still move the task) that is `working`, `waiting` (subagents still
+  going), `input` or `approval` in its snapshot, and not settled or archived. `check` drops candidates that already
+  have a run (a failed or still-starting task would otherwise use up the room of those below it) and returns only as
+  many as `maxConcurrent` leaves after those and the engine's running runs. A snapshot only counts as
+  evidence when it was taken after the run ended (the launch-time poll sees a thread that hasn't run yet, "idle"). A
+  thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
+  for ten minutes from the run's end or the snapshot. The slot frees when
+  the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
+  waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
+  the engine counts. A dry run ignores this.
+- **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
+  by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
+  (15).
 
 ### Runners
 
@@ -344,10 +405,11 @@ without `--force`, so a worktree with uncommitted changes is kept and logged onc
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
 `defineAutomation`:
 
-- `key`: stored in settings and runs, so never renamed. Start planned tasks must use `AUTOPILOT_START_PLANNED`.
+- `key`: stored in settings and runs, so never renamed. Start planned tasks uses `AUTOPILOT_START_PLANNED`.
 - `needsAgent`: whether the action starts an agent, and so counts against the caps.
+- `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
-  UI renders (boolean, number, text, select, skill).
+  UI renders (boolean, number, text, select, skill; a skill field's `builtinLabel` renames its built-in entry).
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
@@ -358,8 +420,8 @@ An automation must never merge, close or delete tasks, force-push or push to the
 
 ### The UI
 
-How Autopilot looks on the board (the lane pill, the header pause button, the card badge and the task panel's
-Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
+How Autopilot looks on the board (the lane pill, the epic button, the header pause button, the card badge and the
+task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
 `components/autopilot/`:
 
 - **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
@@ -369,7 +431,7 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
   board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text or select
   per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored
   as a `ReviewSkillRef`, and an unset one is the built-in skill). The same rows appear in a project's settings,
-  where Inherit follows the board. Config set at a scope is sent whole (the server replaces it), so editing one
+  where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
@@ -424,6 +486,7 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
@@ -432,4 +495,4 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
-| `apps/web/src/components/autopilot/` | The pill, badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |
+| `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

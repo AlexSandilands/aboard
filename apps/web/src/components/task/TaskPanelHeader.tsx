@@ -1,6 +1,7 @@
 import { TASK_STATUSES, type TaskDetail } from "@repo/contracts";
 import { ArchiveIcon, XIcon } from "lucide-react";
 
+import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
@@ -122,6 +123,7 @@ export function TaskPanelHeader({
             Archive
           </Button>
         ) : null}
+        {task.kind === "epic" ? <AutopilotEpicButton epic={task} /> : null}
         <SectionsMenu />
       </div>
     </header>
