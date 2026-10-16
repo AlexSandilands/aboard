@@ -114,9 +114,19 @@ export function DependencyLines({
       frame = requestAnimationFrame(measure);
     });
     observer.observe(root);
+    // Collapsing a cell or filtering the board adds and removes cards without resizing the content.
+    const isCard = (node: Node) =>
+      node instanceof Element && (node.matches("[data-task-card]") || node.querySelector("[data-task-card]") !== null);
+    const mutations = new MutationObserver((records) => {
+      if (!records.some((r) => [...r.addedNodes, ...r.removedNodes].some(isCard))) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
+    mutations.observe(root, { childList: true, subtree: true });
     const settle = window.setTimeout(measure, SETTLE_MS);
     return () => {
       observer.disconnect();
+      mutations.disconnect();
       cancelAnimationFrame(frame);
       window.clearTimeout(settle);
     };
@@ -160,7 +170,7 @@ export function DependencyLines({
         const shown = shownId ? byId.get(shownId) : undefined;
         const hidden = hiddenId ? byId.get(hiddenId) : undefined;
         const box = shownId ? layout.boxes.get(shownId) : undefined;
-        // The shown end must be a card we measured; an archived task isn't on the board and gets no line.
+        // The shown end must be a card we measured; an archived task's card is only there with Show archived.
         if (!shown || !hidden || !box) return null;
         const direction = stubDirection(
           { status: shown.status, laneIndex: laneIndex(shown) },

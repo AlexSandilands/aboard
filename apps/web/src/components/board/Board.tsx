@@ -228,6 +228,11 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const rowIds = useMemo(() => lanes.flatMap((lane) => laneRows(lane).map((row) => row.id)), [lanes]);
   const rows = useMemo(() => rowIndex(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
+  // Archived cards shown by Show archived take part in the dependency lines too.
+  const lineTasks = useMemo(
+    () => (archivedTasks ? [...board.tasks, ...archivedTasks.filter((t) => !tasksById.has(t.id))] : board.tasks),
+    [board.tasks, archivedTasks, tasksById],
+  );
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
     : null;
@@ -514,7 +519,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           ) : null}
           <DependencyLines
             containerRef={contentRef}
-            tasks={board.tasks}
+            tasks={lineTasks}
             projects={board.projects}
             selectedTaskId={selectedTaskId}
             suspended={activeId !== null}

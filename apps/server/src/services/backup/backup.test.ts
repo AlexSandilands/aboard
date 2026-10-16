@@ -306,6 +306,36 @@ describe("restore", () => {
   });
 });
 
+describe("backups from before relations existed", () => {
+  it("reads a folder with no relations.json and a single file with no task_relations", () => {
+    const { s } = seed();
+    const dump = s.backup.dump();
+    const { task_relations: _r, ...counts } = dump.manifest.counts;
+    const oldManifest = { ...dump.manifest, counts };
+
+    const dir = tempDir();
+    writeDumpDir(dir, { ...dump, manifest: oldManifest });
+    rmSync(join(dir, "relations.json"));
+    const fromFolder = readDumpDir(dir);
+    expect(fromFolder.task_relations).toEqual([]);
+
+    const file = join(tempDir(), "board.json");
+    const { task_relations: _t, ...bare } = dump;
+    writeFileSync(file, JSON.stringify({ ...bare, manifest: oldManifest }));
+    expect(readDump(file).task_relations).toEqual([]);
+
+    const restored = join(tempDir(), "data.sqlite");
+    restoreBoard(restored, fromFolder);
+    const db = openDatabase(restored);
+    try {
+      expect(db.prepare("SELECT count(*) AS n FROM task_relations").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual({ n: dump.tasks.length });
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("backup routes", () => {
   it("serves the status, reports a run without a folder, and restores a task over HTTP", async () => {
     const { s, a, request } = seed();
