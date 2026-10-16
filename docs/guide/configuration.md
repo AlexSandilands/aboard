@@ -34,7 +34,7 @@ pnpm backup restore-task <folder|file> 42   # put task #42 back, with its plan a
 ```
 
 A backup taken by an older version restores into a newer one. See
-[docs/features/backup.md](docs/features/backup.md).
+[docs/features/backup.md](../features/backup.md).
 
 ## Desktop app (Windows)
 
