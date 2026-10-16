@@ -19,7 +19,7 @@ Register the server (it runs on 127.0.0.1:4317):
 
 ```sh
 # Claude Code
-claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
+claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp
 # Codex
 codex mcp add aboard --url http://127.0.0.1:4317/mcp
 # GitHub Copilot CLI

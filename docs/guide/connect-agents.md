@@ -4,14 +4,16 @@ The board's MCP endpoint is `http://127.0.0.1:4317/mcp`. Any agent that speaks M
 
 ## Add the server
 
+Each of these registers the server for your user, so every repo you open can use it:
+
 ```sh
-claude mcp add --transport http aboard http://127.0.0.1:4317/mcp                    # Claude Code
-codex mcp add aboard --url http://127.0.0.1:4317/mcp                                 # Codex
-copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp                    # GitHub Copilot CLI
-code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'   # GitHub Copilot in VS Code
+claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp      # Claude Code
+codex mcp add aboard --url http://127.0.0.1:4317/mcp                                # Codex
+copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp                   # GitHub Copilot CLI
+code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'  # GitHub Copilot in VS Code
 ```
 
-For GitHub Copilot in VS Code you can also add this to `.vscode/mcp.json` (note the `servers` key):
+To share it with a single repo instead, VS Code also reads `.vscode/mcp.json` (note the `servers` key):
 
 ```json
 { "servers": { "aboard": { "type": "http", "url": "http://127.0.0.1:4317/mcp" } } }

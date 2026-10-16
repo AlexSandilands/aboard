@@ -75,10 +75,10 @@ The desktop app keeps the board running in the tray, so agents can reach it with
 
 ## Connect an agent
 
-Add the MCP server (Claude Code shown; [other agents](docs/guide/connect-agents.md)):
+Add the MCP server once for your user (Claude Code shown; [other agents](docs/guide/connect-agents.md)):
 
 ```sh
-claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
+claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp
 ```
 
 Then teach it the workflow: copy [`skills/aboard`](skills/aboard) to `~/.claude/skills/aboard`, or paste
