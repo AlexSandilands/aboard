@@ -1,8 +1,7 @@
-import type { T3LaunchOptions, T3LaunchProvider } from "@repo/contracts";
+import { clampRuntimeMode, runtimeModesFor, type T3LaunchOptions, type T3LaunchProvider } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   canStartT3Thread,
-  clampRuntimeMode,
   FAVORITES,
   initialPickerTab,
   initialWorkspaceChoice,
@@ -14,7 +13,6 @@ import {
   refBadge,
   refDisabledReason,
   refLabel,
-  runtimeModesFor,
   selectionAfterPlanToggle,
   selectionLabel,
   selectModel,

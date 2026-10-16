@@ -1,5 +1,5 @@
 import {
-  T3_RUNTIME_MODES,
+  defaultBaseRef,
   type AppSettings,
   type Project,
   type T3IntegrationStatus,
@@ -9,7 +9,6 @@ import {
   type T3LaunchWorkspace,
   type T3ModelSelection,
   type T3Ref,
-  type T3RuntimeMode,
   type TaskSummary,
 } from "@repo/contracts";
 
@@ -194,19 +193,6 @@ export function selectionLabel(catalog: Pick<T3LaunchOptions, "providers">, sele
   return parts.join(", ");
 }
 
-// ── Access ───────────────────────────────────────────────────────────────
-
-export function runtimeModesFor(provider: Pick<T3LaunchProvider, "supportedRuntimeModes"> | undefined) {
-  const supported = provider?.supportedRuntimeModes ?? [];
-  return supported.length === 0 ? T3_RUNTIME_MODES : T3_RUNTIME_MODES.filter((m) => supported.includes(m.value));
-}
-
-/** Keeps the mode when the provider supports it, else its most permissive supported mode. */
-export function clampRuntimeMode(mode: T3RuntimeMode, provider: T3LaunchProvider | undefined): T3RuntimeMode {
-  const modes = runtimeModesFor(provider);
-  return modes.some((m) => m.value === mode) ? mode : (modes.at(-1)?.value ?? mode);
-}
-
 // ── Workspace and refs ───────────────────────────────────────────────────
 
 export type WorkspaceMode = "current" | "new_worktree" | "previous";
@@ -248,11 +234,6 @@ export function refBadge(ref: T3Ref, workspaceRoot: string): "current" | "worktr
 export function refDisabledReason(ref: T3Ref, mode: WorkspaceMode, workspaceRoot: string): string | null {
   if (mode !== "current" || ref.current || refWorktree(ref, workspaceRoot)) return null;
   return "Switching branches in the current checkout isn't supported. Use New worktree to branch from it.";
-}
-
-/** The base for a new worktree when none is picked: the default branch (origin/HEAD), else the current one. */
-export function defaultBaseRef(refs: ReadonlyArray<T3Ref>): T3Ref | undefined {
-  return refs.find((r) => r.isDefault && !r.isRemote) ?? refs.find((r) => r.isDefault) ?? refs.find((r) => r.current);
 }
 
 export function initialWorkspaceChoice(options: Pick<T3LaunchOptions, "isRepo" | "defaults">): WorkspaceChoice {

@@ -10,6 +10,7 @@ export const defaultSettings: AppSettings = {
   reviewSkill: { source: "builtin" },
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
   headlessReviewEnabled: false,
+  agentT3Threads: false,
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
   issueImportEnabled: true,

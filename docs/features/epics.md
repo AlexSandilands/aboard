@@ -109,16 +109,64 @@ mode `orchestrate`, in `packages/contracts/src/handoff.ts`). The agent that runs
    saves each with `set_plan` and moves it to Planned. No task starts before its plan is approved.
 3. It works out which tasks can run in parallel and tells the user the order.
 4. It starts each task by the first route the harness supports:
+   - **T3 Code threads**, when `epic_overview` says T3 Code is available: `start_task_thread(task)` per task (see
+     [below](#t3-code-threads)).
    - **Subagents** (Claude Code's Agent tool, Copilot CLI's subagents or the equivalent), one per task, each
      given `get_handoff_prompt(task, subagent: true)`, on its own git worktree and branch when they run in
      parallel.
    - **Manual**: the prompts from `get_handoff_prompt(task)` for the user to paste into new sessions.
 5. It monitors through `epic_overview`, which shows what every route writes over MCP: progress, current step,
-   blocked steps, review rounds and notes. It tells a subagent things directly, and a session the user started
-   through `add_note` on its task, which that session reads on its next `get_task`.
+   blocked steps, review rounds and notes. It talks to a T3 thread with `message_task_thread`, to a subagent
+   directly where the harness allows it, and to any other session through `add_note` on its task, which that
+   session reads on its next `get_task`.
 6. It runs the review loop for subagent tasks (below), and leaves an `add_note` handover on the epic.
 
 The prompt names harnesses only as examples, so the same text reads right in any of them.
+
+#### T3 Code threads
+
+Starting threads with no one watching is off until the user turns on **Settings → T3 Code → Let agents start
+threads** (`agentT3Threads`). Unlike the launch dialog, nobody sees the model or access before the agent starts,
+and messages land in threads as if the user had typed them.
+
+`epic_overview` starts with a line saying whether an agent can start threads for the epic's project
+(`t3LaunchBlocker` in `apps/server/src/mcp/shared.ts`). That needs T3 running, a token set, the setting on and a
+project folder, the same checks as the board's **New T3 Code thread…**. Whether T3 knows the project, or has a model
+ready, is only found out at launch. If it can:
+
+- `start_task_thread(task, mode?, baseRef?, startFromOrigin?)` starts a thread with the task's hand-off prompt
+  (the linked-thread variant, with the mode defaulting like the menu) and links it. There is no dialog, so
+  `autoLaunchSettings` (`integrations/t3Launch.ts`) picks what the dialog would start on:
+  - the model: the suggested tier's model for work, else T3's default;
+  - the access: T3's default, or the most the provider allows below it, never more (no supported mode at
+    or below it refuses the launch);
+  - the workspace: **always a new worktree**, so tasks can run side by side. It branches from `baseRef` (the
+    default branch when there is none). With a `baseRef` it starts from the local branch unless
+    `startFromOrigin` says otherwise, because a branch to build on is usually another task's unpushed one. A
+    folder that isn't a git repository runs in the folder itself, and the result says to start such tasks one
+    at a time. If T3 can't list the branches, the launch is refused rather than falling back to the shared
+    checkout.
+
+  The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
+- Both tools work only on a task in an epic; other tasks are started from the board. `baseRef` must look like
+  a branch name (no leading `-`, `..`, spaces or the characters git refuses).
+- The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
+  included, so removing a link never brings an old id back). A retry after a timeout or an
+  unreadable reply therefore gets the same thread back from T3 instead of a second one. The error says so and
+  doesn't suggest another route.
+- It refuses a task that already has a thread on it: working, waiting, asking for input or approval, or linked
+  in the last two minutes and not yet polled. It says to message that thread instead. A thread that is done,
+  failed, idle or settled doesn't block a new one.
+- When T3 can't take the task, the error says why and points at `get_handoff_prompt(task, subagent: true)` and the
+  pasted-prompt route.
+- `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
+  archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From the agent
+  orchestrating this task's epic (sent through the board)". Each call is a new message, so a retry can post it twice.
+
+A Jira import run, which reads untrusted issue text, denies tools named with `message`, `dispatch`, `launch` or
+`start` among its write verbs, so an injected instruction can't drive these tools.
+
+T3 threads are top-level sessions, so they run their own review loop.
 
 #### Subagent tasks
 
@@ -180,4 +228,6 @@ the loop to the subagent, so its prompt says to ignore that. Sessions the user s
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
 | `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
 | `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |
+| `apps/server/src/mcp/tools/threads.ts`                  | `start_task_thread`, `message_task_thread`                            |
+| `apps/server/src/integrations/t3Launch.ts`              | `autoLaunchSettings`: a launch without the dialog                      |
 | `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events                           |

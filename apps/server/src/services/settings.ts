@@ -10,6 +10,7 @@ const DEFAULTS: StoredSettings = {
   githubPolling: true,
   t3LinkTarget: "desktop",
   t3Token: null,
+  agentT3Threads: false,
   autoReview: false,
   reviewSkill: { source: "builtin" },
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
@@ -36,6 +37,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<keyof StoredSettin
   "jiraBaseUrl",
   "githubPolling",
   "t3LinkTarget",
+  "agentT3Threads",
   "autoReview",
   "reviewSkill",
   "reviewMaxRounds",
@@ -90,6 +92,7 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.githubPolling !== undefined) repos.settings.set("githubPolling", input.githubPolling);
         if (input.t3LinkTarget !== undefined) repos.settings.set("t3LinkTarget", input.t3LinkTarget);
+        if (input.agentT3Threads !== undefined) repos.settings.set("agentT3Threads", input.agentT3Threads);
         if (input.t3Token !== undefined) repos.settings.set("t3Token", blankToNull(input.t3Token));
         if (input.autoReview !== undefined) repos.settings.set("autoReview", input.autoReview);
         if (input.reviewSkill !== undefined) repos.settings.set("reviewSkill", input.reviewSkill);

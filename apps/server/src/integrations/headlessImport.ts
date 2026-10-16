@@ -200,6 +200,9 @@ export const JIRA_READ_TOOLS = ["get_jira_issue", "getJiraIssue", "jira_get_issu
  */
 const WRITE_VERBS = [
   "create",
+  "message",
+  "dispatch",
+  "launch",
   "update",
   "delete",
   "remove",
