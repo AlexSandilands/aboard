@@ -155,6 +155,56 @@ describe("classifyLink", () => {
     expect(classifyLink("https://example.com")).toEqual({ kind: "url", url: "https://example.com" });
     expect(classifyLink("not a link")).toBeNull();
   });
+
+  describe("with a detected T3", () => {
+    const t3 = { environmentId: "env-1", origin: "http://127.0.0.1:3773" };
+    const uuid = "bca46358-2812-4417-93f7-e151c0f96292";
+
+    it("turns a bare thread id into a thread link in the detected environment", () => {
+      expect(classifyLink(uuid, { t3 })).toEqual({
+        kind: "t3_thread",
+        url: `t3code://threads/env-1/${uuid}`,
+        ref: { environmentId: "env-1", threadId: uuid },
+      });
+      expect(classifyLink(` ${uuid.toUpperCase()} `, { t3 })).toMatchObject({
+        kind: "t3_thread",
+        ref: { threadId: uuid },
+      });
+      expect(classifyLink("thread:project:p1:t1", { t3 })).toMatchObject({
+        kind: "t3_thread",
+        ref: { environmentId: "env-1", threadId: "thread:project:p1:t1" },
+      });
+    });
+
+    it("leaves a bare id unrecognised without a detected T3, or with a half-detected one", () => {
+      expect(classifyLink(uuid)).toBeNull();
+      expect(classifyLink(uuid, { t3: null })).toBeNull();
+      expect(classifyLink(uuid, { t3: { environmentId: null, origin: null } })).toBeNull();
+    });
+
+    it("does not take other text for a thread id", () => {
+      expect(classifyLink("thread:", { t3 })).toBeNull();
+      expect(classifyLink(`${uuid} extra`, { t3 })).toBeNull();
+      expect(classifyLink("bca46358", { t3 })).toBeNull();
+    });
+
+    it("recognises browser URLs of the detected T3 only", () => {
+      expect(classifyLink(`http://127.0.0.1:3773/env-1/${uuid}`, { t3 })).toMatchObject({
+        kind: "t3_thread",
+        ref: { environmentId: "env-1", threadId: uuid },
+      });
+      expect(classifyLink(`http://127.0.0.1:3773/env-1/${uuid}/?x=1#y`, { t3 })).toMatchObject({ kind: "t3_thread" });
+      // Another origin, another environment, or a different page of the T3 app stays a plain URL.
+      for (const url of [
+        `http://127.0.0.1:9999/env-1/${uuid}`,
+        `http://127.0.0.1:3773/env-2/${uuid}`,
+        "http://127.0.0.1:3773/settings",
+        `http://127.0.0.1:3773/env-1/${uuid}/diff`,
+      ]) {
+        expect(classifyLink(url, { t3 })).toEqual({ kind: "url", url });
+      }
+    });
+  });
 });
 
 describe("findJiraKeys", () => {

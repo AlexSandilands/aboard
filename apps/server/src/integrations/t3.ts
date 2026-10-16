@@ -6,7 +6,9 @@ import { DatabaseSync } from "node:sqlite";
 import {
   BRAND,
   type ConnectT3Result,
+  isT3ThreadId,
   normalizeWorkspaceKey,
+  parseT3ThreadInput,
   ProjectIcon,
   type Project,
   type StartT3ThreadInput,
@@ -14,6 +16,7 @@ import {
   type T3LaunchOptions,
   type T3ModelCatalog,
   type T3ProjectCandidate,
+  type T3ThreadRef,
   type T3ThreadSnapshot,
   type TaskLink,
 } from "@repo/contracts";
@@ -400,6 +403,12 @@ export interface ThreadWorkspace {
   branch: string | null;
 }
 
+export interface ResolvedThread {
+  ref: T3ThreadRef;
+  /** Set when the thread was linked without checking that it exists. */
+  warning?: string;
+}
+
 export interface T3Integration {
   status(): T3IntegrationStatus;
   discover(): Promise<T3IntegrationStatus>;
@@ -420,6 +429,13 @@ export interface T3Integration {
   sendToThread(link: ThreadLink, text: string, commandId: string): Promise<void>;
   /** The thread's workspace from the live shell; null when T3 can't say. */
   threadWorkspace(link: ThreadLink): Promise<ThreadWorkspace | null>;
+  /**
+   * Turns a bare thread id (as T3's "Copy thread ID" gives) or a browser URL of this T3 into a thread ref in the
+   * detected environment, checking the thread exists. Null when the value is neither. Throws when T3 is connected
+   * and has no such thread, or when it isn't detected so there is no environment to link into. When T3 can't be
+   * asked (no token, unreachable) the ref is returned with a warning instead.
+   */
+  resolveThread(value: string): Promise<ResolvedThread | null>;
   /** Refreshes one thread link. Returns false when it is not a T3 thread link. */
   refresh(link: TaskLink): Promise<boolean>;
   test(): Promise<T3IntegrationStatus>;
@@ -678,6 +694,29 @@ export function createT3Integration(deps: {
     return thread ? { worktreePath: thread.worktreePath ?? null, branch: thread.branch ?? null } : null;
   };
 
+  const resolveThread = async (value: string): Promise<ResolvedThread | null> => {
+    await ensureDiscovered();
+    if (!discovery.detected && isT3ThreadId(value)) {
+      throw new AppError(
+        "VALIDATION",
+        "T3 Code isn't running, so the board can't tell which environment this thread ID belongs to. " +
+          "Start T3 Code, or link the thread with its t3code:// link",
+      );
+    }
+    const ref = discovery.detected ? parseT3ThreadInput(value, discovery) : null;
+    if (!ref) return null;
+    if (!token()) {
+      return { ref, warning: "Linked without checking the thread exists: no T3 Code token is configured" };
+    }
+    const shell = await loadShell();
+    if (!shell) {
+      return { ref, warning: `Linked without checking the thread exists: ${live.error ?? "T3 Code is unavailable"}` };
+    }
+    const known = [...shell.threads, ...(shell.archivedThreads ?? [])].some((t) => t.id === ref.threadId);
+    if (!known) throw new AppError("VALIDATION", `No T3 Code thread with ID ${ref.threadId}`);
+    return { ref };
+  };
+
   const listProjects = async (): Promise<T3ProjectCandidate[]> => {
     await ensureDiscovered();
     let source: T3SqliteProject[] | null = null;
@@ -722,6 +761,7 @@ export function createT3Integration(deps: {
     startThread,
     sendToThread,
     threadWorkspace,
+    resolveThread,
     async importProjects(ids) {
       const wanted = new Set(ids);
       const candidates = (await listProjects()).filter((c) => wanted.has(c.t3ProjectId) && !c.existingProjectId);

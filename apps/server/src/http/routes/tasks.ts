@@ -1,4 +1,5 @@
 import {
+  type AddLinkResult,
   CloseTaskInput,
   CreateTaskInput,
   LinkInput,
@@ -111,7 +112,12 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
   );
   app.post(
     "/api/tasks/:id/links",
-    handle(async (c) => c.json(services.links.add(taskId(c), await parseBody(c, LinkInput), actorOf(c)), 201)),
+    handle(async (c) => {
+      const id = taskId(c);
+      const { input, warning } = await integrations.resolveLinkInput(await parseBody(c, LinkInput));
+      const link: AddLinkResult = services.links.add(id, input, actorOf(c));
+      return c.json(warning ? { ...link, warning } : link, 201);
+    }),
   );
   app.post(
     "/api/tasks/:id/notes",

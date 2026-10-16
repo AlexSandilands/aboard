@@ -362,13 +362,16 @@ export const UpdateProjectInput = z.object({
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
 export const LinkInput = z.object({
-  /** URL, Jira key (ABC-123), GitHub PR URL, or t3code:// thread link. Kind is inferred when omitted. */
+  /** URL, Jira key (ABC-123), GitHub PR URL, t3code:// thread link or T3 thread id. Kind is inferred when omitted. */
   value: z.string().trim().min(1).optional(),
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
+
+/** What adding a link returns: the link, plus a warning when it was accepted with something unverified. */
+export type AddLinkResult = TaskLink & { warning?: string };
 
 export const CreateTaskInput = z.object({
   projectId: z.string(),

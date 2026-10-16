@@ -1,5 +1,5 @@
 import { ACTOR_HEADER, type ApiErrorBody, type Project, type TaskDetail } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
 async function setup() {
@@ -74,6 +74,26 @@ describe("REST", () => {
     const board = (await (await h.request("/api/board")).json()) as { tasks: unknown[]; projects: unknown[] };
     expect(board.tasks).toHaveLength(0);
     expect(board.projects).toHaveLength(1);
+  });
+
+  it("adds a pasted T3 thread id as a thread link and returns the warning with it", async () => {
+    const h = await setup();
+    const threadId = "bca46358-2812-4417-93f7-e151c0f96292";
+    vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({
+      input: { t3Thread: { environmentId: "env-1", threadId } },
+      warning: "Linked without checking the thread exists",
+    });
+    const res = await h.request(`/api/tasks/${h.task.id}/links`, { method: "POST", json: { value: threadId } });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({
+      kind: "t3_thread",
+      ref: { environmentId: "env-1", threadId },
+      warning: "Linked without checking the thread exists",
+    });
+    // Without T3 detected a bare id is still not a link.
+    vi.restoreAllMocks();
+    const unknown = await h.request(`/api/tasks/${h.task.id}/links`, { method: "POST", json: { value: threadId } });
+    expect(unknown.status).toBe(400);
   });
 
   it("deletes a task permanently only once it is archived", async () => {

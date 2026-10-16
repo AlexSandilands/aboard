@@ -1,6 +1,6 @@
-import type { T3ThreadSnapshot, TaskLink } from "@repo/contracts";
+import { classifyLink, type T3ThreadSnapshot, type TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { orderLinks, threadDetails, threadModelsDiffer } from "./links.logic";
+import { describeLinkInput, orderLinks, threadDetails, threadModelsDiffer, unrecognisedLinkHint } from "./links.logic";
 
 const base = { taskId: "t", label: null, syncedAt: null, createdAt: "" };
 
@@ -82,5 +82,21 @@ describe("threadDetails", () => {
 
   it("is empty without a snapshot", () => {
     expect(threadDetails(null, { showModel: true })).toEqual([]);
+  });
+});
+
+describe("adding a pasted T3 thread id", () => {
+  const id = "bca46358-2812-4417-93f7-e151c0f96292";
+  const t3 = { environmentId: "env-1", origin: "http://127.0.0.1:3773" };
+
+  it("previews a thread when T3 is detected", () => {
+    expect(describeLinkInput(classifyLink(id, { t3 }))).toEqual({ kind: "t3_thread", label: "T3 Code thread" });
+    expect(describeLinkInput(classifyLink(id, { t3: { environmentId: null, origin: null } }))).toBeNull();
+  });
+
+  it("says why an id isn't recognised only when T3 isn't detected", () => {
+    expect(unrecognisedLinkHint(id, { detected: false })).toContain("T3 Code isn't running");
+    expect(unrecognisedLinkHint(id, { detected: true })).toContain("Not recognised");
+    expect(unrecognisedLinkHint("nonsense", { detected: false })).toContain("Not recognised");
   });
 });
