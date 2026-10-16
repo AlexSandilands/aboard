@@ -145,8 +145,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 **Auto-archive Done** (`auto_archive`, #91; `automations/autoArchive.ts`). Needs no agent and is off until switched
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
-`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog) and
-tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
+`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog, so an epic's
+switch for this automation changes nothing) and tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until

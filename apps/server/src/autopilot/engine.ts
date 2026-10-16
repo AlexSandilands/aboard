@@ -152,6 +152,18 @@ export function createAutopilotEngine(deps: {
     const boardConfig = board.enabled ? board.config : null;
     if (projects.length === 0 && !boardConfig) return;
 
+    // Settings are read once per project and epic, not per candidate: a Done column can hold many.
+    const resolutions = new Map<string, ReturnType<typeof s.autopilot.resolve>>();
+    const resolveFor = (projectId: string, epicId: string | null) => {
+      const key = `${projectId}:${epicId ?? ""}`;
+      let resolved = resolutions.get(key);
+      if (!resolved) {
+        resolved = s.autopilot.resolve(automation, projectId, epicId);
+        resolutions.set(key, resolved);
+      }
+      return resolved;
+    };
+
     const candidates = await automation.check({ services: s, engine, now: at, projects, board: boardConfig });
     for (const found of candidates) {
       let candidate = found;
@@ -169,7 +181,7 @@ export function createAutopilotEngine(deps: {
       }
       const projectId = candidate.projectId ?? null;
       // Only where the automation is on: a check may return more than it was asked for.
-      const resolved = projectId ? s.autopilot.resolve(automation, projectId, epicId) : board;
+      const resolved = projectId ? resolveFor(projectId, epicId) : board;
       const config = resolved.enabled ? resolved.config : null;
       if (!config) continue;
       if (s.autopilot.status().paused) return;

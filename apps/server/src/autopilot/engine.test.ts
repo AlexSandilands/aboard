@@ -211,6 +211,16 @@ describe("epic scope", () => {
     expect(s.autopilot.projectsWithEpicOn(noop).size).toBe(0);
   });
 
+  it("doesn't look at a project for an archived epic that is on, in a real pass", async () => {
+    const { s, engine, epic, child, task, checks } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "on" }, epic.projectId);
+    s.tasks.move(child.id, { status: "done" }, "agent");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    await settle(engine);
+    expect(checks()).toBe(0);
+    expect(s.tasks.summary(task.id).labels).toEqual([]);
+  });
+
   it("ignores an epic from another project", () => {
     const { s, epic, other } = withEpic();
     const noop = s.autopilot.automations().find((a) => a.key === "noop")!;

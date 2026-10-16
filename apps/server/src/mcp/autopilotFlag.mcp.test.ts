@@ -108,6 +108,21 @@ describe("the Autopilot flag over MCP", () => {
     expect(await call("create_task", { title: "Off here", workspacePath, markdown })).not.toContain(HINT);
   });
 
+  it("follows the task's epic: asked for a task in an epic that switches it on, not for a loose one", async () => {
+    await call("create_epic", { title: "Big", workspacePath });
+    const project = h.services.projects.resolve({ workspacePath }, { autoCreate: false });
+    h.services.autopilot.setScope("project", project.id, AUTOPILOT_START_PLANNED, { mode: "off" });
+    h.services.autopilot.setScope(
+      "epic",
+      h.services.tasks.resolveId("#1"),
+      AUTOPILOT_START_PLANNED,
+      { mode: "on" },
+      project.id,
+    );
+    expect(await call("create_task", { title: "In it", workspacePath, markdown, epic: "#1" })).toContain(HINT);
+    expect(await call("create_task", { title: "Loose", workspacePath, markdown })).not.toContain(HINT);
+  });
+
   it("does not offer the flag to epics, closed or started tasks", async () => {
     h.services.autopilot.setScope("board", null, AUTOPILOT_START_PLANNED, { mode: "on" });
     await call("create_task", { title: "Started", workspacePath, markdown });
