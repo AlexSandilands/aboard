@@ -250,6 +250,16 @@ export function createTasksService(
       return service.detail(id);
     },
 
+    createEpic(input, taskIds, actor) {
+      // One write, so a task that can't join doesn't leave a half-filled epic behind.
+      const id = core.write(() => {
+        const epic = service.create({ ...input, kind: "epic", actor });
+        for (const taskId of taskIds) service.update(taskId, { epicId: epic.id }, actor);
+        return epic.id;
+      });
+      return service.detail(id);
+    },
+
     update(id, input, actor) {
       core.write((fx) => {
         const current = record(id);
@@ -262,6 +272,8 @@ export function createTasksService(
           // Cards of tasks this one resolved show its title, and so does the "Also resolved" list of its resolver.
           for (const resolved of repos.tasks.resolvedBy([id])) fx.task(resolved.id);
           if (current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
+          // An epic's tasks show its title on their cards and in their panels.
+          if (current.kind === "epic") for (const child of repos.tasks.childrenOf([id])) fx.task(child.id);
         }
         if (input.description !== undefined && input.description !== current.description) {
           next.description = input.description;
@@ -298,6 +310,17 @@ export function createTasksService(
           logEpicChange(next, from, parentId ? record(parentId) : null, actor, fx);
         }
         if (input.archived !== undefined && input.archived !== (current.archivedAt !== null)) {
+          // An archived epic leaves the board, so its open tasks would show loose while still claiming it.
+          if (input.archived && current.kind === "epic") {
+            const open = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null && c.status !== "done");
+            if (open.length > 0) {
+              throw new AppError(
+                "VALIDATION",
+                `Epic #${current.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")}). ` +
+                  "Finish, close or archive them, or take them out of the epic, before archiving it.",
+              );
+            }
+          }
           next.archivedAt = input.archived ? now : null;
           if (!input.archived) next.position = endOfLane(next);
           fx.log(id, actor, input.archived ? "archived" : "unarchived");

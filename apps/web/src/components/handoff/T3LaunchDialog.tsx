@@ -55,7 +55,7 @@ interface Starter {
   isPending: boolean;
   start: (
     input: StartT3ThreadInput,
-    callbacks: { onSuccess: (thread: T3ThreadRef) => void; onError: (error: Error) => void },
+    callbacks: { onSuccess: (thread: T3ThreadRef | null) => void; onError: (error: Error) => void },
   ) => void;
 }
 
@@ -97,6 +97,7 @@ function TaskLaunch({ task, onDone }: { task: TaskSummary; onDone: () => void })
         linkedThread: true,
       }),
     planToggle: !epic,
+    // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
     initialPlan: defaultHandoffMode(task) === "plan",
     successDescription: `#${task.number} is linked to the new thread.`,
     copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
@@ -107,7 +108,7 @@ function TaskLaunch({ task, onDone }: { task: TaskSummary; onDone: () => void })
     start: (input, { onSuccess, onError }) =>
       mutation.mutate(
         { taskId: task.id, ...input },
-        { onSuccess: (link) => link.kind === "t3_thread" && onSuccess(link.ref), onError },
+        { onSuccess: (link) => onSuccess(link.kind === "t3_thread" ? link.ref : null), onError },
       ),
   };
   return <LaunchContent subject={subject} options={options} starter={starter} onDone={onDone} />;
@@ -242,7 +243,7 @@ function Composer({
       },
       {
         onSuccess: (thread) => {
-          const open = subject.offerOpen && t3 ? t3LinkTargets(thread, t3, settings).primary : null;
+          const open = subject.offerOpen && t3 && thread ? t3LinkTargets(thread, t3, settings).primary : null;
           toastManager.add({
             type: "success",
             title: "Started in T3 Code",

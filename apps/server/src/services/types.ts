@@ -110,6 +110,8 @@ export interface TasksService {
    * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
    */
   create(input: CreateTaskInput): TaskDetail;
+  /** Creates an epic and puts the given tasks in it, all or nothing. */
+  createEpic(input: Omit<CreateTaskInput, "kind" | "epicId" | "plan">, taskIds: string[], actor: string): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
    * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.
@@ -199,6 +201,8 @@ export interface LinksService {
   get(linkId: string): TaskLink;
   /** Links of a kind on non-archived tasks — for pollers. */
   listByKind(kind: TaskLink["kind"]): TaskLink[];
+  /** How many T3 threads were ever linked to a task, unlinked ones included. Only ever grows. */
+  threadsLinked(taskId: string): number;
   /**
    * Stores a poller snapshot. Publishes task.upserted only when the snapshot changed. A PR that just became merged
    * or closed moves its task from Review to Done (actor "github") once all its PRs are finished and one merged.

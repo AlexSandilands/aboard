@@ -263,7 +263,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
       description:
         "The prompt that starts an agent session on a task, the same one the board's Copy prompt button gives. " +
         "Use it when orchestrating an epic: pass subagent: true for the prompt to give a subagent you start (it " +
-        "reports back instead of asking the user or running its own review loop), or leave it off for a prompt the " +
+        "reports back instead of asking the user or running its own review loop; the task needs a plan first), or leave it off for a prompt the " +
         "user pastes into a new session. mode defaults to work for a subagent, else to the task's suggested one: " +
         "plan for tasks in Backlog or without a plan, work otherwise, orchestrate for an epic.",
       inputSchema: {

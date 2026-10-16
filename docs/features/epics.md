@@ -21,6 +21,7 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Can't be closed, reviewed, or moved to Done by its PRs merging | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone` |
 | Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
 | A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
+| Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -42,6 +43,12 @@ moves the epic to the end of its new column.
   logs `epic_changed` on the task and `child_added` / `child_removed` on the epic.
 - Moving a task to another project takes it out of its epic, unless the same update names an epic there.
 - Moving an epic to another project takes its tasks with it.
+- `create_epic` creates the epic and adds its `tasks` in one write (`tasks.createEpic`), and refuses a task
+  already in another epic rather than moving it.
+- Renaming an epic republishes its tasks, whose cards and panels show its title.
+- An epic is archived only once none of its tasks is open: an archived epic leaves the board, and its open
+  tasks would show loose while still claiming it. Restoring an epic from a backup takes back only the tasks
+  still in its project.
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
   `epicDeleted` on each. Deleting a task logs `child_removed` with `deleted` on its epic.
 - The roll-up (`rollup` on `TaskSummary`: total, done and a count per status) ignores archived tasks; the
@@ -52,7 +59,7 @@ cards (`flush` in `services/core.ts`).
 
 ### On the board
 
-Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.logic.ts`):
+Each lane stacks its epic bands above the loose cards, oldest epic first (`buildLanes` in `board.logic.ts`):
 
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
@@ -131,7 +138,8 @@ ready, is only found out at launch. If it can:
   (the linked-thread variant, with the mode defaulting like the menu) and links it. There is no dialog, so
   `autoLaunchSettings` (`integrations/t3Launch.ts`) picks what the dialog would start on:
   - the model: the suggested tier's model for work, else T3's default;
-  - the access: T3's default, clamped to what the provider supports;
+  - the access: T3's default, or the most the provider allows below it, never more (no supported mode at
+    or below it refuses the launch);
   - the workspace: **always a new worktree**, so tasks can run side by side. It branches from `baseRef` (the
     default branch when there is none). With a `baseRef` it starts from the local branch unless
     `startFromOrigin` says otherwise, because a branch to build on is usually another task's unpushed one. A
@@ -140,7 +148,10 @@ ready, is only found out at launch. If it can:
     checkout.
 
   The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
-- The launch's `commandId` is derived from the task and how many threads it has. A retry after a timeout or an
+- Both tools work only on a task in an epic; other tasks are started from the board. `baseRef` must look like
+  a branch name (no leading `-`, `..`, spaces or the characters git refuses).
+- The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
+  included, so removing a link never brings an old id back). A retry after a timeout or an
   unreadable reply therefore gets the same thread back from T3 instead of a second one. The error says so and
   doesn't suggest another route.
 - It refuses a task that already has a thread on it: working, waiting, asking for input or approval, or linked
@@ -151,6 +162,9 @@ ready, is only found out at launch. If it can:
 - `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
   archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From the agent
   orchestrating this task's epic (sent through the board)". Each call is a new message, so a retry can post it twice.
+
+A Jira import run, which reads untrusted issue text, denies tools named with `message`, `dispatch`, `launch` or
+`start` among its write verbs, so an injected instruction can't drive these tools.
 
 T3 threads are top-level sessions, so they run their own review loop.
 
@@ -167,7 +181,8 @@ A subagent can't ask the user anything, and most harnesses don't let it start su
 - the suggested model line goes to the orchestrator in `get_handoff_prompt`'s result, since only the
   orchestrator can choose the subagent's model.
 
-The orchestrator then runs the loop for it: `start_review(task)` returns the brief of the round that is already
+The orchestrator then runs the loop for it. It reads the task first: when the board's own reviewer already
+submitted the round and left blocking or major findings open, it goes straight to the fixes. Otherwise `start_review(task)` returns the brief of the round that is already
 open (it doesn't open another), a fresh reviewer subagent in the task's worktree submits its findings, an implementer subagent in the
 task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
 When the loop ends, the implementer opens and links the PR. If the board's own reviewer has already taken the round

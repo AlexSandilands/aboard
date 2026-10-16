@@ -96,6 +96,7 @@ describe("orchestrate prompt", () => {
     expect(prompt).toContain("fresh reviewer subagent working in the task's worktree");
     expect(prompt).toContain("resolve_finding");
     expect(prompt).toContain("the board's own reviewer has it");
+    expect(prompt).toContain("if its latest round was already submitted");
     expect(prompt).toContain("Don't set_plan, move or review the epic itself");
   });
 
@@ -114,6 +115,8 @@ describe("handoffModeError", () => {
     expect(handoffModeError({ number: 9, kind: "task" }, "orchestrate")).toContain("isn't an epic");
     expect(handoffModeError({ number: 9 }, "work", true)).toBeNull();
     expect(handoffModeError({ number: 9 }, "plan", true)).toContain("Only work prompts go to subagents");
+    expect(handoffModeError({ number: 9, progress: { done: 0, total: 0 } }, "work", true)).toContain("has no plan yet");
+    expect(handoffModeError({ number: 9, progress: { done: 0, total: 0 } }, "work")).toBeNull();
   });
 });
 

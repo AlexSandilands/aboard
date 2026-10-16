@@ -24,8 +24,8 @@ export function toggleCell(state: CollapseState, projectId: string, status: Task
 }
 
 /** True when any of the given projects overrides the column, so the header shows a mixed state. */
-export function isColumnMixed(state: CollapseState, status: TaskStatus, projectIds: ReadonlyArray<string>): boolean {
-  return projectIds.some((id) => cellKey(id, status) in state.cellOverrides);
+export function isColumnMixed(state: CollapseState, status: TaskStatus, rowIds: ReadonlyArray<string>): boolean {
+  return rowIds.some((id) => cellKey(id, status) in state.cellOverrides);
 }
 
 /**
