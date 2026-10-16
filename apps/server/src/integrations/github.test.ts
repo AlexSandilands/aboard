@@ -216,14 +216,34 @@ describe("github poller", () => {
     expect(none.github.status()).toMatchObject({ available: true, authenticated: false, hosts: [] });
   });
 
-  it("falls back to `gh auth status` when gh is too old for --json", async () => {
-    const runGh: RunGh = async (args) => {
+  it("falls back to `gh auth status` when gh is too old for --json, trusting it for github.com only", async () => {
+    const gh = createFakeGithub();
+    gh.prs.set("o/r#1", fakePr());
+    gh.prs.set("team/svc#3", fakePr());
+    const runGh: RunGh = async (args, opts) => {
       if (args.includes("--json")) throw new GhError("unknown flag: --json", false);
-      return "ok";
+      return gh.runGh(args, opts);
     };
-    const { services } = fakeServices([]);
-    const github = createGithubIntegration({ services: () => services, runGh });
+    const links = [ghLink("l1", 1), ghLink("ghe", 3, "github.evil.example", "team/svc")];
+    const { services, snapshots } = fakeServices(links);
+    const github = createGithubIntegration({ services: () => services, runGh, fetch: gh.fetch });
     expect(await github.checkStatus()).toEqual({ available: true, authenticated: true, error: null, hosts: [] });
+    await github.pollAll();
+    expect([...snapshots.keys()]).toEqual(["l1"]);
+    expect(gh.requests.map((r) => r.url)).toEqual(["https://api.github.com/graphql"]);
+    await expect(github.refresh(links[1]!)).rejects.toThrow(/not signed in to github\.evil\.example/);
+    expect(github.holdsTasks("github.com")).toBe(true);
+    expect(github.holdsTasks("github.evil.example")).toBe(false);
+  });
+
+  it("holds tasks back only for github.com and polled hosts", async () => {
+    const { github } = setup([], { hosts: ["github.com", "ghe.example.com"] });
+    expect(github.holdsTasks("github.com")).toBe(true);
+    expect(github.holdsTasks("ghe.example.com")).toBe(false);
+    await github.checkStatus();
+    expect(github.holdsTasks("GHE.example.com")).toBe(true);
+    expect(github.holdsTasks("github.other.com")).toBe(false);
+    expect(github.holdsTasks("example.com")).toBe(false);
   });
 
   it("reads signed-in hosts from gh's output when it exits non-zero", async () => {

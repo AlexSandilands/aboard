@@ -55,6 +55,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   return {
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
+    prHostHoldsTasks: (host) => github.holdsTasks(host),
     start() {
       if (!deps.config.pollers || started) return;
       started = true;

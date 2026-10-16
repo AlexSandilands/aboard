@@ -219,6 +219,12 @@ export interface GithubIntegration {
   status(): GithubStatus;
   /** Re-detects gh and its per-host sign-in. */
   checkStatus(): Promise<GithubStatus>;
+  /**
+   * Whether an unfinished PR on the host keeps a Review task from Done. github.com always does, as
+   * before Enterprise support, so not knowing yet whether gh works can't let one merge finish a task
+   * whose other PR is open. Other hosts only while they're polled (GitHub, and gh signed in to it).
+   */
+  holdsTasks(host: string): boolean;
   /** One poll over all GitHub PR links (no-op when polling is off or gh is unusable). */
   pollAll(): Promise<void>;
   /** Fetches one PR link now. Returns false when the link is not a GitHub PR. Throws AppError on failure. */
@@ -309,12 +315,21 @@ export function createGithubIntegration(deps: {
 
   const signedInHosts = (current: GithubStatus) => current.hosts.filter((h) => h.authenticated);
 
-  const isPolled = (link: TaskLink, current: GithubStatus): link is RefPrLink =>
+  const isGithubPr = (link: TaskLink, current: GithubStatus): link is RefPrLink =>
     link.kind === "pr" && link.ref !== null && isGithubHost(link.ref.host, signedInHosts(current));
 
-  /** Whether `gh` can hand over a token for the host. With no host list (old gh), assume so. */
+  /**
+   * Whether `gh` is signed in to the host, so its token may be sent there. A `gh` too old to list
+   * hosts only vouches for github.com: an env token such as GH_ENTERPRISE_TOKEN would otherwise go
+   * to any host a link names.
+   */
   const signedInTo = (host: string, current: GithubStatus): boolean =>
-    current.hosts.length === 0 ? current.authenticated : signedInHosts(current).some((h) => h.host === host);
+    current.hosts.length === 0
+      ? current.authenticated && host === "github.com"
+      : signedInHosts(current).some((h) => h.host === host);
+
+  const polls = (host: string, current: GithubStatus): boolean =>
+    isGithubHost(host, signedInHosts(current)) && signedInTo(host, current);
 
   /** Reads one batch of a repo's PRs and stores what came back. Per-PR failures are logged. */
   const pollBatch = async (host: string, repo: string, links: readonly RefPrLink[]): Promise<void> => {
@@ -347,7 +362,7 @@ export function createGithubIntegration(deps: {
       if (!current.authenticated) return;
       const links = services.links
         .listByKind("pr")
-        .filter((l): l is RefPrLink => isPolled(l, current) && signedInTo(l.ref.host, current));
+        .filter((l): l is RefPrLink => isGithubPr(l, current) && polls(l.ref.host, current));
       const groups = new Map<string, { host: string; repo: string; links: RefPrLink[] }>();
       for (const link of links) {
         const key = `${link.ref.host}\n${link.ref.repo.toLowerCase()}`;
@@ -411,9 +426,13 @@ export function createGithubIntegration(deps: {
       return status;
     },
     checkStatus,
+    holdsTasks: (host) => {
+      const h = host.toLowerCase();
+      return h === "github.com" || polls(h, status);
+    },
     pollAll,
     async refresh(link) {
-      if (!isPolled(link, await ensureStatus())) return false;
+      if (!isGithubPr(link, await ensureStatus())) return false;
       await requireGh(link);
       try {
         await refreshOne(link);
@@ -434,7 +453,7 @@ export function createGithubIntegration(deps: {
       if (input.action !== "disable_auto" && !snapshot.mergeMethods?.includes(input.method!)) {
         throw new AppError("VALIDATION", `This repository doesn't allow ${input.method} merges`);
       }
-      if (!isPolled(link, await ensureStatus())) throw notGithub();
+      if (!isGithubPr(link, await ensureStatus())) throw notGithub();
       await requireGh(link);
 
       const [owner, name] = splitRepo(link.ref.repo);

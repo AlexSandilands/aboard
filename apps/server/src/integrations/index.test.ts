@@ -46,7 +46,12 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
       ...(opts.githubFetch ? { githubFetch: opts.githubFetch } : {}),
     },
   );
-  services = createServices({ db: openDatabase(":memory:"), bus, t3Status: () => integrations.t3Status() });
+  services = createServices({
+    db: openDatabase(":memory:"),
+    bus,
+    t3Status: () => integrations.t3Status(),
+    prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+  });
   return { services, integrations, events };
 }
 

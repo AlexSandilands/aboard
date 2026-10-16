@@ -23,9 +23,9 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 - The poller only asks hosts that are GitHub: github.com, `*.ghe.com`, a host with a `github` DNS label
   (`github.example.com`), or any host `gh` is signed in to. A link to `/a/b/pull/1` on some other site
   is never sent anywhere.
-- And only hosts `gh` is signed in to. `gh auth status --json hosts` is read every 10 minutes and
-  shown per host in Settings. A `gh` too old for `--json` falls back to the exit code of
-  `gh auth status`, which can't tell hosts apart, so every GitHub host is tried.
+- And only hosts `gh` is signed in to, since that's where its token is sent. `gh auth status --json
+  hosts` is read every 10 minutes and shown per host in Settings. A `gh` too old for `--json` falls
+  back to the exit code of `gh auth status`, which can't name hosts, so only github.com is used then.
 - The token is `gh auth token --hostname <host>`, kept in memory for five minutes (`githubApi.ts`).
   A 401 on a cached token asks `gh` once more before failing.
 
@@ -102,7 +102,9 @@ Merging is UI only: there's no MCP tool for it.
 
 When a task in Review has every polled PR finished and at least one merged, it moves to Done as actor
 `github`. This happens when a poll (or a merge) sees the last PR finish, and when a task enters Review
-with its PRs already finished. Unpolled PRs (other hosts) never hold it back.
+with its PRs already finished. PRs that aren't polled (other sites, or GitHub hosts `gh` isn't signed in
+to) never hold it back, except on github.com, which always counts (`holdsTasks`): while `gh`'s status is
+still unknown, one merge mustn't finish a task whose other PR is open.
 
 ## Decisions
 

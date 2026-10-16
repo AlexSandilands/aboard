@@ -15,6 +15,8 @@ import type {
 export interface Integrations {
   t3Status(): T3IntegrationStatus;
   githubStatus(): GithubStatus;
+  /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
+  prHostHoldsTasks(host: string): boolean;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;
