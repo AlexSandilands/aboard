@@ -56,6 +56,13 @@ mode is a legacy beta behind a client setting the board can't read, and a thread
 with no visible way to switch back. The option is on by default for tasks in
 Backlog or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
+#### Suggest epics (projects)
+
+A project has one hand-off, in its lane header: **Suggest epics**, as a new T3 Code thread or a copied prompt. An
+agent proposes epics for the project's open tasks and creates the ones the user agrees to. The launch dialog is
+the same, without **Plan with me** or a task to link
+([epics.md](epics.md#suggesting-epics)).
+
 #### Orchestrate (epics) and subagents
 
 An epic has no plan of its own, so it gets a third prompt, mode `orchestrate`: start the epic's tasks in other
@@ -267,5 +274,5 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task |
-| `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
+| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task or a project) and its pickers; pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Model tiers |

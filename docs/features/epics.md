@@ -77,7 +77,7 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
   hidden.
 - A task's panel shows its epic as a chip under the title, and **More actions → Epic** moves it into another
   open epic in its project, out of its epic, or into a new one.
-- **New epic…** is in the command palette and the lane header.
+- **New epic…** is in the command palette and the lane header, next to **Suggest epics** (below).
 - The hand-off menu offers the epic's one prompt, the orchestrating prompt: **Copy prompt to start its tasks**,
   and **New T3 Code thread…** without **Plan with me** (see [Orchestrating](#orchestrating-an-epic)).
 
@@ -174,6 +174,30 @@ When the loop ends, the implementer opens and links the PR. If the board's own r
 (`start_review` says it is being reviewed), the orchestrator waits for it. The `move_task` result still describes
 the loop to the subagent, so its prompt says to ignore that. Sessions the user started run their own loop.
 
+### Suggesting epics
+
+Grouping an existing backlog into epics by hand means reading every task. The lane header's **Suggest epics**
+(a sparkles icon) hands that to an agent instead:
+
+- **Suggest epics in a new T3 Code thread…** opens the launch dialog for the project
+  (`GET /api/projects/:id/t3-launch-options`, `POST /api/projects/:id/t3-thread`). The thread is named
+  `Suggest epics: <project>`, and nothing is linked, since there is no task to link it to. It shows on the same
+  conditions as a task's T3 launch (`canStartProjectT3Thread`).
+- **Copy prompt to suggest epics** works in any harness.
+
+The prompt (`suggestEpicsPrompt` in `packages/contracts/src/handoff.ts`) has the agent:
+
+1. read the project's open tasks and its existing epics;
+2. propose groups, each with a title, a one-line description and its tasks, including tasks that belong in an
+   existing epic, and leave stand-alone tasks out;
+3. wait for the user to agree;
+4. call `create_epic(tasks: [...])` for new epics and `update_task(epic)` for existing ones.
+
+It doesn't plan, start or move anything. Starting an epic's tasks is the epic's own hand-off.
+
+On the server, a launch is for a task or a project (`launchContext` in `integrations/t3.ts`). A project
+launch has no suggested model and returns the thread instead of a link.
+
 ## Decisions
 
 - **Derived and stored status.** Deriving keeps an epic honest without anyone moving it, and storing it
@@ -213,6 +237,7 @@ the loop to the subagent, so its prompt says to ignore that. Sessions the user s
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
 | `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
 | `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |
+| `apps/web/src/components/handoff/HandoffActions.tsx`, `T3LaunchDialog.tsx` | Suggest epics in the lane header; the dialog launching for a task or a project |
 | `apps/server/src/mcp/tools/threads.ts`                  | `start_task_thread`, `message_task_thread`                            |
 | `apps/server/src/integrations/t3Launch.ts`              | `autoLaunchSettings`: a launch without the dialog                      |
 | `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events                           |

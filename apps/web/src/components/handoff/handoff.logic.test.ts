@@ -1,6 +1,7 @@
 import { clampRuntimeMode, runtimeModesFor, type T3LaunchOptions, type T3LaunchProvider } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  canStartProjectT3Thread,
   canStartT3Thread,
   FAVORITES,
   initialPickerTab,
@@ -134,6 +135,12 @@ describe("visibility", () => {
     expect(canStartT3Thread(task, project, t3, { t3TokenSet: false })).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: "t3-p1", workspaceRoot: null }, t3, settings)).toBe(true);
+  });
+
+  it("offers Suggest epics in T3 Code for a project on the same conditions, with no task involved", () => {
+    expect(canStartProjectT3Thread(project, t3, settings)).toBe(true);
+    expect(canStartProjectT3Thread(project, { detected: false }, settings)).toBe(false);
+    expect(canStartProjectT3Thread({ t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);
   });
 });
 

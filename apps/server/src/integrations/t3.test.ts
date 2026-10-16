@@ -721,6 +721,14 @@ describe("T3 thread launch", () => {
     expect(launched).toMatchObject({ runtimeMode: "full-access", suggestionUnavailable: null });
   });
 
+  it("starts a thread about a whole project, titled by the caller, without linking it", async () => {
+    const { t3, socket, added } = setup((frame) => success(frame.id, { threadId: "th-proj", resumed: false }));
+    const ref = await t3.startProjectThread("proj-acme", LAUNCH, "Suggest epics: Acme");
+    expect(socket.sent[0]!.payload).toMatchObject({ projectId: "t3-p1", title: "Suggest epics: Acme" });
+    expect(ref).toEqual({ environmentId: ENV_ID, threadId: "th-proj" });
+    expect(added).toEqual([]);
+  });
+
   it("refuses a launch without the dialog when T3 couldn't list the branches", async () => {
     const { t3, socket, added } = setup((frame) =>
       frame.tag === "server.getConfig" ? success(frame.id, SERVER_CONFIG) : success(frame.id, { unexpected: true }),

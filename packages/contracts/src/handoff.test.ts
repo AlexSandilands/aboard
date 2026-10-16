@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "./brand.ts";
-import { defaultHandoffMode, handoffModeError, taskBoardUrl, taskHandoffPrompt, taskReferenceLine } from "./handoff.ts";
+import {
+  defaultHandoffMode,
+  handoffModeError,
+  suggestEpicsPrompt,
+  taskBoardUrl,
+  taskHandoffPrompt,
+  taskReferenceLine,
+} from "./handoff.ts";
 import { EMPTY_MODEL_TIERS, type SuggestedModel } from "./modelTiers.ts";
 
 const task = { id: "abc-123", number: 9, title: "Hand tasks to agents" };
@@ -165,5 +172,23 @@ describe("suggested model in the prompt", () => {
       taskHandoffPrompt({ task: suggested, boardUrl: "http://x", mode: "work", linkedThread: true }),
     ).not.toContain("Suggested model");
     expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" })).not.toContain("Suggested model");
+  });
+});
+
+describe("suggestEpicsPrompt", () => {
+  const prompt = suggestEpicsPrompt({ project: { id: "p-1", title: "Billing API" }, boardUrl: "http://x//" });
+
+  it("reads the project's open tasks and existing epics, then proposes groups for the user to agree", () => {
+    expect(prompt).toContain("group the open work in the Billing API project");
+    expect(prompt).toContain("Board: http://x/");
+    expect(prompt).toContain(`list_tasks(projectId: "p-1")`);
+    expect(prompt).toContain("Wait for me to agree");
+    expect(prompt).toContain("create_epic");
+    expect(prompt).toContain(`update_task(task, epic: "#N")`);
+  });
+
+  it("only groups, without planning or starting anything", () => {
+    expect(prompt).toContain("Don't plan, start or move any task");
+    expect(prompt).not.toContain("set_plan(");
   });
 });

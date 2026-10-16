@@ -434,10 +434,14 @@ export interface T3Integration {
   importProjects(ids: string[]): Promise<Project[]>;
   /** Models, refs and defaults for the "Start in T3 Code" dialog of a task. */
   launchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /** The same for a thread about a whole project (Suggest epics), which has no suggested model. */
+  projectLaunchOptions(projectId: string): Promise<T3LaunchOptions>;
   /** T3's providers and models, for mapping model tiers to a T3 model in settings. */
   modelCatalog(): Promise<T3ModelCatalog>;
   /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
   startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
+  /** Starts a T3 thread about a whole project. There is no task to link it to, so it returns the thread. */
+  startProjectThread(projectId: string, input: StartT3ThreadInput, title: string): Promise<T3ThreadRef>;
   /** Starts a task's thread without the dialog, on the settings autoLaunchSettings picks, then links it. */
   launchTaskThread(taskId: string, input: TaskThreadInput, actor: string): Promise<TaskThreadLaunch>;
   /**
@@ -571,14 +575,15 @@ export function createT3Integration(deps: {
   };
 
   /** The task's T3 project and the live shell, or a clear reason why a thread can't be started. */
-  const launchContext = async (taskId: string) => {
+  /** A launch is for a task, which the thread is then linked to, or for a project as a whole. */
+  const launchContext = async (target: { taskId: string } | { projectId: string }) => {
     await ensureDiscovered();
     const { origin, environmentId } = discovery;
     if (!discovery.detected || !origin || !environmentId) throw new AppError("VALIDATION", "T3 Code is not running");
     const bearer = token();
     if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
-    const task = deps.services().tasks.summary(taskId);
-    const project = deps.services().projects.get(task.projectId);
+    const task = "taskId" in target ? deps.services().tasks.summary(target.taskId) : null;
+    const project = deps.services().projects.get("projectId" in target ? target.projectId : task!.projectId);
     const shell = await loadShell();
     if (!shell) throw new AppError("VALIDATION", live.error ?? "T3 Code is unavailable");
     const t3Project = resolveT3Project(project, shell);
@@ -606,8 +611,10 @@ export function createT3Integration(deps: {
   };
 
   /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
-  const loadLaunchOptions = async (taskId: string): Promise<{ options: T3LaunchOptions; refsListed: boolean }> => {
-    const ctx = await launchContext(taskId);
+  const loadLaunchOptions = async (
+    target: { taskId: string } | { projectId: string },
+  ): Promise<{ options: T3LaunchOptions; refsListed: boolean }> => {
+    const ctx = await launchContext(target);
     return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
       const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
       // Refs are optional: a folder that isn't a git repo (or a failed listing) just offers the current checkout.
@@ -620,14 +627,12 @@ export function createT3Integration(deps: {
         refs,
         shell: ctx.shell,
         t3Project: ctx.t3Project,
-        suggestedModel: ctx.task.suggestedModel,
+        suggestedModel: ctx.task?.suggestedModel ?? null,
         modelTiers: deps.services().settings.get().modelTiers,
       });
       return { options, refsListed: refs !== null };
     });
   };
-
-  const launchOptions = async (taskId: string): Promise<T3LaunchOptions> => (await loadLaunchOptions(taskId)).options;
 
   const modelCatalog = async (): Promise<T3ModelCatalog> => {
     await ensureDiscovered();
@@ -641,14 +646,18 @@ export function createT3Integration(deps: {
     });
   };
 
-  const startThread = async (taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink> => {
-    const ctx = await launchContext(taskId);
+  /** Sends the launch and returns the new thread's id. */
+  const launch = async (
+    ctx: Awaited<ReturnType<typeof launchContext>>,
+    input: StartT3ThreadInput,
+    title: string,
+  ): Promise<string> => {
     const { options, ...selection } = input.modelSelection;
     const result = await withRpc(ctx.origin, ctx.bearer, async (rpc) => {
       const raw = await rpc.request("orchestration.launchThread", {
         commandId: input.commandId ?? randomUUID(),
         projectId: ctx.t3Project.id,
-        title: `#${ctx.task.number} ${ctx.task.title}`,
+        title,
         modelSelection: options.length > 0 ? { ...selection, options } : selection,
         runtimeMode: input.runtimeMode,
         // T3's plan mode sits behind a client beta flag the board can't read; a thread started in it may
@@ -666,11 +675,24 @@ export function createT3Integration(deps: {
       }
       return parsed.data;
     });
-    const link = deps
-      .services()
-      .links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId: result.threadId } }, actor);
+    return result.threadId;
+  };
+
+  const startThread = async (taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink> => {
+    const ctx = await launchContext({ taskId });
+    const threadId = await launch(ctx, input, `#${ctx.task!.number} ${ctx.task!.title}`);
+    const link = deps.services().links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId } }, actor);
     void pollLive();
     return link;
+  };
+
+  const startProjectThread = async (
+    projectId: string,
+    input: StartT3ThreadInput,
+    title: string,
+  ): Promise<T3ThreadRef> => {
+    const ctx = await launchContext({ projectId });
+    return { environmentId: ctx.environmentId, threadId: await launch(ctx, input, title) };
   };
 
   const launchTaskThread = async (
@@ -678,7 +700,7 @@ export function createT3Integration(deps: {
     { prompt, commandId, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
-    const { options, refsListed } = await loadLaunchOptions(taskId);
+    const { options, refsListed } = await loadLaunchOptions({ taskId });
     // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
     if (!refsListed) {
       throw new AppError(
@@ -798,9 +820,11 @@ export function createT3Integration(deps: {
     discover,
     pollLive,
     listProjects,
-    launchOptions,
+    launchOptions: async (taskId) => (await loadLaunchOptions({ taskId })).options,
+    projectLaunchOptions: async (projectId) => (await loadLaunchOptions({ projectId })).options,
     modelCatalog,
     startThread,
+    startProjectThread,
     launchTaskThread,
     sendToThread,
     threadWorkspace,

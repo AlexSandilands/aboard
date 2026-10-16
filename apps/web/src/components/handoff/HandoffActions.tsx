@@ -1,13 +1,15 @@
 import {
   BRAND,
   defaultHandoffMode,
+  suggestEpicsPrompt,
   taskHandoffPrompt,
   taskReferenceLine,
   type HandoffMode,
   type ModelTiers,
+  type Project,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, TerminalIcon } from "lucide-react";
+import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, SparklesIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -41,6 +43,46 @@ export function copyHandoffPrompt(
   copyToClipboard(
     prompt,
     mode === "plan" ? "planning prompt" : mode === "orchestrate" ? "orchestrating prompt" : "prompt",
+  );
+}
+
+/** Copies the project's "Suggest epics" prompt (see suggestEpicsPrompt). */
+export function copySuggestEpicsPrompt(project: Pick<Project, "id" | "title">) {
+  copyToClipboard(suggestEpicsPrompt({ project, boardUrl: window.location.origin }), "prompt");
+}
+
+/**
+ * The lane header's "Suggest epics": hands the project's open tasks to an agent that proposes epics to group them,
+ * in a new T3 Code thread (when `canStartT3`, see canStartProjectT3Thread) or as a prompt to paste.
+ */
+export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; canStartT3: boolean }) {
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger
+              render={<Button variant="ghost-muted" size="icon-xs" aria-label={`Suggest epics for ${project.title}`} />}
+            />
+          }
+        >
+          <SparklesIcon />
+        </TooltipTrigger>
+        <TooltipPopup>Suggest epics</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="start">
+        {canStartT3 ? (
+          <MenuItem onClick={() => useDialogs.getState().openProjectT3Launch(project.id)}>
+            <MessageSquarePlusIcon />
+            Suggest epics in a new T3 Code thread…
+          </MenuItem>
+        ) : null}
+        <MenuItem onClick={() => copySuggestEpicsPrompt(project)}>
+          <ClipboardCopyIcon />
+          Copy prompt to suggest epics
+        </MenuItem>
+      </MenuPopup>
+    </Menu>
   );
 }
 

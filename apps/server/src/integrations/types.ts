@@ -10,6 +10,7 @@ import type {
   T3LaunchOptions,
   T3ModelCatalog,
   T3ProjectCandidate,
+  T3ThreadRef,
   TaskLink,
 } from "@repo/contracts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
@@ -36,6 +37,8 @@ export interface Integrations {
   mergePr(linkId: string, input: MergePrInput): Promise<void>;
   /** Models, refs and defaults for starting a T3 Code thread for a task. */
   t3LaunchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /** The same for a thread about a whole project, such as Suggest epics. */
+  t3ProjectLaunchOptions(projectId: string): Promise<T3LaunchOptions>;
   /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */
   t3ModelCatalog(): Promise<T3ModelCatalog>;
   /**
@@ -45,6 +48,8 @@ export interface Integrations {
   resolveLinkInput(input: LinkInput): Promise<{ input: LinkInput; warning?: string }>;
   /** Starts a T3 Code thread for a task and links it to the task. */
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
+  /** Starts a T3 Code thread about a whole project; nothing is linked, so it returns the thread. */
+  startT3ProjectThread(projectId: string, input: StartT3ThreadInput, title: string): Promise<T3ThreadRef>;
   /** Starts a T3 Code thread for a task without the dialog (see autoLaunchSettings) and links it. */
   launchT3TaskThread(taskId: string, input: TaskThreadInput, actor: string): Promise<TaskThreadLaunch>;
   /** Posts a message into a task's linked T3 Code thread, as if the user had typed it. */
