@@ -28,6 +28,19 @@ export interface PeriodEvent extends TaskEvent {
 
 /** Typed access to the task_events activity log. */
 export function createEventsRepo(sql: Sql) {
+  /** Latest event of any of these types per task. */
+  const latestOfType = (taskIds: readonly string[], types: readonly string[]): TaskEvent[] =>
+    sql
+      .all<EventRow>(
+        `SELECT * FROM task_events WHERE id IN (
+           SELECT MAX(id) FROM task_events
+           WHERE type IN (SELECT value FROM json_each(?)) AND task_id IN (SELECT value FROM json_each(?))
+           GROUP BY task_id)`,
+        jsonList(types),
+        jsonList(taskIds),
+      )
+      .map(toEvent);
+
   return {
     append(taskId: string, at: string, actor: string, type: string, payload: Record<string, unknown> = {}): TaskEvent {
       const result = sql.run(
@@ -71,15 +84,8 @@ export function createEventsRepo(sql: Sql) {
     },
     /** Latest "note" event per task. */
     lastNotes(taskIds: readonly string[]): TaskEvent[] {
-      return sql
-        .all<EventRow>(
-          `SELECT * FROM task_events WHERE id IN (
-             SELECT MAX(id) FROM task_events
-             WHERE type = 'note' AND task_id IN (SELECT value FROM json_each(?))
-             GROUP BY task_id)`,
-          jsonList(taskIds),
-        )
-        .map(toEvent);
+      return latestOfType(taskIds, ["note"]);
     },
+    latestOfType,
   };
 }

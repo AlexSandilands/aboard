@@ -70,6 +70,9 @@ the PR's branch and replies on the threads it addressed, starting each reply wit
 - Its settings: the five switches, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
   ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
 
+You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See
+[custom automations](custom-automations.md).
+
 ## How agents run
 
 An automation that needs an agent picks its **runner** in its settings:

@@ -18,6 +18,8 @@ export interface Candidate {
   projectId?: string | null;
   /** Anything the check found that the action needs. */
   data?: unknown;
+  /** What the action would run (a filled prompt, a command): kept on a dry run's record. */
+  preview?: string;
 }
 
 /** One project where the automation is on, with its effective config there. */
@@ -41,7 +43,9 @@ export interface CheckContext<C> {
 }
 
 /** What a runner recorded about an agent action. */
-export type RunPatch = Partial<Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd">>;
+export type RunPatch = Partial<
+  Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode">
+>;
 
 /** What an action may do on GitHub: post a review as the user's `gh` account. */
 export interface GithubActions {
@@ -97,8 +101,9 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
   /**
-   * The action can take long (it waits on an agent) without being an agent run for the caps, so the engine doesn't
-   * hold up the rest of its pass for it. Agent automations are always like this.
+   * The action can take long (a shell command, or waiting on an agent) without being an agent run for the caps, so
+   * the engine doesn't hold up the rest of its pass for it. At most AUTOPILOT_BACKGROUND_MAX of these that aren't
+   * agent runs go at once. Agent automations are always like this.
    */
   background?: boolean;
   /**

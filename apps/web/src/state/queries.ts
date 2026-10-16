@@ -57,6 +57,7 @@ export const queryKeys = {
   /** Prefix of every project's recurring rules query. */
   recurring: ["recurring"] as const,
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
+  customAutomations: ["customAutomations"] as const,
   digests: ["digests"] as const,
 };
 
@@ -331,6 +332,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });
         // A digest is made, read or dropped.
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }

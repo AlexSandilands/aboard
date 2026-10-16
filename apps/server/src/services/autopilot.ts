@@ -105,6 +105,8 @@ export interface AutopilotService {
   resolve(automation: Automation, projectId: string | null, epicId?: string | null): ResolvedAutomation;
   /** Projects with an epic, not archived, that switches the automation on: the engine must look there even when the project is off. */
   projectsWithEpicOn(automation: Automation): ReadonlySet<string>;
+  /** Epics with a setting of their own for the automation: their tasks follow the epic, not the project. */
+  epicsWithOwnSetting(automation: Pick<Automation, "key" | "epicScope">): ReadonlySet<string>;
   /** Newest first. */
   runsForTask(taskId: string, limit?: number): AutopilotRun[];
   /** Newest first. */
@@ -136,23 +138,31 @@ const RUN_LIMIT = 50;
 export function createAutopilotService(
   core: Core,
   deps: {
-    automations: readonly Automation[];
+    /** The catalogue, read on every call: custom automations come and go. */
+    automations: () => readonly Automation[];
     notifications: NotificationsService;
     /**
      * An automation just started applying to these projects: its switch went on for them, or Pause all was lifted.
      * For automations that keep their own schedule and must not catch up on what passed meanwhile.
      */
     onEnabled?: (automation: string, projectIds: readonly string[]) => void;
+    /** The same for epics with a setting of their own, when the automation turned on for their tasks. */
+    onEpicEnabled?: (automation: string, epicIds: readonly string[]) => void;
+    /**
+     * These epics just got a setting of their own, so their tasks stop following the project's switch. Called before
+     * onEpicEnabled, so an epic that was on through its project can carry over the project's state.
+     */
+    onEpicOwnSetting?: (automation: string, epicIds: readonly string[]) => void;
   },
 ): AutopilotService {
   const { repos } = core;
-  const byKey = new Map(deps.automations.map((a) => [a.key, a]));
-  const titleOf = (key: string) => byKey.get(key)?.title ?? key;
+  const find = (key: string) => deps.automations().find((a) => a.key === key);
+  const titleOf = (key: string) => find(key)?.title ?? key;
 
-  const epicScoped = (a: Automation) => a.epicScope ?? true;
+  const epicScoped = (a: Pick<Automation, "epicScope">) => a.epicScope ?? true;
 
   const automationOf = (key: string): Automation => {
-    const automation = byKey.get(key);
+    const automation = find(key);
     if (!automation) throw new AppError("NOT_FOUND", `No automation ${key}`);
     return automation;
   };
@@ -208,7 +218,8 @@ export function createAutopilotService(
 
   const entries = (kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
-    return deps.automations
+    return deps
+      .automations()
       .filter((automation) => kind !== "epic" || epicScoped(automation))
       .map((automation) => {
         const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
@@ -225,6 +236,29 @@ export function createAutopilotService(
           effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
         };
       });
+  };
+
+  /** Epics with a setting of their own for the automation (any mode), that count as a scope. */
+  const epicsWithOwnSetting = (automation: Pick<Automation, "key" | "epicScope">): string[] => {
+    if (!epicScoped(automation)) return [];
+    return repos.autopilotSettings
+      .all()
+      .filter((s) => s.scopeKind === "epic" && s.automation === automation.key)
+      .map((s) => repos.tasks.get(s.scopeId!))
+      .filter((epic) => epic && countsAsScope(epic.id, epic.projectId))
+      .map((epic) => epic!.id);
+  };
+
+  /** Whether the automation is on for each of these epics' tasks, as the engine resolves it. */
+  const epicStates = (automation: Automation, epicIds: Iterable<string>): Map<string, boolean> => {
+    const all = repos.autopilotSettings.all();
+    const states = new Map<string, boolean>();
+    for (const epicId of epicIds) {
+      const epic = repos.tasks.get(epicId);
+      if (!epic || !countsAsScope(epic.id, epic.projectId)) continue;
+      states.set(epicId, resolveAutopilot(chainFor(all, automation.key, epic.projectId, epic.id)).enabled);
+    }
+    return states;
   };
 
   /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
@@ -278,10 +312,10 @@ export function createAutopilotService(
     overview: () => ({
       paused: loadAutopilotStatus(repos).paused,
       engine: loadAutopilotEngine(repos),
-      automations: deps.automations.map(describeAutomation),
+      automations: deps.automations().map(describeAutomation),
     }),
     status: () => loadAutopilotStatus(repos),
-    automations: () => deps.automations,
+    automations: () => deps.automations(),
     engine: () => loadAutopilotEngine(repos),
     updateEngine(input) {
       const current = loadAutopilotEngine(repos);
@@ -304,7 +338,11 @@ export function createAutopilotService(
         fx.autopilot();
       });
       if (wasPaused && !paused) {
-        for (const a of deps.automations) deps.onEnabled?.(a.key, enabledProjects(a.key));
+        for (const a of deps.automations()) {
+          deps.onEnabled?.(a.key, enabledProjects(a.key));
+          const epics = [...epicStates(a, epicsWithOwnSetting(a))].filter(([, on]) => on).map(([id]) => id);
+          if (epics.length > 0) deps.onEpicEnabled?.(a.key, epics);
+        }
       }
       return loadAutopilotStatus(repos);
     },
@@ -328,6 +366,10 @@ export function createAutopilotService(
         throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);
       }
       const before = new Set(enabledProjects(key));
+      // Epics with their own setting follow it rather than the project, so their switching on is tracked apart.
+      const ownBefore = new Set(epicsWithOwnSetting(automation));
+      const watched = new Set([...ownBefore, ...(kind === "epic" && scopeId ? [scopeId] : [])]);
+      const epicsBefore = epicStates(automation, watched);
       core.write((fx) => {
         if (mode === "inherit" && Object.keys(config).length === 0) {
           repos.autopilotSettings.delete(kind, scopeId, key);
@@ -345,6 +387,12 @@ export function createAutopilotService(
       });
       const started = enabledProjects(key).filter((enabledId) => !before.has(enabledId));
       if (started.length > 0) deps.onEnabled?.(key, started);
+      const gainedOwn = epicsWithOwnSetting(automation).filter((epicId) => !ownBefore.has(epicId));
+      if (gainedOwn.length > 0) deps.onEpicOwnSetting?.(key, gainedOwn);
+      const epicsStarted = [...epicStates(automation, watched)]
+        .filter(([epicId, on]) => on && !epicsBefore.get(epicId))
+        .map(([epicId]) => epicId);
+      if (epicsStarted.length > 0) deps.onEpicEnabled?.(key, epicsStarted);
       return entries(kind, scopeId, projectId);
     },
     resolve(automation, projectId, epicId = null) {
@@ -353,6 +401,7 @@ export function createAutopilotService(
       const parsed = parseConfig(automation, resolved.config);
       return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
     },
+    epicsWithOwnSetting: (automation) => new Set(epicsWithOwnSetting(automation)),
     projectsWithEpicOn(automation) {
       const projects = new Set<string>();
       if (!epicScoped(automation)) return projects;
@@ -396,6 +445,8 @@ export function createAutopilotService(
         threadUrl: null,
         worktreePath: null,
         costUsd: null,
+        detail: dryRun ? (candidate.preview ?? null) : null,
+        exitCode: null,
         error: null,
         needsAttention: false,
         output: null,

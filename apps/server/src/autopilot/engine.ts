@@ -18,6 +18,8 @@ export const AUTOPILOT_TICK_MS = 60_000;
 const DEFAULT_BOARD_URL = "http://127.0.0.1:5317";
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
 export const AUTOPILOT_DEBOUNCE_MS = 1_000;
+/** Background actions that aren't agents (shell commands, digests) going at once; the rest wait for a later pass. */
+export const AUTOPILOT_BACKGROUND_MAX = 4;
 
 const IGNORED_EVENTS: ReadonlySet<string> = new Set([
   "task.detail_changed",
@@ -61,6 +63,7 @@ export function createAutopilotEngine(deps: {
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? console;
   const inFlight = new Set<Promise<void>>();
+  let background = 0;
   let passing: Promise<void> | null = null;
   let again = false;
   let own = 0;
@@ -144,10 +147,13 @@ export function createAutopilotEngine(deps: {
 
   /** Starts the action without waiting for it; agent runs are long. */
   const launch = (automation: Automation, run: AutopilotRun, candidate: Candidate, config: AutomationConfig) => {
+    const counted = Boolean(automation.background) && !automation.needsAgent;
+    if (counted) background += 1;
     const done = act(automation, run, candidate, config).finally(() => {
       inFlight.delete(done);
-      // A finished agent run frees a slot that held candidates are waiting for.
-      if (automation.needsAgent) schedule();
+      if (counted) background -= 1;
+      // A finished agent run or background action frees a slot that held candidates are waiting for.
+      if (automation.needsAgent || counted) schedule();
     });
     inFlight.add(done);
     return done;
@@ -211,10 +217,12 @@ export function createAutopilotEngine(deps: {
       if (s.autopilot.hasRun(automation.key, candidate.dedupeKey, false)) continue;
       // Held candidates aren't recorded: a later pass picks them up once there is room.
       if (automation.needsAgent && held(s, engine, at)) continue;
+      if (automation.background && !automation.needsAgent && background >= AUTOPILOT_BACKGROUND_MAX) continue;
       const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;
       const done = launch(automation, run, candidate, config);
-      // Quick board changes run one after another; agent runs (and slow actions) go on in the background.
+      // Quick board changes run one after another; agent runs and slow actions (shell commands, digests) go on in
+      // the background.
       if (!automation.needsAgent && !automation.background) await done;
     }
   };

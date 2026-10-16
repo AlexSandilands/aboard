@@ -1,6 +1,7 @@
 import {
   agentSessionUrl,
   classifyLink,
+  nextPrChanges,
   t3DesktopThreadUrl,
   type ClassifiedLink,
   type LinkInput,
@@ -248,12 +249,25 @@ export function createLinksService(
 
     listByKind: (kind): TaskLink[] => repos.links.byKindActive(kind).map(toLink),
 
+    prChanges: (linkIds) => repos.links.prChanges(linkIds),
+
     setSnapshot(linkId, snapshot) {
       core.write((fx) => {
         const row = rowOrThrow(linkId);
         const json = snapshot ? JSON.stringify(snapshot) : null;
-        repos.links.setSnapshot(linkId, json, nowIso());
+        const at = nowIso();
+        repos.links.setSnapshot(linkId, json, at);
         if (json === row.snapshot_json) return;
+        if (row.kind === "pr") {
+          const before = repos.links.prChanges([linkId]).get(linkId) ?? {};
+          const after = nextPrChanges(
+            parseJson<PrSnapshot>(row.snapshot_json),
+            snapshot as PrSnapshot | null,
+            before,
+            at,
+          );
+          if (JSON.stringify(after) !== JSON.stringify(before)) repos.links.setPrChanges(linkId, after);
+        }
         fx.task(row.task_id);
         notifyOnChange(row, row.snapshot_json, json);
         if (row.kind === "pr") completeOnMerge({ ...row, snapshot_json: json }, row.snapshot_json);

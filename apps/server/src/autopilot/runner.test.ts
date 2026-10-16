@@ -84,6 +84,8 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       threadUrl: null,
       worktreePath: null,
       costUsd: null,
+      detail: null,
+      exitCode: null,
       error: null,
       needsAttention: false,
       output: null,

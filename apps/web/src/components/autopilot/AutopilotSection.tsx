@@ -62,8 +62,19 @@ function RunRow({ run, title }: { run: AutopilotRun; title: string }) {
           </span>
         ) : null}
         {cost ? <span className="tabular-nums">{cost}</span> : null}
+        {run.exitCode !== null ? <span className="tabular-nums">exit {run.exitCode}</span> : null}
       </div>
       {run.error ? <p className="text-xs text-destructive-foreground [overflow-wrap:anywhere]">{run.error}</p> : null}
+      {run.detail ? (
+        <details className="text-2xs text-muted-foreground">
+          <summary className="w-fit cursor-pointer rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            {run.dryRun ? "What it would run" : "Output"}
+          </summary>
+          <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-muted/60 px-2 py-1.5 font-mono whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground/85">
+            {run.detail}
+          </pre>
+        </details>
+      ) : null}
     </li>
   );
 }

@@ -35,6 +35,7 @@ export function createContext(
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),
+    ...(overrides.runShell ? { runShell: overrides.runShell } : {}),
   });
   return { db, bus, services, integrations, config };
 }

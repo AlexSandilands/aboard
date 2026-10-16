@@ -4,6 +4,7 @@ import { createDigestGenerator } from "../autopilot/digest.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
+import type { RunShell } from "./shellCommand.ts";
 import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
@@ -54,6 +55,8 @@ export interface IntegrationOverrides {
   runAgent?: RunAgent;
   /** Replaces the Autopilot catalogue (read by the services, see createContext). */
   automations?: readonly Automation[];
+  /** Runs custom automations' shell commands (read by the services, see createContext). */
+  runShell?: RunShell;
   /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
   now?: () => Date;
   log?: Logger;

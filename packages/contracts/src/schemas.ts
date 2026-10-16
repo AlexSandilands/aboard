@@ -222,6 +222,60 @@ export const PrSnapshot = z.object({
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
+/**
+ * When the board saw each pull request fact begin, from one snapshot to the next (`nextPrChanges`): the merge, the
+ * checks starting to fail, a conflict appearing, and the head moving from one commit to another. Server-side only,
+ * for Autopilot's PR triggers; the snapshot alone can't say when a state began.
+ */
+export const PrChanges = z.object({
+  merged: IsoDate.optional(),
+  checksFailing: IsoDate.optional(),
+  conflict: IsoDate.optional(),
+  newHead: IsoDate.optional(),
+  /** The last known checks and mergeability, kept across `pending` and `unknown`, which say nothing either way. */
+  failing: z.boolean().optional(),
+  conflicting: z.boolean().optional(),
+});
+export type PrChanges = z.infer<typeof PrChanges>;
+
+/**
+ * The PR changes after a new snapshot at `at`. A fact that became true is stamped; one that holds keeps its stamp.
+ * The first snapshot (`prev` null: the PR was just linked, or the board was restored, which leaves snapshots out)
+ * only records what is true, so a state the board finds already in place never counts as beginning. Pending checks
+ * and unknown mergeability keep the last known state, so a push that re-runs failing checks, or GitHub recomputing
+ * a conflict, isn't a new failure or conflict.
+ */
+export function nextPrChanges(
+  prev: PrSnapshot | null,
+  next: PrSnapshot | null,
+  changes: PrChanges,
+  at: string,
+): PrChanges {
+  if (!next) return changes;
+  const out: PrChanges = { ...changes };
+  const failing = next.checks === "pending" ? undefined : next.checks === "failing";
+  const conflicting = next.mergeable === "unknown" ? undefined : next.mergeable === "conflicting";
+  if (!prev) {
+    if (failing !== undefined) out.failing = failing;
+    if (conflicting !== undefined) out.conflicting = conflicting;
+    return out;
+  }
+  // Rows from before these flags fall back to the previous snapshot.
+  const wasFailing = changes.failing ?? prev.checks === "failing";
+  const wasConflicting = changes.conflicting ?? prev.mergeable === "conflicting";
+  if (next.state === "merged" && prev.state !== "merged") out.merged = at;
+  if (failing !== undefined) {
+    if (failing && !wasFailing) out.checksFailing = at;
+    out.failing = failing;
+  }
+  if (conflicting !== undefined) {
+    if (conflicting && !wasConflicting) out.conflict = at;
+    out.conflicting = conflicting;
+  }
+  if (prev.headOid && next.headOid && prev.headOid !== next.headOid) out.newHead = at;
+  return out;
+}
+
 export const T3ThreadRef = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),

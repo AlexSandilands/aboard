@@ -1,7 +1,8 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 import { z } from "zod";
+import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
 
 // Running Claude Code headless (`claude -p`): finding the executable, spawning it on every platform, and reading
 // its JSON result. Shared by the board's reviewer, the issue import and Autopilot's headless runs.
@@ -53,40 +54,6 @@ interface RunResult {
   code: number | null;
   stdout: string;
   stderr: string;
-}
-
-/**
- * Off Windows each run gets its own process group, so a timeout can end everything it started. Detached groups no
- * longer end with the server's terminal, so the ones still going are ended when the server exits.
- */
-const POSIX_GROUPS = process.platform !== "win32";
-const liveGroups = new Set<number>();
-if (POSIX_GROUPS) {
-  process.on("exit", () => {
-    for (const pid of liveGroups) killGroup(pid);
-  });
-}
-
-function killGroup(pid: number): void {
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    // Already gone.
-  }
-}
-
-/** Ends the process and everything it started: an agent's shells and test runs must not outlive a timeout. */
-function killTree(child: ChildProcess): void {
-  if (child.pid === undefined) {
-    child.kill();
-  } else if (process.platform === "win32") {
-    // child.kill() would end only the cmd.exe shim or claude itself, not the tools it started.
-    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () =>
-      child.kill(),
-    );
-  } else {
-    killGroup(child.pid);
-  }
 }
 
 function run(

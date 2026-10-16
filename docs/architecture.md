@@ -124,6 +124,7 @@ ORM.
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
 | `autopilot_recurring` | Recurring-task rules: project, template, schedule, flag, the cursor and the last task made ([autopilot](features/autopilot.md)) |
+| `autopilot_custom` | Custom automations: name, trigger, filters, action and when it was armed ([autopilot](features/autopilot.md#custom-automations)) |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
 | `autopilot_digests` | Digests of what changed: period, mode, Markdown body, cost, read state. The newest 30; not backed up ([autopilot](features/autopilot.md)) |
 | `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |

@@ -69,6 +69,14 @@ function seed() {
     flagAutopilot: true,
   });
   s.recurring.handled(rule.id, { dueAt: "2026-10-12T09:00:00", taskId: a.id });
+  // A custom automation and its switch: the switch is an ordinary settings row.
+  const custom = s.customAutomations.create({
+    name: "Notify",
+    trigger: { kind: "status_change", to: "review" },
+    filters: { projectIds: [project.id] },
+    action: { kind: "shell", command: "./notify.sh" },
+  });
+  s.autopilot.setScope("board", null, `custom:${custom.id}`, { mode: "on" });
   // Autopilot settings are exported; its runs are history and stay out.
   h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
     ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
@@ -94,6 +102,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   task_templates: "id",
   autopilot_settings: "scope_kind, scope_id, automation",
   autopilot_recurring: "id",
+  autopilot_custom: "id",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
@@ -243,7 +252,10 @@ describe("restore", () => {
         expect.arrayContaining([{ snapshot_json: null }]),
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
-      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 2 });
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
+      expect(restored.prepare("SELECT name, action_json FROM autopilot_custom").all()).toEqual([
+        { name: "Notify", action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300 }) },
+      ]);
       expect(restored.prepare("SELECT flag_autopilot, last_task_id FROM autopilot_recurring").all()).toEqual([
         { flag_autopilot: 1, last_task_id: a.id },
       ]);
@@ -278,6 +290,15 @@ describe("restore", () => {
     expect(readDumpDir(dir).autopilot_recurring).toHaveLength(1);
     rmSync(join(dir, "recurring.json"));
     expect(readDumpDir(dir).autopilot_recurring).toEqual([]);
+  });
+
+  it("reads a folder written before custom automations, which has no custom-automations.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    expect(readDumpDir(dir).autopilot_custom).toHaveLength(1);
+    rmSync(join(dir, "custom-automations.json"));
+    expect(readDumpDir(dir).autopilot_custom).toEqual([]);
   });
 
   it("reads a folder written before Autopilot, which has no autopilot.json", () => {
@@ -361,7 +382,13 @@ describe("restore", () => {
     const dump = s.backup.dump();
     // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no
     // relations, no Autopilot settings.
-    const { autopilot_settings: _a, autopilot_recurring: _rc, task_relations: _rel, ...counts } = dump.manifest.counts;
+    const {
+      autopilot_settings: _a,
+      autopilot_recurring: _rc,
+      autopilot_custom: _cu,
+      task_relations: _rel,
+      ...counts
+    } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
@@ -369,6 +396,7 @@ describe("restore", () => {
       task_relations: [],
       autopilot_settings: [],
       autopilot_recurring: [],
+      autopilot_custom: [],
       tasks: dump.tasks.map((bundle) => {
         const {
           suggested_tier: _t,

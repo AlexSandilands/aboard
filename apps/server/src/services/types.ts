@@ -13,6 +13,7 @@ import type {
   PlanStep,
   PlanStepInput,
   Project,
+  PrChanges,
   PrSnapshot,
   ResolveFindingInput,
   ReviewFinding,
@@ -41,6 +42,7 @@ import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
 import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
+import type { CustomAutomationsService } from "./customAutomations.ts";
 import type { RecurringService } from "./recurring.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
@@ -68,6 +70,7 @@ export interface Services {
   templates: TemplatesService;
   autopilot: AutopilotService;
   recurring: RecurringService;
+  customAutomations: CustomAutomationsService;
   digests: DigestsService;
   notifications: NotificationsService;
 }
@@ -233,6 +236,8 @@ export interface LinksService {
    *   completes the task instead when it later enters Review.
    */
   setSnapshot(linkId: string, snapshot: LinkSnapshot | null): void;
+  /** When each pull request fact began on these links (see nextPrChanges); links with none are left out. */
+  prChanges(linkIds: readonly string[]): Map<string, PrChanges>;
 }
 
 export interface SettingsService {
