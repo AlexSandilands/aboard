@@ -80,7 +80,8 @@ The plan side of the gate (a plan can't be emptied outside Backlog) is in [plans
 Archive clears a card away without resolving it. `archived_at` is set and the position kept. Archived
 tasks drop out of the board and lists unless asked for (`includeArchived`, **Show archived**).
 Unarchiving puts the task at the end of its lane. The Autopilot **Auto-archive Done** automation can archive
-tasks that have sat in Done for N days (as the actor `autopilot`); see [autopilot.md](autopilot.md#automations).
+tasks that have sat in Done for N days (as the actor `autopilot`), and a finished epic together with its tasks
+(its tasks are never archived on their own, so the epic stays Done); see [autopilot.md](autopilot.md#automations).
 
 ### Deleting
 

@@ -519,6 +519,36 @@ export function createTasksService(
       return service.detail(id);
     },
 
+    archiveFinishedEpic(id, actor) {
+      return core.write((fx) => {
+        const epic = record(id);
+        if (epic.kind !== "epic") throw new AppError("VALIDATION", `#${epic.number} is not an epic`);
+        if (epic.archivedAt !== null) throw new AppError("VALIDATION", `Epic #${epic.number} is already archived`);
+        const tasks = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null);
+        const open = tasks.filter((c) => c.status !== "done");
+        if (open.length > 0) {
+          throw new AppError(
+            "VALIDATION",
+            `Epic #${epic.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")})`,
+          );
+        }
+        if (epic.status !== "done")
+          throw new AppError("VALIDATION", `Epic #${epic.number} isn't finished (not in Done)`);
+        const now = nowIso();
+        // Not through `update`: archiving the last task there re-derives the epic from no tasks and drops it to
+        // Backlog. Archived with its tasks, it stays as it was (Done).
+        for (const task of tasks) {
+          repos.tasks.update({ ...task, archivedAt: now, updatedAt: now });
+          fx.log(task.id, actor, "archived", { withEpic: epic.number });
+          fx.task(task.id);
+        }
+        repos.tasks.update({ ...epic, archivedAt: now, updatedAt: now });
+        fx.log(id, actor, "archived", { tasks: tasks.length });
+        fx.task(id);
+        return tasks.length;
+      });
+    },
+
     addNote(id, text, actor) {
       const body = text.trim();
       if (!body) throw new AppError("VALIDATION", "Note text must not be empty");

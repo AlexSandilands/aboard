@@ -14,11 +14,12 @@ import {
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 
-/** One candidate per Planned task in the projects where the automation is on. */
+/** One candidate per Planned task (not an epic, which rolls up from its tasks) in the projects where the automation is on. */
 const plannedCandidates = (key: string, { services, projects }: CheckContext<unknown>): Candidate[] =>
   projects.flatMap(({ project }) =>
     services.tasks
       .summaries({ projectId: project.id, status: "planned" })
+      .filter((t) => t.kind !== "epic")
       .map((t) => ({ dedupeKey: `${key}:${t.id}`, summary: `touch #${t.number}`, taskId: t.id })),
   );
 

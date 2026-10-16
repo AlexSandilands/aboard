@@ -36,6 +36,10 @@ export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
   return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
 }
 
+/** The epic a run on this task belongs to: its parent, or itself for an epic (Auto-archive runs on epic cards). */
+const epicOf = (task: { id: string; kind: string; parentId: string | null } | null | undefined): string | null =>
+  (task?.kind === "epic" ? task.id : task?.parentId) || null;
+
 /** Pause and the runs in flight: what autopilot.changed and the board snapshot carry. */
 export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
   return {
@@ -48,7 +52,7 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
         taskId,
         projectId,
         status,
-        epicId: (taskId && repos.tasks.get(taskId)?.parentId) || null,
+        epicId: taskId ? epicOf(repos.tasks.get(taskId)) : null,
       })),
   };
 }

@@ -29,6 +29,33 @@ const expectCode = (fn: () => unknown, code: string, message?: RegExp) => {
   throw new Error(`expected ${code}`);
 };
 
+describe("archiving a finished epic", () => {
+  it("archives the epic with its unarchived tasks and keeps it Done", () => {
+    const { s, epic, child } = setup();
+    const [a, b] = [child("A"), child("B")];
+    s.tasks.move(a.id, { status: "done" }, "agent");
+    s.tasks.move(b.id, { status: "done" }, "agent");
+    const done = s.tasks.summary(epic.id);
+    expect(s.tasks.archiveFinishedEpic(epic.id, "autopilot")).toBe(2);
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", position: done.position });
+    expect([epic.id, a.id, b.id].map((id) => s.tasks.summary(id).archivedAt !== null)).toEqual([true, true, true]);
+  });
+
+  it("refuses a task that isn't an epic, an archived epic, an open task and an epic that isn't Done", () => {
+    const { s, epic, child } = setup();
+    const a = child("A");
+    expect(() => s.tasks.archiveFinishedEpic(a.id, "autopilot")).toThrow(/not an epic/);
+    expect(() => s.tasks.archiveFinishedEpic(epic.id, "autopilot")).toThrow(/open tasks/);
+    s.tasks.move(a.id, { status: "done" }, "agent");
+    s.tasks.update(a.id, { archived: true }, "user");
+    // No unarchived tasks left: Backlog by derivation, so not finished.
+    expect(() => s.tasks.archiveFinishedEpic(epic.id, "autopilot")).toThrow(/isn't finished/);
+    s.tasks.update(a.id, { archived: false }, "user");
+    s.tasks.archiveFinishedEpic(epic.id, "autopilot");
+    expect(() => s.tasks.archiveFinishedEpic(epic.id, "autopilot")).toThrow(/already archived/);
+  });
+});
+
 describe("epics", () => {
   it("creates an empty epic in Backlog with an empty roll-up", () => {
     const { epic } = setup();
