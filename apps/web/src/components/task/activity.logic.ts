@@ -66,7 +66,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
   switch (event.type) {
     case "created": {
       const status = STATUS_LABEL.get(str(p.status) ?? "");
-      return line("created", status ? `created this in ${status}` : "created this");
+      const from = str(p.template) ? ` from the ${str(p.template)} template` : "";
+      return line("created", status ? `created this in ${status}${from}` : `created this${from}`);
     }
     case "status_changed": {
       const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;

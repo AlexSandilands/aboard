@@ -22,7 +22,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
+| `tools/read.ts`    | `board_overview`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
@@ -42,6 +42,10 @@ task out), `list_tasks` filters by `epic`, and `create_epic` can group existing 
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
 epic's orchestrator can start its tasks. See [epics.md](epics.md).
+
+`add_to_backlog` and `create_task` take `template` (a name or id; `list_templates` shows them) and then need no
+title, or, for `create_task`, no plan, when the template supplies one. Agents can't create or edit templates. See
+[templates.md](templates.md).
 
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).

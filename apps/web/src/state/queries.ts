@@ -11,6 +11,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
+  TaskTemplate,
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -30,6 +31,7 @@ export const queryKeys = {
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
+  templates: ["templates"] as const,
 };
 
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
@@ -67,6 +69,14 @@ export function useTaskDetail(taskId: string | null | undefined) {
     queryKey: queryKeys.task(taskId ?? ""),
     queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId!)}`, { signal }),
     enabled: !!taskId,
+  });
+}
+
+/** Every task template, board-wide and per project. Changed only from the UI, so mutations refetch it. */
+export function useTemplates() {
+  return useQuery({
+    queryKey: queryKeys.templates,
+    queryFn: ({ signal }) => api<TaskTemplate[]>("/api/templates", { signal }),
   });
 }
 

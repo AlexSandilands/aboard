@@ -38,6 +38,7 @@ files under each app.
 ### Guides
 
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
+- [Templates](guide/templates.md): Bug, Spike, Feature and your own starting points for tasks
 - [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop
@@ -49,6 +50,7 @@ files under each app.
 - [Task lifecycle](features/task-lifecycle.md): statuses, the plan gate, closing, archiving, deleting, numbering
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
 - [Epics](features/epics.md): grouping a feature's tasks, derived status, bands on the board
+- [Templates](features/templates.md): starting points for tasks: title pattern, labels, plan, per project or board-wide
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them

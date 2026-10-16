@@ -38,8 +38,16 @@ function seed() {
     title: "Feature",
     description: "Line one\nline two",
     plan,
+    template: "Bug",
     labels: ["ui", "backend"],
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
+  });
+  s.templates.create({
+    name: "Weekly review",
+    projectId: project.id,
+    titlePattern: "Review {{date}}",
+    labels: ["ops"],
+    phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
   });
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
@@ -62,6 +70,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   projects: "id",
   label_colors: "label",
   counters: "name",
+  task_templates: "id",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
@@ -274,8 +283,16 @@ describe("restore", () => {
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
+      task_templates: [],
       tasks: dump.tasks.map((bundle) => {
-        const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
+        const {
+          suggested_tier: _t,
+          suggested_reason: _r,
+          kind: _k,
+          parent_id: _p,
+          template_id: _m,
+          ...task
+        } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
       }),
       task_events: dump.task_events.map((e) =>
@@ -340,6 +357,18 @@ describe("restoreTask", () => {
     expect(after.links.map((l) => l.url)).toEqual(before.links.map((l) => l.url));
     expect(after.events.at(-1)).toMatchObject({ type: "restored", actor: "user" });
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("brings a task back without its template when the template has been deleted since", () => {
+    const { s, db, a } = seed();
+    const dump = s.backup.dump();
+    const bug = s.templates.list().find((t) => t.name === "Bug")!;
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: bug.id });
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    s.templates.delete(bug.id);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: null });
   });
 
   it("refuses a task still on the board unless forced, and renumbers on a number clash", () => {

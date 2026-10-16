@@ -54,6 +54,8 @@ export function createBackupService(core: Core): BackupService {
         if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {
           task.resolved_by_task_id = null;
         }
+        // Its template may have been deleted since the backup; the task keeps what it copied.
+        if (task.template_id && !repos.templates.get(String(task.template_id))) task.template_id = null;
         // Back into its epic only if that is still an epic in the same project; otherwise it comes back loose.
         const epic = task.parent_id ? repos.tasks.get(String(task.parent_id)) : null;
         if (task.parent_id && (epic?.kind !== "epic" || epic.projectId !== projectId)) task.parent_id = null;

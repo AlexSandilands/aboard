@@ -23,6 +23,7 @@ const ROOT_FILES = {
   projects: "projects.json",
   label_colors: "labels.json",
   counters: "counters.json",
+  task_templates: "templates.json",
 } as const;
 const TASKS_DIR = "tasks";
 const EVENTS_DIR = "events";
@@ -57,6 +58,7 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.projects, rowsJson(dump.projects));
   add(ROOT_FILES.label_colors, rowsJson(dump.label_colors));
   add(ROOT_FILES.counters, rowsJson(dump.counters));
+  add(ROOT_FILES.task_templates, rowsJson(dump.task_templates));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
   const months = new Map<string, BackupRow[]>();
   for (const event of dump.task_events) {
@@ -150,6 +152,8 @@ export function readDumpDir(dir: string): BoardDump {
     projects: root(ROOT_FILES.projects),
     label_colors: root(ROOT_FILES.label_colors),
     counters: root(ROOT_FILES.counters),
+    // Folders written before templates existed have no such file.
+    task_templates: existsSync(join(dir, ROOT_FILES.task_templates)) ? root(ROOT_FILES.task_templates) : [],
     tasks: tasks.sort((a, b) => Number(a.task?.number) - Number(b.task?.number)),
     task_events: events.sort((a, b) => Number(a.id) - Number(b.id)),
   });

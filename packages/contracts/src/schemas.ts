@@ -456,10 +456,20 @@ export const CreateTaskInput = z
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
      */
     sourceUrl: z.string().trim().min(1).optional(),
+    /**
+     * A template (id or name) to start from. Its title pattern, description, labels and plan fill in whatever the
+     * other fields leave out; fields given here win. See templates.ts.
+     */
+    template: z.string().trim().min(1).optional(),
+    /**
+     * Where the task lands. Defaults to "planned" when a plan is given and to "backlog" otherwise, so a template's
+     * plan is copied into a Backlog task unless "planned" is asked for.
+     */
+    status: z.enum(["backlog", "planned"]).optional(),
     actor: z.string().optional(),
   })
-  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined, {
-    message: "Provide a title or a sourceUrl",
+  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined || input.template !== undefined, {
+    message: "Provide a title, a sourceUrl or a template",
     path: ["title"],
   })
   .refine((input) => input.sourceUrl === undefined || input.plan === undefined, {

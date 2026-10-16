@@ -45,6 +45,7 @@ export function dumpBoard(db: Db): BoardDump {
     const projects = rowsOf(db, "projects", "SELECT * FROM projects ORDER BY id");
     const labelColors = rowsOf(db, "label_colors", "SELECT * FROM label_colors ORDER BY label");
     const counters = rowsOf(db, "counters", "SELECT * FROM counters ORDER BY name");
+    const templates = rowsOf(db, "task_templates", "SELECT * FROM task_templates ORDER BY id");
     const tasks = rowsOf(db, "tasks", "SELECT * FROM tasks ORDER BY number");
     const events = rowsOf(db, "task_events", "SELECT * FROM task_events ORDER BY id");
 
@@ -67,6 +68,7 @@ export function dumpBoard(db: Db): BoardDump {
       projects: projects.length,
       label_colors: labelColors.length,
       counters: counters.length,
+      task_templates: templates.length,
       tasks: tasks.length,
       task_events: events.length,
     };
@@ -88,6 +90,7 @@ export function dumpBoard(db: Db): BoardDump {
       projects,
       label_colors: labelColors,
       counters,
+      task_templates: templates,
       tasks: [...bundles.values()],
       task_events: events,
     };

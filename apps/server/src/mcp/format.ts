@@ -10,6 +10,7 @@ import {
   type ReviewFinding,
   type Project,
   type TaskDetail,
+  type TaskTemplate,
   type TaskEvent,
   type TaskLink,
   type TaskStatus,
@@ -123,6 +124,21 @@ export function renderTaskGroups(tasks: ReadonlyArray<TaskSummary>, indent = "")
   return lines.join("\n");
 }
 
+/** One template for list_templates: name, scope, what it fills in, and its plan. */
+export function renderTemplate(template: TaskTemplate, project: Project | undefined): string {
+  const scope = template.projectId ? `project ${project?.title ?? "?"}` : "board-wide";
+  const lines = [`${template.name}  (${scope})`];
+  if (template.titlePattern) lines.push(`  title: ${template.titlePattern}`);
+  if (template.labels.length) lines.push(`  labels: ${template.labels.join(", ")}`);
+  const headline = template.description?.split("\n").find((line) => line.trim());
+  if (headline) lines.push(`  description: ${headline.slice(0, 80)}${headline.length > 80 ? "..." : ""}`);
+  if (template.suggestedTier) lines.push(`  suggested model: ${template.suggestedTier}`);
+  for (const phase of template.phases) {
+    lines.push(`  plan: ${phase.title}: ${phase.steps.map((step) => step.title).join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
 export function eventText(event: TaskEvent): string {
   const p = event.payload;
   const str = (k: string) => (typeof p[k] === "string" ? p[k] : undefined);
@@ -182,6 +198,7 @@ export function eventText(event: TaskEvent): string {
     case "created":
       what = `created ${p.kind === "epic" ? "the epic" : `in ${statusLabel((str("status") ?? "backlog") as TaskStatus)}`}`;
       if (typeof p.epic === "number") what += ` in epic #${p.epic}`;
+      if (str("template")) what += ` from template "${str("template")}"`;
       break;
     case "epic_changed": {
       const num = (k: string) => (typeof p[k] === "number" ? `#${p[k]}` : null);
