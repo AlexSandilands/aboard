@@ -145,13 +145,15 @@ export function createBackupIntegration(deps: {
     }
   };
 
+  // Use the machine's identity when it has one; a fresh machine gets the app's, rather than a failed commit.
+  // The rebase in pull() needs it too: it rewrites our backup commits onto the remote's.
+  const identity = async (dir: string): Promise<string[]> =>
+    (await runGit(["config", "user.email"], dir)).code === 0
+      ? []
+      : ["-c", `user.name=${BRAND.name}`, "-c", `user.email=${BRAND.id}@localhost`];
+
   const commit = async (dir: string, message: string) => {
-    // Use the machine's identity when it has one; a fresh machine gets the app's, rather than a failed commit.
-    const identity =
-      (await runGit(["config", "user.email"], dir)).code === 0
-        ? []
-        : ["-c", `user.name=${BRAND.name}`, "-c", `user.email=${BRAND.id}@localhost`];
-    await git(dir, ...identity, "commit", "--quiet", "-m", message);
+    await git(dir, ...(await identity(dir)), "commit", "--quiet", "-m", message);
     status.lastCommit = (await git(dir, "rev-parse", "--short", "HEAD")).trim();
     status.lastCommitAt = now().toISOString();
   };
@@ -162,7 +164,7 @@ export function createBackupIntegration(deps: {
    */
   const pull = async (dir: string): Promise<string | null> => {
     if (!(await upstreamOf(dir)) && !(await adoptRemoteBranch(dir))) return null;
-    const result = await runGit(["pull", "--rebase", "--quiet"], dir);
+    const result = await runGit([...(await identity(dir)), "pull", "--rebase", "--quiet"], dir);
     if (result.code === 0) return null;
     await runGit(["rebase", "--abort"], dir);
     return `git pull: ${(result.stderr || result.stdout).trim()}`;
@@ -204,10 +206,11 @@ export function createBackupIntegration(deps: {
   const runOnce = async (): Promise<BackupStatus> => {
     const settings = deps.services().settings.get();
     const dir = settings.backupDir;
+    let pullError: string | null = null;
     try {
       if (!dir) throw new AppError("VALIDATION", "Choose a backup folder first");
       await prepareRepo(dir, settings.backupRemote);
-      const pullError = settings.backupRemote ? await pull(dir) : null;
+      pullError = settings.backupRemote ? await pull(dir) : null;
       writeDumpDir(dir, deps.services().backup.dump());
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
@@ -215,7 +218,9 @@ export function createBackupIntegration(deps: {
       if (settings.backupRemote) await push(dir);
       status.lastError = pullError;
     } catch (error) {
-      status.lastError = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
+      // A failed pull is usually why the push was then rejected; keep it rather than only the symptom.
+      status.lastError = pullError ? `${pullError}\n${message}` : message;
       log.warn(`[backup] ${status.lastError}`);
     } finally {
       status.lastRunAt = now().toISOString();

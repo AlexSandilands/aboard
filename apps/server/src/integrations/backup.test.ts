@@ -3,13 +3,35 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BRAND } from "@repo/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { commitMessage, createBackupIntegration } from "./backup.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+// Run git as on a CI runner: no user identity (and none guessed from the host name) and no system or global
+// defaults such as init.defaultBranch, so a dev machine's git config can't hide a failure.
+const gitEnv = {
+  GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+  GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM,
+};
+let home = "";
+beforeAll(() => {
+  home = mkdtempSync(join(tmpdir(), `${BRAND.id}-gitconfig-`));
+  const config = join(home, ".gitconfig");
+  writeFileSync(config, "[user]\n\tuseConfigOnly = true\n");
+  process.env.GIT_CONFIG_GLOBAL = config;
+  process.env.GIT_CONFIG_NOSYSTEM = "1";
+});
+afterAll(() => {
+  rmSync(home, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(gitEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 const git = (cwd: string, ...args: string[]) =>
