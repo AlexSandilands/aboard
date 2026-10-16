@@ -6,6 +6,7 @@ import type {
   IntegrationsStatus,
   SkillInfo,
   T3LaunchOptions,
+  T3ModelCatalog,
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
@@ -24,6 +25,7 @@ export const queryKeys = {
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
+  t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
 };
 
@@ -99,6 +101,17 @@ export function useT3LaunchOptions(taskId: string | null) {
     enabled: !!taskId,
     staleTime: 0,
     gcTime: 0,
+    retry: false,
+  });
+}
+
+/** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */
+export function useT3ModelCatalog(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.t3Models,
+    queryFn: ({ signal }) => api<T3ModelCatalog>("/api/integrations/t3/models", { signal }),
+    enabled,
+    staleTime: 0,
     retry: false,
   });
 }

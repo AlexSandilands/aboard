@@ -12,6 +12,7 @@ import {
   type StartT3ThreadInput,
   type T3IntegrationStatus,
   type T3LaunchOptions,
+  type T3ModelCatalog,
   type T3ProjectCandidate,
   type T3ThreadSnapshot,
   type TaskLink,
@@ -23,6 +24,8 @@ import type { LinksService, ProjectsService, SettingsService, TasksService } fro
 import { messageOf } from "./github.ts";
 import {
   buildLaunchOptions,
+  mapFavorites,
+  mapProviders,
   resolveT3Project,
   toWorkspaceStrategy,
   WireLaunchResult,
@@ -384,7 +387,7 @@ function openCopy(path: string): DatabaseSync {
 
 export interface T3Services {
   links: Pick<LinksService, "listByKind" | "setSnapshot" | "add">;
-  settings: Pick<SettingsService, "t3Token" | "update">;
+  settings: Pick<SettingsService, "get" | "t3Token" | "update">;
   projects: Pick<ProjectsService, "list" | "create" | "get">;
   tasks: Pick<TasksService, "summary">;
 }
@@ -406,6 +409,8 @@ export interface T3Integration {
   importProjects(ids: string[]): Promise<Project[]>;
   /** Models, refs and defaults for the "Start in T3 Code" dialog of a task. */
   launchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /** T3's providers and models, for mapping model tiers to a T3 model in settings. */
+  modelCatalog(): Promise<T3ModelCatalog>;
   /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
   startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /**
@@ -575,7 +580,26 @@ export function createT3Integration(deps: {
         .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
         .then((value) => WireRefs.safeParse(value).data ?? null)
         .catch(() => null);
-      return buildLaunchOptions({ config, refs, shell: ctx.shell, t3Project: ctx.t3Project });
+      return buildLaunchOptions({
+        config,
+        refs,
+        shell: ctx.shell,
+        t3Project: ctx.t3Project,
+        suggestedModel: ctx.task.suggestedModel,
+        modelTiers: deps.services().settings.get().modelTiers,
+      });
+    });
+  };
+
+  const modelCatalog = async (): Promise<T3ModelCatalog> => {
+    await ensureDiscovered();
+    const { origin } = discovery;
+    if (!discovery.detected || !origin) throw new AppError("VALIDATION", "T3 Code is not running");
+    const bearer = token();
+    if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
+    return withRpc(origin, bearer, async (rpc) => {
+      const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
+      return { providers: mapProviders(config), favorites: mapFavorites(config) };
     });
   };
 
@@ -694,6 +718,7 @@ export function createT3Integration(deps: {
     pollLive,
     listProjects,
     launchOptions,
+    modelCatalog,
     startThread,
     sendToThread,
     threadWorkspace,

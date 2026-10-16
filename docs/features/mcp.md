@@ -14,7 +14,8 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 ([ADR 0003](../decisions/0003-localhost-guard.md)).
 
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
-`get_task` before resuming, plan before leaving Backlog (and suggest labels if the task has none), keep
+`get_task` before resuming, plan before leaving Backlog (with a suggested model tier, and suggest labels if
+the task has none), keep
 steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 
 ### Tools
@@ -30,6 +31,10 @@ steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
 counts. See [labels.md](labels.md).
+
+`set_plan`, `create_task` and `update_task` take `suggestedModel: {tier, reason}`: the model tier for
+implementing the task. `set_plan` keeps the current one when it's omitted; `update_task` clears it with
+`null`. See [agent-handoff.md](agent-handoff.md#suggested-model).
 
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).
@@ -62,7 +67,11 @@ text when both are present.
 - **Missing labels** appears in `set_plan`, `create_task` and `get_task` results when the task has no
   labels and is still open. It names the labels in use and asks the agent to suggest 1–3 and wait for
   the user before calling `update_task`. Other mutation results leave it out (`taskResult`'s
-  `labelHint` option).
+  `planningHints` option).
+- **Missing suggested model** appears in `set_plan` and `create_task` results for a planned, open task with
+  no suggested model, asking the agent to set one with `update_task`. Unlike labels it needs no approval, and
+  `get_task` leaves it out so implementing agents aren't nagged. The task render shows
+  `Suggested model: deep (reason)` once set.
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
@@ -109,7 +118,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `apps/server/src/mcp/server.ts`       | `registerMcp`, transport, `INSTRUCTIONS`, actor resolution           |
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
-| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint` |
+| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |

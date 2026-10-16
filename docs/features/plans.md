@@ -40,6 +40,8 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
     sets them. A kept step may move to another phase.
   - Anything without a matching id is new; anything omitted is deleted.
   - Positions are regenerated in input order. `context` updates the plan context only when given.
+  - `suggestedModel` sets the task's suggested model tier when given, and clears it when `null`
+    ([agent-handoff.md](agent-handoff.md#suggested-model)).
 - Smaller edits: `add_steps` (to a phase by number or id, the last phase by default, or a new phase),
   `update_step` (status, title, notes, `appendNotes`), and REST: steps can be added, edited, moved and
   deleted; phases can be added, renamed and deleted.

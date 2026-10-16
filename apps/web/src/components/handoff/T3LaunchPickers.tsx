@@ -1,6 +1,12 @@
 // Composer controls modelled on T3 Code's new-thread composer (ComposerControl, ModelPickerContent,
 // TraitsPicker, BranchToolbar), MIT — see NOTICE. Rebuilt on our primitives rather than copied.
-import type { T3LaunchOptions, T3LaunchProvider, T3ModelSelection, T3RuntimeMode } from "@repo/contracts";
+import type {
+  T3LaunchOptions,
+  T3LaunchProvider,
+  T3ModelCatalog,
+  T3ModelSelection,
+  T3RuntimeMode,
+} from "@repo/contracts";
 import {
   BotIcon,
   BrainIcon,
@@ -90,7 +96,7 @@ export function ModelPicker({
   selection,
   onChange,
 }: {
-  options: T3LaunchOptions;
+  options: T3ModelCatalog;
   selection: T3ModelSelection | null;
   onChange: (selection: T3ModelSelection) => void;
 }) {
@@ -284,7 +290,7 @@ export function TraitsPicker({
   selection,
   onChange,
 }: {
-  options: T3LaunchOptions;
+  options: T3ModelCatalog;
   selection: T3ModelSelection;
   onChange: (selection: T3ModelSelection) => void;
 }) {

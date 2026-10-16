@@ -1,9 +1,10 @@
-import type { TaskDetail } from "@repo/contracts";
+import { MODEL_TIERS, ModelTier, type TaskDetail } from "@repo/contracts";
 import { PencilIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
 import { Button } from "~/components/ui/button";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateTask } from "~/state/mutations";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
@@ -14,6 +15,7 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
   return (
     <TaskSection title="Details">
       <div className="flex flex-col gap-3">
+        <SuggestedModelField task={task} />
         <MarkdownField
           title="Description"
           value={task.description}
@@ -28,6 +30,44 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
         />
       </div>
     </TaskSection>
+  );
+}
+
+const NO_TIER = "none";
+const TIER_ITEMS = [{ value: NO_TIER, label: "None" }, ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label }))];
+
+/** The model tier the planner suggested for implementing the task, which the user can change or clear. */
+function SuggestedModelField({ task }: { task: TaskDetail }) {
+  const { mutate: updateTask } = useUpdateTask();
+  const suggestion = task.suggestedModel;
+  return (
+    <div className="px-1.5">
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <h4 className="text-2xs text-muted-foreground/80 select-none">Suggested model</h4>
+        <Select
+          items={TIER_ITEMS}
+          value={suggestion?.tier ?? NO_TIER}
+          onValueChange={(value) => {
+            const tier = ModelTier.safeParse(value);
+            if ((tier.success ? tier.data : null) === (suggestion?.tier ?? null)) return;
+            // A reason explains the planner's tier; it doesn't carry over to one the user picked.
+            updateTask({ id: task.id, suggestedModel: tier.success ? { tier: tier.data } : null });
+          }}
+        >
+          <SelectTrigger size="xs" className="min-w-28" aria-label="Suggested model tier">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {TIER_ITEMS.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+      {suggestion?.reason ? <p className="text-xs text-muted-foreground">{suggestion.reason}</p> : null}
+    </div>
   );
 }
 

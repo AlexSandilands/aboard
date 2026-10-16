@@ -104,6 +104,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       ].filter(Boolean);
       return line("edit", parts.length ? parts.join("; ") : "changed the labels");
     }
+    case "suggested_model_changed": {
+      const tier = str(p.tier);
+      return line("edit", tier ? `suggested the ${tier} model tier` : "cleared the suggested model", str(p.reason));
+    }
     case "moved_project": {
       const title = ctx.projectTitle(str(p.to) ?? "");
       return line("project", title ? `moved to project ${title}` : "moved to another project");

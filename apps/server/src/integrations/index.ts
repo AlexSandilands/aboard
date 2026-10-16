@@ -74,6 +74,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
+    t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
   };
 }

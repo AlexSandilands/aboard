@@ -1,11 +1,14 @@
 import {
   normalizeWorkspaceKey,
   T3RuntimeMode,
+  type ModelTiers,
   type Project,
+  type SuggestedModel,
   type T3EnvMode,
   type T3LaunchModel,
   type T3LaunchOptions,
   type T3LaunchProvider,
+  type T3LaunchSuggestion,
   type T3LaunchWorkspace,
   type T3ModelOptionDescriptor,
   type T3ModelSelection,
@@ -162,6 +165,9 @@ export function mapProviders(config: WireServerConfig): T3LaunchProvider[] {
     }));
 }
 
+export const mapFavorites = (config: WireServerConfig): T3LaunchOptions["favorites"] =>
+  (config.settings.favorites ?? []).map((f) => ({ instanceId: f.provider, model: f.model }));
+
 /**
  * The model a new thread starts with, mirroring T3's new-thread defaults: the project's default model
  * (T3's legacy per-project field until its settings fold), else the environment default, kept only when
@@ -194,6 +200,34 @@ export function defaultModelSelection(
   return null;
 }
 
+/**
+ * The task's suggested tier resolved against the tier settings and T3's providers. The tier's model is used
+ * only when its provider is ready and still offers it; option values the model no longer supports are dropped.
+ */
+export function resolveSuggestion(
+  suggested: SuggestedModel | null,
+  modelTiers: ModelTiers,
+  providers: ReadonlyArray<T3LaunchProvider>,
+): T3LaunchSuggestion | null {
+  if (!suggested) return null;
+  const unavailable = (why: string): T3LaunchSuggestion => ({ ...suggested, modelSelection: null, unavailable: why });
+  const binding = modelTiers[suggested.tier].t3;
+  if (!binding) return unavailable(`No T3 Code model is set for the ${suggested.tier} tier in Settings.`);
+  const provider = providers.find((p) => p.instanceId === binding.selection.instanceId);
+  if (!provider) return unavailable(`${binding.label} isn't offered by T3 Code right now.`);
+  if (!provider.ready) return unavailable(`${provider.displayName} isn't ready in T3 Code.`);
+  const model = provider.models.find((m) => m.slug === binding.selection.model);
+  if (!model) return unavailable(`${binding.label} isn't offered by T3 Code right now.`);
+  const options = binding.selection.options.filter((o) => {
+    const descriptor = model.options.find((d) => d.id === o.id);
+    if (!descriptor) return false;
+    return descriptor.type === "boolean"
+      ? typeof o.value === "boolean"
+      : descriptor.options.some((choice) => choice.id === o.value);
+  });
+  return { ...suggested, modelSelection: { ...binding.selection, options }, unavailable: null };
+}
+
 /** The newest live thread in the project that ran in a worktree other than the project folder. */
 export function previousWorktree(
   shell: ShellSnapshot,
@@ -213,6 +247,8 @@ export function buildLaunchOptions(input: {
   refs: WireRefs | null;
   shell: ShellSnapshot;
   t3Project: ShellSnapshot["projects"][number];
+  suggestedModel: SuggestedModel | null;
+  modelTiers: ModelTiers;
 }): T3LaunchOptions {
   const { config, shell, t3Project } = input;
   const settings = config.settings;
@@ -233,10 +269,11 @@ export function buildLaunchOptions(input: {
     t3ProjectId: t3Project.id,
     workspaceRoot: t3Project.workspaceRoot,
     providers,
-    favorites: (settings.favorites ?? []).map((f) => ({ instanceId: f.provider, model: f.model })),
+    favorites: mapFavorites(config),
     isRepo,
     refs,
     previousWorktree: isRepo ? previousWorktree(shell, t3Project) : null,
+    suggestion: resolveSuggestion(input.suggestedModel, input.modelTiers, providers),
     defaults: {
       modelSelection: defaultModelSelection(config, providers, t3Project),
       runtimeMode: override?.defaultRuntimeMode ?? settings.defaultRuntimeMode ?? "full-access",
