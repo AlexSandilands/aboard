@@ -126,7 +126,8 @@ A subagent can't ask the user anything, and most harnesses don't let it start su
 - the suggested model line goes to the orchestrator in `get_handoff_prompt`'s result, since only the
   orchestrator can choose the subagent's model.
 
-The orchestrator then runs the loop for it: `start_review(task)` returns the brief of the round that is already
+The orchestrator then runs the loop for it. It reads the task first: when the board's own reviewer already
+submitted the round and left blocking or major findings open, it goes straight to the fixes. Otherwise `start_review(task)` returns the brief of the round that is already
 open (it doesn't open another), a fresh reviewer subagent in the task's worktree submits its findings, an implementer subagent in the
 task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
 When the loop ends, the implementer opens and links the PR. If the board's own reviewer has already taken the round

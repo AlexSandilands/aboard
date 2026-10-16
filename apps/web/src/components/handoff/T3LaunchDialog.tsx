@@ -98,6 +98,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
       mode: epic ? "orchestrate" : plan ? "plan" : "work",
       linkedThread: true,
     });
+  // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
   const [planWithMe, setPlanWithMe] = useState(() => defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
   const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));

@@ -34,7 +34,7 @@ export function defaultHandoffMode(
 
 /** Why a mode doesn't fit a task, or null when it does: epics are only orchestrated, and only work prompts go to subagents. */
 export function handoffModeError(
-  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind">>,
+  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind" | "progress">>,
   mode: HandoffMode,
   subagent = false,
 ): string | null {
@@ -45,6 +45,10 @@ export function handoffModeError(
   if (!epic && mode === "orchestrate") return `#${task.number} isn't an epic; only epics are orchestrated`;
   if (subagent && mode !== "work") {
     return "Only work prompts go to subagents: a subagent can't plan with the user or orchestrate. Draft unplanned tasks' plans yourself.";
+  }
+  // The user approves a plan before its task starts; a subagent can't ask them.
+  if (subagent && task.progress?.total === 0) {
+    return `#${task.number} has no plan yet. Draft one, get the user's approval and save it with set_plan before starting a subagent on it.`;
   }
   return null;
 }
@@ -172,7 +176,7 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     "   - Subagents, if you can start them (Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent): one per task, with get_handoff_prompt(task, subagent: true) as its prompt. Start it on the model of the task's suggested tier if you can choose one. Give each its own git worktree and branch when they run in parallel (your harness's worktree isolation, or git worktree add), otherwise run them one at a time.",
     "   - Otherwise, give me get_handoff_prompt(task) for each, and I'll paste them into new sessions.",
     `5. Keep track with ${overview}: progress, current step, blocked steps, review rounds and each task's last note. Answer a blocked step yourself if you can, else ask me. To tell a session something, message a subagent directly if your harness allows it, else add_note on its task, which a session reads on its next get_task.`,
-    "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it: call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent working in the task's worktree; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. If the round raised blocking or major findings, call start_review(task) for the next round with a new reviewer. When the loop ends, have the implementer open the pull request and link it. If start_review says the round is already being reviewed, the board's own reviewer has it: check back with get_task. Sessions I started run their own review loop.",
+    "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it. First read the task with get_task: if its latest round was already submitted (the board's own reviewer can take a round nobody picked up) and left blocking or major findings open, start with the fixes below. Otherwise call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent working in the task's worktree; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. If the round raised blocking or major findings, call start_review(task) for the next round with a new reviewer. When the loop ends, have the implementer open the pull request and link it. If start_review says the round is already being reviewed, the board's own reviewer has it: check back with get_task. Sessions I started run their own review loop.",
     `7. Don't set_plan, move or review the epic itself: its status follows its tasks. Finish with add_note on ${ref}: which tasks started by which route, where each is, and what's left.`,
     "",
     linkedThread
