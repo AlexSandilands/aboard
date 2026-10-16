@@ -1,0 +1,354 @@
+import { randomUUID } from "node:crypto";
+import {
+  AUTOPILOT_ACTIVE_STATUSES,
+  AUTOPILOT_ACTOR,
+  AutopilotEngineSettings,
+  DEFAULT_AUTOPILOT_ENGINE,
+  resolveAutopilot,
+  type AutopilotAutomation,
+  type AutopilotOverview,
+  type AutopilotRun,
+  type AutopilotScopeEntry,
+  type AutopilotScopeKind,
+  type AutopilotSetting,
+  type AutopilotStatus,
+  type UpdateAutopilotEngineInput,
+  type UpdateAutopilotSettingInput,
+} from "@repo/contracts";
+import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
+import { nowIso } from "../db/database.ts";
+import type { Repos } from "../db/repos/index.ts";
+import { AppError } from "../errors.ts";
+import type { Core, Effects } from "./core.ts";
+
+/** Settings-table keys for the engine. Both are exported in backups (see EXPORTED_SETTINGS). */
+export const AUTOPILOT_ENGINE_KEY = "autopilotEngine";
+export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
+
+/** The engine settings stored, over the defaults; a value that no longer parses falls back to them. */
+export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
+  const stored = repos.settings.all().get(AUTOPILOT_ENGINE_KEY);
+  const parsed = AutopilotEngineSettings.safeParse({
+    ...DEFAULT_AUTOPILOT_ENGINE,
+    ...(typeof stored === "object" ? stored : {}),
+  });
+  return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
+}
+
+/** Pause and the runs in flight: what autopilot.changed and the board snapshot carry. */
+export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
+  return {
+    paused: repos.settings.all().get(AUTOPILOT_PAUSED_KEY) === true,
+    active: repos.autopilotRuns
+      .withStatus(AUTOPILOT_ACTIVE_STATUSES)
+      .map(({ id, automation, taskId, projectId, status }) => ({ id, automation, taskId, projectId, status })),
+  };
+}
+
+export const describeAutomation = (a: Automation): AutopilotAutomation => ({
+  key: a.key,
+  title: a.title,
+  description: a.description,
+  needsAgent: a.needsAgent,
+  fields: a.fields,
+  defaults: a.defaults,
+});
+
+/** An automation's effective state for one project (or the board, with null). */
+export interface ResolvedAutomation {
+  enabled: boolean;
+  /** Parsed over the automation's defaults; null when the stored config no longer parses. */
+  config: AutomationConfig | null;
+}
+
+export interface RecordRunInput {
+  automation: string;
+  candidate: Candidate;
+  dryRun: boolean;
+}
+
+/** Autopilot settings, the engine's limits and pause, and the run history (docs/features/autopilot.md). */
+export interface AutopilotService {
+  overview(): AutopilotOverview;
+  status(): AutopilotStatus;
+  automations(): readonly Automation[];
+  engine(): AutopilotEngineSettings;
+  updateEngine(input: UpdateAutopilotEngineInput): AutopilotEngineSettings;
+  /** Pause all: no new runs start; runs already going finish. */
+  setPaused(paused: boolean): AutopilotStatus;
+  /** Every automation as seen from a scope: its setting there and what it resolves to. Epic scope isn't resolved yet. */
+  scope(kind: AutopilotScopeKind, id: string | null): AutopilotScopeEntry[];
+  /** Sets one automation's mode and/or config at a scope. Inherit with no config removes the row. */
+  setScope(
+    kind: AutopilotScopeKind,
+    id: string | null,
+    automation: string,
+    input: UpdateAutopilotSettingInput,
+  ): AutopilotScopeEntry[];
+  /** What the engine uses: on or off for the project (or the board), and the config. */
+  resolve(automation: Automation, projectId: string | null): ResolvedAutomation;
+  /** Newest first. */
+  runsForTask(taskId: string, limit?: number): AutopilotRun[];
+  /** Newest first. */
+  runsForProject(projectId: string, limit?: number): AutopilotRun[];
+  hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
+  /** Real agent runs started and spend since `since`, and agent runs going now. */
+  usage(agentAutomations: readonly string[], since: string): { started: number; spendUsd: number; active: number };
+  /**
+   * Records a candidate as a run: queued, or skipped with "Would …" in dry-run. Null when the dedupe key already
+   * has one (another pass got there first).
+   */
+  record(input: RecordRunInput): AutopilotRun | null;
+  /** queued → running. */
+  start(runId: string): AutopilotRun;
+  /** Runner details on a run in flight. */
+  update(runId: string, patch: RunPatch): AutopilotRun;
+  /** Ends a run with the action's result, logging it on the task. */
+  finish(runId: string, result: ActionResult): AutopilotRun;
+  /** Fails and flags the runs a restart left queued or running. Returns how many. */
+  recover(): number;
+}
+
+const RUN_LIMIT = 50;
+
+export function createAutopilotService(core: Core, deps: { automations: readonly Automation[] }): AutopilotService {
+  const { repos } = core;
+  const byKey = new Map(deps.automations.map((a) => [a.key, a]));
+  const titleOf = (key: string) => byKey.get(key)?.title ?? key;
+
+  const automationOf = (key: string): Automation => {
+    const automation = byKey.get(key);
+    if (!automation) throw new AppError("NOT_FOUND", `No automation ${key}`);
+    return automation;
+  };
+
+  const runOf = (id: string): AutopilotRun => {
+    const run = repos.autopilotRuns.get(id);
+    if (!run) throw new AppError("NOT_FOUND", `Autopilot run ${id} not found`);
+    return run;
+  };
+
+  /** Checks the scope exists and returns its id as stored (null for the board). */
+  const checkScope = (kind: AutopilotScopeKind, id: string | null): string | null => {
+    if (kind === "board") {
+      if (id) throw new AppError("VALIDATION", "The board scope has no id");
+      return null;
+    }
+    if (kind === "epic") throw new AppError("VALIDATION", "Autopilot can't be set per epic yet");
+    if (!id || !repos.projects.get(id)) throw new AppError("NOT_FOUND", `Project ${id ?? ""} not found`);
+    return id;
+  };
+
+  /** Settings from least to most specific scope for a project (or just the board). */
+  const chainFor = (all: readonly AutopilotSetting[], automation: string, projectId: string | null) => [
+    all.find((s) => s.scopeKind === "board" && s.automation === automation),
+    projectId === null
+      ? undefined
+      : all.find((s) => s.scopeKind === "project" && s.scopeId === projectId && s.automation === automation),
+  ];
+
+  const parseConfig = (automation: Automation, config: AutomationConfig) =>
+    automation.schema.safeParse({ ...automation.defaults, ...config });
+
+  const entries = (kind: AutopilotScopeKind, id: string | null): AutopilotScopeEntry[] => {
+    const all = repos.autopilotSettings.all();
+    return deps.automations.map((automation) => {
+      const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
+      const resolved = resolveAutopilot(chainFor(all, automation.key, kind === "project" ? id : null));
+      const parsed = parseConfig(automation, resolved.config);
+      return {
+        automation: automation.key,
+        mode: own?.mode ?? "inherit",
+        config: own?.config ?? {},
+        enabled: resolved.enabled,
+        source: resolved.source,
+        effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
+      };
+    });
+  };
+
+  const logRun = (fx: Effects, run: AutopilotRun) => {
+    if (!run.taskId) return;
+    fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
+      automation: run.automation,
+      title: titleOf(run.automation),
+      status: run.status,
+      summary: run.summary,
+      ...(run.dryRun ? { dryRun: true } : {}),
+      ...(run.error ? { error: run.error } : {}),
+    });
+  };
+
+  const save = (run: AutopilotRun, opts: { log?: boolean } = {}): AutopilotRun => {
+    core.write((fx) => {
+      repos.autopilotRuns.update(run);
+      if (opts.log) logRun(fx, run);
+      // The card's attention reason may change with the run.
+      else if (run.taskId) fx.task(run.taskId);
+      fx.autopilot();
+    });
+    return run;
+  };
+
+  return {
+    overview: () => ({
+      paused: loadAutopilotStatus(repos).paused,
+      engine: loadAutopilotEngine(repos),
+      automations: deps.automations.map(describeAutomation),
+    }),
+    status: () => loadAutopilotStatus(repos),
+    automations: () => deps.automations,
+    engine: () => loadAutopilotEngine(repos),
+    updateEngine(input) {
+      const current = loadAutopilotEngine(repos);
+      const next = AutopilotEngineSettings.safeParse({
+        ...current,
+        ...input,
+        quietHours: { ...current.quietHours, ...input.quietHours },
+      });
+      if (!next.success) throw new AppError("VALIDATION", "Invalid Autopilot settings", next.error.issues);
+      core.write((fx) => {
+        repos.settings.set(AUTOPILOT_ENGINE_KEY, next.data);
+        fx.autopilot();
+      });
+      return next.data;
+    },
+    setPaused(paused) {
+      core.write((fx) => {
+        repos.settings.set(AUTOPILOT_PAUSED_KEY, paused);
+        fx.autopilot();
+      });
+      return loadAutopilotStatus(repos);
+    },
+    scope(kind, id) {
+      return entries(kind, checkScope(kind, id));
+    },
+    setScope(kind, id, key, input) {
+      const scopeId = checkScope(kind, id);
+      const automation = automationOf(key);
+      const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
+      const mode = input.mode ?? own?.mode ?? "inherit";
+      const config = input.config ?? own?.config ?? {};
+      const known = new Set(automation.fields.map((f) => f.key));
+      const unknown = Object.keys(config).find((k) => !known.has(k));
+      if (unknown) throw new AppError("VALIDATION", `${automation.title} has no setting ${unknown}`);
+      const parsed = parseConfig(automation, config);
+      if (!parsed.success) {
+        throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);
+      }
+      core.write((fx) => {
+        if (mode === "inherit" && Object.keys(config).length === 0) {
+          repos.autopilotSettings.delete(kind, scopeId, key);
+        } else {
+          repos.autopilotSettings.upsert({
+            scopeKind: kind,
+            scopeId,
+            automation: key,
+            mode,
+            config,
+            updatedAt: nowIso(),
+          });
+        }
+        fx.autopilot();
+      });
+      return entries(kind, scopeId);
+    },
+    resolve(automation, projectId) {
+      const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId));
+      const parsed = parseConfig(automation, resolved.config);
+      return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
+    },
+    runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
+    runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
+    hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
+    usage(agentAutomations, since) {
+      const agents = new Set(agentAutomations);
+      return {
+        started: repos.autopilotRuns.startedSince(agentAutomations, since),
+        spendUsd: repos.autopilotRuns.spendSince(since),
+        active: repos.autopilotRuns
+          .withStatus(AUTOPILOT_ACTIVE_STATUSES)
+          .filter((r) => !r.dryRun && agents.has(r.automation)).length,
+      };
+    },
+    record({ automation, candidate, dryRun }) {
+      const at = nowIso();
+      const run: AutopilotRun = {
+        id: randomUUID(),
+        automation,
+        taskId: candidate.taskId ?? null,
+        projectId: candidate.projectId ?? null,
+        dedupeKey: candidate.dedupeKey,
+        status: dryRun ? "skipped" : "queued",
+        summary: dryRun ? `Would ${candidate.summary}` : candidate.summary,
+        dryRun,
+        runner: null,
+        sessionId: null,
+        threadUrl: null,
+        worktreePath: null,
+        costUsd: null,
+        error: null,
+        needsAttention: false,
+        createdAt: at,
+        startedAt: null,
+        finishedAt: dryRun ? at : null,
+        updatedAt: at,
+      };
+      return core.write((fx) => {
+        if (repos.autopilotRuns.exists(automation, candidate.dedupeKey, dryRun)) return null;
+        repos.autopilotRuns.insert(run);
+        if (dryRun) logRun(fx, run);
+        fx.autopilot();
+        return run;
+      });
+    },
+    start(runId) {
+      const run = runOf(runId);
+      if (run.status !== "queued") throw new AppError("CONFLICT", `Run ${runId} is ${run.status}, not queued`);
+      const at = nowIso();
+      return save({ ...run, status: "running", startedAt: at, updatedAt: at }, { log: true });
+    },
+    update(runId, patch) {
+      return save({ ...runOf(runId), ...patch, updatedAt: nowIso() });
+    },
+    finish(runId, result) {
+      const run = runOf(runId);
+      const { status = "succeeded", summary, error, needsAttention, ...patch } = result;
+      const at = nowIso();
+      return save(
+        {
+          ...run,
+          ...patch,
+          status,
+          summary: summary ?? run.summary,
+          error: error ?? null,
+          needsAttention: needsAttention ?? false,
+          finishedAt: at,
+          updatedAt: at,
+        },
+        { log: true },
+      );
+    },
+    recover() {
+      const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES);
+      if (stranded.length === 0) return 0;
+      core.write((fx) => {
+        const at = nowIso();
+        for (const run of stranded) {
+          const failed: AutopilotRun = {
+            ...run,
+            status: "failed",
+            error: "The board restarted while this run was going",
+            needsAttention: run.taskId !== null,
+            finishedAt: at,
+            updatedAt: at,
+          };
+          repos.autopilotRuns.update(failed);
+          logRun(fx, failed);
+        }
+        fx.autopilot();
+      });
+      return stranded.length;
+    },
+  };
+}

@@ -59,6 +59,7 @@ files under each app.
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
+- [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
 
 ### Decisions
 
@@ -69,6 +70,7 @@ files under each app.
 - [0005 Live updates patch the cache, with no replay](decisions/0005-sse-without-replay.md)
 - [0006 GitHub through its GraphQL API, with the token `gh` holds](decisions/0006-github-graphql-via-gh-token.md)
 - [0007 An epic is a task with kind 'epic'](decisions/0007-epic-is-a-task-kind.md)
+- [0008 Autopilot is a deterministic rule engine inside the server](decisions/0008-autopilot-engine.md)
 
 ### Reference
 

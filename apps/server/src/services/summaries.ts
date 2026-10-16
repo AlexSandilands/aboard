@@ -83,6 +83,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const findingsByTask = groupBy(repos.reviews.findingsFor(ids), (f) => f.taskId);
   const labelsByTask = repos.labels.forTasks(ids);
   const importsByTask = repos.imports.forTasks(ids);
+  const autopilotByTask = repos.autopilotRuns.attentionFor(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
   for (const record of records) {
@@ -121,7 +122,13 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       currentStep: deriveCurrentStep(phases),
       links,
       // A finished task's review is history: the badge stays, the call to action doesn't.
-      attention: deriveAttention(phases, links, record.status === "done" ? null : review, issueImport),
+      attention: deriveAttention(
+        phases,
+        links,
+        record.status === "done" ? null : review,
+        issueImport,
+        autopilotByTask.get(record.id) ?? null,
+      ),
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,

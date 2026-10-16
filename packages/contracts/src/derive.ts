@@ -67,8 +67,11 @@ export function deriveAttention(
   links: ReadonlyArray<TaskLink>,
   review: TaskReviewSummary | null = null,
   issueImport: TaskImport | null = null,
+  /** Why an Autopilot run on the task needs the user (see the autopilot_runs repo); null when none does. */
+  autopilot: string | null = null,
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
+  if (autopilot) reasons.push({ kind: "autopilot", severity: "warning", message: autopilot });
   if (issueImport?.status === "failed") {
     reasons.push({
       kind: "import_failed",
