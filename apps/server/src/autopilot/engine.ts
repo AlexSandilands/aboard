@@ -3,7 +3,14 @@ import type { EventBus } from "../bus.ts";
 import { messageOf } from "../integrations/github.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
-import { NO_RUNNER, type Automation, type AutomationConfig, type Candidate, type Runner } from "./types.ts";
+import {
+  NO_RUNNER,
+  type Automation,
+  type AutomationConfig,
+  type Candidate,
+  type Runner,
+  type RunPatch,
+} from "./types.ts";
 
 export const AUTOPILOT_TICK_MS = 60_000;
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
@@ -94,18 +101,19 @@ export function createAutopilotEngine(deps: {
     const s = deps.services();
     try {
       const started = self(() => s.autopilot.start(run.id));
+      const update = (patch: RunPatch) => {
+        self(() => s.autopilot.update(run.id, patch));
+      };
       // The action's synchronous part counts as the engine's own write; changes it makes after an await don't.
       const result = await self(() =>
         automation.act(candidate, {
           services: s,
-          runner,
+          runner: { start: (request) => runner.start(request, update) },
           engine: s.autopilot.engine(),
           config,
           run: started,
           actor: AUTOPILOT_ACTOR,
-          update: (patch) => {
-            self(() => s.autopilot.update(run.id, patch));
-          },
+          update,
         }),
       );
       self(() => s.autopilot.finish(run.id, result));

@@ -93,6 +93,8 @@ export interface AutopilotService {
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
+  /** Finished headless runs that made a worktree, oldest first. */
+  finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
   usage(agentAutomations: readonly string[], since: string): { started: number; spendUsd: number; active: number };
   /**
@@ -280,6 +282,7 @@ export function createAutopilotService(
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
+    finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage(agentAutomations, since) {
       const agents = new Set(agentAutomations);
       return {

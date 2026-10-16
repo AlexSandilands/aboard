@@ -23,6 +23,8 @@ export interface Config {
   userHome: string;
   /** Where Claude Code and Copilot CLI keep their running sessions, for linked sessions' status. */
   sessionDirs: SessionDirs;
+  /** Where Autopilot's headless runs get their git worktrees. */
+  worktreesDir: string;
 }
 
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
@@ -41,6 +43,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
     userHome: homedir(),
+    worktreesDir: join(homeDir, "worktrees"),
     sessionDirs: {
       claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
       copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),

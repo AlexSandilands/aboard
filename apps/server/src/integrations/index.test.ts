@@ -44,6 +44,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         pollers: false,
         userHome: "/nonexistent",
         sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
+        worktreesDir: "/nonexistent/worktrees",
       },
       bus,
       services: () => services!,

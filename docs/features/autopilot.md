@@ -1,15 +1,14 @@
 # Autopilot
 
-Board task: #79 (engine core), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per project or for
 the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine, the per-task flag and the automations that have landed (below). The rest of the
-catalogue is each its own task in the epic, and so are the runners (#85) and the UI (#86). Until a runner is
-configured, every agent action fails with "No agent runner is available yet".
+This doc covers the engine, the runners, the per-task flag and the automations that have landed (below). The rest
+of the catalogue is each its own task in the epic, and so is the UI (#86).
 
 ## How it works
 
@@ -48,6 +47,7 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dryRun`               | off             | Record what would run, and do nothing                                |
 | `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR                          |
 | `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
+| `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 
 Quiet hours and the caps only hold back automations with `needsAgent`; board-only actions (archiving a card)
 go ahead. **Pause all** stops every new run; runs already going finish. Backups carry the engine settings but not
@@ -132,6 +132,66 @@ per scope), logged as `archived` plus the note "Archived by Autopilot after N da
 tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
+### Runners
+
+An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
+binds the run's `update` into it, so the session, thread or worktree is on the run as soon as it exists, and a
+run that fails afterwards still shows it. A runner throws when the work couldn't be done, and the run fails
+with that error.
+
+- **`kind: "start"`** (the default) begins a new session. The automation's `runner` option picks the runner:
+  **Auto** (a T3 Code thread when T3 is detected and its live poll is ok, else headless), **T3 only** (fails
+  when T3 isn't connected) or **Headless only**. Once Auto has asked T3 it never falls back to headless: the
+  thread may have started even when the reply was lost.
+- **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
+  session, and fails when the task has no live thread.
+- **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
+  starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
+  branch is refused either way.
+- Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
+  (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`.
+
+Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
+`RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):
+
+| Option           | Default | Meaning                                                                          |
+| ---------------- | ------- | -------------------------------------------------------------------------------- |
+| `runner`         | auto    | auto, t3 or headless                                                             |
+| `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
+| `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
+| `model`          | blank   | Headless: `--model`; blank takes the task's tier when it maps to a Claude model  |
+| `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
+
+**T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
+so the model is the one the user mapped to the task's suggested tier. The thread gets a new T3 worktree; for a
+`branch` it starts from origin's copy of it. The prompt ends with a note on where to push and the safety rules.
+
+**Headless.** `claude -p` in a worktree of its own (`autopilot/worktrees.ts`):
+
+1. `git worktree add --no-track -b autopilot/<task#>-<run8> <data dir>/worktrees/<repo>/<task#>-<run8> <start>`,
+   where `<start>` is the base ref, `origin/<default branch>` or `origin/<branch>`, after a best-effort fetch.
+   The new branch tracks nothing, so a bare `git push` can't land on the branch it started from. A worktree
+   folder that overlaps the project's checkout is refused.
+2. The board picks the session id and records it on the run, with the worktree, before the agent starts. It
+   also links the session to the task as an `agent_session` link ([agent sessions](agent-sessions.md)) with the
+   worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
+   there is no `--no-session-persistence`.
+3. `--permission-mode acceptEdits`, with Bash, the file tools and this board's MCP tools (`mcp__<id>`) allowed.
+   Read-only runs use `dontAsk` with the reviewer's read-only list. The agent reaches the board through the
+   user's own MCP config.
+4. **Push safety:** Claude Code checks deny rules before allow rules, and in every part of a compound command.
+   The deny rules block force-pushes (`--force*`, `-f`, `+ref`), `--mirror` and `--delete`. They block pushes to
+   the default branch, including ones written `*:main` or `refs/heads/main` or run as `git -C <dir> push`. They
+   also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
+   not a sandbox; the prompt states the same rules.
+5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
+   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`).
+
+**Cleanup** (`autopilot/cleanup.ts`) runs hourly with the pollers. It removes a finished headless run's worktree
+once the task has a merged PR, or `worktreeRetentionDays` after the run finished. It uses `git worktree remove`
+without `--force`, so a worktree with uncommitted changes is kept and logged once. The branch is deleted with
+`git branch -d`, which keeps a branch that has unmerged commits.
+
 ### Writing an automation
 
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
@@ -144,8 +204,8 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
-  Agent work goes through `ctx.runner.start`; `ctx.update` records runner details while it runs. Return
-  `needsAttention: true` for a failure the user should see.
+  Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
+  it runs. Return `needsAttention: true` for a failure the user should see.
 
 An automation must never merge, close or delete tasks, force-push or push to the default branch.
 
@@ -159,6 +219,10 @@ An automation must never merge, close or delete tasks, force-push or push to the
   again next pass gives the same result with nothing stored.
 - **Engine settings are one key.** They are always read and validated together; pause is its own key because
   it is a switch, not configuration.
+- **The board picks the headless session id** (`--session-id`) rather than reading it from the result. That
+  way the session is linked while the agent works, and survives a timeout that leaves no result.
+- **Headless worktrees live under the data dir**, never in the project's folder. They can't show up in the
+  user's checkout or its `git status`, and cleanup can't touch anything Autopilot didn't make.
 - **Self-made events are ignored by a depth counter** around the engine's synchronous writes, including the
   synchronous part of an action. Changes an action makes after an `await` do start a pass, which dedupe keys
   make harmless.
@@ -167,6 +231,8 @@ An automation must never merge, close or delete tasks, force-push or push to the
 
 | Option | Why not chosen |
 | ------ | -------------- |
+| Headless runs in the project's own checkout | Would switch the user's branch and mix the agent's edits with theirs |
+| `--permission-mode bypassPermissions` for headless runs | Allows tools nobody listed; acceptEdits with an explicit list says what the agent may do |
 | A long-running agent watching the board | Costs tokens while nothing happens, and its choices can't be tested or reasoned about |
 | Clearing `needs_attention` on task moves | Needs a hook in every path that changes status; deriving it can't go stale |
 | Recording held candidates as queued runs | Needs queue ordering and expiry; re-checking each pass is simpler |
@@ -181,7 +247,11 @@ An automation must never merge, close or delete tasks, force-push or push to the
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
-| `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner` |
+| `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner`, `RunnerRequest` |
+| `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |
+| `apps/server/src/autopilot/runnerOptions.ts` | The runner options every agent automation shares |
+| `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
+| `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |

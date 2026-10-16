@@ -1,6 +1,8 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../app.ts";
 import { createContext } from "../context.ts";
-import type { BoardEvent } from "@repo/contracts";
+import { BRAND, type BoardEvent } from "@repo/contracts";
 import { GhError } from "../integrations/gh.ts";
 import type { SessionDirs } from "../integrations/agentSessions.ts";
 import type { IntegrationOverrides } from "../integrations/index.ts";
@@ -10,6 +12,7 @@ import type { IntegrationOverrides } from "../integrations/index.ts";
 const NO_PROCESSES: IntegrationOverrides = {
   runGh: () => Promise.reject(new GhError("gh is not available in tests", false)),
   runImport: () => Promise.reject(new Error("Claude Code is not available in tests")),
+  runAgent: () => Promise.reject(new Error("Claude Code is not available in tests")),
   listMcpServers: () => Promise.resolve([]),
 };
 
@@ -27,6 +30,8 @@ export function createTestHarness(
       pollers: false,
       userHome: "/nonexistent",
       sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
+      // An in-memory database has no folder to put worktrees next to.
+      worktreesDir: join(tmpdir(), `${BRAND.id}-test-worktrees`),
       ...config,
     },
     { ...NO_PROCESSES, ...integrations },

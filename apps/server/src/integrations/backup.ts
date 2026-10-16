@@ -25,7 +25,7 @@ export type RunGit = (args: string[], cwd: string) => Promise<GitResult>;
 // The machine's own git does the work, so pushing uses whatever credentials it already has (Git Credential
 // Manager, SSH keys) and the board never stores a token. GIT_TERMINAL_PROMPT=0 makes a missing credential fail
 // instead of waiting for input nobody will type.
-const defaultRunGit: RunGit = (args, cwd) =>
+export const defaultRunGit: RunGit = (args, cwd) =>
   new Promise((resolve, reject) => {
     execFile(
       "git",
