@@ -17,4 +17,5 @@ export * from "./agentSessions.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
 export * from "./recurring.ts";
+export * from "./customAutomations.ts";
 export * from "./notifications.ts";

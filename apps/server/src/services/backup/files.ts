@@ -27,6 +27,7 @@ const ROOT_FILES = {
   task_templates: "templates.json",
   autopilot_settings: "autopilot.json",
   autopilot_recurring: "recurring.json",
+  autopilot_custom: "custom-automations.json",
 } as const;
 const TASKS_DIR = "tasks";
 const EVENTS_DIR = "events";
@@ -65,6 +66,7 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.task_templates, rowsJson(dump.task_templates));
   add(ROOT_FILES.autopilot_settings, rowsJson(dump.autopilot_settings));
   add(ROOT_FILES.autopilot_recurring, rowsJson(dump.autopilot_recurring));
+  add(ROOT_FILES.autopilot_custom, rowsJson(dump.autopilot_custom));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
   const months = new Map<string, BackupRow[]>();
   for (const event of dump.task_events) {
@@ -168,6 +170,9 @@ export function readDumpDir(dir: string): BoardDump {
       : {}),
     ...(existsSync(join(dir, ROOT_FILES.autopilot_recurring))
       ? { autopilot_recurring: root(ROOT_FILES.autopilot_recurring) }
+      : {}),
+    ...(existsSync(join(dir, ROOT_FILES.autopilot_custom))
+      ? { autopilot_custom: root(ROOT_FILES.autopilot_custom) }
       : {}),
     tasks: tasks.sort((a, b) => Number(a.task?.number) - Number(b.task?.number)),
     task_events: events.sort((a, b) => Number(a.id) - Number(b.id)),

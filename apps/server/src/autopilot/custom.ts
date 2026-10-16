@@ -1,0 +1,282 @@
+import {
+  BRAND,
+  customAutomationKey,
+  describeCustomTrigger,
+  describeShellRun,
+  latestDue,
+  latestHourlySlot,
+  localStamp,
+  renderCustomPrompt,
+  customShellEnv,
+  type CustomAutomation,
+  type CustomTrigger,
+  type CustomValues,
+  type Project,
+  type TaskLink,
+  type TaskSummary,
+} from "@repo/contracts";
+import { z } from "zod";
+import type { RunShell } from "../integrations/shellCommand.ts";
+import type { Services } from "../services/types.ts";
+import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "./runnerOptions.ts";
+import { defineAutomation, type ActionResult, type Automation, type Candidate, type CheckContext } from "./types.ts";
+
+// A custom automation as a catalogue entry (docs/features/autopilot.md#custom-automations): the trigger is the check,
+// the filters narrow it, and the action is an agent through the runners or a shell command in the project's folder.
+
+type PrLink = Extract<TaskLink, { kind: "pr" }>;
+
+interface CustomData {
+  /** The pull request the trigger was about, for `{{pr.url}}` and the agent's branch. */
+  prLinkId?: string;
+}
+
+const prLinks = (task: TaskSummary): PrLink[] => task.links.filter((l): l is PrLink => l.kind === "pr");
+
+/** The pull request a task's values name: the one the trigger was about, else its newest open one, else its newest. */
+const prOf = (task: TaskSummary, linkId?: string): PrLink | null => {
+  const prs = prLinks(task);
+  const open = prs.filter((l) => l.snapshot?.state === "open" || l.snapshot?.state === "draft");
+  return (linkId ? prs.find((l) => l.id === linkId) : null) ?? open.at(-1) ?? prs.at(-1) ?? null;
+};
+
+// An event at the arming instant counts: the automation was there for it.
+// Compared as instants: GitHub's stamps have no milliseconds, the board's do.
+const after = (at: string | null | undefined, armedAt: string): boolean =>
+  Boolean(at) && Date.parse(at!) >= Date.parse(armedAt);
+
+/** The trigger's candidates on one task, before filters: a dedupe key and what it was about. */
+function taskEvents(
+  trigger: Exclude<CustomTrigger, { kind: "schedule" }>,
+  task: TaskSummary,
+  ctx: { armedAt: string; now: Date; from: Map<string, string | null>; byId: Map<string, TaskSummary> },
+  services: Services,
+): Array<{ key: string; data: CustomData; what: string }> {
+  switch (trigger.kind) {
+    case "status_change": {
+      if (task.status !== trigger.to || !after(task.statusChangedAt, ctx.armedAt)) return [];
+      if (trigger.from && ctx.from.get(task.id) !== trigger.from) return [];
+      return [{ key: `status:${task.id}:${task.statusChangedAt}`, data: {}, what: `moved to ${trigger.to}` }];
+    }
+    case "stale": {
+      // A state, not an event: a task that was already stuck when the automation was made counts.
+      if (task.status !== trigger.status) return [];
+      if (Date.parse(task.statusChangedAt) > ctx.now.getTime() - trigger.hours * 3_600_000) return [];
+      return [{ key: `stale:${task.id}:${task.statusChangedAt}`, data: {}, what: `stale in ${trigger.status}` }];
+    }
+    case "blocker_finished": {
+      if (task.blockedBy.length === 0 || task.blocked || task.status === "done") return [];
+      const blockers = task.blockedBy.map((b) => ctx.byId.get(b.id) ?? services.tasks.summary(b.id));
+      const lastDoneAt = blockers
+        .map((b) => b.statusChangedAt)
+        .sort()
+        .at(-1)!;
+      if (!after(lastDoneAt, ctx.armedAt)) return [];
+      return [{ key: `unblocked:${task.id}:${lastDoneAt}`, data: {}, what: "unblocked" }];
+    }
+    case "pr_event":
+      return prLinks(task).flatMap((link) => {
+        const snap = link.snapshot;
+        // When the board last saw the pull request change; a state older than the automation isn't news.
+        const seen = [link.createdAt, snap?.updatedAt ?? null].reduce<string | null>(
+          (latest, at) => (at && (!latest || Date.parse(at) > Date.parse(latest)) ? at : latest),
+          null,
+        );
+        const head = snap?.headOid ?? snap?.updatedAt ?? "";
+        const data = { prLinkId: link.id };
+        switch (trigger.event) {
+          case "linked":
+            return after(link.createdAt, ctx.armedAt) ? [{ key: `pr_linked:${link.id}`, data, what: "PR linked" }] : [];
+          case "new_head":
+            return snap?.headOid && after(seen, ctx.armedAt)
+              ? [{ key: `pr_head:${link.id}:${snap.headOid}`, data, what: "new commits" }]
+              : [];
+          case "checks_failing":
+            return snap?.checks === "failing" && after(seen, ctx.armedAt)
+              ? [{ key: `pr_checks:${link.id}:${head}`, data, what: "checks failing" }]
+              : [];
+          case "conflict":
+            return snap?.mergeable === "conflicting" && after(seen, ctx.armedAt)
+              ? [{ key: `pr_conflict:${link.id}:${head}`, data, what: "merge conflict" }]
+              : [];
+          case "merged":
+            return snap?.state === "merged" && after(seen, ctx.armedAt)
+              ? [{ key: `pr_merged:${link.id}`, data, what: "PR merged" }]
+              : [];
+        }
+      });
+  }
+}
+
+/** The values an action is given. */
+export function customValues(
+  custom: Pick<CustomAutomation, "name">,
+  project: Project | null,
+  task: TaskSummary | null,
+  data: CustomData = {},
+): CustomValues {
+  const pr = task ? prOf(task, data.prLinkId) : null;
+  return {
+    automation: custom.name,
+    task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
+    pr: pr ? { url: pr.url } : null,
+    project: project ? { name: project.title, path: project.workspaceRoot } : null,
+  };
+}
+
+/** The agent's prompt: the skill to use, the user's prompt filled in, and the task it is about. */
+export function customAgentPrompt(
+  custom: CustomAutomation,
+  values: CustomValues,
+  task: TaskSummary,
+  description: string | null,
+): string {
+  if (custom.action.kind !== "agent") throw new Error("Not an agent action");
+  const parts = [] as string[];
+  if (custom.action.skill) parts.push(`Use the ${custom.action.skill} skill.`);
+  parts.push(renderCustomPrompt(custom.action.prompt, values));
+  const context = [
+    `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
+    task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
+    values.pr ? `Pull request: ${values.pr.url}` : null,
+    description?.trim() ? `Description:\n${description.trim()}` : null,
+    `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
+  ].filter(Boolean);
+  parts.push(`---\nStarted by the ${BRAND.name} Autopilot automation "${custom.name}".\n${context.join("\n")}`);
+  return parts.join("\n\n");
+}
+
+const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
+
+/** The catalogue entry for a custom automation. */
+export function customAutomation(custom: CustomAutomation, deps: { runShell: RunShell }): Automation {
+  const { trigger, filters, action } = custom;
+  const isAgent = action.kind === "agent";
+
+  const inScope = (ctx: CheckContext<Record<string, unknown>>) =>
+    ctx.projects.filter(({ project }) => filters.projectIds.length === 0 || filters.projectIds.includes(project.id));
+
+  const matches = (task: TaskSummary) =>
+    task.kind !== "epic" &&
+    task.archivedAt === null &&
+    (filters.labels.length === 0 || task.labels.some((l) => filters.labels.includes(l))) &&
+    (!filters.epicId || task.parent?.id === filters.epicId);
+
+  const preview = (values: CustomValues, task: TaskSummary | null, services: Services): string => {
+    if (action.kind === "shell") return describeShellRun(action.command, values);
+    return customAgentPrompt(custom, values, task!, task ? services.tasks.detail(task.id).description : null);
+  };
+
+  const check = (ctx: CheckContext<Record<string, unknown>>): Candidate[] => {
+    const { services, now } = ctx;
+    const scoped = inScope(ctx);
+    if (trigger.kind === "schedule") {
+      const s = trigger.schedule;
+      const slot =
+        s.kind === "hourly"
+          ? latestHourlySlot(s.everyHours, now)
+          : latestDue(s, now, localStamp(new Date(custom.armedAt)));
+      if (!slot || slot.getTime() <= Date.parse(custom.armedAt)) return [];
+      const stamp = localStamp(slot);
+      return scoped.map(({ project }) => ({
+        dedupeKey: `schedule:${stamp}`,
+        summary: `run "${custom.name}" in ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
+        projectId: project.id,
+        data: {} satisfies CustomData,
+        preview: preview(customValues(custom, project, null), null, services),
+      }));
+    }
+    return scoped.flatMap(({ project }) => {
+      const tasks = services.tasks.summaries({ projectId: project.id });
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const eligible = tasks.filter(matches);
+      const from =
+        trigger.kind === "status_change" && trigger.from
+          ? services.customAutomations.statusFrom(eligible.filter((t) => t.status === trigger.to).map((t) => t.id))
+          : new Map<string, string | null>();
+      return eligible.flatMap((task) =>
+        taskEvents(trigger, task, { armedAt: custom.armedAt, now, from, byId }, services).map(
+          ({ key, data, what }): Candidate => {
+            // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
+            const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, ctx.engine.dryRun);
+            return {
+              dedupeKey: key,
+              summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
+              taskId: task.id,
+              data,
+              ...(fresh && ctx.engine.dryRun
+                ? { preview: preview(customValues(custom, project, task, data), task, services) }
+                : {}),
+            };
+          },
+        ),
+      );
+    });
+  };
+
+  return defineAutomation({
+    key: customAutomationKey(custom.id),
+    title: custom.name,
+    description: `${describeCustomTrigger(trigger)}: ${isAgent ? "start an agent" : "run a shell command"}.`,
+    needsAgent: isAgent,
+    background: !isAgent,
+    schema: isAgent ? AgentConfig : z.object({}),
+    fields: isAgent ? RUNNER_FIELDS : [],
+    defaults: isAgent ? RUNNER_DEFAULTS : {},
+    check,
+    async act(candidate, ctx): Promise<ActionResult> {
+      const { services } = ctx;
+      const data = (candidate.data ?? {}) as CustomData;
+      const task = candidate.taskId ? services.tasks.summary(candidate.taskId) : null;
+      const projectId = task?.projectId ?? candidate.projectId;
+      const project = projectId ? services.projects.get(projectId) : null;
+      const values = customValues(custom, project, task, data);
+
+      if (action.kind === "agent") {
+        if (!task) throw new Error("An agent action needs a task to work on");
+        const prompt = customAgentPrompt(custom, values, task, services.tasks.detail(task.id).description);
+        const branch = action.onPrBranch ? (prOf(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
+        const result = await ctx.runner.start({
+          run: ctx.run,
+          prompt,
+          tier: action.tier ?? task.suggestedModel?.tier ?? null,
+          options: ctx.config,
+          ...(branch ? { workspace: { branch } } : {}),
+        });
+        const { result: _final, output: _output, ...patch } = result;
+        return { ...patch, summary: `Started an agent on #${task.number} for "${custom.name}"` };
+      }
+
+      if (!project?.workspaceRoot) {
+        throw new Error(`${project?.title ?? "The project"} has no workspace folder to run "${custom.name}" in`);
+      }
+      const ran = await deps.runShell({
+        command: action.command,
+        cwd: project.workspaceRoot,
+        env: customShellEnv(values),
+        timeoutMs: action.timeoutSeconds * 1000,
+      });
+      const where = task ? ` for #${task.number}` : ` in ${project.title}`;
+      const base = { detail: ran.output || null, exitCode: ran.exitCode };
+      if (ran.timedOut) {
+        return {
+          ...base,
+          status: "failed",
+          summary: `"${custom.name}"${where} timed out`,
+          error: `The command didn't finish within ${action.timeoutSeconds} seconds and was stopped`,
+          needsAttention: task !== null,
+        };
+      }
+      if (ran.exitCode !== 0) {
+        return {
+          ...base,
+          status: "failed",
+          summary: `"${custom.name}"${where} exited with ${ran.exitCode ?? "a signal"}`,
+          error: `The command exited with ${ran.exitCode ?? "a signal"}`,
+          needsAttention: task !== null,
+        };
+      }
+      return { ...base, summary: `Ran "${custom.name}"${where}` };
+    },
+  });
+}

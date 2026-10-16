@@ -15,6 +15,8 @@ interface RunRow {
   thread_url: string | null;
   worktree_path: string | null;
   cost_usd: number | null;
+  detail: string | null;
+  exit_code: number | null;
   error: string | null;
   needs_attention: number;
   created_at: string;
@@ -37,6 +39,8 @@ const toRun = (r: RunRow): AutopilotRun => ({
   threadUrl: r.thread_url,
   worktreePath: r.worktree_path,
   costUsd: r.cost_usd,
+  detail: r.detail,
+  exitCode: r.exit_code,
   error: r.error,
   needsAttention: r.needs_attention === 1,
   createdAt: r.created_at,
@@ -59,6 +63,8 @@ const toRow = (r: AutopilotRun) => ({
   thread_url: r.threadUrl,
   worktree_path: r.worktreePath,
   cost_usd: r.costUsd,
+  detail: r.detail,
+  exit_code: r.exitCode,
   error: r.error,
   needs_attention: r.needsAttention ? 1 : 0,
   created_at: r.createdAt,

@@ -17,6 +17,8 @@ export interface Candidate {
   projectId?: string | null;
   /** Anything the check found that the action needs. */
   data?: unknown;
+  /** What the action would run (a filled prompt, a command): kept on a dry run's record. */
+  preview?: string;
 }
 
 /** One project where the automation is on, with its effective config there. */
@@ -36,7 +38,9 @@ export interface CheckContext<C> {
 }
 
 /** What a runner recorded about an agent action. */
-export type RunPatch = Partial<Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd">>;
+export type RunPatch = Partial<
+  Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode">
+>;
 
 export interface ActionContext<C> {
   services: Services;
@@ -73,6 +77,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   description: string;
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
+  /**
+   * Runs in the background like an agent action, without counting against the agent caps: a shell command that may
+   * take minutes. Other board-only actions are awaited one after another.
+   */
+  background?: boolean;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

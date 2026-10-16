@@ -207,6 +207,10 @@ export const AutopilotRun = z.object({
   threadUrl: z.string().nullable(),
   worktreePath: z.string().nullable(),
   costUsd: z.number().nullable(),
+  /** What a shell action printed (the tail), or what a dry run of a custom automation would have run. */
+  detail: z.string().nullable(),
+  /** A shell action's exit code; null when it didn't exit (a timeout) or isn't a shell action. */
+  exitCode: z.number().int().nullable(),
   error: z.string().nullable(),
   needsAttention: z.boolean(),
   createdAt: z.string(),

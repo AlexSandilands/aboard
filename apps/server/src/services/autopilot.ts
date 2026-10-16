@@ -117,7 +117,8 @@ const RUN_LIMIT = 50;
 export function createAutopilotService(
   core: Core,
   deps: {
-    automations: readonly Automation[];
+    /** The catalogue, read on every call: custom automations come and go. */
+    automations: () => readonly Automation[];
     notifications: NotificationsService;
     /**
      * An automation just started applying to these projects: its switch went on for them, or Pause all was lifted.
@@ -127,11 +128,11 @@ export function createAutopilotService(
   },
 ): AutopilotService {
   const { repos } = core;
-  const byKey = new Map(deps.automations.map((a) => [a.key, a]));
-  const titleOf = (key: string) => byKey.get(key)?.title ?? key;
+  const find = (key: string) => deps.automations().find((a) => a.key === key);
+  const titleOf = (key: string) => find(key)?.title ?? key;
 
   const automationOf = (key: string): Automation => {
-    const automation = byKey.get(key);
+    const automation = find(key);
     if (!automation) throw new AppError("NOT_FOUND", `No automation ${key}`);
     return automation;
   };
@@ -166,7 +167,7 @@ export function createAutopilotService(
 
   const entries = (kind: AutopilotScopeKind, id: string | null): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
-    return deps.automations.map((automation) => {
+    return deps.automations().map((automation) => {
       const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
       const resolved = resolveAutopilot(chainFor(all, automation.key, kind === "project" ? id : null));
       const parsed = parseConfig(automation, resolved.config);
@@ -232,10 +233,10 @@ export function createAutopilotService(
     overview: () => ({
       paused: loadAutopilotStatus(repos).paused,
       engine: loadAutopilotEngine(repos),
-      automations: deps.automations.map(describeAutomation),
+      automations: deps.automations().map(describeAutomation),
     }),
     status: () => loadAutopilotStatus(repos),
-    automations: () => deps.automations,
+    automations: () => deps.automations(),
     engine: () => loadAutopilotEngine(repos),
     updateEngine(input) {
       const current = loadAutopilotEngine(repos);
@@ -258,7 +259,7 @@ export function createAutopilotService(
         fx.autopilot();
       });
       if (wasPaused && !paused) {
-        for (const a of deps.automations) deps.onEnabled?.(a.key, enabledProjects(a.key));
+        for (const a of deps.automations()) deps.onEnabled?.(a.key, enabledProjects(a.key));
       }
       return loadAutopilotStatus(repos);
     },
@@ -333,6 +334,8 @@ export function createAutopilotService(
         threadUrl: null,
         worktreePath: null,
         costUsd: null,
+        detail: dryRun ? (candidate.preview ?? null) : null,
+        exitCode: null,
         error: null,
         needsAttention: false,
         createdAt: at,

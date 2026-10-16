@@ -60,6 +60,8 @@ export const BoardDump = z.object({
   autopilot_settings: z.array(BackupRow).default([]),
   /** Recurring-task rules. Dumps taken before Recurring tasks have none. */
   autopilot_recurring: z.array(BackupRow).default([]),
+  /** Custom automations. Dumps taken before them have none. */
+  autopilot_custom: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
 });

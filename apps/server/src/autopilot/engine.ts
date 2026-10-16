@@ -185,8 +185,8 @@ export function createAutopilotEngine(deps: {
       const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;
       const done = launch(automation, run, candidate, config);
-      // Quick board changes run one after another; agent runs go on in the background.
-      if (!automation.needsAgent) await done;
+      // Quick board changes run one after another; agent runs and shell commands go on in the background.
+      if (!automation.needsAgent && !automation.background) await done;
     }
   };
 
