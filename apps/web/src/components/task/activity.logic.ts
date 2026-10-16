@@ -39,6 +39,7 @@ const FIELD_LABEL: Record<string, string> = {
   description: "description",
   planContext: "plan context",
   autoReview: "auto-review setting",
+  autopilot: "Autopilot flag",
 };
 const FINDING_STATUS_LABEL: Record<string, string> = { fixed: "fixed", wont_fix: "won't fix" };
 const LINK_KIND_LABEL: Record<string, string> = {

@@ -39,9 +39,10 @@ function seed() {
     description: "Line one\nline two",
     plan,
     labels: ["ui", "backend"],
+    autopilot: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
   });
-  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
+  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
   s.tasks.create({ projectId: project.id, title: "Idea" });
   s.tasks.addNote(a.id, "handover", "agent");
@@ -211,6 +212,12 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
+      // Both flags survive: On, Off, and Default (null) for the task that never had one.
+      expect(restored.prepare("SELECT autopilot FROM tasks ORDER BY number").all()).toEqual([
+        { autopilot: 1 },
+        { autopilot: 0 },
+        { autopilot: null },
+      ]);
       expect(restored.prepare("SELECT snapshot_json FROM task_links").all()).toEqual(
         expect.arrayContaining([{ snapshot_json: null }]),
       );
@@ -297,14 +304,21 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns, no Autopilot.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no Autopilot settings.
     const { autopilot_settings: _a, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
       autopilot_settings: [],
       tasks: dump.tasks.map((bundle) => {
-        const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
+        const {
+          suggested_tier: _t,
+          suggested_reason: _r,
+          kind: _k,
+          parent_id: _p,
+          autopilot: _f,
+          ...task
+        } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
       }),
       task_events: dump.task_events.map((e) =>

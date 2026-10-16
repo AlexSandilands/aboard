@@ -5,6 +5,8 @@ import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
+  autopilotField,
+  autopilotValue,
   epicField,
   hasProjectRef,
   labelsField,
@@ -51,7 +53,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
-        "epic when it is part of a larger feature, and t3Thread when running inside T3 Code.",
+        "epic when it is part of a larger feature, and t3Thread when running inside T3 Code. Set autopilot only if the " +
+        "user has said whether Autopilot may start it.",
       inputSchema: {
         title: z.string().min(1).describe("Short imperative title."),
         description: z
@@ -62,6 +65,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         epic: epicField.optional(),
         links: linksField,
         labels: labelsField.optional(),
+        autopilot: autopilotField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -78,6 +82,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.epic ? { epicId: args.epic } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
+          ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           actor: actor(args.actor),
         });
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
@@ -95,7 +100,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
-        "suggestedModel to the tier its implementation needs, and epic when it is part of a larger feature. " +
+        "suggestedModel to the tier its implementation needs, and epic when it is part of a larger feature. When the " +
+        "result asks about the Autopilot flag, ask the user before setting autopilot. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z.string().min(1),
@@ -105,6 +111,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         ...planInputFields,
         links: linksField,
         labels: labelsField.optional(),
+        autopilot: autopilotField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -129,6 +136,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           plan,
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
+          ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           actor: actor(args.actor),
         });
         return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
@@ -279,7 +287,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels or suggested model, or archive/unarchive it. To move the task to a different " +
+        "Edit a task's title, description, plan context, labels, suggested model or Autopilot flag, or archive/unarchive it. " +
+        "The Autopilot flag lets the board start the task by itself, so set it only after the user has said so. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. " +
@@ -305,6 +314,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .describe("Turn local review on or off for this task; null follows the board's setting."),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
+        autopilot: autopilotField.optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         actor: actorField,
       },
@@ -327,6 +337,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
+            ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
           },
           actor(args.actor),

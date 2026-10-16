@@ -54,6 +54,12 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    Change it later with `update_task` (`null` clears it). A suggestion is advice to the user: keep working on
    whatever model you are on.
 
+   Autopilot can start Planned tasks by itself, but only the ones flagged for it. When Start planned tasks is
+   on for the task's project, the `set_plan` / `create_task` result says **Autopilot flag not set**: ask the
+   user whether to flag the task, and once they answer call `update_task` with `autopilot: "on"` or `"off"`
+   (`"default"` clears it). Never set the flag on your own, since it lets an agent start on the task unattended.
+   You can flag tasks, but you can't change Autopilot's own settings: only the user can.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
    asking the user a question and waiting for the answer, mark the current step `blocked` with a note

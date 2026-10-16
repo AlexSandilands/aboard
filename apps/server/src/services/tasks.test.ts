@@ -418,6 +418,25 @@ describe("events", () => {
   });
 });
 
+describe("autopilot flag", () => {
+  it("starts as Default, is set on create, and logs a change once", () => {
+    const { s, project } = setup();
+    const plain = s.tasks.create({ projectId: project.id, title: "Plain" });
+    expect(plain.autopilot).toBeNull();
+    const flagged = s.tasks.create({ projectId: project.id, title: "Flagged", autopilot: true });
+    expect(flagged.autopilot).toBe(true);
+
+    const off = s.tasks.update(plain.id, { autopilot: false }, "user");
+    expect(off.autopilot).toBe(false);
+    const again = s.tasks.update(plain.id, { autopilot: false }, "user");
+    const updates = again.events.filter((e) => e.type === "updated");
+    expect(updates.map((e) => e.payload)).toEqual([{ fields: ["autopilot"] }]);
+
+    expect(s.tasks.update(plain.id, { autopilot: null }, "user").autopilot).toBeNull();
+    expect(s.tasks.summaries().find((t) => t.id === flagged.id)?.autopilot).toBe(true);
+  });
+});
+
 describe("suggested model", () => {
   it("is set by set_plan and create, kept when omitted, and cleared with null", () => {
     const { s, project } = setup();

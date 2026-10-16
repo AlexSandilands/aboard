@@ -225,6 +225,7 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
+          autopilot: input.autopilot ?? null,
           suggestedModel: null,
         };
         repos.tasks.insert(task);
@@ -286,6 +287,10 @@ export function createTasksService(
         if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
           next.autoReview = input.autoReview;
           changed.push("autoReview");
+        }
+        if (input.autopilot !== undefined && input.autopilot !== current.autopilot) {
+          next.autopilot = input.autopilot;
+          changed.push("autopilot");
         }
         const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
         if (movedProject) {

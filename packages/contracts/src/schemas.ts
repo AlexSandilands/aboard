@@ -328,6 +328,8 @@ export const TaskSummary = z.object({
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
+  /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
+  autopilot: z.boolean().nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */
@@ -456,6 +458,8 @@ export const CreateTaskInput = z
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
+    /** The Autopilot flag: null or omitted is Default. */
+    autopilot: z.boolean().nullable().optional(),
     /**
      * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
@@ -482,6 +486,8 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
+  /** null is Default: Start planned tasks never starts the task. */
+  autopilot: z.boolean().nullable().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
   /** null clears it. */

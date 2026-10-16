@@ -133,6 +133,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,
       autoReview: record.autoReview,
+      autopilot: record.autopilot,
       review,
       suggestedModel: record.suggestedModel,
       import: issueImport,

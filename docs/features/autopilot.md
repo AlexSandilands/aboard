@@ -7,7 +7,7 @@ the whole board, that watch the board and act when something needs doing. The en
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine. The catalogue ships empty: each automation is its own task in the epic, and so are
+This doc covers the engine and the per-task flag. The catalogue ships empty: each automation is its own task in the epic, and so are
 the runners (#85) and the UI (#86). Until a runner is configured, every agent action fails with "No agent runner
 is available yet".
 
@@ -94,6 +94,22 @@ A flagged run puts an `autopilot` attention reason on its task, with the run's e
 write: `autopilotRuns.attentionFor` stops reporting it once the task changes status after the run, or a later
 real run of the same automation on the task succeeds.
 
+### The per-task flag
+
+`tasks.autopilot` is a nullable integer like `auto_review`: null is **Default**, 1 is **On** and 0 is **Off**.
+Default never auto-starts a task; only On does, so an automation that starts work (Start planned tasks) checks
+for `task.autopilot === true` on top of its scope being on. The flag does nothing by itself.
+
+- The user sets it in the task panel's Details section. Agents set it with `autopilot: "default" | "on" | "off"`
+  on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
+  as an `updated` activity entry naming `autopilot`.
+- After `set_plan` or `create_task`, when Start planned tasks resolves On for the task's project and the flag is
+  Default, the result says **Autopilot flag not set** and tells the agent to ask the user (`autopilotFlagHint`).
+  Without the automation switched on there is nothing to opt into, so there's no hint.
+- Backups carry the column (the dump is `SELECT *` and the restore inserts by column name); a dump from before
+  the column restores with every task at Default.
+- Agents can flag tasks but still can't change any Autopilot setting.
+
 ### API
 
 REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on, lift its limits or unpause it.
@@ -152,6 +168,8 @@ An automation must never merge, close or delete tasks, force-push or push to the
 | ---- | ------------ |
 | `packages/contracts/src/autopilot.ts` | Modes, scopes, runs, engine settings, field descriptors, `resolveAutopilot`, `inQuietHours` |
 | `apps/server/src/db/migrations/010_autopilot.sql` | `autopilot_settings`, `autopilot_runs`, the scope clean-up triggers |
+| `apps/server/src/db/migrations/013_task_autopilot.sql` | `tasks.autopilot`, the per-task flag |
+| `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
 | `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner` |
