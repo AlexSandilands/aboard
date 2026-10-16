@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
-import { AgentSessionRef, AgentSessionSnapshot, TerminalSetting } from "./agentSessions.ts";
+import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
@@ -702,6 +702,8 @@ export const AppSettings = z
     modelTiers: ModelTiers,
     /** Where "Open in terminal" resumes agent sessions. */
     terminal: TerminalSetting,
+    /** Windows Terminal only: a tab in its last window, or a new window. */
+    terminalOpenIn: TerminalOpenIn,
     /** Which notifications are recorded, and whether quiet hours silence their popups. */
     notifications: NotificationSettings,
   })
@@ -727,6 +729,7 @@ export const UpdateSettingsInput = z.object({
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
   terminal: TerminalSetting.optional(),
+  terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */
   notifications: UpdateNotificationSettingsInput.optional(),
   backupEnabled: z.boolean().optional(),

@@ -340,7 +340,8 @@ export function createAgentSessionsIntegration(deps: {
   const terminal = (): { resolved: ResolvedTerminal | null; error: string | null; host: TerminalHost } => {
     const h = host();
     try {
-      return { resolved: resolveTerminal(deps.services().settings.get().terminal, h), error: null, host: h };
+      const settings = deps.services().settings.get();
+      return { resolved: resolveTerminal(settings.terminal, h, settings.terminalOpenIn), error: null, host: h };
     } catch (error) {
       return { resolved: null, error: messageOf(error), host: h };
     }

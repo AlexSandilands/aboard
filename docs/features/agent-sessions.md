@@ -77,9 +77,14 @@ quoted for the shell the terminal setting opens.
 | Automatic, Windows | Windows Terminal's default profile, else a Command Prompt window |
 | Automatic, macOS | Terminal, through `osascript` |
 | Automatic, Linux | the first of `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xfce4-terminal`, `xterm`, running `bash -c 'cd <folder> && <command>; exec bash'` |
-| A Windows Terminal profile | `wt -w new new-tab -p <guid> -d <folder> <shell> …` |
+| A Windows Terminal profile | `wt -w 0 new-tab -p <guid> -d <folder> <shell> …` (`-w new` with **Open in: New window**) |
 | Command Prompt, Windows PowerShell | a console window through `cmd /c start` |
 | Custom command | the template, with `{cwd}` (quoted) and `{command}`, run by cmd on Windows and sh elsewhere. On Windows a folder containing `%` is refused, as cmd would expand it |
+
+**Open in** (`terminalOpenIn`, machine-only; shown on Windows for Automatic and Windows Terminal profiles) is
+a new tab in the last window (default) or a new window. `-w 0` is Windows Terminal's most recently used
+window, and it starts a window itself when none is open. It doesn't apply to Command Prompt, PowerShell, macOS,
+Linux or custom commands.
 
 Windows Terminal's settings are read from the Store, Preview and unpackaged locations, with comments and
 trailing commas allowed. A profile's shell comes from its `commandline` (or its `source` for PowerShell 7

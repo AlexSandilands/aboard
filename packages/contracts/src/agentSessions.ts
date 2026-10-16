@@ -120,6 +120,13 @@ export const TerminalSetting = z.discriminatedUnion("kind", [
 ]);
 export type TerminalSetting = z.infer<typeof TerminalSetting>;
 
+/**
+ * Whether Windows Terminal opens a session as a tab of its most recently used window or in a window of its own.
+ * Other terminals (cmd, PowerShell, macOS, Linux, custom commands) always do what their command says.
+ */
+export const TerminalOpenIn = z.enum(["tab", "window"]);
+export type TerminalOpenIn = z.infer<typeof TerminalOpenIn>;
+
 /** The shell a session is started in; it decides how the command is quoted and kept open. */
 export const TerminalShell = z.enum(["bash", "cmd", "powershell", "pwsh", "sh"]);
 export type TerminalShell = z.infer<typeof TerminalShell>;
