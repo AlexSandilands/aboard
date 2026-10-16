@@ -53,6 +53,8 @@ export function createAutopilotEngine(deps: {
   github?: GithubActions;
   /** Where the user opens the board; actions put it in agent prompts. */
   boardUrl?: () => string;
+  /** A run ended, so the board can show its headless session as finished or failed at once. */
+  runEnded?: (run: AutopilotRun) => void;
   now?: () => Date;
   debounceMs?: number;
   tickMs?: number;
@@ -107,6 +109,15 @@ export function createAutopilotEngine(deps: {
     return null;
   };
 
+  /** Tells the listener, which must never change how the run ended. */
+  const ended = (run: AutopilotRun) => {
+    try {
+      deps.runEnded?.(run);
+    } catch (error) {
+      log.warn(`[autopilot] run-ended listener failed: ${messageOf(error)}`);
+    }
+  };
+
   const act = async (automation: Automation, run: AutopilotRun, candidate: Candidate, config: AutomationConfig) => {
     const s = deps.services();
     try {
@@ -128,16 +139,18 @@ export function createAutopilotEngine(deps: {
           update,
         }),
       );
-      self(() => s.autopilot.finish(run.id, result));
+      const finished = self(() => s.autopilot.finish(run.id, result));
+      ended(finished);
     } catch (error) {
       try {
-        self(() =>
+        const failed = self(() =>
           s.autopilot.finish(run.id, {
             status: "failed",
             error: messageOf(error),
             needsAttention: run.taskId !== null,
           }),
         );
+        ended(failed);
       } catch (finishError) {
         // The run went with its task (deleted meanwhile); nothing is left to record it on.
         log.warn(`[autopilot] couldn't record ${automation.key} failing: ${messageOf(finishError)}`);

@@ -31,7 +31,7 @@ interface Deferred {
   update: (patch: RunPatch) => void;
 }
 
-function setup(opts: { now?: () => Date } = {}) {
+function setup(opts: { now?: () => Date; runEnded?: (run: AutopilotRun) => void } = {}) {
   let checks = 0;
   const noop = defineAutomation({
     key: "noop",
@@ -121,6 +121,7 @@ function setup(opts: { now?: () => Date } = {}) {
     debounceMs: 5,
     tickMs: 1_000_000,
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.runEnded ? { runEnded: opts.runEnded } : {}),
     log: { warn: () => {} },
   });
   engines.push(engine);
@@ -445,6 +446,42 @@ describe("limits", () => {
 });
 
 describe("failures and attention", () => {
+  it("records a run's outcome even when the listener for ended runs throws", async () => {
+    const { s, engine, runs, started } = setup({
+      runEnded: () => {
+        throw new Error("listener broke");
+      },
+    });
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    await engine.pass();
+    started[0]!.resolve({});
+    await engine.idle();
+    expect(runs("agent")).toMatchObject([{ status: "succeeded", error: null }]);
+  });
+
+  it("tells whoever is listening that a run ended, finished or failed, with its session", async () => {
+    const ended: Array<[string, string | null]> = [];
+    const { s, engine, task, runs, started } = setup({ runEnded: (run) => ended.push([run.status, run.sessionId]) });
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    await engine.pass();
+    started[0]!.update({ runner: "headless", sessionId: "s-1" });
+    expect(ended).toEqual([]);
+    started[0]!.resolve({});
+    await engine.idle();
+    expect(ended).toEqual([["succeeded", "s-1"]]);
+
+    s.tasks.create({ projectId: task.projectId, title: "Two", plan });
+    await engine.pass();
+    started[1]!.update({ runner: "headless", sessionId: "s-2" });
+    started[1]!.reject(new Error("no runner today"));
+    await engine.idle();
+    expect(ended).toEqual([
+      ["succeeded", "s-1"],
+      ["failed", "s-2"],
+    ]);
+    expect(runs("agent")).toHaveLength(2);
+  });
+
   it("fails a run whose action throws, flags the task, and clears the flag when the task moves", async () => {
     const { s, engine, task, runs, started } = setup();
     s.autopilot.setScope("board", null, "agent", { mode: "on" });

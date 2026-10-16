@@ -41,6 +41,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const jobs: AgentJob[] = [];
     const launches: TaskThreadInput[] = [];
     const sent: Array<{ text: string; commandId: string }> = [];
+    const linked: string[] = [];
     const t3: Pick<T3Integration, "status" | "launchTaskThread" | "sendToThread"> = {
       status: () => opts.t3 ?? T3_DOWN,
       launchTaskThread: async (taskId, input) => {
@@ -63,6 +64,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       t3,
       worktreesDir: repo.worktrees,
       newSessionId: () => SESSION,
+      sessionLinked: (id) => linked.push(id),
       runAgent: async (job) => {
         jobs.push(job);
         return opts.agent ? opts.agent(job) : result({ result: "Done", session_id: SESSION, total_cost_usd: 0.75 });
@@ -97,11 +99,11 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const patches: RunPatch[] = [];
     const start = (request: Partial<RunnerRequest> & { options?: Record<string, unknown> } = {}) =>
       runner.start({ run, prompt: "Do the task", tier: null, options: {}, ...request }, (p) => patches.push(p));
-    return { h, task, run, jobs, launches, sent, t3, start, patches };
+    return { h, task, run, jobs, launches, sent, linked, t3, start, patches };
   }
 
   it("runs headless in a new worktree, records the session and cost, and links the session", async () => {
-    const { h, task, run, jobs, start, patches } = setup();
+    const { h, task, run, jobs, linked, start, patches } = setup();
     const out = await start({ options: { runner: "auto", budgetUsd: 2, timeoutMinutes: 5, model: "haiku" } });
 
     const name = `${task.number}-${run.id.slice(0, 8)}`;
@@ -130,6 +132,8 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const links = h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session");
     expect(links).toHaveLength(1);
     expect(links[0]).toMatchObject({ label: "Autopilot session", ref: { harness: "claude-code", sessionId: SESSION } });
+    // So the board reads its state at once, not at the next poll.
+    expect(linked).toEqual([SESSION]);
   });
 
   it("works on an existing branch and pushes back to it", async () => {

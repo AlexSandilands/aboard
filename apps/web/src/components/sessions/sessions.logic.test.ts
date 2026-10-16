@@ -38,6 +38,13 @@ describe("sessions", () => {
     expect(sessionStatusPresentation({ status: "not_running", inApp: false }).label).toBe("Not running");
   });
 
+  it("shows an Autopilot session as finished or failed, with when it ended", () => {
+    const endedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    expect(sessionStatusPresentation({ status: "finished", inApp: false, endedAt }).label).toBe("Finished 5m ago");
+    expect(sessionStatusPresentation({ status: "failed", inApp: false, endedAt }).label).toBe("Failed 5m ago");
+    expect(sessionStatusPresentation({ status: "finished", inApp: false }).label).toBe("Finished");
+  });
+
   it("offers fork for Claude and the T3 thread for a session inside T3", () => {
     const w = sessionWarning(link(), { status: "busy", inApp: true }, { hasThread: true });
     expect(w).toMatchObject({ canFork: true, offerThread: true });

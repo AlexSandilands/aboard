@@ -101,6 +101,14 @@ export function createAutopilotRunsRepo(sql: Sql) {
         ) !== undefined
       );
     },
+    /** The run that made this headless session, if any. */
+    forSession(sessionId: string): AutopilotRun | null {
+      const row = sql.get<RunRow>(
+        "SELECT * FROM autopilot_runs WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+        sessionId,
+      );
+      return row ? toRun(row) : null;
+    },
     /** Newest first. */
     forTask(taskId: string, limit: number): AutopilotRun[] {
       return sql

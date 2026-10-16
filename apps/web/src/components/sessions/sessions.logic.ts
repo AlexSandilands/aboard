@@ -5,6 +5,7 @@ import {
   type AgentSessionStatus,
   type TaskLink,
 } from "@repo/contracts";
+import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 
 export type SessionLink = Extract<TaskLink, { kind: "agent_session" }>;
 
@@ -13,6 +14,12 @@ export interface SessionStatusPresentation {
   colorClass: string;
   dotClass: string;
 }
+
+/** " 5m ago" for an Autopilot session that has ended; nothing when we don't know when. */
+const endedAgo = (snapshot: AgentSessionSnapshot | null): string => {
+  const ago = snapshot?.endedAt ? formatRelativeTimeLabel(snapshot.endedAt) : "";
+  return ago ? ` ${ago}` : "";
+};
 
 /** Live status of a linked session. Unknown and not-yet-read show as "Status unknown". */
 export function sessionStatusPresentation(snapshot: AgentSessionSnapshot | null): SessionStatusPresentation {
@@ -38,10 +45,26 @@ export function sessionStatusPresentation(snapshot: AgentSessionSnapshot | null)
       };
     case "not_running":
       return { label: "Not running", colorClass: "text-muted-foreground", dotClass: "bg-muted-foreground/40" };
+    case "finished":
+      return {
+        label: `Finished${endedAgo(snapshot)}`,
+        colorClass: "text-muted-foreground",
+        dotClass: "bg-emerald-500/60 dark:bg-emerald-300/60",
+      };
+    case "failed":
+      return {
+        label: `Failed${endedAgo(snapshot)}`,
+        colorClass: "text-red-600 dark:text-red-300/90",
+        dotClass: "bg-red-500 dark:bg-red-300/90",
+      };
     case "unknown":
       return { label: "Status unknown", colorClass: "text-muted-foreground", dotClass: "bg-muted-foreground/20" };
   }
 }
+
+/** Not running now: stopped, or an Autopilot run that has ended. */
+export const isSettledSession = (snapshot: AgentSessionSnapshot | null): boolean =>
+  snapshot?.status === "not_running" || snapshot?.status === "finished" || snapshot?.status === "failed";
 
 /** The last folder of a path, for a compact row; the full path goes in its tooltip. */
 export function folderName(cwd: string): string {

@@ -11,7 +11,7 @@ import type { Services } from "../services/types.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
-import { createGithubIntegration } from "./github.ts";
+import { createGithubIntegration, messageOf } from "./github.ts";
 import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
@@ -106,6 +106,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  // An Autopilot session's state comes from its run, which changes without the harness's files changing.
+  const refreshSession = (sessionId: string) => {
+    sessions.refreshSession(sessionId).catch((error: unknown) => {
+      (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
+    });
+  };
   const runner =
     overrides.autopilotRunner ??
     createAutopilotRunner({
@@ -114,6 +120,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktreesDir: deps.config.worktreesDir,
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
+      sessionLinked: refreshSession,
       ...(overrides.log ? { log: overrides.log } : {}),
     });
   const autopilot = createAutopilotEngine({
@@ -121,6 +128,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     bus: deps.bus,
     runner,
     github,
+    runEnded: (run) => {
+      if (run.sessionId) refreshSession(run.sessionId);
+    },
     boardUrl: () => boardUrlOf(deps.config),
     ...(overrides.log ? { log: overrides.log } : {}),
   });

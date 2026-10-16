@@ -586,7 +586,9 @@ so the model is the one the user mapped to the task's suggested tier. The thread
 2. The board picks the session id and records it on the run, with the worktree, before the agent starts. It
    also links the session to the task as an `agent_session` link ([agent sessions](agent-sessions.md)) with the
    worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
-   there is no `--no-session-persistence`.
+   there is no `--no-session-persistence`. The link's status comes from the run, not the harness's files:
+   Working while the run goes, then Finished or Failed with the time it ended
+   ([agent sessions](agent-sessions.md#live-status)).
 3. `--permission-mode acceptEdits`, with Bash, the file tools and this board's MCP tools (`mcp__<id>`) allowed.
    Read-only runs use `dontAsk` with the reviewer's read-only list. The agent reaches the board through the
    user's own MCP config.

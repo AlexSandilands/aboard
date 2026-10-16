@@ -376,6 +376,9 @@ const threads: Scenario = (s, opts) => {
   session("Claude session working", "claude-code", { status: "busy", inApp: false }, 1);
   session("Claude session idle", "claude-code", { status: "idle", inApp: false }, 2);
   session("Claude session not running", "claude-code", { status: "not_running", inApp: false }, 3);
+  const ended = new Date(Date.now() - 12 * 60_000).toISOString();
+  session("Autopilot session finished", "claude-code", { status: "finished", inApp: false, endedAt: ended }, 7);
+  session("Autopilot session failed", "claude-code", { status: "failed", inApp: false, endedAt: ended }, 8);
   session("Copilot session running", "copilot-cli", { status: "running", inApp: false }, 4);
   session("Session status unknown", "claude-code", null, 5);
   // A thread hides the session on the card; the panel shows both.
