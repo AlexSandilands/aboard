@@ -101,7 +101,7 @@ export interface SkillOption {
 export function skillOptions(
   discovered: ReadonlyArray<SkillInfo>,
   current: ReviewSkillRef | null,
-  opts: { inheritLabel?: string } = {},
+  opts: { inheritLabel?: string; builtinLabel?: string } = {},
 ): SkillOption[] {
   const options: SkillOption[] = [];
   if (opts.inheritLabel !== undefined) {
@@ -109,7 +109,7 @@ export function skillOptions(
   }
   options.push({
     value: "builtin",
-    label: BUILTIN_REVIEW_SKILL_NAME,
+    label: opts.builtinLabel ?? BUILTIN_REVIEW_SKILL_NAME,
     detail: "Built in",
     skill: { source: "builtin" },
   });

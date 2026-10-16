@@ -111,7 +111,12 @@ export const AutopilotField = z.discriminatedUnion("kind", [
     options: z.array(z.object({ value: z.string(), label: z.string() })),
   }),
   /** A skill reference, picked the way the review skill is. */
-  z.object({ ...FieldBase, kind: z.literal("skill") }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("skill"),
+    /** What the built-in entry is called, when it isn't the review skill (e.g. "Default workflow"). */
+    builtinLabel: z.string().optional(),
+  }),
 ]);
 export type AutopilotField = z.infer<typeof AutopilotField>;
 

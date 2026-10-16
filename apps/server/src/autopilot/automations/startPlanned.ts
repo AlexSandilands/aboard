@@ -1,0 +1,181 @@
+import {
+  AUTOPILOT_START_PLANNED,
+  ReviewSkillRef,
+  taskHandoffPrompt,
+  type AutopilotField,
+  type TaskSummary,
+} from "@repo/contracts";
+import { z } from "zod";
+import { messageOf } from "../../integrations/github.ts";
+import type { Services } from "../../services/types.ts";
+import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { defineAutomation, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
+
+export { AUTOPILOT_START_PLANNED };
+
+/** How often a started run looks at whether the agent has moved the task out of Planned. */
+export const START_POLL_MS = 5_000;
+
+const ConfigSchema = z.object({
+  ...RUNNER_OPTION_SHAPE,
+  /** The skill the agent is told to implement with; the built-in entry is the board's own workflow. */
+  skill: ReviewSkillRef,
+  /** The branch the agent's worktree starts from; blank is the default branch. */
+  baseRef: z.string(),
+  /** How long the agent has to move the task out of Planned before the run counts as not started. */
+  graceMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60),
+});
+type Config = z.infer<typeof ConfigSchema>;
+
+const DEFAULTS: Config = {
+  ...RUNNER_DEFAULTS,
+  skill: { source: "builtin" },
+  baseRef: "",
+  graceMinutes: 15,
+};
+
+const FIELDS: AutopilotField[] = [
+  {
+    key: "skill",
+    label: "Implement skill",
+    kind: "skill",
+    builtinLabel: "Default workflow",
+    help: "What the agent follows to do the work. The default is the board's own workflow, from the hand-off prompt.",
+  },
+  ...RUNNER_FIELDS,
+  {
+    key: "baseRef",
+    label: "Start from",
+    kind: "text",
+    placeholder: "The default branch",
+    help: "The branch the agent's worktree starts from. Blank is the project's default branch.",
+  },
+  {
+    key: "graceMinutes",
+    label: "Start grace period",
+    kind: "number",
+    min: 1,
+    max: 1440,
+    unit: "minutes",
+    help: "The agent moves the task to In Progress itself. A task still in Planned after this long is flagged.",
+  },
+];
+
+/** Why a task can't be started, or null when it can. The same rules decide the candidates and re-check them. */
+export function notStartable(task: TaskSummary): string | null {
+  if (task.kind === "epic") return "it's an epic";
+  if (task.archivedAt !== null) return "it's archived";
+  if (task.status !== "planned") return "it's no longer in Planned";
+  if (task.autopilot !== true) return "its Autopilot flag isn't On";
+  if (task.progress.total === 0) return "it has no plan";
+  if (task.blocked) return "it's blocked by unfinished tasks";
+  return null;
+}
+
+/** Appended to the work prompt: nobody is there to answer, and where the agent's own skill comes from. */
+function unattendedNote(skill: ReviewSkillRef): string {
+  const lines = [
+    "",
+    "You were started by Autopilot and nobody is watching this session, so you can't ask the user anything. " +
+      "If you need an answer, mark the current step blocked with a note saying what you need, add a note and stop. " +
+      "Move the task to in_progress when you start, and to review when the work is done.",
+  ];
+  if (skill.source !== "builtin") {
+    lines.push(`For how to implement the work, read the skill "${skill.name}" at ${skill.path} and follow it.`);
+  }
+  return lines.join("\n");
+}
+
+/** What the runner recorded, without the agent's answer. */
+const patchOf = ({ result: _result, output: _output, ...patch }: RunnerResult) => patch;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Waits for the task to leave Planned, up to `deadline` (ms since the epoch). */
+async function leftPlanned(services: Services, taskId: string, deadline: number): Promise<boolean> {
+  for (;;) {
+    if (services.tasks.summary(taskId).status !== "planned") return true;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return false;
+    await sleep(Math.min(START_POLL_MS, remaining));
+  }
+}
+
+const failed = (reason: string, patch: Partial<ActionResult> = {}): ActionResult => ({
+  ...patch,
+  status: "failed",
+  error: `Autopilot couldn't start this task: ${reason}`,
+  needsAttention: true,
+});
+
+/**
+ * Starts an agent on Planned tasks, one per entry into Planned. Eligible: in Planned, the task's Autopilot flag On
+ * (Default never starts), a plan, nothing unfinished blocking it. The engine adds the concurrency cap, quiet hours
+ * and the daily caps. Tasks go in board order, and the engine takes as many as there is room for.
+ *
+ * The agent moves the task to In Progress itself. A run that fails, or leaves the task in Planned past the grace
+ * period, is flagged on the task and notified; it is never retried, because the dedupe key holds the task's
+ * `statusChangedAt`: moving it out and back into Planned is the way to try again.
+ */
+export const startPlanned = defineAutomation({
+  key: AUTOPILOT_START_PLANNED,
+  title: "Start planned tasks",
+  description:
+    "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
+  needsAgent: true,
+  schema: ConfigSchema,
+  fields: FIELDS,
+  defaults: DEFAULTS,
+  check: ({ services, projects }) =>
+    projects.flatMap(({ project }): Candidate[] =>
+      services.tasks
+        .summaries({ projectId: project.id, status: "planned" })
+        .filter((task) => notStartable(task) === null)
+        .sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0))
+        .map((task) => ({
+          dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
+          summary: `start #${task.number} "${task.title}"`,
+          taskId: task.id,
+        })),
+    ),
+  act: async (candidate, { services, runner, run, config, boardUrl }) => {
+    const task = services.tasks.summary(candidate.taskId!);
+    const reason = notStartable(task);
+    if (reason) return { status: "skipped", summary: `Skipped #${task.number}: ${reason}` };
+
+    const deadline = Date.now() + config.graceMinutes * 60_000;
+    const prompt = [
+      taskHandoffPrompt({ task, boardUrl, mode: "work", linkedThread: true }),
+      unattendedNote(config.skill),
+    ].join("\n");
+    let started: RunnerResult;
+    try {
+      started = await runner.start({
+        run,
+        prompt,
+        tier: task.suggestedModel?.tier ?? null,
+        options: config,
+        ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
+      });
+    } catch (error) {
+      return failed(messageOf(error));
+    }
+
+    // A T3 thread is up once started and a headless run is over, so the task should have moved by now or soon.
+    const patch = patchOf(started);
+    if (!(await leftPlanned(services, task.id, deadline))) {
+      return failed(
+        `the agent didn't move #${task.number} out of Planned within ${config.graceMinutes} minutes`,
+        patch,
+      );
+    }
+    return {
+      ...patch,
+      summary: `Started #${task.number} ${started.runner === "headless" ? "headless" : "in T3 Code"}`,
+    };
+  },
+});
