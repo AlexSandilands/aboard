@@ -77,6 +77,12 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   description: string;
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
+  /**
+   * Whether an epic can switch it on or off for its tasks (default true). Set false when its candidates are never
+   * tasks in an epic: the epic's popover then leaves it out, the epic button ignores it, and the service refuses an
+   * epic-scope setting for it.
+   */
+  epicScope?: boolean;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

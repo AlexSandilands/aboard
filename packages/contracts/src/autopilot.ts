@@ -125,6 +125,8 @@ export const AutopilotAutomation = z.object({
   description: z.string(),
   /** Starts an agent, so it counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: z.boolean(),
+  /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
+  epicScope: z.boolean(),
   fields: z.array(AutopilotField),
   /** Every field's value when no scope sets it. */
   defaults: AutopilotConfig,

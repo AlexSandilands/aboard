@@ -28,9 +28,15 @@ Inherit wins: epic over project over board. With nothing set anywhere, an automa
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
-card itself isn't "in" an epic, so it follows its project. Automations whose candidates have no task (board-wide
-ones, and Recurring tasks, which works per project) never see epic settings, so an epic's switch for them changes
-nothing.
+card itself isn't "in" an epic, so it follows its project.
+
+An automation says whether an epic can switch it with `epicScope` (default true; `describeAutomation` sends it to the
+UI). Set it false when its candidates are never tasks in an epic: Auto-archive Done (it skips them) and Recurring tasks
+(per project, no task) do, and so should Digest (#90) when it lands. For those the epic's popover leaves the automation out, the
+epic button's state ignores it, the epic's scope entries don't list it, `PUT` of an epic switch for it is a
+`VALIDATION` error, and an epic row left over from before the flag was set is ignored (`resolve` and
+`projectsWithEpicOn` skip the epic level). If Auto-archive ever starts archiving tasks in epics, flipping its flag
+brings the epic switch back.
 
 Each automation also has config (a skill, a budget, a number of days). Config keys merge the same way, board
 first, then project, then epic, over the automation's defaults, whatever the modes: a project can tune an
@@ -147,7 +153,7 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
 `autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog, so an epic's
-switch for this automation changes nothing) and tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
+switch for this automation isn't offered, see `epicScope`) and tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
@@ -287,6 +293,7 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 
 - `key`: stored in settings and runs, so never renamed. Start planned tasks must use `AUTOPILOT_START_PLANNED`.
 - `needsAgent`: whether the action starts an agent, and so counts against the caps.
+- `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
   UI renders (boolean, number, text, select, skill).
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`

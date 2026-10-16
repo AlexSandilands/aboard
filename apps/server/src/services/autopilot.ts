@@ -58,6 +58,7 @@ export const describeAutomation = (a: Automation): AutopilotAutomation => ({
   title: a.title,
   description: a.description,
   needsAgent: a.needsAgent,
+  epicScope: a.epicScope ?? true,
   fields: a.fields,
   defaults: a.defaults,
 });
@@ -146,6 +147,8 @@ export function createAutopilotService(
   const byKey = new Map(deps.automations.map((a) => [a.key, a]));
   const titleOf = (key: string) => byKey.get(key)?.title ?? key;
 
+  const epicScoped = (a: Automation) => a.epicScope ?? true;
+
   const automationOf = (key: string): Automation => {
     const automation = byKey.get(key);
     if (!automation) throw new AppError("NOT_FOUND", `No automation ${key}`);
@@ -203,21 +206,23 @@ export function createAutopilotService(
 
   const entries = (kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
-    return deps.automations.map((automation) => {
-      const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
-      const resolved = resolveAutopilot(
-        chainFor(all, automation.key, kind === "board" ? null : (projectId ?? id), kind === "epic" ? id : null),
-      );
-      const parsed = parseConfig(automation, resolved.config);
-      return {
-        automation: automation.key,
-        mode: own?.mode ?? "inherit",
-        config: own?.config ?? {},
-        enabled: resolved.enabled,
-        source: resolved.source,
-        effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
-      };
-    });
+    return deps.automations
+      .filter((automation) => kind !== "epic" || epicScoped(automation))
+      .map((automation) => {
+        const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
+        const resolved = resolveAutopilot(
+          chainFor(all, automation.key, kind === "board" ? null : (projectId ?? id), kind === "epic" ? id : null),
+        );
+        const parsed = parseConfig(automation, resolved.config);
+        return {
+          automation: automation.key,
+          mode: own?.mode ?? "inherit",
+          config: own?.config ?? {},
+          enabled: resolved.enabled,
+          source: resolved.source,
+          effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
+        };
+      });
   };
 
   /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
@@ -307,6 +312,9 @@ export function createAutopilotService(
     setScope(kind, id, key, input, projectId) {
       const scopeId = checkScope(kind, id, projectId);
       const automation = automationOf(key);
+      if (kind === "epic" && !epicScoped(automation)) {
+        throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
+      }
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
       const config = input.config ?? own?.config ?? {};
@@ -338,13 +346,14 @@ export function createAutopilotService(
       return entries(kind, scopeId, projectId);
     },
     resolve(automation, projectId, epicId = null) {
-      const epic = countsAsScope(epicId, projectId) ? epicId : null;
+      const epic = epicScoped(automation) && countsAsScope(epicId, projectId) ? epicId : null;
       const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
       return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
     },
     projectsWithEpicOn(automation) {
       const projects = new Set<string>();
+      if (!epicScoped(automation)) return projects;
       for (const s of repos.autopilotSettings.all()) {
         if (s.scopeKind !== "epic" || s.mode !== "on" || s.automation !== automation.key) continue;
         const epic = repos.tasks.get(s.scopeId!);

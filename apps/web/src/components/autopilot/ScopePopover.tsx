@@ -3,7 +3,7 @@ import { PopoverClose } from "~/components/ui/popover";
 import type { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
-import { entryFor, inheritLabel, parentEntry } from "./autopilot.logic";
+import { entryFor, inheritLabel, parentEntry, scopeAutomations } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
 
 /**
@@ -16,6 +16,7 @@ export function ScopePopover({
   parentEntries,
   set,
   projectId,
+  epic = false,
 }: {
   /** The project's or epic's name, for the switches' labels. */
   title: string;
@@ -24,6 +25,8 @@ export function ScopePopover({
   set: ReturnType<typeof useSetAutopilotScope>;
   /** Set for a project's popover: under Recurring tasks a link opens the project's settings at that section. */
   projectId?: string;
+  /** An epic's popover: leaves out the automations that don't apply to epics. */
+  epic?: boolean;
 }) {
   const overview = useAutopilotOverview();
   const paused = overview.data?.paused ?? false;
@@ -44,7 +47,7 @@ export function ScopePopover({
         </p>
       ) : null}
       <ul className="flex flex-col divide-y divide-border/50">
-        {(overview.data?.automations ?? []).map((automation) => {
+        {scopeAutomations(overview.data?.automations ?? [], epic).map((automation) => {
           const entry = entryFor(entries, automation);
           const parent = parentEntry(parentEntries, automation.key);
           return (

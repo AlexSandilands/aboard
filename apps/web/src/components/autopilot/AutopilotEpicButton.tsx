@@ -50,7 +50,13 @@ export function AutopilotEpicButton({
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
-        <ScopePopover title={`epic #${epic.number}`} entries={scope.data} parentEntries={projectScope.data} set={set} />
+        <ScopePopover
+          title={`epic #${epic.number}`}
+          entries={scope.data}
+          parentEntries={projectScope.data}
+          set={set}
+          epic
+        />
       </PopoverPopup>
     </Popover>
   );

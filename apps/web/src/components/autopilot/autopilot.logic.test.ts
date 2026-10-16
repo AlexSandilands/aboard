@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   automationTitle,
   entryFor,
+  scopeAutomations,
   epicActiveRuns,
   epicPillState,
   fieldText,
@@ -61,6 +62,23 @@ describe("pillState", () => {
   it("shows paused for an enabled project when Pause all is set", () => {
     expect(pillState(status([], true), "p1", on)).toBe("paused");
     expect(pillState(status([], true), "p1", [{ enabled: false }])).toBe("off");
+  });
+});
+
+describe("scopeAutomations", () => {
+  const all = [
+    { key: "unblock", epicScope: true },
+    { key: "archive", epicScope: false },
+    { key: "recurring", epicScope: false },
+  ];
+  it("lists every automation for the board and a project, and only those that apply to epics for an epic", () => {
+    expect(scopeAutomations(all, false).map((a) => a.key)).toEqual(["unblock", "archive", "recurring"]);
+    expect(scopeAutomations(all, true).map((a) => a.key)).toEqual(["unblock"]);
+  });
+
+  it("leaves an epic's button off when only automations that don't apply to epics are on", () => {
+    // The server leaves them out of an epic's entries, so nothing enabled is left to light the button.
+    expect(epicPillState(status(), "e1", [])).toBe("off");
   });
 });
 
@@ -149,6 +167,7 @@ describe("config forms", () => {
     title: "A",
     description: "",
     needsAgent: false,
+    epicScope: true,
     fields: [],
     defaults: { budget: 2 },
   } satisfies AutopilotAutomation;

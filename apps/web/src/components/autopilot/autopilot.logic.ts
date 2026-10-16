@@ -95,6 +95,14 @@ export function parentEntry(
 
 // ── Config forms ─────────────────────────────────────────────────────────
 
+/** The automations a scope's popover lists: an epic's leaves out those that don't apply to epics. */
+export function scopeAutomations<T extends Pick<AutopilotAutomation, "epicScope">>(
+  automations: ReadonlyArray<T>,
+  forEpic: boolean,
+): T[] {
+  return forEpic ? automations.filter((a) => a.epicScope) : [...automations];
+}
+
 /** The entry for an automation, or an inherit-everything stand-in while the scope loads. */
 export function entryFor(
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined,

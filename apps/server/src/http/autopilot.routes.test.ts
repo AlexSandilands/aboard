@@ -23,8 +23,23 @@ const archive = defineAutomation({
   act: () => ({}),
 });
 
-function setup() {
-  const h = createTestHarness({ integrations: { automations: [archive] } });
+// Acts on no task in an epic, so an epic can't switch it.
+const projectWide = defineAutomation({
+  key: "project_wide",
+  title: "Project-wide",
+  description: "Acts per project.",
+  needsAgent: false,
+  epicScope: false,
+  schema: z.object({}),
+  fields: [],
+  defaults: {},
+  check: () => [],
+  act: () => ({}),
+});
+
+function setup(opts: { withProjectWide?: boolean } = {}) {
+  const automations = opts.withProjectWide ? [archive, projectWide] : [archive];
+  const h = createTestHarness({ integrations: { automations } });
   const project = h.services.projects.create({ title: "P", workspaceRoot: "/work/p" });
   return { ...h, project };
 }
@@ -36,7 +51,7 @@ describe("Autopilot REST routes", () => {
     expect(overview).toMatchObject({
       paused: false,
       engine: { maxConcurrent: 1, dryRun: false, quietHours: { enabled: false }, prReviewRounds: 3 },
-      automations: [{ key: "archive", needsAgent: false, defaults: { days: 14 } }],
+      automations: [{ key: "archive", needsAgent: false, epicScope: true, defaults: { days: 14 } }],
     });
 
     const res = await h.request("/api/autopilot/engine", {
@@ -136,6 +151,45 @@ describe("Autopilot REST routes", () => {
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_settings WHERE scope_kind = 'epic'").get()).toEqual({
       n: 0,
     });
+  });
+
+  it("describes which automations an epic can switch, leaves the others out of its scope and refuses to set them", async () => {
+    const h = setup({ withProjectWide: true });
+    const overview = (await (await h.request("/api/autopilot")).json()) as AutopilotOverview;
+    expect(overview.automations.map((a) => [a.key, a.epicScope])).toEqual([
+      ["archive", true],
+      ["project_wide", false],
+    ]);
+
+    const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");
+    const path = `/api/autopilot/projects/${h.project.id}/epics/${epic.id}`;
+    const entries = (await (await h.request(path)).json()) as AutopilotScopeEntry[];
+    expect(entries.map((e) => e.automation)).toEqual(["archive"]);
+    // The board and the project still list both.
+    const project = (await (
+      await h.request(`/api/autopilot/projects/${h.project.id}`)
+    ).json()) as AutopilotScopeEntry[];
+    expect(project.map((e) => e.automation)).toEqual(["archive", "project_wide"]);
+
+    const refused = await h.request(`${path}/project_wide`, { method: "PUT", json: { mode: "on" } });
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/doesn't apply to epics/);
+    expect((await h.request(`${path}/archive`, { method: "PUT", json: { mode: "on" } })).status).toBe(200);
+    expect(h.db.prepare("SELECT automation FROM autopilot_settings").all()).toEqual([{ automation: "archive" }]);
+  });
+
+  it("ignores an epic row for an automation that stops applying to epics", () => {
+    const h = setup({ withProjectWide: true });
+    const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");
+    // A row left from before the flag was set.
+    h.db
+      .prepare(
+        "INSERT INTO autopilot_settings VALUES ('epic', ?, 'project_wide', 'on', '{}', '2026-01-01T00:00:00.000Z')",
+      )
+      .run(epic.id);
+    const automation = h.services.autopilot.automations().find((a) => a.key === "project_wide")!;
+    expect(h.services.autopilot.resolve(automation, h.project.id, epic.id).enabled).toBe(false);
+    expect(h.services.autopilot.projectsWithEpicOn(automation).size).toBe(0);
   });
 
   it("only accepts an epic that is in the project", async () => {
