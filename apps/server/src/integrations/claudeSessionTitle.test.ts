@@ -89,6 +89,18 @@ describe("Claude session titles", () => {
     expect(reader.read(ID, "/w/app")).toBe("Now there");
   });
 
+  it("remembers where it found a transcript, and looks again once it is gone", () => {
+    const { claudeDir, transcript } = setup();
+    const reader = createTitleReader(claudeDir);
+    // Found by looking in every folder (the cwd is wrong), then read from the remembered path.
+    const path = transcript("/w/app", ai("Here"));
+    expect(reader.read(ID, "/elsewhere")).toBe("Here");
+    // Moved to another folder: the remembered path fails, and the search finds it again.
+    rmSync(path);
+    transcript("/w/moved", ai("There"));
+    expect(reader.read(ID, "/elsewhere")).toBe("There");
+  });
+
   it("reads a transcript again only when it changed", () => {
     const { claudeDir, transcript } = setup();
     const path = transcript("/w/app", ai("One"));

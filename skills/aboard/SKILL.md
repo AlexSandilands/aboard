@@ -191,7 +191,7 @@ see from the board whether it is still running and reopen it in a terminal later
 link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", cwd: "<your cwd>" }, label: "Implementing #42")
 ```
 
-- `label` is the name the board shows for the session, so say what it does: "Implementing #42", "Planning #42",
+- `label` is the name the board shows for the session, so say what it does: "Implementing #42", "Planning #42".
   Linking the same session again with a new label renames it (when the work changes). A subagent (a reviewer, say)
   has the same session id as the session that started it: only the main session links, and a subagent must never
   link or relabel it.

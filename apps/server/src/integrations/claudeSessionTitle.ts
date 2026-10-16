@@ -113,22 +113,31 @@ export function createTitleReader(claudeDir: string, now: () => number = Date.no
   const cache = new Map<string, { size: number; mtimeMs: number; title: string | null }>();
   // Session ids whose transcript wasn't found, and when: searching every project folder each poll is wasteful.
   const missing = new Map<string, number>();
+  const found = new Map<string, string>();
   return {
     read(sessionId, cwd) {
       const missedAt = missing.get(sessionId);
       if (missedAt !== undefined && now() - missedAt < MISSING_RETRY_MS) return null;
-      const path = transcriptPath(claudeDir, sessionId, cwd);
-      if (!path) {
+      // The path found last time, until the file is gone: a search of every project folder happens once, not per poll.
+      let path = found.get(sessionId) ?? transcriptPath(claudeDir, sessionId, cwd);
+      let stat: ReturnType<typeof statSync> | null = null;
+      try {
+        if (path) stat = statSync(path);
+      } catch {
+        found.delete(sessionId);
+        path = transcriptPath(claudeDir, sessionId, cwd);
+        try {
+          if (path) stat = statSync(path);
+        } catch {
+          // Gone between the search and now.
+        }
+      }
+      if (!path || !stat) {
         missing.set(sessionId, now());
         return null;
       }
       missing.delete(sessionId);
-      let stat: ReturnType<typeof statSync>;
-      try {
-        stat = statSync(path);
-      } catch {
-        return null;
-      }
+      found.set(sessionId, path);
       const hit = cache.get(path);
       if (hit && hit.size === stat.size && hit.mtimeMs === stat.mtimeMs) return hit.title;
       const title = readTranscriptTitle(path);
