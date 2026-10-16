@@ -24,6 +24,7 @@ function seeded(scenario: ScenarioName) {
     t3Home: "/nonexistent",
     pollers: false,
     userHome: "/nonexistent",
+    sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
   });
   const tasks = ctx.services.tasks.summaries({ includeArchived: true });
   const details = tasks.map((t) => ctx.services.tasks.detail(t.id));
@@ -81,6 +82,16 @@ describe("seed scenarios", () => {
     );
     expect(snapshotStates).toEqual(expect.arrayContaining(["open", "draft", "merged", "closed", "working", "input"]));
     expect(links.some((l) => l.kind === "pr" && !l.snapshot)).toBe(true);
+  });
+
+  it("threads has an agent session in each status, and one beside a T3 thread", () => {
+    const { details } = seeded("threads");
+    const sessions = details.flatMap((t) => t.links.filter((l) => l.kind === "agent_session"));
+    expect(sessions.map((l) => (l.kind === "agent_session" ? (l.snapshot?.status ?? null) : null))).toEqual(
+      expect.arrayContaining(["busy", "idle", "not_running", "running", null]),
+    );
+    const withThread = details.find((t) => t.title === "Session inside a T3 thread");
+    expect(withThread?.links.map((l) => l.kind).sort()).toEqual(["agent_session", "t3_thread"]);
   });
 
   it("threads offers every merge control on Review PRs", () => {

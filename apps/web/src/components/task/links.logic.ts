@@ -20,6 +20,8 @@ export function describeLinkInput(link: ClassifiedLink | null): { kind: Classifi
       return { kind: "t3_thread", label: "T3 Code thread" };
     case "issue":
       return { kind: "issue", label: `GitHub issue ${link.ref.repo}#${link.ref.number}` };
+    case "agent_session":
+      return { kind: "agent_session", label: "Agent session" };
     case "url":
       return { kind: "url", label: `Link to ${hostnameOf(link.url) ?? link.url}` };
   }

@@ -16,6 +16,8 @@ import type {
   PlanStepInput,
   Project,
   ResolveFindingInput,
+  ResumeMode,
+  ResumeResult,
   ReviewFinding,
   StartT3ThreadInput,
   StepPatch,
@@ -363,6 +365,16 @@ export const useMergePr = (opts?: MutationOpts) =>
   useApiMutation(
     ({ linkId, ...input }: MergePrInput & { linkId: string }) =>
       api<TaskLink>(`/api/links/${enc(linkId)}/merge`, { body: input }),
+    opts,
+  );
+/**
+ * Opens an agent session in a terminal. A running session comes back as a CONFLICT ApiError carrying its status;
+ * a terminal that won't start comes back as `launched: false` with the command to copy.
+ */
+export const useResumeSession = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ linkId, ...input }: { linkId: string; mode: ResumeMode; force?: boolean }) =>
+      api<ResumeResult>(`/api/links/${enc(linkId)}/resume`, { body: input }),
     opts,
   );
 

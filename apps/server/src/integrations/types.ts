@@ -5,6 +5,10 @@ import type {
   LinkInput,
   MergePrInput,
   Project,
+  ResumeCommand,
+  ResumeMode,
+  ResumeResult,
+  ResumeSessionInput,
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
@@ -12,6 +16,7 @@ import type {
   T3ProjectCandidate,
   T3ThreadRef,
   TaskLink,
+  TerminalInfo,
 } from "@repo/contracts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
@@ -58,6 +63,12 @@ export interface Integrations {
   testT3(): Promise<T3IntegrationStatus>;
   /** Saves a T3 token, or exchanges a pairing link/code for one, and checks it. */
   connectT3(value: string): Promise<ConnectT3Result>;
+  /** What to paste to resume an agent session by hand. */
+  resumeCommand(linkId: string, mode: ResumeMode): ResumeCommand;
+  /** Opens an agent session in a new terminal (see AgentSessionsIntegration.resume). */
+  resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
+  /** What "Open in terminal" runs on this machine, for settings. */
+  terminalInfo(): TerminalInfo;
   /** The last scheduled or manual git backup. */
   backupStatus(): BackupStatus;
   /** Backs the board up to its git repo now; failures land in the returned status. */

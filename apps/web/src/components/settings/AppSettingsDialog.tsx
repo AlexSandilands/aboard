@@ -36,6 +36,7 @@ import { BackupSection } from "./BackupSection";
 import { IssueImportSection } from "./IssueImportSection";
 import { ModelTiersSection } from "./ModelTiersSection";
 import { ReviewSettingsSection } from "./ReviewSettingsSection";
+import { TerminalSection } from "./TerminalSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { type TemplateEdit, TemplatesSection } from "./TemplatesSection";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
@@ -117,6 +118,7 @@ function AppSettingsBody() {
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
             <IssueImportSection settings={settings.data} />
+            <TerminalSection settings={settings.data} />
             <BackupSection settings={settings.data} />
           </>
         ) : (

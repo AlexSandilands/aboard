@@ -60,6 +60,7 @@ files under each app.
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
 - [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
+- [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges

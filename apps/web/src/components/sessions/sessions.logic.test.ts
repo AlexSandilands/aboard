@@ -1,0 +1,57 @@
+import type { AgentSessionRef, TaskLink } from "@repo/contracts";
+import { describe, expect, it } from "vitest";
+import {
+  folderName,
+  sessionStatusPresentation,
+  sessionTitle,
+  sessionWarning,
+  type SessionLink,
+} from "./sessions.logic";
+
+const ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
+
+const link = (ref: Partial<AgentSessionRef> = {}, label: string | null = null): SessionLink =>
+  ({
+    id: "l",
+    taskId: "t",
+    url: "",
+    label,
+    syncedAt: null,
+    createdAt: "",
+    kind: "agent_session",
+    ref: { harness: "claude-code", sessionId: ID, cwd: "C:\\Code\\aboard\\", ...ref },
+    snapshot: null,
+  }) satisfies TaskLink;
+
+describe("sessions", () => {
+  it("names a session by harness and folder", () => {
+    expect(folderName("C:\\Code\\aboard\\")).toBe("aboard");
+    expect(folderName("/home/me/x")).toBe("x");
+    expect(folderName("/")).toBe("/");
+    expect(sessionTitle(link())).toBe("Claude Code session in aboard");
+    expect(sessionTitle(link({ harness: "copilot-cli" }, "Autopilot run"))).toBe("Autopilot run");
+  });
+
+  it("shows status unknown until the first read", () => {
+    expect(sessionStatusPresentation(null).label).toBe("Status unknown");
+    expect(sessionStatusPresentation({ status: "busy", inApp: false }).label).toBe("Working");
+    expect(sessionStatusPresentation({ status: "not_running", inApp: false }).label).toBe("Not running");
+  });
+
+  it("offers fork for Claude and the T3 thread for a session inside T3", () => {
+    const w = sessionWarning(link(), { status: "busy", inApp: true }, { hasThread: true });
+    expect(w).toMatchObject({ canFork: true, offerThread: true });
+    expect(w.body).toMatch(/inside T3 Code and working right now/);
+    expect(w.body).toMatch(/Fork it/);
+  });
+
+  it("offers neither for a Copilot session in a terminal", () => {
+    const w = sessionWarning(
+      link({ harness: "copilot-cli" }),
+      { status: "running", inApp: false },
+      { hasThread: true },
+    );
+    expect(w).toMatchObject({ canFork: false, offerThread: false });
+    expect(w.body).not.toMatch(/Fork/);
+  });
+});
