@@ -14,6 +14,7 @@ import { AppError } from "../../errors.ts";
 import {
   projectLabel,
   renderEpicChildren,
+  harnessOfClient,
   renderTaskDetail,
   renderTaskGroups,
   statusLabel,
@@ -47,7 +48,7 @@ function withOpenRoundPointer(detail: string, task: TaskDetail): string {
  * Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task, epic_overview, and
  * get_handoff_prompt.
  */
-export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
+export const registerReadTools: ToolRegistrar = (server, { services, ctx, client }) => {
   server.registerTool(
     "board_overview",
     {
@@ -216,6 +217,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         const detail = renderTaskDetail(task, safeProject(services, task.projectId), {
           events: args.events ?? 10,
           labelsInUse: services.labels.usage(),
+          sessionHarness: harnessOfClient(client()),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));

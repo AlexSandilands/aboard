@@ -22,7 +22,8 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Epics group the tasks of a large feature in one project: create_epic (optionally with existing tasks), then pass epic: "#N" to create_task/add_to_backlog, or update_task(epic) to move a task in or out. An epic has no plan and no column of its own; its status follows its tasks, so plan, move and review the tasks. epic_overview (or get_task on the epic) shows how each task is getting on. To start an epic's tasks, use start_task_thread(task) when epic_overview says T3 Code is available (message_task_thread talks to the thread), else give each subagent get_handoff_prompt(task, subagent: true), or give the user get_handoff_prompt(task) to paste; a subagent stops at an open review round and reports back, and the orchestrator runs the loop with start_review.
 - Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
 - End each session with add_note: a handover of what's done, what's left and the next action.
-- In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.`;
+- In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.
+- In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board.`;
 
 /** Generic HTTP client user agents that say nothing about which agent is calling. */
 const GENERIC_AGENTS =
@@ -45,6 +46,7 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
     ctx,
     services: ctx.services,
     actor: (explicit) => explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
+    client: () => server.server.getClientVersion()?.name || fallbackActor,
   };
   registerReadTools(server, tc);
   registerTaskTools(server, tc);

@@ -18,6 +18,7 @@ export const defaultSettings: AppSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  terminal: { kind: "auto" },
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

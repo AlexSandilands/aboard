@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
@@ -11,11 +12,12 @@ import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
+import type { SpawnTerminal, TerminalHost } from "./terminal.ts";
 import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers">;
+  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome">;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -32,6 +34,11 @@ export interface IntegrationOverrides {
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   runGit?: RunGit;
+  /** Process checks for agent sessions' status. */
+  processProbe?: ProcessProbe;
+  /** The machine "Open in terminal" runs on, and how it starts a terminal. */
+  terminalHost?: () => TerminalHost;
+  spawnTerminal?: SpawnTerminal;
   log?: Logger;
 }
 
@@ -69,6 +76,16 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const sessions = createAgentSessionsIntegration({
+    services: deps.services,
+    bus: deps.bus,
+    dirs: deps.config.sessionDirs,
+    userHome: deps.config.userHome,
+    ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
+    ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
+    ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -82,6 +99,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.start();
       reviews.start();
       backup.start();
+      sessions.start();
     },
     stop() {
       started = false;
@@ -89,6 +107,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.stop();
       reviews.stop();
       backup.stop();
+      sessions.stop();
     },
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
@@ -97,6 +116,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     async refreshLink(linkId) {
       const link = deps.services().links.get(linkId);
       if (await github.refresh(link)) return;
+      if (await sessions.refresh(link)) return;
       await t3.refresh(link);
     },
     async mergePr(linkId, input) {
@@ -119,6 +139,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const { value: _value, ...rest } = input;
       return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
     },
+    resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
+    resumeSession: (linkId, input) => sessions.resume(linkId, input),
+    terminalInfo: () => sessions.terminalInfo(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };

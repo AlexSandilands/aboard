@@ -6,17 +6,16 @@ import type {
   BoardEvent,
   CreateProjectInput,
   LinkInput,
-  PrSnapshot,
   Project,
   StartT3ThreadInput,
   T3ThreadSnapshot,
-  IssueSnapshot,
   TaskLink,
   TaskSummary,
 } from "@repo/contracts";
 import { BRAND, normalizeWorkspaceKey } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus.ts";
+import type { LinkSnapshot } from "../services/types.ts";
 import { AppError } from "../errors.ts";
 import { fakeSocket, success, type SentFrame } from "../test/fakeT3Socket.ts";
 import {
@@ -250,7 +249,7 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
 }
 
 function fakeServices(opts: { token?: string | null; links?: TaskLink[]; projects?: Project[] } = {}) {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
+  const snapshots = new Map<string, LinkSnapshot | null>();
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
   let token = opts.token ?? null;

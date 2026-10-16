@@ -64,3 +64,23 @@ describe("cardLinks", () => {
     expect(cardLinks([thread("s", { settled: true }), thread("a", { archived: true }), other("u")])).toEqual([]);
   });
 });
+
+const session = (id: string): TaskLink => ({
+  ...base,
+  id,
+  kind: "agent_session",
+  url: `agent-session://claude-code/${id}`,
+  ref: { harness: "claude-code", sessionId: id, cwd: "C:\\Code" },
+  snapshot: null,
+});
+
+describe("cardLinks with agent sessions", () => {
+  it("shows sessions on a task without a T3 thread", () => {
+    expect(ids(cardLinks([pr("1"), session("s")]))).toEqual(["1", "s"]);
+  });
+
+  it("hides sessions once the task has a T3 thread, even a settled one", () => {
+    expect(ids(cardLinks([session("s"), thread("t", { status: "working" })]))).toEqual(["t"]);
+    expect(ids(cardLinks([session("s"), thread("t", { settled: true })]))).toEqual([]);
+  });
+});

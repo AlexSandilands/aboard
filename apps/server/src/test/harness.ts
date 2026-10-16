@@ -2,6 +2,7 @@ import { createApp } from "../app.ts";
 import { createContext } from "../context.ts";
 import type { BoardEvent } from "@repo/contracts";
 import { GhError } from "../integrations/gh.ts";
+import type { SessionDirs } from "../integrations/agentSessions.ts";
 import type { IntegrationOverrides } from "../integrations/index.ts";
 
 /** In-memory server context + app for tests. `events` collects everything published on the bus. */
@@ -12,7 +13,9 @@ const NO_PROCESSES: IntegrationOverrides = {
   listMcpServers: () => Promise.resolve([]),
 };
 
-export function createTestHarness(overrides: { webPort?: number; integrations?: IntegrationOverrides } = {}) {
+export function createTestHarness(
+  overrides: { webPort?: number; sessionDirs?: SessionDirs; integrations?: IntegrationOverrides } = {},
+) {
   const { integrations, ...config } = overrides;
   const ctx = createContext(
     {
@@ -23,6 +26,7 @@ export function createTestHarness(overrides: { webPort?: number; integrations?: 
       t3Home: "/nonexistent",
       pollers: false,
       userHome: "/nonexistent",
+      sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
       ...config,
     },
     { ...NO_PROCESSES, ...integrations },

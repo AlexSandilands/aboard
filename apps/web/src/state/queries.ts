@@ -11,6 +11,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
+  TerminalInfo,
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -30,6 +31,7 @@ export const queryKeys = {
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
+  terminal: ["terminal"] as const,
 };
 
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
@@ -83,6 +85,15 @@ export function useIntegrationsStatus(enabled = true) {
     queryFn: ({ signal }) => api<IntegrationsStatus>("/api/integrations/status", { signal }),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/** What "Open in terminal" runs here. Read again whenever settings change it, as its preview follows the setting. */
+export function useTerminalInfo(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.terminal,
+    queryFn: ({ signal }) => api<TerminalInfo>("/api/terminal", { signal }),
+    enabled,
   });
 }
 

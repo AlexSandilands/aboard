@@ -1,4 +1,5 @@
 import {
+  agentSessionUrl,
   classifyLink,
   t3DesktopThreadUrl,
   type ClassifiedLink,
@@ -19,8 +20,13 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
   }
+  if (input.agentSession) {
+    return { kind: "agent_session", url: agentSessionUrl(input.agentSession), ref: input.agentSession };
+  }
   const value = input.value?.trim();
-  if (!value) throw new AppError("VALIDATION", "Provide a link value (URL or Jira key) or a t3Thread reference");
+  if (!value) {
+    throw new AppError("VALIDATION", "Provide a link value (URL or Jira key), a t3Thread or an agentSession");
+  }
   const looksLikeKey = /^[a-z][a-z0-9_]+-\d+$/i.test(value);
   const classified = classifyLink(looksLikeKey ? value.toUpperCase() : value, { jiraBaseUrl });
   if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${value}`);
@@ -40,6 +46,7 @@ const refJson = (c: ClassifiedLink): string | null => {
       return JSON.stringify({ key: c.key });
     case "t3_thread":
     case "issue":
+    case "agent_session":
       return JSON.stringify(c.ref);
     case "url":
       return null;

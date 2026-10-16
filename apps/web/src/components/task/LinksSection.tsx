@@ -1,4 +1,5 @@
 import {
+  AGENT_HARNESSES,
   BRAND,
   classifyLink,
   prMergeAction,
@@ -23,6 +24,7 @@ import {
   MessagesSquareIcon,
   PlusIcon,
   RefreshCwIcon,
+  SquareTerminalIcon,
   TicketIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -31,6 +33,9 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
+import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
+import { folderName, sessionStatusPresentation, type SessionLink } from "~/components/sessions/sessions.logic";
+import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
@@ -89,6 +94,7 @@ export const LINK_KIND_ICON: Record<TaskLink["kind"], LucideIcon> = {
   jira: TicketIcon,
   t3_thread: MessagesSquareIcon,
   issue: CircleDotIcon,
+  agent_session: SquareTerminalIcon,
   url: GlobeIcon,
 };
 
@@ -174,6 +180,8 @@ function LinkRow({
       return <PullRequestRow task={task} link={link} onRemove={onRemove} />;
     case "issue":
       return <IssueRow link={link} onRemove={onRemove} />;
+    case "agent_session":
+      return <SessionRow taskId={task.id} link={link} onRemove={onRemove} />;
     case "jira": {
       const href = jiraHref(link, settings?.jiraBaseUrl);
       return (
@@ -480,6 +488,51 @@ function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" 
       <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
       {state ? <span className={cn("shrink-0 text-xs font-normal", state.tone)}>{state.label}</span> : null}
     </RowWithMenu>
+  );
+}
+
+/** An agent session: "Open in terminal" with the harness, folder and live status, and the rest in its menu. */
+function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionLink; onRemove: () => void }) {
+  const { open, pending } = useSessionActions(taskId);
+  const status = sessionStatusPresentation(link.snapshot);
+  const harness = AGENT_HARNESSES[link.ref.harness].label;
+  return (
+    <PanelSplitGroup className={cn(link.snapshot?.status === "not_running" && "opacity-80 hover:opacity-100")}>
+      <PanelControl
+        part="primary"
+        title={`Open in a terminal: ${harness} session ${link.ref.sessionId} in ${link.ref.cwd}`}
+        disabled={pending}
+        onClick={() => open(link)}
+      >
+        <HarnessIcon harness={link.ref.harness} className="size-4" />
+        <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in terminal</span>
+        <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>
+          {link.label ?? `${harness} · ${folderName(link.ref.cwd)}`}
+        </span>
+        <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
+          <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
+          {link.snapshot?.inApp && link.snapshot.status !== "not_running" ? `${status.label} in T3` : status.label}
+        </span>
+      </PanelControl>
+      <PanelSplitSeparator />
+      <Menu>
+        <MenuTrigger render={<PanelControl part="secondary" aria-label="More session actions" />}>
+          <ChevronDownIcon className={PANEL_ICON_CLASS} />
+        </MenuTrigger>
+        <MenuPopup align="end">
+          <SessionMenuItems link={link} includeOpen={false} onOpen={(mode) => open(link, mode)} />
+          <MenuItem onClick={() => copyToClipboard(link.ref.sessionId, "session id")}>
+            <CopyIcon />
+            Copy session id
+          </MenuItem>
+          <MenuItem onClick={() => copyToClipboard(link.ref.cwd, "folder")}>
+            <CopyIcon />
+            Copy folder
+          </MenuItem>
+          <RemoveItem onRemove={onRemove} />
+        </MenuPopup>
+      </Menu>
+    </PanelSplitGroup>
   );
 }
 

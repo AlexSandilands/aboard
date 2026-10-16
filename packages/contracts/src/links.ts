@@ -1,10 +1,12 @@
-import type { IssueRef, LinkKind, PrRef, T3ThreadRef } from "./schemas.ts";
+import type { AgentSessionRef } from "./agentSessions.ts";
+import { LinkKind, type IssueRef, type PrRef, type T3ThreadRef } from "./schemas.ts";
 
 export type ClassifiedLink =
   | { kind: "pr"; url: string; ref: PrRef | null }
   | { kind: "jira"; url: string; key: string }
   | { kind: "t3_thread"; url: string; ref: T3ThreadRef }
   | { kind: "issue"; url: string; ref: IssueRef }
+  | { kind: "agent_session"; url: string; ref: AgentSessionRef }
   | { kind: "url"; url: string };
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
@@ -152,7 +154,7 @@ export function findJiraKeys(text: string | null | undefined): string[] {
 }
 
 export function isLinkKind(value: string): value is LinkKind {
-  return value === "pr" || value === "jira" || value === "t3_thread" || value === "issue" || value === "url";
+  return LinkKind.options.includes(value as LinkKind);
 }
 
 /** An issue a task can be created from: what to link, and the title to show until its details are fetched. */

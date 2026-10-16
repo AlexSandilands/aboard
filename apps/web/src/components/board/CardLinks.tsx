@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
+import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
+import { sessionStatusPresentation, sessionTitle, type SessionLink } from "~/components/sessions/sessions.logic";
+import { useSessionActions } from "~/components/sessions/useSessionActions";
+import { Menu, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
@@ -52,7 +56,10 @@ export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
   return cardLinks(links).length > 0;
 }
 
-/** Card line 4: PR chips (with a merge button when one is offered) and "Open in T3 Code" buttons for active threads. */
+/**
+ * Card line 4: PR chips (with a merge button when one is offered), "Open in T3 Code" buttons for active threads and
+ * agent sessions, whose menu opens them in a terminal.
+ */
 export function CardLinks({
   taskId,
   taskStatus,
@@ -69,6 +76,8 @@ export function CardLinks({
           <PrChip key={link.id} taskId={taskId} taskStatus={taskStatus} link={link} />
         ) : link.kind === "t3_thread" ? (
           <ThreadButton key={link.id} link={link} />
+        ) : link.kind === "agent_session" ? (
+          <SessionChip key={link.id} taskId={taskId} link={link} />
         ) : null,
       )}
     </div>
@@ -163,5 +172,42 @@ function ThreadButton({ link }: { link: Extract<TaskLink, { kind: "t3_thread" }>
         </span>
       </TooltipPopup>
     </Tooltip>
+  );
+}
+
+function SessionChip({ taskId, link }: { taskId: string; link: SessionLink }) {
+  const { open } = useSessionActions(taskId);
+  const status = sessionStatusPresentation(link.snapshot);
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`${sessionTitle(link)}: ${status.label}`}
+                  className={chipClassName}
+                  {...linkHandlers}
+                />
+              }
+            />
+          }
+        >
+          <HarnessIcon harness={link.ref.harness} />
+          <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", status.dotClass)} />
+        </TooltipTrigger>
+        <TooltipPopup>
+          <span className="flex flex-col gap-0.5">
+            <span>{sessionTitle(link)}</span>
+            <span className="text-muted-foreground">{status.label}</span>
+          </span>
+        </TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="start" {...linkHandlers}>
+        <SessionMenuItems link={link} onOpen={(mode) => open(link, mode)} />
+      </MenuPopup>
+    </Menu>
   );
 }

@@ -54,6 +54,8 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
+| `CLAUDE_CONFIG_DIR`       | `~/.claude`                 | Where Claude Code keeps running sessions, for session status        |
+| `COPILOT_HOME`            | `~/.copilot`                | The same for Copilot CLI                                            |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
@@ -110,7 +112,7 @@ ORM.
 | `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
-| `task_links`      | PR, Jira, GitHub issue, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
@@ -143,6 +145,10 @@ on independent timers:
 - **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (`gh`, then
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
+- **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of
+  linked Claude Code and Copilot CLI sessions from their own files; and opening one in a terminal on
+  request ([ADR 0008](decisions/0008-board-starts-local-processes.md)). See
+  [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
 

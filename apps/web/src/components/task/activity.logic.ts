@@ -45,6 +45,8 @@ const LINK_KIND_LABEL: Record<string, string> = {
   pr: "a pull request",
   jira: "a Jira issue",
   t3_thread: "a T3 Code thread",
+  issue: "a GitHub issue",
+  agent_session: "an agent session",
   url: "a link",
 };
 

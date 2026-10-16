@@ -1,4 +1,6 @@
 import {
+  AGENT_HARNESSES,
+  type AgentHarness,
   TASK_STATUSES,
   describeEpicRollup,
   findJiraKeys,
@@ -17,6 +19,17 @@ import {
 } from "@repo/contracts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
+
+/**
+ * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
+ * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't.
+ */
+export function harnessOfClient(client: string | undefined): AgentHarness | null {
+  if (!client) return null;
+  if (/claude[-_ ]?code/i.test(client)) return "claude-code";
+  if (/copilot/i.test(client)) return "copilot-cli";
+  return null;
+}
 
 export function statusLabel(status: TaskStatus): string {
   return TASK_STATUSES.find((s) => s.value === status)?.label ?? status;
@@ -65,6 +78,12 @@ export function linkText(link: TaskLink): string {
       const s = link.snapshot ? ` (${link.snapshot.state})` : "";
       return `Issue ${link.ref.repo}#${link.ref.number}${s}${label} ${link.url}`;
     }
+    case "agent_session": {
+      const s = link.snapshot
+        ? ` (${link.snapshot.status.replace("_", " ")}${link.snapshot.inApp ? ", in an app" : ""})`
+        : "";
+      return `${AGENT_HARNESSES[link.ref.harness].label} session ${link.ref.sessionId}${s}${label} in ${link.ref.cwd}`;
+    }
     case "url":
       return `URL${label} ${link.url}`;
   }
@@ -80,6 +99,8 @@ function shortLink(link: TaskLink): string {
       return "T3 thread";
     case "issue":
       return `issue #${link.ref.number}`;
+    case "agent_session":
+      return `${AGENT_HARNESSES[link.ref.harness].label} session`;
     case "url":
       return "link";
   }
@@ -217,7 +238,7 @@ export function eventText(event: TaskEvent): string {
  * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
-export function missingLinkHints(task: TaskDetail): string[] {
+export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness | null = null): string[] {
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
   const linked = new Set(task.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])));
@@ -229,6 +250,13 @@ export function missingLinkHints(task: TaskDetail): string[] {
     hints.push(
       `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
         "from t3_environment_read and t3_thread_configuration",
+    );
+  }
+  if (sessionHarness && !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness)) {
+    const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
+    hints.push(
+      `Your session: link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
+        "cwd: <your working directory>}), so the user can see it running and reopen it in a terminal from the board",
     );
   }
   // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.
@@ -363,6 +391,8 @@ export function renderTaskDetail(
     events?: number;
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    /** The harness calling, when it is one that can link its own session; the Missing links hint asks for it. */
+    sessionHarness?: AgentHarness | null;
     /** For an epic: each child's newest activity, shown in its overview. */
     childActivity?: ChildActivity;
   } = {},
@@ -428,7 +458,7 @@ export function renderTaskDetail(
     lines.push("", "Links:");
     for (const link of task.links) lines.push(`- ${linkText(link)}`);
   }
-  const missing = missingLinkHints(task);
+  const missing = missingLinkHints(task, opts.sessionHarness ?? null);
   if (missing.length) {
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);

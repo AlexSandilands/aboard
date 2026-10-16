@@ -22,6 +22,7 @@ const DEFAULTS: StoredSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  terminal: { kind: "auto" },
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -30,7 +31,7 @@ const DEFAULTS: StoredSettings = {
 
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
- * someone decides otherwise. Left out: the T3 token, and the backup settings themselves, which describe this
+ * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
  * machine; a forced restore keeps them from the database it replaces.
  */
 export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<keyof StoredSettings>([
@@ -124,6 +125,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.backupIntervalMinutes !== undefined) {
           repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
+        if (input.terminal !== undefined) repos.settings.set("terminal", input.terminal);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
       });

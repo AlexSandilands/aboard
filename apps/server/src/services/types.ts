@@ -1,4 +1,5 @@
 import type {
+  AgentSessionSnapshot,
   AppSettings,
   BoardSnapshot,
   CreateProjectInput,
@@ -194,8 +195,15 @@ export interface PlansService {
   resolveStepId(taskId: string, ref: string): string;
 }
 
+/** What a poller stores on a link: PR, T3 thread, issue or agent session state. */
+export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | AgentSessionSnapshot;
+
 export interface LinksService {
-  /** Idempotent on (task, kind, url). Infers kind via classifyLink when omitted. */
+  /**
+   * Idempotent on (task, kind, url). Infers kind via classifyLink when omitted. An `agentSession` is one link per
+   * harness and session id; the board links sessions it starts itself (Autopilot's headless runs) the same way an
+   * agent links its own, and the folder may be anywhere, such as a worktree outside the project.
+   */
   add(taskId: string, input: LinkInput, actor: string): TaskLink;
   remove(linkId: string, actor: string): void;
   get(linkId: string): TaskLink;
@@ -212,7 +220,7 @@ export interface LinksService {
    * - a merge seen while the task was not in Review (e.g. still In Progress) is used up here; `TasksService.move`
    *   completes the task instead when it later enters Review.
    */
-  setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null): void;
+  setSnapshot(linkId: string, snapshot: LinkSnapshot | null): void;
 }
 
 export interface SettingsService {

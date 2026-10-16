@@ -1,4 +1,4 @@
-import { storageKey, type MergeMethod, type TaskStatus } from "@repo/contracts";
+import { storageKey, type AgentSessionSnapshot, type MergeMethod, type TaskStatus } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
@@ -199,6 +199,8 @@ interface DialogsState {
   t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
   mergePr: { taskId: string; linkId: string } | null;
+  /** Agent session the server wouldn't reopen because it is running, with the status it read. */
+  sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
   openProjectSettings: (projectId: string) => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
@@ -207,6 +209,8 @@ interface DialogsState {
   closeT3Launch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
+  openSessionWarning: (warning: NonNullable<DialogsState["sessionWarning"]>) => void;
+  closeSessionWarning: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
@@ -214,6 +218,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
   appSettingsOpen: false,
   t3Launch: null,
   mergePr: null,
+  sessionWarning: null,
   openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
   closeProjectSettings: () => set({ projectSettingsId: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
@@ -222,6 +227,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeT3Launch: () => set({ t3Launch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),
+  openSessionWarning: (sessionWarning) => set({ sessionWarning }),
+  closeSessionWarning: () => set({ sessionWarning: null }),
 }));
 
 /** The merge method last picked per repo (`host/owner/repo`), offered first next time. */

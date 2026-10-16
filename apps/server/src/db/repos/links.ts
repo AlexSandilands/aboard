@@ -1,4 +1,6 @@
 import type {
+  AgentSessionRef,
+  AgentSessionSnapshot,
   IssueRef,
   IssueSnapshot,
   LinkKind,
@@ -56,6 +58,13 @@ export function toLink(r: LinkRow): TaskLink {
         kind: "issue",
         ref: parseJson<IssueRef>(r.ref_json) ?? { host: "", repo: "", number: 0 },
         snapshot: parseJson<IssueSnapshot>(r.snapshot_json),
+      };
+    case "agent_session":
+      return {
+        ...base,
+        kind: "agent_session",
+        ref: parseJson<AgentSessionRef>(r.ref_json) ?? { harness: "claude-code", sessionId: "", cwd: "" },
+        snapshot: parseJson<AgentSessionSnapshot>(r.snapshot_json),
       };
     case "url":
       return { ...base, kind: "url" };
