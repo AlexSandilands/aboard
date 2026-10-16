@@ -92,6 +92,7 @@ describe("reviews", () => {
     it("when the last blocking or major finding is resolved, fixed or declined", () => {
       const { s, task } = setup();
       s.settings.update({ autoReview: true });
+      s.tasks.move(task.id, { status: "review" }, "agent");
       s.reviews.submit(task.id, gating, "reviewer");
       s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
       // One gating finding is still open, and a minor one doesn't count.
@@ -107,6 +108,7 @@ describe("reviews", () => {
     it("once: resolving more findings while the round is open doesn't open another", () => {
       const { s, task } = setup();
       s.settings.update({ autoReview: true });
+      s.tasks.move(task.id, { status: "review" }, "agent");
       s.reviews.submit(task.id, gating, "reviewer");
       s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
       s.reviews.resolveFinding(task.id, "R1.2", { status: "fixed" }, "agent");
@@ -115,9 +117,21 @@ describe("reviews", () => {
       expect(s.reviews.list(task.id)).toHaveLength(2);
     });
 
+    it("only while the task is in Review", () => {
+      const { s, task } = setup();
+      s.settings.update({ autoReview: true });
+      s.tasks.move(task.id, { status: "review" }, "agent");
+      s.reviews.submit(task.id, gating, "reviewer");
+      s.tasks.move(task.id, { status: "done" }, "user");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "user");
+      s.reviews.resolveFinding(task.id, "R1.2", { status: "fixed" }, "user");
+      expect(s.reviews.list(task.id)).toHaveLength(1);
+    });
+
     it("not at the round limit, not on reopening, not after a clean round, and not with auto-review off", () => {
       const { s, task } = setup();
       s.settings.update({ autoReview: true, reviewMaxRounds: 1 });
+      s.tasks.move(task.id, { status: "review" }, "agent");
       s.reviews.submit(task.id, { findings: [{ severity: "major", title: "A" }] }, "reviewer");
       s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
       expect(s.reviews.list(task.id)).toHaveLength(1);

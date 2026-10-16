@@ -314,7 +314,12 @@ export const reviewPrs = defineAutomation({
         if (task.kind === "epic" || task.archivedAt !== null || task.status === "done") return [];
         // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
         // is about to change. Only in Review, where the watchdog runs rounds; later the PR is reviewed as usual.
-        if (task.status === "review" && reviewIsInProgress(task.review)) return [];
+        if (
+          task.status === "review" &&
+          reviewIsInProgress(task.review, services.reviews.effectiveAutoReview(task.id))
+        ) {
+          return [];
+        }
         const links = task.links.flatMap((link) => {
           if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
           const { state, headOid, headRef, isCrossRepository } = link.snapshot;

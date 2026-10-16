@@ -241,7 +241,9 @@ export function createReviewsService(
         });
         // The agent that fixed the last gating finding is mid-turn and may stop before it asks for the next round,
         // so the board opens it: the task would sit at "Fixed, re-review" with nobody to run it.
-        if (!reopened && service.effectiveAutoReview(taskId)) {
+        // Only in Review: that's where the watchdog runs rounds, so on a Done or archived task it would sit pending.
+        const task = deps.task(taskId);
+        if (!reopened && task.status === "review" && !task.archivedAt && service.effectiveAutoReview(taskId)) {
           const summary = deriveReviewSummary(
             repos.reviews.forTasks([taskId]),
             repos.reviews.findingsFor([taskId]),

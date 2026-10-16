@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BOARD_ACTOR,
   FindingSeverity,
   FindingStatus,
   REVIEW_DONE_NEXT,
@@ -164,7 +165,9 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
           next = reviewIsDone(review) ? `${stillOpen} ${REVIEW_LIMIT_NEXT}` : stillOpen;
         } else if (review?.state === "pending") {
           // The board opens the next round when the last gating finding is resolved (services/reviews.ts).
-          next = `No blocking or major findings are open. The board opened review round ${services.reviews.list(id).at(-1)?.round}: call start_review("#${task.number}") for its reviewer brief and run it with a fresh reviewer. Hold the PR until the loop ends.`;
+          const open = services.reviews.list(id).at(-1);
+          const by = open?.openedBy === BOARD_ACTOR ? "The board opened" : "There is";
+          next = `No blocking or major findings are open. ${by} review round ${open?.round}: call start_review("#${task.number}") for its reviewer brief and run it with a fresh reviewer. Hold the PR until the loop ends.`;
         } else if (reviewWantsAnotherRound(review)) {
           next = `No blocking or major findings are open. Call start_review("#${task.number}") for the next round with a fresh reviewer.`;
         } else if (reviewIsDone(review)) {

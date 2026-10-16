@@ -104,7 +104,7 @@ export function reviewFixInstructions({
     `1. Call get_task(${ref}) on the ${BRAND.id} MCP server and read the open findings.`,
     "2. Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).",
     cycleRound < maxRounds
-      ? `3. Once none are open, the board opens the next round itself: call start_review(${ref}) and follow what it returns (it hands you that round's brief to run with a fresh reviewer), up to ${maxRounds} rounds.`
+      ? `3. Once none are open, the board opens the next round itself (when auto-review is on): call start_review(${ref}) and follow what it returns (it hands you that round's brief to run with a fresh reviewer), up to ${maxRounds} rounds.`
       : "3. That was the last review round: don't start another. Leave anything you can't fix open.",
     `4. ${REVIEW_PR_STEP}`,
   ].join("\n");
@@ -122,7 +122,7 @@ export function reviewLoopInstructions(input: ReviewPromptInput): string {
     `Local review is on for this task: ${which} is open, up to ${maxRounds} rounds. Run the review loop before you open a pull request:`,
     "1. Start a reviewer subagent with fresh context (Claude Code: the Agent tool; Copilot: a subagent) and give it the brief below. Wait for it to finish; it records its findings on the board.",
     `2. Call get_task(${ref}). Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).`,
-    `3. If the round raised blocking or major findings, the board opens the next round itself once you have resolved the last of them: call start_review(${ref}) for its brief and repeat from step 1 with a new reviewer. Stop when a round comes back clean or after ${maxRounds} rounds.`,
+    `3. If the round raised blocking or major findings, the board opens the next round itself (when auto-review is on) once you have resolved the last of them: call start_review(${ref}) for its brief and repeat from step 1 with a new reviewer. Stop when a round comes back clean or after ${maxRounds} rounds.`,
     `4. ${REVIEW_PR_STEP}`,
     'If you can\'t start subagents, do the review yourself as a separate pass that follows the brief, and submit_review with actor "self-review".',
     "",

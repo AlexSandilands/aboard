@@ -52,7 +52,8 @@ Minor findings and nits may stay open.
 The board opens the round because the agent that fixed the findings is mid-turn and may simply stop: with
 the round left to the agent, tasks sat at "Fixed, re-review". A round the board opened looks like an agent's to
 the watchdog below (its grace, the nudge of the task's T3 thread, then the board reviewer). It only does so
-when auto-review is on for the task. A PR opened before the loop ends would be reviewed on GitHub too, so
+when auto-review is on for the task and the task is in Review (not Done or archived, where nothing would run the
+round). A PR opened before the loop ends would be reviewed on GitHub too, so
 Autopilot's [Review PRs](autopilot.md) waits for the loop (`reviewIsInProgress`), and
 `move_task` to Review with a PR already linked says to finish the loop first and push fixes to that PR.
 

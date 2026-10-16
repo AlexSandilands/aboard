@@ -253,6 +253,20 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("doesn't hold a PR for fixes nobody will re-review because auto-review is off for the task", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    // A one-off round on request: the major is fixed, and the board won't open round 2 with auto-review off.
+    s.reviews.openRound(task.id, { trigger: "manual", actor: "user" });
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    expect(s.tasks.summary(task.id).review?.state).toBe("fixed");
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
   it("isn't held back by tasks without local review, or by a loop on a task that left Review", async () => {
     const { s, task, setPr, pass, turnOn, requests } = setup();
     turnOn();
