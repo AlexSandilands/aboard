@@ -199,17 +199,18 @@ the automation. Runs stay, under the old key.
 
 | Trigger            | Candidate                                   | Dedupe key                                     |
 | ------------------ | ------------------------------------------- | ---------------------------------------------- |
-| `status_change`    | A task in `to` (moved from `from`, if set, by its latest `status_changed` event) | `status:<taskId>:<statusChangedAt>` |
+| `status_change`    | A task in `to` (moved from `from`, if set, by its latest `status_changed` or `closed` event) | `status:<taskId>:<statusChangedAt>` |
 | `pr_event`         | Per PR link: `linked`, `new_head` (headOid), `checks_failing`, `conflict`, `merged` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<oid>`, `pr_conflict:<link>:<oid>`, `pr_merged:<link>` |
 | `stale`            | A task in `status` for `hours`              | `stale:<taskId>:<statusChangedAt>`             |
 | `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
-| `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<local slot stamp>` |
+| `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<projectId>:<local slot stamp>` |
 
 - **Arming.** Events before `armed_at` don't fire, so switching an automation on doesn't act on the board's history.
-  It is set at creation, when the trigger changes, when the automation's switch turns on somewhere (`onEnabled`)
+  It is set at creation, when the trigger or filters change, when the automation's switch turns on somewhere (`onEnabled`)
   and when Pause all is lifted. Event times are `statusChangedAt`, the blocker's, or for a PR the later of the link's
   creation and the PR's `updatedAt` (so a PR whose state predates the automation is left alone). `stale` is a state,
-  not an event, and ignores it.
+  not an event, and ignores it. The board keeps no PR head history, so `new_head` fires for the head it sees after
+  arming, including the one a PR has when it is linked, or an older head when only the PR's `updatedAt` moved.
 - **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
   contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
   project filter (`checkCustomDefinition`, run by the service and the form).
@@ -218,11 +219,15 @@ the automation. Runs stay, under the old key.
   It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
   set to the PR's head branch. Its config is the shared runner options, per scope.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
-  `integrations/shellCommand.ts` spawns the command with `shell: true` in the project's `workspaceRoot`, with the
+  `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
+  `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command), in the
+  project's `workspaceRoot`, with the
   server's environment minus every `brandEnv` variable (the API token) plus the values as `brandEnv` variables
   (`customShellEnv`). The command is never interpolated, and `{{…}}` in it is refused on save. A timeout kills the
-  process tree (`processTree.ts`, shared with `claude -p`). Non-zero exits and timeouts fail the run and flag the
-  task; the output's last 4,000 characters and the exit code go on the run.
+  process tree (`processTree.ts`, shared with `claude -p`), with SIGKILL and giving up on the run 5 seconds later if
+  it doesn't end. Non-zero exits and timeouts fail the run and flag the task; the output's last 4,000 characters and
+  the exit code go on the run. At most `AUTOPILOT_BACKGROUND_MAX` (4) go at once; the engine skips further
+  candidates until one ends, without recording them.
 - **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
   action is (or stays) a shell command needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by

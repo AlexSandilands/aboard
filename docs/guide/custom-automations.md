@@ -29,8 +29,9 @@ and keeps to the same pause, dry run, caps and quiet hours.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.
-     So a task title can't change what runs, even if it contains quotes or `;`. Quote them as your shell does
-     (`"$ABOARD_TASK_TITLE"` in sh, `%ABOARD_TASK_TITLE%` in cmd).
+     So a task title can't change what runs, even if it contains quotes, `;` or `&`. Commands run in `sh`, or in
+     Windows PowerShell on Windows: read a value as `"$ABOARD_TASK_TITLE"` in sh and `$env:ABOARD_TASK_TITLE` in
+     PowerShell. (Not cmd.exe: it fills `%VAR%` in before reading the line, so a title could add a command.)
 4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
    or the command with its variables.
 5. Save it, then switch it **On** in the Autopilot list (for the board) or in a project's Autopilot settings, or
@@ -39,11 +40,12 @@ and keeps to the same pause, dry run, caps and quiet hours.
 ## What it does
 
 - It only acts on what happens **after** it is switched on: tasks already in Review when you make a "moves into
-  Review" automation are left alone. Changing its trigger, switching it on, and lifting **Pause all** each start it
+  Review" automation are left alone. Changing its trigger or filters, switching it on, and lifting **Pause all** each start it
   from that moment. A stale-task trigger is the exception: a task that was already stuck counts.
 - Each thing it acts on is done once: a task moving into Review twice gets two runs, but the same move never
   gets a second one, even if the first failed.
-- An agent action waits out quiet hours and counts against the agent caps. A command doesn't.
+- An agent action waits out quiet hours and counts against the agent caps. A command doesn't, but at most four
+  commands run at once; the rest start as those finish.
 - A command that exits non-zero, or runs past its timeout (it's stopped), fails its run and puts the task under
   Needs attention. The run keeps the exit code and the end of its output, shown in the task panel's **Autopilot**
   section under **Output**.
@@ -51,7 +53,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
 
 ## Commands run on your machine
 
-A command runs as you, with your shell (cmd.exe on Windows, sh elsewhere), whenever its trigger fires in a project
+A command runs as you, in sh (Windows PowerShell on Windows), whenever its trigger fires in a project
 it's on in. The board's own environment variables, such as its API token, are left out of its environment.
 There is no MCP tool for custom automations, and the API only takes a command from the board's settings page (a
 request without the page's Origin is refused). That keeps agents from setting one up by accident; it isn't a lock,

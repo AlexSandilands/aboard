@@ -22,7 +22,7 @@ export interface CustomAutomationsService {
   get(id: string): CustomAutomation;
   /** Throws VALIDATION for a definition that can't run, NOT_FOUND for an unknown project or epic, CONFLICT for a name taken. */
   create(input: CreateCustomAutomationInput): CustomAutomation;
-  /** A changed trigger arms it again, so events before the change don't fire. */
+  /** A changed trigger or filters arm it again, so events before the change don't fire. */
   update(id: string, input: UpdateCustomAutomationInput): CustomAutomation;
   /** Its switches go with it; its runs stay as history. */
   delete(id: string): void;
@@ -105,8 +105,13 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
         const next: CustomAutomation = {
           ...current,
           ...def,
-          // Under another trigger, what happened before isn't what the user asked to act on.
-          armedAt: JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ? now : current.armedAt,
+          // Under another trigger, or over tasks it didn't cover, what happened before isn't what the user asked to
+          // act on.
+          armedAt:
+            JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ||
+            JSON.stringify(def.filters) !== JSON.stringify(current.filters)
+              ? now
+              : current.armedAt,
           updatedAt: now,
         };
         repos.autopilotCustom.update(next);
@@ -138,7 +143,8 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
 
     statusFrom(taskIds) {
       return new Map(
-        repos.events.latestOfType(taskIds, "status_changed").map((e) => {
+        // Closing a task moves it to Done with a `closed` event, which carries `from` too.
+        repos.events.latestOfType(taskIds, ["status_changed", "closed"]).map((e) => {
           const from = TaskStatus.safeParse(e.payload.from);
           return [e.taskId, from.success ? from.data : null];
         }),

@@ -15,16 +15,19 @@ if (POSIX_GROUPS) {
   });
 }
 
-function killGroup(pid: number): void {
+function killGroup(pid: number, signal: NodeJS.Signals = "SIGTERM"): void {
   try {
-    process.kill(-pid, "SIGTERM");
+    process.kill(-pid, signal);
   } catch {
     // Already gone.
   }
 }
 
-/** Ends the process and everything it started: an agent's shells and test runs must not outlive a timeout. */
-export function killTree(child: ChildProcess): void {
+/**
+ * Ends the process and everything it started: an agent's shells and test runs must not outlive a timeout. `force`
+ * sends SIGKILL off Windows, for a tree that ignored the first attempt (taskkill /F is forced already).
+ */
+export function killTree(child: ChildProcess, force = false): void {
   if (child.pid === undefined) {
     child.kill();
   } else if (process.platform === "win32") {
@@ -33,6 +36,6 @@ export function killTree(child: ChildProcess): void {
       child.kill(),
     );
   } else {
-    killGroup(child.pid);
+    killGroup(child.pid, force ? "SIGKILL" : "SIGTERM");
   }
 }

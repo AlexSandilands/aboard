@@ -21,15 +21,15 @@ const toEvent = (r: EventRow): TaskEvent => ({
 
 /** Typed access to the task_events activity log. */
 export function createEventsRepo(sql: Sql) {
-  /** Latest event of a type per task. */
-  const latestOfType = (taskIds: readonly string[], type: string): TaskEvent[] =>
+  /** Latest event of any of these types per task. */
+  const latestOfType = (taskIds: readonly string[], types: readonly string[]): TaskEvent[] =>
     sql
       .all<EventRow>(
         `SELECT * FROM task_events WHERE id IN (
            SELECT MAX(id) FROM task_events
-           WHERE type = ? AND task_id IN (SELECT value FROM json_each(?))
+           WHERE type IN (SELECT value FROM json_each(?)) AND task_id IN (SELECT value FROM json_each(?))
            GROUP BY task_id)`,
-        type,
+        jsonList(types),
         jsonList(taskIds),
       )
       .map(toEvent);
@@ -65,7 +65,7 @@ export function createEventsRepo(sql: Sql) {
     },
     /** Latest "note" event per task. */
     lastNotes(taskIds: readonly string[]): TaskEvent[] {
-      return latestOfType(taskIds, "note");
+      return latestOfType(taskIds, ["note"]);
     },
     latestOfType,
   };

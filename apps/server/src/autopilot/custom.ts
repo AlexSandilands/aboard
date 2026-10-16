@@ -123,7 +123,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       if (!slot || slot.getTime() <= Date.parse(custom.armedAt)) return [];
       const stamp = localStamp(slot);
       return scoped.map(({ project }) => ({
-        dedupeKey: `schedule:${stamp}`,
+        dedupeKey: `schedule:${project.id}:${stamp}`,
         summary: `run "${custom.name}" in ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
         projectId: project.id,
         data: {} satisfies CustomData,

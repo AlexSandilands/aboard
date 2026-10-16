@@ -384,14 +384,16 @@ export function CustomAutomationEditorForm({
               label="Command"
               hint={
                 <>
-                  Runs in the project&apos;s folder with your shell. It is never filled in: read the task from{" "}
+                  Runs in the project&apos;s folder, in sh (PowerShell on Windows). It is never filled in: read the task
+                  from{" "}
                   {CUSTOM_PLACEHOLDERS.map((p, i) => (
                     <span key={p.key}>
                       {i > 0 ? ", " : null}
                       <code className="font-mono">{customEnvName(p.env)}</code>
                     </span>
                   ))}
-                  .
+                  , as <code className="font-mono">&quot;$NAME&quot;</code> in sh or{" "}
+                  <code className="font-mono">$env:NAME</code> in PowerShell.
                 </>
               }
             >

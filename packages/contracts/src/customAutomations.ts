@@ -78,8 +78,8 @@ export const CustomAction = z.discriminatedUnion("kind", [
     onPrBranch: z.boolean().default(false),
   }),
   /**
-   * A command run by the platform shell in the project's folder. Task values reach it only as environment variables
-   * (customShellEnv): the command is never filled in, so a task title can't inject anything.
+   * A command run in the project's folder by /bin/sh, or PowerShell on Windows. Task values reach it only as
+   * environment variables (customShellEnv): the command is never filled in, so a task title can't inject anything.
    */
   z.object({
     kind: z.literal("shell"),
@@ -259,7 +259,7 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
     if (named) {
       const env = CUSTOM_PLACEHOLDERS.find((p) => p.key === named)?.env;
       return `Shell commands aren't filled in, so values can't be injected into them: read ${
-        env ? `$${customEnvName(env)}` : "the environment variables"
+        env ? `the ${customEnvName(env)} environment variable` : "the environment variables"
       } instead of {{${named}}}`;
     }
   }

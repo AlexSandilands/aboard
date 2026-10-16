@@ -8,7 +8,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
-import { createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
+import { AUTOPILOT_BACKGROUND_MAX, createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
 import type { RunnerRequest } from "./types.ts";
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -64,7 +64,7 @@ function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<
   };
   const runsOf = (projectId = project.id) => s.autopilot.runsForProject(projectId);
   const shell = (command = "./notify.sh") => ({ kind: "shell" as const, command, timeoutSeconds: 30 });
-  return { ...h, s, project, other, task, define, pass, runsOf, shellRuns, agentRuns, shell };
+  return { ...h, s, engine, project, other, task, define, pass, runsOf, shellRuns, agentRuns, shell };
 }
 
 const pr = (patch: Partial<PrSnapshot> = {}): PrSnapshot => ({
@@ -108,6 +108,21 @@ describe("custom automations: triggers", () => {
     s.tasks.move(b.id, { status: "in_progress" }, "agent");
     await pass();
     expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([b.id]);
+  });
+
+  it("reads where a closed task came from", async () => {
+    const { s, task, define, pass, shellRuns, shell } = setup();
+    define({ name: "Closed", trigger: { kind: "status_change", from: "review", to: "done" }, action: shell() });
+    const t = task("Closed from review");
+    s.tasks.move(t.id, { status: "in_progress" }, "agent");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    s.tasks.close(t.id, { resolution: "wont_do" }, "agent");
+    const other = task("Closed from planned");
+    s.tasks.move(other.id, { status: "review" }, "agent");
+    s.tasks.move(other.id, { status: "planned" }, "agent");
+    s.tasks.close(other.id, { resolution: "wont_do" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([t.id]);
   });
 
   it("acts on PR events: linked, failing checks per head, a conflict and the merge", async () => {
@@ -162,6 +177,17 @@ describe("custom automations: triggers", () => {
     expect(runsOf()[0]).toMatchObject({ automation: customAutomationKey(custom.id), taskId: null });
     expect(runsOf(other.id)).toHaveLength(0);
     expect(s.autopilot.runsForProject(project.id)[0]!.dedupeKey).toMatch(/^schedule:/);
+  });
+
+  it("runs a schedule's slot in every project it is on in, not just the first", async () => {
+    const { define, pass, shellRuns, shell } = setup();
+    define({
+      name: "Hourly",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: shell(),
+    });
+    await pass(HOUR);
+    expect(shellRuns.map((r) => r.cwd).sort()).toEqual(["/work/alpha", "/work/beta"]);
   });
 
   it("acts on a task that has sat in its column too long, once per stint", async () => {
@@ -328,6 +354,24 @@ describe("custom automations: actions", () => {
     });
   });
 
+  it("runs at most a few commands at once, and starts the rest as they finish", async () => {
+    const releases: Array<() => void> = [];
+    const { s, task, define, pass, engine, shellRuns, shell } = setup({
+      shell: () => new Promise((resolve) => releases.push(() => resolve({ exitCode: 0, output: "", timedOut: false }))),
+    });
+    define({ name: "Slow", trigger: { kind: "status_change", to: "review" }, action: shell() });
+    for (let i = 0; i < AUTOPILOT_BACKGROUND_MAX + 2; i++)
+      s.tasks.move(task(`T${i}`).id, { status: "review" }, "agent");
+    await engine.pass();
+    expect(shellRuns).toHaveLength(AUTOPILOT_BACKGROUND_MAX);
+    for (const release of releases.splice(0)) release();
+    await new Promise((r) => setTimeout(r, 50));
+    await engine.pass();
+    expect(shellRuns).toHaveLength(AUTOPILOT_BACKGROUND_MAX + 2);
+    for (const release of releases.splice(0)) release();
+    await pass();
+  });
+
   it("fails and flags the task when the command exits non-zero or times out", async () => {
     let call = 0;
     const { s, task, define, pass, runsOf, shell } = setup({
@@ -400,7 +444,7 @@ describe("custom automations: definitions", () => {
         trigger: { kind: "stale", hours: 2 },
         action: { kind: "shell", command: "echo {{task.title}}" },
       }),
-    ).toThrow(new RegExp(`read \\$${brandEnv("TASK_TITLE")}`));
+    ).toThrow(new RegExp(`read the ${brandEnv("TASK_TITLE")} environment variable`));
     expect(() =>
       s.customAutomations.create({
         name: "D",
@@ -450,6 +494,18 @@ describe("custom automations: definitions", () => {
     s.customAutomations.delete(custom.id);
     expect(s.autopilot.overview().automations.find((a) => a.key === key)).toBeUndefined();
     expect(s.autopilot.scope("board", null).find((e) => e.automation === key)).toBeUndefined();
+  });
+
+  it("arms again when the filters change", async () => {
+    const { s, project } = setup();
+    const custom = s.customAutomations.create({
+      name: "Ping",
+      trigger: { kind: "status_change", to: "review" },
+      action: { kind: "shell", command: "x" },
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    const widened = s.customAutomations.update(custom.id, { filters: { projectIds: [project.id] } });
+    expect(widened.armedAt > custom.armedAt).toBe(true);
   });
 
   it("arms again when the trigger changes, not when only the name does", async () => {
