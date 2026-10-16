@@ -5,6 +5,7 @@ import type {
   IssueSnapshot,
   MergeMethod,
   MergePrInput,
+  PrRef,
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
@@ -53,6 +54,7 @@ export const GraphqlPr = z.object({
   mergeable: z.string().nullish(),
   headRefName: z.string().nullish(),
   headRefOid: z.string().nullish(),
+  isCrossRepository: z.boolean().nullish(),
   updatedAt: z.string().nullish(),
   autoMergeRequest: z.object({ mergeMethod: MergeMethodJson.nullish() }).nullish(),
   commits: z
@@ -142,13 +144,14 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     autoMergeAllowed: repo.autoMergeAllowed ?? false,
     canMerge: CAN_MERGE.has(repo.viewerPermission?.toUpperCase() ?? ""),
     headOid: pr.headRefOid || null,
+    isCrossRepository: pr.isCrossRepository ?? false,
   };
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
-const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid updatedAt
+const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
@@ -196,6 +199,45 @@ const ENABLE_AUTO_MERGE_MUTATION = `mutation EnableAutoMerge($input: EnablePullR
 const DISABLE_AUTO_MERGE_MUTATION = `mutation DisableAutoMerge($pullRequestId: ID!) {
   disablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId }) { clientMutationId }
 }`;
+
+const POST_REVIEW_MUTATION = `mutation PostPullRequestReview($input: AddPullRequestReviewInput!) {
+  addPullRequestReview(input: $input) { pullRequestReview { databaseId url } }
+}`;
+const PostedReviewData = z.object({
+  addPullRequestReview: z.object({
+    pullRequestReview: z.object({ databaseId: z.number().nullish(), url: z.string() }),
+  }),
+});
+
+/** An inline comment on a line of the PR's diff. */
+export interface ReviewComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
+export interface PostReviewInput {
+  /** The commit the reviewer read (a prefix will do). The review is refused when the PR's head is another. */
+  reviewedSha: string;
+  body: string;
+  comments: readonly ReviewComment[];
+}
+
+export interface PostedReview {
+  id: number | null;
+  url: string;
+  /** The PR's head commit the review was posted against, in full. */
+  headOid: string;
+  /** Inline comments GitHub refused (a line outside the diff) and that went into the body instead. */
+  folded: number;
+}
+
+/** The body, with comments that can't be placed on the diff added under it. */
+export function foldReviewComments(body: string, comments: readonly ReviewComment[]): string {
+  if (comments.length === 0) return body;
+  const items = comments.map((c) => `**\`${c.path}:${c.line}\`**\n\n${c.body}`);
+  return `${body}\n\n### Inline comments\n\n${items.join("\n\n")}`;
+}
 
 /** States in which GitHub merges at once rather than waiting, as `gh pr merge --auto` treats them. */
 const IMMEDIATELY_MERGEABLE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
@@ -278,6 +320,11 @@ export interface GithubIntegration {
   refresh(link: TaskLink): Promise<boolean>;
   /** Merges a Review task's PR, or turns auto-merge on or off, then refreshes it. Throws AppError. */
   merge(link: TaskLink, input: MergePrInput): Promise<void>;
+  /**
+   * Posts one review on the PR as the signed-in account, always as a comment (never an approval or a request for
+   * changes). Throws AppError: `gh` missing or not signed in, the PR's head isn't the commit read, GitHub's refusal.
+   */
+  postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   start(): void;
   stop(): void;
 }
@@ -557,6 +604,61 @@ export function createGithubIntegration(deps: {
         await refreshOne(link);
       } catch (error) {
         logOnce(link.id, link.url, messageOf(error));
+      }
+    },
+    async postReview(ref, input) {
+      const current = await ensureStatus();
+      if (!current.available) throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
+      if (!isGithubHost(ref.host, signedInHosts(current)) || !signedInTo(ref.host, current)) {
+        throw new AppError(
+          "VALIDATION",
+          `GitHub CLI (gh) is not signed in to ${ref.host}: run \`gh auth login --hostname ${ref.host}\``,
+        );
+      }
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const raw = await api.graphql(ref.host, ACTION_STATE_QUERY, { owner, name, number: ref.number });
+        const parsed = ActionState.safeParse(raw);
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        const { id, headRefOid: head } = parsed.data.repository.pullRequest;
+        const sha = input.reviewedSha.toLowerCase();
+        if (sha.length < 7 || !(head.toLowerCase().startsWith(sha) || sha.startsWith(head.toLowerCase()))) {
+          throw new AppError(
+            "CONFLICT",
+            `The PR's head is ${head.slice(0, 7)}, not the ${input.reviewedSha.slice(0, 7)} the reviewer read`,
+          );
+        }
+        const post = (comments: readonly ReviewComment[], body: string) =>
+          api.graphql(ref.host, POST_REVIEW_MUTATION, {
+            input: {
+              pullRequestId: id,
+              commitOID: head,
+              event: "COMMENT",
+              body,
+              ...(comments.length > 0
+                ? { threads: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })) }
+                : {}),
+            },
+          });
+        let data: unknown;
+        let folded = 0;
+        try {
+          data = await post(input.comments, input.body);
+        } catch (error) {
+          // One comment on a line the diff doesn't touch refuses the whole review: say it in the body instead.
+          if (!(error instanceof GithubApiError) || error.kind !== "response" || input.comments.length === 0) {
+            throw error;
+          }
+          data = await post([], foldReviewComments(input.body, input.comments));
+          folded = input.comments.length;
+        }
+        const posted = PostedReviewData.safeParse(data);
+        if (!posted.success) throw new Error("GitHub returned an unexpected review shape");
+        const review = posted.data.addPullRequestReview.pullRequestReview;
+        return { id: review.databaseId ?? null, url: review.url, headOid: head, folded };
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("VALIDATION", messageOf(error));
       }
     },
     start() {

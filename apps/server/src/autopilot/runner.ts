@@ -159,6 +159,7 @@ export function createAutopilotRunner(deps: {
         model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
+        ...(request.boardTools === false ? { boardTools: false } : {}),
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       }),
     });

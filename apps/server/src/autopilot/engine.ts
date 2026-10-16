@@ -4,10 +4,12 @@ import { messageOf } from "../integrations/github.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import {
+  NO_GITHUB,
   NO_RUNNER,
   type Automation,
   type AutomationConfig,
   type Candidate,
+  type GithubActions,
   type Runner,
   type RunPatch,
 } from "./types.ts";
@@ -45,12 +47,14 @@ export function createAutopilotEngine(deps: {
   services: () => Services;
   bus: EventBus;
   runner?: Runner;
+  github?: GithubActions;
   now?: () => Date;
   debounceMs?: number;
   tickMs?: number;
   log?: Logger;
 }): AutopilotEngine {
   const runner = deps.runner ?? NO_RUNNER;
+  const github = deps.github ?? NO_GITHUB;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? console;
   const inFlight = new Set<Promise<void>>();
@@ -109,6 +113,7 @@ export function createAutopilotEngine(deps: {
         automation.act(candidate, {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
+          github,
           engine: s.autopilot.engine(),
           config,
           run: started,

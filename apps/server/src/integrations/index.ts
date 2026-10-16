@@ -115,6 +115,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
+    github,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const worktrees = createWorktreeCleanup({

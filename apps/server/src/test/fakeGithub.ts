@@ -20,6 +20,9 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
   const mutations: { operation: string; input: Record<string, unknown> }[] = [];
   /** GitHub's error message for the next mutation, to test failures. */
   let failNextMutation: string | null = null;
+  /** Refuse the next review that has inline threads, as GitHub does for a line outside the diff. */
+  let failNextThreadedReview = false;
+  let reviewCount = 0;
 
   const repoOf = (owner: string, name: string): GraphqlRepo | undefined =>
     repos.get(`${owner}/${name}`) ??
@@ -94,6 +97,23 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       return { data: null, errors: [{ type: "UNPROCESSABLE", message }] };
     }
     const pr = prById(input.pullRequestId);
+    if (operation === "PostPullRequestReview") {
+      if (failNextThreadedReview && Array.isArray(input.threads)) {
+        failNextThreadedReview = false;
+        mutations.pop();
+        mutations.push({ operation: `${operation} (refused)`, input });
+        return { data: null, errors: [{ type: "UNPROCESSABLE", message: "Line must be part of the diff" }] };
+      }
+      reviewCount += 1;
+      const id = 900 + reviewCount;
+      return {
+        data: {
+          addPullRequestReview: {
+            pullRequestReview: { databaseId: id, url: `https://github.com/o/r/pull/7#pullrequestreview-${id}` },
+          },
+        },
+      };
+    }
     if (operation === "MergePullRequest") pr.state = "MERGED";
     else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
     else if (operation === "DisableAutoMerge") pr.autoMergeRequest = null;
@@ -129,6 +149,9 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
     runGh,
     failNextMutation(message: string) {
       failNextMutation = message;
+    },
+    failNextThreadedReview() {
+      failNextThreadedReview = true;
     },
   };
 }

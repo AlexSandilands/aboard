@@ -54,15 +54,13 @@ describe("PR review verdict", () => {
     expect(describeCounts({ blocking: 0, major: 0, minor: 0, nit: 0 })).toBe("no issues");
   });
 
-  it("parses the agent's answer, and rejects one without a review URL", () => {
-    const ok = {
-      reviewUrl: "https://github.com/a/b/pull/1#pullrequestreview-9",
-      headSha: "abc",
-      summary: "s",
-      issues: [],
-    };
+  it("parses the agent's answer, and rejects one with no commit", () => {
+    const ok = { headSha: "abc1234", summary: "s", issues: [{ severity: "major", title: "t", fyi: false }] };
     expect(PrReviewVerdict.safeParse(ok).success).toBe(true);
-    expect(PrReviewVerdict.safeParse({ ...ok, reviewUrl: "nope" }).success).toBe(false);
+    expect(PrReviewVerdict.safeParse({ ...ok, headSha: "" }).success).toBe(false);
+    expect(PrReviewVerdict.safeParse({ ...ok, issues: [{ severity: "huge", title: "t", fyi: false }] }).success).toBe(
+      false,
+    );
   });
 
   it("reads a verdict only from a finished, real review run", () => {

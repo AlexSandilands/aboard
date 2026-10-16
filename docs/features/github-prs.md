@@ -58,16 +58,19 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 | `autoMergeAllowed` | Whether the repo allows auto-merge                                                                 |
 | `canMerge`         | The signed-in account has `WRITE`, `MAINTAIN` or `ADMIN` on the repo                               |
 | `headOid`          | The head commit, checked again before merging                                                      |
+| `isCrossRepository` | Whether the head branch is in a fork; Autopilot's PR review skips those                           |
 
-The last five are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
+The last six are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
 no merge until the next poll). `links.setSnapshot` stores the snapshot, and publishes the card only
 when it changed.
 
 ### Reviews by Autopilot
 
-The poller's snapshot (`state`, `headRef`, `headOid`) is what the **Review PRs** automation reads: it reviews an
-open (or, if asked, draft) PR once per head commit and posts the review through `gh` as the user, as a comment
-review. See [Autopilot](autopilot.md#automations).
+The poller's snapshot (`state`, `headRef`, `headOid`, `isCrossRepository`) is what the **Review PRs** automation
+reads: it reviews an open (or, if asked, draft) PR once per head commit. `postReview` posts the result with the
+`gh` token as one review with `event: COMMENT` (`addPullRequestReview`), after checking the PR's live head is the
+commit that was reviewed; inline comments GitHub refuses (a line outside the diff) go into the body. See
+[Autopilot](autopilot.md#automations).
 
 ### Attention
 

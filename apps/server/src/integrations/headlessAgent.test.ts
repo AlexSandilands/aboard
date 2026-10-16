@@ -42,7 +42,17 @@ describe("headless agent", () => {
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
   });
 
-  it("denies force-pushes, pushes to the default branch, merging and approving, in every written form", () => {
+  it("can keep a read-only agent away from the board and every other MCP server", () => {
+    const base = { access: "read-only", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: null } as const;
+    const open = agentArgs(base);
+    expect(open).toContain(`mcp__${BRAND.id}`);
+    expect(open).not.toContain("--strict-mcp-config");
+    const closed = agentArgs({ ...base, boardTools: false });
+    expect(closed).not.toContain(`mcp__${BRAND.id}`);
+    expect(closed).toContain("--strict-mcp-config");
+  });
+
+  it("denies force-pushes, pushes to the default branch and merging, in every written form", () => {
     const rules = pushDenyRules("main");
     for (const rule of [
       "Bash(git push --force*)",
@@ -55,10 +65,6 @@ describe("headless agent", () => {
       "Bash(git push * *:refs/heads/main)",
       "Bash(git -C * push * main)",
       "Bash(gh pr merge*)",
-      "Bash(gh pr review*--approve*)",
-      "Bash(gh pr review*--request-changes*)",
-      "Bash(gh api *APPROVE*)",
-      "Bash(gh api *REQUEST_CHANGES*)",
     ]) {
       expect(rules).toContain(rule);
     }

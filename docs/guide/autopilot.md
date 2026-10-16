@@ -18,7 +18,8 @@ project can override those in its own settings.
 
 When a task has a pull request linked, **Review PRs** has an agent review it and post the review on GitHub as
 comments, from your own `gh` account. The review starts with a line naming this app's Autopilot, and each inline
-comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges.
+comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges. The
+agent itself only reads the pull request and reports its findings; Autopilot posts them.
 
 - It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
   Settings → Autopilot) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs

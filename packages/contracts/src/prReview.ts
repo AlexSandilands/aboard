@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { BRAND } from "./brand.ts";
 import type { AutopilotRun } from "./autopilot.ts";
+import { BRAND } from "./brand.ts";
 import { FINDING_SEVERITIES, FindingSeverity, type SeverityCounts } from "./reviews.ts";
 
-// Autopilot's PR review (docs/features/autopilot.md#review-prs): an agent reviews a linked pull request and posts the
-// review on GitHub. The board keeps only the verdict, on the run, and the fix automation reads it from there.
+// Autopilot's PR review (docs/features/autopilot.md#review-prs): a read-only agent reviews a linked pull request and
+// answers with its findings; the server posts them on GitHub as a comment review. The board keeps only the verdict,
+// on the run, and the fix automation reads it from there.
 
 /** The automation's key, stored in settings and runs. */
 export const AUTOPILOT_REVIEW_PRS = "review_prs";
@@ -25,21 +26,20 @@ export const isReviewOfLink = (dedupeKey: string, linkId: string): boolean =>
 /** One point the reviewer raised, as the agent reports it. FYI points are posted but never ask for a fix. */
 export const PrReviewIssue = z.object({
   severity: FindingSeverity,
-  title: z.string(),
+  title: z.string().min(1),
   file: z.string().optional(),
   line: z.number().int().positive().optional(),
+  /** What goes wrong and when. */
+  body: z.string().optional(),
+  suggestion: z.string().optional(),
   fyi: z.boolean(),
 });
 export type PrReviewIssue = z.infer<typeof PrReviewIssue>;
 
-/** What the review agent returns as its structured answer. */
+/** What the review agent returns as its structured answer. The server posts it; the agent posts nothing. */
 export const PrReviewVerdict = z.object({
-  /** The review on GitHub (`html_url` of the posted review). */
-  reviewUrl: z.string().regex(/^https?:\/\//i, "Not a URL"),
-  /** GitHub's id of the review, when it reported one. */
-  reviewId: z.number().int().optional(),
-  /** The commit the agent reviewed (`git rev-parse HEAD`). */
-  headSha: z.string().min(1),
+  /** The commit the agent read (`git rev-parse HEAD`). */
+  headSha: z.string().min(7),
   summary: z.string(),
   /** Every point in the review, the FYI ones too. */
   issues: z.array(PrReviewIssue),
@@ -50,27 +50,31 @@ export type PrReviewVerdict = z.infer<typeof PrReviewVerdict>;
 export const PR_REVIEW_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
-    reviewUrl: { type: "string", description: "html_url of the review you posted." },
-    reviewId: { type: "integer", description: "id of the review you posted." },
     headSha: { type: "string", description: "The commit you reviewed: the output of `git rev-parse HEAD`." },
     summary: { type: "string", description: "One paragraph: your overall verdict and the main risks." },
     issues: {
       type: "array",
-      description: "Every point in the review, including the FYI ones.",
+      description: "Every point in the review, including the FYI ones. Empty when the change is clean.",
       items: {
         type: "object",
         properties: {
           severity: { type: "string", enum: FindingSeverity.options },
-          title: { type: "string" },
+          title: { type: "string", description: "One line." },
           file: { type: "string", description: "Repo-relative path." },
-          line: { type: "integer", minimum: 1 },
-          fyi: { type: "boolean", description: "True for a point in the FYI (no action needed) section." },
+          line: {
+            type: "integer",
+            minimum: 1,
+            description: "A line of the file at the reviewed commit, in the PR's diff.",
+          },
+          body: { type: "string", description: "What goes wrong and when." },
+          suggestion: { type: "string", description: "A concrete fix." },
+          fyi: { type: "boolean", description: "True for a point that needs no action." },
         },
         required: ["severity", "title", "fyi"],
       },
     },
   },
-  required: ["reviewUrl", "headSha", "summary", "issues"],
+  required: ["headSha", "summary", "issues"],
 } as const;
 
 /** What the review means for the loop: nothing to fix, hand over to the fix automation, or out of rounds. */
@@ -79,14 +83,14 @@ export type PrReviewHandoff = z.infer<typeof PrReviewHandoff>;
 
 /**
  * What a finished review leaves on its run (`run.output`): the contract with the fix automation. A run with
- * `handoff: "fix"` is a review whose issues the fix automation should address; `reviewId`s tell it which reviews on
- * the PR are Autopilot's own.
+ * `handoff: "fix"` is a review whose issues the fix automation should address, but only while it is `currentPrReview`
+ * (the PR's head hasn't moved since). `reviewId`s tell it which reviews on the PR are Autopilot's own.
  */
 export const PrReviewRunOutput = z.object({
   kind: z.literal("pr_review"),
   linkId: z.string(),
   prUrl: z.string(),
-  /** The head commit that was reviewed. */
+  /** The PR's head commit the review was posted against, in full: the same value as the snapshot's `headOid`. */
   headOid: z.string(),
   /** Which review of the PR this was, counting from 1. */
   round: z.number().int().positive(),
@@ -110,13 +114,30 @@ export const PrReviewRunOutput = z.object({
 });
 export type PrReviewRunOutput = z.infer<typeof PrReviewRunOutput>;
 
+type ReviewRun = Pick<AutopilotRun, "automation" | "status" | "dryRun" | "output">;
+
 /** The review verdict a run left, or null when the run isn't a finished PR review. */
-export function prReviewOutput(
-  run: Pick<AutopilotRun, "automation" | "status" | "dryRun" | "output">,
-): PrReviewRunOutput | null {
+export function prReviewOutput(run: ReviewRun): PrReviewRunOutput | null {
   if (run.automation !== AUTOPILOT_REVIEW_PRS || run.status !== "succeeded" || run.dryRun) return null;
   const parsed = PrReviewRunOutput.safeParse(run.output);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * The newest finished review of the link, only if it is of the PR's current head: the one the fix automation acts
+ * on. A review of an older commit says nothing about the code now, and a newer review supersedes an older one.
+ */
+export function currentPrReview(
+  runs: readonly ReviewRun[],
+  linkId: string,
+  headOid: string | null | undefined,
+): PrReviewRunOutput | null {
+  const outputs = runs.flatMap((run) => {
+    const out = prReviewOutput(run);
+    return out && out.linkId === linkId ? [out] : [];
+  });
+  const latest = outputs.reduce<PrReviewRunOutput | null>((a, b) => (a && a.round > b.round ? a : b), null);
+  return latest && headOid && latest.headOid === headOid ? latest : null;
 }
 
 const RANK: Record<FindingSeverity, number> = { blocking: 0, major: 1, minor: 2, nit: 3 };

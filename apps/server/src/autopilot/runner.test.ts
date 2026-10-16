@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
+import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
 import type { T3Integration, TaskThreadInput } from "../integrations/t3.ts";
@@ -156,6 +156,13 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
     expect(args).toContain("Bash(gh pr review *)");
     expect(jobs[0]!.prompt).toContain("Don't edit files");
+  });
+
+  it("keeps a read-only agent away from the board's tools when asked", async () => {
+    const { jobs, start } = setup({ agent: async () => result({ result: "ok" }) });
+    await start({ options: { runner: "headless" }, access: "read-only", boardTools: false });
+    expect(jobs[0]!.args).toContain("--strict-mcp-config");
+    expect(jobs[0]!.args).not.toContain(`mcp__${BRAND.id}`);
   });
 
   it("fails a run that stopped, keeping its cost and session", async () => {

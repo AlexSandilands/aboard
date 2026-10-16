@@ -1,5 +1,6 @@
-import type { AutopilotEngineSettings, AutopilotField, AutopilotRun, ModelTier, Project } from "@repo/contracts";
+import type { AutopilotEngineSettings, AutopilotField, AutopilotRun, ModelTier, PrRef, Project } from "@repo/contracts";
 import type { z } from "zod";
+import type { PostedReview, PostReviewInput } from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { Services } from "../services/types.ts";
 
@@ -38,10 +39,21 @@ export interface CheckContext<C> {
 /** What a runner recorded about an agent action. */
 export type RunPatch = Partial<Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd">>;
 
+/** What an action may do on GitHub: post a review as the user's `gh` account. */
+export interface GithubActions {
+  postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
+}
+
+/** GitHub until one is configured: every action that needs it fails with a clear reason. */
+export const NO_GITHUB: GithubActions = {
+  postReview: () => Promise.reject(new Error("GitHub isn't available")),
+};
+
 export interface ActionContext<C> {
   services: Services;
   /** Starts agent work; only for automations with needsAgent. What it records goes on this run as it happens. */
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
+  github: GithubActions;
   engine: AutopilotEngineSettings;
   /** The effective config for the candidate's project (or the board's). */
   config: C;
@@ -109,6 +121,8 @@ export interface RunnerRequest {
   tools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
+  /** Headless read-only only: `false` keeps the agent from the board's tools and every other MCP server. Default true. */
+  boardTools?: boolean;
 }
 
 /** What a runner did. A T3 run returns once the thread is started; a headless run once the agent finished. */

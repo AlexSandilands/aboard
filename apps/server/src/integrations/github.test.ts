@@ -36,7 +36,9 @@ describe("mapPrSnapshot", () => {
       autoMergeAllowed: true,
       canMerge: true,
       headOid: "head-1",
+      isCrossRepository: false,
     });
+    expect(mapPrSnapshot(fakePr({ isCrossRepository: true }), repo).isCrossRepository).toBe(true);
     expect(mapPrSnapshot(fakePr({ isDraft: true }), repo).state).toBe("draft");
     expect(mapPrSnapshot(fakePr({ state: "MERGED", isDraft: true }), repo).state).toBe("merged");
     expect(mapPrSnapshot(fakePr({ state: "CLOSED" }), repo).state).toBe("closed");
@@ -433,5 +435,76 @@ describe("github merge", () => {
       ),
     ).rejects.toThrow(/Only GitHub/);
     expect(gh.requests).toEqual([]);
+  });
+});
+
+describe("github postReview", () => {
+  const ref = { host: "github.com", repo: "o/r", number: 7 };
+  const comments = [{ path: "src/a.ts", line: 3, body: "A comment" }];
+
+  it("posts one review as a comment, with its inline threads, against the PR's head", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body: "Summary", comments });
+    expect(posted).toEqual({
+      id: 901,
+      url: "https://github.com/o/r/pull/7#pullrequestreview-901",
+      headOid: "abcdef1234567890",
+      folded: 0,
+    });
+    expect(gh.mutations).toEqual([
+      {
+        operation: "PostPullRequestReview",
+        input: {
+          pullRequestId: "PR_o/r#7",
+          commitOID: "abcdef1234567890",
+          event: "COMMENT",
+          body: "Summary",
+          threads: [{ path: "src/a.ts", line: 3, side: "RIGHT", body: "A comment" }],
+        },
+      },
+    ]);
+  });
+
+  it("posts a review with no inline comments without a threads field", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await github.postReview(ref, { reviewedSha: "abcdef1234567890", body: "Nothing to fix", comments: [] });
+    expect(gh.mutations[0]!.input).not.toHaveProperty("threads");
+  });
+
+  it("refuses when the PR's head isn't the commit the reviewer read", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await expect(github.postReview(ref, { reviewedSha: "1234567", body: "x", comments })).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: expect.stringContaining("abcdef1"),
+    });
+    expect(gh.mutations).toEqual([]);
+  });
+
+  it("puts the inline comments in the body when GitHub refuses them", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    gh.failNextThreadedReview();
+    const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body: "Summary", comments });
+    expect(posted.folded).toBe(1);
+    const [, retry] = gh.mutations;
+    expect(retry!.input).not.toHaveProperty("threads");
+    expect(retry!.input.body).toContain("Summary");
+    expect(retry!.input.body).toContain("`src/a.ts:3`");
+    expect(retry!.input.body).toContain("A comment");
+  });
+
+  it("reports a host gh isn't signed in to, and GitHub's refusal", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)], { hosts: [] });
+    await expect(
+      github.postReview({ ...ref, host: "github.example.com" }, { reviewedSha: "abcdef1", body: "x", comments: [] }),
+    ).rejects.toThrow(/not signed in to github\.example\.com/);
+    const ok = setup([ghLink("l1", 7)]);
+    await expect(ok.github.postReview(ref, { reviewedSha: "abcdef1", body: "x", comments: [] })).rejects.toThrow(
+      /Could not resolve to a PullRequest/,
+    );
+    expect(gh.mutations).toEqual([]);
   });
 });
