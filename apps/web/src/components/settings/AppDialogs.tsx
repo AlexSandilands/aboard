@@ -1,5 +1,6 @@
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
+import { TemplateDraftDialog } from "~/components/templates/TemplateDraftDialog";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 
@@ -11,6 +12,7 @@ export function AppDialogs() {
       <AppSettingsDialog />
       <T3LaunchDialog />
       <MergePrDialog />
+      <TemplateDraftDialog />
     </>
   );
 }

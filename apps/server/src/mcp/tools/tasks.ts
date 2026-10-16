@@ -1,6 +1,14 @@
 import { z } from "zod";
-import { CloseTaskInput, TaskResolution, TaskStatusInput, type LinkInput, type T3ThreadRef } from "@repo/contracts";
+import {
+  CloseTaskInput,
+  TaskResolution,
+  templateHasPlan,
+  TaskStatusInput,
+  type LinkInput,
+  type T3ThreadRef,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
+import type { Services } from "../../services/types.ts";
 import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
@@ -9,9 +17,11 @@ import {
   autopilotValue,
   blockedByField,
   epicField,
+  findProject,
   hasProjectRef,
   labelsField,
   suggestedModelField,
+  templateField,
   planFromArgs,
   planInputFields,
   projectFields,
@@ -22,6 +32,7 @@ import {
   taskField,
   taskResult,
   textResult,
+  type ProjectRefArgs,
   type ToolRegistrar,
 } from "../shared.ts";
 
@@ -40,6 +51,36 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
 }
 
 /**
+ * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
+ * that doesn't exist yet has no templates of its own, only the board-wide ones. Also checks what the service would
+ * refuse later (no title anywhere, or a planned task with no plan), for the same reason.
+ */
+function templateFor(
+  services: Services,
+  args: ProjectRefArgs & { template?: string | undefined; title?: string | undefined },
+  opts: { needsPlan?: boolean; hasPlan?: boolean } = {},
+) {
+  const template = args.template
+    ? services.templates.resolve(args.template, findProject(services, args)?.id ?? "")
+    : null;
+  if (!args.title && !template?.titlePattern) {
+    throw new AppError(
+      "VALIDATION",
+      template ? `Pass a title: template "${template.name}" has no title pattern.` : "Pass a title.",
+    );
+  }
+  if (opts.needsPlan && !opts.hasPlan && !(template && templateHasPlan(template))) {
+    throw new AppError(
+      "VALIDATION",
+      template
+        ? `Template "${template.name}" has no plan; pass a plan (phases or markdown), or use add_to_backlog.`
+        : "create_task needs a plan (phases or markdown), or a template that has one. Use add_to_backlog for unplanned work.",
+    );
+  }
+  return template;
+}
+
+/**
  * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
  * add_note.
  */
@@ -55,15 +96,22 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
-        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it.",
+        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it. Pass " +
+        "template (a name from list_templates, such as Bug or Spike) to start from the user's template: its " +
+        "description, labels and plan are copied, and the task stays in Backlog.",
       inputSchema: {
-        title: z.string().min(1).describe("Short imperative title."),
+        title: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Short imperative title. Optional when the template has a title pattern."),
         description: z
           .string()
           .optional()
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
         epic: epicField.optional(),
+        template: templateField.optional(),
         blockedBy: blockedByField.optional(),
         links: linksField,
         labels: labelsField.optional(),
@@ -75,13 +123,15 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     (args) =>
       run(() => {
         requireProjectRef(args);
+        const template = templateFor(services, args);
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
-          title: args.title,
+          ...(args.title ? { title: args.title } : {}),
           ...(args.description ? { description: args.description } : {}),
           ...(args.epic ? { epicId: args.epic } : {}),
+          ...(template ? { template: template.id } : {}),
           ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
@@ -89,7 +139,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           actor: actor(args.actor),
         });
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
-        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}.`);
+        const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
+        const from = template ? ` from template ${template.name}${plan}` : "";
+        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.`);
       }),
   );
 
@@ -105,13 +157,19 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
         "blockedBy when other tasks must be Done first. When the result asks about the Autopilot flag, ask the user " +
-        "before setting autopilot. " +
+        "before setting autopilot. With template (a name from list_templates, such as Bug or Spike) the plan is " +
+        "optional: the template's plan is copied, and a plan you give replaces it. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
-        title: z.string().min(1),
+        title: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Short imperative title. Optional when the template has a title pattern."),
         description: z.string().optional().describe("Markdown: what and why."),
         ...projectFields,
         epic: epicField.optional(),
+        template: templateField.optional(),
         blockedBy: blockedByField.optional(),
         ...planInputFields,
         links: linksField,
@@ -125,21 +183,17 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       run(() => {
         requireProjectRef(args);
         const plan = planFromArgs(args);
-        if (!plan) {
-          throw new AppError(
-            "VALIDATION",
-            "create_task needs a plan (phases or markdown). Use add_to_backlog for unplanned work.",
-          );
-        }
+        const template = templateFor(services, args, { needsPlan: true, hasPlan: plan !== null });
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
-          title: args.title,
+          ...(args.title ? { title: args.title } : {}),
           ...(args.description ? { description: args.description } : {}),
           ...(args.epic ? { epicId: args.epic } : {}),
+          ...(template ? { template: template.id, status: "planned" as const } : {}),
           ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
-          plan,
+          ...(plan ? { plan } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),

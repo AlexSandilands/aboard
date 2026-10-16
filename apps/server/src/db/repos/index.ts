@@ -11,6 +11,7 @@ import { createRelationsRepo } from "./relations.ts";
 import { createReviewsRepo } from "./reviews.ts";
 import { createSettingsRepo } from "./settings.ts";
 import { createSql } from "./sql.ts";
+import { createTemplatesRepo } from "./templates.ts";
 import { createTasksRepo } from "./tasks.ts";
 
 /** All table repositories over one database. */
@@ -27,6 +28,7 @@ export function createRepos(db: Db) {
     relations: createRelationsRepo(sql),
     reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
+    templates: createTemplatesRepo(sql),
     autopilotSettings: createAutopilotSettingsRepo(sql),
     autopilotRuns: createAutopilotRunsRepo(sql),
   };

@@ -16,6 +16,7 @@ import {
   RotateCcwIcon,
   SquareCheckIcon,
   Trash2Icon,
+  FilePlus2Icon,
   XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -40,7 +41,8 @@ import { copyTaskReference, HandoffMenu } from "~/components/handoff/HandoffActi
 import { cn } from "~/lib/utils";
 import { useDeleteTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { useBoard, useSettings } from "~/state/queries";
-import { usePalette, useTaskPanelPrefs } from "~/state/ui";
+import { draftFromTask } from "~/components/templates/templates.logic";
+import { useDialogs, usePalette, useTaskPanelPrefs } from "~/state/ui";
 import { epicOptions } from "./epic.logic";
 import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -210,6 +212,12 @@ export function TaskActions({
                 </MenuItem>
               </MenuSubPopup>
             </MenuSub>
+          )}
+          {task.kind === "epic" ? null : (
+            <MenuItem onClick={() => useDialogs.getState().openTemplateDraft(draftFromTask(task))}>
+              <FilePlus2Icon />
+              Save as template…
+            </MenuItem>
           )}
           {item("archive")}
           {archived ? (

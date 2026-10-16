@@ -38,9 +38,17 @@ function seed() {
     title: "Feature",
     description: "Line one\nline two",
     plan,
+    template: "Bug",
     labels: ["ui", "backend"],
     autopilot: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
+  });
+  s.templates.create({
+    name: "Weekly review",
+    projectId: project.id,
+    titlePattern: "Review {{date}}",
+    labels: ["ops"],
+    phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
   });
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
@@ -74,6 +82,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   projects: "id",
   label_colors: "label",
   counters: "name",
+  task_templates: "id",
   autopilot_settings: "scope_kind, scope_id, automation",
   tasks: "id",
   plan_phases: "id",
@@ -303,6 +312,28 @@ describe("restore", () => {
     expect(readdirSync(join(dbPath, ".."))).toEqual([]);
   });
 
+  it("reads a folder written before templates existed, with no templates.json", () => {
+    const { s, db } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "templates.json"));
+    const dump = readDumpDir(dir);
+    expect(dump.task_templates).toEqual([]);
+    const dbPath = join(tempDir(), "data.sqlite");
+    // An older manifest doesn't count templates, and its tasks don't point at any.
+    const { task_templates: _n, ...counts } = dump.manifest.counts;
+    const tasks = dump.tasks.map((b) => ({ ...b, task: { ...b.task, template_id: null } }));
+    restoreBoard(dbPath, { ...dump, manifest: { ...dump.manifest, counts }, tasks });
+    const restored = openDatabase(dbPath);
+    try {
+      expect(restored.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual(
+        db.prepare("SELECT count(*) AS n FROM tasks").get(),
+      );
+    } finally {
+      restored.close();
+    }
+  });
+
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
@@ -312,6 +343,7 @@ describe("restore", () => {
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
+      task_templates: [],
       task_relations: [],
       autopilot_settings: [],
       tasks: dump.tasks.map((bundle) => {
@@ -321,6 +353,7 @@ describe("restore", () => {
           kind: _k,
           parent_id: _p,
           autopilot: _f,
+          template_id: _m,
           ...task
         } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
@@ -337,6 +370,9 @@ describe("restore", () => {
     try {
       const statuses = restored.prepare("SELECT status FROM tasks").all() as Array<{ status: string }>;
       expect(statuses.map((r) => r.status)).not.toContain("idea");
+      // The migrations after the dump's schema seed the starter templates.
+      const names = restored.prepare("SELECT name FROM task_templates ORDER BY name").all();
+      expect(names).toEqual([{ name: "Bug" }, { name: "Feature" }, { name: "Spike" }]);
       const created = restored
         .prepare("SELECT payload_json FROM task_events WHERE task_id = ? AND type = 'created'")
         .get(a.id) as { payload_json: string };
@@ -417,6 +453,18 @@ describe("restoreTask", () => {
     expect(after.links.map((l) => l.url)).toEqual(before.links.map((l) => l.url));
     expect(after.events.at(-1)).toMatchObject({ type: "restored", actor: "user" });
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("brings a task back without its template when the template has been deleted since", () => {
+    const { s, db, a } = seed();
+    const dump = s.backup.dump();
+    const bug = s.templates.list().find((t) => t.name === "Bug")!;
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: bug.id });
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    s.templates.delete(bug.id);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: null });
   });
 
   it("puts back what it blocked, and keeps current relations when it replaces a task", () => {

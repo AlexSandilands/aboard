@@ -1,4 +1,4 @@
-import { storageKey, type MergeMethod, type TaskStatus } from "@repo/contracts";
+import { storageKey, type CreateTemplateInput, type MergeMethod, type TaskStatus } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
@@ -207,6 +207,10 @@ interface DialogsState {
   closeT3Launch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
+  /** A template being made outside Settings, e.g. "Save as template" on a task. */
+  templateDraft: CreateTemplateInput | null;
+  openTemplateDraft: (draft: CreateTemplateInput) => void;
+  closeTemplateDraft: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
@@ -214,6 +218,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
   appSettingsOpen: false,
   t3Launch: null,
   mergePr: null,
+  templateDraft: null,
   openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
   closeProjectSettings: () => set({ projectSettingsId: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
@@ -222,6 +227,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeT3Launch: () => set({ t3Launch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),
+  openTemplateDraft: (templateDraft) => set({ templateDraft }),
+  closeTemplateDraft: () => set({ templateDraft: null }),
 }));
 
 /** The merge method last picked per repo (`host/owner/repo`), offered first next time. */

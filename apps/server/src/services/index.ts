@@ -16,6 +16,7 @@ import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
 
@@ -36,6 +37,7 @@ export function createServices(deps: ServiceDeps): Services {
   const settings = createSettingsService(core);
   const projects = createProjectsService(core);
   const labels = createLabelsService(core);
+  const templates = createTemplatesService(core, { projects });
 
   let plans: PlansModule | null = null;
   let links: LinksModule | null = null;
@@ -50,6 +52,7 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
     settings,
     imports: () => imports!,
+    templates,
     relations: () => relations!,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
@@ -74,6 +77,7 @@ export function createServices(deps: ServiceDeps): Services {
     labels: labels.service,
     imports: imports.service,
     backup: createBackupService(core),
+    templates,
     autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS }),
   };
 }
