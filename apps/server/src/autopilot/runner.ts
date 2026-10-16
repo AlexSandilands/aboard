@@ -180,6 +180,14 @@ export function createAutopilotRunner(deps: {
       const task = taskOf(request);
       if (request.kind === "nudge") return nudge(request, task, update);
       const options = readRunnerOptions(request.options);
+      // A T3 thread can't be held to read-only, given tools or asked for structured output.
+      const headlessOnly =
+        request.access === "read-only" || (request.tools?.length ?? 0) > 0 || Boolean(request.outputSchema);
+      if (headlessOnly) {
+        if (options.runner === "t3")
+          throw new Error("This action needs a headless run, but the automation runs only in T3 Code");
+        return startHeadless(request, task, options, update);
+      }
       const ready = t3Ready(deps.t3.status());
       if (options.runner === "t3" && !ready)
         throw new Error("T3 Code isn't connected, and this automation runs only there");

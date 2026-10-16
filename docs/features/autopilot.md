@@ -149,7 +149,8 @@ with that error.
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
   branch is refused either way.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
-  (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`.
+  (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
+  can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
 `RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):

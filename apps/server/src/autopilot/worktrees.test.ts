@@ -10,9 +10,10 @@ const RUN_ID = "abcdef12-3456-4789-8abc-def012345678";
 // Real git processes are slow on the Windows CI runner.
 describe("Autopilot worktrees", { timeout: 30_000 }, () => {
   let repo: ReturnType<typeof createGitFixture>;
+  // Building the fixture runs several git processes, which can outlast the default hook timeout on Windows.
   beforeEach(() => {
     repo = createGitFixture();
-  });
+  }, 30_000);
   afterEach(() => repo.cleanup());
 
   const make = (extra: { baseRef?: string; branch?: string; root?: string } = {}) =>

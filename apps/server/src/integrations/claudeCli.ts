@@ -55,16 +55,38 @@ interface RunResult {
   stderr: string;
 }
 
+/**
+ * Off Windows each run gets its own process group, so a timeout can end everything it started. Detached groups no
+ * longer end with the server's terminal, so the ones still going are ended when the server exits.
+ */
+const POSIX_GROUPS = process.platform !== "win32";
+const liveGroups = new Set<number>();
+if (POSIX_GROUPS) {
+  process.on("exit", () => {
+    for (const pid of liveGroups) killGroup(pid);
+  });
+}
+
+function killGroup(pid: number): void {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    // Already gone.
+  }
+}
+
 /** Ends the process and everything it started: an agent's shells and test runs must not outlive a timeout. */
 function killTree(child: ChildProcess): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
+  if (child.pid === undefined) {
+    child.kill();
+  } else if (process.platform === "win32") {
     // child.kill() would end only the cmd.exe shim or claude itself, not the tools it started.
     spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () =>
       child.kill(),
     );
-    return;
+  } else {
+    killGroup(child.pid);
   }
-  child.kill();
 }
 
 function run(
@@ -81,7 +103,9 @@ function run(
           windowsHide: true,
           windowsVerbatimArguments: true,
         })
-      : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true });
+      : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
+    const group = POSIX_GROUPS ? child.pid : undefined;
+    if (group !== undefined) liveGroups.add(group);
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
@@ -92,10 +116,12 @@ function run(
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
     child.on("error", (error) => {
       clearTimeout(timer);
+      if (group !== undefined) liveGroups.delete(group);
       reject(error);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (group !== undefined) liveGroups.delete(group);
       resolve({ code, stdout, stderr });
     });
     child.stdin.end(opts.input ?? "");

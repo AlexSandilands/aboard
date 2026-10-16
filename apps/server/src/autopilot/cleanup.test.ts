@@ -13,9 +13,10 @@ const plan = { phases: [{ title: "Build", steps: [{ title: "a" }] }] };
 // Real git processes are slow on the Windows CI runner.
 describe("Autopilot worktree cleanup", { timeout: 30_000 }, () => {
   let repo: ReturnType<typeof createGitFixture>;
+  // Building the fixture runs several git processes, which can outlast the default hook timeout on Windows.
   beforeEach(() => {
     repo = createGitFixture();
-  });
+  }, 30_000);
   afterEach(() => repo.cleanup());
 
   async function setup() {

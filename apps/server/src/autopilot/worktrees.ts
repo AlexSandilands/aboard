@@ -70,8 +70,8 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   const checkout = resolve(top.stdout.trim());
   const defaultBranch = await defaultBranchOf(runGit, checkout);
   const hasOrigin = (await runGit(["remote", "get-url", "origin"], checkout)).code === 0;
-  // Best effort: offline, the local refs still give a starting point.
-  if (hasOrigin) await runGit(["fetch", "--quiet", "origin"], checkout);
+  // Best effort: offline (or timed out), the local refs still give a starting point.
+  if (hasOrigin) await runGit(["fetch", "--quiet", "origin"], checkout).catch(() => null);
 
   for (const name of [req.branch, req.baseRef]) {
     // Refs reach git as arguments; one starting with "-" would be read as an option.

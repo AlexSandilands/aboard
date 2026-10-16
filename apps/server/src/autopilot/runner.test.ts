@@ -28,9 +28,10 @@ const result = (fields: Record<string, unknown>) => JSON.stringify({ type: "resu
 // Real git processes are slow on the Windows CI runner.
 describe("Autopilot runner", { timeout: 30_000 }, () => {
   let repo: ReturnType<typeof createGitFixture>;
+  // Building the fixture runs several git processes, which can outlast the default hook timeout on Windows.
   beforeEach(() => {
     repo = createGitFixture();
-  });
+  }, 30_000);
   afterEach(() => repo.cleanup());
 
   function setup(opts: { t3?: T3IntegrationStatus; agent?: (job: AgentJob) => Promise<string> } = {}) {
@@ -227,6 +228,25 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       const headless = setup({ t3: T3_UP });
       expect((await headless.start({ options: { runner: "headless" } })).runner).toBe("headless");
       expect(headless.launches).toHaveLength(0);
+    });
+
+    it("runs read-only, tool and schema requests headless even when T3 is connected", async () => {
+      for (const request of [
+        { access: "read-only" as const },
+        { tools: ["Bash(gh pr review *)"] },
+        { outputSchema: { type: "object" } },
+      ]) {
+        const auto = setup({
+          t3: T3_UP,
+          agent: async () => result({ structured_output: {}, total_cost_usd: 0 }),
+        });
+        expect((await auto.start({ options: { runner: "auto" }, ...request })).runner).toBe("headless");
+        expect(auto.launches).toHaveLength(0);
+
+        const t3Only = setup({ t3: T3_UP });
+        await expect(t3Only.start({ options: { runner: "t3" }, ...request })).rejects.toThrow("needs a headless run");
+        expect(t3Only.launches).toHaveLength(0);
+      }
     });
 
     it("nudges the task's latest live thread with a stable command id", async () => {
