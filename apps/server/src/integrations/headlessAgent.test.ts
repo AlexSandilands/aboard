@@ -42,6 +42,39 @@ describe("headless agent", () => {
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
   });
 
+  it("keeps a read-only agent that reads untrusted text to its worktree, away from MCP servers", () => {
+    const base = { access: "read-only", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: null } as const;
+    const open = agentArgs(base);
+    expect(open).toContain(`mcp__${BRAND.id}`);
+    expect(open).toContain("Read");
+    expect(open).not.toContain("--strict-mcp-config");
+    const closed = agentArgs({ ...base, untrusted: true });
+    expect(closed).not.toContain(`mcp__${BRAND.id}`);
+    expect(closed).toContain("--strict-mcp-config");
+    // File tools only reach the working directory: a bare Read would reach any file the user can.
+    expect(closed).toEqual(expect.arrayContaining(["Read(./**)", "Grep(./**)", "Glob(./**)"]));
+    for (const bare of ["Read", "Grep", "Glob"]) expect(closed).not.toContain(bare);
+    // The checkout's own settings (allow rules, hooks) must not apply.
+    expect(closed.slice(closed.indexOf("--setting-sources"), closed.indexOf("--setting-sources") + 2)).toEqual([
+      "--setting-sources",
+      "user",
+    ]);
+    // And only the built-in tools it needs, whatever the user's own settings allow.
+    expect(closed.slice(closed.indexOf("--tools"), closed.indexOf("--tools") + 2)).toEqual([
+      "--tools",
+      "Read,Grep,Glob,Bash",
+    ]);
+    expect(open).not.toContain("--tools");
+    // git only in exact forms: diff, show and log take any path, and --output= writes to it.
+    const allowed = closed.slice(closed.indexOf("--allowedTools") + 1, closed.indexOf("--disallowedTools"));
+    const git = allowed.filter((t) => t.startsWith("Bash(git"));
+    expect(git).toEqual(["Bash(git rev-parse HEAD)", "Bash(git status --short)", "Bash(git log --oneline -20)"]);
+    expect(git.some((t) => t.includes("*"))).toBe(false);
+    // Untrusted only means something for a read-only agent.
+    expect(agentArgs({ ...base, access: "edit", untrusted: true })).not.toContain("--strict-mcp-config");
+    expect(open).not.toContain("--setting-sources");
+  });
+
   it("can have no tools at all: none built in, no MCP servers, nothing allowed", () => {
     const args = agentArgs({
       access: "none",

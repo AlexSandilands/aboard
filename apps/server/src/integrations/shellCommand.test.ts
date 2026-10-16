@@ -1,4 +1,5 @@
 import { brandEnv } from "@repo/contracts";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { runShellCommand, shellEnvironment, shellInvocation } from "./shellCommand.ts";
@@ -12,14 +13,16 @@ const echoTitle = process.platform === "win32" ? `Write-Output $env:${TITLE}` : 
 
 describe("runShellCommand", () => {
   it("runs in the folder with the values as environment variables", async () => {
+    // The long name: a Windows temp dir can be a short 8.3 name (RUNNER~1), which the child reports in full.
+    const dir = realpathSync.native(tmpdir());
     const result = await runShellCommand({
       command: node(`process.stdout.write(process.cwd() + '|' + process.env.${TITLE})`),
-      cwd: tmpdir(),
+      cwd: dir,
       env: { [TITLE]: "Fix it" },
       timeoutMs: 20_000,
     });
     expect(result).toMatchObject({ exitCode: 0, timedOut: false });
-    expect(result.output).toBe(`${tmpdir()}|Fix it`);
+    expect(result.output).toBe(`${dir}|Fix it`);
   });
 
   it("never runs a value as part of the command", async () => {

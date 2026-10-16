@@ -58,7 +58,20 @@ function setup(opts: { now?: () => Date } = {}) {
     fields: [],
     defaults: {},
     check: (ctx) => plannedCandidates("agent", ctx),
-    act: async (_candidate, ctx) => ctx.runner.start({ run: ctx.run, prompt: "go", tier: null, options: ctx.config }),
+    act: async (_candidate, ctx) => {
+      // What the runner recorded is the run's already; the action's own result is just how it went.
+      const {
+        result: _result,
+        output: _output,
+        ...patch
+      } = await ctx.runner.start({
+        run: ctx.run,
+        prompt: "go",
+        tier: null,
+        options: ctx.config,
+      });
+      return patch;
+    },
   });
   // Ignores its scopes and claims every Planned task is board-wide.
   const stray = defineAutomation({

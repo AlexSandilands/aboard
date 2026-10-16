@@ -1,7 +1,7 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #97
-(custom automations), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
+(PR review), #97 (custom automations), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -104,9 +104,11 @@ hide work it only previewed.
 ### Runs
 
 `autopilot_runs` holds one row per run: `queued → running → succeeded | failed | skipped`. The runner fills in
-`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. A custom automation's shell action fills in
-`exit_code` and `detail` (the output's tail); a dry run of a custom automation keeps in `detail` what it would have
-run (`Candidate.preview`). Runs are history, so backups leave them out.
+`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
+`output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
+verdict there. A custom automation's shell action fills in `exit_code` and `detail` (the output's tail); a dry run
+of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). Runs are history, so backups
+leave them out.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
@@ -229,6 +231,77 @@ REST only, like the rest of Autopilot:
 
 Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
 
+**Review PRs** (`review_prs`, #95; `automations/reviewPrs.ts`, contract in `packages/contracts/src/prReview.ts`).
+Needs an agent and is off until switched on. Reviews a pull request linked to a task and posts the review on GitHub,
+as comments only.
+
+- **Trigger.** A `pr` link whose snapshot (from the `gh` poller) is open, or draft when **Review drafts** is on
+  (off by default), and has a `headOid` and `headRef`. Merged and closed PRs, PRs from forks (`isCrossRepository`:
+  the branch isn't on `origin`), Done and archived tasks, epics and links with no snapshot yet are skipped. The
+  dedupe key is `review:pr:<linkId>:<headOid>`: one review per PR and head commit, and a push gives a new one.
+- **One at a time, and rounds.** While a review of the PR is queued or running, a new head commit waits; the next
+  pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
+  setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
+  posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (#96) counts its
+  own attempts against the same limit; each fix is followed by at most one new head and so one review.
+- **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
+  `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
+  write (the PR's description and comments), the request sets `untrustedInput`, which gives it the least it needs:
+  - no board tools and no other MCP servers (`--strict-mcp-config`), and `--setting-sources user`, so the branch's
+    own `.claude/settings.json` (allow rules, hooks) never applies. The user's own settings stay, because some carry
+    the login; `--tools Read,Grep,Glob,Bash` keeps a global allow rule of theirs (WebFetch and the like) from
+    finding a tool, but a broad `Bash` allow rule of theirs would still widen what the reviewer may run;
+  - file tools scoped to the worktree (`Read(./**)` and so on; a bare `Read` reaches any file the user can);
+  - git in three exact commands only (`rev-parse HEAD`, `status --short`, `log --oneline -20`), because `git diff`,
+    `show` and `log` take any path, so read any file (a path outside the work tree makes `diff` compare files) and
+    write any file (`--output=`);
+  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` (also with `--name-only`, for a diff too long for
+    one command output) and two reads of
+    the PR's comments and reviews with `gh api`. The PR is named by its URL, so there is no `-R` to point it at
+    another repository, and no wildcard for `--web`, `-f` or `--method` to ride on.
+
+  Before the agent starts the runner checks the worktree is at the commit the run is about (`expectHead`,
+  `WorktreeHeadError`) and, when it isn't, removes the worktree and its branch (the run records neither). A branch
+  that moved past the commit skips the run. So does a rewritten branch (a force-push) once `GithubActions.prHead`
+  says GitHub's head is no longer that commit; if GitHub still says it is, the checkout is what's wrong (a stale
+  `origin`, a fork's branch name that exists on `origin`, a PR in another repository) and the run fails, flagged,
+  before any budget is spent. A read-only run may read the default branch (a PR from `main`), since it can't push.
+  A review has to be held to read-only, which a T3 thread can't be, so the runner setting is Auto or Headless and
+  both run headless. It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill**
+  chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the
+  PR's text untrusted, and says nothing is recorded on the board.
+- **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
+  `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot review`
+  (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
+  inline comments starting with `🤖 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
+  with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or request
+  changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses with
+  `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
+  the run is skipped, and the new head is reviewed next as the same round. GitHub refuses a whole review over one
+  comment on a line outside the diff, so it then posts again with the inline comments in the body; a body is cut to
+  what GitHub takes. The agent doesn't post itself because Claude Code's permission rules can't scope `gh api`
+  writes to a review (and can't see an `event` inside a heredoc), it refuses a JSON payload in a heredoc, and
+  `gh api -f` can't build the inline comments reliably.
+- **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** (engine
+  setting, default major) are the actionable ones.
+- **Anti-spiral.** From round 2 the prompt carries the round ("round 2 of 3"), the earlier Autopilot reviews with
+  their URLs and counts, and the rules: look for regressions and earlier points still unfixed, don't raise again
+  what was fixed or declined with a reason, and mark new minors and nits `fyi` (they go in an "FYI (no action
+  needed)" section). On the last allowed round the bar is raised to at least major (`effectiveFixThreshold`: minor
+  and nit become major; blocking stays) and the prompt says no round follows.
+- **What the board keeps.** The task gets a note "Autopilot reviewed PR #N at `<sha>` (round R of M): review on
+  GitHub", linking the review, and the run gets its verdict in `output` (`PrReviewRunOutput`: review URL and id, the
+  head commit in full, round, counts, FYI count, threshold, actionable count and `handoff`). An answer that isn't a
+  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too. A run is never retried, so there is one review per head
+  commit even when posting failed.
+- **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
+  (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
+  gave up…", which shows under Needs attention and sends an `autopilot_failed` notification). The fix automation
+  reads `currentPrReview(runs, linkId, snapshot.headOid)`: the newest finished review of the link, and only while
+  its `headOid` is the PR's current head, so a superseded or stale verdict is never acted on. The review ids on the
+  runs are how it tells Autopilot's own reviews from other people's.
+- **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
+  commit; dry run shows which first.
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
 
@@ -404,7 +477,7 @@ with that error.
   session, and fails when the task has no live thread.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
-  branch is refused either way.
+  branch is refused either way, except for a read-only run, which can't push.
 - **No task.** A run with no task (a digest's) is headless only: `claude -p` in an empty temporary folder that is
   removed afterwards, with no worktree and no session link. T3 Code and `nudge` fail for it.
 - Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
@@ -412,6 +485,9 @@ with that error.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
   (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
+  Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
+  checkout settings, file tools limited to the worktree, only exact git commands) and **`expectHead`**, the commit the worktree must be at, checked before the
+  agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
 `RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):
@@ -549,9 +625,13 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
+| `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
+| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
+| `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |

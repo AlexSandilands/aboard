@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
+import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
 import type { T3Integration, TaskThreadInput } from "../integrations/t3.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { createAutopilotRunner, tierModel } from "./runner.ts";
-import type { RunnerRequest, RunPatch } from "./types.ts";
+import { WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const plan = { phases: [{ title: "Build", steps: [{ title: "a" }] }] };
@@ -88,6 +88,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       exitCode: null,
       error: null,
       needsAttention: false,
+      output: null,
       createdAt: "2026-10-17T00:00:00.000Z",
       startedAt: "2026-10-17T00:00:00.000Z",
       finishedAt: null,
@@ -157,6 +158,78 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
     expect(args).toContain("Bash(gh pr review *)");
     expect(jobs[0]!.prompt).toContain("Don't edit files");
+  });
+
+  it("keeps a read-only agent that reads untrusted text away from MCP servers and other files", async () => {
+    const { jobs, start } = setup({ agent: async () => result({ result: "ok" }) });
+    await start({ options: { runner: "headless" }, access: "read-only", untrustedInput: true });
+    const args = jobs[0]!.args;
+    expect(args).toContain("--strict-mcp-config");
+    expect(args).not.toContain(`mcp__${BRAND.id}`);
+    expect(args).toContain("Read(./**)");
+    expect(args).not.toContain("Read");
+  });
+
+  describe("expecting a head commit", () => {
+    it("starts the agent when the worktree is at it", async () => {
+      const { jobs, start } = setup();
+      await start({
+        options: { runner: "headless" },
+        workspace: { branch: "feature" },
+        expectHead: git(repo.checkout, "rev-parse", "feature"),
+      });
+      expect(jobs).toHaveLength(1);
+    });
+
+    it("refuses before the agent starts when the branch has moved past it", async () => {
+      const { jobs, start } = setup();
+      // main's commit is an ancestor of feature's tip: the branch moved on from it.
+      const old = git(repo.checkout, "rev-parse", "main");
+      const failure = await start({
+        options: { runner: "headless" },
+        workspace: { branch: "feature" },
+        expectHead: old,
+      }).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(WorktreeHeadError);
+      expect(failure).toMatchObject({ moved: true, head: git(repo.checkout, "rev-parse", "feature") });
+      expect(jobs).toEqual([]);
+    });
+
+    it("removes the worktree it made when the check refuses, since the run never records it", async () => {
+      const { run, task, start, patches } = setup();
+      const old = git(repo.checkout, "rev-parse", "main");
+      await start({ options: { runner: "headless" }, workspace: { branch: "feature" }, expectHead: old }).catch(
+        () => null,
+      );
+      const path = join(repo.worktrees, "app", `${task.number}-${run.id.slice(0, 8)}`);
+      expect(existsSync(path)).toBe(false);
+      expect(git(repo.checkout, "branch", "--list", "autopilot/*")).toBe("");
+      expect(patches).toEqual([]);
+    });
+
+    it("refuses, saying it isn't the PR's, when the worktree is at an unrelated commit", async () => {
+      const { jobs, start } = setup();
+      git(repo.checkout, "commit", "--quiet", "--allow-empty", "-m", "elsewhere");
+      const elsewhere = git(repo.checkout, "rev-parse", "HEAD");
+      const failure = await start({
+        options: { runner: "headless" },
+        workspace: { branch: "feature" },
+        expectHead: elsewhere,
+      }).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(WorktreeHeadError);
+      expect(failure).toMatchObject({ moved: false });
+      expect((failure as Error).message).toContain("not the PR's head");
+      expect(jobs).toEqual([]);
+    });
+  });
+
+  it("lets a read-only agent read the default branch, but never an agent that can push", async () => {
+    const { jobs, start } = setup({ agent: async () => result({ result: "ok" }) });
+    await start({ options: { runner: "headless" }, access: "read-only", workspace: { branch: "main" } });
+    expect(readFileSync(join(jobs[0]!.cwd, "README.md"), "utf8")).toBe("hello\n");
+    await expect(setup().start({ options: { runner: "headless" }, workspace: { branch: "main" } })).rejects.toThrow(
+      "default branch",
+    );
   });
 
   it("fails a run that stopped, keeping its cost and session", async () => {

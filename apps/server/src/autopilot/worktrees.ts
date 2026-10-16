@@ -17,8 +17,10 @@ export interface WorktreeRequest {
   runId: string;
   /** The ref a new branch starts from. Defaults to the default branch (origin's copy when there is one). */
   baseRef?: string | null | undefined;
-  /** An existing branch to work on instead, e.g. a pull request's. Never the default branch. */
+  /** An existing branch to work on instead, e.g. a pull request's. Never the default branch, unless `readOnly`. */
   branch?: string | null | undefined;
+  /** The agent can't push (a reviewer), so reading the default branch is harmless. */
+  readOnly?: boolean | undefined;
 }
 
 export interface Worktree {
@@ -97,7 +99,7 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   let start: string;
   let pushTo: string | null = null;
   if (req.branch) {
-    if (req.branch === defaultBranch) {
+    if (req.branch === defaultBranch && !req.readOnly) {
       throw new Error(`Autopilot doesn't work on the default branch (${defaultBranch})`);
     }
     if (hasOrigin && (await refExists(runGit, checkout, `refs/remotes/origin/${req.branch}`))) {
