@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { claudeProjectSlug, createTitleReader, readTranscriptTitle } from "./claudeSessionTitle.ts";
+import { claudeProjectSlug, createTitleReader, MISSING_RETRY_MS, readTranscriptTitle } from "./claudeSessionTitle.ts";
 
 const ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
 
@@ -75,6 +75,18 @@ describe("Claude session titles", () => {
     expect(reader.read(ID, "/w/app")).toBeNull();
     expect(readTranscriptTitle(join(claudeDir, "nope.jsonl"))).toBeNull();
     expect(createTitleReader(join(claudeDir, "missing")).read(ID, "/w/app")).toBeNull();
+  });
+
+  it("doesn't search again for a missing transcript until a while has passed", () => {
+    const { claudeDir, transcript } = setup();
+    let clock = 1_000;
+    const reader = createTitleReader(claudeDir, () => clock);
+    expect(reader.read(ID, "/w/app")).toBeNull();
+    transcript("/w/app", ai("Now there"));
+    clock += MISSING_RETRY_MS - 1;
+    expect(reader.read(ID, "/w/app")).toBeNull();
+    clock += 1;
+    expect(reader.read(ID, "/w/app")).toBe("Now there");
   });
 
   it("reads a transcript again only when it changed", () => {

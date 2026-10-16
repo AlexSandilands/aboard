@@ -105,13 +105,24 @@ export interface TitleReader {
   read(sessionId: string, cwd: string | undefined): string | null;
 }
 
-export function createTitleReader(claudeDir: string): TitleReader {
+/** How long a session with no transcript is left alone before its folders are searched again. */
+export const MISSING_RETRY_MS = 5 * 60_000;
+
+export function createTitleReader(claudeDir: string, now: () => number = Date.now): TitleReader {
   // Keyed by transcript path: what was read, and the file's size and time then.
   const cache = new Map<string, { size: number; mtimeMs: number; title: string | null }>();
+  // Session ids whose transcript wasn't found, and when: searching every project folder each poll is wasteful.
+  const missing = new Map<string, number>();
   return {
     read(sessionId, cwd) {
+      const missedAt = missing.get(sessionId);
+      if (missedAt !== undefined && now() - missedAt < MISSING_RETRY_MS) return null;
       const path = transcriptPath(claudeDir, sessionId, cwd);
-      if (!path) return null;
+      if (!path) {
+        missing.set(sessionId, now());
+        return null;
+      }
+      missing.delete(sessionId);
       let stat: ReturnType<typeof statSync>;
       try {
         stat = statSync(path);

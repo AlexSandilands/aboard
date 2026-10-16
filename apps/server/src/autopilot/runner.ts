@@ -39,7 +39,8 @@ const SAFETY = (defaultBranch: string | null) =>
 
 /** What a headless agent is told about where it works and how its work leaves the worktree. */
 export function headlessWorkspaceNote(worktree: Worktree, readOnly: boolean): string {
-  const where = `You are running unattended as ${BRAND.name} Autopilot, in a git worktree made for this run (${worktree.path}) on branch \`${worktree.branch}\`.`;
+  // The board links this session itself, under the run's name; an agent linking it again would rename it.
+  const where = `You are running unattended as ${BRAND.name} Autopilot, in a git worktree made for this run (${worktree.path}) on branch \`${worktree.branch}\`. Autopilot has already linked this session to the task, so don't link it yourself.`;
   if (readOnly) return `${where} Don't edit files, commit or push.`;
   const push =
     worktree.pushTo === worktree.branch

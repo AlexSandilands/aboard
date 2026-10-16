@@ -127,6 +127,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     expect(job.args[job.args.indexOf("--name") + 1]).toBe("Autopilot · Fix PRs · PR #7");
     expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     expect(job.prompt).toContain("Do the task");
+    expect(job.prompt).toContain("already linked this session to the task, so don't link it yourself");
     expect(job.prompt).toContain(`git push -u origin autopilot/${name}`);
     expect(job.prompt).toContain("never push to `main`");
     expect(git(path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(`autopilot/${name}`);
