@@ -64,10 +64,16 @@ describe("parseDesktopNotification", () => {
     expect(parseDesktopNotification({ ...ok, taskId: null })).toEqual({ ...ok, taskId: null });
   });
 
-  it("drops anything else, including extra keys and oversized text", () => {
+  it("cuts long text rather than losing the notification", () => {
+    const cut = parseDesktopNotification({ ...ok, title: "t".repeat(500), body: "x".repeat(5000) });
+    expect(cut?.title).toHaveLength(300);
+    expect(cut?.body).toHaveLength(1000);
+  });
+
+  it("drops anything else, including extra keys and an oversized id", () => {
+    expect(parseDesktopNotification({ ...ok, id: "i".repeat(200) })).toBeNull();
     expect(parseDesktopNotification({ ...ok, extra: 1 })).toEqual(ok);
     expect(parseDesktopNotification({ ...ok, title: 1 })).toBeNull();
-    expect(parseDesktopNotification({ ...ok, body: "x".repeat(5000) })).toBeNull();
     expect(parseDesktopNotification({ ...ok, taskId: 3 })).toBeNull();
     expect(parseDesktopNotification({ id: "n1" })).toBeNull();
     expect(parseDesktopNotification(null)).toBeNull();

@@ -52,14 +52,15 @@ export class LogTail {
 const text = (value: unknown, max: number): string | null =>
   typeof value === "string" && value.length <= max ? value : null;
 
-/** Validates a notification sent over IPC by the page; the shell shows only what it recognises. */
+/** Validates a notification sent over IPC by the page; the shell shows only what it recognises. Long text is cut, not refused. */
 export function parseDesktopNotification(value: unknown): DesktopNotification | null {
   if (typeof value !== "object" || value === null) return null;
   const { id, title, body, taskId } = value as Record<string, unknown>;
-  const checked = { id: text(id, 100), title: text(title, 300), body: text(body, 1000) };
-  if (checked.id === null || checked.title === null || checked.body === null) return null;
-  if (taskId !== null && text(taskId, 100) === null) return null;
-  return { id: checked.id, title: checked.title, body: checked.body, taskId: taskId as string | null };
+  if (typeof title !== "string" || typeof body !== "string") return null;
+  // Ids are ours and short; a long one is not from the board.
+  const checked = { id: text(id, 100), taskId: taskId === null ? null : text(taskId, 100) };
+  if (checked.id === null || (taskId !== null && checked.taskId === null)) return null;
+  return { id: checked.id, title: title.slice(0, 300), body: body.slice(0, 1000), taskId: checked.taskId };
 }
 
 const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;

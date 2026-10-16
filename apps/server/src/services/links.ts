@@ -160,7 +160,9 @@ export function createLinksService(
       const prev = was as T3ThreadSnapshot;
       const next = now as T3ThreadSnapshot;
       const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
-      if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status)) {
+      // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
+      const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
+      if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {
         deps.notifications.notify({
           kind: "thread_waiting",
           taskId: task.id,

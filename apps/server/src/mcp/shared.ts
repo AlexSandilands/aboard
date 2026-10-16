@@ -44,6 +44,21 @@ export const epicField = z
   .min(1)
   .describe('The epic this task belongs to: "#12", "12" or its uuid. It must be in the same project.');
 
+export const templateField = z
+  .string()
+  .min(1)
+  .describe(
+    "Start from a template: its name or id (list_templates shows them). Its title pattern, description, labels and " +
+      "plan fill in whatever you leave out, and anything you pass wins; labels you pass replace the template's.",
+  );
+
+export const blockedByField = z
+  .array(z.string().min(1))
+  .describe(
+    'Tasks that must be Done before this one is ready: "#42", "42" or uuids. They may be in other ' +
+      "projects; a relation that would make a cycle is refused.",
+  );
+
 export const actorField = z
   .string()
   .optional()

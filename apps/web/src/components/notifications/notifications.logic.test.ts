@@ -78,7 +78,7 @@ describe("deliveryTarget", () => {
     expect(deliveryTarget({ ...base, desktop: true, deliveringTab: false })).toBe("desktop");
   });
 
-  it("uses the InboxNotification API in one permitted tab", () => {
+  it("uses the Notification API in one permitted tab", () => {
     expect(deliveryTarget(base)).toBe("browser");
     expect(deliveryTarget({ ...base, deliveringTab: false })).toBeNull();
     expect(deliveryTarget({ ...base, permission: "default" })).toBeNull();

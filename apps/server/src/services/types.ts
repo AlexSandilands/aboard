@@ -3,6 +3,7 @@ import type {
   BoardSnapshot,
   CreateProjectInput,
   CreateTaskInput,
+  CreateTemplateInput,
   IssueSnapshot,
   LinkInput,
   MoveTaskInput,
@@ -29,9 +30,11 @@ import type {
   TaskReview,
   TaskStatus,
   TaskSummary,
+  TaskTemplate,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
+  UpdateTemplateInput,
 } from "@repo/contracts";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
@@ -59,6 +62,7 @@ export interface Services {
   labels: LabelsService;
   imports: ImportsService;
   backup: BackupService;
+  templates: TemplatesService;
   autopilot: AutopilotService;
   notifications: NotificationsService;
 }
@@ -309,6 +313,24 @@ export interface ImportsService {
    * done. Starting it again is the caller's job; one already running ignores that.
    */
   retry(taskId: string, actor: string): void;
+}
+
+export interface TemplatesService {
+  /** Board-wide templates and every project's; with `projectId`, those board-wide and that project's. */
+  list(opts?: { projectId?: string }): TaskTemplate[];
+  get(id: string): TaskTemplate;
+  /**
+   * The template `ref` (an id or a name, any case) names for a task in `projectId`: the project's own wins over a
+   * board-wide one of the same name. Throws NOT_FOUND, listing what is available.
+   */
+  resolve(ref: string, projectId: string): TaskTemplate;
+  /** Throws CONFLICT when the scope already has a template of that name. Phases without steps are dropped. */
+  create(input: CreateTemplateInput): TaskTemplate;
+  update(id: string, input: UpdateTemplateInput): TaskTemplate;
+  /** A copy named "<name> copy" in the same scope. */
+  duplicate(id: string): TaskTemplate;
+  /** Tasks made from it keep what they copied and forget which template it was. */
+  delete(id: string): void;
 }
 
 export interface BoardService {

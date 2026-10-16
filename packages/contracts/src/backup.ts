@@ -52,6 +52,10 @@ export const BoardDump = z.object({
   projects: z.array(BackupRow),
   label_colors: z.array(BackupRow),
   counters: z.array(BackupRow),
+  /** Absent from dumps taken before templates existed. */
+  task_templates: z.array(BackupRow).default([]),
+  /** Blocks / blocked-by pairs. Backups from before relations existed have none. */
+  task_relations: z.array(BackupRow).default([]),
   /** Autopilot switches and config per scope. Dumps taken before Autopilot have none. */
   autopilot_settings: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),

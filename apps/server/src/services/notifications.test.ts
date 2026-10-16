@@ -156,6 +156,15 @@ describe("producers", () => {
     expect(inbox().map((n) => n.title)).toEqual(["Thread waiting for approval", "Thread waiting for input"]);
   });
 
+  it("notifies again when a thread asks twice between two polls", () => {
+    const { s, threadLink, inbox } = setup();
+    s.links.setSnapshot(threadLink.id, thread({ status: "working" }));
+    s.links.setSnapshot(threadLink.id, thread({ status: "input", lastActivityAt: "2026-10-01T10:06:00Z" }));
+    // It was answered and asked again before the next poll: still input, but newer.
+    s.links.setSnapshot(threadLink.id, thread({ status: "input", lastActivityAt: "2026-10-01T10:09:00Z" }));
+    expect(inbox()).toHaveLength(2);
+  });
+
   it("notifies when checks start failing, and again for a new head that fails", () => {
     const { s, prLink, inbox } = setup();
     s.links.setSnapshot(prLink.id, pr());

@@ -4,7 +4,10 @@ import {
   findJiraKeys,
   normalizeLabel,
   parseIssueSource,
+  renderTemplateText,
   resolutionNeedsTask,
+  templateHasPlan,
+  type PlanInput,
   type TaskDetail,
   type TaskSummary,
 } from "@repo/contracts";
@@ -19,7 +22,16 @@ import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
-import type { CloseInput, ProjectsService, ReviewsService, SettingsService, TaskQuery, TasksService } from "./types.ts";
+import type { RelationsModule } from "./relations.ts";
+import type {
+  CloseInput,
+  ProjectsService,
+  ReviewsService,
+  SettingsService,
+  TaskQuery,
+  TasksService,
+  TemplatesService,
+} from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -68,6 +80,8 @@ export function createTasksService(
     labels: LabelsModule;
     settings: SettingsService;
     imports: () => ImportsModule;
+    templates: TemplatesService;
+    relations: () => RelationsModule;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -194,6 +208,9 @@ export function createTasksService(
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
         }
+        if (kind === "epic" && input.template) {
+          throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
+        }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
         const source = input.sourceUrl ? parseIssueSource(input.sourceUrl, deps.settings.get()) : null;
         if (input.sourceUrl && !source) {
@@ -201,11 +218,60 @@ export function createTasksService(
         }
         if (source && input.plan)
           throw new AppError("VALIDATION", "A task imported from an issue can't start with a plan");
-        const title = input.title ?? source?.placeholder;
-        if (!title) throw new AppError("VALIDATION", "A task needs a title");
-        const hasSteps = (input.plan?.phases ?? []).some((p) => p.steps.length > 0);
+        const template = input.template ? deps.templates.resolve(input.template, project.id) : null;
+        const templatePlan = template && !input.plan && templateHasPlan(template);
+        if (source && templatePlan) {
+          throw new AppError(
+            "VALIDATION",
+            `Template "${template.name}" has a plan, and a task imported from an issue can't start with one`,
+          );
+        }
+        // What the template fills in is rendered once, here, and copied: the task never reads the template again.
+        const context = { date: new Date(), project: project.title };
+        const fromPattern = template ? renderTemplateText(template.titlePattern, context).trim() : "";
+        const title = input.title ?? source?.placeholder ?? (fromPattern || undefined);
+        if (!title) {
+          throw new AppError(
+            "VALIDATION",
+            template
+              ? `A task needs a title; template "${template.name}" has no title pattern`
+              : "A task needs a title",
+          );
+        }
+        // An imported task takes its description from the issue, and only while it is still empty.
+        // A description given, even a blank one, is explicit: blank means none, not "use the template's".
+        const description =
+          input.description !== undefined
+            ? input.description.trim()
+              ? input.description
+              : undefined
+            : source || !template?.description
+              ? undefined
+              : renderTemplateText(template.description, context);
+        const plan: PlanInput | undefined =
+          input.plan ??
+          (templatePlan
+            ? {
+                ...(template.planContext ? { context: template.planContext } : {}),
+                ...(template.suggestedTier ? { suggestedModel: { tier: template.suggestedTier } } : {}),
+                phases: template.phases.map((phase) => ({
+                  title: phase.title,
+                  steps: phase.steps.map((step) => ({
+                    title: step.title,
+                    ...(step.notes ? { notes: step.notes } : {}),
+                  })),
+                })),
+              }
+            : undefined);
+        const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
-        const status = hasSteps ? "planned" : "backlog";
+        const status = input.status ?? (input.plan && hasSteps ? "planned" : "backlog");
+        if (status === "planned" && !hasSteps) {
+          throw new AppError(
+            "VALIDATION",
+            "A planned task needs a plan; give one, or start from a template that has one",
+          );
+        }
         const task: TaskRecord = {
           id: randomUUID(),
           number: repos.tasks.nextNumber(),
@@ -213,7 +279,7 @@ export function createTasksService(
           kind,
           parentId: epic?.id ?? null,
           title,
-          description: input.description ?? null,
+          description: description ?? null,
           planContext: null,
           status,
           position: positionAmong(repos.tasks.lane(project.id, status), {}),
@@ -226,10 +292,12 @@ export function createTasksService(
           resolvedByTaskId: null,
           autoReview: null,
           suggestedModel: null,
+          templateId: template?.id ?? null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
           status,
+          ...(template ? { template: template.name } : {}),
           ...(kind === "epic" ? { kind } : {}),
           ...(epic ? { epic: epic.number } : {}),
         });
@@ -237,8 +305,10 @@ export function createTasksService(
           fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title });
           syncEpic(epic.id, actor, fx);
         }
-        if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
-        if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
+        const labels = input.labels ?? template?.labels;
+        if (labels?.length) deps.labels.setIn(task.id, labels, actor, fx);
+        if (plan) deps.plans().replacePlan(task, plan, actor, fx);
+        if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
           deps.links().service.add(task.id, { value: source.url }, actor);
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
@@ -349,6 +419,9 @@ export function createTasksService(
         if (next.parentId && (next.parentId !== current.parentId || archivedChanged))
           syncEpic(next.parentId, actor, fx);
         if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
+        // Removals first, so one call can swap a blocker.
+        if (input.removeBlockedBy?.length) deps.relations().removeBlockersIn(id, input.removeBlockedBy, actor, fx);
+        if (input.addBlockedBy?.length) deps.relations().addBlockersIn(id, input.addBlockedBy, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);
@@ -467,6 +540,8 @@ export function createTasksService(
         for (const child of repos.tasks.childrenOf([id])) {
           fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
         }
+        // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
+        deps.relations().noteDeletionIn(task, actor, fx);
         repos.tasks.delete(id);
         fx.taskDeleted(id);
         if (task.parentId) {

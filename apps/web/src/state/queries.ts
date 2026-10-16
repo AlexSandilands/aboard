@@ -2,6 +2,7 @@ import type {
   AppSettings,
   BackupStatus,
   BoardEvent,
+  AutopilotOverview,
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
@@ -12,6 +13,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
+  TaskTemplate,
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -28,12 +30,14 @@ export const queryKeys = {
   integrations: ["integrations"] as const,
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
+  autopilotOverview: ["autopilot", "overview"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
+  templates: ["templates"] as const,
 };
 
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
@@ -74,10 +78,29 @@ export function useTaskDetail(taskId: string | null | undefined) {
   });
 }
 
+/** Every task template, board-wide and per project. Changed only from the UI, so mutations refetch it. */
+export function useTemplates() {
+  return useQuery({
+    queryKey: queryKeys.templates,
+    queryFn: ({ signal }) => api<TaskTemplate[]>("/api/templates", { signal }),
+    // No SSE event covers templates, so refetch whenever a picker or Settings mounts.
+    staleTime: 0,
+  });
+}
+
 export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings,
     queryFn: ({ signal }) => api<AppSettings>("/api/settings", { signal }),
+  });
+}
+
+/** Autopilot's engine settings and catalogue. */
+export function useAutopilotOverview() {
+  return useQuery({
+    queryKey: queryKeys.autopilotOverview,
+    queryFn: ({ signal }) => api<AutopilotOverview>("/api/autopilot", { signal }),
+    staleTime: 0,
   });
 }
 
@@ -202,6 +225,8 @@ export function useBoardEvents() {
       // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
       if (event.type === "task.deleted") {
         void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
+        // Its notifications went with it, read or not.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
       }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {

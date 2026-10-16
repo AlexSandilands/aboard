@@ -39,7 +39,7 @@ export function renderOverlayIcon(count: number): string | null {
   return canvas.toDataURL("image/png");
 }
 
-let originalFavicon: string | null = null;
+let originalFavicon: { href: string; type: string } | null = null;
 let baseImage: Promise<HTMLImageElement | null> | null = null;
 let faviconRun = 0;
 
@@ -47,7 +47,8 @@ const faviconLink = () => document.querySelector<HTMLLinkElement>('link[rel~="ic
 
 const loadBase = (href: string): Promise<HTMLImageElement | null> =>
   (baseImage ??= new Promise((resolve) => {
-    const image = new Image();
+    // An SVG without a width and height has no size of its own, which Firefox can't draw from.
+    const image = new Image(64, 64);
     image.addEventListener("load", () => resolve(image), { once: true });
     image.addEventListener("error", () => resolve(null), { once: true });
     image.src = href;
@@ -57,14 +58,15 @@ const loadBase = (href: string): Promise<HTMLImageElement | null> =>
 async function showFaviconCount(count: number): Promise<void> {
   const link = faviconLink();
   if (!link) return;
-  originalFavicon ??= link.href;
+  originalFavicon ??= { href: link.href, type: link.type };
   const run = (faviconRun += 1);
   const text = badgeText(count);
   if (!text) {
-    link.href = originalFavicon;
+    link.type = originalFavicon.type;
+    link.href = originalFavicon.href;
     return;
   }
-  const base = await loadBase(originalFavicon);
+  const base = await loadBase(originalFavicon.href);
   // A newer count arrived while the base icon loaded.
   if (run !== faviconRun) return;
   const canvas = document.createElement("canvas");
@@ -72,10 +74,14 @@ async function showFaviconCount(count: number): Promise<void> {
   canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  if (base) ctx.drawImage(base, 0, 0, 64, 64);
-  drawBadge(ctx, 64, text, { x: 44, y: 20 }, 20);
-  link.type = "image/png";
-  link.href = canvas.toDataURL("image/png");
+  try {
+    if (base) ctx.drawImage(base, 0, 0, 64, 64);
+    drawBadge(ctx, 64, text, { x: 44, y: 20 }, 20);
+    link.type = "image/png";
+    link.href = canvas.toDataURL("image/png");
+  } catch {
+    // The count is a nicety: with an icon that can't be drawn, the plain favicon stays.
+  }
 }
 
 /**

@@ -42,6 +42,20 @@ Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or
 are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
 gets a colour you can change.
 
+## Templates
+
+Start a task from a template (Bug, Spike, Feature or your own) in New task, to pre-fill its description, labels and plan. See [Templates](templates.md).
+
+## Blocking
+
+A task can wait on others, in any project: open its panel, find **Relations** and **Add** a task under
+**Blocked by** (or under **Blocks**, to make another task wait on this one). A blocked card shows a lock, and
+hovering it names what it is waiting on. It is ready once every blocker is Done. Loops are refused.
+
+Hover a card, or open one, to draw lines to the tasks it blocks (green) and is blocked by (red). Hold Shift to
+draw the whole chain, with each step further away a little darker. Agents set blockers too and are told not to
+start a blocked task.
+
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what

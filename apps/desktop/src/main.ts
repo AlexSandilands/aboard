@@ -46,6 +46,7 @@ let quitting = false;
 let badge: DesktopBadge = { count: 0, description: "", overlay: null };
 /** Shown notifications, held until they close: Electron drops the click handler of one that is garbage collected. */
 const shown = new Set<Notification>();
+const MAX_SHOWN = 50;
 /** Tray clicks and second launches before the server is ready; the window opens once it is. */
 let showRequested = false;
 
@@ -224,11 +225,15 @@ if (app.requestSingleInstanceLock()) {
     if (!notification || !fromBoard(event) || !Notification.isSupported()) return;
     const toast = new Notification({ title: notification.title, body: notification.body, icon: appIcon() });
     shown.add(toast);
+    // Windows doesn't always report a toast that timed out into the Action Center as closed.
+    if (shown.size > MAX_SHOWN) shown.delete(shown.values().next().value!);
     toast.on("click", () => {
+      shown.delete(toast);
       showWindow();
       window?.webContents.send(NOTIFICATION_CLICK_CHANNEL, notification);
     });
     toast.on("close", () => shown.delete(toast));
+    toast.on("failed", () => shown.delete(toast));
     toast.show();
   });
   ipcMain.on(SET_BADGE_CHANNEL, (event, value: unknown) => {

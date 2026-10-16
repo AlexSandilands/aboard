@@ -201,9 +201,9 @@ export function createAutopilotService(
     core.write((fx) => {
       repos.autopilotRuns.update(run);
       if (opts.log) logRun(fx, run);
-      if (run.finishedAt) notifyEnded(run);
       // The card's attention reason may change with the run.
       else if (run.taskId) fx.task(run.taskId);
+      if (run.finishedAt) notifyEnded(run);
       fx.autopilot();
     });
     return run;

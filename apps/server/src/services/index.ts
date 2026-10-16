@@ -14,8 +14,10 @@ import { createLinksService, type LinksModule } from "./links.ts";
 import { createNotificationsService } from "./notifications.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
+import { createRelations, type RelationsModule } from "./relations.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
 
@@ -39,11 +41,13 @@ export function createServices(deps: ServiceDeps): Services {
   const notifications = createNotificationsService(core);
   const projects = createProjectsService(core);
   const labels = createLabelsService(core);
+  const templates = createTemplatesService(core, { projects });
 
   let plans: PlansModule | null = null;
   let links: LinksModule | null = null;
   let reviews: ReviewsService | null = null;
   let imports: ImportsModule | null = null;
+  let relations: RelationsModule | null = null;
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -52,7 +56,10 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
     settings,
     imports: () => imports!,
+    templates,
+    relations: () => relations!,
   });
+  relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, {
@@ -75,6 +82,7 @@ export function createServices(deps: ServiceDeps): Services {
     labels: labels.service,
     imports: imports.service,
     backup: createBackupService(core),
+    templates,
     notifications,
     autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS, notifications }),
   };

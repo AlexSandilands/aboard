@@ -82,7 +82,7 @@ export function createNotificationsService(core: Core): NotificationsService {
     markRead(id) {
       return core.write((fx) => {
         const existing = repos.notifications.get(id);
-        if (!existing) throw notFound("InboxNotification", id);
+        if (!existing) throw notFound("Notification", id);
         if (!repos.notifications.markRead(id, core.now().toISOString())) return existing;
         fx.notificationsChanged();
         return repos.notifications.get(id)!;

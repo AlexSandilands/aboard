@@ -1,12 +1,11 @@
-import { NOTIFICATION_KINDS, type AppSettings, type AutopilotOverview } from "@repo/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { NOTIFICATION_KINDS, type AppSettings } from "@repo/contracts";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
-import { api } from "~/lib/api";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { useUpdateSettings } from "~/state/mutations";
+import { useAutopilotOverview } from "~/state/queries";
 import { describeQuietHours } from "./notifications.logic";
 
 /** Settings → Notifications: which events are recorded, quiet hours, and the browser's permission. */
@@ -14,11 +13,7 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
   const update = useUpdateSettings();
   const { kinds, muteInQuietHours } = settings.notifications;
   // Autopilot owns the window; this only reads it to say what the mute switch follows.
-  const autopilot = useQuery({
-    queryKey: ["autopilot", "overview"],
-    queryFn: ({ signal }) => api<AutopilotOverview>("/api/autopilot", { signal }),
-    staleTime: 0,
-  });
+  const autopilot = useAutopilotOverview();
   return (
     <SettingsSection title="Notifications">
       <SettingsRow

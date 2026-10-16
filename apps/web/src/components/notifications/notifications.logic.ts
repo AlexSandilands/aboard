@@ -46,7 +46,7 @@ export interface DeliveryContext {
 
 /**
  * Where an OS popup for a new notification should show, if anywhere. Nothing pops up while the user is looking at the
- * board (the bell has it). The desktop app uses the shell; a browser tab uses the InboxNotification API once permitted,
+ * board (the bell has it). The desktop app uses the shell; a browser tab uses the Notification API once permitted,
  * and only the one delivering tab does, so several tabs don't each pop up the same thing.
  */
 export function deliveryTarget(c: DeliveryContext): DeliveryTarget | null {

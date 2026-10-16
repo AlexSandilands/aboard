@@ -1,6 +1,6 @@
 ---
 name: aboard
-description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, step progress, PR/Jira/T3 thread links and handover notes.
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/Jira/T3 thread links and handover notes.
 ---
 
 # Aboard (task board)
@@ -43,6 +43,15 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    If a task you just planned has no labels (the `set_plan` / `create_task` / `get_task` result says so
    under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
    before calling `update_task`.
+
+   **Templates.** The user keeps task templates (Bug, Spike and Feature to start with, plus their own),
+   each a starting point with a description, labels and a plan. `list_templates` (with `workspacePath`) shows
+   them. Pass `template: "Bug"` to `add_to_backlog` or `create_task` to start from one: what you leave out
+   is filled in from it (the title too, when it has a title pattern), what you pass wins, and labels you pass
+   replace its labels. `add_to_backlog` keeps the task in Backlog with the template's plan copied in;
+   `create_task` needs no plan of its own when the template has one, and lands in Planned. Use a template
+   when one clearly fits the work; don't make one up. You can't create or edit templates; the user does that
+   in Settings.
 
    When you write the plan, also set `suggestedModel` on `set_plan` / `create_task`: the tier the session
    that implements it needs, with a one-line `reason`. The user maps each tier to a model, and hand-offs
@@ -112,6 +121,23 @@ band across the columns its tasks are in, with a roll-up of how many are done.
   blocked and report back when you need an answer. When `move_task` to `review` opens a review round, don't
   run the loop or open the PR; stop and report the round. The orchestrator runs the review: `start_review`
   gives it the open round's brief.
+
+## Blocking
+
+Tasks can wait on each other, including across projects. "A blocks B" means B isn't ready until A is **Done**
+(any resolution counts, so a `wont_do` blocker stops blocking). On the board a blocked card shows a lock, and
+hovering a card draws green lines to the tasks it unblocks and red lines to its blockers.
+
+- Set blockers with `blockedBy: ["#4"]` on `create_task` / `add_to_backlog`, or `addBlockedBy` /
+  `removeBlockedBy` on `update_task`. The other task's `Blocks` list follows. Epics can block and be blocked.
+- `get_task` lists **Blocked by** (with each blocker's status) and **Blocks**; `list_tasks` and `epic_overview`
+  add "blocked by #N" to blocked tasks.
+- **Don't start a blocked task** (`move_task` to `in_progress`, or a session for it). Tell the user what it waits
+  on, or work on a blocker first. When the last blocker reaches Done the task is ready.
+- A relation that would make a cycle is refused with the chain in the error. Archive-and-forget doesn't free a
+  task: an archived blocker that isn't Done still blocks, so close it with `close_task` or remove the relation.
+- Record a dependency when you notice one while planning (the task needs another task's migration, API or
+  decision), instead of only writing it in the plan.
 
 ## Local review
 
