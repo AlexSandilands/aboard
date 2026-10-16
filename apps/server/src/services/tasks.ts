@@ -34,6 +34,7 @@ import type {
 } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
+const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
 
 /** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
@@ -205,6 +206,7 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic has no plan; create its child tasks with plans instead");
         }
         if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
+        if (kind === "epic" && input.autopilot != null) throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
         }
@@ -291,6 +293,7 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
+          autopilot: input.autopilot ?? null,
           suggestedModel: null,
           templateId: template?.id ?? null,
         };
@@ -356,6 +359,12 @@ export function createTasksService(
         if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
           next.autoReview = input.autoReview;
           changed.push("autoReview");
+        }
+        if (current.kind === "epic" && input.autopilot != null)
+          throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
+        if (input.autopilot !== undefined && input.autopilot !== current.autopilot) {
+          next.autopilot = input.autopilot;
+          changed.push("autopilot");
         }
         const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
         if (movedProject) {

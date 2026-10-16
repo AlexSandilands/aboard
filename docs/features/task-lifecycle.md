@@ -27,6 +27,8 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
 - A Jira key or URL, or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
   Backlog titled after the issue, and its details are filled in in the background
   ([issue import](issue-import.md)).
+- `add_to_backlog`, `create_task` and `POST /api/tasks` can set the task's Autopilot flag at creation; it
+  defaults to unset ([autopilot.md](autopilot.md#the-per-task-flag)).
 - A `template` (id or name) on `POST /api/tasks`, or on either MCP create tool: the template fills in what the
   input leaves out, and the task lands in Backlog unless `status: "planned"` is asked for ([templates](templates.md)).
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira

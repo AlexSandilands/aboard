@@ -15,7 +15,7 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
 `get_task` before resuming, plan before leaving Backlog (with a suggested model tier, and suggest labels if
-the task has none), keep
+the task has none, and whether to flag it for Autopilot), keep
 steps current, group large features into epics, link the Jira issue and the T3 thread, finish with `add_note`.
 
 ### Tools
@@ -36,6 +36,10 @@ counts. See [labels.md](labels.md).
 `set_plan`, `create_task` and `update_task` take `suggestedModel: {tier, reason}`: the model tier for
 implementing the task. `set_plan` keeps the current one when it's omitted; `update_task` clears it with
 `null`. See [agent-handoff.md](agent-handoff.md#suggested-model).
+
+`add_to_backlog`, `create_task` and `update_task` take `autopilot: "default" | "on" | "off"`, the task's
+Autopilot flag (stored as null, 1 or 0). Agents may set it, but only after the user has said so, and no tool
+changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-flag).
 
 `add_to_backlog`, `create_task` and `update_task` take `epic: "#N"` (`update_task` takes `null` to take the
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
@@ -86,6 +90,11 @@ text when both are present.
   no suggested model, asking the agent to set one with `update_task`. Unlike labels it needs no approval, and
   `get_task` leaves it out so implementing agents aren't nagged. The task render shows
   `Suggested model: deep (reason)` once set.
+- **Autopilot flag not set** appears in `set_plan` and `create_task` results for a backlog or planned task
+  with a plan, when Start planned tasks resolves On for its project and the flag is still Default. It tells the
+  agent to ask the user, then `update_task(autopilot)`, and never to set it unasked. Epics, started and closed
+  tasks and tasks already flagged On or Off don't get it, and neither does `get_task`. The task render shows
+  `Autopilot: flagged on|off` once set.
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`. An epic's line shows `[epic]` and its roll-up
   (`0/3 done · 2 In Progress, 1 Backlog`); a task in one ends with `in epic #N`. `board_overview` counts only
@@ -106,7 +115,7 @@ Descriptions are written for agents, and they are most of what an agent knows ab
   points to `update_plan`, because agents grabbed it for bulk updates when nothing else did that.
 - Explain the gate where it bites (`create_task`, `move_task`), and point to the cheap path
   (`add_to_backlog`, `close_task`).
-- Put guidance agents must act on in **results** too (Missing links, Missing labels, review loop
+- Put guidance agents must act on in **results** too (Missing links, Missing labels, the Autopilot flag, review loop
   instructions): agents follow a result they just got more reliably than instructions read once. Show
   it only where it applies, or agents learn to skip it.
 - `get_task` must not tell a reviewer to start a reviewer: the review loop instructions come only from
@@ -138,7 +147,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `apps/server/src/mcp/server.ts`       | `registerMcp`, transport, `INSTRUCTIONS`, actor resolution           |
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
-| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint` |
+| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |

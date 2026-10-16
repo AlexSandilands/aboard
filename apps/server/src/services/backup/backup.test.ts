@@ -40,6 +40,7 @@ function seed() {
     plan,
     template: "Bug",
     labels: ["ui", "backend"],
+    autopilot: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
   });
   s.templates.create({
@@ -49,7 +50,7 @@ function seed() {
     labels: ["ops"],
     phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
   });
-  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
+  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
   const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   s.tasks.addNote(a.id, "handover", "agent");
@@ -222,6 +223,12 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
+      // Both flags survive: On, Off, and Default (null) for the task that never had one.
+      expect(restored.prepare("SELECT autopilot FROM tasks ORDER BY number").all()).toEqual([
+        { autopilot: 1 },
+        { autopilot: 0 },
+        { autopilot: null },
+      ]);
       expect(restored.prepare("SELECT snapshot_json FROM task_links").all()).toEqual(
         expect.arrayContaining([{ snapshot_json: null }]),
       );
@@ -330,7 +337,8 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns, no Autopilot.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no
+    // relations, no Autopilot settings.
     const { autopilot_settings: _a, task_relations: _rel, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
@@ -344,6 +352,7 @@ describe("restore", () => {
           suggested_reason: _r,
           kind: _k,
           parent_id: _p,
+          autopilot: _f,
           template_id: _m,
           ...task
         } = bundle.task;

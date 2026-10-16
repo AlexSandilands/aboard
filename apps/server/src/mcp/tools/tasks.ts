@@ -13,6 +13,8 @@ import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
+  autopilotField,
+  autopilotValue,
   blockedByField,
   epicField,
   findProject,
@@ -94,8 +96,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
-        "running inside T3 Code. Pass template (a name from list_templates, such as Bug or Spike) to start from the " +
-        "user's template: its description, labels and plan are copied, and the task stays in Backlog.",
+        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it. Pass " +
+        "template (a name from list_templates, such as Bug or Spike) to start from the user's template: its " +
+        "description, labels and plan are copied, and the task stays in Backlog.",
       inputSchema: {
         title: z
           .string()
@@ -112,6 +115,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         blockedBy: blockedByField.optional(),
         links: linksField,
         labels: labelsField.optional(),
+        autopilot: autopilotField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -131,6 +135,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
+          ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           actor: actor(args.actor),
         });
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
@@ -151,8 +156,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
-        "blockedBy when other tasks must be Done first. With template (a name from list_templates, such as Bug or " +
-        "Spike) the plan is optional: the template's plan is copied, and a plan you give replaces it. " +
+        "blockedBy when other tasks must be Done first. When the result asks about the Autopilot flag, ask the user " +
+        "before setting autopilot. With template (a name from list_templates, such as Bug or Spike) the plan is " +
+        "optional: the template's plan is copied, and a plan you give replaces it. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z
@@ -168,6 +174,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         ...planInputFields,
         links: linksField,
         labels: labelsField.optional(),
+        autopilot: autopilotField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -189,6 +196,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(plan ? { plan } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
+          ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           actor: actor(args.actor),
         });
         return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
@@ -339,7 +347,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels or suggested model, or archive/unarchive it. To move the task to a different " +
+        "Edit a task's title, description, plan context, labels, suggested model or Autopilot flag, or archive/unarchive it. " +
+        "The Autopilot flag lets the board start the task by itself, so set it only after the user has said so. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +
@@ -366,6 +375,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .describe("Turn local review on or off for this task; null follows the board's setting."),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
+        autopilot: autopilotField.optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
         removeBlockedBy: blockedByField.optional().describe("Blockers to remove; one that isn't a blocker is ignored."),
@@ -390,6 +400,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
+            ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
             ...(args.addBlockedBy?.length ? { addBlockedBy: args.addBlockedBy } : {}),
             ...(args.removeBlockedBy?.length ? { removeBlockedBy: args.removeBlockedBy } : {}),

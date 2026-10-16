@@ -69,6 +69,12 @@ describe("REST", () => {
       json: { status: "in_progress" },
     });
     expect(((await moved.json()) as { status: string }).status).toBe("in_progress");
+    const flagged = await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { autopilot: true } });
+    expect(((await flagged.json()) as { autopilot: boolean | null }).autopilot).toBe(true);
+    const unflagged = await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { autopilot: null } });
+    expect(((await unflagged.json()) as { autopilot: boolean | null }).autopilot).toBeNull();
+    const bad = await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { autopilot: "on" } });
+    expect(bad.status).toBe(400);
     const archived = await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { archived: true } });
     expect(archived.status).toBe(200);
     const board = (await (await h.request("/api/board")).json()) as { tasks: unknown[]; projects: unknown[] };

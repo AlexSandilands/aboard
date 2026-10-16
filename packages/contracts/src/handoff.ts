@@ -116,7 +116,7 @@ export function taskHandoffPrompt({
           `1. ${getTask} to read the task, then explore the relevant code.`,
           "2. Ask me clarifying questions about scope, approach and anything ambiguous.",
           "3. Propose a plan: phases of 3-8 concrete, verifiable steps, plus the key decisions for the plan context.",
-          "4. Once I agree, save it with set_plan and move the task to planned with move_task.",
+          "4. Once I agree, save it with set_plan and move the task to planned with move_task. If the result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered.",
           "Don't implement anything yet.",
         ]
       : [
@@ -125,6 +125,7 @@ export function taskHandoffPrompt({
           "",
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step, link any PR you open, and finish with an add_note handover.`,
+          "If a plan result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered. You can flag tasks but never change Autopilot's settings.",
           ...(task.blocked
             ? [
                 `This task is blocked: get_task lists what it waits on under "Blocked by". Don't start it until those are Done; tell me what it waits on instead.`,
@@ -156,7 +157,7 @@ function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): str
     "",
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server first: it has the description, plan, current step and latest handover notes.`,
     `Then follow the ${BRAND.id} skill: pick up from the current step, keep steps current with update_step and work in the git worktree or branch you were given.`,
-    "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back.",
+    "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back. Don't set the task's Autopilot flag: that is the user's call.",
     "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
     "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",
     "",

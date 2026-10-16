@@ -31,6 +31,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     attention: [],
     lastNote: null,
     autoReview: null,
+    autopilot: null,
     review: null,
     suggestedModel: null,
     import: null,
