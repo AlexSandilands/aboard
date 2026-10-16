@@ -10,6 +10,7 @@ import type {
   Project,
   StartT3ThreadInput,
   T3ThreadSnapshot,
+  IssueSnapshot,
   TaskLink,
   TaskSummary,
 } from "@repo/contracts";
@@ -249,7 +250,7 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
 }
 
 function fakeServices(opts: { token?: string | null; links?: TaskLink[]; projects?: Project[] } = {}) {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | null>();
+  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
   let token = opts.token ?? null;

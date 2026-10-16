@@ -39,6 +39,7 @@ const refJson = (c: ClassifiedLink): string | null => {
     case "jira":
       return JSON.stringify({ key: c.key });
     case "t3_thread":
+    case "issue":
       return JSON.stringify(c.ref);
     case "url":
       return null;
@@ -129,7 +130,14 @@ export function createLinksService(
       return core.write((fx) => {
         const task = deps.task(taskId);
         const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
-        const existing = repos.links.find(task.id, classified.kind, classified.url);
+        const existing =
+          repos.links.find(task.id, classified.kind, classified.url) ??
+          // A Jira issue is one link however it was written: a bare key, or a URL on any host.
+          (classified.kind === "jira"
+            ? repos.links
+                .forTasks([task.id])
+                .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
+            : undefined);
         if (existing) return toLink(existing);
         const row: LinkRow = {
           id: randomUUID(),

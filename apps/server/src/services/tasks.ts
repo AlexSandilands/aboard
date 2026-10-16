@@ -3,6 +3,7 @@ import {
   deriveEpicStatus,
   findJiraKeys,
   normalizeLabel,
+  parseIssueSource,
   resolutionNeedsTask,
   type TaskDetail,
   type TaskSummary,
@@ -15,9 +16,10 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
+import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
-import type { CloseInput, ProjectsService, ReviewsService, TaskQuery, TasksService } from "./types.ts";
+import type { CloseInput, ProjectsService, ReviewsService, SettingsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
 
@@ -64,6 +66,8 @@ export function createTasksService(
     links: () => LinksModule;
     reviews: () => ReviewsService;
     labels: LabelsModule;
+    settings: SettingsService;
+    imports: () => ImportsModule;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -187,7 +191,18 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic has no plan; create its child tasks with plans instead");
         }
         if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
+        if (kind === "epic" && input.sourceUrl) {
+          throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
+        }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
+        const source = input.sourceUrl ? parseIssueSource(input.sourceUrl, deps.settings.get()) : null;
+        if (input.sourceUrl && !source) {
+          throw new AppError("VALIDATION", `Not a Jira issue key or URL, or a GitHub issue URL: ${input.sourceUrl}`);
+        }
+        if (source && input.plan)
+          throw new AppError("VALIDATION", "A task imported from an issue can't start with a plan");
+        const title = input.title ?? source?.placeholder;
+        if (!title) throw new AppError("VALIDATION", "A task needs a title");
         const hasSteps = (input.plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
         const status = hasSteps ? "planned" : "backlog";
@@ -197,7 +212,7 @@ export function createTasksService(
           projectId: project.id,
           kind,
           parentId: epic?.id ?? null,
-          title: input.title,
+          title,
           description: input.description ?? null,
           planContext: null,
           status,
@@ -224,6 +239,10 @@ export function createTasksService(
         }
         if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
+        if (source) {
+          deps.links().service.add(task.id, { value: source.url }, actor);
+          deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
+        }
         for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
         return task.id;

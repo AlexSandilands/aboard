@@ -6,6 +6,7 @@ import {
   type EpicRollup,
   type PlanPhase,
   type StepStatus,
+  type TaskImport,
   type TaskLink,
 } from "./schemas.ts";
 
@@ -65,8 +66,16 @@ export function deriveAttention(
   phases: ReadonlyArray<PlanPhase>,
   links: ReadonlyArray<TaskLink>,
   review: TaskReviewSummary | null = null,
+  issueImport: TaskImport | null = null,
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
+  if (issueImport?.status === "failed") {
+    reasons.push({
+      kind: "import_failed",
+      severity: "warning",
+      message: issueImport.error ? `Import failed: ${issueImport.error}` : "Import failed",
+    });
+  }
   const blocked = phases.flatMap((p) => p.steps).filter((s) => s.status === "blocked");
   if (blocked.length > 0) {
     reasons.push({

@@ -3,6 +3,7 @@ import type {
   BoardSnapshot,
   CreateProjectInput,
   CreateTaskInput,
+  IssueSnapshot,
   LinkInput,
   MoveTaskInput,
   PlanInput,
@@ -32,6 +33,7 @@ import type {
   UpdateSettingsInput,
   UpdateTaskInput,
 } from "@repo/contracts";
+import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { Effects } from "./core.ts";
@@ -53,6 +55,7 @@ export interface Services {
   board: BoardService;
   reviews: ReviewsService;
   labels: LabelsService;
+  imports: ImportsService;
   backup: BackupService;
 }
 
@@ -101,7 +104,11 @@ export interface TasksService {
   detail(id: string): TaskDetail;
   /** Accepts a uuid, "#42" or "42". */
   resolveId(ref: string): string;
-  /** Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column. */
+  /**
+   * Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column.
+   * With `sourceUrl` (a Jira key or URL, or a GitHub issue URL) the task is titled and linked after the issue and
+   * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
+   */
   create(input: CreateTaskInput): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
@@ -201,7 +208,7 @@ export interface LinksService {
    * - a merge seen while the task was not in Review (e.g. still In Progress) is used up here; `TasksService.move`
    *   completes the task instead when it later enters Review.
    */
-  setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | null): void;
+  setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null): void;
 }
 
 export interface SettingsService {
@@ -265,6 +272,35 @@ export interface LabelsService {
   setColor(label: string, hue: number): Record<string, number>;
   /** Drops the override so the label takes its hashed hue again; returns all overrides. */
   clearColor(label: string): Record<string, number>;
+}
+
+/** What an import found out about an issue. */
+export interface ImportResult {
+  title: string;
+  description: string | null;
+  /** Raw label suggestions; normalised, deduped and capped when applied. */
+  labels: string[];
+}
+
+/** The background fill-in of tasks created from a Jira or GitHub issue (see CreateTaskInput.sourceUrl). */
+export interface ImportsService {
+  get(taskId: string): ImportRecord | null;
+  /** Pending imports on non-archived tasks, oldest first. */
+  pending(): ImportRecord[];
+  /** Counts a run against the import. Null when it is no longer pending (finished, or its task is gone). */
+  claim(taskId: string): ImportRecord | null;
+  /**
+   * Applies the result and marks the import done. The title is replaced only while it is still the placeholder and
+   * the description only while empty, so edits made during the fetch stand; labels are added to the task's.
+   */
+  complete(taskId: string, result: ImportResult): void;
+  /** Marks the import failed with the reason; the card shows it as a warning. */
+  fail(taskId: string, error: string): void;
+  /**
+   * Puts a failed (or stuck pending) import back to pending with a fresh attempt count. Throws CONFLICT when it is
+   * done. Starting it again is the caller's job; one already running ignores that.
+   */
+  retry(taskId: string, actor: string): void;
 }
 
 export interface BoardService {

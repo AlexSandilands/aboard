@@ -5,6 +5,7 @@ import { createRepos } from "../db/repos/index.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
+import { createImportsService, type ImportsModule } from "./imports.ts";
 import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
@@ -33,13 +34,17 @@ export function createServices(deps: ServiceDeps): Services {
   let plans: PlansModule | null = null;
   let links: LinksModule | null = null;
   let reviews: ReviewsService | null = null;
+  let imports: ImportsModule | null = null;
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
     links: () => links!,
     reviews: () => reviews!,
     labels,
+    settings,
+    imports: () => imports!,
   });
+  imports = createImportsService(core, { tasks: () => tasks.service });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, {
     task: tasks.record,
@@ -58,6 +63,7 @@ export function createServices(deps: ServiceDeps): Services {
     board: createBoardService(core),
     reviews,
     labels: labels.service,
+    imports: imports.service,
     backup: createBackupService(core),
   };
 }

@@ -110,7 +110,8 @@ ORM.
 | `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
-| `task_links`      | PR, Jira, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_links`      | PR, Jira, GitHub issue, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
@@ -126,7 +127,7 @@ status, derived from its tasks but stored so lists and filters treat it like any
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
-[local review](features/local-review.md), [labels](features/labels.md).
+[local review](features/local-review.md), [labels](features/labels.md), [issue import](features/issue-import.md).
 
 ## Integrations
 
@@ -139,6 +140,9 @@ on independent timers:
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).
+- **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (`gh`, then
+  `claude -p`); imports left pending by a restart resume at startup. See
+  [issue-import.md](features/issue-import.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
 

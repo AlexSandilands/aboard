@@ -4,7 +4,9 @@ import type { Services } from "../services/types.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
+import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
+import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
@@ -26,6 +28,8 @@ export interface IntegrationOverrides {
   githubFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
+  runImport?: RunImport;
+  listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   runGit?: RunGit;
   log?: Logger;
 }
@@ -50,6 +54,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     t3,
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const importer = createIssueImporter({
+    services: deps.services,
+    github,
+    ...(overrides.runImport ? { runImport: overrides.runImport } : {}),
+    ...(overrides.listMcpServers ? { listMcpServers: overrides.listMcpServers } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const backup = createBackupIntegration({
@@ -78,6 +89,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       reviews.stop();
       backup.stop();
     },
+    startImport: (taskId) => importer.start(taskId),
+    resumeImports: () => importer.resume(),
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
     async refreshLink(linkId) {

@@ -6,8 +6,10 @@ import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
+import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
+import { importPendingLabel } from "./import.logic";
 import { resolutionLabel } from "./resolution.logic";
 import { SectionsMenu } from "./SectionsMenu";
 import { useSetTaskStatus } from "./useSetTaskStatus";
@@ -57,6 +59,7 @@ export function TaskPanelHeader({
   const { mutate: updateTask } = useUpdateTask();
   const setStatus = useSetTaskStatus(task, onOpenPlanEditor);
   const resolution = resolutionLabel(task);
+  const fetching = importPendingLabel(task);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
 
@@ -105,6 +108,12 @@ export function TaskPanelHeader({
         <Badge variant="warning" size="sm">
           Archived
         </Badge>
+      ) : null}
+      {fetching ? (
+        <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <Spinner size="xs" />
+          {fetching}
+        </span>
       ) : null}
       <div className="ms-auto flex items-center gap-1.5">
         {task.status === "done" && !archived && task.kind !== "epic" ? (

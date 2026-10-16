@@ -87,14 +87,15 @@ by their working directory, so there's nothing to set up per repo.
 
 ## Learn more
 
-| Guide                                             | What's in it                                                        |
-| ------------------------------------------------- | ------------------------------------------------------------------- |
-| [Using the board](docs/guide/using-the-board.md)  | Plans, closing and deleting tasks, links, labels, layout, shortcuts |
-| [Connecting agents](docs/guide/connect-agents.md) | MCP setup for Claude Code, Codex, Copilot and VS Code               |
-| [Local review](docs/guide/local-review.md)        | Have agents' work reviewed on the board before they open a PR       |
-| [T3 Code](docs/guide/t3-code.md)                  | Thread links, live thread status, starting threads from a task      |
-| [Configuration](docs/guide/configuration.md)      | Data folder, ports, access token, the desktop app's tray            |
-| [Contributing](CONTRIBUTING.md)                   | Developing, checks, and where the design docs are                   |
+| Guide                                              | What's in it                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------- |
+| [Using the board](docs/guide/using-the-board.md)   | Plans, closing and deleting tasks, links, labels, layout, shortcuts |
+| [Importing issues](docs/guide/importing-issues.md) | Create a task from a Jira or GitHub issue URL                       |
+| [Connecting agents](docs/guide/connect-agents.md)  | MCP setup for Claude Code, Codex, Copilot and VS Code               |
+| [Local review](docs/guide/local-review.md)         | Have agents' work reviewed on the board before they open a PR       |
+| [T3 Code](docs/guide/t3-code.md)                   | Thread links, live thread status, starting threads from a task      |
+| [Configuration](docs/guide/configuration.md)       | Data folder, ports, access token, the desktop app's tray            |
+| [Contributing](CONTRIBUTING.md)                    | Developing, checks, and where the design docs are                   |
 
 <br>
 

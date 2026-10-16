@@ -50,7 +50,9 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
     handle(async (c) => {
       const input = await parseBody(c, CreateTaskInput);
       const actor = c.req.header(ACTOR_HEADER)?.trim() || input.actor || actorOf(c);
-      return c.json(services.tasks.create({ ...input, actor }), 201);
+      const task = services.tasks.create({ ...input, actor });
+      if (task.import?.status === "pending") integrations.startImport(task.id);
+      return c.json(task, 201);
     }),
   );
   app.get(
@@ -78,6 +80,15 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       const id = taskId(c);
       const input = await parseBody(c, StartT3ThreadInput);
       return c.json(await integrations.startT3Thread(id, input, actorOf(c)), 201);
+    }),
+  );
+  app.post(
+    "/api/tasks/:id/import/retry",
+    handle((c) => {
+      const id = taskId(c);
+      services.imports.retry(id, actorOf(c));
+      integrations.startImport(id);
+      return c.json(services.tasks.summary(id));
     }),
   );
   app.post(

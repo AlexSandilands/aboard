@@ -24,6 +24,9 @@ follows its tasks, and it can't be closed. See [epics.md](epics.md).
 - `add_to_backlog` (MCP) or **New task** (UI): no plan, lands in Backlog.
 - `create_task` (MCP): requires a plan and lands in Planned. Like `POST /api/tasks`, it lands in Backlog
   instead when no phase of the plan has a step.
+- A Jira key or URL, or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
+  Backlog titled after the issue, and its details are filled in in the background
+  ([issue import](issue-import.md)).
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
   keys in the title are linked automatically (on later title edits too).
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the

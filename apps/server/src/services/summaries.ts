@@ -7,11 +7,13 @@ import {
   type PlanPhase,
   type PlanStep,
   type TaskRef,
+  type TaskImport,
   type TaskReview,
   type TaskSummary,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { toLink } from "../db/repos/links.ts";
+import type { ImportRecord } from "../db/repos/imports.ts";
 import type { FindingRecord, ReviewRecord } from "../db/repos/reviews.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { loadSettings } from "./settings.ts";
@@ -47,6 +49,10 @@ export function toTaskReviews(rounds: readonly ReviewRecord[], findings: readonl
   }));
 }
 
+export function toTaskImport(record: ImportRecord | undefined): TaskImport | null {
+  return record ? { status: record.status, error: record.error, sourceUrl: record.sourceUrl } : null;
+}
+
 export function taskRef(task: TaskRecord | undefined): TaskRef | null {
   return task ? { id: task.id, number: task.number, title: task.title } : null;
 }
@@ -76,6 +82,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const roundsByTask = groupBy(repos.reviews.forTasks(ids), (r) => r.taskId);
   const findingsByTask = groupBy(repos.reviews.findingsFor(ids), (f) => f.taskId);
   const labelsByTask = repos.labels.forTasks(ids);
+  const importsByTask = repos.imports.forTasks(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
   for (const record of records) {
@@ -90,6 +97,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const rounds = roundsByTask.get(record.id) ?? [];
     const findings = findingsByTask.get(record.id) ?? [];
     const review = deriveReviewSummary(rounds, findings, reviewMaxRounds);
+    const issueImport = toTaskImport(importsByTask.get(record.id));
     const summary: TaskSummary = {
       id: record.id,
       number: record.number,
@@ -113,13 +121,14 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       currentStep: deriveCurrentStep(phases),
       links,
       // A finished task's review is history: the badge stays, the call to action doesn't.
-      attention: deriveAttention(phases, links, record.status === "done" ? null : review),
+      attention: deriveAttention(phases, links, record.status === "done" ? null : review, issueImport),
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,
       autoReview: record.autoReview,
       review,
       suggestedModel: record.suggestedModel,
+      import: issueImport,
     };
     result.set(record.id, { record, summary, phases, reviews: toTaskReviews(rounds, findings) });
   }

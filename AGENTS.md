@@ -70,6 +70,7 @@ and to this table.
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
 | Column collapse, panel sections, which links a card shows      | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
 | PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
+| Creating tasks from Jira or GitHub issue URLs                  | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
 | The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
