@@ -1,4 +1,4 @@
-import { storageKey, type TaskStatus } from "@repo/contracts";
+import { storageKey, type MergeMethod, type TaskStatus } from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
@@ -176,23 +176,46 @@ interface DialogsState {
   appSettingsOpen: boolean;
   /** Task whose "Start in T3 Code" dialog is open. */
   t3LaunchTaskId: string | null;
+  /** PR link whose merge dialog is open, from the panel or a card chip. */
+  mergePr: { taskId: string; linkId: string } | null;
   openProjectSettings: (projectId: string) => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
   closeT3Launch: () => void;
+  openMergePr: (taskId: string, linkId: string) => void;
+  closeMergePr: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
   appSettingsOpen: false,
   t3LaunchTaskId: null,
+  mergePr: null,
   openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
   closeProjectSettings: () => set({ projectSettingsId: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
   openT3Launch: (t3LaunchTaskId) => set({ t3LaunchTaskId }),
   closeT3Launch: () => set({ t3LaunchTaskId: null }),
+  openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
+  closeMergePr: () => set({ mergePr: null }),
 }));
+
+/** The merge method last picked per repo (`host/owner/repo`), offered first next time. */
+interface MergeMethodState {
+  lastByRepo: Record<string, MergeMethod>;
+  remember: (repoKey: string, method: MergeMethod) => void;
+}
+
+export const useMergeMethods = create<MergeMethodState>()(
+  persist(
+    (set) => ({
+      lastByRepo: {},
+      remember: (repoKey, method) => set((s) => ({ lastByRepo: { ...s.lastByRepo, [repoKey]: method } })),
+    }),
+    { name: storageKey("merge-methods") },
+  ),
+);
 
 /** Signals the detail panel to focus the plan editor (e.g. after a PLAN_REQUIRED drop). */
 interface PanelState {

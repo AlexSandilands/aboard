@@ -122,6 +122,20 @@ describe("REST", () => {
     expect(await errorCode(svg)).toBe("VALIDATION");
   });
 
+  it("validates PR merges before reaching GitHub", async () => {
+    const h = await setup();
+    const link = h.services.links.add(h.task.id, { value: "https://github.com/o/r/pull/1" }, "user");
+    const merge = (json: unknown) => h.request(`/api/links/${link.id}/merge`, { method: "POST", json });
+    expect(await errorCode(await merge({ action: "merge" }))).toBe("VALIDATION");
+    expect(await errorCode(await merge({ action: "squash-it", method: "squash" }))).toBe("VALIDATION");
+    const notReview = await merge({ action: "merge", method: "squash" });
+    expect(notReview.status).toBe(400);
+    expect(((await notReview.json()) as ApiErrorBody).error.message).toMatch(/in Review/);
+    expect(
+      await errorCode(await h.request("/api/links/nope/merge", { method: "POST", json: { action: "disable_auto" } })),
+    ).toBe("NOT_FOUND");
+  });
+
   it("serves settings without the token", async () => {
     const h = await setup();
     const res = await h.request("/api/settings", { method: "PATCH", json: { t3Token: "tok" } });

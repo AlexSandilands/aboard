@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND } from "@repo/contracts";
+import { BRAND, prMergeAction } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createContext } from "../context.ts";
 import { SCENARIOS, seedDatabase, type ScenarioName } from "./seeds.ts";
@@ -69,6 +69,16 @@ describe("seed scenarios", () => {
     );
     expect(snapshotStates).toEqual(expect.arrayContaining(["open", "draft", "merged", "closed", "working", "input"]));
     expect(links.some((l) => l.kind === "pr" && !l.snapshot)).toBe(true);
+  });
+
+  it("threads offers every merge control on Review PRs", () => {
+    const { details } = seeded("threads");
+    const actions = details.flatMap((t) =>
+      t.links.flatMap((l) => (l.kind === "pr" ? [prMergeAction(t.status, l.snapshot)] : [])),
+    );
+    expect(actions).toEqual(expect.arrayContaining(["merge", "auto", "armed", null]));
+    const hosts = details.flatMap((t) => t.links.flatMap((l) => (l.kind === "pr" && l.ref ? [l.ref.host] : [])));
+    expect(hosts).toContain("github.example.com");
   });
 
   it("showcase mixes labels, PRs, threads, review and a blocked step across projects", () => {

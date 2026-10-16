@@ -376,7 +376,7 @@ function GithubSection({
         ? "The GitHub CLI (gh) isn't installed. PR links still work, without live status."
         : !status.authenticated
           ? (status.error ?? "gh is installed but not signed in. Run `gh auth login`.")
-          : "gh is installed and signed in.";
+          : `PR status and merging use the account gh is signed in with. Add a GitHub Enterprise host with \`gh auth login --hostname <host>\`.`;
   return (
     <SettingsSection title="GitHub">
       <SettingsRow
@@ -390,9 +390,27 @@ function GithubSection({
           )
         }
       />
+      {status?.hosts.map((host) => (
+        <SettingsRow
+          key={host.host}
+          title={host.host}
+          description={
+            host.authenticated
+              ? `Signed in${host.login ? ` as ${host.login}` : ""}.`
+              : `Sign-in has expired. Run \`gh auth login --hostname ${host.host}\`.`
+          }
+          control={
+            host.authenticated ? (
+              <Badge variant="success">Signed in</Badge>
+            ) : (
+              <Badge variant="warning">Not signed in</Badge>
+            )
+          }
+        />
+      ))}
       <SettingsRow
         title="Poll PR status"
-        description="Refresh state, checks and reviews of GitHub PR links every 2 minutes."
+        description="Refresh state, checks and reviews of GitHub PR links every 2 minutes, on github.com and Enterprise hosts gh is signed in to."
         control={
           <Switch
             aria-label="Poll PR status"

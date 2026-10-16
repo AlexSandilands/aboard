@@ -2,7 +2,8 @@ import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
-import { createGithubIntegration, type RunGh } from "./github.ts";
+import type { RunGh } from "./gh.ts";
+import { createGithubIntegration } from "./github.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
@@ -21,17 +22,20 @@ export interface IntegrationDeps {
 export interface IntegrationOverrides {
   runGh?: RunGh;
   fetch?: FetchFn;
+  /** GitHub's GraphQL API; separate from `fetch`, which reaches T3 Code. */
+  githubFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
   runGit?: RunGit;
   log?: Logger;
 }
 
-/** Builds the GitHub (gh CLI) and T3 Code integrations. */
+/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations. */
 export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
   const github = createGithubIntegration({
     services: deps.services,
     ...(overrides.runGh ? { runGh: overrides.runGh } : {}),
+    ...(overrides.githubFetch ? { fetch: overrides.githubFetch } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const t3 = createT3Integration({
@@ -58,6 +62,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   return {
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
+    prHostHoldsTasks: (host) => github.holdsTasks(host),
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
@@ -79,6 +84,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const link = deps.services().links.get(linkId);
       if (await github.refresh(link)) return;
       await t3.refresh(link);
+    },
+    async mergePr(linkId, input) {
+      await github.merge(deps.services().links.get(linkId), input);
     },
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),

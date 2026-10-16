@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { CODE_MIGRATIONS } from "./codeMigrations.ts";
 
 export type Db = DatabaseSync;
 
@@ -19,9 +20,7 @@ export function openDatabase(path: string, options: { migrateTo?: string } = {})
 
 /** Migration file names in the order they apply. */
 export function migrationNames(): string[] {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  return [...readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")), ...Object.keys(CODE_MIGRATIONS)].sort();
 }
 
 /** The last migration applied: the schema version a backup records. */
@@ -42,7 +41,8 @@ export function migrate(db: Db, upTo?: string): void {
   for (const file of files) {
     if (upTo !== undefined && file > upTo) break;
     if (applied.has(file)) continue;
-    const sql = readFileSync(MIGRATIONS_DIR + file, "utf8");
+    const code = CODE_MIGRATIONS[file];
+    const sql = code ? "" : readFileSync(MIGRATIONS_DIR + file, "utf8");
     // Rebuilding a table (SQLite's 12-step ALTER) drops it, which with foreign keys on would cascade-delete
     // every child row. Such a migration marks itself and runs with them off; the pragma is a no-op inside a
     // transaction, so it is set around it, and foreign_key_check stands in for the checks we skipped.
@@ -50,7 +50,8 @@ export function migrate(db: Db, upTo?: string): void {
     if (foreignKeysOff) db.exec("PRAGMA foreign_keys = OFF");
     try {
       transaction(db, () => {
-        db.exec(sql);
+        if (code) code(db);
+        else db.exec(sql);
         if (foreignKeysOff) {
           const broken = db.prepare("PRAGMA foreign_key_check").all();
           if (broken.length > 0)

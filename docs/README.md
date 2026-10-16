@@ -51,7 +51,7 @@ files under each app.
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
 - [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards
-- [GitHub PRs](features/github-prs.md): live PR state through `gh`
+- [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
@@ -64,6 +64,7 @@ files under each app.
 - [0003 Localhost only, with an Origin check](decisions/0003-localhost-guard.md)
 - [0004 A task needs a plan to leave Ideas](decisions/0004-plan-gate.md)
 - [0005 Live updates patch the cache, with no replay](decisions/0005-sse-without-replay.md)
+- [0006 GitHub through its GraphQL API, with the token `gh` holds](decisions/0006-github-graphql-via-gh-token.md)
 
 ### Reference
 

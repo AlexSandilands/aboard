@@ -9,7 +9,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (gh, T3 Code, review watchdog) ──► services/*
+ pollers (GitHub, T3 Code, review watchdog) ──► services/*
 ```
 
 ## Packages
@@ -97,7 +97,8 @@ and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_cha
 
 SQLite through `node:sqlite` ([ADR 0002](decisions/0002-node-sqlite.md)), with WAL, foreign keys on and
 a 5-second busy timeout. Migrations are `apps/server/src/db/migrations/NNN_name.sql`, applied in name
-order at startup, each in its own transaction, and recorded in `migrations`. Never edit a shipped one;
+order at startup, each in its own transaction, and recorded in `migrations`. One that needs code (such as
+parsing URLs) is a function in `db/codeMigrations.ts` under the next number instead, and runs in the same order. Never edit a shipped one;
 add the next number. A migration that rebuilds a table (SQLite's create, copy, drop, rename) starts with
 `-- migrate: foreign_keys off`: dropping the old table with foreign keys on would cascade-delete its
 children. The runner turns them off around that file and runs `foreign_key_check` before committing. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
@@ -130,7 +131,9 @@ Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](feat
 All optional, all in `apps/server/src/integrations/`, started together by `createIntegrations().start()`
 on independent timers:
 
-- **GitHub:** `gh pr view` every 2 minutes for GitHub PR links. See [github-prs.md](features/github-prs.md).
+- **GitHub:** batched GraphQL every 2 minutes for PR links on GitHub hosts, with the token `gh` holds,
+  and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
+  [github-prs.md](features/github-prs.md).
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).

@@ -1,0 +1,161 @@
+import type { RunGh } from "../integrations/gh.ts";
+import type { GraphqlPr, GraphqlRepo } from "../integrations/github.ts";
+import type { FetchFn } from "../integrations/t3.ts";
+
+export interface FakePr extends GraphqlPr {
+  /** What the fresh read before a merge reports. */
+  mergeStateStatus?: string;
+  isMergeQueueEnabled?: boolean;
+}
+
+/**
+ * A stand-in for `gh` and GitHub's GraphQL API, holding PRs by `owner/name#number`. It answers the
+ * poll, the pre-merge read and the three merge mutations, and records every request.
+ */
+export function createFakeGithub(opts: { hosts?: string[] } = {}) {
+  const hosts = opts.hosts ?? ["github.com"];
+  const prs = new Map<string, FakePr>();
+  const repos = new Map<string, GraphqlRepo>();
+  const requests: { url: string; operation: string; variables: Record<string, unknown> }[] = [];
+  const mutations: { operation: string; input: Record<string, unknown> }[] = [];
+  /** GitHub's error message for the next mutation, to test failures. */
+  let failNextMutation: string | null = null;
+
+  const repoOf = (owner: string, name: string): GraphqlRepo | undefined =>
+    repos.get(`${owner}/${name}`) ??
+    ([...prs.keys()].some((k) => k.startsWith(`${owner}/${name}#`))
+      ? {
+          squashMergeAllowed: true,
+          mergeCommitAllowed: true,
+          rebaseMergeAllowed: false,
+          autoMergeAllowed: true,
+          viewerPermission: "WRITE",
+        }
+      : undefined);
+
+  const prById = (id: unknown): FakePr => {
+    const pr = [...prs.entries()].find(([key]) => `PR_${key}` === id)?.[1];
+    if (!pr) throw new Error(`fake github: no PR ${String(id)}`);
+    return pr;
+  };
+
+  const handle = (query: string, variables: Record<string, unknown>): unknown => {
+    const operation = /^(?:query|mutation)\s+(\w+)/.exec(query)?.[1] ?? "anonymous";
+    if (operation === "PollPullRequests") {
+      const { owner, name } = variables as { owner: string; name: string };
+      const repo = repoOf(owner, name);
+      if (!repo) {
+        return {
+          data: { repository: null },
+          errors: [{ type: "NOT_FOUND", path: ["repository"], message: `Could not resolve to a Repository` }],
+        };
+      }
+      const repository: Record<string, unknown> = { ...repo };
+      const errors: unknown[] = [];
+      for (const [key, value] of Object.entries(variables)) {
+        const match = /^n(\d+)$/.exec(key);
+        if (!match) continue;
+        const alias = `pr${match[1]}`;
+        const pr = prs.get(`${owner}/${name}#${String(value)}`);
+        repository[alias] = pr ? { ...pr, mergeStateStatus: undefined, isMergeQueueEnabled: undefined } : null;
+        if (!pr) {
+          errors.push({
+            type: "NOT_FOUND",
+            path: ["repository", alias],
+            message: `Could not resolve to a PullRequest with the number of ${String(value)}.`,
+          });
+        }
+      }
+      return errors.length > 0 ? { data: { repository }, errors } : { data: { repository } };
+    }
+    if (operation === "PullRequestActionState") {
+      const { owner, name, number } = variables as { owner: string; name: string; number: number };
+      const key = `${owner}/${name}#${number}`;
+      const pr = prs.get(key);
+      if (!pr) return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a PullRequest" }] };
+      return {
+        data: {
+          repository: {
+            pullRequest: {
+              id: `PR_${key}`,
+              headRefOid: pr.headRefOid,
+              isMergeQueueEnabled: pr.isMergeQueueEnabled ?? false,
+              mergeStateStatus: pr.mergeStateStatus ?? "CLEAN",
+            },
+          },
+        },
+      };
+    }
+    const input = (variables.input ?? variables) as Record<string, unknown>;
+    mutations.push({ operation, input });
+    if (failNextMutation) {
+      const message = failNextMutation;
+      failNextMutation = null;
+      return { data: null, errors: [{ type: "UNPROCESSABLE", message }] };
+    }
+    const pr = prById(input.pullRequestId);
+    if (operation === "MergePullRequest") pr.state = "MERGED";
+    else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
+    else if (operation === "DisableAutoMerge") pr.autoMergeRequest = null;
+    else throw new Error(`fake github: unknown operation ${operation}`);
+    return { data: { [operation]: { clientMutationId: null } } };
+  };
+
+  const fetch: FetchFn = async (url, init) => {
+    const body = JSON.parse(init?.body as string) as { query: string; variables: Record<string, unknown> };
+    const operation = /^(?:query|mutation)\s+(\w+)/.exec(body.query)?.[1] ?? "anonymous";
+    requests.push({ url, operation, variables: body.variables });
+    return Response.json(handle(body.query, body.variables));
+  };
+
+  const runGh: RunGh = async (args) => {
+    if (args[0] === "--version") return "gh version 2.96.0";
+    if (args[0] === "auth" && args[1] === "status") {
+      return JSON.stringify({
+        hosts: Object.fromEntries(hosts.map((host) => [host, [{ state: "success", active: true, host, login: "me" }]])),
+      });
+    }
+    // Built at runtime so no token-shaped literal sits in the source.
+    if (args[0] === "auth" && args[1] === "token") return ["fake", "credential", args[3]].join("-");
+    throw new Error(`fake gh: unexpected args ${args.join(" ")}`);
+  };
+
+  return {
+    prs,
+    repos,
+    requests,
+    mutations,
+    fetch,
+    runGh,
+    failNextMutation(message: string) {
+      failNextMutation = message;
+    },
+  };
+}
+
+/** An open PR with passing checks, ready to merge. */
+export function fakePr(overrides: Partial<FakePr> = {}): FakePr {
+  return {
+    title: "Add poller",
+    state: "OPEN",
+    isDraft: false,
+    reviewDecision: "APPROVED",
+    mergeable: "MERGEABLE",
+    headRefName: "feat/poller",
+    headRefOid: "head-1",
+    updatedAt: "2026-10-01T10:00:00Z",
+    autoMergeRequest: null,
+    commits: {
+      nodes: [
+        {
+          commit: {
+            statusCheckRollup: {
+              contexts: { nodes: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" }] },
+            },
+          },
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
