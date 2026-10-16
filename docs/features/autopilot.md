@@ -320,7 +320,7 @@ to fix a pull request linked to a task.
   `fix:pr:<linkId>:<headOid>:<trigger keys joined by +>`. Earlier attempts' triggers are read back from their keys
   (`parseFixKey`), so a failed attempt, which leaves no output, still counts what it was given; a skipped one didn't
   act and counts nothing. Triggers still holding from an earlier attempt are listed in the prompt for context. While
-  a fix or a review of the PR is queued or running, the PR waits. So it does while an attempt at the current head
+  a fix or a review of the PR is queued or running, the PR waits. So it does while an attempt
   handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `autopilot/threads.ts`,
   shared with Start planned): those runs end as soon as the message is sent, so without this, comments arriving
   while the agent works would use up the attempts and give up before it pushed.

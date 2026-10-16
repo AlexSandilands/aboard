@@ -366,10 +366,10 @@ export const fixPrs = defineAutomation({
           // One at a time: a fix or a review of this PR still going may change what needs fixing.
           if (ofLink.some((f) => isActive(f.run))) return [];
           if (reviews.some((r) => isActive(r) && isReviewOfLink(r.dedupeKey, link.id))) return [];
-          // A nudge or a T3 thread ends its run at once; the agent is still at it while its thread is busy and hasn't
-          // pushed.
+          // A nudge or a T3 thread ends its run at once; the agent is still at it while its thread is busy, even after
+          // a first push.
           const at = now.getTime();
-          if (ofLink.some((f) => f.headOid === snapshot.headOid && t3RunWorking(task, f.run, at))) return [];
+          if (ofLink.some((f) => t3RunWorking(task, f.run, at))) return [];
           // A skipped attempt did nothing, so what it was given hasn't been handled.
           const used = ofLink.filter((f) => f.run.status !== "skipped");
           const handled = new Set(used.flatMap((f) => f.triggers));

@@ -402,6 +402,22 @@ describe("fix PRs: nudge or new session", () => {
     expect(runs()[0]!.needsAttention).toBe(false);
   });
 
+  it("keeps waiting when the nudged thread pushes and works on", async () => {
+    const { requests, setPr, pass, turnOn, withThread, threadIs } = setup();
+    turnOn();
+    withThread("idle");
+    setPr({ checks: "failing" });
+    await pass();
+    threadIs("working");
+    // A first push, whose checks fail again while the agent is still at it.
+    setPr({ checks: "failing", headOid: SHA_B });
+    await pass();
+    expect(requests).toHaveLength(1);
+    threadIs("idle");
+    await pass();
+    expect(requests).toHaveLength(2);
+  });
+
   it("doesn't nudge when the automation runs headless", async () => {
     const { requests, setPr, pass, turnOn, withThread } = setup();
     turnOn({ runner: "headless" });
