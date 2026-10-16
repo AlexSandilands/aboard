@@ -47,8 +47,16 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
    asking the user a question and waiting for the answer, mark the current step `blocked` with a note
-   saying what you need; set it back to `in_progress` once answered. Found more work? `add_steps`. When
-   revising with `set_plan`, pass existing step ids to keep their status.
+   saying what you need; set it back to `in_progress` once answered. Found more work? `add_steps`.
+   Several steps to update at once (mark a phase done, add notes, move a step, rename a phase)? One
+   `update_plan` call, with `steps: [{step: "2.3", status: "done"}, …]`; labels refer to the plan as it was
+   before the call.
+
+   **`set_plan` replaces the whole plan.** Every phase or step you don't pass back with its id is deleted,
+   with its status and notes. Use it to write a plan or deliberately rewrite one, never to update a few
+   steps. A call that would delete started, done or noted steps is refused with `CONFLICT` unless you pass
+   `allowDeletes: true`; when it deletes anything, the result lists it.
+
 6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in
    `links` to `create_task` / `add_to_backlog`, or call `link`. Keys in the title are linked
    automatically. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs

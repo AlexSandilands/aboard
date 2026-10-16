@@ -17,6 +17,7 @@ import type {
   ReviewSkillRef,
   ReviewTrigger,
   StepPatch,
+  StepStatus,
   SubmitReviewInput,
   T3ThreadSnapshot,
   TaskDetail,
@@ -126,13 +127,41 @@ export interface CloseInput {
   byTaskId?: string;
 }
 
+/** A step that replacing the plan would delete. `label` is its "phase.step" position before the call. */
+export interface PlanDeletion {
+  label: string;
+  title: string;
+  status: StepStatus;
+  hasNotes: boolean;
+}
+
+/** In-place edits to a plan. Refs (`2.3` labels, step/phase ids, phase numbers) resolve against the plan before any edit. */
+export interface PlanUpdateInput {
+  steps?: Array<
+    StepPatch & {
+      step: string;
+      /** Where the step goes: a phase (number or id, appended) and/or next to another step (`before`/`after`, a step ref). */
+      move?: { phase?: string; before?: string; after?: string };
+    }
+  >;
+  phases?: Array<{ phase: string; title: string }>;
+}
+
 export interface PlansService {
   /**
    * Replaces the plan. Phases/steps given with an existing `id` are kept (status and
    * timestamps preserved unless overridden); others are created; missing ones are deleted.
    * Throws PLAN_REQUIRED if the result has no steps and the task is not in Backlog.
+   * With `protectStarted`, throws CONFLICT instead of deleting a step that isn't `todo` or has notes.
    */
-  setPlan(taskId: string, plan: PlanInput, actor: string): TaskDetail;
+  setPlan(taskId: string, plan: PlanInput, actor: string, opts?: { protectStarted?: boolean }): TaskDetail;
+  /** The steps `setPlan` would delete for this input, in plan order. Writes nothing. */
+  deletionsOf(taskId: string, plan: PlanInput): PlanDeletion[];
+  /**
+   * Patches steps and renames phases in place, nothing else changes. All-or-nothing: one bad ref or
+   * move changes nothing. One activity entry per change, as the single edits log.
+   */
+  updatePlan(taskId: string, input: PlanUpdateInput, actor: string): TaskDetail;
   addPhase(taskId: string, title: string, actor: string, opts?: { afterPhaseId?: string }): PlanPhase;
   updatePhase(phaseId: string, patch: { title: string }, actor: string): PlanPhase;
   deletePhase(phaseId: string, actor: string): void;

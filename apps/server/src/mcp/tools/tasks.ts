@@ -206,7 +206,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       description:
         "Edit a task's title, description, plan context or labels, or archive/unarchive it. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist). " +
-        "For plan steps use set_plan/add_steps/update_step; for status use move_task.",
+        "For plan steps use set_plan/update_plan/add_steps/update_step;for status use move_task.",
       inputSchema: {
         task: taskField,
         title: z.string().min(1).optional(),
