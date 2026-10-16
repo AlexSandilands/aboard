@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_KEYBINDINGS,
   matchesShortcut,
   parseShortcut,
   resolveCommand,
   runsImmediately,
   type KeybindingContext,
   type KeyEventLike,
-} from "./keyboard";
+} from "./keyboard.logic";
 
 const key = (k: string, mods: Partial<KeyEventLike> = {}): KeyEventLike => ({
   key: k,
@@ -23,7 +22,6 @@ const idle: KeybindingContext = {
   popupFocus: false,
   overlayOpen: false,
   panelOpen: false,
-  paletteOpen: false,
 };
 
 describe("parseShortcut", () => {
@@ -60,7 +58,7 @@ describe("matchesShortcut", () => {
 describe("resolveCommand", () => {
   it("opens the palette on mod+k whatever has focus or is open", () => {
     const event = key("k", { ctrlKey: true });
-    const busy = { editableFocus: true, popupFocus: true, overlayOpen: true, panelOpen: true, paletteOpen: true };
+    const busy = { editableFocus: true, popupFocus: true, overlayOpen: true, panelOpen: true };
     expect(resolveCommand(event, idle, false)).toBe("palette.open");
     expect(resolveCommand(event, busy, false)).toBe("palette.open");
   });
@@ -94,7 +92,6 @@ describe("resolveCommand", () => {
 
   it("has no binding for other keys", () => {
     expect(resolveCommand(key("x"), idle, false)).toBeNull();
-    expect(DEFAULT_KEYBINDINGS.length).toBeGreaterThan(0);
   });
 });
 
