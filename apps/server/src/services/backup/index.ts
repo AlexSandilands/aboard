@@ -38,10 +38,18 @@ export function createBackupService(core: Core): BackupService {
         let closedAgainst: string[] = [];
         // Likewise an epic's tasks, whose parent_id deleting it nulls.
         let children: string[] = [];
+        // What blocks it and what it blocks: kept as they are now when replacing, else taken from the backup.
+        let relations = current.task_relations.filter((r) => r.blocker_id === taskId || r.blocked_id === taskId);
         if (repos.tasks.get(taskId)) {
           if (!force) throw new AppError("CONFLICT", `Task #${number} is still on the board. Use force to replace it.`);
           closedAgainst = repos.tasks.resolvedBy([taskId]).map((t) => t.id);
           children = repos.tasks.childrenOf([taskId]).map((t) => t.id);
+          relations = repos.relations.forTasks([taskId]).map((r) => ({
+            blocker_id: r.blockerId,
+            blocked_id: r.blockedId,
+            created_at: r.createdAt,
+            actor: r.actor,
+          }));
           repos.tasks.delete(taskId);
         }
         const projectId = String(bundle.task.project_id);
@@ -61,6 +69,14 @@ export function createBackupService(core: Core): BackupService {
         insertRows(db, "tasks", [task]);
         for (const table of TASK_BUNDLE_TABLES) insertRows(db, table, bundle[table]);
         insertRows(db, "task_events", events);
+        // Only to tasks still on the board, and not where it would now close a loop.
+        for (const r of relations) {
+          const [blocker, blocked] = [String(r.blocker_id), String(r.blocked_id)];
+          if (!repos.tasks.get(blocker) || !repos.tasks.get(blocked) || repos.relations.path(blocked, blocker))
+            continue;
+          repos.relations.add(blocker, blocked, String(r.created_at), String(r.actor));
+          fx.task(blocker === taskId ? blocked : blocker);
+        }
         for (const id of closedAgainst) {
           db.prepare("UPDATE tasks SET resolved_by_task_id = ? WHERE id = ?").run(taskId, id);
           fx.task(id);

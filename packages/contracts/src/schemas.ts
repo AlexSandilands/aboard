@@ -297,6 +297,14 @@ export const EpicRollup = z.object({
 });
 export type EpicRollup = z.infer<typeof EpicRollup>;
 
+/** The other end of a blocks / blocked-by relation: enough to show it, and to tell whether it still blocks. */
+export const TaskRelation = TaskRef.extend({
+  status: TaskStatus,
+  /** An archived task that isn't Done still blocks, but its card isn't on the board. */
+  archived: z.boolean(),
+});
+export type TaskRelation = z.infer<typeof TaskRelation>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -316,6 +324,12 @@ export const TaskSummary = z.object({
   statusChangedAt: IsoDate,
   /** Normalised labels (see normalizeLabel), sorted by name. */
   labels: z.array(z.string()),
+  /** Tasks that must be Done before this one is ready, by number. */
+  blockedBy: z.array(TaskRelation),
+  /** Tasks waiting on this one, by number. */
+  blocks: z.array(TaskRelation),
+  /** True while any of `blockedBy` isn't Done (see isBlocked). */
+  blocked: z.boolean(),
   resolution: TaskResolution.nullable(),
   /** The task that delivered or duplicates this one; null for "won't do" or once that task is deleted. */
   resolvedBy: TaskRef.nullable(),
@@ -456,6 +470,8 @@ export const CreateTaskInput = z
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
+    /** Tasks that block this one (uuid, "#42" or "42"). */
+    blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
      * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
@@ -488,6 +504,10 @@ export const UpdateTaskInput = z.object({
   suggestedModel: SuggestedModelInput.nullable().optional(),
   /** The epic to put the task in (uuid, "#42" or "42"); null takes it out of its epic. */
   epicId: z.string().trim().min(1).nullable().optional(),
+  /** Tasks to add as blockers of this one (uuid, "#42" or "42"). A cycle is rejected. */
+  addBlockedBy: z.array(z.string().trim().min(1)).optional(),
+  /** Blockers to remove. Removing a relation that doesn't exist does nothing. */
+  removeBlockedBy: z.array(z.string().trim().min(1)).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 

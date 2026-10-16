@@ -22,6 +22,7 @@ const ROOT_FILES = {
   settings: "settings.json",
   projects: "projects.json",
   label_colors: "labels.json",
+  task_relations: "relations.json",
   counters: "counters.json",
   autopilot_settings: "autopilot.json",
 } as const;
@@ -57,6 +58,7 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.settings, rowsJson(dump.settings));
   add(ROOT_FILES.projects, rowsJson(dump.projects));
   add(ROOT_FILES.label_colors, rowsJson(dump.label_colors));
+  add(ROOT_FILES.task_relations, rowsJson(dump.task_relations));
   add(ROOT_FILES.counters, rowsJson(dump.counters));
   add(ROOT_FILES.autopilot_settings, rowsJson(dump.autopilot_settings));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
@@ -151,6 +153,8 @@ export function readDumpDir(dir: string): BoardDump {
     settings: root(ROOT_FILES.settings),
     projects: root(ROOT_FILES.projects),
     label_colors: root(ROOT_FILES.label_colors),
+    // Absent in backups taken before relations existed.
+    task_relations: existsSync(join(dir, ROOT_FILES.task_relations)) ? root(ROOT_FILES.task_relations) : [],
     counters: root(ROOT_FILES.counters),
     // Optional: folders written before Autopilot don't have it.
     ...(existsSync(join(dir, ROOT_FILES.autopilot_settings))
