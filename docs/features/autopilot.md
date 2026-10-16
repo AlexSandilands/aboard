@@ -7,9 +7,9 @@ the whole board, that watch the board and act when something needs doing. The en
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine and the automations that have landed (below). The rest of the catalogue is each its own
-task in the epic, and so are the runners (#85) and the UI (#86). Until a runner is configured, every agent action fails with "No agent runner
-is available yet".
+This doc covers the engine and the automations that have landed (below). The rest of the catalogue is each its
+own task in the epic, and so are the runners (#85) and the UI (#86). Until a runner is configured, every agent
+action fails with "No agent runner is available yet".
 
 ## How it works
 
@@ -112,7 +112,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 **Auto-archive Done** (`auto_archive`, #91; `automations/autoArchive.ts`). Needs no agent and is off until switched
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
-`autopilot`. It skips epics and tasks with an open, draft or not-yet-polled PR. The dedupe key is
+`autopilot`. It skips epics, tasks in an epic (archiving them would send a finished epic back to Backlog) and tasks with an
+open, draft or not-yet-polled PR. The dedupe key is
 `archive:<taskId>:<statusChangedAt>`, so a manual unarchive sticks until the task leaves Done and comes back.
 
 ### Writing an automation

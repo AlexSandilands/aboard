@@ -24,8 +24,9 @@ export const autoArchive = defineAutomation({
       return (
         services.tasks
           .summaries({ projectId: project.id, status: "done" })
-          // Epics archive with their own rules; a card with an unmerged PR still has work attached.
-          .filter((t) => t.kind !== "epic" && Date.parse(t.statusChangedAt) < cutoff)
+          // Epics archive with their own rules. An epic's tasks stay too: archived children leave its roll-up, which
+          // would send a finished epic back to Backlog. A card with an unmerged PR still has work attached.
+          .filter((t) => t.kind !== "epic" && t.parent === null && Date.parse(t.statusChangedAt) < cutoff)
           .filter(
             (t) =>
               !t.links.some(

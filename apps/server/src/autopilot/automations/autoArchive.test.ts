@@ -73,15 +73,37 @@ describe("auto-archive Done", () => {
     const young = done("young");
     turnOn({ days: 30 });
     const open = s.tasks.create({ projectId: project.id, title: "open", plan });
-    const epic = s.tasks.createEpic({ projectId: project.id, title: "Epic" }, [done("child").id], "agent");
+    const child = done("child");
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Epic" }, [child.id], "agent");
+    const gone = done("gone");
+    s.tasks.update(gone.id, { archived: true }, "user");
     await pass(20);
     expect(archived(young.id)).toBe(false);
     expect(archived(open.id)).toBe(false);
     expect(archived(epic.id)).toBe(false);
+    expect(archived(child.id)).toBe(false);
     await pass(40);
     expect(archived(young.id)).toBe(true);
     expect(archived(open.id)).toBe(false);
     expect(archived(epic.id)).toBe(false);
+    // Archiving the children would send a finished epic back to Backlog.
+    expect(archived(child.id)).toBe(false);
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    // Already archived by someone else: no run for it.
+    expect(s.autopilot.runsForTask(gone.id)).toEqual([]);
+  });
+
+  it("uses each project's own number of days", async () => {
+    const { s, done, pass, archived, turnOn } = setup();
+    const task = done();
+    turnOn({ days: 30 });
+    const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const b = s.tasks.create({ projectId: other.id, title: "b", plan });
+    s.tasks.move(b.id, { status: "done" }, "agent");
+    s.autopilot.setScope("project", other.id, AUTOPILOT_AUTO_ARCHIVE, { mode: "on", config: { days: 3 } });
+    await pass(5);
+    expect(archived(task.id)).toBe(false);
+    expect(archived(b.id)).toBe(true);
   });
 
   it("waits for an open PR but not a merged or closed one", async () => {
@@ -91,8 +113,10 @@ describe("auto-archive Done", () => {
     const merged = withPr(2);
     const closed = withPr(3);
     const unknown = withPr(4);
+    const draft = withPr(5);
     for (const [task, state] of [
       [open, "open"],
+      [draft, "draft"],
       [merged, "merged"],
       [closed, "closed"],
     ] as const) {
@@ -100,7 +124,13 @@ describe("auto-archive Done", () => {
     }
     turnOn();
     await pass(15);
-    expect([open, merged, closed, unknown].map((t) => archived(t.id))).toEqual([false, true, true, false]);
+    expect([open, draft, merged, closed, unknown].map((t) => archived(t.id))).toEqual([
+      false,
+      false,
+      true,
+      true,
+      false,
+    ]);
   });
 
   it("doesn't archive again after a manual unarchive, until the task returns to Done", async () => {
