@@ -155,6 +155,28 @@ describe("classifyLink", () => {
     expect(classifyLink("https://example.com")).toEqual({ kind: "url", url: "https://example.com" });
     expect(classifyLink("not a link")).toBeNull();
   });
+
+  it("treats /owner/repo/pull/n on any host as a GitHub-style PR", () => {
+    expect(classifyLink("https://github.com/acme/app/pull/42/files?w=1")).toMatchObject({
+      kind: "pr",
+      ref: { host: "github.com", repo: "acme/app", number: 42 },
+    });
+    expect(classifyLink("https://GHE.Example.com/team/svc/pull/7")).toMatchObject({
+      kind: "pr",
+      ref: { host: "ghe.example.com", repo: "team/svc", number: 7 },
+    });
+    expect(classifyLink("https://example.ghe.com/team/svc/pull/8#discussion")).toMatchObject({
+      kind: "pr",
+      ref: { host: "example.ghe.com", repo: "team/svc", number: 8 },
+    });
+    expect(classifyLink("https://bitbucket.org/team/repo/pull-requests/3")).toMatchObject({ kind: "pr", ref: null });
+    expect(classifyLink("https://org.visualstudio.com/proj/_git/repo/pullrequest/9")).toMatchObject({
+      kind: "pr",
+      ref: null,
+    });
+    expect(classifyLink("https://github.com/acme/app/pull/42abc")).toMatchObject({ kind: "url" });
+    expect(classifyLink("https://github.com/acme/pull/42")).toMatchObject({ kind: "url" });
+  });
 });
 
 describe("findJiraKeys", () => {

@@ -25,7 +25,8 @@ progress.
 
 A task can link to:
 
-- **GitHub PRs**, with their live state (checks, review, conflicts) through the `gh` CLI.
+- **GitHub PRs**, on github.com or GitHub Enterprise, with their live state (checks, review, conflicts)
+  and a **Merge** button once the task is in Review, through the account the `gh` CLI is signed in with.
 - **Jira issues.** Keys in a task's title are linked automatically.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
 - **Any URL.**
