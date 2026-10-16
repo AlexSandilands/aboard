@@ -154,7 +154,8 @@ export interface PlansService {
    * Replaces the plan. Phases/steps given with an existing `id` are kept (status and
    * timestamps preserved unless overridden); others are created; missing ones are deleted.
    * Throws PLAN_REQUIRED if the result has no steps and the task is not in Backlog.
-   * With `protectStarted`, throws CONFLICT instead of deleting a step that isn't `todo` or has notes.
+   * With `protectStarted`, throws CONFLICT instead of deleting a step that isn't `todo` or has notes, or all of a
+   * phase's steps while other existing steps are kept (a partial update, not a rewrite).
    */
   setPlan(taskId: string, plan: PlanInput, actor: string, opts?: { protectStarted?: boolean }): TaskDetail;
   /** The steps `setPlan` would delete for this input, in plan order. Writes nothing. */

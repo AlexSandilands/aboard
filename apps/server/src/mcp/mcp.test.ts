@@ -210,7 +210,7 @@ describe("MCP endpoint", () => {
       const refused = await call("set_plan", onlyPhaseOne);
       expect(refused.error).toBe(true);
       expect(refused.body).toMatch(/^CONFLICT: /);
-      expect(refused.body).toContain('2.1 "c" (its whole phase is left out)');
+      expect(refused.body).toContain('2.1 "c" (all steps of its phase are dropped)');
       expect(await planText()).toContain("2.2 [ ] d");
       expect((await call("set_plan", { ...onlyPhaseOne, allowDeletes: true })).error).toBe(false);
     });

@@ -393,14 +393,14 @@ function wouldDelete(steps: PlanDeletion[]): AppError {
     const why = [
       ...(d.status !== "todo" ? [d.status] : []),
       ...(d.hasNotes ? ["notes"] : []),
-      ...(d.status === "todo" && !d.hasNotes ? ["its whole phase is left out"] : []),
+      ...(d.status === "todo" && !d.hasNotes ? ["all steps of its phase are dropped"] : []),
     ].join(", ");
     return `${d.label} "${d.title}" (${why})`;
   });
   const more = steps.length - shown.length;
   return new AppError(
     "CONFLICT",
-    `This plan would delete ${steps.length} step(s) that have progress or notes, or that sit in a phase it leaves out: ${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}. ` +
+    `This plan would delete ${steps.length} step(s) that have progress or notes, or that sit in a phase whose steps are all dropped: ${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}. ` +
       "Steps and phases you leave out (or pass without their id) are deleted.",
     { steps },
   );

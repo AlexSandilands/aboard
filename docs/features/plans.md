@@ -106,7 +106,8 @@ Phase 1: Structure
   matching by id keeps the status and notes of steps that survive.
 - **Replace is guarded, and there is a tool for patching.** Wording alone didn't stop agents using
   `set_plan` for bulk updates, because no tool did that. `update_plan` is the tool for it, `set_plan` leads
-  with a warning and refuses to drop started or noted steps unless told to, and says what it deleted.
+  with a warning and refuses to drop started or noted steps, or whole phases while keeping others, unless
+  told to, and says what it deleted.
 
 ## Code map
 
