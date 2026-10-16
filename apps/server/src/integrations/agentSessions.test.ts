@@ -11,7 +11,7 @@ import {
   START_TIME_TTL_MS,
   type ProcessProbe,
 } from "./agentSessions.ts";
-import type { LaunchSpec, TerminalHost } from "./terminal.ts";
+import { shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const A = "b76a4a91-3196-48df-a421-9a32d5ac9978";
 const B = "709f26ed-ce2f-4449-b7eb-3bb01f89f268";
@@ -208,7 +208,8 @@ describe("resuming a session", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       launched: true,
-      command: `cd '${app.home.root}' && claude --resume ${A}`,
+      // Quoted only where the temp path needs it: a Windows path does (backslashes), /tmp/... doesn't.
+      command: `cd ${shQuote(app.home.root)} && claude --resume ${A}`,
       error: null,
     });
     expect(app.spawned).toEqual([
