@@ -82,6 +82,24 @@ describe("REST", () => {
     expect(board.projects).toHaveLength(1);
   });
 
+  it("archives and unarchives an epic with its Done tasks", async () => {
+    const h = await setup();
+    const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "Epic" }, [], "agent");
+    const part = h.services.tasks.create({
+      projectId: h.project.id,
+      title: "Part",
+      epicId: epic.id,
+      plan: { phases: [{ title: "Do", steps: [{ title: "it" }] }] },
+    });
+    h.services.tasks.move(part.id, { status: "done" }, "agent");
+    const patch = (archived: boolean) => h.request(`/api/tasks/${epic.id}`, { method: "PATCH", json: { archived } });
+
+    expect((await patch(true)).status).toBe(200);
+    expect(h.services.tasks.summary(part.id).archivedAt).not.toBeNull();
+    expect(((await (await patch(false)).json()) as TaskDetail).status).toBe("done");
+    expect(h.services.tasks.summary(part.id).archivedAt).toBeNull();
+  });
+
   it("adds a pasted T3 thread id as a thread link and returns the warning with it", async () => {
     const h = await setup();
     const threadId = "bca46358-2812-4417-93f7-e151c0f96292";

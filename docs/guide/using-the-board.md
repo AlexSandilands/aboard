@@ -17,7 +17,8 @@ progress.
   longer want can be closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or
   `close_task` over MCP). It moves to Done without needing a plan, and the other task lists it under
   "Also resolved". Moving it out of Done reopens it.
-- **Archiving** clears a card off the board. It's for tidying up, not for resolving work.
+- **Archiving** clears a card off the board. It's for tidying up, not for resolving work. Archiving an epic
+  (once none of its tasks is open) archives its Done tasks with it, and unarchiving the epic brings them back.
 - **Deleting** removes an archived task for good, with its plan, links and activity (task menu, or
   `delete_task` over MCP). Archive first; active tasks can't be deleted.
 

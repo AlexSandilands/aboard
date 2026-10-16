@@ -22,6 +22,8 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
 | A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
 | Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
+| Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
+| An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -49,6 +51,14 @@ moves the epic to the end of its new column.
 - An epic is archived only once none of its tasks is open: an archived epic leaves the board, and its open
   tasks would show loose while still claiming it. Restoring an epic from a backup takes back only the tasks
   still in its project.
+- Archiving an epic (`update`, so UI, REST and MCP alike) archives its unarchived tasks, all Done by then, in the
+  same write: each gets the epic's `archived_at` and an `archived` event with `withEpic`. They aren't archived
+  through `update`, which would re-derive the epic from its remaining tasks and drop it to Backlog. Unarchiving
+  the epic unarchives the tasks with that same `archived_at` (`unarchived` with `withEpic`, at the end of their
+  lane) and re-derives it; tasks archived on their own earlier stay archived.
+- `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
+  this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
+  and Auto-archive treats such a Done task as loose. There is no migration for these.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with

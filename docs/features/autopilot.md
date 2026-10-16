@@ -159,7 +159,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
 `autopilot`. It skips tasks in an epic (archiving them one by one would leave the epic with none counted and send it
-back to Backlog) and tasks with an open, draft or not-yet-polled PR. The dedupe key is
+back to Backlog), except Done tasks whose epic is already archived, which count as loose (epics archived before
+they took their Done tasks along left those behind), and tasks with an open, draft or not-yet-polled PR. The dedupe key is
 `archive:<taskId>:<statusChangedAt>`, so a manual unarchive sticks until the task leaves Done and comes back.
 
 A **finished epic** is archived with its tasks instead: an epic that isn't archived, is in Done (so every unarchived
@@ -172,7 +173,8 @@ unarchived task and then the epic, as `autopilot`, without re-deriving the epic'
 "Archived by Autopilot with its N tasks after D days in Done" on the epic. Tasks already archived stay as they were.
 The dedupe key is `archive-epic:<epicId>:<statusChangedAt>`, so unarchiving the epic by hand sticks until it leaves
 Done and comes back. The engine resolves a candidate that is an epic on the epic itself; a dry run says "Would
-archive #N with its K tasks after D days in Done". Unarchiving a task inside an archived epic is #100's question.
+archive #N with its K tasks after D days in Done". The archive itself is the shared `archiveWithEpic` that archiving an epic by hand uses too. Unarchiving a task inside
+an archived epic is #100's question.
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
 switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or

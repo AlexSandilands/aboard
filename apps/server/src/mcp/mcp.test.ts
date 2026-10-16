@@ -318,6 +318,26 @@ describe("MCP endpoint", () => {
     expect(h.services.tasks.summary(task.id).projectId).toBe(other.id);
   });
 
+  it("update_task archives an epic with its Done tasks", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const epic = h.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "Part",
+      epicId: epic.id,
+      plan: { phases: [{ title: "Do", steps: [{ title: "it" }] }] },
+    });
+    h.services.tasks.move(task.id, { status: "done" }, "agent");
+
+    const archived = await client.callTool({
+      name: "update_task",
+      arguments: { task: `#${epic.number}`, archived: true },
+    });
+    expect(archived.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id).archivedAt).not.toBeNull();
+    expect(h.services.tasks.summary(epic.id).status).toBe("done");
+  });
+
   it("delete_task requires the task to be archived first", async () => {
     const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
     const task = h.services.tasks.create({ projectId: project.id, title: "Scrap me" });
