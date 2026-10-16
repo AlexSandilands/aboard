@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
+import { createDigestGenerator } from "../autopilot/digest.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
@@ -120,6 +121,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     boardUrl: () => boardUrlOf(deps.config),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const digests = createDigestGenerator({
+    services: deps.services,
+    runner,
+    ...(overrides.now ? { now: overrides.now } : {}),
+  });
   const worktrees = createWorktreeCleanup({
     services: deps.services,
     ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
@@ -185,6 +191,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
+    generateDigest: () => digests.generate(),
+    digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };

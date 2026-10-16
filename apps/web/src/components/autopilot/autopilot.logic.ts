@@ -146,6 +146,11 @@ export function parseNumberField(
   return value;
 }
 
+/** Whether `text` is a complete 24-hour "HH:MM" time, the form a time field and quiet hours save. */
+export function isClockTime(text: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
+}
+
 /** A field's value as an input shows it. */
 export function fieldText(value: unknown): string {
   return typeof value === "number" || typeof value === "string" ? String(value) : "";

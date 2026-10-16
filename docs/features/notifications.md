@@ -23,7 +23,7 @@ write that made the change, so the change and its notification commit together.
 | `pr_changes_requested` | An open or draft PR's review decision becomes `changes_requested`               | `changes:<linkId>:<updatedAt>`          |
 | `review_finished`      | A local review round is submitted (`reviews.submit`)                            | `review:<reviewId>`                     |
 | `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded | `autopilot:<runId>`     |
-| `autopilot_notice`     | Anything else an automation sends through `notify()` (stale, unblocked, digests); no producer uses it yet | the caller's |
+| `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked

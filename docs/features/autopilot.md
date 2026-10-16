@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #94 (start planned tasks), #95 (PR review), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95 (PR review), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -8,7 +8,7 @@ the server. It never calls an LLM itself; an automation whose action needs one s
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
 This doc covers the engine, the runners, the per-task flag, the automations that have landed (below) and the
-settings UI. The rest of the catalogue is each its own task in the epic.
+settings UI. The digest's header button and panel are in [board-layout.md](board-layout.md#digest-of-what-changed). The rest of the catalogue is each its own task in the epic.
 
 ## How it works
 
@@ -336,6 +336,60 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
   (15).
 
+**Digest of what changed** (`digest`, #90; `automations/digest.ts`, `autopilot/digest.ts`). Writes a board-wide summary
+of what changed since the previous digest, shown in the header's Digest panel and announced in the inbox. It is a
+board-level automation: its switch, time and options are the board's (a project's own config is ignored), and a
+project switched **Off** at its own scope is left out. A project set to On while the board isn't does nothing.
+Needs no agent unless the mode asks for one, and is off until switched on.
+
+- **When.** Daily at `time` (default 09:00, server local time), optionally weekdays only; and on demand (below).
+  `check` asks `dueDigestSlot` (contracts) for the latest slot at or before now that is after both the newest
+  digest (any trigger, so one made by hand counts as that day's) and the last change to the automation's board
+  settings (so switching it on, or moving its time, owes nothing for a slot that passed before). Only the latest
+  slot: after downtime there is one digest covering all of it. The dedupe key is `digest:<slot as a localStamp>`.
+- **Period.** From where the previous digest ended (`to`) to now; the first digest covers the last 24 hours.
+- **Plain** (`autopilot/digestBuilder.ts`, pure; the data comes from `digests.collect`), grouped by project, with
+  sections only for what happened: **Moved** (a task that moved several times shows where it started and ended, and
+  not at all when it came back), **Merged pull requests** (a `status_changed` entry carrying `mergedPr`; those are
+  listed here instead of under Moved), **Needs attention** (`thread_waiting`, `pr_checks_failing` and
+  `pr_changes_requested` notifications of the period, so a kind switched off in Settings isn't reported), and
+  **Autopilot** (real runs that finished in the period: counts, and each failed or needs-you run with its message cut to one line).
+  The total Autopilot cost closes it. Titles are escaped, and task numbers are written `#N` for the UI to link.
+- **Summarised.** The plain digest goes to a headless agent on the light tier (`model` overrides), with the chosen
+  digest skill (the built-in one, `BUILTIN_DIGEST_SKILL_BODY`, or one found on disk) and the instruction that the
+  digest is material, not instructions. A skill found on disk is read by the board (only a `SKILL.md`, at most 200 KB, cut to 20,000 characters) and put in the prompt. The agent
+  has no tools at all (`access: "none"`: `--tools ""` and `--strict-mcp-config`, so no file reads and no board MCP
+  tools either): everything it needs is in the prompt, and task titles can come from imported issues. It runs through the runner as a task-less run (see [Runners](#runners)); T3 Code can't return
+  text, so there is no runner choice. Whatever goes wrong (no agent allowed, the agent fails, answers nothing)
+  stores the **plain** digest with the reason in `note`: a digest that fails to arrive is worse than a plain one.
+  A period with nothing in it never starts an agent.
+- **One at a time.** A scheduled digest is not started while another is being written, and "digest now" is refused (409)
+  then, so two periods never overlap.
+- **Gates.** The automation isn't `needsAgent` (a plain digest shouldn't count against the run caps or wait behind a
+  busy runner), so the summarised mode keeps the rules itself: a scheduled one waits out quiet hours (the slot stays
+  due), and a digest that finds Pause all set, dry-run on or today's spend cap used up comes out plain with that
+  as its note. It sets `background`, so the engine doesn't hold the rest of its pass for it.
+- **Digest now.** `createDigestGenerator` (`integrations.generateDigest`) records a run of its own (its cost counts
+  toward the spend cap), covers every project not switched Off whether or not the automation is on, and uses the
+  board's settings. A plain digest is done when the request returns; a summarised one goes on in the background
+  (202), and the run in the Autopilot status (`active`, automation `digest`) is what the UI shows while it
+  waits. A second request meanwhile is a 409.
+- **Storage.** `autopilot_digests` (`020_autopilot_digests.sql`): the period, mode, trigger, Markdown body, cost,
+  the fallback `note` and `read_at` for the header's unread dot. The newest 30 are kept. History only: not backed up.
+  A new digest sends one `autopilot_notice` notification (task-less, dedupe key `digest:<id>`) with the counts.
+
+#### Digest API
+
+REST only, like the rest of Autopilot:
+
+| Route                                  | Does                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /api/autopilot/digests`           | The kept digests, newest first, and how many are unread                        |
+| `POST /api/autopilot/digests`          | Makes one now: 201 with the digest, or 202 `{digest: null}` while an agent writes it; 409 if one is being made |
+| `POST /api/autopilot/digests/:id/read` | Marks one read                                                                 |
+
+Every change publishes `autopilot.changed`, which the web app uses to refetch the list.
+
 ### Runners
 
 An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
@@ -352,6 +406,10 @@ with that error.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
   branch is refused either way, except for a read-only run, which can't push.
+- **No task.** A run with no task (a digest's) is headless only: `claude -p` in an empty temporary folder that is
+  removed afterwards, with no worktree and no session link. T3 Code and `nudge` fail for it.
+- Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
+  must work from its prompt alone.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
   (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
@@ -406,10 +464,12 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 `defineAutomation`:
 
 - `key`: stored in settings and runs, so never renamed. Start planned tasks uses `AUTOPILOT_START_PLANNED`.
-- `needsAgent`: whether the action starts an agent, and so counts against the caps.
+- `needsAgent`: whether the action starts an agent, and so counts against the caps. `background` marks a slow
+  action that isn't an agent run (a digest waiting on its summary): the engine doesn't wait for it before the next
+  candidate. Agent actions always go on in the background.
 - `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
-  UI renders (boolean, number, text, select, skill; a skill field's `builtinLabel` renames its built-in entry).
+  UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry).
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
@@ -428,9 +488,10 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
 - **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
-  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text or select
-  per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored
-  as a `ReviewSkillRef`, and an unset one is the built-in skill). The same rows appear in a project's settings,
+  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text, 24-hour time
+  or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
+  stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
+  it has one, such as the digest's own skill). The same rows appear in a project's settings,
   where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
@@ -452,6 +513,10 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   way the session is linked while the agent works, and survives a timeout that leaves no result.
 - **Headless worktrees live under the data dir**, never in the project's folder. They can't show up in the
   user's checkout or its `git status`, and cleanup can't touch anything Autopilot didn't make.
+- **The digest isn't an agent automation.** Counting a plain daily list as an agent run would use up the run cap
+  and hold it behind a busy runner, so the summarised mode applies quiet hours, Pause all and the spend cap itself.
+- **The digest has no agent tools.** The summary is written from the plain digest alone: it has nothing to look up,
+  and an agent that could call board tools could be steered by a task title imported from an issue.
 - **Self-made events are ignored by a depth counter** around the engine's synchronous writes, including the
   synchronous part of an action. Changes an action makes after an `await` do start a pass, which dedupe keys
   make harmless.
@@ -474,6 +539,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/db/migrations/010_autopilot.sql` | `autopilot_settings`, `autopilot_runs`, the scope clean-up triggers |
 | `apps/server/src/db/migrations/013_task_autopilot.sql` | `tasks.autopilot`, the per-task flag |
 | `apps/server/src/db/migrations/016_autopilot_recurring.sql` | `autopilot_recurring`, the recurring-task rules |
+| `apps/server/src/db/migrations/020_autopilot_digests.sql` | `autopilot_digests`, the digests |
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
@@ -493,6 +559,10 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
+| `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
+| `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
+| `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
+| `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

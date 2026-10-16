@@ -18,4 +18,5 @@ export * from "./templates.ts";
 export * from "./autopilot.ts";
 export * from "./prReview.ts";
 export * from "./recurring.ts";
+export * from "./digest.ts";
 export * from "./notifications.ts";

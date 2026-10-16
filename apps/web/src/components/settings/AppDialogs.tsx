@@ -1,3 +1,4 @@
+import { DigestDialog } from "~/components/digest/DigestDialog";
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
 import { SessionWarningDialog } from "~/components/sessions/SessionWarningDialog";
@@ -11,6 +12,7 @@ export function AppDialogs() {
     <>
       <ProjectSettingsDialog />
       <AppSettingsDialog />
+      <DigestDialog />
       <T3LaunchDialog />
       <MergePrDialog />
       <SessionWarningDialog />
