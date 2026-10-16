@@ -35,7 +35,7 @@ up living in your head.
 
 Aboard moves it onto a board, and the agents keep the board up to date themselves:
 
-- **One glance, every project.** A swimlane per repo, columns from **Ideas** to **Done**. You can see
+- **One glance, every project.** A swimlane per repo, columns from **Backlog** to **Done**. You can see
   what's moving, what's stuck and what's waiting on you.
 - **Agents do the bookkeeping.** Over MCP they capture ideas, write a plan before they start, tick off
   steps as they go and leave a handover note when they stop. You don't have to update anything.
@@ -43,7 +43,7 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
   agent thread. Resume it yourself, or hand it to a fresh agent with one click.
 - **Problems come to you.** Failing checks, requested changes and blocked steps collect under
   **Needs attention**, so you don't have to go looking.
-- **Ideas don't get lost.** Anything worth doing later goes into Ideas in one call, and the agent
+- **Ideas don't get lost.** Anything worth doing later goes into the Backlog in one call, and the agent
   carries on with what it was doing.
 
 Everything runs on your machine: a local server and a SQLite file, with no account and no cloud.

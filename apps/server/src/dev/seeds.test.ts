@@ -38,11 +38,13 @@ describe("seed scenarios", () => {
 
   it("basic fills every column, with more than five Done and an archived card", () => {
     const { tasks, details } = seeded("basic");
-    expect(new Set(tasks.map((t) => t.status))).toEqual(new Set(["idea", "planned", "in_progress", "review", "done"]));
+    expect(new Set(tasks.map((t) => t.status))).toEqual(
+      new Set(["backlog", "planned", "in_progress", "review", "done"]),
+    );
     expect(tasks.filter((t) => t.status === "done" && !t.archivedAt).length).toBeGreaterThan(5);
     expect(tasks.some((t) => t.archivedAt)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
-    expect(details.some((t) => t.status === "idea" && t.phases.length > 0)).toBe(true);
+    expect(details.some((t) => t.status === "backlog" && t.phases.length > 0)).toBe(true);
   });
 
   it("review covers every round status and finding severity", () => {

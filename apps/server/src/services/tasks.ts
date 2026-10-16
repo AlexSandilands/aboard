@@ -4,7 +4,7 @@ import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core } from "./core.ts";
-import type { PlansModule } from "./plans.ts";
+import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
@@ -122,7 +122,7 @@ export function createTasksService(
         const actor = input.actor ?? "user";
         const hasSteps = (input.plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
-        const status = hasSteps ? "planned" : "idea";
+        const status = hasSteps ? "planned" : "backlog";
         const task: TaskRecord = {
           id: randomUUID(),
           number: repos.tasks.nextNumber(),
@@ -140,6 +140,7 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
+          suggestedModel: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", { status });
@@ -188,7 +189,7 @@ export function createTasksService(
           if (!input.archived) next.position = endOfLane(next);
           fx.log(id, actor, input.archived ? "archived" : "unarchived");
         }
-        repos.tasks.update(next);
+        repos.tasks.update(withSuggestedModel(next, input.suggestedModel, actor, fx));
         if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
@@ -202,7 +203,7 @@ export function createTasksService(
         const current = record(id);
         const status = input.status ?? current.status;
         const statusChanged = status !== current.status;
-        if (statusChanged && status !== "idea" && repos.plans.countSteps(id) === 0) {
+        if (statusChanged && status !== "backlog" && repos.plans.countSteps(id) === 0) {
           throw planRequired(current.number);
         }
         if (!statusChanged && !input.beforeId && !input.afterId) return;

@@ -43,10 +43,10 @@ launch can't drift apart.
 
 #### Plan with me
 
-A rough idea in the Ideas column usually needs a conversation before it needs code. The **Plan with me**
+A task in Backlog usually needs a conversation before it needs code. The **Plan with me**
 option switches the prompt to a planning brief:
 
-- the idea is still basic, and the user wants to shape the plan together;
+- the task has no plan yet, and the user wants to shape the plan together;
 - explore the task and the relevant code, then ask clarifying questions;
 - propose phases and steps, and wait for agreement;
 - only then call `set_plan` and move the task to Planned. Don't implement anything.
@@ -54,7 +54,29 @@ option switches the prompt to a planning brief:
 The option only changes the prompt. T3 threads always start in T3's default interaction mode: T3's own plan
 mode is a legacy beta behind a client setting the board can't read, and a thread started in it could be left
 with no visible way to switch back. The option is on by default for tasks in
-Ideas or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
+Backlog or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
+
+### Suggested model
+
+Planning often wants the strongest model; implementing a well-planned task often doesn't. So the agent that
+plans a task suggests a **model tier** for implementing it, and hand-offs use it.
+
+- **The task stores a tier, not a model:** `suggestedModel` is `{tier: light | standard | deep, reason}` or
+  null. Agents set it with `set_plan`, `create_task` or `update_task` (`null` clears it), and never need to
+  know any harness's model names. The user can change or clear it under Details in the task panel. A change
+  is logged as `suggested_model_changed`.
+- **Settings → Model tiers** says what each tier means for you: a free-text description (e.g. "Sonnet 5.5,
+  medium effort") for any harness, and, when T3 Code is connected, a T3 model with its effort and fast mode.
+  The T3 model's label is saved with it, so prompts can name it without asking T3.
+- **Copied work prompts** get one line: `Suggested model: standard (Sonnet 5.5, medium effort): <reason>.
+  Switch your session's model if it differs.` The tier is named by its description, else its T3 label, else
+  just the tier (`suggestedModelLine`).
+- **The T3 launch dialog** starts a work launch on the tier's T3 model, and shows the suggestion under the
+  composer. When the tier has no T3 model, its provider isn't ready or T3 no longer offers the model, it stays
+  on T3's default and says why. Effort and fast mode values the model no longer supports are dropped.
+- **Planning ignores it.** Planning prompts leave the line out, and turning on **Plan with me** switches the
+  dialog to T3's default model (and back when turned off), unless you picked a model by hand. A
+  board-started thread's prompt leaves the line out too: the thread already runs on the chosen model.
 
 ### Starting a thread in T3 Code
 
@@ -105,7 +127,8 @@ doesn't, the dialog says so and offers to copy the prompt instead.
   first 100 refs T3 returns, searched in the browser; a branch beyond that can't be picked yet.
 
 The choices start from your T3 settings, resolved the way T3 resolves them for a new thread: the project's
-default model, then the environment default, then the first ready provider's default model. Runtime mode,
+default model, then the environment default, then the first ready provider's default model. A work launch
+for a task with a suggested model starts on that tier's model instead (see [Suggested model](#suggested-model)). Runtime mode,
 worktree default and "start new worktrees from origin" come from the same settings, project overrides first.
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
@@ -126,14 +149,15 @@ own web client uses:
 1. `POST <t3-origin>/api/auth/websocket-ticket` with the token as a Bearer header returns a short-lived ticket.
 2. Connect to `ws://<t3-origin>/ws?orchestrationProtocol=2&wsTicket=<ticket>`.
 3. Send Effect-RPC JSON requests and wait for each reply:
-   - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog;
+   - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog, and
+     `server.getConfig` alone fills the model pickers in Settings → Model tiers;
    - `orchestration.launchThread` creates the thread and sends the prompt as its first message, which starts
      the agent.
 4. On success, add a `t3_thread` link to the task. The card shows the thread straight away, and the
    20-second live status poll takes over from there.
 
 The browser only talks to the board's REST API (`GET /api/tasks/:id/t3-launch-options`,
-`POST /api/tasks/:id/t3-thread`). Each request opens one WebSocket session and closes it when done.
+`POST /api/tasks/:id/t3-thread`, and `GET /api/integrations/t3/models` for settings). Each request opens one WebSocket session and closes it when done.
 
 **This protocol is not a public API.** It was worked out from T3 Code's source, so a T3 update can break it.
 Failures to load the dialog's options are shown in the dialog, with an offer to copy the prompt instead.
@@ -197,9 +221,11 @@ round, it posts a message into the task's linked thread (`orchestration.dispatch
 
 | File | What it does |
 |---|---|
-| `packages/contracts/src/handoff.ts` | The hand-off prompt (`taskHandoffPrompt`) and the default mode |
+| `packages/contracts/src/handoff.ts` | The hand-off prompt (`taskHandoffPrompt`), its suggested model line and the default mode |
+| `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime mode labels |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
-| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, workspace → `workspaceStrategy` |
+| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy` |
 | `apps/server/src/integrations/t3.ts` | `launchOptions` and `startThread`, and linking the new thread to the task |
 | `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
+| `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Model tiers |

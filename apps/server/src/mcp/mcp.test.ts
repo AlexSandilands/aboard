@@ -47,9 +47,10 @@ describe("MCP endpoint", () => {
       "list_projects",
       "list_tasks",
       "get_task",
-      "create_idea",
+      "add_to_backlog",
       "create_task",
       "set_plan",
+      "update_plan",
       "add_steps",
       "update_step",
       "move_task",
@@ -71,11 +72,11 @@ describe("MCP endpoint", () => {
     expect(res.status).toBe(405);
   });
 
-  it("drives an idea through plan, progress, links and notes", async () => {
+  it("drives a backlog task through plan, progress, links and notes", async () => {
     const workspacePath = "C:\\Fake\\proj";
 
     const created = await client.callTool({
-      name: "create_idea",
+      name: "add_to_backlog",
       arguments: { title: "Add dark mode", description: "Users asked for it", workspacePath },
     });
     expect(created.isError).toBeFalsy();
@@ -149,7 +150,7 @@ describe("MCP endpoint", () => {
       { name: "add_note", arguments: { task: `#${task.number}`, text: "Handover" } },
       { name: "link", arguments: { task: `#${task.number}`, value: "https://example.com" } },
       { name: "move_task", arguments: { task: `#${task.number}`, status: "in_progress" } },
-      { name: "create_idea", arguments: { title: "Later", workspacePath } },
+      { name: "add_to_backlog", arguments: { title: "Later", workspacePath } },
     ];
     for (const call of calls) {
       const result = await client.callTool(call);
@@ -164,6 +165,112 @@ describe("MCP endpoint", () => {
     expect(detail).toContain("Ship search");
     expect(detail).toContain("Index titles");
     expect(detail).toContain("1.1 [ ] Add FTS table");
+  });
+
+  describe("changing a plan that has progress", () => {
+    const markdown = "## One\n- [x] a\n- [ ] b\n\n## Two\n- [ ] c\n- [ ] d\n";
+    let task: string;
+
+    beforeEach(() => {
+      const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+      const created = h.services.tasks.create({ projectId: project.id, title: "Big task" });
+      task = `#${created.number}`;
+    });
+
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: { task, ...args } });
+      return { error: result.isError === true, body: text(result) };
+    };
+    const planText = async () => (await call("get_task", {})).body.replace(/ {2}\(id: [^)]+\)/g, "");
+
+    it("refuses a set_plan that would delete finished work and says how to update instead", async () => {
+      expect((await call("set_plan", { markdown })).error).toBe(false);
+      // The #25 mistake: only the phase being updated is passed, so phase One would be wiped.
+      const refused = await call("set_plan", { markdown: "## Two\n- [x] c\n- [x] d\n" });
+      expect(refused.error).toBe(true);
+      expect(refused.body).toMatch(/^CONFLICT: /);
+      expect(refused.body).toContain('1.1 "a" (done)');
+      expect(refused.body).toContain("update_plan");
+      expect(refused.body).toContain("allowDeletes: true");
+      const after = await planText();
+      expect(after).toContain("1.1 [x] a");
+      expect(after).toContain("1.2 [ ] b");
+      expect(after).toContain("2.1 [ ] c");
+    });
+
+    it("refuses a set_plan that passes only the current phase and would drop later phases", async () => {
+      await call("set_plan", { markdown });
+      const one = h.services.tasks.detail(h.services.tasks.resolveId(task)).phases[0]!;
+      // Phase One passed back with its ids and both steps done: untouched todos in phase Two would be dropped.
+      const onlyPhaseOne = {
+        phases: [
+          { id: one.id, title: "One", steps: one.steps.map((s) => ({ id: s.id, title: s.title, status: "done" })) },
+        ],
+      };
+      const refused = await call("set_plan", onlyPhaseOne);
+      expect(refused.error).toBe(true);
+      expect(refused.body).toMatch(/^CONFLICT: /);
+      expect(refused.body).toContain('2.1 "c" (all steps of its phase are dropped)');
+      expect(await planText()).toContain("2.2 [ ] d");
+      expect((await call("set_plan", { ...onlyPhaseOne, allowDeletes: true })).error).toBe(false);
+    });
+
+    it("lets set_plan delete started steps with allowDeletes and lists what went", async () => {
+      await call("set_plan", { markdown });
+      const result = await call("set_plan", { markdown: "## Two\n- [ ] c\n", allowDeletes: true });
+      expect(result.error).toBe(false);
+      expect(result.body).toContain("Deleted 4 step(s): 1.1 a, 1.2 b, 2.1 c, 2.2 d.");
+      expect(await planText()).toContain("1.1 [ ] c");
+      // The activity log keeps every deleted title, uncut, so the plan can be rebuilt.
+      expect((await call("get_task", {})).body).toContain("deleted 4: 1.1 a, 1.2 b, 2.1 c, 2.2 d");
+    });
+
+    it("lets a first plan and a replace that only drops untouched steps through", async () => {
+      const first = await call("set_plan", { markdown: "## One\n- [ ] a\n- [ ] b\n" });
+      expect(first.error).toBe(false);
+      expect(first.body).not.toContain("Deleted");
+      // Nothing started, no notes: replacing is allowed, and the result still says what was dropped.
+      const replaced = await call("set_plan", { markdown: "## One\n- [ ] x\n" });
+      expect(replaced.error).toBe(false);
+      expect(replaced.body).toContain("Deleted 2 step(s): 1.1 a, 1.2 b.");
+    });
+
+    it("update_plan marks several steps done, moves a step and renames a phase in one call", async () => {
+      await call("set_plan", { markdown });
+      const result = await call("update_plan", {
+        steps: [
+          { step: "1.2", status: "done", appendNotes: "merged" },
+          { step: "2.1", status: "done" },
+          { step: "2.2", move: { phase: "1" } },
+        ],
+        phases: [{ phase: "2", title: "Two renamed" }],
+      });
+      expect(result.error).toBe(false);
+      expect(result.body).toContain("Updated 3 step(s) and 1 phase(s) in the plan.");
+      const body = await planText();
+      expect(body).toContain("Phase 1: One");
+      expect(body).toContain("1.1 [x] a");
+      expect(body).toContain("1.2 [x] b");
+      expect(body).toContain("1.3 [ ] d");
+      expect(body).toContain("Phase 2: Two renamed");
+      expect(body).toContain("2.1 [x] c");
+      expect(body).toContain("merged");
+    });
+
+    it("update_plan changes nothing when one reference is bad", async () => {
+      await call("set_plan", { markdown });
+      const before = await planText();
+      const result = await call("update_plan", {
+        steps: [
+          { step: "1.2", status: "done" },
+          { step: "7.7", status: "done" },
+        ],
+      });
+      expect(result.error).toBe(true);
+      expect(result.body).toMatch(/^NOT_FOUND: /);
+      expect(await planText()).toBe(before);
+      expect((await call("update_plan", {})).body).toMatch(/^VALIDATION: /);
+    });
   });
 
   it("update_task only moves projects through the explicit moveTo params", async () => {
@@ -223,35 +330,55 @@ describe("MCP endpoint", () => {
     expect(text(result)).toMatch(/^NOT_FOUND: /);
   });
 
+  it("still reads the old idea status as backlog", async () => {
+    const workspacePath = "C:/Fake/proj";
+    const project = h.services.projects.create({ workspaceRoot: workspacePath });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "Old agent",
+      plan: { phases: [{ title: "P", steps: [{ title: "s" }] }] },
+    });
+
+    const moved = await client.callTool({ name: "move_task", arguments: { task: `#${task.number}`, status: "idea" } });
+    expect(moved.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id).status).toBe("backlog");
+
+    const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "idea" } }));
+    expect(listed).toContain(`#${task.number} Old agent`);
+  });
+
   it("closes a task as done by another and shows it on both tasks", async () => {
     const workspacePath = "C:/Fake/proj";
     const project = h.services.projects.create({ workspaceRoot: workspacePath });
     const shipped = h.services.tasks.create({ projectId: project.id, title: "Ship search" });
-    const idea = h.services.tasks.create({ projectId: project.id, title: "Search titles" });
+    const unplanned = h.services.tasks.create({ projectId: project.id, title: "Search titles" });
 
-    const gated = await client.callTool({ name: "move_task", arguments: { task: `#${idea.number}`, status: "done" } });
+    const gated = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${unplanned.number}`, status: "done" },
+    });
     expect(text(gated)).toContain("close_task");
 
     const missing = await client.callTool({
       name: "close_task",
-      arguments: { task: `#${idea.number}`, resolution: "completed" },
+      arguments: { task: `#${unplanned.number}`, resolution: "completed" },
     });
     expect(missing.isError).toBe(true);
     expect(text(missing)).toMatch(/^VALIDATION: byTask/);
 
     const closed = await client.callTool({
       name: "close_task",
-      arguments: { task: `#${idea.number}`, resolution: "completed", byTask: `#${shipped.number}` },
+      arguments: { task: `#${unplanned.number}`, resolution: "completed", byTask: `#${shipped.number}` },
     });
     expect(closed.isError).toBeFalsy();
-    expect(text(closed)).toContain(`Closed #${idea.number} as done by #${shipped.number}.`);
+    expect(text(closed)).toContain(`Closed #${unplanned.number} as done by #${shipped.number}.`);
     expect(text(closed)).toContain(`Closed: done by #${shipped.number} "Ship search"`);
 
     const delivering = text(await client.callTool({ name: "get_task", arguments: { task: `#${shipped.number}` } }));
-    expect(delivering).toContain(`Also resolved: #${idea.number} Search titles (done by this)`);
+    expect(delivering).toContain(`Also resolved: #${unplanned.number} Search titles (done by this)`);
 
     const listed = text(await client.callTool({ name: "list_tasks", arguments: { workspacePath, status: "done" } }));
-    expect(listed).toContain(`#${idea.number} Search titles — done by #${shipped.number}`);
+    expect(listed).toContain(`#${unplanned.number} Search titles — done by #${shipped.number}`);
   });
 
   it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
@@ -289,9 +416,9 @@ describe("MCP endpoint", () => {
     expect(text(closed)).not.toContain("Missing links:");
   });
 
-  it("create_idea attaches links and the T3 thread", async () => {
+  it("add_to_backlog attaches links and the T3 thread", async () => {
     const created = await client.callTool({
-      name: "create_idea",
+      name: "add_to_backlog",
       arguments: {
         title: "Retry flaky upload",
         workspacePath: "C:/Fake/proj",
@@ -345,14 +472,14 @@ describe("MCP endpoint", () => {
       return body;
     };
     const workspacePath = "C:/Fake/proj";
-    await call("create_idea", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
+    await call("add_to_backlog", { title: "Polish header", workspacePath, labels: ["UI", "polish"] });
     await call("create_task", {
       title: "Add endpoint",
       workspacePath,
       markdown: "## Build\n- [ ] route",
       labels: ["backend"],
     });
-    await call("create_idea", { title: "Write docs", workspacePath });
+    await call("add_to_backlog", { title: "Write docs", workspacePath });
 
     const listed = await call("list_tasks", { workspacePath, labels: ["ui", "Backend"] });
     expect(listed).toContain("Polish header [polish] [ui]");
@@ -380,8 +507,8 @@ describe("MCP endpoint", () => {
     };
     const workspacePath = "C:/Fake/proj";
     const markdown = "## Build\n- [ ] route";
-    await call("create_idea", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
-    await call("create_idea", { title: "Untagged", workspacePath });
+    await call("add_to_backlog", { title: "Tagged", workspacePath, labels: ["ui", "bug"] });
+    await call("add_to_backlog", { title: "Untagged", workspacePath });
 
     const planned = await call("set_plan", { task: "#2", markdown });
     expect(planned).toContain("Missing labels:");
@@ -401,6 +528,47 @@ describe("MCP endpoint", () => {
     expect(await call("get_task", { task: "#2" })).toContain("Missing labels:");
     await call("close_task", { task: "#2", resolution: "wont_do" });
     expect(await call("get_task", { task: "#2" })).not.toContain("Missing labels:");
+  });
+
+  it("sets, keeps and clears the suggested model through set_plan, create_task and update_task", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    const markdown = "## Build\n- [ ] route";
+
+    const created = await call("create_task", {
+      title: "Endpoint",
+      workspacePath,
+      markdown,
+      suggestedModel: { tier: "light", reason: "One route" },
+    });
+    expect(created).toContain("Suggested model: light (One route)");
+    expect(created).not.toContain("Missing suggested model:");
+
+    await call("add_to_backlog", { title: "Bare", workspacePath });
+    const planned = await call("set_plan", { task: "#2", markdown });
+    expect(planned).toContain("Missing suggested model:");
+    expect(planned).toContain('update_task(task: "#2", suggestedModel:');
+    const suggested = await call("set_plan", { task: "#2", markdown, suggestedModel: { tier: "deep" } });
+    expect(suggested).toContain("Suggested model: deep");
+    // Revising the plan without the argument keeps the suggestion.
+    expect(await call("set_plan", { task: "#2", markdown })).toContain("Suggested model: deep");
+
+    expect(await call("update_task", { task: "#2", suggestedModel: { tier: "standard" } })).toContain(
+      "Suggested model: standard",
+    );
+    expect(await call("update_task", { task: "#2", suggestedModel: null })).not.toContain("Suggested model:");
+    expect(await call("get_task", { task: "#2" })).toContain("suggested model cleared");
+
+    const rejected = await client.callTool({
+      name: "update_task",
+      arguments: { task: "#2", suggestedModel: { tier: "huge" } },
+    });
+    expect(rejected.isError).toBe(true);
   });
 
   it("offers generic label examples only when the board has no labels yet", async () => {

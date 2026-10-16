@@ -22,7 +22,7 @@ leading or trailing `-` removed (so `"ui,"` is `ui`).
 | Invalid input     | `VALIDATION` error naming the bad label     |
 
 A task's labels are replaced whole: `labels` on `PATCH /api/tasks/:id` or `update_task` is the new list,
-and `[]` clears it. `create_task`, `create_idea` and `POST /api/tasks` take an initial list. A change logs
+and `[]` clears it. `create_task`, `add_to_backlog` and `POST /api/tasks` take an initial list. A change logs
 one `labels_changed` event with `added` and `removed`, and the card updates through the usual
 `task.upserted`. Labels count as "in use" only on non-archived tasks in non-archived projects.
 
@@ -61,7 +61,7 @@ Cards show the first three labels and `+N` for the rest.
 
 ### Agents
 
-- `labels` on `create_task`, `create_idea` and `update_task`; `list_tasks` takes a `labels` filter, and
+- `labels` on `create_task`, `add_to_backlog` and `update_task`; `list_tasks` takes a `labels` filter, and
   summary lines show `[ui] [backend]` after the title.
 - `board_overview` ends with **Labels in use** and counts, so agents reuse the board's vocabulary.
 - **Missing labels.** `set_plan`, `create_task` and `get_task` results add a hint when the task has no

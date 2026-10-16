@@ -7,6 +7,7 @@ import {
   initialPickerTab,
   initialWorkspaceChoice,
   keepsCommandId,
+  launchModelSelection,
   modelTraits,
   optionValue,
   pickerModels,
@@ -14,6 +15,8 @@ import {
   refDisabledReason,
   refLabel,
   runtimeModesFor,
+  selectionAfterPlanToggle,
+  selectionLabel,
   selectModel,
   setOption,
   showHandoffActions,
@@ -69,6 +72,7 @@ const options: T3LaunchOptions = {
     { name: "origin/main", isRemote: true, current: false, isDefault: false, worktreePath: null },
   ],
   previousWorktree: { worktreePath: "C:/wt/prev", branch: "t3/prev" },
+  suggestion: null,
   defaults: {
     modelSelection: { instanceId: "claudeAgent", model: "opus", options: [] },
     runtimeMode: "full-access",
@@ -77,8 +81,45 @@ const options: T3LaunchOptions = {
   },
 };
 
+describe("suggested model", () => {
+  const sonnet = { instanceId: "claudeAgent", model: "sonnet", options: [{ id: "effort", value: "low" }] };
+  const suggested: T3LaunchOptions = {
+    ...options,
+    suggestion: { tier: "light", reason: null, modelSelection: sonnet, unavailable: null },
+  };
+
+  it("starts work on the suggested model and planning on T3's default", () => {
+    expect(launchModelSelection(suggested, false)).toEqual(sonnet);
+    expect(launchModelSelection(suggested, true)?.model).toBe("opus");
+    expect(launchModelSelection(options, false)?.model).toBe("opus");
+    const unresolved = { ...options, suggestion: { ...suggested.suggestion!, modelSelection: null, unavailable: "x" } };
+    expect(launchModelSelection(unresolved, false)?.model).toBe("opus");
+  });
+
+  it("swaps models when the mode toggles, keeping a model picked by hand", () => {
+    expect(selectionAfterPlanToggle(suggested, sonnet, true)?.model).toBe("opus");
+    expect(selectionAfterPlanToggle(suggested, options.defaults.modelSelection, false)).toEqual(sonnet);
+    const picked = { instanceId: "codex", model: "gpt", options: [] };
+    expect(selectionAfterPlanToggle(suggested, picked, true)).toEqual(picked);
+  });
+});
+
+it("selectionLabel names the model and the options set explicitly", () => {
+  expect(selectionLabel(options, { instanceId: "codex", model: "gpt", options: [] })).toBe("GPT");
+  expect(selectionLabel(options, { instanceId: "codex", model: "gone", options: [] })).toBe("gone");
+  const opus = {
+    instanceId: "claudeAgent",
+    model: "opus",
+    options: [
+      { id: "effort", value: "low" },
+      { id: "fastMode", value: true },
+    ],
+  };
+  expect(selectionLabel(options, opus)).toBe("Claude Opus, Low, fast");
+});
+
 describe("visibility", () => {
-  const task = { status: "idea" as const, archivedAt: null };
+  const task = { status: "backlog" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
   const settings = { t3TokenSet: true };

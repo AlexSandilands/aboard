@@ -1,13 +1,13 @@
 # Using the board
 
-The board has one swimlane per project and five columns: **Ideas → Planned → In Progress → Review →
+The board has one swimlane per project and five columns: **Backlog → Planned → In Progress → Review →
 Done**. Agents move tasks along over MCP; you can do everything they can from the UI.
 
 ![A task in Review with its labels, a PR with changes requested, review findings and its plan](../../.github/assets/task-panel.png)
 
 ## Plans
 
-Ideas can be rough, but a task can't leave Ideas until it has a plan. A plan is a list of phases, each
+A backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leave Backlog until it has a plan. A plan is a list of phases, each
 with a few concrete steps. The task panel shows exactly which step a task is on, and the card shows its
 progress.
 
@@ -40,10 +40,15 @@ Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or
 are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
 gets a colour you can change.
 
+## Suggested model
+
+The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
+each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it.
+
 ## Handing a task to an agent
 
 Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent
-(Claude Code, Copilot, …), with a planning variant for rough ideas. With [T3 Code](t3-code.md) paired,
+(Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. With [T3 Code](t3-code.md) paired,
 **New T3 Code thread…** starts a thread for the task directly.
 
 ## Your layout
@@ -56,5 +61,5 @@ sections of the task panel. Your layout is saved per browser.
 | Key          | Action               |
 | ------------ | -------------------- |
 | `Ctrl/Cmd K` | Command palette      |
-| `N`          | New idea             |
+| `N`          | New task             |
 | `Esc`        | Close the task panel |

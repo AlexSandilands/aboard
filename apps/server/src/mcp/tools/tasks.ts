@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CloseTaskInput, TaskResolution, TaskStatus, type LinkInput, type T3ThreadRef } from "@repo/contracts";
+import { CloseTaskInput, TaskResolution, TaskStatusInput, type LinkInput, type T3ThreadRef } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
@@ -7,6 +7,7 @@ import {
   actorField,
   hasProjectRef,
   labelsField,
+  suggestedModelField,
   planFromArgs,
   planInputFields,
   projectFields,
@@ -22,7 +23,7 @@ import {
 
 const PLAN_REQUIRED_HINT =
   "Fix: call set_plan for this task (phases with concrete steps, or a markdown checklist), then retry move_task. " +
-  "Only Ideas may exist without a plan. If the work was already delivered by another task, is a duplicate, or " +
+  "Only Backlog tasks may exist without a plan. If the work was already delivered by another task, is a duplicate, or " +
   "won't be done, use close_task instead; it needs no plan.";
 
 const linksField = z
@@ -34,16 +35,17 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
   return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
 }
 
-/** Task lifecycle tools: create_idea, create_task, move_task, close_task, update_task, delete_task, add_note. */
+/** Task lifecycle tools: add_to_backlog, create_task, move_task, close_task, update_task, delete_task, add_note. */
 export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
   server.registerTool(
-    "create_idea",
+    "add_to_backlog",
     {
-      title: "Capture an idea",
+      title: "Add a task to the backlog",
       description:
-        "Capture an idea in the Ideas column with one call. Ideas are cheap and need no plan: when something " +
-        "worth doing comes up mid-task (a refactor, a bug you noticed, a follow-up), log it here and carry on " +
-        "with your current work instead of getting derailed. Pass workspacePath (your cwd); the project is " +
+        "Add a task to the Backlog column with one call: an idea, a known to-do, a Jira ticket or GitHub issue " +
+        "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
+        "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
+        "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, and " +
         "t3Thread when running inside T3 Code.",
       inputSchema: {
@@ -72,7 +74,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
-        return textResult(`Captured idea #${task.number} "${task.title}" in ${project.title}.`);
+        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}.`);
       }),
   );
 
@@ -85,8 +87,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
-        "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...). " +
-        "For something you are not doing now, use create_idea instead.",
+        "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
+        "suggestedModel to the tier its implementation needs. " +
+        "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z.string().min(1),
         description: z.string().optional().describe("Markdown: what and why."),
@@ -105,7 +108,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         if (!plan) {
           throw new AppError(
             "VALIDATION",
-            "create_task needs a plan (phases or markdown). Use create_idea for unplanned work.",
+            "create_task needs a plan (phases or markdown). Use add_to_backlog for unplanned work.",
           );
         }
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
@@ -119,7 +122,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           ...(args.labels?.length ? { labels: args.labels } : {}),
           actor: actor(args.actor),
         });
-        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, { labelHint: true });
+        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
+          planningHints: true,
+        });
       }),
   );
 
@@ -128,15 +133,15 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Move task to a status",
       description:
-        "Change a task's status: idea -> planned -> in_progress -> review -> done (any direction is allowed). " +
+        "Change a task's status: backlog -> planned -> in_progress -> review -> done (any direction is allowed). " +
         "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
-        "when merged or verified. Leaving Ideas requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
+        "when merged or verified. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it before opening the PR. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
       inputSchema: {
         task: taskField,
-        status: TaskStatus,
+        status: TaskStatusInput,
         beforeTask: z.string().optional().describe("Place before this task (same project and status)."),
         afterTask: z.string().optional().describe("Place after this task (same project and status)."),
         actor: actorField,
@@ -203,9 +208,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context or labels, or archive/unarchive it. To move the task to a different " +
+        "Edit a task's title, description, plan context, labels or suggested model, or archive/unarchive it. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist). " +
-        "For plan steps use set_plan/add_steps/update_step; for status use move_task.",
+        "For plan steps use set_plan/update_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
         task: taskField,
         title: z.string().min(1).optional(),
@@ -226,6 +231,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .optional()
           .describe("Turn local review on or off for this task; null follows the board's setting."),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
+        suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
         actor: actorField,
       },
     },
@@ -246,6 +252,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.archived !== undefined ? { archived: args.archived } : {}),
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
+            ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
           },
           actor(args.actor),
         );

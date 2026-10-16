@@ -11,6 +11,8 @@ import {
   PROJECT_ICON_IMAGE_MAX_LENGTH,
   ProjectIcon,
   T3ThreadSnapshot,
+  TaskStatus,
+  TaskStatusInput,
   type PlanPhase,
   type StepStatus,
 } from "./index.ts";
@@ -225,5 +227,13 @@ Some context here.
 
   it("returns null when there are no steps", () => {
     expect(parsePlanMarkdown("just prose")).toBeNull();
+  });
+});
+
+describe("TaskStatusInput", () => {
+  it("reads the old idea status as backlog", () => {
+    expect(TaskStatusInput.parse("idea")).toBe("backlog");
+    expect(TaskStatusInput.parse("planned")).toBe("planned");
+    expect(TaskStatus.safeParse("idea").success).toBe(false);
   });
 });

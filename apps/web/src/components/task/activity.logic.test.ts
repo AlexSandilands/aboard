@@ -20,7 +20,7 @@ const event = (type: string, payload: Record<string, unknown> = {}): TaskEvent =
 
 describe("describeEvent", () => {
   it("describes status moves with column labels", () => {
-    expect(describeEvent(event("status_changed", { from: "idea", to: "in_progress" }), ctx)).toEqual({
+    expect(describeEvent(event("status_changed", { from: "backlog", to: "in_progress" }), ctx)).toEqual({
       icon: "status",
       text: "moved to In Progress",
       quote: null,
@@ -32,6 +32,15 @@ describe("describeEvent", () => {
     expect(text({ added: ["ui", "bug"], removed: ["server"] })).toBe("added 2 labels ui, bug; removed server");
     expect(text({ added: [], removed: ["ui"] })).toBe("removed ui");
     expect(text({})).toBe("changed the labels");
+  });
+
+  it("describes suggested model changes", () => {
+    const line = (payload: Record<string, unknown>) => describeEvent(event("suggested_model_changed", payload), ctx);
+    expect(line({ tier: "deep", reason: "Migration" })).toMatchObject({
+      text: "suggested the deep model tier",
+      quote: "Migration",
+    });
+    expect(line({ tier: null, reason: null })).toMatchObject({ text: "cleared the suggested model", quote: null });
   });
 
   it("describes the local review loop", () => {
@@ -67,8 +76,8 @@ describe("describeEvent", () => {
     expect(text("closed", { resolution: "completed", byTask: 4 })).toBe("closed this as done by #4");
     expect(text("closed", { resolution: "duplicate", byTask: 4 })).toBe("closed this as a duplicate of #4");
     expect(text("closed", { resolution: "wont_do" })).toBe("closed this as won't do");
-    expect(text("status_changed", { from: "done", to: "idea", clearedResolution: "wont_do" })).toBe(
-      "reopened this and moved to Ideas",
+    expect(text("status_changed", { from: "done", to: "backlog", clearedResolution: "wont_do" })).toBe(
+      "reopened this and moved to Backlog",
     );
     expect(text("status_changed", { from: "review", to: "done", mergedPr: "acme/app#12" })).toBe(
       "moved to Done when acme/app#12 merged",
@@ -93,6 +102,10 @@ describe("describeEvent", () => {
       quote: "Handover: tests pass",
     });
     expect(describeEvent(event("plan_set", { phases: 2, steps: 1 }), ctx).text).toBe("set the plan (2 phases, 1 step)");
+    expect(describeEvent(event("plan_set", { phases: 1, steps: 1, deleted: ["1.1 a", "1.2 b"] }), ctx)).toMatchObject({
+      text: "set the plan (1 phase, 1 step)",
+      quote: "Deleted 2 steps:\n\n- 1.1 a\n- 1.2 b",
+    });
     expect(describeEvent(event("moved_project", { to: "p2" }), ctx).text).toBe("moved to project storefront");
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",

@@ -17,6 +17,7 @@ import type {
   ReviewSkillRef,
   ReviewTrigger,
   StepPatch,
+  StepStatus,
   SubmitReviewInput,
   T3ThreadSnapshot,
   TaskDetail,
@@ -96,11 +97,11 @@ export interface TasksService {
   detail(id: string): TaskDetail;
   /** Accepts a uuid, "#42" or "42". */
   resolveId(ref: string): string;
-  /** Lands in "planned" when `plan` is given (with ≥1 step), else "idea". Appends to the end of the column. */
+  /** Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column. */
   create(input: CreateTaskInput): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
-   * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "idea" without plan steps.
+   * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.
    * Moving a closed task out of Done clears its resolution. `because` adds fields to the status_changed event
    * payload, for automatic moves that should say why (e.g. `{ mergedPr: "owner/repo#12" }`); it cannot override
    * from/to/clearedResolution.
@@ -126,13 +127,44 @@ export interface CloseInput {
   byTaskId?: string;
 }
 
+/** A step that replacing the plan would delete. `label` is its "phase.step" position before the call. */
+export interface PlanDeletion {
+  label: string;
+  title: string;
+  status: StepStatus;
+  hasNotes: boolean;
+  /** Every step of its phase is deleted too. */
+  phaseDropped: boolean;
+}
+
+/** In-place edits to a plan. Refs (`2.3` labels, step/phase ids, phase numbers) resolve against the plan before any edit. */
+export interface PlanUpdateInput {
+  steps?: Array<
+    StepPatch & {
+      step: string;
+      /** Where the step goes: a phase (number or id, appended) and/or next to another step (`before`/`after`, a step ref). */
+      move?: { phase?: string; before?: string; after?: string };
+    }
+  >;
+  phases?: Array<{ phase: string; title: string }>;
+}
+
 export interface PlansService {
   /**
    * Replaces the plan. Phases/steps given with an existing `id` are kept (status and
    * timestamps preserved unless overridden); others are created; missing ones are deleted.
-   * Throws PLAN_REQUIRED if the result has no steps and the task is not an idea.
+   * Throws PLAN_REQUIRED if the result has no steps and the task is not in Backlog.
+   * With `protectStarted`, throws CONFLICT instead of deleting a step that isn't `todo` or has notes, or all of a
+   * phase's steps while other existing steps are kept (a partial update, not a rewrite).
    */
-  setPlan(taskId: string, plan: PlanInput, actor: string): TaskDetail;
+  setPlan(taskId: string, plan: PlanInput, actor: string, opts?: { protectStarted?: boolean }): TaskDetail;
+  /** The steps `setPlan` would delete for this input, in plan order. Writes nothing. */
+  deletionsOf(taskId: string, plan: PlanInput): PlanDeletion[];
+  /**
+   * Patches steps and renames phases in place, nothing else changes. All-or-nothing: one bad ref or
+   * move changes nothing. One activity entry per change, as the single edits log.
+   */
+  updatePlan(taskId: string, input: PlanUpdateInput, actor: string): TaskDetail;
   addPhase(taskId: string, title: string, actor: string, opts?: { afterPhaseId?: string }): PlanPhase;
   updatePhase(phaseId: string, patch: { title: string }, actor: string): PlanPhase;
   deletePhase(phaseId: string, actor: string): void;

@@ -8,32 +8,36 @@ and MCP all behave the same.
 
 ### Statuses
 
-`idea → planned → in_progress → review → done`, shown as Ideas, Planned, In Progress, Review and Done.
+`backlog → planned → in_progress → review → done`, shown as Backlog, Planned, In Progress, Review and Done.
 Any move in any direction is allowed, subject to the plan gate. `status_changed_at` is set only when the
 status really changes. A move logs `status_changed`; closing logs `closed` instead.
 
+The first column was called Ideas (`idea`) until migration 006 renamed it. Status inputs (REST and MCP
+`move_task`, `list_tasks`) still read `idea` as `backlog` through `TaskStatusInput`, so agents with older
+instructions keep working; outputs only ever say `backlog`.
+
 ### Creating
 
-- `create_idea` (MCP) or **New idea** (UI): no plan, lands in Ideas.
-- `create_task` (MCP): requires a plan and lands in Planned. Like `POST /api/tasks`, it lands in Ideas
+- `add_to_backlog` (MCP) or **New task** (UI): no plan, lands in Backlog.
+- `create_task` (MCP): requires a plan and lands in Planned. Like `POST /api/tasks`, it lands in Backlog
   instead when no phase of the plan has a step.
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
   keys in the title are linked automatically (on later title edits too).
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
-  path, deepest first. `create_idea` and `create_task` create a project for an unknown path (at the
+  path, deepest first. `add_to_backlog` and `create_task` create a project for an unknown path (at the
   nearest folder with a `.git`, else the path itself) and unarchive an archived match. Other write tools
   return `NOT_FOUND` for an unknown path; read tools treat it as an empty project.
 
 ### The plan gate
 
-A task can leave Ideas only if its plan has at least one step
+A task can leave Backlog only if its plan has at least one step
 ([ADR 0004](../decisions/0004-plan-gate.md)). Otherwise `move` throws `PLAN_REQUIRED` (HTTP 422):
 
 - MCP's `move_task` adds a hint: call `set_plan` and retry, or use `close_task`, which needs no plan.
 - The UI shows a toast with **Write plan** when a drag is refused, and opens the plan editor when the
   status menu is.
 
-The plan side of the gate (a plan can't be emptied outside Ideas) is in [plans.md](plans.md).
+The plan side of the gate (a plan can't be emptied outside Backlog) is in [plans.md](plans.md).
 
 ### Entering Review
 
@@ -111,6 +115,9 @@ reliably than on instructions they read once.
   archiving is only for tidying. That's why delete requires archive but close doesn't.
 - **Numbers are never reused.** A `#N` in a commit, a PR or a note should never point at a different task
   later, so the counter only goes up even after deletes.
+- **Backlog, not Ideas.** Not everything in the first column is an idea: some are known to-dos, Jira
+  tickets or GitHub issues. "Backlog" fits all of them, and the MCP tool became `add_to_backlog` with no
+  `create_idea` alias, since an alias would keep the old word alive in agents' tool lists.
 - **Moving between projects is explicit.** A drag across lanes isn't allowed; changing project is a field
   edit, so a mis-drop can't move work to another repo.
 
@@ -123,7 +130,8 @@ reliably than on instructions they read once.
 | `apps/server/src/services/projects.ts`      | Project resolution from a workspace path                                       |
 | `apps/server/src/db/repos/tasks.ts`         | Task SQL, `nextNumber`, `lane`, `resolvedBy`                                   |
 | `apps/server/src/db/migrations/002_task_resolution.sql`, `003_task_number_counter.sql` | Resolution columns and the number counter |
-| `apps/server/src/mcp/tools/tasks.ts`        | `create_idea`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
-| `packages/contracts/src/schemas.ts`         | `TaskStatus`, `TaskResolution`, `CloseTaskInput`, `MoveTaskInput`              |
+| `apps/server/src/db/migrations/006_status_backlog.sql` | Renames the `idea` status to `backlog` (rebuilds `tasks`) |
+| `apps/server/src/mcp/tools/tasks.ts`        | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
+| `packages/contracts/src/schemas.ts`         | `TaskStatus`, `TaskStatusInput`, `TaskResolution`, `CloseTaskInput`, `MoveTaskInput`              |
 | `packages/contracts/src/derive.ts`          | `deriveAttention`, progress, current step                                      |
 | `apps/web/src/components/task/CloseTaskDialog.tsx`, `ResolutionCallout.tsx` | Closing and "Also resolved" in the panel           |

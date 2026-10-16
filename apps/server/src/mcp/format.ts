@@ -85,7 +85,7 @@ export function summaryLine(task: TaskSummary): string {
   if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
-  } else if (task.status === "idea") {
+  } else if (task.status === "backlog") {
     parts.push("no plan");
   }
   const links = task.links.map(shortLink);
@@ -131,6 +131,14 @@ function eventText(event: TaskEvent): string {
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
       break;
+    case "plan_set": {
+      // Uncut, unlike the generic fallback: the deleted titles are how a wiped plan gets rebuilt.
+      const deleted = Array.isArray(p.deleted) ? p.deleted.filter((d): d is string => typeof d === "string") : [];
+      const counts =
+        typeof p.phases === "number" && typeof p.steps === "number" ? ` (${p.phases} phases, ${p.steps} steps)` : "";
+      what = `set the plan${counts}${deleted.length ? `; deleted ${deleted.length}: ${deleted.join(", ")}` : ""}`;
+      break;
+    }
     case "labels_changed": {
       const list = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[]) : []);
       const changes = [...list("added").map((l) => `+${l}`), ...list("removed").map((l) => `-${l}`)];
@@ -151,6 +159,11 @@ function eventText(event: TaskEvent): string {
       what = `review round ${typeof p.round === "number" ? p.round : "?"} submitted: ${tally.join(", ") || "no findings"}`;
       break;
     }
+    case "suggested_model_changed":
+      what = str("tier")
+        ? `suggested model ${str("tier")}${str("reason") ? ` (${str("reason")})` : ""}`
+        : "suggested model cleared";
+      break;
     case "finding_resolved":
       what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
       break;
@@ -197,6 +210,15 @@ export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsag
   return (
     `This task has no labels. Suggest 1-3 to the user. ${source} ` +
     `Once they agree, call update_task(task: "#${task.number}", labels: [...]).`
+  );
+}
+
+/** A nudge, at planning moments, to suggest a model tier for a planned open task that has none. */
+export function suggestedModelHint(task: TaskDetail): string | null {
+  if (task.suggestedModel || task.progress.total === 0 || task.resolution || task.status === "done") return null;
+  return (
+    "This task has no suggested model. Judge how much reasoning implementing it needs and call " +
+    `update_task(task: "#${task.number}", suggestedModel: {tier: "light" | "standard" | "deep", reason}).`
   );
 }
 
@@ -252,12 +274,16 @@ function reviewLines(task: TaskDetail): string[] {
 export function renderTaskDetail(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { events?: number; labelsInUse?: ReadonlyArray<LabelUsage> } = {},
+  opts: { events?: number; labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean } = {},
 ): string {
   const lines: string[] = [];
   lines.push(`#${task.number} ${task.title} [${statusLabel(task.status)}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
   if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
+  if (task.suggestedModel) {
+    const { tier, reason } = task.suggestedModel;
+    lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
+  }
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;
@@ -289,7 +315,7 @@ export function renderTaskDetail(
   } else if (task.resolution) {
     lines.push("Plan: none.");
   } else {
-    lines.push("Plan: none yet. Add one with set_plan before moving this out of Ideas.");
+    lines.push("Plan: none yet. Add one with set_plan before moving this out of Backlog.");
   }
 
   lines.push(...reviewLines(task));
@@ -305,6 +331,8 @@ export function renderTaskDetail(
   }
   const labels = opts.labelsInUse ? labelHint(task, opts.labelsInUse) : null;
   if (labels) lines.push("", "Missing labels:", `- ${labels}`);
+  const model = opts.modelHint ? suggestedModelHint(task) : null;
+  if (model) lines.push("", "Missing suggested model:", `- ${model}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -319,7 +347,7 @@ export function renderTaskDetail(
 export function renderTaskShort(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { labelsInUse?: ReadonlyArray<LabelUsage> } = {},
+  opts: { labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });
 }

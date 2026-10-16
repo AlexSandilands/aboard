@@ -79,15 +79,15 @@ export const BoardCell = memo(function BoardCell({
           <SortableTaskCard key={task.id} task={task} selected={task.id === selectedTaskId} />
         ))}
       </SortableContext>
-      {status === "idea" && tasks.length === 0 ? (
+      {status === "backlog" && tasks.length === 0 ? (
         <Button
           variant="ghost-muted"
           size="xs"
           className="justify-start"
-          onClick={() => usePalette.getState().openPalette({ kind: "new-idea", projectId })}
+          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId })}
         >
           <PlusIcon />
-          Add idea
+          Add task
         </Button>
       ) : null}
       {hiddenCount > 0 ? (

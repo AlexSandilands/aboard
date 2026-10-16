@@ -1,4 +1,4 @@
-import { DEFAULT_REVIEW_MAX_ROUNDS, type AppSettings } from "@repo/contracts";
+import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings } from "@repo/contracts";
 
 /** Settings as a fresh install returns them, for fakes of SettingsService. */
 export const defaultSettings: AppSettings = {
@@ -12,4 +12,5 @@ export const defaultSettings: AppSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
+  modelTiers: EMPTY_MODEL_TIERS,
 };

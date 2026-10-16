@@ -1,7 +1,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { PlanInput, parsePlanMarkdown, type Project } from "@repo/contracts";
+import {
+  MODEL_TIERS,
+  ModelTier,
+  PlanInput,
+  parsePlanMarkdown,
+  SUGGESTED_MODEL_REASON_MAX,
+  type Project,
+} from "@repo/contracts";
 import { renderTaskShort } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { AppError } from "../errors.ts";
@@ -39,6 +46,20 @@ export const labelsField = z
   .describe(
     'Short type labels such as "ui", "backend", "server", "docs", "bug" or "tech-debt". Lowercased and deduped; ' +
       "reuse labels already on the board (board_overview lists them) rather than inventing near-duplicates.",
+  );
+
+export const suggestedModelField = z
+  .object({
+    tier: ModelTier.describe(MODEL_TIERS.map((t) => `${t.value}: ${t.description}`).join(" ")),
+    reason: z
+      .string()
+      .max(SUGGESTED_MODEL_REASON_MAX)
+      .optional()
+      .describe("One short sentence on why, e.g. 'Mechanical rename across 3 files'."),
+  })
+  .describe(
+    "The model tier you suggest for implementing this task, judged by its complexity and risk. The user maps each " +
+      "tier to a model, so the session that picks the task up starts on (or is reminded to switch to) that model.",
   );
 
 export const t3ThreadField = z
@@ -144,19 +165,20 @@ export function safeProject(services: Services, id: string): Project | undefined
 }
 
 /**
- * Mutating tools answer with a one-line confirmation plus the task's new state. `labelHint` adds the
- * "Missing labels" nudge; only the planning moments (set_plan, create_task) ask for it, so it isn't noise elsewhere.
+ * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
+ * "Missing labels" and "Suggested model" nudges; only the planning moments (set_plan, create_task) ask for them, so
+ * they aren't noise elsewhere.
  */
 export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { labelHint?: boolean } = {},
+  opts: { planningHints?: boolean } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
-  const body = opts.labelHint
-    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage() })
+  const body = opts.planningHints
+    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage(), modelHint: true })
     : renderTaskShort(task, project);
   return textResult(`${headline}\n\n${body}`);
 }
@@ -166,6 +188,7 @@ export function planFromArgs(args: {
   phases?: PlanInput["phases"] | undefined;
   markdown?: string | undefined;
   context?: string | undefined;
+  suggestedModel?: PlanInput["suggestedModel"];
 }): PlanInput | null {
   if (args.phases && args.markdown) {
     throw new AppError("VALIDATION", "Pass either phases or markdown, not both.");
@@ -184,7 +207,11 @@ export function planFromArgs(args: {
   }
   if (!plan) return null;
   const context = args.context ?? plan.context;
-  return { ...plan, ...(context !== undefined ? { context } : {}) };
+  return {
+    ...plan,
+    ...(context !== undefined ? { context } : {}),
+    ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
+  };
 }
 
 export const planInputFields = {
@@ -196,4 +223,5 @@ export const planInputFields = {
       "Alternative to phases: a markdown plan. '## Heading' = phase, '- [ ] item' = step ([x] done, [~] in progress, [!] blocked, [-] skipped); nested lines become step notes.",
     ),
   context: z.string().optional().describe("Markdown: approach, key decisions, constraints. Shown above the plan."),
+  suggestedModel: suggestedModelField.optional(),
 };

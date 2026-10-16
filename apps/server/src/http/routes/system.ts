@@ -56,6 +56,10 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   });
   app.post("/api/integrations/t3/import", importProjects);
   app.post("/api/integrations/t3/import-projects", importProjects);
+  app.get(
+    "/api/integrations/t3/models",
+    handle(async (c) => c.json(await integrations.t3ModelCatalog())),
+  );
   app.post(
     "/api/integrations/t3/test",
     handle(async (c) => c.json(await integrations.testT3())),

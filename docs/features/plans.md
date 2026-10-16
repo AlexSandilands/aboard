@@ -40,15 +40,35 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
     sets them. A kept step may move to another phase.
   - Anything without a matching id is new; anything omitted is deleted.
   - Positions are regenerated in input order. `context` updates the plan context only when given.
-- Smaller edits: `add_steps` (to a phase by number or id, the last phase by default, or a new phase),
-  `update_step` (status, title, notes, `appendNotes`), and REST: steps can be added, edited, moved and
-  deleted; phases can be added, renamed and deleted.
+  - `suggestedModel` sets the task's suggested model tier when given, and clears it when `null`
+    ([agent-handoff.md](agent-handoff.md#suggested-model)).
+- **The guard on `set_plan`.** Agents used it to update a few steps and wiped the rest of the plan, so the
+  MCP tool refuses with `CONFLICT` in two cases: the call would delete a step that isn't `todo` or has
+  notes, or it keeps some existing steps but drops a whole phase (a partial update, not a rewrite, even
+  when the dropped steps are untouched todos). The error lists those steps and points to `update_plan`;
+  `allowDeletes: true` overrides it. A first plan, and a rewrite that keeps no existing steps (a markdown
+  plan carries no ids) of a plan with no progress, go through; a markdown plan replacing a started plan
+  trips the guard. The guard is the service's `protectStarted` option; REST, the panel editor and
+  `create_task` don't pass it, because there someone is deliberately writing the whole plan.
+- **What was deleted.** A `set_plan` result that deleted steps says so (`Deleted 2 step(s): 1.1 a, 1.2 b.`),
+  and the `plan_set` activity entry records the deleted `label title` strings, so a plan wiped by mistake
+  can be rebuilt from the log.
+- Smaller edits:
+  - `update_plan` changes many steps and phases in one call without deleting anything:
+    `steps: [{step, status?, title?, notes?, appendNotes?, move?: {phase?, before?, after?}}]` and
+    `phases: [{phase, title}]`. It is all-or-nothing, and labels, phase numbers and ids are resolved
+    against the plan as it was before the call, so a move in the batch doesn't renumber later labels.
+    `move` takes a phase (the step goes to its end), `before`/`after` another step (the step goes to that
+    step's phase), or a phase with one of them. Each change is logged as the single edits are.
+  - `add_steps` (to a phase by number or id, the last phase by default, or a new phase) and `update_step`
+    (status, title, notes, `appendNotes`) for one change.
+  - REST: steps can be added, edited, moved and deleted; phases can be added, renamed and deleted.
 - Steps are referenced by id or by their `2.3` label.
 
 ### The gate on the plan side
 
-Outside Ideas a plan can't become empty. `set_plan`, deleting a phase and deleting a step all throw
-`PLAN_REQUIRED` if they'd leave a non-idea task with no steps. See
+Outside Backlog a plan can't become empty. `set_plan`, deleting a phase and deleting a step all throw
+`PLAN_REQUIRED` if they'd leave a task outside Backlog with no steps. See
 [task-lifecycle.md](task-lifecycle.md) and [ADR 0004](../decisions/0004-plan-gate.md).
 
 ### Markdown plans
@@ -86,13 +106,17 @@ Phase 1: Structure
   disagree with the plan.
 - **Replace keeps ids.** `set_plan` is a full replace so agents can rewrite a plan in one call, but
   matching by id keeps the status and notes of steps that survive.
+- **Replace is guarded, and there is a tool for patching.** Wording alone didn't stop agents using
+  `set_plan` for bulk updates, because no tool did that. `update_plan` is the tool for it, `set_plan` leads
+  with a warning and refuses to drop started or noted steps, or whole phases while keeping others, unless
+  told to, and says what it deleted.
 
 ## Code map
 
 | File                                        | What it does                                                         |
 | ------------------------------------------- | -------------------------------------------------------------------- |
-| `apps/server/src/services/plans.ts`         | `replacePlan`, `gate`, phase and step edits, `resolveStepId`, `withStatus` |
-| `apps/server/src/mcp/tools/plans.ts`        | `set_plan`, `add_steps`, `update_step`                               |
+| `apps/server/src/services/plans.ts`         | `replacePlan` (with the `protectStarted` guard), `deletionsOf`, `updatePlan`, `gate`, phase and step edits, `resolveStepId`, `withStatus` |
+| `apps/server/src/mcp/tools/plans.ts`        | `set_plan`, `update_plan`, `add_steps`, `update_step`                |
 | `apps/server/src/http/routes/plans.ts`      | REST for phases and steps                                            |
 | `apps/server/src/http/routes/tasks.ts`      | `PUT /api/tasks/:id/plan` and `POST /api/tasks/:id/phases`           |
 | `packages/contracts/src/planMarkdown.ts`    | `parsePlanMarkdown`                                                  |

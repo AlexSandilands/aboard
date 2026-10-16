@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local kanban board for coding agents: agents log ideas, write plans and move tasks over MCP; the web UI
+Local kanban board for coding agents: agents add tasks to a backlog, write plans and move them along over MCP; the web UI
 updates live. User-facing docs are the root `README.md` and the guides in `docs/guide/`; docs for changing
 the code are the rest of `docs/` (start at [docs/README.md](docs/README.md)).
 

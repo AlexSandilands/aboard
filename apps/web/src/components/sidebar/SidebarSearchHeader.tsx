@@ -26,7 +26,7 @@ import { useBoardView, useDialogs, usePalette } from "~/state/ui";
 import { useProjectFilter, useSetProjectFilter } from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
 
-/** Search field plus the segmented project-filter / add-project / new-idea buttons. */
+/** Search field plus the segmented project-filter / add-project / new-task buttons. */
 export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Project> }) {
   const search = useBoardView((s) => s.search);
   const setSearch = useBoardView((s) => s.setSearch);
@@ -86,9 +86,9 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
           </>
         ) : null}
         <SidebarHeaderIconButton
-          label="New idea"
-          tooltip="New idea (N)"
-          onClick={() => usePalette.getState().openPalette({ kind: "new-idea", projectId: projectFilter ?? undefined })}
+          label="New task"
+          tooltip="New task (N)"
+          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId: projectFilter ?? undefined })}
         >
           <SquarePenIcon />
         </SidebarHeaderIconButton>

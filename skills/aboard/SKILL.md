@@ -1,11 +1,11 @@
 ---
 name: aboard
-description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea or follow-up comes up mid-task, when writing an implementation plan, when finishing steps, opening PRs, or ending a session. Covers ideas, plans, step progress, PR/Jira/T3 thread links and handover notes.
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, step progress, PR/Jira/T3 thread links and handover notes.
 ---
 
 # Aboard (task board)
 
-The user keeps a local kanban board of their work across projects. Columns: **Ideas → Planned → In
+The user keeps a local kanban board of their work across projects. Columns: **Backlog → Planned → In
 Progress → Review → Done**, one swimlane per project. You read and update it through the `aboard`
 MCP server; the board updates live in the user's browser. Identify the project by passing
 `workspacePath` = your current working directory. Unknown paths create the project automatically.
@@ -19,9 +19,10 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the Jira issue, and your own T3 thread when you're in T3 Code.
-3. **Ideas are cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
-   follow-up), call `create_idea` once and carry on with your current work. Don't derail.
-4. **Plan before implementing.** A task can't leave Ideas without a plan. Use `set_plan` on an existing
+3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
+   follow-up, a Jira ticket for later), call `add_to_backlog` once and carry on with your current work.
+   Don't derail.
+4. **Plan before implementing.** A task can't leave Backlog without a plan. Use `set_plan` on an existing
    task, or `create_task` for new work (plan included, lands in Planned). A good plan has phases with
    3–8 concrete, verifiable steps each ("Add links table migration", not "Backend"). Put the approach
    and key decisions in `context`. Markdown checklists work too:
@@ -36,20 +37,39 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    Then `move_task` to `in_progress`.
 
    Tag tasks with `labels` for the kind of work, e.g. `["ui"]`, `["backend", "bug"]`, on
-   `create_task` / `create_idea`, or later with `update_task` (which replaces the list). Reuse the labels
+   `create_task` / `add_to_backlog`, or later with `update_task` (which replaces the list). Reuse the labels
    `board_overview` lists rather than inventing near-duplicates. The user filters the board by them, and
    `list_tasks` takes a `labels` filter too.
    If a task you just planned has no labels (the `set_plan` / `create_task` / `get_task` result says so
    under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
    before calling `update_task`.
 
+   When you write the plan, also set `suggestedModel` on `set_plan` / `create_task`: the tier the session
+   that implements it needs, with a one-line `reason`. The user maps each tier to a model, and hand-offs
+   from the board start on (or remind the user to switch to) that model.
+   - `light`: small, well-specified work with an obvious approach (copy changes, a one-file fix, mechanical edits).
+   - `standard`: a typical feature or fix across a few files that follows existing patterns.
+   - `deep`: cross-cutting, ambiguous or risky work (architecture, migrations, concurrency, security).
+
+   Change it later with `update_task` (`null` clears it). A suggestion is advice to the user: keep working on
+   whatever model you are on.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
    asking the user a question and waiting for the answer, mark the current step `blocked` with a note
-   saying what you need; set it back to `in_progress` once answered. Found more work? `add_steps`. When
-   revising with `set_plan`, pass existing step ids to keep their status.
+   saying what you need; set it back to `in_progress` once answered. Found more work? `add_steps`.
+   Several steps to update at once (mark a phase done, add notes, move a step, rename a phase)? One
+   `update_plan` call, with `steps: [{step: "2.3", status: "done"}, …]`; labels refer to the plan as it was
+   before the call.
+
+   **`set_plan` replaces the whole plan.** Every phase or step you don't pass back with its id is deleted,
+   with its status and notes. Use it to write a plan or deliberately rewrite one, never to update a few
+   steps. A call that would delete steps with progress (any status but `todo`) or notes, or a whole phase while keeping
+   other steps, is refused with `CONFLICT` unless you pass
+   `allowDeletes: true`; when it deletes anything, the result lists it.
+
 6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in
-   `links` to `create_task` / `create_idea`, or call `link`. Keys in the title are linked
+   `links` to `create_task` / `add_to_backlog`, or call `link`. Keys in the title are linked
    automatically. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
    as soon as the PR is open; GitHub PRs show live checks/review state on the board. `link` is
    idempotent, so linking twice is harmless.
@@ -90,7 +110,7 @@ it. That includes existing tasks you pick up or resume, not only ones you create
 
 1. Call `t3_thread_configuration` once → `threadId`.
 2. Call `t3_environment_read` once → `environmentId`.
-3. Pass `t3Thread: { environmentId, threadId }` to `create_task` / `create_idea`, or to `link` when you
+3. Pass `t3Thread: { environmentId, threadId }` to `create_task` / `add_to_backlog`, or to `link` when you
    start or resume an existing task. A task can have several threads; each session adds its own.
 
 T3 Code exposes no environment variable for this, so you must call those tools. A thread started from

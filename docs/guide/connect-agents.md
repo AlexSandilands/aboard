@@ -30,6 +30,9 @@ The server explains the basics when an agent connects. For the full workflow:
 - **Other agents:** paste [`skills/aboard/AGENTS-snippet.md`](../../skills/aboard/AGENTS-snippet.md) into
   your `AGENTS.md` or `CLAUDE.md`.
 
+Copy them again after upgrading: tools get renamed (for example `create_idea` became `add_to_backlog`), and
+an old copy sends agents to tools that no longer exist.
+
 ## Projects
 
 Agents identify the project by passing their working directory, so there's nothing to configure per

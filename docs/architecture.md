@@ -98,13 +98,15 @@ and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_cha
 SQLite through `node:sqlite` ([ADR 0002](decisions/0002-node-sqlite.md)), with WAL, foreign keys on and
 a 5-second busy timeout. Migrations are `apps/server/src/db/migrations/NNN_name.sql`, applied in name
 order at startup, each in its own transaction, and recorded in `migrations`. Never edit a shipped one;
-add the next number. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
+add the next number. A migration that rebuilds a table (SQLite's create, copy, drop, rename) starts with
+`-- migrate: foreign_keys off`: dropping the old table with foreign keys on would cascade-delete its
+children. The runner turns them off around that file and runs `foreign_key_check` before committing. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
 ORM.
 
 | Table             | Holds                                                                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
-| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override |
+| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason` |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, Jira, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
