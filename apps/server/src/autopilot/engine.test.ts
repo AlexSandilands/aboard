@@ -75,6 +75,23 @@ function setup(opts: { now?: () => Date } = {}) {
         .map((t) => ({ dedupeKey: `stray:${t.id}`, summary: "stray", taskId: t.id, projectId: null })),
     act: () => ({}),
   });
+  // Like Recurring tasks: one candidate per project, with no task.
+  const projectWide = defineAutomation({
+    key: "project_wide",
+    title: "Project-wide",
+    description: "Acts once per project.",
+    needsAgent: false,
+    schema: z.object({}),
+    fields: [],
+    defaults: {},
+    check: ({ projects }) =>
+      projects.map(({ project }) => ({
+        dedupeKey: `project_wide:${project.id}`,
+        summary: "act",
+        projectId: project.id,
+      })),
+    act: () => ({}),
+  });
   const started: Deferred[] = [];
   const runner: Runner = {
     start: ({ run }, update = () => {}) =>
@@ -82,7 +99,7 @@ function setup(opts: { now?: () => Date } = {}) {
         started.push({ run, resolve: (patch) => resolve({ ...patch, result: null }), reject, update });
       }),
   };
-  const h = createTestHarness({ integrations: { automations: [noop, agent, stray] } });
+  const h = createTestHarness({ integrations: { automations: [noop, agent, stray, projectWide] } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
@@ -228,6 +245,19 @@ describe("epic scope", () => {
     await settle(engine);
     expect(checks()).toBe(0);
     expect(s.tasks.summary(task.id).labels).toEqual([]);
+  });
+
+  it("never lets an epic switch on an automation that has no task, like Recurring tasks", async () => {
+    const { s, engine, epic, runs } = withEpic();
+    s.autopilot.setScope("epic", epic.id, "project_wide", { mode: "on" }, epic.projectId);
+    await settle(engine);
+    expect(runs("project_wide")).toEqual([]);
+
+    // The project's own switch still works, and an epic's Off doesn't hold it back.
+    s.autopilot.setScope("epic", epic.id, "project_wide", { mode: "off" }, epic.projectId);
+    s.autopilot.setScope("project", epic.projectId, "project_wide", { mode: "on" });
+    await settle(engine);
+    expect(runs("project_wide")).toMatchObject([{ projectId: epic.projectId, taskId: null, status: "succeeded" }]);
   });
 
   it("ignores an epic from another project", () => {
