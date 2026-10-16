@@ -9,7 +9,7 @@ import { TaskPanel } from "~/components/task/TaskPanel";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 import { useBoardEvents } from "~/state/queries";
 import { useDialogs, usePalette } from "~/state/ui";
-import { isEditableTarget, isInsidePopup } from "./keyboard";
+import { isEditableTarget, isInsidePopup, resolveCommand, runsImmediately, type KeybindingCommand } from "./keyboard";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = storageKey("sidebar-width");
 /** The board keeps at least this much room when the sidebar is dragged wider. */
@@ -51,38 +51,61 @@ export function AppLayout() {
   );
 }
 
+const IS_MAC = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
+
 /**
- * App-wide shortcuts: Ctrl/Cmd+K opens the palette, N starts a new task (in the scoped project),
- * Esc closes the detail panel when nothing nearer to the focus claims it.
+ * App-wide shortcuts from the table in `keyboard.ts`: Ctrl/Cmd+K opens the palette, N starts a new
+ * task (in the scoped project), Esc closes the detail panel.
+ *
+ * It listens in the capture phase because card controls stop their keydowns from bubbling, which
+ * would otherwise hide every shortcut while one of them has focus. Ctrl/Cmd+K runs right away.
+ * N and Esc must still yield to anything nearer the focus (inline inputs, plan editors, menus), and
+ * those signal that with `preventDefault`, so they wait until the event has finished dispatching
+ * and run only if nothing called it. A plain `stopPropagation` doesn't count as a claim.
  */
 function useGlobalKeybindings(panelOpen: boolean, closePanel: () => unknown) {
   const projectFilter = useProjectFilter();
-  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.isComposing) return;
+  const run = (command: KeybindingCommand) => {
     const palette = usePalette.getState();
-    const modifier = event.metaKey || event.ctrlKey;
-    if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
-      event.preventDefault();
+    if (command === "palette.open") {
       if (!palette.open) palette.openPalette();
-      return;
-    }
-    const dialogs = useDialogs.getState();
-    const overlayOpen = palette.open || dialogs.appSettingsOpen || dialogs.projectSettingsId !== null;
-    if (overlayOpen || isEditableTarget(event.target) || isInsidePopup(event.target)) return;
-    if (event.key === "Escape" && panelOpen) {
-      event.preventDefault();
-      closePanel();
-      return;
-    }
-    if (!modifier && !event.altKey && (event.key === "n" || event.key === "N") && !event.shiftKey) {
-      event.preventDefault();
+    } else if (command === "idea.new") {
       palette.openPalette({ kind: "new-task", projectId: projectFilter ?? undefined });
+    } else {
+      closePanel();
     }
+  };
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.isComposing) return;
+    const palette = usePalette.getState();
+    const dialogs = useDialogs.getState();
+    const command = resolveCommand(
+      event,
+      {
+        editableFocus: isEditableTarget(event.target),
+        popupFocus: isInsidePopup(event.target),
+        overlayOpen: palette.open || dialogs.appSettingsOpen || dialogs.projectSettingsId !== null,
+        panelOpen,
+        paletteOpen: palette.open,
+      },
+      IS_MAC,
+    );
+    if (command === null) return;
+    if (runsImmediately(command)) {
+      event.preventDefault();
+      run(command);
+      return;
+    }
+    // A timeout rather than a microtask: microtasks run between listeners, before the bubble phase.
+    setTimeout(() => {
+      if (event.defaultPrevented) return;
+      run(command);
+    }, 0);
   });
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => onKeyDown(event);
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
+    window.addEventListener("keydown", listener, { capture: true });
+    return () => window.removeEventListener("keydown", listener, { capture: true });
   }, []);
 }
