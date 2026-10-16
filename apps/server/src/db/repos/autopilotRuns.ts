@@ -120,6 +120,15 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
+    /** Finished headless runs that made a worktree, oldest first: what worktree cleanup looks at. */
+    finishedWithWorktree(): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          `SELECT * FROM autopilot_runs WHERE runner = 'headless' AND worktree_path IS NOT NULL
+           AND finished_at IS NOT NULL ORDER BY finished_at, id`,
+        )
+        .map(toRun);
+    },
     /** Real runs of these automations that started at or after `since`. */
     startedSince(automations: readonly string[], since: string): number {
       return (

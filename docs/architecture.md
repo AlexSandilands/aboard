@@ -46,7 +46,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files) and `server.json` while a server runs |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |

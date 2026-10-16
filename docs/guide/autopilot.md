@@ -14,6 +14,21 @@ Off** switch. Inherit follows the board, and the switch says what that means ("I
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings.
 
+## How agents run
+
+An automation that needs an agent picks its **runner** in its settings:
+
+- **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
+- **T3 Code only**: the thread gets the model you set for the task's tier, and never more access than T3 Code's
+  own default. You can lower it further.
+- **Headless only**: `claude -p` in a git worktree of its own under the board's data folder, never your
+  checkout, on a new `autopilot/…` branch. It has a budget and a timeout. Its session is linked on the card,
+  so **Open in terminal** picks it up where it stopped.
+
+Headless agents can't force-push, push to the default branch or merge a pull request. A worktree is removed
+once the task's PR merges, or after **Worktree retention** days (7 by default). One with uncommitted changes is
+kept.
+
 ## Limits
 
 In **Settings → Autopilot**:

@@ -314,6 +314,8 @@ export interface AutoLaunchChoice {
    * defaults to false: a branch named for a task to build on is usually another task's local, unpushed branch.
    */
   startFromOrigin?: boolean | undefined;
+  /** Lowers the access further than T3's default (an Autopilot automation's setting); never raises it. */
+  maxRuntimeMode?: T3RuntimeMode | undefined;
 }
 
 export type AutoLaunchSettings = Pick<StartT3ThreadInput, "modelSelection" | "runtimeMode" | "workspace">;
@@ -331,7 +333,10 @@ export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchC
   if (!modelSelection || !provider?.ready) return { ok: false, reason: "T3 Code has no model ready to start a thread" };
   // Unattended, so never more access than T3's default: the most permissive supported mode up to it.
   const order = T3_RUNTIME_MODES.map((m) => m.value);
-  const ceiling = order.indexOf(options.defaults.runtimeMode);
+  const ceiling = Math.min(
+    order.indexOf(options.defaults.runtimeMode),
+    choice.maxRuntimeMode ? order.indexOf(choice.maxRuntimeMode) : Infinity,
+  );
   const runtimeMode = runtimeModesFor(provider)
     .map((m) => m.value)
     .findLast((m) => order.indexOf(m) <= ceiling);

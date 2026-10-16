@@ -183,6 +183,22 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
           </Select>
         }
       />
+      <SettingsRow
+        title="Worktree retention"
+        description="How long a finished headless run's worktree is kept when its PR hasn't merged. Worktrees with uncommitted changes are always kept."
+        control={
+          <LimitInput
+            label="Worktree retention"
+            value={engine.worktreeRetentionDays}
+            min={1}
+            max={365}
+            integer
+            required
+            unit="days"
+            onSave={(next) => save({ worktreeRetentionDays: next ?? 7 })}
+          />
+        }
+      />
     </>
   );
 }
