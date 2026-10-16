@@ -60,6 +60,10 @@ export function linkText(link: TaskLink): string {
       const s = link.snapshot ? ` (${link.snapshot.title}, ${link.snapshot.status})` : "";
       return `T3 thread${s}${label} ${link.url}`;
     }
+    case "issue": {
+      const s = link.snapshot ? ` (${link.snapshot.state})` : "";
+      return `Issue ${link.ref.repo}#${link.ref.number}${s}${label} ${link.url}`;
+    }
     case "url":
       return `URL${label} ${link.url}`;
   }
@@ -73,6 +77,8 @@ function shortLink(link: TaskLink): string {
       return link.ref.key;
     case "t3_thread":
       return "T3 thread";
+    case "issue":
+      return `issue #${link.ref.number}`;
     case "url":
       return "link";
   }
@@ -310,6 +316,9 @@ export function renderTaskDetail(
     lines.push(`Also resolved: ${resolved.join("; ")}`);
   }
   if (task.attention.length) lines.push(`Needs attention: ${task.attention.map((a) => a.message).join("; ")}`);
+  if (task.import?.status === "pending") {
+    lines.push(`Import: pending. The title, description and labels are being filled in from ${task.import.sourceUrl}.`);
+  }
 
   if (task.description?.trim()) lines.push("", "Description:", task.description.trim());
   if (task.planContext?.trim()) lines.push("", "Plan context:", task.planContext.trim());

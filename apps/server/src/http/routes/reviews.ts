@@ -2,7 +2,7 @@ import { ResolveFindingInput, reviewFixInstructions, reviewLoopInstructions } fr
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
-import { headlessCliVersion } from "../../integrations/headlessReview.ts";
+import { claudeCliVersion } from "../../integrations/claudeCli.ts";
 import { discoverSkills } from "../../skills.ts";
 import { actorOf, handle, idParam, parseBody, parseQuery } from "../respond.ts";
 
@@ -70,7 +70,7 @@ export function registerReviewRoutes(app: Hono, { services, config }: AppContext
     handle(async (c) => {
       const { cli } = await parseBody(c, z.object({ cli: z.string().trim().nullable().optional() }));
       try {
-        return c.json({ ok: true, ...(await headlessCliVersion(cli ?? services.settings.get().headlessReviewCli)) });
+        return c.json({ ok: true, ...(await claudeCliVersion(cli ?? services.settings.get().headlessReviewCli)) });
       } catch (error) {
         return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) });
       }

@@ -27,6 +27,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     autoReview: null,
     review: null,
     suggestedModel: null,
+    import: null,
   };
 }
 

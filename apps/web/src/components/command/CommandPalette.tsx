@@ -8,6 +8,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ImportIcon,
   LayersIcon,
   LightbulbIcon,
   ListTodoIcon,
@@ -39,6 +40,7 @@ import {
 } from "./PaletteResults";
 import {
   filterItems,
+  issueImportRow,
   normalizeDescription,
   queryForEntry,
   queryForParent,
@@ -344,8 +346,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     const title = query.trim();
     if (!title || createTask.isPending) return;
     const { flow, projectId } = view;
+    const issue = issueImportRow(title, flow);
     createTask.mutate(
-      { projectId, title, description: normalizeDescription(description) },
+      issue
+        ? { projectId, sourceUrl: issue.sourceUrl }
+        : { projectId, title, description: normalizeDescription(description) },
       {
         onSuccess: (task) => {
           setLastProjectId(projectId);
@@ -359,13 +364,17 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           toastManager.add({
             type: "success",
             title: "Added to Backlog",
-            description: `#${task.number} ${task.title}`,
+            description: `#${task.number} ${task.title}${issue ? " · fetching details" : ""}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
           if (keepOpen) {
             setDescription("");
             replaceQuery("");
-          } else closePalette();
+          } else {
+            closePalette();
+            // An import's panel shows the details arriving; a typed title has nothing more to show.
+            if (issue) openTask(task.id);
+          }
         },
       },
     );
@@ -670,6 +679,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const isSubmenu = stack.length > 1;
   const hasHighlightedFolder = view.kind === "browse" && highlighted !== null && highlighted.startsWith("browse:");
   const titleProject = view.kind === "title" ? projectById.get(view.projectId) : undefined;
+  const importRow = view.kind === "title" ? issueImportRow(query, view.flow) : null;
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === "Backspace" && query === "" && isSubmenu) {
@@ -808,10 +818,12 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       break;
     case "title":
       placeholder = "Task title…";
-      footerActionLabel = "Create";
+      footerActionLabel = importRow ? "Import" : "Create";
       inputAccessory = (
         <InputAction
-          label={createTask.isPending ? "Creating" : "Create"}
+          label={
+            importRow ? (createTask.isPending ? "Importing" : "Import") : createTask.isPending ? "Creating" : "Create"
+          }
           shortcut="Enter"
           disabled={!query.trim() || createTask.isPending}
           onClick={() => submitTitle(false)}
@@ -829,16 +841,24 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                 : "Opens the task with the plan editor"
             }
           />
-          <div className="px-4 pb-3">
-            <Textarea
-              size="sm"
-              aria-label="Description (optional)"
-              placeholder={`Description (optional) · Tab to focus · ${MOD_LABEL}+Enter to create`}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              onKeyDown={handleDescriptionKeyDown}
+          {importRow ? (
+            <ContextRow
+              icon={<ImportIcon className={ITEM_ICON_CLASS} />}
+              title={importRow.title}
+              description={importRow.description}
             />
-          </div>
+          ) : (
+            <div className="px-4 pb-3">
+              <Textarea
+                size="sm"
+                aria-label="Description (optional)"
+                placeholder={`Description (optional) · Tab to focus · ${MOD_LABEL}+Enter to create`}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                onKeyDown={handleDescriptionKeyDown}
+              />
+            </div>
+          )}
         </>
       );
       emptyStateMessage = undefined;

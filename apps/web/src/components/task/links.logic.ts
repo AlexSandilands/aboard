@@ -1,6 +1,7 @@
 import {
   isT3ThreadId,
   type ClassifiedLink,
+  type IssueSnapshot,
   type T3IntegrationStatus,
   type T3ThreadSnapshot,
   type T3ThreadStatus,
@@ -17,10 +18,18 @@ export function describeLinkInput(link: ClassifiedLink | null): { kind: Classifi
       return { kind: "jira", label: `Jira issue ${link.key}` };
     case "t3_thread":
       return { kind: "t3_thread", label: "T3 Code thread" };
+    case "issue":
+      return { kind: "issue", label: `GitHub issue ${link.ref.repo}#${link.ref.number}` };
     case "url":
       return { kind: "url", label: `Link to ${hostnameOf(link.url) ?? link.url}` };
   }
 }
+
+/** GitHub's issue colours: green while open, purple once closed. */
+export const ISSUE_STATE: Record<IssueSnapshot["state"], { label: string; tone: string }> = {
+  open: { label: "Open", tone: "text-emerald-600 dark:text-emerald-300/90" },
+  closed: { label: "Closed", tone: "text-violet-600 dark:text-violet-300/90" },
+};
 
 /** Why the "Add link" input isn't recognised: a T3 thread id needs a running T3 to know which environment it is in. */
 export function unrecognisedLinkHint(value: string, t3: Pick<T3IntegrationStatus, "detected">): string {

@@ -1,5 +1,5 @@
 import type { TaskReviewSummary } from "./reviews.ts";
-import type { AttentionReason, CurrentStep, PlanPhase, StepStatus, TaskLink } from "./schemas.ts";
+import type { AttentionReason, CurrentStep, PlanPhase, StepStatus, TaskImport, TaskLink } from "./schemas.ts";
 
 /** Statuses that count as finished for progress. */
 export function isStepComplete(status: StepStatus): boolean {
@@ -57,8 +57,16 @@ export function deriveAttention(
   phases: ReadonlyArray<PlanPhase>,
   links: ReadonlyArray<TaskLink>,
   review: TaskReviewSummary | null = null,
+  issueImport: TaskImport | null = null,
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
+  if (issueImport?.status === "failed") {
+    reasons.push({
+      kind: "import_failed",
+      severity: "warning",
+      message: issueImport.error ? `Import failed: ${issueImport.error}` : "Import failed",
+    });
+  }
   const blocked = phases.flatMap((p) => p.steps).filter((s) => s.status === "blocked");
   if (blocked.length > 0) {
     reasons.push({

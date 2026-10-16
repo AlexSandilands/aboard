@@ -1,4 +1,4 @@
-import type { AppSettings, PrSnapshot, T3ThreadSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
+import type { AppSettings, IssueSnapshot, PrSnapshot, T3ThreadSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
@@ -122,7 +122,7 @@ const ghLink = (id: string, number: number, host = "github.com", repoName = "o/r
   prLink(id, `https://${host}/${repoName}/pull/${number}`, { host, repo: repoName, number });
 
 function fakeServices(links: TaskLink[], settings: Partial<AppSettings> = {}, taskStatus: TaskStatus = "review") {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | null>();
+  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
   const services: GithubServices = {
     links: {
       listByKind: (kind) => links.filter((l) => l.kind === kind),

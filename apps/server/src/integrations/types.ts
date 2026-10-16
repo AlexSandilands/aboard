@@ -22,6 +22,10 @@ export interface Integrations {
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;
+  /** Fills in a task created from an issue URL in the background (see TasksService.create). No-op unless its import is pending. */
+  startImport(taskId: string): void;
+  /** Queues the imports a restart left pending. Runs whether or not the pollers do. */
+  resumeImports(): void;
   /** T3 projects available to import (read-only source: shell API or a temp copy of statev2.sqlite). */
   listT3Projects(): Promise<T3ProjectCandidate[]>;
   importT3Projects(t3ProjectIds: string[]): Promise<Project[]>;

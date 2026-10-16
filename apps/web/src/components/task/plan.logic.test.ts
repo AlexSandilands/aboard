@@ -58,6 +58,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     autoReview: null,
     review: null,
     suggestedModel: null,
+    import: null,
     description: null,
     planContext: null,
     phases,

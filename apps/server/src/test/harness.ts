@@ -1,19 +1,32 @@
 import { createApp } from "../app.ts";
 import { createContext } from "../context.ts";
 import type { BoardEvent } from "@repo/contracts";
+import { GhError } from "../integrations/gh.ts";
+import type { IntegrationOverrides } from "../integrations/index.ts";
 
 /** In-memory server context + app for tests. `events` collects everything published on the bus. */
-export function createTestHarness(overrides: { webPort?: number } = {}) {
-  const ctx = createContext({
-    dbPath: ":memory:",
-    port: 4317,
-    webPort: 5317,
-    token: null,
-    t3Home: "/nonexistent",
-    pollers: false,
-    userHome: "/nonexistent",
-    ...overrides,
-  });
+/** Nothing in a test may reach `gh`, GitHub or Claude Code; an import started by a route fails at once instead. */
+const NO_PROCESSES: IntegrationOverrides = {
+  runGh: () => Promise.reject(new GhError("gh is not available in tests", false)),
+  runImport: () => Promise.reject(new Error("Claude Code is not available in tests")),
+  listMcpServers: () => Promise.resolve([]),
+};
+
+export function createTestHarness(overrides: { webPort?: number; integrations?: IntegrationOverrides } = {}) {
+  const { integrations, ...config } = overrides;
+  const ctx = createContext(
+    {
+      dbPath: ":memory:",
+      port: 4317,
+      webPort: 5317,
+      token: null,
+      t3Home: "/nonexistent",
+      pollers: false,
+      userHome: "/nonexistent",
+      ...config,
+    },
+    { ...NO_PROCESSES, ...integrations },
+  );
   const app = createApp(ctx);
   const events: BoardEvent[] = [];
   ctx.bus.subscribe((e) => events.push(e));

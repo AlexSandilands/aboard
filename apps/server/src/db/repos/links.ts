@@ -1,4 +1,13 @@
-import type { LinkKind, PrRef, PrSnapshot, T3ThreadRef, T3ThreadSnapshot, TaskLink } from "@repo/contracts";
+import type {
+  IssueRef,
+  IssueSnapshot,
+  LinkKind,
+  PrRef,
+  PrSnapshot,
+  T3ThreadRef,
+  T3ThreadSnapshot,
+  TaskLink,
+} from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
 
@@ -40,6 +49,13 @@ export function toLink(r: LinkRow): TaskLink {
         kind: "t3_thread",
         ref: parseJson<T3ThreadRef>(r.ref_json) ?? { environmentId: "", threadId: "" },
         snapshot: parseJson<T3ThreadSnapshot>(r.snapshot_json),
+      };
+    case "issue":
+      return {
+        ...base,
+        kind: "issue",
+        ref: parseJson<IssueRef>(r.ref_json) ?? { host: "", repo: "", number: 0 },
+        snapshot: parseJson<IssueSnapshot>(r.snapshot_json),
       };
     case "url":
       return { ...base, kind: "url" };
