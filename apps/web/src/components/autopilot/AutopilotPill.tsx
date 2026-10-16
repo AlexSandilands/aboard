@@ -1,4 +1,4 @@
-import type { Project } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, type Project } from "@repo/contracts";
 import { PauseIcon, ZapIcon } from "lucide-react";
 import { Popover, PopoverClose, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -124,6 +124,14 @@ function AutopilotPopover({ project }: { project: Project }) {
                   {inheritLabel(parent)}
                 </span>
               </div>
+              {automation.key === AUTOPILOT_RECURRING ? (
+                <PopoverClose
+                  className="w-fit cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => useDialogs.getState().openProjectSettings(project.id, "recurring")}
+                >
+                  Recurring tasks…
+                </PopoverClose>
+              ) : null}
             </li>
           );
         })}

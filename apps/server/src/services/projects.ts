@@ -31,7 +31,10 @@ export function repositoryRootOf(path: string): string {
 }
 
 /** Projects: lanes on the board, optionally bound to a workspace folder. */
-export function createProjectsService(core: Core): ProjectsService {
+export function createProjectsService(
+  core: Core,
+  hooks: { onUnarchived?: (projectId: string) => void } = {},
+): ProjectsService {
   const { repos } = core;
 
   const get = (id: string): Project => {
@@ -124,6 +127,7 @@ export function createProjectsService(core: Core): ProjectsService {
         // Clients drop an archived lane's tasks; unarchiving must send them back.
         if (current.archivedAt && !next.archivedAt) {
           for (const task of repos.tasks.list({ projectId: id })) fx.task(task.id);
+          hooks.onUnarchived?.(id);
         }
         return next;
       });

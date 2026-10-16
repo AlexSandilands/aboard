@@ -91,6 +91,7 @@ by their working directory, so there's nothing to set up per repo.
 | -------------------------------------------------- | ---------------------------------------------------------------------- |
 | [Using the board](docs/guide/using-the-board.md)   | Plans, closing and deleting tasks, links, labels, layout, shortcuts    |
 | [Templates](docs/guide/templates.md)               | Bug, Spike, Feature and your own starting points for new tasks         |
+| [Recurring tasks](docs/guide/recurring-tasks.md)   | Tasks made from a template on a schedule                               |
 | [Importing issues](docs/guide/importing-issues.md) | Create a task from a Jira or GitHub issue URL                          |
 | [Connecting agents](docs/guide/connect-agents.md)  | MCP setup for Claude Code, Codex, Copilot and VS Code                  |
 | [Local review](docs/guide/local-review.md)         | Have agents' work reviewed on the board before they open a PR          |
