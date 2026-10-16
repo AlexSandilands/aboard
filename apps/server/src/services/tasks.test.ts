@@ -417,3 +417,56 @@ describe("events", () => {
     });
   });
 });
+
+describe("suggested model", () => {
+  it("is set by set_plan and create, kept when omitted, and cleared with null", () => {
+    const { s, project } = setup();
+    const created = s.tasks.create({
+      projectId: project.id,
+      title: "T",
+      plan: { ...plan("a"), suggestedModel: { tier: "light", reason: "  " } },
+    });
+    expect(created.suggestedModel).toEqual({ tier: "light", reason: null });
+
+    s.plans.setPlan(created.id, { ...plan("a", "b"), suggestedModel: { tier: "deep", reason: "Migration" } }, "agent");
+    expect(s.tasks.detail(created.id).suggestedModel).toEqual({ tier: "deep", reason: "Migration" });
+
+    s.plans.setPlan(created.id, plan("a"), "agent");
+    expect(s.tasks.detail(created.id).suggestedModel).toEqual({ tier: "deep", reason: "Migration" });
+
+    const cleared = s.tasks.update(created.id, { suggestedModel: null }, "user");
+    expect(cleared.suggestedModel).toBeNull();
+    expect(cleared.events.filter((e) => e.type === "suggested_model_changed").map((e) => e.payload)).toEqual([
+      { tier: "light", reason: null },
+      { tier: "deep", reason: "Migration" },
+      { tier: null, reason: null },
+    ]);
+  });
+
+  it("logs nothing when the suggestion is unchanged", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "T" });
+    s.tasks.update(task.id, { suggestedModel: { tier: "standard" } }, "user");
+    const again = s.tasks.update(task.id, { suggestedModel: { tier: "standard", reason: "" } }, "user");
+    expect(again.events.filter((e) => e.type === "suggested_model_changed")).toHaveLength(1);
+    expect(s.tasks.summary(task.id).suggestedModel).toEqual({ tier: "standard", reason: null });
+  });
+
+  it("round-trips the model tier settings, storing blank descriptions as none", () => {
+    const { s } = setup();
+    const t3 = { selection: { instanceId: "claude", model: "sonnet", options: [] }, label: "Claude Sonnet" };
+    const updated = s.settings.update({
+      modelTiers: {
+        light: { description: "  ", t3 },
+        standard: { description: "Sonnet, medium effort", t3: null },
+        deep: { description: null, t3: null },
+      },
+    });
+    expect(updated.modelTiers.light).toEqual({ description: null, t3 });
+    expect(s.settings.get().modelTiers.standard.description).toBe("Sonnet, medium effort");
+    // A partial update leaves the other tiers alone.
+    const partial = s.settings.update({ modelTiers: { deep: { description: "Opus", t3: null } } });
+    expect(partial.modelTiers).toMatchObject({ light: { t3 }, standard: { description: "Sonnet, medium effort" } });
+    expect(partial.modelTiers.deep.description).toBe("Opus");
+  });
+});

@@ -2,6 +2,7 @@ import {
   defaultHandoffMode,
   taskHandoffPrompt,
   type T3LaunchOptions,
+  type T3LaunchSuggestion,
   type T3ModelSelection,
   type TaskSummary,
 } from "@repo/contracts";
@@ -15,13 +16,15 @@ import { toastManager } from "~/components/ui/toast";
 import { ApiError } from "~/lib/api";
 import { cn } from "~/lib/utils";
 import { useStartT3Thread } from "~/state/mutations";
-import { useBoard, useT3LaunchOptions } from "~/state/queries";
+import { useBoard, useSettings, useT3LaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   clampRuntimeMode,
   keepsCommandId,
   findModel,
   initialWorkspaceChoice,
+  launchModelSelection,
+  selectionAfterPlanToggle,
   toLaunchWorkspace,
   type WorkspaceChoice,
 } from "./handoff.logic";
@@ -66,6 +69,7 @@ function LaunchContent({ task, onDone }: { task: TaskSummary; onDone: () => void
 }
 
 function LaunchUnavailable({ task, message, onRetry }: { task: TaskSummary; message: string; onRetry: () => void }) {
+  const modelTiers = useSettings().data?.modelTiers;
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
       <p className="flex items-start gap-2">
@@ -76,7 +80,7 @@ function LaunchUnavailable({ task, message, onRetry }: { task: TaskSummary; mess
         <Button size="sm" variant="outline" onClick={onRetry}>
           Retry
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => copyHandoffPrompt(task, defaultHandoffMode(task))}>
+        <Button size="sm" variant="ghost" onClick={() => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)}>
           Copy prompt instead
         </Button>
       </div>
@@ -89,7 +93,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
     taskHandoffPrompt({ task, boardUrl: window.location.origin, mode: plan ? "plan" : "work", linkedThread: true });
   const [planWithMe, setPlanWithMe] = useState(() => defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
-  const [selection, setSelection] = useState<T3ModelSelection | null>(options.defaults.modelSelection);
+  const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
   const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
   const [choice, setChoice] = useState<WorkspaceChoice>(() => initialWorkspaceChoice(options));
@@ -101,10 +105,17 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
   const blocker =
     !selection || !model?.provider.ready ? "Choose an available model" : !workspace ? "Choose a branch" : null;
 
+  const changeSelection = (next: T3ModelSelection | null) => {
+    setSelection(next);
+    const nextProvider = options.providers.find((p) => p.instanceId === next?.instanceId);
+    setRuntimeMode((mode) => clampRuntimeMode(mode, nextProvider));
+  };
+
   const togglePlan = () => {
     const next = !planWithMe;
-    // Swap the generated prompt, but never discard the user's own edits.
+    // Swap the generated prompt and the mode's model, but never discard the user's own choices.
     if (prompt === promptFor(planWithMe)) setPrompt(promptFor(next));
+    changeSelection(selectionAfterPlanToggle(options, selection, next));
     setPlanWithMe(next);
   };
 
@@ -158,19 +169,7 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
           className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
-          <ModelPicker
-            options={options}
-            selection={selection}
-            onChange={(next) => {
-              setSelection(next);
-              setRuntimeMode((mode) =>
-                clampRuntimeMode(
-                  mode,
-                  options.providers.find((p) => p.instanceId === next.instanceId),
-                ),
-              );
-            }}
-          />
+          <ModelPicker options={options} selection={selection} onChange={changeSelection} />
           {selection ? <TraitsPicker options={options} selection={selection} onChange={setSelection} /> : null}
           <AccessPicker provider={provider} value={runtimeMode} onChange={setRuntimeMode} />
           <ComposerControl
@@ -198,6 +197,25 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
         <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
         <RefPicker options={options} choice={choice} onChange={setChoice} />
       </div>
+      {options.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
+  );
+}
+
+/** Which model tier the task's planner suggested, and whether the dialog is using it. */
+function SuggestionNote({ suggestion, planWithMe }: { suggestion: T3LaunchSuggestion; planWithMe: boolean }) {
+  const status = planWithMe
+    ? "Not used while planning."
+    : suggestion.unavailable
+      ? `${suggestion.unavailable} Using T3's default instead.`
+      : null;
+  return (
+    <p className="mt-2 px-1 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">Suggested model: {suggestion.tier}</span>
+      {suggestion.reason ? ` · ${suggestion.reason}` : null}
+      {status ? (
+        <span className={cn("block", !planWithMe && suggestion.unavailable && "text-warning")}>{status}</span>
+      ) : null}
+    </p>
   );
 }

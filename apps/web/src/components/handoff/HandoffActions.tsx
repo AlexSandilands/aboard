@@ -4,6 +4,7 @@ import {
   taskHandoffPrompt,
   taskReferenceLine,
   type HandoffMode,
+  type ModelTiers,
   type TaskSummary,
 } from "@repo/contracts";
 import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, TerminalIcon } from "lucide-react";
@@ -13,6 +14,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
+import { useSettings } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 
 type Variant = "card" | "panel";
@@ -24,8 +26,18 @@ const chipClassName =
 const stop = (event: SyntheticEvent) => event.stopPropagation();
 const cardHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 
-export function copyHandoffPrompt(task: Pick<TaskSummary, "id" | "number" | "title">, mode: HandoffMode) {
-  const prompt = taskHandoffPrompt({ task, boardUrl: window.location.origin, mode });
+/** `modelTiers` names the task's suggested model in a work prompt; without it the line shows the bare tier. */
+export function copyHandoffPrompt(
+  task: Pick<TaskSummary, "id" | "number" | "title" | "suggestedModel">,
+  mode: HandoffMode,
+  modelTiers: ModelTiers | undefined,
+) {
+  const prompt = taskHandoffPrompt({
+    task,
+    boardUrl: window.location.origin,
+    mode,
+    ...(modelTiers ? { modelTiers } : {}),
+  });
   copyToClipboard(prompt, mode === "plan" ? "planning prompt" : "prompt");
 }
 
@@ -48,6 +60,7 @@ export function HandoffMenu({
   canStartT3: boolean;
 }) {
   const suggested = defaultHandoffMode(task);
+  const modelTiers = useSettings().data?.modelTiers;
   return (
     <Menu>
       <Tooltip>
@@ -78,12 +91,12 @@ export function HandoffMenu({
             <MenuSeparator />
           </>
         ) : null}
-        <MenuItem onClick={() => copyHandoffPrompt(task, "work")}>
+        <MenuItem onClick={() => copyHandoffPrompt(task, "work", modelTiers)}>
           <ClipboardCopyIcon />
           Copy prompt
           {suggested === "work" ? <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span> : null}
         </MenuItem>
-        <MenuItem onClick={() => copyHandoffPrompt(task, "plan")}>
+        <MenuItem onClick={() => copyHandoffPrompt(task, "plan", modelTiers)}>
           <LightbulbIcon />
           Copy planning prompt
           {suggested === "plan" ? <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span> : null}

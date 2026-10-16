@@ -44,6 +44,16 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    under **Missing labels**), suggest 1–3 to the user, preferring ones already in use, and wait for their OK
    before calling `update_task`.
 
+   When you write the plan, also set `suggestedModel` on `set_plan` / `create_task`: the tier the session
+   that implements it needs, with a one-line `reason`. The user maps each tier to a model, and hand-offs
+   from the board start on (or remind the user to switch to) that model.
+   - `light`: small, well-specified work with an obvious approach (copy changes, a one-file fix, mechanical edits).
+   - `standard`: a typical feature or fix across a few files that follows existing patterns.
+   - `deep`: cross-cutting, ambiguous or risky work (architecture, migrations, concurrency, security).
+
+   Change it later with `update_task` (`null` clears it). A suggestion is advice to the user: keep working on
+   whatever model you are on.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
    asking the user a question and waiting for the answer, mark the current step `blocked` with a note

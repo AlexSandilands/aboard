@@ -5,6 +5,7 @@ import type {
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
+  T3ModelCatalog,
   T3ProjectCandidate,
   TaskLink,
 } from "@repo/contracts";
@@ -23,6 +24,8 @@ export interface Integrations {
   refreshLink(linkId: string): Promise<void>;
   /** Models, refs and defaults for starting a T3 Code thread for a task. */
   t3LaunchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */
+  t3ModelCatalog(): Promise<T3ModelCatalog>;
   /** Starts a T3 Code thread for a task and links it to the task. */
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Re-runs T3 discovery + a live-status request and returns the resulting status. */

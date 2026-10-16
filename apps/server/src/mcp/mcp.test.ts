@@ -530,6 +530,47 @@ describe("MCP endpoint", () => {
     expect(await call("get_task", { task: "#2" })).not.toContain("Missing labels:");
   });
 
+  it("sets, keeps and clears the suggested model through set_plan, create_task and update_task", async () => {
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      const body = text(result);
+      expect(result.isError ? body : null).toBeNull();
+      return body;
+    };
+    const workspacePath = "C:/Fake/proj";
+    const markdown = "## Build\n- [ ] route";
+
+    const created = await call("create_task", {
+      title: "Endpoint",
+      workspacePath,
+      markdown,
+      suggestedModel: { tier: "light", reason: "One route" },
+    });
+    expect(created).toContain("Suggested model: light (One route)");
+    expect(created).not.toContain("Missing suggested model:");
+
+    await call("add_to_backlog", { title: "Bare", workspacePath });
+    const planned = await call("set_plan", { task: "#2", markdown });
+    expect(planned).toContain("Missing suggested model:");
+    expect(planned).toContain('update_task(task: "#2", suggestedModel:');
+    const suggested = await call("set_plan", { task: "#2", markdown, suggestedModel: { tier: "deep" } });
+    expect(suggested).toContain("Suggested model: deep");
+    // Revising the plan without the argument keeps the suggestion.
+    expect(await call("set_plan", { task: "#2", markdown })).toContain("Suggested model: deep");
+
+    expect(await call("update_task", { task: "#2", suggestedModel: { tier: "standard" } })).toContain(
+      "Suggested model: standard",
+    );
+    expect(await call("update_task", { task: "#2", suggestedModel: null })).not.toContain("Suggested model:");
+    expect(await call("get_task", { task: "#2" })).toContain("suggested model cleared");
+
+    const rejected = await client.callTool({
+      name: "update_task",
+      arguments: { task: "#2", suggestedModel: { tier: "huge" } },
+    });
+    expect(rejected.isError).toBe(true);
+  });
+
   it("offers generic label examples only when the board has no labels yet", async () => {
     const created = await client.callTool({
       name: "create_task",

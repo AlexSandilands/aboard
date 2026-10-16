@@ -40,6 +40,8 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
     sets them. A kept step may move to another phase.
   - Anything without a matching id is new; anything omitted is deleted.
   - Positions are regenerated in input order. `context` updates the plan context only when given.
+  - `suggestedModel` sets the task's suggested model tier when given, and clears it when `null`
+    ([agent-handoff.md](agent-handoff.md#suggested-model)).
 - **The guard on `set_plan`.** Agents used it to update a few steps and wiped the rest of the plan, so the
   MCP tool refuses with `CONFLICT` in two cases: the call would delete a step that isn't `todo` or has
   notes, or it keeps some existing steps but drops a whole phase (a partial update, not a rewrite, even

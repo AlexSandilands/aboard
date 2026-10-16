@@ -150,6 +150,50 @@ export function modelTraits(model: T3LaunchModel | undefined) {
   return { effort: select?.type === "select" ? select : null, fastMode };
 }
 
+/**
+ * The model a launch starts on: the task's suggested tier's model when working and it resolved, else T3's
+ * default. Planning ignores the suggestion; the tier is about implementing.
+ */
+export function launchModelSelection(
+  options: Pick<T3LaunchOptions, "suggestion" | "defaults">,
+  planWithMe: boolean,
+): T3ModelSelection | null {
+  if (!planWithMe && options.suggestion?.modelSelection) return options.suggestion.modelSelection;
+  return options.defaults.modelSelection;
+}
+
+const sameSelection = (a: T3ModelSelection | null, b: T3ModelSelection | null) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The selection after toggling "Plan with me": swapped to the new mode's model, unless the user already picked
+ * a model by hand, which is kept.
+ */
+export function selectionAfterPlanToggle(
+  options: Pick<T3LaunchOptions, "suggestion" | "defaults">,
+  current: T3ModelSelection | null,
+  nextPlanWithMe: boolean,
+): T3ModelSelection | null {
+  if (!sameSelection(current, launchModelSelection(options, !nextPlanWithMe))) return current;
+  return launchModelSelection(options, nextPlanWithMe);
+}
+
+/**
+ * How a model tier's T3 model is named in prompts and settings, e.g. "Claude Sonnet 5.5, High, fast". Only
+ * options set explicitly are named; the model's defaults go unsaid.
+ */
+export function selectionLabel(catalog: Pick<T3LaunchOptions, "providers">, selection: T3ModelSelection): string {
+  const found = findModel(catalog, selection);
+  if (!found) return selection.model;
+  const { effort, fastMode } = modelTraits(found.model);
+  const parts = [found.model.name];
+  const effortId = effort ? selection.options.find((o) => o.id === effort.id)?.value : undefined;
+  const effortLabel = effort?.options.find((o) => o.id === effortId)?.label;
+  if (effortLabel) parts.push(effortLabel);
+  if (fastMode && selection.options.some((o) => o.id === fastMode.id && o.value === true)) parts.push("fast");
+  return parts.join(", ");
+}
+
 // ── Access ───────────────────────────────────────────────────────────────
 
 export function runtimeModesFor(provider: Pick<T3LaunchProvider, "supportedRuntimeModes"> | undefined) {

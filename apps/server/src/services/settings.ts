@@ -1,4 +1,4 @@
-import { DEFAULT_REVIEW_MAX_ROUNDS, type AppSettings } from "@repo/contracts";
+import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings, type ModelTiers } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import type { Core } from "./core.ts";
 import type { SettingsService } from "./types.ts";
@@ -16,7 +16,19 @@ const DEFAULTS: StoredSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
+  modelTiers: EMPTY_MODEL_TIERS,
 };
+
+/** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
+const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): ModelTiers => ({
+  ...current,
+  ...Object.fromEntries(
+    Object.entries(input).map(([tier, setting]) => [
+      tier,
+      { ...setting, description: setting.description?.trim() || null },
+    ]),
+  ),
+});
 
 /** Stored settings over their defaults. Also read by summaries, which derive review state from max rounds. */
 export function loadSettings(repos: Repos): StoredSettings {
@@ -65,6 +77,8 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }
+        if (input.modelTiers !== undefined)
+          repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
       });
       return get();
     },

@@ -21,6 +21,9 @@ Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with
 - **Labels:** tag tasks with the kind of work (`ui`, `backend`, `bug`), from the task panel or by agents,
   and filter the board to any of several labels. Agents are asked to suggest labels for tasks that have
   none. Each label gets a colour you can change.
+- **Suggested model:** the agent that plans a task suggests a model tier (light, standard or deep) for
+  implementing it. Say what each tier means in **Settings → Model tiers**; copied prompts name it, and new
+  T3 Code threads start on it.
 - **Your layout:** collapse a column (Done starts collapsed) or just one project's cell, and collapse,
   reorder or hide the task panel's sections. Layout is saved per browser.
 

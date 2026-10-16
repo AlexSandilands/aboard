@@ -30,6 +30,7 @@ import { cn } from "~/lib/utils";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
 import { useAppearance, useDialogs } from "~/state/ui";
+import { ModelTiersSection } from "./ModelTiersSection";
 import { ReviewSettingsSection } from "./ReviewSettingsSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
@@ -92,6 +93,7 @@ function AppSettingsBody() {
         {settings.data ? (
           <>
             <T3Section settings={settings.data} status={integrations.data?.t3} />
+            <ModelTiersSection settings={settings.data} t3={integrations.data?.t3} />
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />

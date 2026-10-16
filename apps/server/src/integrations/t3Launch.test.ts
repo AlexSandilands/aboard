@@ -1,9 +1,10 @@
-import type { Project } from "@repo/contracts";
+import { EMPTY_MODEL_TIERS, type ModelTiers, type Project } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
 import {
   buildLaunchOptions,
   mapProviders,
+  resolveSuggestion,
   resolveT3Project,
   toWorkspaceStrategy,
   WireServerConfig,
@@ -67,6 +68,8 @@ const config = (settings: Record<string, unknown> = {}, providers?: unknown[]) =
 const shell = (threads: unknown[] = []): ShellSnapshot =>
   ({ projects: [t3Project], threads, archivedThreads: [] }) as unknown as ShellSnapshot;
 
+const noSuggestion = { suggestedModel: null, modelTiers: EMPTY_MODEL_TIERS };
+
 const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isDefault: true, worktreePath: null }] };
 
 describe("mapProviders", () => {
@@ -97,7 +100,8 @@ describe("mapProviders", () => {
 
 describe("buildLaunchOptions defaults", () => {
   const defaults = (settings: Record<string, unknown>, project = t3Project) =>
-    buildLaunchOptions({ config: config(settings), refs: repo, shell: shell(), t3Project: project }).defaults;
+    buildLaunchOptions({ config: config(settings), refs: repo, shell: shell(), t3Project: project, ...noSuggestion })
+      .defaults;
 
   it("falls back to the first ready provider's default non-custom model", () => {
     expect(defaults({}).modelSelection).toEqual({ instanceId: "claudeAgent", model: "opus", options: [] });
@@ -148,8 +152,70 @@ describe("buildLaunchOptions defaults", () => {
       refs: null,
       shell: shell([{ id: "t", projectId: "t3-p1", worktreePath: "C:/wt", updatedAt: "2026" }]),
       t3Project,
+      ...noSuggestion,
     });
     expect(options).toMatchObject({ isRepo: false, refs: [], previousWorktree: null, defaults: { envMode: "local" } });
+  });
+});
+
+describe("resolveSuggestion", () => {
+  const providers = mapProviders(config());
+  const tiers = (t3: ModelTiers["deep"]["t3"]): ModelTiers => ({
+    ...EMPTY_MODEL_TIERS,
+    deep: { description: null, t3 },
+  });
+  const sonnet = {
+    selection: {
+      instanceId: "claudeAgent",
+      model: "sonnet",
+      options: [
+        { id: "effort", value: "low" },
+        { id: "effort-gone", value: "x" },
+        { id: "fastMode", value: "yes" },
+      ],
+    },
+    label: "Claude Sonnet",
+  };
+
+  it("is null without a suggestion", () => {
+    expect(resolveSuggestion(null, tiers(sonnet), providers)).toBeNull();
+  });
+
+  it("uses the tier's model, dropping options the model doesn't support", () => {
+    expect(resolveSuggestion({ tier: "deep", reason: "Risky" }, tiers(sonnet), providers)).toEqual({
+      tier: "deep",
+      reason: "Risky",
+      modelSelection: { instanceId: "claudeAgent", model: "sonnet", options: [{ id: "effort", value: "low" }] },
+      unavailable: null,
+    });
+  });
+
+  it("says why when the tier has no model, its provider isn't ready or the model is gone", () => {
+    const why = (t3: ModelTiers["deep"]["t3"]) =>
+      resolveSuggestion({ tier: "deep", reason: null }, tiers(t3), providers)?.unavailable;
+    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings.");
+    expect(why({ selection: { instanceId: "codex", model: "gpt", options: [] }, label: "GPT" })).toBe(
+      "Codex isn't ready in T3 Code.",
+    );
+    expect(why({ selection: { instanceId: "claudeAgent", model: "haiku", options: [] }, label: "Haiku" })).toBe(
+      "Haiku isn't offered by T3 Code right now.",
+    );
+    expect(why({ selection: { instanceId: "off", model: "x", options: [] }, label: "Off" })).toBe(
+      "Off isn't offered by T3 Code right now.",
+    );
+  });
+
+  it("is part of the launch options, leaving T3's default alone", () => {
+    const options = buildLaunchOptions({
+      config: config(),
+      refs: repo,
+      shell: shell(),
+      t3Project,
+      suggestedModel: { tier: "deep", reason: null },
+      modelTiers: tiers(sonnet),
+    });
+    expect(options.suggestion?.modelSelection?.model).toBe("sonnet");
+    expect(options.defaults.modelSelection?.model).toBe("opus");
   });
 });
 
@@ -166,6 +232,7 @@ describe("previous worktree", () => {
         { id: "e", projectId: "other", worktreePath: "C:/wt/other", updatedAt: "2026-05-01" },
       ]),
       t3Project,
+      ...noSuggestion,
     });
     expect(options.previousWorktree).toEqual({ worktreePath: "C:/wt/new", branch: "t3/new" });
   });

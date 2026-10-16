@@ -57,6 +57,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     lastNote: null,
     autoReview: null,
     review: null,
+    suggestedModel: null,
     description: null,
     planContext: null,
     phases,

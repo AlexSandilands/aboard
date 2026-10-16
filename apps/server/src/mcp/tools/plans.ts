@@ -32,9 +32,10 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
         "(approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. When rewriting, pass " +
         "the phase/step ids from get_task to keep their statuses and notes. A call that would delete steps with " +
         "progress (any status but todo) or notes, or a whole phase while keeping other steps, is refused unless you " +
-        "pass `allowDeletes: true`. A task needs a " +
-        "plan before it can leave Backlog. If the task has no labels, the result asks you to suggest some: propose " +
-        "1-3 to the user and apply them with update_task once they agree.",
+        "pass `allowDeletes: true`. A task needs a plan before it can leave Backlog. Set `suggestedModel` to the " +
+        "tier the implementing session should use; omit it on a rewrite to keep the current one. If the task has " +
+        "no labels, the result asks you to suggest some: propose 1-3 to the user and apply them with update_task " +
+        "once they agree.",
       inputSchema: {
         task: taskField,
         ...planInputFields,
@@ -62,7 +63,7 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
               ? `
 Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
               : "";
-          return taskResult(services, task.id, `Plan set for #${task.number}.${dropped}`, { labelHint: true });
+          return taskResult(services, task.id, `Plan set for #${task.number}.${dropped}`, { planningHints: true });
         },
         {
           CONFLICT:

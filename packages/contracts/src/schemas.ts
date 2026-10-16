@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LabelHue } from "./labels.ts";
+import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -267,6 +268,8 @@ export const TaskSummary = z.object({
   autoReview: z.boolean().nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
+  /** The model tier its planner suggests for implementing it; null when none is set. */
+  suggestedModel: SuggestedModel.nullable(),
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;
 
@@ -326,6 +329,8 @@ export type PlanStepInput = z.infer<typeof PlanStepInput>;
 
 export const PlanInput = z.object({
   context: z.string().optional(),
+  /** Omit to keep the current suggestion; null clears it. */
+  suggestedModel: SuggestedModelInput.nullable().optional(),
   phases: z
     .array(
       z.object({
@@ -387,6 +392,8 @@ export const UpdateTaskInput = z.object({
   autoReview: z.boolean().nullable().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
+  /** null clears it. */
+  suggestedModel: SuggestedModelInput.nullable().optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
@@ -437,6 +444,8 @@ export const AppSettings = z.object({
   /** The Claude Code CLI to run; null looks up `claude` on PATH. */
   headlessReviewCli: z.string().nullable(),
   headlessReviewBudgetUsd: z.number().positive().max(100),
+  /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
+  modelTiers: ModelTiers,
 });
 export type AppSettings = z.infer<typeof AppSettings>;
 
@@ -450,6 +459,8 @@ export const UpdateSettingsInput = z.object({
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
+  /** Replaces the tiers given; tiers left out keep their setting. */
+  modelTiers: ModelTiers.partial().optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

@@ -34,6 +34,15 @@ describe("describeEvent", () => {
     expect(text({})).toBe("changed the labels");
   });
 
+  it("describes suggested model changes", () => {
+    const line = (payload: Record<string, unknown>) => describeEvent(event("suggested_model_changed", payload), ctx);
+    expect(line({ tier: "deep", reason: "Migration" })).toMatchObject({
+      text: "suggested the deep model tier",
+      quote: "Migration",
+    });
+    expect(line({ tier: null, reason: null })).toMatchObject({ text: "cleared the suggested model", quote: null });
+  });
+
   it("describes the local review loop", () => {
     const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx);
     expect(text("review_opened", { round: 1, trigger: "move" }).text).toBe("opened review round 1 (moved to Review)");

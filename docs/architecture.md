@@ -106,7 +106,7 @@ ORM.
 | Table             | Holds                                                                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
-| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override |
+| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason` |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, Jira, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |

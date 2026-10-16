@@ -261,6 +261,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
       },
     },
     settings: {
+      get: () => ({ ...defaultSettings, t3TokenSet: Boolean(token) }),
       t3Token: () => token,
       update: (input) => {
         if (input.t3Token !== undefined) token = input.t3Token;

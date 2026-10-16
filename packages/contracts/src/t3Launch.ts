@@ -60,6 +60,26 @@ export const T3ModelSelection = z.object({
 });
 export type T3ModelSelection = z.infer<typeof T3ModelSelection>;
 
+/**
+ * The task's suggested model tier as it applies to this launch. `modelSelection` is the tier's T3 model when it
+ * can be used now; otherwise `unavailable` says why and the dialog stays on T3's default.
+ */
+export const T3LaunchSuggestion = z.object({
+  // ModelTier's values, inlined: modelTiers.ts imports this file.
+  tier: z.enum(["light", "standard", "deep"]),
+  reason: z.string().nullable(),
+  modelSelection: T3ModelSelection.nullable(),
+  unavailable: z.string().nullable(),
+});
+export type T3LaunchSuggestion = z.infer<typeof T3LaunchSuggestion>;
+
+/** Providers and favorites alone, for choosing a tier's model in settings. */
+export const T3ModelCatalog = z.object({
+  providers: z.array(T3LaunchProvider),
+  favorites: z.array(z.object({ instanceId: z.string(), model: z.string() })),
+});
+export type T3ModelCatalog = z.infer<typeof T3ModelCatalog>;
+
 export const T3Ref = z.object({
   name: z.string(),
   isRemote: z.boolean(),
@@ -82,7 +102,10 @@ export const T3LaunchOptions = z.object({
   refs: z.array(T3Ref),
   /** The most recently used worktree of another thread in this project. */
   previousWorktree: z.object({ worktreePath: z.string(), branch: z.string().nullable() }).nullable(),
+  /** Null when the task has no suggested model. Applies to work launches; planning keeps the default. */
+  suggestion: T3LaunchSuggestion.nullable(),
   defaults: z.object({
+    /** T3's own new-thread default, ignoring the task's suggestion. */
     modelSelection: T3ModelSelection.nullable(),
     runtimeMode: T3RuntimeMode,
     envMode: T3EnvMode,
