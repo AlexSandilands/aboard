@@ -136,6 +136,8 @@ describe("custom automations: triggers", () => {
     const head = define({ name: "Head", trigger: { kind: "pr_event", event: "new_head" }, action: shell() });
     const merged = define({ name: "Merged", trigger: { kind: "pr_event", event: "merged" }, action: shell() });
     const link = s.links.add(t.id, { value: "https://github.com/o/r/pull/7" }, "agent");
+    // The first snapshot is what the PR was like when linked: nothing has begun yet.
+    s.links.setSnapshot(link.id, pr());
     s.links.setSnapshot(link.id, pr({ checks: "failing" }));
     await pass();
     // Still failing on the next push is the same failure; passing and failing again is a new one.
@@ -154,6 +156,17 @@ describe("custom automations: triggers", () => {
     // The head the PR had when it was linked isn't new; def456 replacing it is.
     expect(by(head.id).map((r) => r.dedupeKey)).toEqual([`pr_head:${link.id}:def456`]);
     expect(by(merged.id)).toHaveLength(1);
+  });
+
+  it("doesn't fire for states it finds in place on a PR's first snapshot, as after a restore", async () => {
+    const { s, task, define, pass, shellRuns, shell } = setup();
+    define({ name: "Merged", trigger: { kind: "pr_event", event: "merged" }, action: shell() });
+    define({ name: "Checks", trigger: { kind: "pr_event", event: "checks_failing" }, action: shell() });
+    const t = task("Restored");
+    const link = s.links.add(t.id, { value: "https://github.com/o/r/pull/11" }, "agent");
+    s.links.setSnapshot(link.id, pr({ state: "merged", checks: "failing" }));
+    await pass();
+    expect(shellRuns).toHaveLength(0);
   });
 
   it("doesn't take a comment on an old merged PR for a new merge", async () => {
@@ -353,6 +366,7 @@ describe("custom automations: actions", () => {
     const t = task("Flaky test");
     s.tasks.update(t.id, { description: "The suite fails on Windows." }, "agent");
     const link = s.links.add(t.id, { value: "https://github.com/o/r/pull/9" }, "agent");
+    s.links.setSnapshot(link.id, pr());
     s.links.setSnapshot(link.id, pr({ checks: "failing" }));
     await pass();
     expect(agentRuns).toHaveLength(1);

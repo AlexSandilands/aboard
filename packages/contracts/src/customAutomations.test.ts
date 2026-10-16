@@ -111,18 +111,46 @@ describe("nextPrChanges", () => {
     ...patch,
   });
 
+  it("records the first snapshot without stamping it: a state the board finds in place isn't new", () => {
+    expect(
+      nextPrChanges(null, snap({ checks: "failing", state: "merged", mergeable: "conflicting" }), {}, "t1"),
+    ).toEqual({
+      failing: true,
+      conflicting: true,
+    });
+  });
+
   it("stamps facts when they begin, keeps them while they hold, and the head only when it moves", () => {
-    const first = nextPrChanges(null, snap({ checks: "failing" }), {}, "t1");
-    expect(first).toEqual({ checksFailing: "t1" });
-    const still = nextPrChanges(snap({ checks: "failing" }), snap({ checks: "failing", headOid: "b2" }), first, "t2");
-    expect(still).toEqual({ checksFailing: "t1", newHead: "t2" });
-    const again = nextPrChanges(
-      snap(),
-      snap({ checks: "failing", mergeable: "conflicting", state: "merged" }),
-      still,
-      "t3",
+    const first = nextPrChanges(null, snap(), {}, "t0");
+    const failed = nextPrChanges(snap(), snap({ checks: "failing" }), first, "t1");
+    expect(failed).toMatchObject({ checksFailing: "t1", failing: true });
+    const still = nextPrChanges(snap({ checks: "failing" }), snap({ checks: "failing", headOid: "b2" }), failed, "t2");
+    expect(still).toMatchObject({ checksFailing: "t1", newHead: "t2" });
+    const merged = nextPrChanges(snap(), snap({ state: "merged", mergeable: "conflicting" }), first, "t3");
+    expect(merged).toMatchObject({ merged: "t3", conflict: "t3" });
+    expect(nextPrChanges(snap(), null, merged, "t4")).toBe(merged);
+  });
+
+  it("keeps the last known state through pending checks and unknown mergeability", () => {
+    let changes = nextPrChanges(null, snap({ checks: "failing", mergeable: "conflicting" }), {}, "t0");
+    // A push re-runs the checks, which fail again; GitHub recomputes mergeability, still conflicting.
+    changes = nextPrChanges(
+      snap({ checks: "failing" }),
+      snap({ checks: "pending", mergeable: "unknown" }),
+      changes,
+      "t1",
     );
-    expect(again).toEqual({ checksFailing: "t3", newHead: "t2", conflict: "t3", merged: "t3" });
-    expect(nextPrChanges(snap(), null, again, "t4")).toBe(again);
+    changes = nextPrChanges(
+      snap({ checks: "pending" }),
+      snap({ checks: "failing", mergeable: "conflicting" }),
+      changes,
+      "t2",
+    );
+    expect(changes.checksFailing).toBeUndefined();
+    expect(changes.conflict).toBeUndefined();
+    // Passing, then failing again, is a new failure.
+    changes = nextPrChanges(snap({ checks: "failing" }), snap({ checks: "passing" }), changes, "t3");
+    changes = nextPrChanges(snap({ checks: "passing" }), snap({ checks: "failing" }), changes, "t4");
+    expect(changes.checksFailing).toBe("t4");
   });
 });

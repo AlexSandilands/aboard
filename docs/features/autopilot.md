@@ -213,10 +213,11 @@ the automation. Runs stay, under the old key.
 - **Event times** are `statusChangedAt`, the latest blocker's, a PR link's creation, or for PR states the time the
   board saw the state begin. `setSnapshot` keeps that in `task_links.pr_changes_json` (`PrChanges`,
   `nextPrChanges` in contracts): when the PR merged, its checks started failing, a conflict appeared and its head
-  moved from one commit to another. The PR's own `updatedAt` isn't used: a comment moves it. A fact true on the first
-  snapshot counts as beginning then; the first head doesn't, so `new_head` means commits pushed after linking. Checks
-  that keep failing across pushes are one failure; passing and failing again is a new one. The column is a cache like
-  `snapshot_json`, left out of backups; until it's filled, PR state triggers see nothing new.
+  moved from one commit to another. The PR's own `updatedAt` isn't used: a comment moves it. The first snapshot of a link only records what is true (`failing`,
+  `conflicting`), so a state the board finds in place never counts as beginning: not on linking a PR, and not on the
+  first poll after a restore, which leaves snapshots and this column out of the backup. Pending checks and unknown
+  mergeability keep the last known state, so checks that fail again after a push, or a conflict GitHub recomputes,
+  aren't new; passing and then failing again is.
 - **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
   contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
   project filter (`checkCustomDefinition`, run by the service and the form).
