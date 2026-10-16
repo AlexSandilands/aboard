@@ -13,4 +13,8 @@ export const defaultSettings: AppSettings = {
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
   modelTiers: EMPTY_MODEL_TIERS,
+  backupEnabled: false,
+  backupDir: null,
+  backupRemote: null,
+  backupIntervalMinutes: 60,
 };

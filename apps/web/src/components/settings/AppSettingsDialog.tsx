@@ -30,6 +30,7 @@ import { cn } from "~/lib/utils";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
 import { useAppearance, useDialogs } from "~/state/ui";
+import { BackupSection } from "./BackupSection";
 import { ModelTiersSection } from "./ModelTiersSection";
 import { ReviewSettingsSection } from "./ReviewSettingsSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -86,7 +87,7 @@ function AppSettingsBody() {
     <>
       <DialogHeader>
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Appearance, integrations and agent setup.</DialogDescription>
+        <DialogDescription>Appearance, integrations, backup and agent setup.</DialogDescription>
       </DialogHeader>
       <DialogPanel className="space-y-6">
         <AppearanceSection />
@@ -97,6 +98,7 @@ function AppSettingsBody() {
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
+            <BackupSection settings={settings.data} />
           </>
         ) : (
           <p className="px-4 text-sm text-muted-foreground">
@@ -374,7 +376,7 @@ function GithubSection({
         ? "The GitHub CLI (gh) isn't installed. PR links still work, without live status."
         : !status.authenticated
           ? (status.error ?? "gh is installed but not signed in. Run `gh auth login`.")
-          : "gh is installed and signed in.";
+          : `PR status and merging use the account gh is signed in with. Add a GitHub Enterprise host with \`gh auth login --hostname <host>\`.`;
   return (
     <SettingsSection title="GitHub">
       <SettingsRow
@@ -388,9 +390,27 @@ function GithubSection({
           )
         }
       />
+      {status?.hosts.map((host) => (
+        <SettingsRow
+          key={host.host}
+          title={host.host}
+          description={
+            host.authenticated
+              ? `Signed in${host.login ? ` as ${host.login}` : ""}.`
+              : `Sign-in has expired. Run \`gh auth login --hostname ${host.host}\`.`
+          }
+          control={
+            host.authenticated ? (
+              <Badge variant="success">Signed in</Badge>
+            ) : (
+              <Badge variant="warning">Not signed in</Badge>
+            )
+          }
+        />
+      ))}
       <SettingsRow
         title="Poll PR status"
-        description="Refresh state, checks and reviews of GitHub PR links every 2 minutes."
+        description="Refresh state, checks and reviews of GitHub PR links every 2 minutes, on github.com and Enterprise hosts gh is signed in to."
         control={
           <Switch
             aria-label="Poll PR status"
@@ -445,7 +465,7 @@ function AgentsSection() {
     <SettingsSection title="Agents (MCP)">
       <SettingsRow title="Claude Code" description={`Register the ${BRAND.id} MCP server.`}>
         <div className="mt-2">
-          <CommandSnippet command={`claude mcp add --transport http ${BRAND.id} ${url}`} />
+          <CommandSnippet command={`claude mcp add --scope user --transport http ${BRAND.id} ${url}`} />
         </div>
       </SettingsRow>
       <SettingsRow title="Codex" description={`Register the ${BRAND.id} MCP server.`}>

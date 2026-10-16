@@ -9,6 +9,7 @@ import {
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
+import type { Repos } from "../db/repos/index.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
@@ -34,6 +35,24 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
     ...summary.labels,
   ];
   return haystack.some((text) => text.toLowerCase().includes(q));
+}
+
+/**
+ * Re-derives an epic's status from its children (see deriveEpicStatus) and marks its card changed, since the
+ * roll-up may have moved. Call inside the write after any change to a child's status, epic, project or archive
+ * state. A no-op for an id that isn't an epic.
+ */
+export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: Effects): void {
+  const epic = repos.tasks.get(epicId);
+  if (!epic || epic.kind !== "epic") return;
+  fx.task(epicId);
+  const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
+  const status = deriveEpicStatus(deriveEpicRollup(children));
+  if (status === epic.status) return;
+  const now = nowIso();
+  const lane = repos.tasks.lane(epic.projectId, status).filter((t) => t.id !== epic.id);
+  repos.tasks.update({ ...epic, status, position: positionAmong(lane, {}), updatedAt: now, statusChangedAt: now });
+  fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
 }
 
 /** Task cards: creation, updates, moves between columns, notes. */
@@ -102,27 +121,7 @@ export function createTasksService(
     return epic;
   };
 
-  /**
-   * Re-derives an epic's status from its children (see deriveEpicStatus) and marks its card changed, since the
-   * roll-up may have moved. Call after any change to a child's status, epic, project or archive state.
-   */
-  const syncEpic = (epicId: string, actor: string, fx: Effects): void => {
-    const epic = repos.tasks.get(epicId);
-    if (!epic || epic.kind !== "epic") return;
-    fx.task(epicId);
-    const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
-    const status = deriveEpicStatus(deriveEpicRollup(children));
-    if (status === epic.status) return;
-    const now = nowIso();
-    repos.tasks.update({
-      ...epic,
-      status,
-      position: endOfLane({ ...epic, status }),
-      updatedAt: now,
-      statusChangedAt: now,
-    });
-    fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
-  };
+  const syncEpic = (epicId: string, actor: string, fx: Effects): void => syncEpicStatus(repos, epicId, actor, fx);
 
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
   const logEpicChange = (

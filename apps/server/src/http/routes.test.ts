@@ -1,5 +1,5 @@
 import { ACTOR_HEADER, type ApiErrorBody, type Project, type TaskDetail } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
 async function setup() {
@@ -76,6 +76,26 @@ describe("REST", () => {
     expect(board.projects).toHaveLength(1);
   });
 
+  it("adds a pasted T3 thread id as a thread link and returns the warning with it", async () => {
+    const h = await setup();
+    const threadId = "bca46358-2812-4417-93f7-e151c0f96292";
+    vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({
+      input: { t3Thread: { environmentId: "env-1", threadId } },
+      warning: "Linked without checking the thread exists",
+    });
+    const res = await h.request(`/api/tasks/${h.task.id}/links`, { method: "POST", json: { value: threadId } });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({
+      kind: "t3_thread",
+      ref: { environmentId: "env-1", threadId },
+      warning: "Linked without checking the thread exists",
+    });
+    // Without T3 detected a bare id is still not a link.
+    vi.restoreAllMocks();
+    const unknown = await h.request(`/api/tasks/${h.task.id}/links`, { method: "POST", json: { value: threadId } });
+    expect(unknown.status).toBe(400);
+  });
+
   it("deletes a task permanently only once it is archived", async () => {
     const h = await setup();
     const active = await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" });
@@ -120,6 +140,20 @@ describe("REST", () => {
       json: { icon: { kind: "image", dataUrl: "data:image/svg+xml;base64,PHN2Zz4=" } },
     });
     expect(await errorCode(svg)).toBe("VALIDATION");
+  });
+
+  it("validates PR merges before reaching GitHub", async () => {
+    const h = await setup();
+    const link = h.services.links.add(h.task.id, { value: "https://github.com/o/r/pull/1" }, "user");
+    const merge = (json: unknown) => h.request(`/api/links/${link.id}/merge`, { method: "POST", json });
+    expect(await errorCode(await merge({ action: "merge" }))).toBe("VALIDATION");
+    expect(await errorCode(await merge({ action: "squash-it", method: "squash" }))).toBe("VALIDATION");
+    const notReview = await merge({ action: "merge", method: "squash" });
+    expect(notReview.status).toBe(400);
+    expect(((await notReview.json()) as ApiErrorBody).error.message).toMatch(/in Review/);
+    expect(
+      await errorCode(await h.request("/api/links/nope/merge", { method: "POST", json: { action: "disable_auto" } })),
+    ).toBe("NOT_FOUND");
   });
 
   it("serves settings without the token", async () => {

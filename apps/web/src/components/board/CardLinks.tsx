@@ -1,4 +1,4 @@
-import type { PrSnapshot, T3ThreadStatus, TaskLink } from "@repo/contracts";
+import { prMergeAction, type PrSnapshot, type T3ThreadStatus, type TaskLink, type TaskStatus } from "@repo/contracts";
 import {
   GitMergeIcon,
   GitPullRequestArrowIcon,
@@ -9,9 +9,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { SyntheticEvent } from "react";
+import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
+import { useDialogs } from "~/state/ui";
 import { useBoardContext } from "./BoardContext";
 import { cardLinks } from "./cardLinks.logic";
 
@@ -50,13 +52,21 @@ export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
   return cardLinks(links).length > 0;
 }
 
-/** Card line 4: PR chips and "Open in T3 Code" buttons for active threads. */
-export function CardLinks({ links }: { links: ReadonlyArray<TaskLink> }) {
+/** Card line 4: PR chips (with a merge button when one is offered) and "Open in T3 Code" buttons for active threads. */
+export function CardLinks({
+  taskId,
+  taskStatus,
+  links,
+}: {
+  taskId: string;
+  taskStatus: TaskStatus;
+  links: ReadonlyArray<TaskLink>;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-1">
       {cardLinks(links).map((link) =>
         link.kind === "pr" ? (
-          <PrChip key={link.id} link={link} />
+          <PrChip key={link.id} taskId={taskId} taskStatus={taskStatus} link={link} />
         ) : link.kind === "t3_thread" ? (
           <ThreadButton key={link.id} link={link} />
         ) : null,
@@ -65,13 +75,22 @@ export function CardLinks({ links }: { links: ReadonlyArray<TaskLink> }) {
   );
 }
 
-function PrChip({ link }: { link: Extract<TaskLink, { kind: "pr" }> }) {
+function PrChip({
+  taskId,
+  taskStatus,
+  link,
+}: {
+  taskId: string;
+  taskStatus: TaskStatus;
+  link: Extract<TaskLink, { kind: "pr" }>;
+}) {
   const snapshot = link.snapshot;
+  const mergeAction = prMergeAction(taskStatus, snapshot);
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const Icon = state?.Icon ?? Link2Icon;
   const checks = snapshot && snapshot.checks !== "none" ? CHECKS[snapshot.checks] : null;
   const number = link.ref?.number;
-  return (
+  const chip = (
     <Tooltip>
       <TooltipTrigger
         render={<a href={link.url} target="_blank" rel="noreferrer" className={chipClassName} {...linkHandlers} />}
@@ -86,8 +105,41 @@ function PrChip({ link }: { link: Extract<TaskLink, { kind: "pr" }> }) {
           {state || checks ? (
             <span className="text-muted-foreground">{[state?.label, checks?.label].filter(Boolean).join(" · ")}</span>
           ) : null}
+          {mergeAction === "armed" ? <span className="text-muted-foreground">Auto-merge on</span> : null}
         </span>
       </TooltipPopup>
+    </Tooltip>
+  );
+  if (mergeAction !== "merge" && mergeAction !== "auto") return chip;
+  return (
+    <>
+      {chip}
+      <MergeChip taskId={taskId} linkId={link.id} label={mergeButtonLabel(mergeAction)} />
+    </>
+  );
+}
+
+function MergeChip({ taskId, linkId, label }: { taskId: string; linkId: string; label: string }) {
+  const openMergePr = useDialogs((s) => s.openMergePr);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className={cn(chipClassName, "text-primary hover:text-primary")}
+            {...linkHandlers}
+            onClick={(event) => {
+              event.stopPropagation();
+              openMergePr(taskId, linkId);
+            }}
+          />
+        }
+      >
+        <GitMergeIcon aria-hidden className="size-3.5 shrink-0" />
+      </TooltipTrigger>
+      <TooltipPopup>{label}</TooltipPopup>
     </Tooltip>
   );
 }

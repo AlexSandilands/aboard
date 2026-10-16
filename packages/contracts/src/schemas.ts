@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LabelHue } from "./labels.ts";
+import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
@@ -151,6 +152,9 @@ export type PlanPhase = z.infer<typeof PlanPhase>;
 export const PrRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
 export type PrRef = z.infer<typeof PrRef>;
 
+export const MergeMethod = z.enum(["squash", "merge", "rebase"]);
+export type MergeMethod = z.infer<typeof MergeMethod>;
+
 export const PrSnapshot = z.object({
   state: z.enum(["open", "draft", "merged", "closed"]),
   title: z.string(),
@@ -159,6 +163,16 @@ export const PrSnapshot = z.object({
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   headRef: z.string().nullable(),
   updatedAt: IsoDate.nullable(),
+  // Optional so snapshots stored by the gh poller, before merging existed, still parse.
+  /** The method auto-merge is set to merge with, or null when auto-merge is off. */
+  autoMerge: MergeMethod.nullable().optional(),
+  /** Methods the repo allows, in GitHub's order. */
+  mergeMethods: z.array(MergeMethod).optional(),
+  /** Whether the repo lets auto-merge be turned on. */
+  autoMergeAllowed: z.boolean().optional(),
+  /** Whether the signed-in account can push to the repo, and so merge. */
+  canMerge: z.boolean().optional(),
+  headOid: z.string().nullable().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
@@ -384,13 +398,16 @@ export const UpdateProjectInput = z.object({
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
 export const LinkInput = z.object({
-  /** URL, Jira key (ABC-123), GitHub PR URL, or t3code:// thread link. Kind is inferred when omitted. */
+  /** URL, Jira key (ABC-123), GitHub PR URL, t3code:// thread link or T3 thread id. Kind is inferred when omitted. */
   value: z.string().trim().min(1).optional(),
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
+
+/** What adding a link returns: the link, plus a warning when it was accepted with something unverified. */
+export type AddLinkResult = TaskLink & { warning?: string };
 
 export const CreateTaskInput = z.object({
   projectId: z.string(),
@@ -455,26 +472,28 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-export const AppSettings = z.object({
-  jiraBaseUrl: z.string().nullable(),
-  githubPolling: z.boolean(),
-  /** Which T3 link the primary "Open in T3 Code" action uses. */
-  t3LinkTarget: z.enum(["desktop", "browser"]),
-  /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
-  t3TokenSet: z.boolean(),
-  /** Moving a task to Review opens a local review round, unless the task overrides it. */
-  autoReview: z.boolean(),
-  /** The skill reviewers follow, unless the task's project overrides it. */
-  reviewSkill: ReviewSkillRef,
-  reviewMaxRounds: z.number().int().min(1).max(10),
-  /** Let the board run a headless reviewer when no agent picks a round up. */
-  headlessReviewEnabled: z.boolean(),
-  /** The Claude Code CLI to run; null looks up `claude` on PATH. */
-  headlessReviewCli: z.string().nullable(),
-  headlessReviewBudgetUsd: z.number().positive().max(100),
-  /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
-  modelTiers: ModelTiers,
-});
+export const AppSettings = z
+  .object({
+    jiraBaseUrl: z.string().nullable(),
+    githubPolling: z.boolean(),
+    /** Which T3 link the primary "Open in T3 Code" action uses. */
+    t3LinkTarget: z.enum(["desktop", "browser"]),
+    /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
+    t3TokenSet: z.boolean(),
+    /** Moving a task to Review opens a local review round, unless the task overrides it. */
+    autoReview: z.boolean(),
+    /** The skill reviewers follow, unless the task's project overrides it. */
+    reviewSkill: ReviewSkillRef,
+    reviewMaxRounds: z.number().int().min(1).max(10),
+    /** Let the board run a headless reviewer when no agent picks a round up. */
+    headlessReviewEnabled: z.boolean(),
+    /** The Claude Code CLI to run; null looks up `claude` on PATH. */
+    headlessReviewCli: z.string().nullable(),
+    headlessReviewBudgetUsd: z.number().positive().max(100),
+    /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
+    modelTiers: ModelTiers,
+  })
+  .extend(BackupSettings.shape);
 export type AppSettings = z.infer<typeof AppSettings>;
 
 export const UpdateSettingsInput = z.object({
@@ -489,6 +508,10 @@ export const UpdateSettingsInput = z.object({
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  backupEnabled: z.boolean().optional(),
+  backupDir: z.string().trim().nullable().optional(),
+  backupRemote: z.string().trim().nullable().optional(),
+  backupIntervalMinutes: BackupSettings.shape.backupIntervalMinutes.optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });
@@ -498,10 +521,20 @@ export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 export const ConnectT3Input = z.object({ value: z.string().trim().min(1) });
 export type ConnectT3Input = z.infer<typeof ConnectT3Input>;
 
+export const GithubHostStatus = z.object({
+  host: z.string(),
+  login: z.string().nullable(),
+  authenticated: z.boolean(),
+});
+export type GithubHostStatus = z.infer<typeof GithubHostStatus>;
+
 export const GithubStatus = z.object({
   available: z.boolean(),
+  /** Signed in to at least one host. */
   authenticated: z.boolean(),
   error: z.string().nullable(),
+  /** Hosts `gh` holds a login for. Empty when `gh` is too old to report them. */
+  hosts: z.array(GithubHostStatus),
 });
 export type GithubStatus = z.infer<typeof GithubStatus>;
 

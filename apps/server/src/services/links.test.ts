@@ -110,6 +110,22 @@ describe("moving Review tasks to Done when their PR merges", () => {
     s.links.setSnapshot(links[0]!.id, pr("merged"));
     expect(status()).toBe("done");
   });
+
+  it("ignores PRs on hosts gh isn't signed in to, though they parse as GitHub PRs", () => {
+    const { s, task, links, status } = setup();
+    // The harness's gh status is unknown: only github.com holds a task back.
+    s.links.add(task.id, { value: "https://github.example.com/team/svc/pull/3" }, "agent");
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    expect(status()).toBe("done");
+  });
+
+  it("keeps counting an Enterprise PR fetched before, though its host isn't polled right now", () => {
+    const { s, task, links, status } = setup();
+    const ghe = s.links.add(task.id, { value: "https://github.example.com/team/svc/pull/3" }, "agent");
+    s.links.setSnapshot(ghe.id, pr("open"));
+    s.links.setSnapshot(links[0]!.id, pr("merged"));
+    expect(status()).toBe("review");
+  });
 });
 
 describe("completing tasks that enter Review with their PRs already merged", () => {

@@ -1,6 +1,7 @@
 import {
   BRAND,
   classifyLink,
+  prMergeAction,
   type AppSettings,
   type T3IntegrationStatus,
   type TaskDetail,
@@ -15,6 +16,7 @@ import {
   CopyIcon,
   EllipsisIcon,
   ExternalLinkIcon,
+  GitMergeIcon,
   GitPullRequestArrowIcon,
   GlobeIcon,
   MessagesSquareIcon,
@@ -28,6 +30,8 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
+import { mergeButtonLabel } from "~/components/merge/merge.logic";
+import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
@@ -35,8 +39,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
-import { useAddLink, useRefreshLink, useRemoveLink } from "~/state/mutations";
+import { useAddLink, useMergePr, useRefreshLink, useRemoveLink } from "~/state/mutations";
 import { queryKeys, useBoard, useSettings } from "~/state/queries";
+import { useDialogs } from "~/state/ui";
 import { copyToClipboard } from "./InlineInput";
 import {
   describeLinkInput,
@@ -48,6 +53,7 @@ import {
   threadDetails,
   threadModelsDiffer,
   threadStatusPresentation,
+  unrecognisedLinkHint,
 } from "./links.logic";
 import {
   PANEL_ICON_CLASS,
@@ -129,6 +135,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
         {links.map((link) => (
           <LinkRow
             key={link.id}
+            task={task}
             link={link}
             t3={t3}
             settings={settings}
@@ -136,7 +143,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
             onRemove={() => remove(link.id)}
           />
         ))}
-        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} />
+        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} t3={t3} />
       </div>
     </TaskSection>
   );
@@ -148,12 +155,14 @@ interface MultiThread {
 }
 
 function LinkRow({
+  task,
   link,
   t3,
   settings,
   multiThread,
   onRemove,
 }: {
+  task: TaskDetail;
   link: TaskLink;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
@@ -164,7 +173,7 @@ function LinkRow({
     case "t3_thread":
       return <T3ThreadRow link={link} t3={t3} settings={settings} multiThread={multiThread} onRemove={onRemove} />;
     case "pr":
-      return <PullRequestRow link={link} onRemove={onRemove} />;
+      return <PullRequestRow task={task} link={link} onRemove={onRemove} />;
     case "jira": {
       const href = jiraHref(link, settings?.jiraBaseUrl);
       return (
@@ -216,11 +225,14 @@ function RowWithMenu({
   href,
   title,
   menu,
+  action,
   children,
 }: {
   href: string | null;
   title: string;
   menu: ReactNode;
+  /** An always-visible action between the row and its menu. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -229,6 +241,7 @@ function RowWithMenu({
       <PanelControl part="fill" title={title} render={href ? <a {...linkProps(href)} /> : <div />}>
         {children}
       </PanelControl>
+      {action}
       <RowMenu>{menu}</RowMenu>
     </PanelSplitGroup>
   );
@@ -353,21 +366,46 @@ function T3ThreadRow({
   );
 }
 
-function PullRequestRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "pr" }>; onRemove: () => void }) {
+function PullRequestRow({
+  task,
+  link,
+  onRemove,
+}: {
+  task: TaskDetail;
+  link: Extract<TaskLink, { kind: "pr" }>;
+  onRemove: () => void;
+}) {
   const { mutate: refresh, isPending: refreshing } = useRefreshLink();
+  const { mutate: mergePr, isPending: disabling } = useMergePr();
+  const openMergePr = useDialogs((s) => s.openMergePr);
   const snapshot = link.snapshot;
+  const mergeAction = prMergeAction(task.status, snapshot);
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const title = snapshot?.title ?? link.label ?? (link.ref ? link.ref.repo : (hostnameOf(link.url) ?? link.url));
   return (
     <RowWithMenu
       href={link.url}
       title={state ? `${state.label} pull request · ${link.url}` : link.url}
+      action={
+        mergeAction === "merge" || mergeAction === "auto" ? (
+          <PanelControl part="meta" tone="primary" onClick={() => openMergePr(task.id, link.id)}>
+            <GitMergeIcon className="size-3.5" />
+            {mergeButtonLabel(mergeAction)}
+          </PanelControl>
+        ) : null
+      }
       menu={
         <>
           {link.ref ? (
             <MenuItem disabled={refreshing} onClick={() => refresh(link.id)}>
               <RefreshCwIcon />
               Refresh
+            </MenuItem>
+          ) : null}
+          {mergeAction === "armed" ? (
+            <MenuItem disabled={disabling} onClick={() => mergePr({ linkId: link.id, action: "disable_auto" })}>
+              <GitMergeIcon />
+              Disable auto-merge
             </MenuItem>
           ) : null}
           <MenuItem onClick={() => copyToClipboard(link.url, "URL")}>
@@ -383,6 +421,11 @@ function PullRequestRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "p
       <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
       {snapshot ? (
         <span className="flex shrink-0 items-center gap-1.5 text-xs font-normal">
+          {snapshot.state === "open" && snapshot.autoMerge ? (
+            <Badge variant="info" size="sm">
+              Auto-merge on
+            </Badge>
+          ) : null}
           {snapshot.mergeable === "conflicting" ? (
             <Hint label="Merge conflicts">
               <TriangleAlertIcon className="size-3.5 text-warning" />
@@ -423,11 +466,19 @@ function Hint({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function AddLinkPopover({ taskId, jiraBaseUrl }: { taskId: string; jiraBaseUrl: string | null }) {
+function AddLinkPopover({
+  taskId,
+  jiraBaseUrl,
+  t3,
+}: {
+  taskId: string;
+  jiraBaseUrl: string | null;
+  t3: T3IntegrationStatus;
+}) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const { mutate: addLink, isPending } = useAddLink();
-  const classified = classifyLink(value, { jiraBaseUrl });
+  const classified = classifyLink(value, { jiraBaseUrl, t3 });
   const preview = describeLinkInput(classified);
   const PreviewIcon = preview ? LINK_KIND_ICON[preview.kind] : null;
 
@@ -480,7 +531,7 @@ function AddLinkPopover({ taskId, jiraBaseUrl }: { taskId: string; jiraBaseUrl: 
                 <span className="ms-auto shrink-0">Enter to add</span>
               </>
             ) : value.trim() ? (
-              <span>Not recognised. Paste a full URL or a Jira key like ABC-123.</span>
+              <span>{unrecognisedLinkHint(value, t3)}</span>
             ) : (
               <span>Detects GitHub PRs, Jira keys, T3 Code threads and URLs.</span>
             )}

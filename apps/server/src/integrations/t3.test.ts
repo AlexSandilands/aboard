@@ -34,6 +34,8 @@ import { defaultSettings } from "../test/fixtures.ts";
 
 const ENV_ID = "19032d81-04ac-423c-a5b0-f71db3f71200";
 const ORIGIN = "http://127.0.0.1:3773";
+/** A thread id as T3's "Copy thread ID" gives it. */
+const COPIED_ID = "bca46358-2812-4417-93f7-e151c0f96292";
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -339,9 +341,11 @@ const SHELL_FIXTURE = {
       updatedAt: "2026-03-01T00:00:00.000Z",
       archivedAt: null,
     },
+    { ...thread({ id: COPIED_ID }), archivedAt: null },
   ],
   archivedThreads: [
     { ...thread({ id: "th-old", status: "completed", title: "Old" }), archivedAt: "2026-02-01T00:00:00.000Z" },
+    { ...thread({ id: "thread:project:p1:old" }), archivedAt: "2026-02-01T00:00:00.000Z" },
   ],
 };
 
@@ -734,6 +738,53 @@ describe("T3 thread launch", () => {
       branch: "t3/feature",
     });
     expect(await t3.threadWorkspace(threadLink("l2", "th-missing") as ThreadLink)).toBeNull();
+  });
+});
+
+describe("T3 resolveThread", () => {
+  const setup = (opts: { token?: string | null; runtime?: boolean; shellStatus?: number } = {}) => {
+    const fake = fakeServices({ token: opts.token === undefined ? "tok" : opts.token });
+    return createT3Integration({
+      t3Home: makeT3Home({ runtime: opts.runtime ?? true }),
+      bus: new EventBus(),
+      services: () => fake.services,
+      fetch: t3Fetch(opts.shellStatus ? { shellStatus: opts.shellStatus } : {}),
+      log: { warn: () => {} },
+    });
+  };
+  const ref = (threadId: string) => ({ environmentId: ENV_ID, threadId });
+
+  it("links an existing thread in the detected environment, archived ones too", async () => {
+    const t3 = setup();
+    expect(await t3.resolveThread(` ${COPIED_ID} `)).toEqual({ ref: ref(COPIED_ID) });
+    expect(await t3.resolveThread("thread:project:p1:old")).toEqual({ ref: ref("thread:project:p1:old") });
+  });
+
+  it("takes a browser URL of this T3 and ignores everything else", async () => {
+    const t3 = setup();
+    expect(await t3.resolveThread(`${ORIGIN}/${ENV_ID}/${COPIED_ID}`)).toEqual({ ref: ref(COPIED_ID) });
+    expect(await t3.resolveThread("https://example.com/a/b")).toBeNull();
+    expect(await t3.resolveThread("ABC-123")).toBeNull();
+    expect(await t3.resolveThread("t3code://threads/env/th-run")).toBeNull();
+  });
+
+  it("rejects an id T3 doesn't know", async () => {
+    await expect(setup().resolveThread("11111111-2222-4333-8444-555555555555")).rejects.toMatchObject({
+      code: "VALIDATION",
+      message: "No T3 Code thread with ID 11111111-2222-4333-8444-555555555555",
+    });
+  });
+
+  it("accepts with a warning when T3 can't be asked", async () => {
+    const noToken = await setup({ token: null }).resolveThread(COPIED_ID);
+    expect(noToken).toMatchObject({ ref: ref(COPIED_ID), warning: expect.stringContaining("no T3 Code token") });
+    const rejected = await setup({ shellStatus: 401 }).resolveThread(COPIED_ID);
+    expect(rejected).toMatchObject({ ref: ref(COPIED_ID), warning: expect.stringContaining("Token expired") });
+  });
+
+  it("explains that a bare id needs T3 running", async () => {
+    await expect(setup({ runtime: false }).resolveThread(COPIED_ID)).rejects.toThrow("T3 Code isn't running");
+    expect(await setup({ runtime: false }).resolveThread("https://example.com")).toBeNull();
   });
 });
 

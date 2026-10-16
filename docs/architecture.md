@@ -9,7 +9,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (gh, T3 Code, review watchdog) ──► services/*
+ pollers (GitHub, T3 Code, review watchdog) ──► services/*
 ```
 
 ## Packages
@@ -46,7 +46,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files)                 |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files) and `server.json` while a server runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -56,7 +56,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
-vars. See `apps/server/src/services/settings.ts`.
+vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
 
 ## The guard
 
@@ -97,7 +97,8 @@ and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_cha
 
 SQLite through `node:sqlite` ([ADR 0002](decisions/0002-node-sqlite.md)), with WAL, foreign keys on and
 a 5-second busy timeout. Migrations are `apps/server/src/db/migrations/NNN_name.sql`, applied in name
-order at startup, each in its own transaction, and recorded in `migrations`. Never edit a shipped one;
+order at startup, each in its own transaction, and recorded in `migrations`. One that needs code (such as
+parsing URLs) is a function in `db/codeMigrations.ts` under the next number instead, and runs in the same order. Never edit a shipped one;
 add the next number. A migration that rebuilds a table (SQLite's create, copy, drop, rename) starts with
 `-- migrate: foreign_keys off`: dropping the old table with foreign keys on would cascade-delete its
 children. The runner turns them off around that file and runs `foreign_key_check` before committing. Repos in `db/repos/*.ts` are thin typed SQL over a prepared-statement cache, with no
@@ -122,7 +123,7 @@ Positions are fractional-index strings (`fractional-indexing`), so a move rewrit
 task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
 attention, an epic's roll-up) are computed when summaries are built, never stored. The exception is an epic's
 status, derived from its tasks but stored so lists and filters treat it like any status
-([ADR 0006](decisions/0006-epic-is-a-task-kind.md)).
+([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
 [local review](features/local-review.md), [labels](features/labels.md).
@@ -132,7 +133,9 @@ Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](feat
 All optional, all in `apps/server/src/integrations/`, started together by `createIntegrations().start()`
 on independent timers:
 
-- **GitHub:** `gh pr view` every 2 minutes for GitHub PR links. See [github-prs.md](features/github-prs.md).
+- **GitHub:** batched GraphQL every 2 minutes for PR links on GitHub hosts, with the token `gh` holds,
+  and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
+  [github-prs.md](features/github-prs.md).
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).

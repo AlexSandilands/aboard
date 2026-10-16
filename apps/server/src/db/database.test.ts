@@ -92,4 +92,35 @@ describe("migrations", () => {
     expect(all("SELECT * FROM plan_steps")).toEqual([]);
     db.close();
   });
+
+  it("re-classifies stored links that now parse as GitHub-style PRs", () => {
+    dir = mkdtempSync(join(tmpdir(), "board-db-"));
+    const path = join(dir, "board.db");
+    const db = openDatabase(path);
+    db.exec(`
+      DELETE FROM migrations WHERE name = '008_enterprise_pr_links';
+      INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+      INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at)
+        VALUES ('t', 1, 'p', 'T', 'backlog', 'a0', 'user', '', '', '');
+      INSERT INTO task_links (id, task_id, kind, url, ref_json, created_at) VALUES
+        ('ghe', 't', 'url', 'https://ghe.example.com/team/svc/pull/7', NULL, ''),
+        ('forced', 't', 'pr', 'https://git.example.org/a/b/pull/2/files', NULL, ''),
+        ('dup-url', 't', 'url', 'https://ghe.example.com/team/svc/pull/8', NULL, ''),
+        ('dup-pr', 't', 'pr', 'https://ghe.example.com/team/svc/pull/8', NULL, ''),
+        ('plain', 't', 'url', 'https://example.com/docs', NULL, ''),
+        ('ado', 't', 'pr', 'https://dev.azure.com/o/p/_git/r/pullrequest/3', NULL, '');
+    `);
+    db.close();
+
+    const reopened = openDatabase(path);
+    const rows = reopened.prepare("SELECT id, kind, ref_json FROM task_links ORDER BY id").all();
+    reopened.close();
+    expect(rows).toEqual([
+      { id: "ado", kind: "pr", ref_json: null },
+      { id: "dup-pr", kind: "pr", ref_json: '{"host":"ghe.example.com","repo":"team/svc","number":8}' },
+      { id: "forced", kind: "pr", ref_json: '{"host":"git.example.org","repo":"a/b","number":2}' },
+      { id: "ghe", kind: "pr", ref_json: '{"host":"ghe.example.com","repo":"team/svc","number":7}' },
+      { id: "plain", kind: "url", ref_json: null },
+    ]);
+  });
 });

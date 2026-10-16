@@ -1,4 +1,4 @@
-# 0006 An epic is a task with kind 'epic'
+# 0007 An epic is a task with kind 'epic'
 
 Status: Accepted
 

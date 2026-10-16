@@ -1,4 +1,4 @@
-import { ConnectT3Input, UpdateSettingsInput } from "@repo/contracts";
+import { ConnectT3Input, MergePrInput, UpdateSettingsInput } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -25,6 +25,16 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
       const id = idParam(c);
       services.links.get(id);
       await integrations.refreshLink(id);
+      return c.json(services.links.get(id));
+    }),
+  );
+  app.post(
+    "/api/links/:id/merge",
+    handle(async (c) => {
+      const id = idParam(c);
+      const input = await parseBody(c, MergePrInput);
+      services.links.get(id);
+      await integrations.mergePr(id, input);
       return c.json(services.links.get(id));
     }),
   );

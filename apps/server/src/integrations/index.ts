@@ -1,7 +1,9 @@
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
-import { createGithubIntegration, type RunGh } from "./github.ts";
+import { createBackupIntegration, type RunGit } from "./backup.ts";
+import type { RunGh } from "./gh.ts";
+import { createGithubIntegration } from "./github.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
@@ -20,16 +22,20 @@ export interface IntegrationDeps {
 export interface IntegrationOverrides {
   runGh?: RunGh;
   fetch?: FetchFn;
+  /** GitHub's GraphQL API; separate from `fetch`, which reaches T3 Code. */
+  githubFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
+  runGit?: RunGit;
   log?: Logger;
 }
 
-/** Builds the GitHub (gh CLI) and T3 Code integrations. */
+/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations. */
 export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
   const github = createGithubIntegration({
     services: deps.services,
     ...(overrides.runGh ? { runGh: overrides.runGh } : {}),
+    ...(overrides.githubFetch ? { fetch: overrides.githubFetch } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const t3 = createT3Integration({
@@ -46,23 +52,31 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const backup = createBackupIntegration({
+    services: deps.services,
+    ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
+    prHostHoldsTasks: (host) => github.holdsTasks(host),
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
       github.start();
       t3.start();
       reviews.start();
+      backup.start();
     },
     stop() {
       started = false;
       github.stop();
       t3.stop();
       reviews.stop();
+      backup.stop();
     },
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
@@ -71,10 +85,23 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       if (await github.refresh(link)) return;
       await t3.refresh(link);
     },
+    async mergePr(linkId, input) {
+      await github.merge(deps.services().links.get(linkId), input);
+    },
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
+    async resolveLinkInput(input) {
+      // An explicit kind other than t3_thread means the caller chose how to read the value.
+      if (input.t3Thread || !input.value || (input.kind && input.kind !== "t3_thread")) return { input };
+      const resolved = await t3.resolveThread(input.value);
+      if (!resolved) return { input };
+      const { value: _value, ...rest } = input;
+      return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
+    },
+    backupStatus: () => backup.status(),
+    runBackup: () => backup.run(),
   };
 }

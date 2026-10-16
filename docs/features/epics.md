@@ -11,7 +11,7 @@ and agents can create epics, put tasks in them and see every task's state in one
 ### An epic is a task
 
 An epic is a `tasks` row with `kind = 'epic'`; its tasks point at it with `parent_id`
-([ADR 0006](../decisions/0006-epic-is-a-task-kind.md)). So it has a `#N`, a description, labels, links (such
+([ADR 0007](../decisions/0007-epic-is-a-task-kind.md)). So it has a `#N`, a description, labels, links (such
 as the T3 thread coordinating it), notes and activity like any task. What differs:
 
 | Rule                                 | Enforced in                                                    |
@@ -116,7 +116,7 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
 
 | File                                                   | What it does                                                          |
 | ------------------------------------------------------ | --------------------------------------------------------------------- |
-| `apps/server/src/db/migrations/008_epics.sql`          | `kind` and `parent_id` on `tasks`                                     |
+| `apps/server/src/db/migrations/009_epics.sql`          | `kind` and `parent_id` on `tasks`                                     |
 | `apps/server/src/services/tasks.ts`                    | `epicFor`, `syncEpic`, joining and leaving, the epic rules            |
 | `apps/server/src/services/summaries.ts`                | `parent` and `rollup` on summaries                                    |
 | `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |

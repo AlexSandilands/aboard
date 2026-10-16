@@ -33,6 +33,7 @@ import type {
   UpdateTaskInput,
 } from "@repo/contracts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { BackupService } from "./backup/index.ts";
 import type { Effects } from "./core.ts";
 
 /**
@@ -52,6 +53,7 @@ export interface Services {
   board: BoardService;
   reviews: ReviewsService;
   labels: LabelsService;
+  backup: BackupService;
 }
 
 export interface ProjectRef {

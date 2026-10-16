@@ -2,6 +2,7 @@ import type { T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
+import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
 import { createLabelsService } from "./labels.ts";
@@ -18,6 +19,8 @@ export interface ServiceDeps {
   bus: EventBus;
   /** Current T3 integration status, embedded in board snapshots. */
   t3Status: () => T3IntegrationStatus;
+  /** Whether an unfinished PR on a host keeps a Review task from Done. Defaults to github.com only. */
+  prHostHoldsTasks?: (host: string) => boolean;
 }
 
 /** Builds the service layer over one database. */
@@ -38,7 +41,12 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
   });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
-  links = createLinksService(core, { task: tasks.record, tasks: tasks.service, settings });
+  links = createLinksService(core, {
+    task: tasks.record,
+    tasks: tasks.service,
+    settings,
+    polls: deps.prHostHoldsTasks ?? ((host) => host === "github.com"),
+  });
   reviews = createReviewsService(core, { task: tasks.record });
 
   return {
@@ -50,5 +58,6 @@ export function createServices(deps: ServiceDeps): Services {
     board: createBoardService(core),
     reviews,
     labels: labels.service,
+    backup: createBackupService(core),
   };
 }

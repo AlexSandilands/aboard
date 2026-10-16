@@ -112,6 +112,13 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const title = ctx.projectTitle(str(p.to) ?? "");
       return line("project", title ? `moved to project ${title}` : "moved to another project");
     }
+    case "restored": {
+      const from = num(p.backupNumber);
+      return line(
+        "created",
+        from !== null ? `restored this from a backup (as #${from})` : "restored this from a backup",
+      );
+    }
     case "archived":
       return line("archive", "archived this");
     case "unarchived":
