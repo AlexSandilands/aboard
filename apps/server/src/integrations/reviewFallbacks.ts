@@ -1,6 +1,5 @@
 import {
   BOARD_REVIEWER,
-  isGatingSeverity,
   REVIEW_DONE_NEXT,
   reviewFixInstructions,
   reviewIsDone,
@@ -116,9 +115,8 @@ export function createReviewFallbacks(deps: {
         }),
       });
       const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;
-      let submitted;
       try {
-        submitted = s.reviews.submit(
+        s.reviews.submit(
           task.id,
           { round: round.round, summary: `${result.summary}${cost}`, findings: result.findings },
           BOARD_REVIEWER,
@@ -134,7 +132,8 @@ export function createReviewFallbacks(deps: {
       const after = s.tasks.summary(task.id);
       let text: string | null = null;
       let key = `review-${round.id}-fix`;
-      if (submitted.findings.some((f) => isGatingSeverity(f.severity))) {
+      // Judged on everything open, not just this round: a gating finding left from an earlier round still needs fixing.
+      if (after.review && after.review.open.blocking + after.review.open.major > 0) {
         text = reviewFixInstructions({
           task,
           round: round.round,

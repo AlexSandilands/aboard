@@ -92,8 +92,9 @@ fallbacks in order:
 3. **The board reviewer.** If it's on (Settings → Local review → Board reviewer), the board reviews the
    round itself with Claude Code headless. If an agent's reviewer submits while it runs, the agent's review
    stands and the board's is dropped. Moving the task to Review meanwhile isn't blocked; the running review
-   covers it. When it finds blocking or major issues and a T3 thread is linked,
-   it posts a "fix these findings" prompt into the thread. Otherwise the card asks for attention.
+   covers it. When blocking or major findings are open and a T3 thread is linked,
+   it posts a "fix these findings" prompt into the thread. When the loop is over with nothing to fix and no PR
+   is linked, it posts a message telling the agent to open the pull request. Otherwise the card asks for attention.
 4. **Otherwise** the round is marked stalled and the card shows *Needs review*. The panel's **Copy prompt**
    copies the loop (or, after a board review, the fix instructions) for any harness.
 
