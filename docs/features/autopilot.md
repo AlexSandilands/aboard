@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #94 (start planned tasks), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -225,6 +225,44 @@ REST only, like the rest of Autopilot:
 
 Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
 
+**Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
+the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
+
+- **Eligible** (`notStartable` is the rule; the action re-checks it, so a flag turned off between the check and the
+  action skips the run): not an epic or archived, in Planned, `task.autopilot === true` (Default and Off never
+  start), a plan (`progress.total > 0`) and not `blocked` by unfinished tasks. The caps and quiet hours are the
+  engine's. Candidates go in board position per project, and the engine starts as many as the cap leaves room for.
+- **Dedupe** `start:<taskId>:<statusChangedAt>`: once per entry into Planned, so moving a task out and back in is the
+  way to try again.
+- **Action**: `ctx.runner.start` with `taskHandoffPrompt` in work mode (`linkedThread: true`: the board links the
+  thread or session itself, and the model line is left out, since the tier picks the model) plus an unattended note
+  (no one to ask: block the step and stop) and, for a chosen skill, a line pointing at its `SKILL.md`. `tier` is the
+  task's suggested tier. The agent moves the task to In Progress itself.
+- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the action
+  began. A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
+  the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
+  error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
+  finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
+  and the engine notifies. Nothing retries it. The flag clears itself when the task changes status
+  ([Needs attention](#needs-attention)), so there is no clearing step. While the action waits out the grace period its
+  run stays `running` and holds a concurrency slot.
+- **The cap counts working agents.** A T3 run ends once the thread has started (so a restart strands nothing), which
+  would free its slot at once. So `check` also counts `workingAgents`: tasks In Progress, In Review (the agent runs
+  its review loop there) or still Planned (the thread hasn't moved them yet) whose latest Start planned run began a T3 thread (the run's `threadUrl`, whatever the run's
+  outcome: one that failed at the grace period may still move the task) that is `working`, `waiting` (subagents still
+  going), `input` or `approval` in its snapshot, and not settled or archived. `check` drops candidates that already
+  have a run (a failed or still-starting task would otherwise use up the room of those below it) and returns only as
+  many as `maxConcurrent` leaves after those and the engine's running runs. A snapshot only counts as
+  evidence when it was taken after the run ended (the launch-time poll sees a thread that hasn't run yet, "idle"). A
+  thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
+  for ten minutes from the run's end or the snapshot. The slot frees when
+  the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
+  waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
+  the engine counts. A dry run ignores this.
+- **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
+  by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
+  (15).
+
 ### Runners
 
 An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
@@ -291,11 +329,11 @@ without `--force`, so a worktree with uncommitted changes is kept and logged onc
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
 `defineAutomation`:
 
-- `key`: stored in settings and runs, so never renamed. Start planned tasks must use `AUTOPILOT_START_PLANNED`.
+- `key`: stored in settings and runs, so never renamed. Start planned tasks uses `AUTOPILOT_START_PLANNED`.
 - `needsAgent`: whether the action starts an agent, and so counts against the caps.
 - `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
-  UI renders (boolean, number, text, select, skill).
+  UI renders (boolean, number, text, select, skill; a skill field's `builtinLabel` renames its built-in entry).
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
@@ -371,6 +409,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |

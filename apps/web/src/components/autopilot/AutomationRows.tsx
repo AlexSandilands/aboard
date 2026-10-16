@@ -261,7 +261,15 @@ function FieldControl({
         </Select>
       );
     case "skill":
-      return <SkillField projectId={projectId} value={value} label={label} onSave={onSave} />;
+      return (
+        <SkillField
+          projectId={projectId}
+          value={value}
+          label={label}
+          builtinLabel={field.builtinLabel}
+          onSave={onSave}
+        />
+      );
   }
 }
 
@@ -319,11 +327,13 @@ function SkillField({
   projectId,
   value,
   label,
+  builtinLabel,
   onSave,
 }: {
   projectId: string | null;
   value: unknown;
   label: string;
+  builtinLabel: string | undefined;
   onSave: (next: unknown) => boolean;
 }) {
   const discovered = useSkills(projectId).data ?? [];
@@ -334,7 +344,7 @@ function SkillField({
   return (
     <ReviewSkillSelect
       ariaLabel={label}
-      options={skillOptions(skills, current)}
+      options={skillOptions(skills, current, builtinLabel ? { builtinLabel } : {})}
       value={current}
       onChange={(skill) => {
         if (skill) onSave(skill);

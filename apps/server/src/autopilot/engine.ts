@@ -13,6 +13,7 @@ import {
 } from "./types.ts";
 
 export const AUTOPILOT_TICK_MS = 60_000;
+const DEFAULT_BOARD_URL = "http://127.0.0.1:5317";
 /** Board events come in bursts (a move publishes several); one pass after the burst is enough. */
 export const AUTOPILOT_DEBOUNCE_MS = 1_000;
 
@@ -45,6 +46,8 @@ export function createAutopilotEngine(deps: {
   services: () => Services;
   bus: EventBus;
   runner?: Runner;
+  /** Where the user opens the board; actions put it in agent prompts. */
+  boardUrl?: () => string;
   now?: () => Date;
   debounceMs?: number;
   tickMs?: number;
@@ -110,6 +113,7 @@ export function createAutopilotEngine(deps: {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
           engine: s.autopilot.engine(),
+          boardUrl: deps.boardUrl?.() ?? DEFAULT_BOARD_URL,
           config,
           run: started,
           actor: AUTOPILOT_ACTOR,

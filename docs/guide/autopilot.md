@@ -36,6 +36,35 @@ Headless agents can't force-push, push to the default branch or merge a pull req
 once the task's PR merges, or after **Worktree retention** days (7 by default). One with uncommitted changes is
 kept.
 
+## Start planned tasks
+
+The one that does the work: it starts an agent on a task you've planned. Switch it on per project or for the
+board, then flag the tasks you want it to take: **Autopilot: On** in the task panel's Details. A task flagged
+Default or Off is never started.
+
+A task is picked up when it's in **Planned**, flagged On, has a plan and nothing unfinished blocks it, and the
+limits below leave room. Tasks go in the order they sit in the Planned column, so drag the one you want first to
+the top.
+
+The agent gets the same prompt as the **Copy prompt** hand-off in work mode, plus a note that nobody is watching:
+if it needs an answer it marks the step blocked and stops. It runs on the model you mapped to the task's
+suggested tier. Its settings:
+
+- **Implement skill**: what the agent follows; the default is the board's own workflow.
+- **Runner**, **budget**, **timeout** and **T3 Code access**, as in [How agents run](#how-agents-run).
+- **Start from**: the branch its worktree starts from; blank is the project's default branch.
+- **Start grace period** (15 minutes): the agent moves the task to In Progress itself.
+
+**Agent runs at once** limits how many of its agents are working: a T3 Code thread keeps its place until it goes
+idle or finishes, is archived or settled, or its task is Done or moves back to Backlog. A thread waiting
+for your answer still holds its place, so answer it, or the next task won't start. A thread the board can no longer
+see (T3 Code closed, the thread deleted) stops holding it after ten minutes.
+
+It tries a task once each time it enters Planned. If the run fails, or the task is still in Planned when the
+grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
+a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
+**Dry run** to see which tasks it would start.
+
 ## Limits
 
 In **Settings → Autopilot**:

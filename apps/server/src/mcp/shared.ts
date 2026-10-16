@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -15,6 +14,7 @@ import {
 } from "@repo/contracts";
 import { renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
+import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
 
@@ -208,8 +208,7 @@ export function childActivity(services: Services, epic: TaskDetail): ChildActivi
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
 export function boardUrl(ctx: AppContext): string {
-  const { webDist, port, webPort } = ctx.config;
-  return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
+  return boardUrlOf(ctx.config);
 }
 
 /**

@@ -47,6 +47,8 @@ export interface ActionContext<C> {
   /** Starts agent work; only for automations with needsAgent. What it records goes on this run as it happens. */
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
   engine: AutopilotEngineSettings;
+  /** Where the user opens the board, e.g. `http://127.0.0.1:5317`, for prompts that point an agent at a task. */
+  boardUrl: string;
   /** The effective config for the candidate's project (or the board's). */
   config: C;
   run: AutopilotRun;
