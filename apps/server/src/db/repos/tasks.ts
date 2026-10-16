@@ -24,6 +24,8 @@ export interface TaskRecord {
   /** null inherits the global auto-review setting. */
   autoReview: boolean | null;
   suggestedModel: SuggestedModel | null;
+  /** The template it was created from; null for none, or once that template is deleted. */
+  templateId: string | null;
 }
 
 interface TaskRow {
@@ -47,6 +49,7 @@ interface TaskRow {
   auto_review: number | null;
   suggested_tier: ModelTier | null;
   suggested_reason: string | null;
+  template_id: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -69,6 +72,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   resolvedByTaskId: r.resolved_by_task_id,
   autoReview: r.auto_review === null ? null : r.auto_review !== 0,
   suggestedModel: r.suggested_tier ? { tier: r.suggested_tier, reason: r.suggested_reason } : null,
+  templateId: r.template_id,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -92,6 +96,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   auto_review: t.autoReview === null ? null : t.autoReview ? 1 : 0,
   suggested_tier: t.suggestedModel?.tier ?? null,
   suggested_reason: t.suggestedModel?.reason ?? null,
+  template_id: t.templateId,
 });
 
 export interface TaskFilter {
