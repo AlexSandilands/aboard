@@ -140,6 +140,51 @@ planned tasks on the next tick. It only reports blockers that finished in the la
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
 
+**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
+per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
+this automation's own switch decides whether a project's rules run. It has no config of its own.
+
+- A rule has a name, a template (board-wide or the project's, with a title pattern), a schedule, whether its tasks
+  carry the Autopilot flag (On), and an enabled switch. The schedule is `weekly` (weekdays and a time) or `every`
+  (N days from a start date, at a time), in the server's local time (`nextDue` and `latestDue` in
+  `packages/contracts/src/recurring.ts`). Slots are found by calendar day, so a DST change never shifts them: a
+  time the clock skips runs an hour later, a repeated one runs the first time.
+- `check` returns, per enabled rule, the latest slot after the rule's cursor `last_due_at` that is due. Only the
+  latest: after downtime of the board there is one catch-up task, not one per missed slot. The dedupe key is
+  `recurring:<ruleId>:<slot>`. The cursor and the key hold the slot as a local wall-clock stamp
+  (`2026-10-12T09:00:00`, `localStamp`), not an instant, so a machine that moves to another time zone doesn't see a
+  handled slot as new.
+- `act` creates the task through `services.tasks.create` with the template: Planned when the template has a plan,
+  Backlog otherwise, flagged On when the rule says so, under the actor `autopilot`, then adds the note "Created by
+  Autopilot from recurring rule <name>". The title and description render `{{date}}` and `{{project}}` as of when the
+  task is made, so a catch-up task carries the day it was made, not the day of the slot it stands for.
+- It skips (the run is `skipped`, with the reason) while the task the rule made last is still open: not Done
+  (closed tasks are Done) and not archived. A deleted template fails the run with "pick another one".
+- Whatever the outcome, `act` moves the cursor to the slot (`recurring.handled`), so the next pass looks for the
+  slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
+  doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
+- A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
+  changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
+  for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
+  project's rules restart from now (`recurring.restart`). Only downtime of the board itself catches up.
+- Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
+  example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
+  The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
+  these settings ("Recurring tasks…", `openProjectSettings(id, "recurring")`), scrolled to the section.
+
+#### Recurring rules API
+
+REST only, like the rest of Autopilot:
+
+| Route                                    | Does                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `GET /api/projects/:id/recurring`        | The project's rules, each with `nextDueAt`                     |
+| `POST /api/projects/:id/recurring`       | Creates one (`name`, `templateId`, `schedule`, `flagAutopilot`, `enabled`); 409 on a name the project has |
+| `PATCH /api/recurring/:id`               | Edits it                                                       |
+| `DELETE /api/recurring/:id`              | Deletes it; tasks it made stay                                 |
+
+Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
+
 ### Runners
 
 An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
@@ -273,6 +318,7 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `packages/contracts/src/autopilot.ts` | Modes, scopes, runs, engine settings, field descriptors, `resolveAutopilot`, `inQuietHours` |
 | `apps/server/src/db/migrations/010_autopilot.sql` | `autopilot_settings`, `autopilot_runs`, the scope clean-up triggers |
 | `apps/server/src/db/migrations/013_task_autopilot.sql` | `tasks.autopilot`, the per-task flag |
+| `apps/server/src/db/migrations/016_autopilot_recurring.sql` | `autopilot_recurring`, the recurring-task rules |
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
@@ -284,5 +330,8 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
+| `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
+| `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

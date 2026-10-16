@@ -116,7 +116,15 @@ const RUN_LIMIT = 50;
 
 export function createAutopilotService(
   core: Core,
-  deps: { automations: readonly Automation[]; notifications: NotificationsService },
+  deps: {
+    automations: readonly Automation[];
+    notifications: NotificationsService;
+    /**
+     * An automation just started applying to these projects: its switch went on for them, or Pause all was lifted.
+     * For automations that keep their own schedule and must not catch up on what passed meanwhile.
+     */
+    onEnabled?: (automation: string, projectIds: readonly string[]) => void;
+  },
 ): AutopilotService {
   const { repos } = core;
   const byKey = new Map(deps.automations.map((a) => [a.key, a]));
@@ -171,6 +179,15 @@ export function createAutopilotService(
         effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
       };
     });
+  };
+
+  /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
+  const enabledProjects = (key: string): string[] => {
+    const all = repos.autopilotSettings.all();
+    return repos.projects
+      .list()
+      .filter((p) => resolveAutopilot(chainFor(all, key, p.id)).enabled)
+      .map((p) => p.id);
   };
 
   const logRun = (fx: Effects, run: AutopilotRun) => {
@@ -235,10 +252,14 @@ export function createAutopilotService(
       return next.data;
     },
     setPaused(paused) {
+      const wasPaused = loadAutopilotStatus(repos).paused;
       core.write((fx) => {
         repos.settings.set(AUTOPILOT_PAUSED_KEY, paused);
         fx.autopilot();
       });
+      if (wasPaused && !paused) {
+        for (const a of deps.automations) deps.onEnabled?.(a.key, enabledProjects(a.key));
+      }
       return loadAutopilotStatus(repos);
     },
     scope(kind, id) {
@@ -257,6 +278,7 @@ export function createAutopilotService(
       if (!parsed.success) {
         throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);
       }
+      const before = new Set(enabledProjects(key));
       core.write((fx) => {
         if (mode === "inherit" && Object.keys(config).length === 0) {
           repos.autopilotSettings.delete(kind, scopeId, key);
@@ -272,6 +294,8 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
+      const started = enabledProjects(key).filter((projectId) => !before.has(projectId));
+      if (started.length > 0) deps.onEnabled?.(key, started);
       return entries(kind, scopeId);
     },
     resolve(automation, projectId) {

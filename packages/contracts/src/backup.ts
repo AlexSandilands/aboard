@@ -58,6 +58,8 @@ export const BoardDump = z.object({
   task_relations: z.array(BackupRow).default([]),
   /** Autopilot switches and config per scope. Dumps taken before Autopilot have none. */
   autopilot_settings: z.array(BackupRow).default([]),
+  /** Recurring-task rules. Dumps taken before Recurring tasks have none. */
+  autopilot_recurring: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
 });
