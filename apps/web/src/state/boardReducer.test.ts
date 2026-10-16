@@ -19,6 +19,9 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     updatedAt: "",
     statusChangedAt: "",
     labels: [],
+    blockedBy: [],
+    blocks: [],
+    blocked: false,
     resolution: null,
     resolvedBy: null,
     progress: { done: 0, total: 0 },
@@ -41,6 +44,7 @@ const board = (tasks: TaskSummary[]): BoardSnapshot => ({
   integrations: {
     t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
   },
+  autopilot: { paused: false, active: [] },
 });
 
 describe("applyBoardEvent", () => {

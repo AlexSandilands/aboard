@@ -1,5 +1,6 @@
 import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings, type ModelTiers } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
+import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
 import type { SettingsService } from "./types.ts";
 
@@ -32,24 +33,28 @@ const DEFAULTS: StoredSettings = {
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
  * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
- * machine; a forced restore keeps them from the database it replaces.
+ * machine; a forced restore keeps them from the database it replaces. Autopilot's engine settings are stored beside
+ * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
  */
-export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<keyof StoredSettings>([
-  "jiraBaseUrl",
-  "githubPolling",
-  "t3LinkTarget",
-  "agentT3Threads",
-  "autoReview",
-  "reviewSkill",
-  "reviewMaxRounds",
-  "headlessReviewEnabled",
-  "headlessReviewCli",
-  "headlessReviewBudgetUsd",
-  "issueImportEnabled",
-  "issueImportModel",
-  "issueImportBudgetUsd",
-  "issueImportJiraTools",
-  "modelTiers",
+export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
+  AUTOPILOT_ENGINE_KEY,
+  ...([
+    "jiraBaseUrl",
+    "githubPolling",
+    "t3LinkTarget",
+    "agentT3Threads",
+    "autoReview",
+    "reviewSkill",
+    "reviewMaxRounds",
+    "headlessReviewEnabled",
+    "headlessReviewCli",
+    "headlessReviewBudgetUsd",
+    "issueImportEnabled",
+    "issueImportModel",
+    "issueImportBudgetUsd",
+    "issueImportJiraTools",
+    "modelTiers",
+  ] satisfies Array<keyof StoredSettings>),
 ]);
 
 /** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */

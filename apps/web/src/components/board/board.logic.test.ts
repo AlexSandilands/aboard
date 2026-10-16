@@ -48,6 +48,9 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     updatedAt: "",
     statusChangedAt: "",
     labels: [],
+    blockedBy: [],
+    blocks: [],
+    blocked: false,
     resolution: null,
     resolvedBy: null,
     progress: { done: 0, total: 0 },
@@ -72,6 +75,7 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
     integrations: {
       t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
     },
+    autopilot: { paused: false, active: [] },
   };
 }
 

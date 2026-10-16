@@ -44,6 +44,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
 | Links                | The task has no links                             |
+| Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
@@ -54,6 +55,11 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended.
+
+### Dependency lines
+
+Hovering a card, or opening one, draws lines to the cards it blocks and is blocked by; Shift shows the whole
+chain. The overlay and its rules are in [relations.md](relations.md#on-the-board).
 
 ### Links on cards
 

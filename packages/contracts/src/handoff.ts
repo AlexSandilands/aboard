@@ -9,7 +9,8 @@ import type { Project, TaskSummary } from "./schemas.ts";
 export type HandoffMode = "work" | "plan" | "orchestrate";
 
 export interface HandoffPromptInput {
-  task: Pick<TaskSummary, "id" | "number" | "title"> & Partial<Pick<TaskSummary, "suggestedModel" | "kind">>;
+  task: Pick<TaskSummary, "id" | "number" | "title"> &
+    Partial<Pick<TaskSummary, "suggestedModel" | "kind" | "blocked">>;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
@@ -124,6 +125,11 @@ export function taskHandoffPrompt({
           "",
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step, link any PR you open, and finish with an add_note handover.`,
+          ...(task.blocked
+            ? [
+                `This task is blocked: get_task lists what it waits on under "Blocked by". Don't start it until those are Done; tell me what it waits on instead.`,
+              ]
+            : []),
         ];
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
   const model = mode === "work" && !linkedThread ? suggestedModelLine(task, modelTiers) : null;
@@ -173,7 +179,7 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     "",
     `1. Call ${overview} on the ${BRAND.id} MCP server: it lists the epic's tasks with their status, plan progress, current step and sessions. get_task("${task.id}") adds the epic's description.`,
     "2. Tasks without a plan (in Backlog): read each with get_task and explore the code, then draft a plan for each. Show me the drafts together, and once I approve save each with set_plan (with suggestedModel) and move_task it to planned. Don't start a task before its plan is approved.",
-    "3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them. Tell me the order before starting anything.",
+    '3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them, and tasks that are blocked (epic_overview shows "blocked by #N"): start those once what blocks them is Done. Tell me the order before starting anything.',
     "4. Start each task by the first route that works here:",
     "   - T3 Code threads, if epic_overview says T3 Code is available: start_task_thread(task) for each. Each gets its own worktree (pass baseRef when a task builds on another's branch), runs its own review loop, and its live status shows in epic_overview.",
     "   - Subagents, if you can start them (Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent): one per task, with get_handoff_prompt(task, subagent: true) as its prompt. Start it on the model of the task's suggested tier if you can choose one. Give each its own git worktree and branch when they run in parallel (your harness's worktree isolation, or git worktree add), otherwise run them one at a time.",

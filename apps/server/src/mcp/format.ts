@@ -2,6 +2,7 @@ import {
   AGENT_HARNESSES,
   type AgentHarness,
   TASK_STATUSES,
+  autopilotRunEventText,
   describeEpicRollup,
   findJiraKeys,
   formatPlanText,
@@ -14,6 +15,7 @@ import {
   type TaskDetail,
   type TaskEvent,
   type TaskLink,
+  type TaskRelation,
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
@@ -106,6 +108,14 @@ function shortLink(link: TaskLink): string {
   }
 }
 
+/** The blockers that aren't Done yet. */
+const openBlockers = (task: Pick<TaskSummary, "blockedBy">): TaskRelation[] =>
+  task.blockedBy.filter((b) => b.status !== "done");
+
+/** "#79 Title [Done]", with "(archived)" for a blocker that has left the board. */
+const relationText = (r: TaskRelation): string =>
+  `#${r.number} ${r.title} [${statusLabel(r.status)}${r.archived ? ", archived" : ""}]`;
+
 /**
  * One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". An epic shows its
  * roll-up instead of progress, and a child says which epic it is in (unless `inEpic` is false, as under its epic).
@@ -123,6 +133,12 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
     parts.push("no plan");
   }
   if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
+  if (task.blocked)
+    parts.push(
+      `blocked by ${openBlockers(task)
+        .map((b) => `#${b.number}`)
+        .join(", ")}`,
+    );
   const links = task.links.map(shortLink);
   if (links.length) parts.push(links.join(", "));
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
@@ -215,6 +231,29 @@ export function eventText(event: TaskEvent): string {
       if (p.epicDeleted) what += " (epic deleted)";
       break;
     }
+    case "blocker_added":
+    case "blocker_removed":
+    case "blocks_added":
+    case "blocks_removed": {
+      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      const text = {
+        blocker_added: `now blocked by ${other}`,
+        blocker_removed: `no longer blocked by ${other}`,
+        blocks_added: `now blocks ${other}`,
+        blocks_removed: `no longer blocks ${other}`,
+      } as const;
+      what = text[event.type];
+      break;
+    }
+    case "blocker_deleted":
+    case "blocked_deleted": {
+      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      what =
+        event.type === "blocker_deleted"
+          ? `${other}, which blocked this, was deleted`
+          : `${other}, which this blocked, was deleted`;
+      break;
+    }
     case "child_added":
     case "child_removed": {
       const child = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
@@ -224,6 +263,9 @@ export function eventText(event: TaskEvent): string {
     }
     case "finding_resolved":
       what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
+      break;
+    case "autopilot_run":
+      what = autopilotRunEventText(p);
       break;
     default: {
       const json = Object.keys(p).length ? ` ${JSON.stringify(p)}` : "";
@@ -429,6 +471,15 @@ export function renderTaskDetail(
     );
     lines.push(`Also resolved: ${resolved.join("; ")}`);
   }
+  if (task.blockedBy.length) {
+    const wait = task.blocked
+      ? ` (blocked until ${openBlockers(task)
+          .map((b) => `#${b.number}`)
+          .join(", ")} are Done)`
+      : "";
+    lines.push(`Blocked by: ${task.blockedBy.map(relationText).join("; ")}${wait}`);
+  }
+  if (task.blocks.length) lines.push(`Blocks: ${task.blocks.map(relationText).join("; ")}`);
   if (task.attention.length) lines.push(`Needs attention: ${task.attention.map((a) => a.message).join("; ")}`);
   if (task.import?.status === "pending") {
     lines.push(`Import: pending. The title, description and labels are being filled in from ${task.import.sourceUrl}.`);

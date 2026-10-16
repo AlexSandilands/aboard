@@ -19,6 +19,7 @@ import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
+import type { RelationsModule } from "./relations.ts";
 import type { CloseInput, ProjectsService, ReviewsService, SettingsService, TaskQuery, TasksService } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
@@ -68,6 +69,7 @@ export function createTasksService(
     labels: LabelsModule;
     settings: SettingsService;
     imports: () => ImportsModule;
+    relations: () => RelationsModule;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -239,6 +241,7 @@ export function createTasksService(
         }
         if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
         if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
+        if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
           deps.links().service.add(task.id, { value: source.url }, actor);
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
@@ -349,6 +352,9 @@ export function createTasksService(
         if (next.parentId && (next.parentId !== current.parentId || archivedChanged))
           syncEpic(next.parentId, actor, fx);
         if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
+        // Removals first, so one call can swap a blocker.
+        if (input.removeBlockedBy?.length) deps.relations().removeBlockersIn(id, input.removeBlockedBy, actor, fx);
+        if (input.addBlockedBy?.length) deps.relations().addBlockersIn(id, input.addBlockedBy, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);
@@ -467,6 +473,8 @@ export function createTasksService(
         for (const child of repos.tasks.childrenOf([id])) {
           fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
         }
+        // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
+        deps.relations().noteDeletionIn(task, actor, fx);
         repos.tasks.delete(id);
         fx.taskDeleted(id);
         if (task.parentId) {

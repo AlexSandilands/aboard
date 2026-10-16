@@ -43,7 +43,7 @@ function seed() {
   });
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
-  s.tasks.create({ projectId: project.id, title: "Idea" });
+  const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   s.tasks.addNote(a.id, "handover", "agent");
   s.reviews.submit(
     a.id,
@@ -51,10 +51,21 @@ function seed() {
     "rev",
   );
   s.labels.setColor("ui", 120);
+  // Autopilot settings are exported; its runs are history and stay out.
+  h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+    ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
+    ('project', '${project.id}', 'noop', 'off', '{"days":3}', '2026-10-16T00:00:00.000Z')`);
+  s.autopilot.updateEngine({ maxConcurrent: 2, quietHours: { enabled: true } });
+  s.autopilot.setPaused(true);
+  s.autopilot.record({
+    automation: "noop",
+    candidate: { dedupeKey: "k", summary: "do it", taskId: a.id },
+    dryRun: false,
+  });
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
-  return { ...h, s, project, a, b };
+  return { ...h, s, project, a, b, idea };
 }
 
 const PRIMARY_KEYS: Record<string, string> = {
@@ -62,11 +73,13 @@ const PRIMARY_KEYS: Record<string, string> = {
   projects: "id",
   label_colors: "label",
   counters: "name",
+  autopilot_settings: "scope_kind, scope_id, automation",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
   task_links: "id",
   task_labels: "task_id, label",
+  task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
   review_findings: "id",
   task_events: "id",
@@ -133,7 +146,9 @@ describe("dump", () => {
         "settings.json",
         "projects.json",
         "labels.json",
+        "relations.json",
         "counters.json",
+        "autopilot.json",
         `tasks/${a.createdAt.slice(0, 7)}/task-${a.number}.json`,
         `events/${a.createdAt.slice(0, 7)}.json`,
       ]),
@@ -202,6 +217,12 @@ describe("restore", () => {
         expect.arrayContaining([{ snapshot_json: null }]),
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 2 });
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_runs").get()).toEqual({ n: 0 });
+      const restoredRepos = createRepos(restored);
+      // Pause stays with the machine: a restore can't lift it, or set it.
+      expect(restoredRepos.settings.all().has("autopilotPaused")).toBe(false);
+      expect(restoredRepos.settings.all().get("autopilotEngine")).toMatchObject({ maxConcurrent: 2 });
     } finally {
       restored.close();
     }
@@ -219,6 +240,14 @@ describe("restore", () => {
     } finally {
       restored.close();
     }
+  });
+
+  it("reads a folder written before Autopilot, which has no autopilot.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "autopilot.json"));
+    expect(readDumpDir(dir).autopilot_settings).toEqual([]);
   });
 
   it("refuses to replace a board without force, and keeps machine settings and the old file when forced", () => {
@@ -270,10 +299,13 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns, no Autopilot.
+    const { autopilot_settings: _a, task_relations: _rel, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
-      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
+      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
+      task_relations: [],
+      autopilot_settings: [],
       tasks: dump.tasks.map((bundle) => {
         const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
@@ -299,6 +331,36 @@ describe("restore", () => {
       });
     } finally {
       restored.close();
+    }
+  });
+});
+
+describe("backups from before relations existed", () => {
+  it("reads a folder with no relations.json and a single file with no task_relations", () => {
+    const { s } = seed();
+    const dump = s.backup.dump();
+    const { task_relations: _r, ...counts } = dump.manifest.counts;
+    const oldManifest = { ...dump.manifest, counts };
+
+    const dir = tempDir();
+    writeDumpDir(dir, { ...dump, manifest: oldManifest });
+    rmSync(join(dir, "relations.json"));
+    const fromFolder = readDumpDir(dir);
+    expect(fromFolder.task_relations).toEqual([]);
+
+    const file = join(tempDir(), "board.json");
+    const { task_relations: _t, ...bare } = dump;
+    writeFileSync(file, JSON.stringify({ ...bare, manifest: oldManifest }));
+    expect(readDump(file).task_relations).toEqual([]);
+
+    const restored = join(tempDir(), "data.sqlite");
+    restoreBoard(restored, fromFolder);
+    const db = openDatabase(restored);
+    try {
+      expect(db.prepare("SELECT count(*) AS n FROM task_relations").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual({ n: dump.tasks.length });
+    } finally {
+      db.close();
     }
   });
 });
@@ -340,6 +402,21 @@ describe("restoreTask", () => {
     expect(after.links.map((l) => l.url)).toEqual(before.links.map((l) => l.url));
     expect(after.events.at(-1)).toMatchObject({ type: "restored", actor: "user" });
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("puts back what it blocked, and keeps current relations when it replaces a task", () => {
+    const { s, a, idea } = seed();
+    const dump = s.backup.dump();
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(s.tasks.summary(idea.id).blockedBy.map((t) => t.id)).toEqual([a.id]);
+
+    // The relation changed since the backup: a forced restore leaves it as it is now.
+    s.tasks.update(idea.id, { removeBlockedBy: [a.id] }, "user");
+    s.backup.restoreTask(dump, a.number, { actor: "user", force: true });
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
   });
 
   it("refuses a task still on the board unless forced, and renumbers on a number clash", () => {

@@ -65,6 +65,7 @@ and to this table.
 | Statuses, closing, archiving, deleting, numbering              | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
 | Plans, steps, the current step, Markdown plans                 | [docs/features/plans.md](docs/features/plans.md)                                    |
 | Epics: grouping tasks, derived status, bands, epic tools       | [docs/features/epics.md](docs/features/epics.md)                                    |
+| Blocks / blocked by, the card lock, dependency lines           | [docs/features/relations.md](docs/features/relations.md)                            |
 | MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
@@ -76,6 +77,7 @@ and to this table.
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
 | Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
+| Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
@@ -251,6 +252,7 @@ export const AttentionReason = z.object({
     "review_failed",
     "review_unattended",
     "import_failed",
+    "autopilot",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
@@ -302,6 +304,14 @@ export const EpicRollup = z.object({
 });
 export type EpicRollup = z.infer<typeof EpicRollup>;
 
+/** The other end of a blocks / blocked-by relation: enough to show it, and to tell whether it still blocks. */
+export const TaskRelation = TaskRef.extend({
+  status: TaskStatus,
+  /** An archived task that isn't Done still blocks, but its card isn't on the board. */
+  archived: z.boolean(),
+});
+export type TaskRelation = z.infer<typeof TaskRelation>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -321,6 +331,12 @@ export const TaskSummary = z.object({
   statusChangedAt: IsoDate,
   /** Normalised labels (see normalizeLabel), sorted by name. */
   labels: z.array(z.string()),
+  /** Tasks that must be Done before this one is ready, by number. */
+  blockedBy: z.array(TaskRelation),
+  /** Tasks waiting on this one, by number. */
+  blocks: z.array(TaskRelation),
+  /** True while any of `blockedBy` isn't Done (see isBlocked). */
+  blocked: z.boolean(),
   resolution: TaskResolution.nullable(),
   /** The task that delivered or duplicates this one; null for "won't do" or once that task is deleted. */
   resolvedBy: TaskRef.nullable(),
@@ -372,6 +388,7 @@ export const BoardSnapshot = z.object({
   /** Label colour overrides by label; labels not listed take a hue hashed from their name. */
   labelColors: z.record(z.string(), LabelHue),
   integrations: z.object({ t3: T3IntegrationStatus }),
+  autopilot: AutopilotStatus,
 });
 export type BoardSnapshot = z.infer<typeof BoardSnapshot>;
 
@@ -384,6 +401,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("integrations.changed"), t3: T3IntegrationStatus }),
   /** Label colours are board-wide, so a change is sent whole rather than per task. */
   z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
+  /** A run started or finished, or Autopilot settings or pause changed. Sent whole: it is small and board-wide. */
+  z.object({ type: z.literal("autopilot.changed"), autopilot: AutopilotStatus }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -460,6 +479,8 @@ export const CreateTaskInput = z
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
+    /** Tasks that block this one (uuid, "#42" or "42"). */
+    blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
      * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
@@ -492,6 +513,10 @@ export const UpdateTaskInput = z.object({
   suggestedModel: SuggestedModelInput.nullable().optional(),
   /** The epic to put the task in (uuid, "#42" or "42"); null takes it out of its epic. */
   epicId: z.string().trim().min(1).nullable().optional(),
+  /** Tasks to add as blockers of this one (uuid, "#42" or "42"). A cycle is rejected. */
+  addBlockedBy: z.array(z.string().trim().min(1)).optional(),
+  /** Blockers to remove. Removing a relation that doesn't exist does nothing. */
+  removeBlockedBy: z.array(z.string().trim().min(1)).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 

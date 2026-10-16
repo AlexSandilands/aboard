@@ -34,6 +34,19 @@ describe("describeEvent", () => {
     expect(text({})).toBe("changed the labels");
   });
 
+  it("describes relation changes from either side", () => {
+    const text = (type: string) => describeEvent(event(type, { task: 4, title: "Migration" }), ctx).text;
+    expect(text("blocker_added")).toBe("made this blocked by #4 Migration");
+    expect(text("blocks_added")).toBe("made this block #4 Migration");
+    expect(text("blocker_removed")).toBe("removed #4 Migration as a blocker");
+    expect(text("blocked_deleted")).toBe("deleted #4 Migration, which this blocked");
+    expect(describeEvent(event("blocker_deleted", {}), ctx)).toEqual({
+      icon: "delete",
+      text: "deleted a task, which blocked this",
+      quote: null,
+    });
+  });
+
   it("describes suggested model changes", () => {
     const line = (payload: Record<string, unknown>) => describeEvent(event("suggested_model_changed", payload), ctx);
     expect(line({ tier: "deep", reason: "Migration" })).toMatchObject({

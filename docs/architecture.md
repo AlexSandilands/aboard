@@ -9,7 +9,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (GitHub, T3 Code, review watchdog) ──► services/*
+ pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
 ```
 
 ## Packages
@@ -92,8 +92,8 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 `CODE: message` as an error result, sometimes with a hint.
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
-`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`
-and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
+`labels.colors_changed` and `autopilot.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -115,11 +115,14 @@ ORM.
 | `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
+| `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
+| `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
+| `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
@@ -129,7 +132,7 @@ status, derived from its tasks but stored so lists and filters treat it like any
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
-[local review](features/local-review.md), [labels](features/labels.md), [issue import](features/issue-import.md).
+[local review](features/local-review.md), [labels](features/labels.md), [relations](features/relations.md), [issue import](features/issue-import.md).
 
 ## Integrations
 
@@ -151,6 +154,9 @@ on independent timers:
   [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
+- **Autopilot:** a rule engine in `apps/server/src/autopilot/`, passing over the board after board events and
+  every 60 seconds, and acting where an automation is switched on ([ADR 0008](decisions/0008-autopilot-engine.md),
+  [autopilot.md](features/autopilot.md)). Runs a restart left going are failed at startup, pollers or not.
 
 ## Testing
 

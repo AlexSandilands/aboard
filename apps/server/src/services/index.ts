@@ -2,6 +2,9 @@ import type { T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
+import { AUTOMATIONS } from "../autopilot/automations/index.ts";
+import type { Automation } from "../autopilot/types.ts";
+import { createAutopilotService } from "./autopilot.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
@@ -10,6 +13,7 @@ import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
+import { createRelations, type RelationsModule } from "./relations.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTasksService } from "./tasks.ts";
@@ -22,6 +26,8 @@ export interface ServiceDeps {
   t3Status: () => T3IntegrationStatus;
   /** Whether an unfinished PR on a host keeps a Review task from Done. Defaults to github.com only. */
   prHostHoldsTasks?: (host: string) => boolean;
+  /** The Autopilot catalogue; tests swap in their own. */
+  automations?: readonly Automation[];
 }
 
 /** Builds the service layer over one database. */
@@ -35,6 +41,7 @@ export function createServices(deps: ServiceDeps): Services {
   let links: LinksModule | null = null;
   let reviews: ReviewsService | null = null;
   let imports: ImportsModule | null = null;
+  let relations: RelationsModule | null = null;
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -43,7 +50,9 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
     settings,
     imports: () => imports!,
+    relations: () => relations!,
   });
+  relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, {
@@ -65,5 +74,6 @@ export function createServices(deps: ServiceDeps): Services {
     labels: labels.service,
     imports: imports.service,
     backup: createBackupService(core),
+    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS }),
   };
 }

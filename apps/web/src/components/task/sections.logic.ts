@@ -2,13 +2,14 @@ import { reviewBadgeLabel, type TaskDetail } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
-export const SECTION_IDS = ["labels", "links", "review", "plan", "details", "activity"] as const;
+export const SECTION_IDS = ["labels", "links", "relations", "review", "plan", "details", "activity"] as const;
 
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_TITLES: Record<SectionId, string> = {
   labels: "Labels",
   links: "Links",
+  relations: "Relations",
   review: "Local review",
   plan: "Plan",
   details: "Details",
@@ -60,6 +61,8 @@ export type SectionTask = Pick<
   TaskDetail,
   | "labels"
   | "links"
+  | "blockedBy"
+  | "blocks"
   | "attention"
   | "review"
   | "reviews"
@@ -84,6 +87,8 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
       return false;
     case "links":
       return task.links.length === 0;
+    case "relations":
+      return task.blockedBy.length === 0 && task.blocks.length === 0;
     case "review":
       return task.reviews.length === 0;
     case "details":
@@ -137,6 +142,14 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       if (task.links.length === 0) return "None";
       const problem = task.attention.find((a) => LINK_ATTENTION.has(a.kind));
       return problem ? `${task.links.length} · ${problem.message}` : String(task.links.length);
+    }
+    case "relations": {
+      const open = task.blockedBy.filter((b) => b.status !== "done");
+      const parts = [
+        open.length ? `blocked by ${open.map((b) => `#${b.number}`).join(", ")}` : null,
+        task.blocks.length ? `blocks ${task.blocks.map((b) => `#${b.number}`).join(", ")}` : null,
+      ].filter((part) => part !== null);
+      return parts.length ? parts.join(" · ") : task.blockedBy.length ? "Unblocked" : "None";
     }
     case "review": {
       if (!task.review) return "Not reviewed yet";

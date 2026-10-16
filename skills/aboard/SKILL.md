@@ -1,6 +1,6 @@
 ---
 name: aboard
-description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, step progress, PR/Jira/T3 thread links and handover notes.
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/Jira/T3 thread links and handover notes.
 ---
 
 # Aboard (task board)
@@ -113,6 +113,23 @@ band across the columns its tasks are in, with a roll-up of how many are done.
   blocked and report back when you need an answer. When `move_task` to `review` opens a review round, don't
   run the loop or open the PR; stop and report the round. The orchestrator runs the review: `start_review`
   gives it the open round's brief.
+
+## Blocking
+
+Tasks can wait on each other, including across projects. "A blocks B" means B isn't ready until A is **Done**
+(any resolution counts, so a `wont_do` blocker stops blocking). On the board a blocked card shows a lock, and
+hovering a card draws green lines to the tasks it unblocks and red lines to its blockers.
+
+- Set blockers with `blockedBy: ["#4"]` on `create_task` / `add_to_backlog`, or `addBlockedBy` /
+  `removeBlockedBy` on `update_task`. The other task's `Blocks` list follows. Epics can block and be blocked.
+- `get_task` lists **Blocked by** (with each blocker's status) and **Blocks**; `list_tasks` and `epic_overview`
+  add "blocked by #N" to blocked tasks.
+- **Don't start a blocked task** (`move_task` to `in_progress`, or a session for it). Tell the user what it waits
+  on, or work on a blocker first. When the last blocker reaches Done the task is ready.
+- A relation that would make a cycle is refused with the chain in the error. Archive-and-forget doesn't free a
+  task: an archived blocker that isn't Done still blocks, so close it with `close_task` or remove the relation.
+- Record a dependency when you notice one while planning (the task needs another task's migration, API or
+  decision), instead of only writing it in the plan.
 
 ## Local review
 
