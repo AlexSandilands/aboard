@@ -463,7 +463,7 @@ function AgentsSection() {
     <SettingsSection title="Agents (MCP)">
       <SettingsRow title="Claude Code" description={`Register the ${BRAND.id} MCP server.`}>
         <div className="mt-2">
-          <CommandSnippet command={`claude mcp add --transport http ${BRAND.id} ${url}`} />
+          <CommandSnippet command={`claude mcp add --scope user --transport http ${BRAND.id} ${url}`} />
         </div>
       </SettingsRow>
       <SettingsRow title="Codex" description={`Register the ${BRAND.id} MCP server.`}>
