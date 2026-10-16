@@ -41,6 +41,7 @@ const board = (tasks: TaskSummary[]): BoardSnapshot => ({
   integrations: {
     t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
   },
+  autopilot: { paused: false, active: [] },
 });
 
 describe("applyBoardEvent", () => {

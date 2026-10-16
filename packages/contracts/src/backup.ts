@@ -54,6 +54,8 @@ export const BoardDump = z.object({
   counters: z.array(BackupRow),
   /** Absent from dumps taken before templates existed. */
   task_templates: z.array(BackupRow).default([]),
+  /** Autopilot switches and config per scope. Dumps taken before Autopilot have none. */
+  autopilot_settings: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
 });

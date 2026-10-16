@@ -1,5 +1,6 @@
 import {
   TASK_STATUSES,
+  autopilotRunEventText,
   describeEpicRollup,
   findJiraKeys,
   formatPlanText,
@@ -220,6 +221,9 @@ export function eventText(event: TaskEvent): string {
     }
     case "finding_resolved":
       what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
+      break;
+    case "autopilot_run":
+      what = autopilotRunEventText(p);
       break;
     default: {
       const json = Object.keys(p).length ? ` ${JSON.stringify(p)}` : "";

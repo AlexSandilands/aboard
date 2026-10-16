@@ -26,7 +26,7 @@ pass `template` to `add_to_backlog` or `create_task` and read them with `list_te
 `YYYY-MM-DD`) and `{{project}}` (the project's title) when a task is created; any other `{{…}}` is left as
 written. A phase without steps is dropped on save.
 
-Three starters are seeded by migration `010_task_templates.sql`, so they exist on every board and are
+Three starters are seeded by migration `012_task_templates.sql`, so they exist on every board and are
 edited or deleted like any other:
 
 | Name    | Labels    | Plan                                                  |
@@ -121,7 +121,7 @@ task clears its `template_id` when that template is gone.
 
 | File                                                  | What it does                                              |
 | ----------------------------------------------------- | --------------------------------------------------------- |
-| `apps/server/src/db/migrations/010_task_templates.sql` | The table, `tasks.template_id`, the starters              |
+| `apps/server/src/db/migrations/012_task_templates.sql` | The table, `tasks.template_id`, the starters              |
 | `packages/contracts/src/templates.ts`                 | Schemas, inputs, placeholder rendering                    |
 | `apps/server/src/services/templates.ts`               | CRUD, name uniqueness, resolving by id or name            |
 | `apps/server/src/services/tasks.ts`                   | `create` applies a template                               |

@@ -301,6 +301,7 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   review_failed: "Review failed",
   review_unattended: "Review findings",
   import_failed: "Import failed",
+  autopilot: "Autopilot",
 };
 
 /** Tasks for the sidebar's "Needs attention" list: errors first, then most recently updated. */

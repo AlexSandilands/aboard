@@ -72,6 +72,7 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
     integrations: {
       t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
     },
+    autopilot: { paused: false, active: [] },
   };
 }
 

@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskEvent } from "@repo/contracts";
+import { TASK_STATUSES, autopilotRunEventText, type TaskEvent } from "@repo/contracts";
 
 export type ActivityIcon =
   | "created"
@@ -205,6 +205,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
               : `reopened review round ${round}`;
       return line(status === "failed" || status === "stalled" ? "step_blocked" : "review", text, str(p.error));
     }
+    case "autopilot_run":
+      return line("other", autopilotRunEventText(p));
     default:
       return line("other", event.type.replace(/[_.]+/g, " "));
   }

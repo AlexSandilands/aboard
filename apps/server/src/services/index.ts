@@ -2,6 +2,9 @@ import type { T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
+import { AUTOMATIONS } from "../autopilot/automations/index.ts";
+import type { Automation } from "../autopilot/types.ts";
+import { createAutopilotService } from "./autopilot.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
@@ -23,6 +26,8 @@ export interface ServiceDeps {
   t3Status: () => T3IntegrationStatus;
   /** Whether an unfinished PR on a host keeps a Review task from Done. Defaults to github.com only. */
   prHostHoldsTasks?: (host: string) => boolean;
+  /** The Autopilot catalogue; tests swap in their own. */
+  automations?: readonly Automation[];
 }
 
 /** Builds the service layer over one database. */
@@ -69,5 +74,6 @@ export function createServices(deps: ServiceDeps): Services {
     imports: imports.service,
     backup: createBackupService(core),
     templates,
+    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS }),
   };
 }
