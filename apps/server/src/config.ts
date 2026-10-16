@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BRAND, brandEnv } from "@repo/contracts";
+import type { SessionDirs } from "./integrations/agentSessions.ts";
 
 export interface Config {
   port: number;
@@ -20,6 +21,8 @@ export interface Config {
   pollers: boolean;
   /** The user's home folder, where harnesses install skills (`~/.claude/skills`). */
   userHome: string;
+  /** Where Claude Code and Copilot CLI keep their running sessions, for linked sessions' status. */
+  sessionDirs: SessionDirs;
 }
 
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
@@ -38,5 +41,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
     userHome: homedir(),
+    sessionDirs: {
+      claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
+      copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),
+    },
   };
 }

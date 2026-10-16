@@ -30,10 +30,14 @@ A task can link to:
 - **GitHub issues**, with their state when imported (see [Importing issues](importing-issues.md)).
 - **Jira issues.** Keys in a task's title are linked automatically.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
+- **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
+  session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
+  Code, when it is still running). Choose the terminal in **Settings → Terminal**; **Copy resume command**
+  works anywhere.
 - **Any URL.**
 
 Failing checks, requested changes and blocked steps show up under **Needs attention** in the sidebar.
-Agents are told which Jira issue and T3 thread a task is still missing, so links tend to fill in on
+Agents are told which Jira issue, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 
 ## Labels

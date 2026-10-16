@@ -1,4 +1,5 @@
 import {
+  agentSessionUrl,
   classifyLink,
   t3DesktopThreadUrl,
   type ClassifiedLink,
@@ -21,8 +22,14 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
   }
+  if (input.agentSession) {
+    const ref = { ...input.agentSession, sessionId: input.agentSession.sessionId.toLowerCase() };
+    return { kind: "agent_session", url: agentSessionUrl(ref), ref };
+  }
   const value = input.value?.trim();
-  if (!value) throw new AppError("VALIDATION", "Provide a link value (URL or Jira key) or a t3Thread reference");
+  if (!value) {
+    throw new AppError("VALIDATION", "Provide a link value (URL or Jira key), a t3Thread or an agentSession");
+  }
   const looksLikeKey = /^[a-z][a-z0-9_]+-\d+$/i.test(value);
   const classified = classifyLink(looksLikeKey ? value.toUpperCase() : value, { jiraBaseUrl });
   if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${value}`);
@@ -42,6 +49,7 @@ const refJson = (c: ClassifiedLink): string | null => {
       return JSON.stringify({ key: c.key });
     case "t3_thread":
     case "issue":
+    case "agent_session":
       return JSON.stringify(c.ref);
     case "url":
       return null;
@@ -195,7 +203,22 @@ export function createLinksService(
                 .forTasks([task.id])
                 .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
             : undefined);
-        if (existing) return toLink(existing);
+        if (existing) {
+          // A session is one link however often it is linked, but an agent may correct the folder it gave: Claude
+          // finds a conversation to resume by its folder, so the newest one wins.
+          const before = parseJson<{ cwd?: string }>(existing.ref_json)?.cwd;
+          if (classified.kind === "agent_session" && before !== classified.ref.cwd) {
+            repos.links.setRef(existing.id, refJson(classified)!);
+            fx.log(task.id, actor, "link_updated", {
+              linkId: existing.id,
+              kind: existing.kind,
+              from: before,
+              to: classified.ref.cwd,
+            });
+            return toLink(repos.links.row(existing.id)!);
+          }
+          return toLink(existing);
+        }
         const row: LinkRow = {
           id: randomUUID(),
           task_id: task.id,

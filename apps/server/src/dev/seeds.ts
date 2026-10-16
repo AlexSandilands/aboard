@@ -1,5 +1,7 @@
 import {
   BOARD_REVIEWER,
+  type AgentHarness,
+  type AgentSessionSnapshot,
   type PlanInput,
   type PrSnapshot,
   type T3ThreadSnapshot,
@@ -353,6 +355,42 @@ const threads: Scenario = (s, opts) => {
     status: "planned",
     links: ["SHOP-77", "https://example.com/design-spec"],
   });
+
+  // Agent sessions in each status. The ids are made up, so the pollers would find none of them running; the
+  // pollers are off in a sandbox, and opening one reads its real status first.
+  const sessionCwd = opts.workspaceRoot ?? "/work/links";
+  const session = (title: string, harness: AgentHarness, snapshot: AgentSessionSnapshot | null, n: number) => {
+    const taskId = addTask(s, project.id, { title, status: "in_progress" });
+    const sessionId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const link = s.links.add(taskId, { agentSession: { harness, sessionId, cwd: sessionCwd } }, AGENT);
+    if (snapshot) s.links.setSnapshot(link.id, snapshot);
+  };
+  session("Claude session working", "claude-code", { status: "busy", inApp: false }, 1);
+  session("Claude session idle", "claude-code", { status: "idle", inApp: false }, 2);
+  session("Claude session not running", "claude-code", { status: "not_running", inApp: false }, 3);
+  session("Copilot session running", "copilot-cli", { status: "running", inApp: false }, 4);
+  session("Session status unknown", "claude-code", null, 5);
+  // A thread hides the session on the card; the panel shows both.
+  const inT3 = addTask(s, project.id, {
+    title: "Session inside a T3 thread",
+    status: "in_progress",
+    links: ["t3code://threads/sandbox-env/thread-with-session"],
+  });
+  s.links.setSnapshot(s.tasks.detail(inT3).links[0]!.id, {
+    title: "Thread with a session",
+    status: "working",
+    lastActivityAt: now,
+    model: "claude-opus",
+    branch: null,
+  });
+  const inT3Session = s.links.add(
+    inT3,
+    {
+      agentSession: { harness: "claude-code", sessionId: "00000000-0000-4000-8000-000000000006", cwd: sessionCwd },
+    },
+    AGENT,
+  );
+  s.links.setSnapshot(inT3Session.id, { status: "busy", inApp: true });
 };
 
 /**
@@ -630,6 +668,7 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
     t3Home: "/nonexistent",
     pollers: false,
     userHome: "/nonexistent",
+    sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
   });
   try {
     SCENARIOS[scenario](ctx.services, opts);
