@@ -27,8 +27,8 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
       title: "Set (replace) the plan",
       description:
         "REPLACES the task's whole plan: every phase or step you don't pass back with its id is deleted, along with " +
-        "its status and notes. To change an existing plan use update_plan (mark many steps done, edit notes, move " +
-        "steps, rename phases), update_step (one step) or add_steps (append). Use set_plan to write the first plan or " +
+        "its status and notes. To change an existing plan use update_plan (edit notes, move steps, rename phases, " +
+        "several changes at once), update_step (one step) or add_steps (append). Use set_plan to write the first plan or " +
         "to deliberately rewrite one: give structured `phases` or a `markdown` checklist, plus optional `context` " +
         "(approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. When rewriting, pass " +
         "the phase/step ids from get_task to keep their statuses and notes. A call that would delete steps with " +
@@ -150,7 +150,9 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
           ...(args.steps?.length ? [`${args.steps.length} step(s)`] : []),
           ...(args.phases?.length ? [`${args.phases.length} phase(s)`] : []),
         ].join(" and ");
-        const batched = batchedCompletionHint(before, after.phases, `"#${after.number}"`);
+        // Only mid-work: at Review or Done the open-steps hint asks for exactly this catch-up.
+        const batched =
+          after.status === "in_progress" ? batchedCompletionHint(before, after.phases, `"#${after.number}"`) : null;
         return taskResult(services, id, `Updated ${counts} in the plan.${batched ? `\n\n${batched}` : ""}`);
       }),
   );

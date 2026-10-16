@@ -222,6 +222,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       run(
         () => {
           const id = services.tasks.resolveId(args.task);
+          const wasDone = services.tasks.detail(id).status === "done";
           const summary = services.tasks.move(
             id,
             {
@@ -238,7 +239,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
               : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
           const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
           return taskResult(services, id, review ? `${moved}\n\n${review}` : moved, {
-            closing: summary.status === "done",
+            closing: summary.status === "done" && !wasDone,
           });
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },

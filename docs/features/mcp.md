@@ -81,9 +81,10 @@ text when both are present.
     that is already Done never nags.
   - _Stale plan_: the task is In Progress with a step in progress, but no step has changed for
     `STALE_PLAN_MS` (30 minutes).
-  - _Batched completion_ is not a section: an `update_plan` result that moved two or more steps straight to
-    done without ever starting them (`startedAt` still null) says so after the headline
-    (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes.
+  - _Batched completion_ is not a section: an `update_plan` result on an In Progress task that moved two or
+    more steps straight to done without ever starting them (`startedAt` still null) says so after the headline
+    (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes. It stays quiet at Review
+    and Done, where the open-steps hint asks for exactly that catch-up.
 
   Renderings that aren't for the implementing agent (the reviewer's `taskText`) leave it out: it is opt-in
   through `renderTaskDetail`'s `progress` option.

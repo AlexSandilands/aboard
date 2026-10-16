@@ -83,6 +83,23 @@ describe("plan progress hints over MCP", () => {
     const review = await call(agent, "move_task", { task, status: "review" });
     expect(review).toContain("2 plan step(s) are still open");
 
+    // Catching up at Review is what the hint asked for, so it isn't rebuked as batching.
+    const caughtUp = await call(agent, "update_plan", {
+      task,
+      steps: [
+        { step: "1.2", status: "done" },
+        { step: "1.3", status: "done" },
+      ],
+    });
+    expect(caughtUp).not.toContain("went straight to done");
+    await call(agent, "update_plan", {
+      task,
+      steps: [
+        { step: "1.2", status: "todo" },
+        { step: "1.3", status: "todo" },
+      ],
+    });
+
     const done = await call(agent, "move_task", { task, status: "done" });
     expect(done).toContain("2 plan step(s) are still open");
     expect(await call(agent, "get_task", { task })).not.toContain("Plan progress:");
