@@ -16,6 +16,10 @@ const DEFAULTS: StoredSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
+  issueImportEnabled: true,
+  issueImportModel: "haiku",
+  issueImportBudgetUsd: 0.5,
+  issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
 };
 
@@ -76,6 +80,14 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
+        }
+        if (input.issueImportEnabled !== undefined) repos.settings.set("issueImportEnabled", input.issueImportEnabled);
+        if (input.issueImportModel !== undefined) repos.settings.set("issueImportModel", input.issueImportModel);
+        if (input.issueImportBudgetUsd !== undefined) {
+          repos.settings.set("issueImportBudgetUsd", input.issueImportBudgetUsd);
+        }
+        if (input.issueImportJiraTools !== undefined) {
+          repos.settings.set("issueImportJiraTools", [...new Set(input.issueImportJiraTools)]);
         }
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));

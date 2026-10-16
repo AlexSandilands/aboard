@@ -35,7 +35,7 @@ export const resolutionNeedsTask = (resolution: TaskResolution): boolean => reso
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
-export const LinkKind = z.enum(["pr", "jira", "t3_thread", "url"]);
+export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "url"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 export const PROJECT_ICON_COLORS = [
@@ -144,6 +144,17 @@ export type PlanPhase = z.infer<typeof PlanPhase>;
 export const PrRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
 export type PrRef = z.infer<typeof PrRef>;
 
+/** A GitHub issue. Shaped like a PR ref, since both live at `<host>/<owner>/<repo>/<kind>/<n>`. */
+export const IssueRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
+export type IssueRef = z.infer<typeof IssueRef>;
+
+/** What was last read of a GitHub issue when it was imported. It isn't polled afterwards. */
+export const IssueSnapshot = z.object({
+  state: z.enum(["open", "closed"]),
+  title: z.string(),
+});
+export type IssueSnapshot = z.infer<typeof IssueSnapshot>;
+
 export const MergeMethod = z.enum(["squash", "merge", "rebase"]);
 export type MergeMethod = z.infer<typeof MergeMethod>;
 
@@ -207,6 +218,7 @@ export const TaskLink = z.discriminatedUnion("kind", [
     ref: T3ThreadRef,
     snapshot: T3ThreadSnapshot.nullable(),
   }),
+  z.object({ ...LinkBase, kind: z.literal("issue"), ref: IssueRef, snapshot: IssueSnapshot.nullable() }),
   z.object({ ...LinkBase, kind: z.literal("url") }),
 ]);
 export type TaskLink = z.infer<typeof TaskLink>;
@@ -223,6 +235,7 @@ export const AttentionReason = z.object({
     "review_stuck",
     "review_failed",
     "review_unattended",
+    "import_failed",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
@@ -248,6 +261,19 @@ export const TaskEvent = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 export type TaskEvent = z.infer<typeof TaskEvent>;
+
+export const ImportStatus = z.enum(["pending", "failed", "done"]);
+export type ImportStatus = z.infer<typeof ImportStatus>;
+
+/** A task created from a Jira or GitHub issue: the title, description and labels are filled in by a background job. */
+export const TaskImport = z.object({
+  status: ImportStatus,
+  /** Why the last attempt failed; null unless the status is "failed". */
+  error: z.string().nullable(),
+  /** The Jira key or issue URL the task was created from. */
+  sourceUrl: z.string(),
+});
+export type TaskImport = z.infer<typeof TaskImport>;
 
 /** Compact pointer to another task, e.g. the one that resolved this one. */
 export const TaskRef = z.object({ id: z.string(), number: z.number().int(), title: z.string() });
@@ -283,6 +309,8 @@ export const TaskSummary = z.object({
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */
   suggestedModel: SuggestedModel.nullable(),
+  /** Set when the task was created from an issue URL; null otherwise. */
+  import: TaskImport.nullable(),
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;
 
@@ -383,16 +411,31 @@ export const LinkInput = z.object({
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
-export const CreateTaskInput = z.object({
-  projectId: z.string(),
-  title: z.string().trim().min(1),
-  description: z.string().optional(),
-  plan: PlanInput.optional(),
-  links: z.array(LinkInput).optional(),
-  /** Normalised by the server; see normalizeLabels. */
-  labels: z.array(z.string()).optional(),
-  actor: z.string().optional(),
-});
+export const CreateTaskInput = z
+  .object({
+    projectId: z.string(),
+    /** Required unless `sourceUrl` is given, which supplies a placeholder title until the import fills it in. */
+    title: z.string().trim().min(1).optional(),
+    description: z.string().optional(),
+    plan: PlanInput.optional(),
+    links: z.array(LinkInput).optional(),
+    /** Normalised by the server; see normalizeLabels. */
+    labels: z.array(z.string()).optional(),
+    /**
+     * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
+     * and a background job fills in the title, description and labels. Can't be combined with a plan.
+     */
+    sourceUrl: z.string().trim().min(1).optional(),
+    actor: z.string().optional(),
+  })
+  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined, {
+    message: "Provide a title or a sourceUrl",
+    path: ["title"],
+  })
+  .refine((input) => input.sourceUrl === undefined || input.plan === undefined, {
+    message: "A task imported from an issue can't be created with a plan",
+    path: ["plan"],
+  });
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>;
 
 export const UpdateTaskInput = z.object({
@@ -457,6 +500,16 @@ export const AppSettings = z.object({
   /** The Claude Code CLI to run; null looks up `claude` on PATH. */
   headlessReviewCli: z.string().nullable(),
   headlessReviewBudgetUsd: z.number().positive().max(100),
+  /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
+  issueImportEnabled: z.boolean(),
+  /** The model `claude -p` runs for an import, as `--model` takes it (an alias like "haiku" or a full id). */
+  issueImportModel: z.string(),
+  issueImportBudgetUsd: z.number().positive().max(100),
+  /**
+   * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
+   * the server). Empty looks for the common read-only Jira tools on every configured MCP server.
+   */
+  issueImportJiraTools: z.array(z.string()),
   /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
   modelTiers: ModelTiers,
 });
@@ -472,6 +525,10 @@ export const UpdateSettingsInput = z.object({
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
+  issueImportEnabled: z.boolean().optional(),
+  issueImportModel: z.string().trim().min(1).optional(),
+  issueImportBudgetUsd: z.number().positive().max(100).optional(),
+  issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
   /** null clears the token. */

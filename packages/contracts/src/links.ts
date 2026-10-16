@@ -1,14 +1,16 @@
-import type { LinkKind, PrRef, T3ThreadRef } from "./schemas.ts";
+import type { IssueRef, LinkKind, PrRef, T3ThreadRef } from "./schemas.ts";
 
 export type ClassifiedLink =
   | { kind: "pr"; url: string; ref: PrRef | null }
   | { kind: "jira"; url: string; key: string }
   | { kind: "t3_thread"; url: string; ref: T3ThreadRef }
+  | { kind: "issue"; url: string; ref: IssueRef }
   | { kind: "url"; url: string };
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 // Any host, since GitHub Enterprise lives on its own domains. The server decides which hosts to poll.
 const GITHUB_PR = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/pull\/(\d+)(?:[/?#]|$)/i;
+const GITHUB_ISSUE = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/issues\/(\d+)(?:[/?#]|$)/i;
 const ADO_PR = /^https?:\/\/[^/\s]*(dev\.azure\.com|visualstudio\.com)\/.+\/pullrequest\/(\d+)/i;
 const BITBUCKET_PR = /^https?:\/\/bitbucket\.org\/([^/\s]+\/[^/\s]+)\/pull-requests\/(\d+)/i;
 const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
@@ -16,7 +18,8 @@ const JIRA_BROWSE = /\/browse\/([A-Z][A-Z0-9_]+-\d+)(?:[/?#]|$)/;
 
 /**
  * Infers link kind from user/agent input: GitHub-style PR URLs on any host (`/<owner>/<repo>/pull/<n>`),
- * ADO/Bitbucket PR URLs, Jira keys or /browse/ URLs, t3code:// thread deep links, otherwise a plain URL.
+ * ADO/Bitbucket PR URLs, GitHub issue URLs (`.../issues/<n>`), Jira keys or /browse/ URLs, t3code:// thread
+ * deep links, otherwise a plain URL.
  */
 export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null } = {}): ClassifiedLink | null {
   const input = value.trim();
@@ -42,6 +45,15 @@ export function classifyLink(value: string, opts: { jiraBaseUrl?: string | null 
   const gh = GITHUB_PR.exec(input);
   if (gh) {
     return { kind: "pr", url: input, ref: { host: gh[1]!.toLowerCase(), repo: gh[2]!, number: Number(gh[3]) } };
+  }
+
+  const issue = GITHUB_ISSUE.exec(input);
+  if (issue) {
+    return {
+      kind: "issue",
+      url: input,
+      ref: { host: issue[1]!.toLowerCase(), repo: issue[2]!, number: Number(issue[3]) },
+    };
   }
 
   const jiraUrl = JIRA_BROWSE.exec(input);
@@ -90,7 +102,30 @@ export function findJiraKeys(text: string | null | undefined): string[] {
 }
 
 export function isLinkKind(value: string): value is LinkKind {
-  return value === "pr" || value === "jira" || value === "t3_thread" || value === "url";
+  return value === "pr" || value === "jira" || value === "t3_thread" || value === "issue" || value === "url";
+}
+
+/** An issue a task can be created from: what to link, and the title to show until its details are fetched. */
+export type IssueSource =
+  | { kind: "jira"; key: string; url: string; placeholder: string }
+  | { kind: "issue"; ref: IssueRef; url: string; placeholder: string };
+
+/**
+ * Recognises text that is a Jira issue (a bare key like `PROJ-123` or a `/browse/PROJ-123` URL) or a GitHub issue
+ * URL, and nothing else: a PR URL, other links and ordinary titles are null. Standards that look like keys
+ * ("UTF-8") are not Jira keys.
+ */
+export function parseIssueSource(value: string, opts: { jiraBaseUrl?: string | null } = {}): IssueSource | null {
+  const input = value.trim();
+  if (!input || /\s/.test(input)) return null;
+  const link = classifyLink(input, opts);
+  if (link?.kind === "issue") {
+    return { kind: "issue", ref: link.ref, url: link.url, placeholder: `${link.ref.repo}#${link.ref.number}` };
+  }
+  if (link?.kind === "jira" && !NOT_JIRA_PROJECTS.has(link.key.slice(0, link.key.lastIndexOf("-")))) {
+    return { kind: "jira", key: link.key, url: link.url, placeholder: link.key };
+  }
+  return null;
 }
 
 /** Deep link that opens a thread in the T3 Code desktop app. */

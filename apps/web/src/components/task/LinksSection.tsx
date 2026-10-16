@@ -12,6 +12,7 @@ import {
   ChevronDownIcon,
   CircleCheckIcon,
   CircleDashedIcon,
+  CircleDotIcon,
   CircleXIcon,
   CopyIcon,
   EllipsisIcon,
@@ -47,6 +48,7 @@ import {
   describeLinkInput,
   hostnameOf,
   isActiveThread,
+  ISSUE_STATE,
   isWebUrl,
   jiraHref,
   orderLinks,
@@ -85,6 +87,7 @@ export const LINK_KIND_ICON: Record<TaskLink["kind"], LucideIcon> = {
   pr: GitPullRequestArrowIcon,
   jira: TicketIcon,
   t3_thread: MessagesSquareIcon,
+  issue: CircleDotIcon,
   url: GlobeIcon,
 };
 
@@ -173,6 +176,8 @@ function LinkRow({
       return <T3ThreadRow link={link} t3={t3} settings={settings} multiThread={multiThread} onRemove={onRemove} />;
     case "pr":
       return <PullRequestRow task={task} link={link} onRemove={onRemove} />;
+    case "issue":
+      return <IssueRow link={link} onRemove={onRemove} />;
     case "jira": {
       const href = jiraHref(link, settings?.jiraBaseUrl);
       return (
@@ -452,6 +457,32 @@ function PullRequestRow({
           ) : null}
         </span>
       ) : null}
+    </RowWithMenu>
+  );
+}
+
+function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" }>; onRemove: () => void }) {
+  const snapshot = link.snapshot;
+  const state = snapshot ? ISSUE_STATE[snapshot.state] : null;
+  const title = snapshot?.title ?? link.label ?? link.ref.repo;
+  return (
+    <RowWithMenu
+      href={link.url}
+      title={state ? `${state.label} issue · ${link.url}` : link.url}
+      menu={
+        <>
+          <MenuItem onClick={() => copyToClipboard(link.url, "URL")}>
+            <CopyIcon />
+            Copy URL
+          </MenuItem>
+          <RemoveItem onRemove={onRemove} />
+        </>
+      }
+    >
+      <CircleDotIcon className={cn("size-4 shrink-0", state?.tone ?? "text-muted-foreground")} />
+      <span className="shrink-0 tabular-nums text-muted-foreground">#{link.ref.number}</span>
+      <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
+      {state ? <span className={cn("shrink-0 text-xs font-normal", state.tone)}>{state.label}</span> : null}
     </RowWithMenu>
   );
 }

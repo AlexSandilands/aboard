@@ -7,6 +7,7 @@ import {
   deriveProjectIdentity,
   findJiraKeys,
   normalizeWorkspaceKey,
+  parseIssueSource,
   parsePlanMarkdown,
   PROJECT_ICON_IMAGE_MAX_LENGTH,
   ProjectIcon,
@@ -58,6 +59,14 @@ describe("deriveProgress", () => {
 });
 
 describe("deriveAttention", () => {
+  it("warns about a failed import, with the reason", () => {
+    const failed = { status: "failed", error: "gh isn't signed in", sourceUrl: "PROJ-1" } as const;
+    expect(deriveAttention([], [], null, failed)).toEqual([
+      { kind: "import_failed", severity: "warning", message: "Import failed: gh isn't signed in" },
+    ]);
+    expect(deriveAttention([], [], null, { ...failed, status: "pending", error: null })).toEqual([]);
+  });
+
   it("flags blocked steps and failing PRs", () => {
     const reasons = deriveAttention(phases(["blocked"]), [
       {
@@ -175,7 +184,55 @@ describe("classifyLink", () => {
       ref: null,
     });
     expect(classifyLink("https://github.com/acme/app/pull/42abc")).toMatchObject({ kind: "url" });
+    expect(classifyLink("https://github.com/acme/app/issues/42")).toMatchObject({
+      kind: "issue",
+      ref: { host: "github.com", repo: "acme/app", number: 42 },
+    });
     expect(classifyLink("https://github.com/acme/pull/42")).toMatchObject({ kind: "url" });
+  });
+});
+
+describe("parseIssueSource", () => {
+  it("reads a bare Jira key and a /browse/ URL", () => {
+    expect(parseIssueSource("PROJ-123")).toEqual({
+      kind: "jira",
+      key: "PROJ-123",
+      url: "PROJ-123",
+      placeholder: "PROJ-123",
+    });
+    expect(parseIssueSource("  PROJ-123 ", { jiraBaseUrl: "https://jira.example.com/" })).toMatchObject({
+      kind: "jira",
+      url: "https://jira.example.com/browse/PROJ-123",
+    });
+    expect(parseIssueSource("https://jira.example.com/browse/ABC-7?focusedId=1")).toEqual({
+      kind: "jira",
+      key: "ABC-7",
+      url: "https://jira.example.com/browse/ABC-7?focusedId=1",
+      placeholder: "ABC-7",
+    });
+  });
+
+  it("reads a GitHub issue URL on any host", () => {
+    expect(parseIssueSource("https://github.com/acme/app/issues/45")).toEqual({
+      kind: "issue",
+      ref: { host: "github.com", repo: "acme/app", number: 45 },
+      url: "https://github.com/acme/app/issues/45",
+      placeholder: "acme/app#45",
+    });
+    expect(parseIssueSource("https://ghe.example.com/team/svc/issues/8#issuecomment-1")).toMatchObject({
+      kind: "issue",
+      ref: { host: "ghe.example.com", repo: "team/svc", number: 8 },
+    });
+  });
+
+  it("is null for anything else", () => {
+    expect(parseIssueSource("https://github.com/acme/app/pull/45")).toBeNull();
+    expect(parseIssueSource("https://github.com/acme/app/issues")).toBeNull();
+    expect(parseIssueSource("https://example.com/browse")).toBeNull();
+    expect(parseIssueSource("Fix PROJ-123 login")).toBeNull();
+    expect(parseIssueSource("proj-123")).toBeNull();
+    expect(parseIssueSource("UTF-8")).toBeNull();
+    expect(parseIssueSource("")).toBeNull();
   });
 });
 

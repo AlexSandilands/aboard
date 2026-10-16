@@ -38,6 +38,7 @@ files under each app.
 ### Guides
 
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
+- [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
@@ -52,6 +53,7 @@ files under each app.
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
 - [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
+- [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell

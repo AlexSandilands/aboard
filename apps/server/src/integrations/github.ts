@@ -1,4 +1,13 @@
-import type { GithubHostStatus, GithubStatus, MergeMethod, MergePrInput, PrSnapshot, TaskLink } from "@repo/contracts";
+import type {
+  GithubHostStatus,
+  GithubStatus,
+  IssueRef,
+  IssueSnapshot,
+  MergeMethod,
+  MergePrInput,
+  PrSnapshot,
+  TaskLink,
+} from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService, TasksService } from "../services/types.ts";
@@ -191,6 +200,42 @@ const DISABLE_AUTO_MERGE_MUTATION = `mutation DisableAutoMerge($pullRequestId: I
 /** States in which GitHub merges at once rather than waiting, as `gh pr merge --auto` treats them. */
 const IMMEDIATELY_MERGEABLE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
 
+// ── Issues ───────────────────────────────────────────────────────────────
+
+/** What `gh issue view --json` returns, as far as an import reads it. */
+const GhIssue = z.object({
+  title: z.string(),
+  body: z.string().nullish(),
+  state: z.string(),
+  labels: z.array(z.object({ name: z.string() })).default([]),
+});
+
+export interface IssueDetails {
+  title: string;
+  body: string;
+  labels: string[];
+  state: IssueSnapshot["state"];
+}
+
+/** Parses `gh issue view --json title,body,labels,state`. Throws when it isn't an issue. */
+export function parseGhIssue(stdout: string): IssueDetails {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    throw new Error("gh returned something that isn't JSON");
+  }
+  const parsed = GhIssue.safeParse(json);
+  if (!parsed.success) throw new Error("gh returned an unexpected issue shape");
+  const issue = parsed.data;
+  return {
+    title: issue.title,
+    body: issue.body ?? "",
+    labels: issue.labels.map((l) => l.name),
+    state: issue.state.toUpperCase() === "CLOSED" ? "closed" : "open",
+  };
+}
+
 // ── Hosts ────────────────────────────────────────────────────────────────
 
 /**
@@ -227,6 +272,8 @@ export interface GithubIntegration {
   holdsTasks(host: string): boolean;
   /** One poll over all GitHub PR links (no-op when polling is off or gh is unusable). */
   pollAll(): Promise<void>;
+  /** Reads an issue with `gh issue view`. Throws AppError (`gh` missing or not signed in, issue not found). */
+  fetchIssue(ref: IssueRef): Promise<IssueDetails>;
   /** Fetches one PR link now. Returns false when the link is not a GitHub PR. Throws AppError on failure. */
   refresh(link: TaskLink): Promise<boolean>;
   /** Merges a Review task's PR, or turns auto-merge on or off, then refreshes it. Throws AppError. */
@@ -431,6 +478,21 @@ export function createGithubIntegration(deps: {
       return h === "github.com" || polls(h, status);
     },
     pollAll,
+    async fetchIssue(ref) {
+      const target = ref.host === "github.com" ? ref.repo : `${ref.host}/${ref.repo}`;
+      try {
+        const stdout = await runGh(
+          ["issue", "view", String(ref.number), "--repo", target, "--json", "title,body,labels,state"],
+          { timeoutMs: 30_000 },
+        );
+        return parseGhIssue(stdout);
+      } catch (error) {
+        if (error instanceof GhError && error.notFound) {
+          throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
+        }
+        throw new AppError("VALIDATION", `Could not read ${ref.repo}#${ref.number}: ${messageOf(error)}`);
+      }
+    },
     async refresh(link) {
       // Checked before ensureStatus so refreshing a T3 thread or Jira link never spawns gh.
       if (link.kind !== "pr" || link.ref === null) return false;

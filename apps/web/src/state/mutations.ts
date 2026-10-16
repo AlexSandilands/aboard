@@ -80,6 +80,12 @@ export const useImportT3Projects = (opts?: MutationOpts) =>
 
 export const useCreateTask = (opts?: MutationOpts) =>
   useApiMutation((input: CreateTaskInput) => api<TaskDetail>("/api/tasks", { body: input }), opts);
+/** Runs a failed import again; the server's events show it pending. */
+export const useRetryImport = (opts?: MutationOpts) =>
+  useApiMutation(
+    (taskId: string) => api<TaskSummary>(`/api/tasks/${enc(taskId)}/import/retry`, { method: "POST", body: {} }),
+    opts,
+  );
 export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>

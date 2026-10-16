@@ -3,7 +3,9 @@ import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
+import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
+import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
@@ -25,6 +27,8 @@ export interface IntegrationOverrides {
   githubFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
+  runImport?: RunImport;
+  discoverJiraTools?: (cli: string | null) => Promise<string[]>;
   log?: Logger;
 }
 
@@ -50,6 +54,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const importer = createIssueImporter({
+    services: deps.services,
+    github,
+    ...(overrides.runImport ? { runImport: overrides.runImport } : {}),
+    ...(overrides.discoverJiraTools ? { discoverJiraTools: overrides.discoverJiraTools } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -62,6 +73,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       github.start();
       t3.start();
       reviews.start();
+      importer.resume();
     },
     stop() {
       started = false;
@@ -69,6 +81,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.stop();
       reviews.stop();
     },
+    startImport: (taskId) => importer.start(taskId),
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
     async refreshLink(linkId) {

@@ -12,5 +12,9 @@ export const defaultSettings: AppSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   headlessReviewBudgetUsd: 2,
+  issueImportEnabled: true,
+  issueImportModel: "haiku",
+  issueImportBudgetUsd: 0.5,
+  issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
 };

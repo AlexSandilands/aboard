@@ -1,6 +1,6 @@
 // Pure helpers for the command palette. Path handling adapted from T3 Code's
 // client-runtime browse helpers (MIT) — see NOTICE.
-import type { FsBrowseResult } from "@repo/contracts";
+import { parseIssueSource, type FsBrowseResult } from "@repo/contracts";
 
 // ── Item filtering ───────────────────────────────────────────────────────
 
@@ -159,4 +159,28 @@ export function resolveSubmitPath(query: string, listing: FsBrowseResult | undef
 export function normalizeDescription(raw: string): string | undefined {
   const trimmed = raw.trim();
   return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/** What pasting an issue into the title box does instead of creating a task with that title. */
+export interface IssueImportRow {
+  /** Sent as `sourceUrl`; the server fills in the title, description and labels. */
+  sourceUrl: string;
+  /** The row's title: "Import PROJ-123 from Jira". */
+  title: string;
+  description: string;
+}
+
+/**
+ * Recognises a pasted Jira key or URL, or GitHub issue URL, in the title box. Only for tasks that land in Backlog:
+ * a task that opens the plan editor is titled by the user.
+ */
+export function issueImportRow(query: string, flow: "backlog" | "planned"): IssueImportRow | null {
+  if (flow !== "backlog") return null;
+  const source = parseIssueSource(query);
+  if (!source) return null;
+  return {
+    sourceUrl: query.trim(),
+    title: `Import ${source.placeholder} from ${source.kind === "jira" ? "Jira" : "GitHub"}`,
+    description: "Fills in the title, description and labels from the issue in the background",
+  };
 }

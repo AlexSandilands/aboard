@@ -15,6 +15,7 @@ import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
 import { LinksSection } from "./LinksSection";
 import { DetailsSection } from "./DetailsSection";
+import { ImportCallout } from "./ImportCallout";
 import { ManagedSections } from "./ManagedSections";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
@@ -174,6 +175,7 @@ function TaskPanelBody({
         <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} actions={titleActions} />
       </div>
       <div className="flex flex-col gap-2 px-3 pb-3">
+        <ImportCallout task={task} />
         <ResolutionCallout task={task} />
         {/* A task closed without a plan has nothing to be up to. */}
         {task.resolution && task.progress.total === 0 ? null : (

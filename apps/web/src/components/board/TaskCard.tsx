@@ -7,7 +7,9 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
+import { importPendingLabel } from "~/components/task/import.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
+import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
@@ -43,6 +45,7 @@ export const TaskCardContent = memo(function TaskCardContent({
   archivable?: boolean;
 }) {
   const attention = topAttention(task.attention);
+  const fetching = importPendingLabel(task);
   const jiraKey = jiraKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
   const handoff = showHandoffActions(task);
@@ -69,6 +72,12 @@ export const TaskCardContent = memo(function TaskCardContent({
           <Badge variant="secondary" size="sm">
             Archived
           </Badge>
+        ) : null}
+        {fetching ? (
+          <span className="flex min-w-0 shrink-0 items-center gap-1 text-muted-foreground">
+            <Spinner size="xs" />
+            {fetching}
+          </span>
         ) : null}
         {attention ? (
           <span title={attention.message} className="flex shrink-0">
