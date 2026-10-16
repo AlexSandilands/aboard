@@ -140,11 +140,12 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
         ];
       });
     }
+    // The same for every project, so read once per pass.
+    const ownEpics = services.autopilot.epicsWithOwnSetting({ key: customAutomationKey(custom.id) });
     return scoped.flatMap(({ project }) => {
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
       const eligible = tasks.filter(matches);
-      const ownEpics = services.autopilot.epicsWithOwnSetting({ key: customAutomationKey(custom.id) });
       const scopeChanged = services.customAutomations.scopeChangedAt([
         ...eligible.map((t) => t.id),
         ...new Set(eligible.flatMap((t) => (t.parent ? [t.parent.id] : []))),

@@ -111,6 +111,10 @@ export function createServices(deps: ServiceDeps): Services {
         const customId = customAutomationId(automation);
         if (customId) customAutomations.rearm(customId, projectIds);
       },
+      onEpicOwnSetting: (automation, epicIds) => {
+        const customId = customAutomationId(automation);
+        if (customId) customAutomations.inheritEpicArming(customId, epicIds);
+      },
       onEpicEnabled: (automation, epicIds) => {
         const customId = customAutomationId(automation);
         if (customId) customAutomations.rearm(customId, epicIds.map(epicArmKey));

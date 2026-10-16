@@ -418,9 +418,11 @@ the automation. Runs stay, under the old key.
     (`epic:<id>`) when its effective state goes from off to on for an epic with a setting of its own
     (`onEpicEnabled`, which also covers it going back to Inherit). Lifting Pause all stamps every project and such
     epic that is on. A task in an epic with its own setting follows the epic, not the project, so switching the
-    project doesn't drop events the epic is waiting on (held by quiet hours or a cap);
+    project doesn't drop events the epic is waiting on (held by quiet hours or a cap). An epic that gets a setting
+    of its own takes over the project's time (`onEpicOwnSetting`), so its floor doesn't move either way;
   - when the task came into that scope: its latest `epic_changed`, `moved_project` or `unarchived` event, or its
-    epic's `unarchived` (`scopeChangedAt`).
+    epic's `archived` or `unarchived` (`scopeChangedAt`): an archived epic no longer counts, so its tasks move to
+    the project's scope.
 
   `stale` is a state, not an event, and ignores arming.
 - **Epic scope.** Task-based custom automations can be switched per epic like the built-in ones (the engine

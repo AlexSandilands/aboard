@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   checkCustomDefinition,
   customAutomationKey,
+  epicArmKey,
   CreateCustomAutomationInput,
   normalizeLabels,
   TaskStatus,
@@ -34,7 +35,13 @@ export interface CustomAutomationsService {
    */
   rearm(id: string, scopeKeys: readonly string[]): void;
   /**
-   * When each of these tasks or epics last changed scope: moved project, moved epic, or was unarchived. Events before
+   * These epics now have a setting of their own, so their tasks no longer read the project's arming time. Carry it
+   * over to the epic (the later of the project's and any the epic has), so an epic that was already on keeps the
+   * same floor: neither older events (from before the project was switched on) nor newer (dropping held ones).
+   */
+  inheritEpicArming(id: string, epicIds: readonly string[]): void;
+  /**
+   * When each of these tasks or epics last changed scope: moved project, moved epic, or was archived or unarchived. Events before
    * then happened outside the scope the automation is looking at now.
    */
   scopeChangedAt(ids: readonly string[]): Map<string, string>;
@@ -160,9 +167,31 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
       });
     },
 
+    inheritEpicArming(id, epicIds) {
+      core.write(() => {
+        const current = repos.autopilotCustom.get(id);
+        if (!current) return;
+        const armedProjects = { ...current.armedProjects };
+        let changed = false;
+        for (const epicId of epicIds) {
+          const epic = repos.tasks.get(epicId);
+          const inherited = epic ? armedProjects[epic.projectId] : undefined;
+          const own = armedProjects[epicArmKey(epicId)];
+          if (inherited && (!own || Date.parse(inherited) > Date.parse(own))) {
+            armedProjects[epicArmKey(epicId)] = inherited;
+            changed = true;
+          }
+        }
+        if (changed) repos.autopilotCustom.update({ ...current, armedProjects });
+      });
+    },
+
     scopeChangedAt(ids) {
       return new Map(
-        repos.events.latestOfType(ids, ["epic_changed", "moved_project", "unarchived"]).map((e) => [e.taskId, e.at]),
+        // `archived` matters for an epic: once archived it no longer counts, and its tasks follow the project.
+        repos.events
+          .latestOfType(ids, ["epic_changed", "moved_project", "unarchived", "archived"])
+          .map((e) => [e.taskId, e.at]),
       );
     },
 

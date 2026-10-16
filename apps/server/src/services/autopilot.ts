@@ -148,6 +148,11 @@ export function createAutopilotService(
     onEnabled?: (automation: string, projectIds: readonly string[]) => void;
     /** The same for epics with a setting of their own, when the automation turned on for their tasks. */
     onEpicEnabled?: (automation: string, epicIds: readonly string[]) => void;
+    /**
+     * These epics just got a setting of their own, so their tasks stop following the project's switch. Called before
+     * onEpicEnabled, so an epic that was on through its project can carry over the project's state.
+     */
+    onEpicOwnSetting?: (automation: string, epicIds: readonly string[]) => void;
   },
 ): AutopilotService {
   const { repos } = core;
@@ -362,7 +367,8 @@ export function createAutopilotService(
       }
       const before = new Set(enabledProjects(key));
       // Epics with their own setting follow it rather than the project, so their switching on is tracked apart.
-      const watched = new Set([...epicsWithOwnSetting(automation), ...(kind === "epic" && scopeId ? [scopeId] : [])]);
+      const ownBefore = new Set(epicsWithOwnSetting(automation));
+      const watched = new Set([...ownBefore, ...(kind === "epic" && scopeId ? [scopeId] : [])]);
       const epicsBefore = epicStates(automation, watched);
       core.write((fx) => {
         if (mode === "inherit" && Object.keys(config).length === 0) {
@@ -381,6 +387,8 @@ export function createAutopilotService(
       });
       const started = enabledProjects(key).filter((enabledId) => !before.has(enabledId));
       if (started.length > 0) deps.onEnabled?.(key, started);
+      const gainedOwn = epicsWithOwnSetting(automation).filter((epicId) => !ownBefore.has(epicId));
+      if (gainedOwn.length > 0) deps.onEpicOwnSetting?.(key, gainedOwn);
       const epicsStarted = [...epicStates(automation, watched)]
         .filter(([epicId, on]) => on && !epicsBefore.get(epicId))
         .map(([epicId]) => epicId);

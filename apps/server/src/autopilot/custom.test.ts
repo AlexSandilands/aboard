@@ -401,6 +401,57 @@ describe("custom automations: filters and scopes", () => {
       expect(ran()).toEqual([]);
     });
 
+    it("keeps an epic's floor when it gets a setting of its own while already on through its project", async () => {
+      const { s, inEpic, setEpic, setProject, pass, ran } = epicSetup();
+      const t = inEpic("Moved while the project was off");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      setProject("on");
+      await tick();
+      setEpic("on");
+      await pass();
+      expect(ran()).toEqual([]);
+    });
+
+    it("keeps an epic's floor when it gets a config-only setting", async () => {
+      const ctx = setup();
+      const { s, project, define, pass } = ctx;
+      const custom = define(
+        { name: "Agent", trigger: { kind: "status_change", to: "review" }, action: { kind: "agent", prompt: "Go" } },
+        null,
+      );
+      const key = customAutomationKey(custom.id);
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const t = ctx.task("Moved while the project was off");
+      s.tasks.update(t.id, { epicId: epic.id }, "agent");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      s.autopilot.setScope("project", project.id, key, { mode: "on" });
+      // A row for the epic that only tunes config: its tasks now follow the epic, which inherits On.
+      s.autopilot.setScope("epic", epic.id, key, { mode: "inherit", config: { budgetUsd: 2 } }, project.id);
+      expect(s.autopilot.epicsWithOwnSetting({ key }).has(epic.id)).toBe(true);
+      await pass();
+      expect(ctx.agentRuns).toEqual([]);
+    });
+
+    it("doesn't bring back an Off epic's events when it is archived in a project that is on", async () => {
+      const ctx = setup();
+      const { s, project, define, shell, pass } = ctx;
+      const custom = define({ name: "Done", trigger: { kind: "status_change", to: "done" }, action: shell() }, null);
+      const key = customAutomationKey(custom.id);
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      s.autopilot.setScope("project", project.id, key, { mode: "on" });
+      s.autopilot.setScope("epic", epic.id, key, { mode: "off" }, project.id);
+      const t = ctx.task("Finished while the epic was off");
+      s.tasks.update(t.id, { epicId: epic.id }, "agent");
+      s.tasks.move(t.id, { status: "done" }, "agent");
+      await pass();
+      await tick();
+      s.tasks.update(epic.id, { archived: true }, "user");
+      await pass();
+      expect(ctx.shellRuns).toEqual([]);
+    });
+
     it("drops the epic switches when the trigger becomes a schedule", () => {
       const { s, key, epic, setEpic } = epicSetup();
       setEpic("on");
