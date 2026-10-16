@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
+import { batchedCompletionHint } from "../format.ts";
 import {
   actorField,
   planFromArgs,
@@ -26,8 +27,8 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
       title: "Set (replace) the plan",
       description:
         "REPLACES the task's whole plan: every phase or step you don't pass back with its id is deleted, along with " +
-        "its status and notes. To change an existing plan use update_plan (mark many steps done, edit notes, move " +
-        "steps, rename phases), update_step (one step) or add_steps (append). Use set_plan to write the first plan or " +
+        "its status and notes. To change an existing plan use update_plan (edit notes, move steps, rename phases, " +
+        "several changes at once), update_step (one step) or add_steps (append). Use set_plan to write the first plan or " +
         "to deliberately rewrite one: give structured `phases` or a `markdown` checklist, plus optional `context` " +
         "(approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. When rewriting, pass " +
         "the phase/step ids from get_task to keep their statuses and notes. A call that would delete steps with " +
@@ -79,8 +80,10 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
     {
       title: "Update the plan in place",
       description:
-        "Change several steps and phases of an existing plan in one call, without touching anything else: mark steps " +
-        "done, set or append notes, rename steps, move steps within or between phases, rename phases. Unlike set_plan " +
+        "Change several steps and phases of an existing plan in one call, without touching anything else: set or " +
+        "append notes, rename steps, move steps within or between phases, rename phases, or change several statuses " +
+        "that really did change together. Not for catching up: update each step with update_step as you start and " +
+        "finish it, because steps that go straight from todo to done leave the board showing no progress. Unlike set_plan " +
         "it never deletes. All references (the 'phase.step' labels from get_task, step ids, phase numbers) refer to " +
         "the plan as it was before the call, so a move in the same call doesn't renumber later labels. All-or-nothing: " +
         "if any reference or move is invalid nothing is changed.",
@@ -126,7 +129,8 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
     (args) =>
       run(() => {
         const id = services.tasks.resolveId(args.task);
-        services.plans.updatePlan(
+        const before = services.tasks.detail(id).phases;
+        const after = services.plans.updatePlan(
           id,
           {
             ...(args.steps
@@ -146,7 +150,10 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
           ...(args.steps?.length ? [`${args.steps.length} step(s)`] : []),
           ...(args.phases?.length ? [`${args.phases.length} phase(s)`] : []),
         ].join(" and ");
-        return taskResult(services, id, `Updated ${counts} in the plan.`);
+        // Only mid-work: at Review or Done the open-steps hint asks for exactly this catch-up.
+        const batched =
+          after.status === "in_progress" ? batchedCompletionHint(before, after.phases, `"#${after.number}"`) : null;
+        return taskResult(services, id, `Updated ${counts} in the plan.${batched ? `\n\n${batched}` : ""}`);
       }),
   );
 
@@ -212,9 +219,11 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
       title: "Update a plan step",
       description:
         "Keep the plan current as you work: mark a step in_progress when you start it and done the moment it's " +
-        "finished (blocked with a note if stuck, skipped if no longer needed). `notes` replaces the step's notes; " +
-        "`appendNotes` adds a paragraph (findings, commands run, file paths). To change several steps at once use " +
-        "update_plan, never set_plan.",
+        "finished (blocked with a note if stuck, skipped if no longer needed), one call per step, never saved up for " +
+        "the end of a phase. If steps can only be verified together, still mark each in_progress as you start it and " +
+        "done once it is written, with testing as its own step. `notes` replaces the step's notes; `appendNotes` " +
+        "adds a paragraph (findings, commands run, file paths). To change several steps at once use update_plan, " +
+        "never set_plan.",
       inputSchema: {
         task: taskField,
         step: stepField,

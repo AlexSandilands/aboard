@@ -71,6 +71,23 @@ text when both are present.
   `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting.
+- **Plan progress** nudges agents to update steps as they work instead of ticking them in bulk at the end of a
+  phase, so the board shows live progress. `progressHints` (`format.ts`) runs for open tasks with a plan, never
+  an epic, and each hint names the call to make. It appears in `get_task` and every mutation result:
+  - _No step started_: the task is In Progress and no step is `in_progress`; names the current step and the
+    `update_step` call. This also fires right after a step is marked done, so it names the next one.
+  - _Open steps_: the task is in Review and steps are still open (not done or skipped). Moving to Done with
+    open steps gets it too, but only in that `move_task` result (`taskResult`'s `closing` option), so a task
+    that is already Done never nags.
+  - _Stale plan_: the task is In Progress with a step in progress, but no step has changed for
+    `STALE_PLAN_MS` (30 minutes).
+  - _Batched completion_ is not a section: an `update_plan` result on an In Progress task that moved two or
+    more steps straight to done without ever starting them (`startedAt` still null) says so after the headline
+    (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes. It stays quiet at Review
+    and Done, where the open-steps hint asks for exactly that catch-up.
+
+  Renderings that aren't for the implementing agent (the reviewer's `taskText`) leave it out: it is opt-in
+  through `renderTaskDetail`'s `progress` option.
 - **Missing labels** appears in `set_plan`, `create_task` and `get_task` results when the task has no
   labels and is still open. It names the labels in use and asks the agent to suggest 1–3 and wait for
   the user before calling `update_task`. Other mutation results leave it out (`taskResult`'s

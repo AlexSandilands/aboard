@@ -216,6 +216,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         const detail = renderTaskDetail(task, safeProject(services, task.projectId), {
           events: args.events ?? 10,
           labelsInUse: services.labels.usage(),
+          progress: { now: Date.now() },
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));

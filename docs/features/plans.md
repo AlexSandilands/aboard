@@ -60,6 +60,10 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
     against the plan as it was before the call, so a move in the batch doesn't renumber later labels.
     `move` takes a phase (the step goes to its end), `before`/`after` another step (the step goes to that
     step's phase), or a phase with one of them. Each change is logged as the single edits are.
+    It is for changes that really are several at once (notes, moves, renames), not for catching up on
+    statuses: agents are told to `update_step` each step as they start (`in_progress`) and finish (`done`) it,
+    and an `update_plan` that moves two or more never-started steps straight to done gets corrective feedback
+    (see **Plan progress** in [mcp.md](mcp.md#results)).
   - `add_steps` (to a phase by number or id, the last phase by default, or a new phase) and `update_step`
     (status, title, notes, `appendNotes`) for one change.
   - REST: steps can be added, edited, moved and deleted; phases can be added, renamed and deleted.
