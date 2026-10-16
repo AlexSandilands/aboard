@@ -1,4 +1,4 @@
-import { MODEL_TIERS, ModelTier, type TaskDetail } from "@repo/contracts";
+import { MODEL_TIERS, ModelTier, modelTierDescription, type TaskDetail } from "@repo/contracts";
 import { PencilIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -6,6 +6,7 @@ import { Markdown } from "~/components/markdown/Markdown";
 import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateTask } from "~/state/mutations";
+import { useSettings } from "~/state/queries";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
 
@@ -39,11 +40,13 @@ const TIER_ITEMS = [{ value: NO_TIER, label: "None" }, ...MODEL_TIERS.map((t) =>
 /** The model tier the planner suggested for implementing the task, which the user can change or clear. */
 function SuggestedModelField({ task }: { task: TaskDetail }) {
   const { mutate: updateTask } = useUpdateTask();
+  const modelTiers = useSettings().data?.modelTiers;
   const suggestion = task.suggestedModel;
+  const mapped = suggestion && modelTiers ? modelTierDescription(modelTiers, suggestion.tier) : null;
   return (
-    <div className="px-1.5">
-      <div className="flex min-h-6 items-center justify-between gap-2">
-        <h4 className="text-2xs text-muted-foreground/80 select-none">Suggested model</h4>
+    <div className="px-1.5 pb-1">
+      <div className="flex min-h-6 items-center gap-2">
+        <h4 className="shrink-0 text-2xs text-muted-foreground/80 select-none">Suggested model</h4>
         <Select
           items={TIER_ITEMS}
           value={suggestion?.tier ?? NO_TIER}
@@ -65,8 +68,15 @@ function SuggestedModelField({ task }: { task: TaskDetail }) {
             ))}
           </SelectPopup>
         </Select>
+        {mapped ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground" title={mapped}>
+            · {mapped}
+          </span>
+        ) : null}
       </div>
-      {suggestion?.reason ? <p className="text-xs text-muted-foreground">{suggestion.reason}</p> : null}
+      {suggestion?.reason ? (
+        <p className="mt-1 text-xs leading-snug text-muted-foreground/80">{suggestion.reason}</p>
+      ) : null}
     </div>
   );
 }
