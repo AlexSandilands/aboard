@@ -1,16 +1,19 @@
 import { BRAND } from "./brand.ts";
+import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 /** "work" picks the task up; "plan" asks the agent to shape the plan with the user first. */
 export type HandoffMode = "work" | "plan";
 
 export interface HandoffPromptInput {
-  task: Pick<TaskSummary, "id" | "number" | "title">;
+  task: Pick<TaskSummary, "id" | "number" | "title"> & Partial<Pick<TaskSummary, "suggestedModel">>;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
   /** The session was started by the board and is already linked to the task. */
   linkedThread?: boolean;
+  /** Names the task's suggested tier in a copied work prompt; without it the line shows the bare tier. */
+  modelTiers?: ModelTiers;
 }
 
 /** Backlog and plan-less tasks still need a plan, so they default to planning together. */
@@ -26,7 +29,10 @@ export function taskBoardUrl(boardUrl: string, taskId: string): string {
  * Short pointer to a task for starting a session on it ad hoc (merge conflicts, a follow-up). Unlike
  * taskHandoffPrompt it prescribes no workflow; the uuid works across projects where `#N` would not.
  */
-export function taskReferenceLine({ task, boardUrl }: Omit<HandoffPromptInput, "mode" | "linkedThread">): string {
+export function taskReferenceLine({
+  task,
+  boardUrl,
+}: Omit<HandoffPromptInput, "mode" | "linkedThread" | "modelTiers">): string {
   return [
     `#${task.number} "${task.title}"`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
@@ -35,10 +41,32 @@ export function taskReferenceLine({ task, boardUrl }: Omit<HandoffPromptInput, "
 }
 
 /**
+ * "Suggested model: standard (Sonnet 5.5): reason. ..." for a copied work prompt, or null when the task has no
+ * suggestion. A board-started thread already runs on the model picked in the dialog, so callers skip it there.
+ */
+export function suggestedModelLine(
+  task: Partial<Pick<TaskSummary, "suggestedModel">>,
+  modelTiers: ModelTiers | undefined,
+): string | null {
+  const suggestion = task.suggestedModel;
+  if (!suggestion) return null;
+  const description = modelTiers ? modelTierDescription(modelTiers, suggestion.tier) : null;
+  const name = description ? `${suggestion.tier} (${description})` : suggestion.tier;
+  const reason = suggestion.reason ? `: ${suggestion.reason.replace(/[.\s]+$/, "")}` : "";
+  return `Suggested model: ${name}${reason}. Switch your session's model if it differs.`;
+}
+
+/**
  * Prompt that hands a task to an agent session (pasted into any harness, or sent as a T3 thread's first
  * message). It points at the task instead of copying it, so the agent reads the live plan and notes.
  */
-export function taskHandoffPrompt({ task, boardUrl, mode, linkedThread = false }: HandoffPromptInput): string {
+export function taskHandoffPrompt({
+  task,
+  boardUrl,
+  mode,
+  linkedThread = false,
+  modelTiers,
+}: HandoffPromptInput): string {
   const ref = `#${task.number} "${task.title}"`;
   const getTask = `Call get_task("${task.id}") on the ${BRAND.id} MCP server`;
   const lines =
@@ -61,6 +89,9 @@ export function taskHandoffPrompt({ task, boardUrl, mode, linkedThread = false }
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step, link any PR you open, and finish with an add_note handover.`,
         ];
+  // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
+  const model = mode === "work" && !linkedThread ? suggestedModelLine(task, modelTiers) : null;
+  if (model) lines.push("", model);
   lines.push(
     "",
     linkedThread

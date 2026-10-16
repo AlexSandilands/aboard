@@ -1,4 +1,12 @@
-import type { PlanInput, PlanPhase, PlanStep, StepStatus } from "@repo/contracts";
+import {
+  sameSuggestedModel,
+  toSuggestedModel,
+  type PlanInput,
+  type PlanPhase,
+  type PlanStep,
+  type StepStatus,
+  type SuggestedModelInput,
+} from "@repo/contracts";
 import { generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
@@ -22,6 +30,23 @@ export function withStatus<T extends Pick<PlanStep, "status" | "startedAt" | "co
     startedAt: status === "todo" ? null : status === "in_progress" ? (step.startedAt ?? now) : step.startedAt,
     completedAt: done ? now : null,
   };
+}
+
+/**
+ * The task with `input` applied as its suggested model (undefined keeps it, null clears it), logging a
+ * "suggested_model_changed" event when it changes. The caller saves the task.
+ */
+export function withSuggestedModel(
+  task: TaskRecord,
+  input: SuggestedModelInput | null | undefined,
+  actor: string,
+  fx: Effects,
+): TaskRecord {
+  if (input === undefined) return task;
+  const next = toSuggestedModel(input);
+  if (sameSuggestedModel(task.suggestedModel, next)) return task;
+  fx.log(task.id, actor, "suggested_model_changed", { tier: next?.tier ?? null, reason: next?.reason ?? null });
+  return { ...task, suggestedModel: next };
 }
 
 const toPlanStep = ({ taskId: _taskId, ...step }: StepRecord): PlanStep => step;
@@ -142,8 +167,9 @@ export function createPlans(
 
     for (const id of oldSteps.keys()) if (!keptSteps.has(id)) repos.plans.deleteStep(id);
     for (const id of oldPhases.keys()) if (!keptPhases.has(id)) repos.plans.deletePhase(id);
-    touchTask({ ...task, planContext: plan.context !== undefined ? plan.context : task.planContext }, now);
     fx.log(task.id, actor, "plan_set", { phases: plan.phases.length, steps: stepCount });
+    const withContext = { ...task, planContext: plan.context !== undefined ? plan.context : task.planContext };
+    touchTask(withSuggestedModel(withContext, plan.suggestedModel, actor, fx), now);
   };
 
   const service: PlansService = {

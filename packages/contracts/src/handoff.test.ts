@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "./brand.ts";
 import { defaultHandoffMode, taskBoardUrl, taskHandoffPrompt, taskReferenceLine } from "./handoff.ts";
+import { EMPTY_MODEL_TIERS, type SuggestedModel } from "./modelTiers.ts";
 
 const task = { id: "abc-123", number: 9, title: "Hand tasks to agents" };
 
@@ -55,4 +56,34 @@ it("taskReferenceLine points at the task by uuid", () => {
       `Call get_task("abc-123") on the ${BRAND.id} MCP server, then continue from the current step.`,
     ].join("\n"),
   );
+});
+
+describe("suggested model in the prompt", () => {
+  const tiers = {
+    ...EMPTY_MODEL_TIERS,
+    standard: {
+      description: null,
+      t3: { selection: { instanceId: "claude", model: "sonnet", options: [] }, label: "Claude Sonnet 5.5" },
+    },
+    deep: { description: "Opus 5.5, high effort", t3: null },
+  };
+
+  it("names the tier's description, else its T3 label, else the bare tier, in a copied work prompt", () => {
+    const work = (suggestedModel: SuggestedModel, modelTiers = tiers) =>
+      taskHandoffPrompt({ task: { ...task, suggestedModel }, boardUrl: "http://x", mode: "work", modelTiers });
+    expect(work({ tier: "deep", reason: "Touches the migration runner." })).toContain(
+      "Suggested model: deep (Opus 5.5, high effort): Touches the migration runner. Switch your session's model if it differs.",
+    );
+    expect(work({ tier: "standard", reason: null })).toContain("Suggested model: standard (Claude Sonnet 5.5). Switch");
+    expect(work({ tier: "light", reason: null })).toContain("Suggested model: light. Switch");
+  });
+
+  it("leaves it out of planning prompts, board-started threads and tasks without one", () => {
+    const suggested = { ...task, suggestedModel: { tier: "deep" as const, reason: null } };
+    expect(taskHandoffPrompt({ task: suggested, boardUrl: "http://x", mode: "plan" })).not.toContain("Suggested model");
+    expect(
+      taskHandoffPrompt({ task: suggested, boardUrl: "http://x", mode: "work", linkedThread: true }),
+    ).not.toContain("Suggested model");
+    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" })).not.toContain("Suggested model");
+  });
 });

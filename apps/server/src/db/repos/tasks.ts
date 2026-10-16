@@ -1,4 +1,4 @@
-import type { TaskResolution, TaskStatus } from "@repo/contracts";
+import type { ModelTier, SuggestedModel, TaskResolution, TaskStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */
@@ -20,6 +20,7 @@ export interface TaskRecord {
   resolvedByTaskId: string | null;
   /** null inherits the global auto-review setting. */
   autoReview: boolean | null;
+  suggestedModel: SuggestedModel | null;
 }
 
 interface TaskRow {
@@ -39,6 +40,8 @@ interface TaskRow {
   resolution: TaskResolution | null;
   resolved_by_task_id: string | null;
   auto_review: number | null;
+  suggested_tier: ModelTier | null;
+  suggested_reason: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -58,6 +61,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   resolution: r.resolution,
   resolvedByTaskId: r.resolved_by_task_id,
   autoReview: r.auto_review === null ? null : r.auto_review !== 0,
+  suggestedModel: r.suggested_tier ? { tier: r.suggested_tier, reason: r.suggested_reason } : null,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -77,6 +81,8 @@ const toRow = (t: TaskRecord): TaskRow => ({
   resolution: t.resolution,
   resolved_by_task_id: t.resolvedByTaskId,
   auto_review: t.autoReview === null ? null : t.autoReview ? 1 : 0,
+  suggested_tier: t.suggestedModel?.tier ?? null,
+  suggested_reason: t.suggestedModel?.reason ?? null,
 });
 
 export interface TaskFilter {

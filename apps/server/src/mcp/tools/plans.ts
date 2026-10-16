@@ -26,8 +26,10 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
         "Write or replace a task's plan before implementing. Give structured `phases` or a `markdown` checklist, plus " +
         "optional `context` (approach, decisions). A good plan has phases with 3-8 concrete, verifiable steps each. " +
         "When revising an existing plan, pass the phase/step ids from get_task to keep their statuses and notes; " +
-        "steps you omit are deleted. A task needs a plan before it can leave Backlog. If the task has no labels, the " +
-        "result asks you to suggest some: propose 1-3 to the user and apply them with update_task once they agree.",
+        "steps you omit are deleted. A task needs a plan before it can leave Backlog. Set `suggestedModel` to the " +
+        "tier the implementing session should use; omit it on a revision to keep the current one. If the task has " +
+        "no labels, the result asks you to suggest some: propose 1-3 to the user and apply them with update_task " +
+        "once they agree.",
       inputSchema: {
         task: taskField,
         ...planInputFields,
@@ -40,7 +42,7 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
         const plan = planFromArgs(args);
         if (!plan) throw new AppError("VALIDATION", "Pass phases or markdown.");
         const task = services.plans.setPlan(id, plan, actor(args.actor));
-        return taskResult(services, task.id, `Plan set for #${task.number}.`, { labelHint: true });
+        return taskResult(services, task.id, `Plan set for #${task.number}.`, { planningHints: true });
       }),
   );
 

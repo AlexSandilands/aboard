@@ -108,6 +108,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
         : null,
       autoReview: record.autoReview,
       review,
+      suggestedModel: record.suggestedModel,
     };
     result.set(record.id, { record, summary, phases, reviews: toTaskReviews(rounds, findings) });
   }
