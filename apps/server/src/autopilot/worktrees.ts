@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { RunGit } from "../integrations/backup.ts";
 
@@ -34,6 +34,22 @@ export interface Worktree {
 export function isInside(child: string, parent: string): boolean {
   const rel = relative(resolve(parent), resolve(child));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * The path with its existing part resolved the way the file system names it, so two spellings of one folder compare
+ * equal: a Windows short name (`RUNNER~1`) and its long name, or a symlink and its target. The part that doesn't
+ * exist yet is kept as given.
+ */
+export function canonicalPath(path: string): string {
+  const full = resolve(path);
+  let existing = full;
+  while (!existsSync(existing) && dirname(existing) !== existing) existing = dirname(existing);
+  try {
+    return join(realpathSync.native(existing), relative(existing, full));
+  } catch {
+    return full;
+  }
 }
 
 const safeName = (name: string) => name.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "repo";
@@ -106,7 +122,9 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   const name = `${req.taskNumber}-${req.runId.slice(0, 8)}`;
   const branch = `${AUTOPILOT_BRANCH_PREFIX}${name}`;
   const path = join(resolve(req.root), safeName(basename(checkout)), name);
-  if (isInside(path, checkout) || isInside(checkout, path)) {
+  const realPath = canonicalPath(path);
+  const realCheckout = canonicalPath(checkout);
+  if (isInside(realPath, realCheckout) || isInside(realCheckout, realPath)) {
     throw new Error(`Autopilot's worktree folder ${req.root} overlaps the checkout ${checkout}`);
   }
   if (existsSync(path)) throw new Error(`${path} already exists`);

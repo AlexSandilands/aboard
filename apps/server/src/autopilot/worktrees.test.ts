@@ -1,9 +1,9 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultRunGit } from "../integrations/backup.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
-import { createWorktree, isInside, removeWorktree } from "./worktrees.ts";
+import { canonicalPath, createWorktree, isInside, removeWorktree } from "./worktrees.ts";
 
 const RUN_ID = "abcdef12-3456-4789-8abc-def012345678";
 
@@ -92,5 +92,11 @@ describe("Autopilot worktrees", { timeout: 30_000 }, () => {
     expect(isInside("a", "a")).toBe(true);
     expect(isInside("ab", "a")).toBe(false);
     expect(isInside("a", join("a", "b"))).toBe(false);
+  });
+
+  it("names a folder the way the file system does, keeping the part that doesn't exist yet", () => {
+    const real = realpathSync.native(repo.root);
+    expect(canonicalPath(join(repo.root, "not", "yet"))).toBe(join(real, "not", "yet"));
+    expect(canonicalPath(join(repo.root, "x", ".."))).toBe(real);
   });
 });
