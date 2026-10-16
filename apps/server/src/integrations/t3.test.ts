@@ -698,19 +698,38 @@ describe("T3 thread launch", () => {
       }
       return success(frame.id, { threadId: "th-auto", resumed: false });
     });
-    await t3.launchTaskThread("task-1", { prompt: "Let us work on #9", work: true, baseRef: "feat/x" }, "orch");
+    const commandId = "6f1c7f2e-2d8f-5f0b-9a57-0c7f0e5b1d2a";
+    const launched = await t3.launchTaskThread(
+      "task-1",
+      { prompt: "Let us work on #9", commandId, work: true, baseRef: "feat/x" },
+      "orch",
+    );
     expect(socket.sent.map((f) => f.tag)).toEqual(["server.getConfig", "vcs.listRefs", "orchestration.launchThread"]);
     expect(socket.sent[2]!.payload).toMatchObject({
       projectId: "t3-p1",
       title: "#9 Hand off",
       modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },
       runtimeMode: "full-access",
-      workspaceStrategy: { type: "worktree", baseRef: "feat/x", startFromOrigin: true },
+      commandId,
+      // A named base is usually another task's local branch, so it isn't taken from origin.
+      workspaceStrategy: { type: "worktree", baseRef: "feat/x", startFromOrigin: false },
       initialMessage: { text: "Let us work on #9", attachments: [] },
     });
     expect(added).toEqual([
       { taskId: "task-1", input: { t3Thread: { environmentId: ENV_ID, threadId: "th-auto" } }, actor: "orch" },
     ]);
+    expect(launched).toMatchObject({ runtimeMode: "full-access", suggestionUnavailable: null });
+  });
+
+  it("refuses a launch without the dialog when T3 couldn't list the branches", async () => {
+    const { t3, socket, added } = setup((frame) =>
+      frame.tag === "server.getConfig" ? success(frame.id, SERVER_CONFIG) : success(frame.id, { unexpected: true }),
+    );
+    await expect(t3.launchTaskThread("task-1", { prompt: "x", commandId: "c", work: true }, "orch")).rejects.toThrow(
+      "couldn't list the project's branches",
+    );
+    expect(socket.sent.map((f) => f.tag)).not.toContain("orchestration.launchThread");
+    expect(added).toEqual([]);
   });
 
   it("tags an unreadable launch result so a retry keeps its commandId", async () => {

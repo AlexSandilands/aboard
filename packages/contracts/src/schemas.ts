@@ -524,6 +524,11 @@ export const AppSettings = z
     t3LinkTarget: z.enum(["desktop", "browser"]),
     /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
     t3TokenSet: z.boolean(),
+    /**
+     * Let agents start T3 threads (start_task_thread) and message them (message_task_thread) over MCP. Off by
+     * default: unlike the launch dialog, nobody sees the model or access before the agent starts.
+     */
+    agentT3Threads: z.boolean(),
     /** Moving a task to Review opens a local review round, unless the task overrides it. */
     autoReview: z.boolean(),
     /** The skill reviewers follow, unless the task's project overrides it. */
@@ -555,6 +560,7 @@ export const UpdateSettingsInput = z.object({
   jiraBaseUrl: z.string().trim().nullable().optional(),
   githubPolling: z.boolean().optional(),
   t3LinkTarget: z.enum(["desktop", "browser"]).optional(),
+  agentT3Threads: z.boolean().optional(),
   autoReview: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.optional(),
   reviewMaxRounds: z.number().int().min(1).max(10).optional(),

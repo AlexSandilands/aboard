@@ -308,13 +308,16 @@ export interface AutoLaunchChoice {
   work: boolean;
   /** The ref to branch the new worktree from. Defaults to the default branch, else the current one. */
   baseRef?: string | undefined;
-  /** Defaults to T3's "start new worktrees from origin" setting, for local branches only. */
+  /**
+   * Without a baseRef, follows T3's "start new worktrees from origin" setting for a local default branch. With one,
+   * defaults to false: a branch named for a task to build on is usually another task's local, unpushed branch.
+   */
   startFromOrigin?: boolean | undefined;
 }
 
-export type AutoLaunch =
-  | { ok: true; launch: Pick<StartT3ThreadInput, "modelSelection" | "runtimeMode" | "workspace"> }
-  | { ok: false; reason: string };
+export type AutoLaunchSettings = Pick<StartT3ThreadInput, "modelSelection" | "runtimeMode" | "workspace">;
+
+export type AutoLaunch = { ok: true; launch: AutoLaunchSettings } | { ok: false; reason: string };
 
 /**
  * The launch an orchestrator gets for an epic's task without the dialog: the model and access the dialog would
@@ -340,7 +343,8 @@ export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchC
   const baseRef = choice.baseRef ?? ref?.name;
   if (!baseRef) return { ok: false, reason: "No branch to start a worktree from; pass baseRef" };
   // A remote ref already names the origin commit; "start from origin" only applies to local branches.
-  const startFromOrigin = choice.startFromOrigin ?? (options.defaults.startFromOrigin && !ref?.isRemote);
+  const startFromOrigin =
+    choice.startFromOrigin ?? (!choice.baseRef && options.defaults.startFromOrigin && !ref?.isRemote);
   return {
     ok: true,
     launch: { modelSelection, runtimeMode, workspace: { mode: "new_worktree", baseRef, startFromOrigin } },

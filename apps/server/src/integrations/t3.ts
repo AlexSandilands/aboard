@@ -28,6 +28,7 @@ import { messageOf } from "./github.ts";
 import {
   autoLaunchSettings,
   type AutoLaunchChoice,
+  type AutoLaunchSettings,
   buildLaunchOptions,
   mapFavorites,
   mapProviders,
@@ -399,6 +400,19 @@ export interface T3Services {
 
 export type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
 
+export interface TaskThreadInput extends AutoLaunchChoice {
+  prompt: string;
+  /** T3 de-duplicates launches by it, so a retry with the same id returns the thread instead of a second one. */
+  commandId: string;
+}
+
+/** A thread launched without the dialog: its link and what was chosen for it. */
+export interface TaskThreadLaunch extends AutoLaunchSettings {
+  link: TaskLink;
+  /** Why the task's suggested model wasn't used, if it wasn't. */
+  suggestionUnavailable: string | null;
+}
+
 /** Where a thread works: its worktree (null for the project's own checkout) and branch. */
 export interface ThreadWorkspace {
   worktreePath: string | null;
@@ -425,7 +439,7 @@ export interface T3Integration {
   /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
   startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Starts a task's thread without the dialog, on the settings autoLaunchSettings picks, then links it. */
-  launchTaskThread(taskId: string, input: { prompt: string } & AutoLaunchChoice, actor: string): Promise<TaskLink>;
+  launchTaskThread(taskId: string, input: TaskThreadInput, actor: string): Promise<TaskThreadLaunch>;
   /**
    * Posts a message into a linked thread, as if the user had typed it: T3 starts a turn, or queues it behind
    * the running one. `commandId` de-duplicates retries. Needs the orchestration:operate scope.
@@ -591,7 +605,8 @@ export function createT3Integration(deps: {
     }
   };
 
-  const launchOptions = async (taskId: string): Promise<T3LaunchOptions> => {
+  /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
+  const loadLaunchOptions = async (taskId: string): Promise<{ options: T3LaunchOptions; refsListed: boolean }> => {
     const ctx = await launchContext(taskId);
     return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
       const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
@@ -600,7 +615,7 @@ export function createT3Integration(deps: {
         .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
         .then((value) => WireRefs.safeParse(value).data ?? null)
         .catch(() => null);
-      return buildLaunchOptions({
+      const options = buildLaunchOptions({
         config,
         refs,
         shell: ctx.shell,
@@ -608,8 +623,11 @@ export function createT3Integration(deps: {
         suggestedModel: ctx.task.suggestedModel,
         modelTiers: deps.services().settings.get().modelTiers,
       });
+      return { options, refsListed: refs !== null };
     });
   };
+
+  const launchOptions = async (taskId: string): Promise<T3LaunchOptions> => (await loadLaunchOptions(taskId)).options;
 
   const modelCatalog = async (): Promise<T3ModelCatalog> => {
     await ensureDiscovered();
@@ -657,12 +675,22 @@ export function createT3Integration(deps: {
 
   const launchTaskThread = async (
     taskId: string,
-    { prompt, ...choice }: { prompt: string } & AutoLaunchChoice,
+    { prompt, commandId, ...choice }: TaskThreadInput,
     actor: string,
-  ): Promise<TaskLink> => {
-    const auto = autoLaunchSettings(await launchOptions(taskId), choice);
+  ): Promise<TaskThreadLaunch> => {
+    const { options, refsListed } = await loadLaunchOptions(taskId);
+    // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
+    if (!refsListed) {
+      throw new AppError(
+        "VALIDATION",
+        "T3 Code couldn't list the project's branches, so the thread can't get its own worktree",
+      );
+    }
+    const auto = autoLaunchSettings(options, choice);
     if (!auto.ok) throw new AppError("VALIDATION", auto.reason);
-    return startThread(taskId, { prompt, ...auto.launch }, actor);
+    const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor);
+    const unavailable = choice.work ? (options.suggestion?.unavailable ?? null) : null;
+    return { link, ...auto.launch, suggestionUnavailable: unavailable };
   };
 
   /** The live origin and token for acting on a thread of this environment, or a clear reason why not. */

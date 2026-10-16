@@ -359,6 +359,17 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
           {warning ? <p className="text-xs text-warning-foreground">{warning}</p> : null}
         </div>
       </SettingsRow>
+      <SettingsRow
+        title="Let agents start threads"
+        description="An agent orchestrating an epic may start its tasks in new T3 threads, on T3's default model and access, and message them as you. Off: it uses subagents or gives you prompts to paste."
+        control={
+          <Switch
+            aria-label="Let agents start threads"
+            checked={settings.agentT3Threads}
+            onCheckedChange={(checked) => updateSettings.mutate({ agentT3Threads: checked })}
+          />
+        }
+      />
     </SettingsSection>
   );
 }

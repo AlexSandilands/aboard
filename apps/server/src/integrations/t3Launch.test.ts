@@ -317,7 +317,7 @@ describe("autoLaunchSettings", () => {
     });
   });
 
-  it("branches from the given ref, from origin only for a local branch unless told otherwise", () => {
+  it("branches from the given ref locally unless told to use origin's copy", () => {
     const refs: WireRefs = {
       isRepo: true,
       refs: [
@@ -334,15 +334,20 @@ describe("autoLaunchSettings", () => {
       baseRef: "origin/feat/a",
       startFromOrigin: false,
     });
-    expect(workspace({ baseRef: "feat/b", startFromOrigin: false })).toEqual({
+    expect(workspace({ baseRef: "feat/b" })).toEqual({
       mode: "new_worktree",
       baseRef: "feat/b",
       startFromOrigin: false,
     });
+    expect(workspace({ baseRef: "feat/b", startFromOrigin: true })).toEqual({
+      mode: "new_worktree",
+      baseRef: "feat/b",
+      startFromOrigin: true,
+    });
   });
 
   it("runs in the folder itself when it isn't a git repository", () => {
-    const notRepo = options({ refs: null });
+    const notRepo = options({ refs: { isRepo: false, refs: [] } });
     expect(autoLaunchSettings(notRepo, { work: true })).toMatchObject({
       ok: true,
       launch: { workspace: { mode: "current" } },

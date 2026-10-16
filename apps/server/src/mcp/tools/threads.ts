@@ -1,13 +1,16 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   defaultHandoffMode,
   handoffModeError,
+  T3_RUNTIME_MODES,
   taskHandoffPrompt,
   type HandoffMode,
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
+import type { TaskThreadLaunch } from "../../integrations/t3.ts";
 import { linkText } from "../format.ts";
 import { actorField, boardUrl, run, t3LaunchBlocker, taskField, textResult, type ToolRegistrar } from "../shared.ts";
 
@@ -16,11 +19,18 @@ type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
 /** Thread statuses that mean a session is still on the task, so a second one shouldn't start. */
 const BUSY = new Set(["working", "waiting", "input", "approval"]);
 
-/** The task's newest linked thread that is still busy on it, if any. */
-function busyThread(task: TaskSummary): ThreadLink | undefined {
-  return task.links
-    .filter((l): l is ThreadLink => l.kind === "t3_thread")
-    .findLast((l) => l.snapshot && !l.snapshot.settled && !l.snapshot.archived && BUSY.has(l.snapshot.status));
+/** How long a just-linked thread counts as busy before the live poll has read its status. */
+const JUST_STARTED_MS = 2 * 60_000;
+
+/** The task's newest linked thread that is still busy on it, or was linked too recently to know. */
+function busyThread(task: TaskSummary, now = Date.now()): ThreadLink | undefined {
+  return task.links.findLast(
+    (l): l is ThreadLink =>
+      l.kind === "t3_thread" &&
+      (l.snapshot
+        ? !l.snapshot.settled && !l.snapshot.archived && BUSY.has(l.snapshot.status)
+        : now - Date.parse(l.createdAt) < JUST_STARTED_MS),
+  );
 }
 
 /** The thread message_task_thread writes to: the one busy on the task, else the newest that isn't archived. */
@@ -30,9 +40,38 @@ function messageTarget(task: TaskSummary): ThreadLink | undefined {
   );
 }
 
+/**
+ * The same id for every attempt at the task's next thread, as a UUID (v5 layout). T3 de-duplicates launches by it,
+ * so a retry after a lost reply, or a second call racing the first, returns the thread instead of starting another.
+ */
+function launchCommandId(task: TaskSummary): string {
+  const threads = task.links.filter((l) => l.kind === "t3_thread").length;
+  const hex = createHash("sha1").update(`start_task_thread:${task.id}:${threads}`).digest("hex");
+  const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** Failures after which T3 may have started the thread anyway (keepsCommandId on the web side). */
+const MAYBE_STARTED = new Set(["unreachable", "protocol-after-send"]);
+
+const sentence = (text: string) => text.replace(/[.\s]+$/, "");
+
 const fallback = (ref: string) =>
   `Start it another way: a subagent with get_handoff_prompt(${ref}, subagent: true), or give the user ` +
   `get_handoff_prompt(${ref}) to paste into a new session.`;
+
+/** What the launch chose, since no dialog showed it to anyone. */
+function launchSummary(launch: TaskThreadLaunch): string {
+  const access = T3_RUNTIME_MODES.find((m) => m.value === launch.runtimeMode)?.label ?? launch.runtimeMode;
+  const where =
+    launch.workspace.mode === "new_worktree"
+      ? `a new worktree from ${launch.workspace.baseRef}${launch.workspace.startFromOrigin ? " (origin's copy)" : ""}`
+      : "the project folder itself, which isn't a git repository: start such tasks one at a time";
+  const skipped = launch.suggestionUnavailable
+    ? ` (not the suggested model: ${sentence(launch.suggestionUnavailable)})`
+    : "";
+  return `Model ${launch.modelSelection.model}${skipped}, access ${access}, in ${where}.`;
+}
 
 /** T3 Code tools for an epic's orchestrator: start_task_thread and message_task_thread. */
 export const registerThreadTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -43,9 +82,10 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
       description:
         "Start a new T3 Code thread working on a task, with the task's hand-off prompt as its first message, and " +
         "link it to the task. Use it to start an epic's tasks when epic_overview says T3 Code is available. The " +
-        "thread starts on T3's defaults (the task's suggested model for work), in a new git worktree branched from " +
-        "baseRef (default: the default branch), so tasks can run side by side. Refused when the task already has a " +
-        "thread working on it (use message_task_thread) or T3 Code can't take it.",
+        "thread starts on T3's default model and access (the task's suggested model for work), in a new git " +
+        "worktree branched from baseRef (default: the default branch), so tasks can run side by side. Calling it " +
+        "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
+        "has a thread working on it (use message_task_thread), or when T3 Code can't take it.",
       inputSchema: {
         task: taskField,
         mode: z
@@ -60,7 +100,10 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         startFromOrigin: z
           .boolean()
           .optional()
-          .describe("Branch from origin's copy of baseRef. Defaults to T3's setting; pass false for a local branch."),
+          .describe(
+            "Branch from origin's copy of baseRef instead of the local branch. Defaults to false with a baseRef, " +
+              "else to T3's setting.",
+          ),
         actor: actorField,
       },
     },
@@ -71,23 +114,25 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const problem = handoffModeError(task, mode);
         if (problem) throw new AppError("VALIDATION", problem);
+        const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
+        if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
         const busy = busyThread(task);
-        if (busy?.snapshot) {
+        if (busy) {
+          const state = busy.snapshot ? `${busy.snapshot.title} (${busy.snapshot.status})` : "just started";
           throw new AppError(
             "CONFLICT",
-            `#${task.number} already has a T3 thread on it: ${busy.snapshot.title} (${busy.snapshot.status}). ` +
+            `#${task.number} already has a T3 thread on it: ${state}. ` +
               `Send it a message with message_task_thread(${ref}, ...) instead.`,
           );
         }
-        const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
-        if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
         const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, linkedThread: true });
-        let link: TaskLink;
+        let launch: TaskThreadLaunch;
         try {
-          link = await ctx.integrations.launchT3TaskThread(
+          launch = await ctx.integrations.launchT3TaskThread(
             task.id,
             {
               prompt,
+              commandId: launchCommandId(task),
               work: mode === "work",
               ...(args.baseRef ? { baseRef: args.baseRef } : {}),
               ...(args.startFromOrigin !== undefined ? { startFromOrigin: args.startFromOrigin } : {}),
@@ -95,11 +140,18 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
             actor(args.actor),
           );
         } catch (error) {
-          if (error instanceof AppError) throw new AppError(error.code, `${error.message}. ${fallback(ref)}`);
-          throw error;
+          if (!(error instanceof AppError)) throw error;
+          const t3 = (error.details as { t3?: string } | undefined)?.t3;
+          const next =
+            t3 && MAYBE_STARTED.has(t3)
+              ? `T3 Code may have started the thread anyway. Call start_task_thread(${ref}) again with the same ` +
+                "arguments: it returns that thread rather than starting another. Don't start the task another way."
+              : fallback(ref);
+          throw new AppError(error.code, `${sentence(error.message)}. ${next}`, error.details);
         }
         return textResult(
-          `Started #${task.number} in a new T3 Code thread (${mode} prompt) and linked it: ${linkText(link)}\n` +
+          `Started #${task.number} in a new T3 Code thread (${mode} prompt) and linked it: ${linkText(launch.link)}\n` +
+            `${launchSummary(launch)}\n` +
             `Follow it with epic_overview, or message it with message_task_thread(${ref}, ...).`,
         );
       }),
@@ -110,10 +162,10 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     {
       title: "Message a task's T3 Code thread",
       description:
-        "Send a message into the T3 Code thread working on a task (else its newest one), as if the user had typed it: T3 starts a " +
-        "turn, or queues it behind the one running. Use it to answer a blocked step or redirect a task an " +
-        "orchestrator started with start_task_thread. Only for T3 threads; for a session the user started, " +
-        "add_note on the task instead, which it reads on its next get_task.",
+        "Send a message into the T3 Code thread working on a task (else its newest one): T3 starts a turn, or " +
+        "queues it behind the one running. It arrives marked as coming from the orchestrating agent. Use it to " +
+        "answer a blocked step or redirect a task started with start_task_thread. Only for T3 threads; for a " +
+        "session the user started, add_note on the task instead, which it reads on its next get_task.",
       inputSchema: {
         task: taskField,
         text: z.string().trim().min(1).describe("The message, written to the agent working on the task."),
@@ -122,6 +174,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     (args) =>
       run(async () => {
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
+        const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
+        if (blocker) throw new AppError("VALIDATION", `${blocker}. Leave the session an add_note on the task instead.`);
         const thread = messageTarget(task);
         if (!thread) {
           throw new AppError(
@@ -129,7 +183,9 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
             `#${task.number} has no T3 thread linked. Leave the session an add_note on the task instead.`,
           );
         }
-        await ctx.integrations.messageT3Thread(thread, args.text);
+        // T3 shows it as the user's own message, so say who really sent it.
+        const text = `From the agent orchestrating this task's epic (sent through the board):\n\n${args.text}`;
+        await ctx.integrations.messageT3Thread(thread, text);
         return textResult(`Sent to #${task.number}'s thread: ${linkText(thread)}`);
       }),
   );

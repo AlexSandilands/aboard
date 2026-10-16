@@ -254,6 +254,8 @@ For starting T3 threads:
 The chosen option means the board writes to T3 Code, which it originally never did. It still never touches
 T3's database or files; it only acts through T3's own API, with a token you issue. [Local review](local-review.md) uses the same channel for one more write: when nobody runs a review
 round, it posts a message into the task's linked thread (`orchestration.dispatchCommand`, `message.dispatch`).
+Epics add the only writes an agent can trigger: `start_task_thread` and `message_task_thread`. They stay off until
+the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-threads)).
 
 ## Code map
 
@@ -261,9 +263,9 @@ round, it posts a message into the task's linked thread (`orchestration.dispatch
 |---|---|
 | `packages/contracts/src/handoff.ts` | The hand-off prompts (`taskHandoffPrompt`: work, plan, orchestrate, subagent), the suggested model line and the default mode |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
-| `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime mode labels |
+| `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
-| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy` |
-| `apps/server/src/integrations/t3.ts` | `launchOptions` and `startThread`, and linking the new thread to the task |
+| `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
+| `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task |
 | `apps/web/src/components/handoff/` | Buttons, the dialog and its pickers; pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Model tiers |

@@ -118,22 +118,39 @@ The prompt names harnesses only as examples, so the same text reads right in any
 
 #### T3 Code threads
 
-`epic_overview` starts with a line saying whether T3 Code can start threads for the epic's project
-(`t3LaunchBlocker` in `apps/server/src/mcp/shared.ts`: T3 running, a token set, a project folder: the same
-test as the board's **New T3 Code thread…**). If it can:
+Starting threads with no one watching is off until the user turns on **Settings → T3 Code → Let agents start
+threads** (`agentT3Threads`). Unlike the launch dialog, nobody sees the model or access before the agent starts,
+and messages land in threads as if the user had typed them.
+
+`epic_overview` starts with a line saying whether an agent can start threads for the epic's project
+(`t3LaunchBlocker` in `apps/server/src/mcp/shared.ts`). That needs T3 running, a token set, the setting on and a
+project folder, the same checks as the board's **New T3 Code thread…**. Whether T3 knows the project, or has a model
+ready, is only found out at launch. If it can:
 
 - `start_task_thread(task, mode?, baseRef?, startFromOrigin?)` starts a thread with the task's hand-off prompt
-  (linked-thread variant, mode defaulting like the menu) and links it. There is no dialog, so
-  `autoLaunchSettings` (`integrations/t3Launch.ts`) chooses what the dialog would start on: the suggested tier's
-  model for work, else T3's default; T3's default access, clamped to the provider; and **always a new worktree**
-  from `baseRef` (default: the default branch), so tasks can run side by side. A folder that isn't a git
-  repository runs in the folder itself.
-- It refuses a task that has a thread still on it (working, waiting, asking for input or approval), and says
-  to message that thread instead. A thread that is done, failed or idle doesn't block a new one.
-- When T3 can't take the task, the error names why and points at `get_handoff_prompt(task, subagent: true)` and
-  the pasted-prompt route.
+  (the linked-thread variant, with the mode defaulting like the menu) and links it. There is no dialog, so
+  `autoLaunchSettings` (`integrations/t3Launch.ts`) picks what the dialog would start on:
+  - the model: the suggested tier's model for work, else T3's default;
+  - the access: T3's default, clamped to what the provider supports;
+  - the workspace: **always a new worktree**, so tasks can run side by side. It branches from `baseRef` (the
+    default branch when there is none). With a `baseRef` it starts from the local branch unless
+    `startFromOrigin` says otherwise, because a branch to build on is usually another task's unpushed one. A
+    folder that isn't a git repository runs in the folder itself, and the result says to start such tasks one
+    at a time. If T3 can't list the branches, the launch is refused rather than falling back to the shared
+    checkout.
+
+  The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
+- The launch's `commandId` is derived from the task and how many threads it has. A retry after a timeout or an
+  unreadable reply therefore gets the same thread back from T3 instead of a second one. The error says so and
+  doesn't suggest another route.
+- It refuses a task that already has a thread on it: working, waiting, asking for input or approval, or linked
+  in the last two minutes and not yet polled. It says to message that thread instead. A thread that is done,
+  failed, idle or settled doesn't block a new one.
+- When T3 can't take the task, the error says why and points at `get_handoff_prompt(task, subagent: true)` and the
+  pasted-prompt route.
 - `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
-  archived, through the same `message.dispatch` the [review nudge](local-review.md) uses.
+  archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From the agent
+  orchestrating this task's epic (sent through the board)". Each call is a new message, so a retry can post it twice.
 
 T3 threads are top-level sessions, so they run their own review loop.
 
