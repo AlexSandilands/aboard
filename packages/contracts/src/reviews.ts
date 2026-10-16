@@ -173,6 +173,23 @@ export const reviewWantsAnotherRound = (summary: TaskReviewSummary | null): bool
   (summary.state === "changes_requested" || summary.state === "fixed") &&
   summary.round < summary.maxRounds;
 
+/**
+ * Whether the loop has ended: the latest round is in and either nothing gating is open, or no further round
+ * is allowed (the limit was reached, with findings still open or fixed but unverified).
+ */
+export const reviewIsDone = (summary: TaskReviewSummary | null): boolean =>
+  summary !== null &&
+  (summary.state === "clean" || summary.state === "stuck" || summary.state === "fixed") &&
+  !reviewWantsAnotherRound(summary);
+
+/**
+ * What the agent is told wherever the loop ends: the PR comes next, always, or work finished on the board never
+ * reaches review on GitHub. At the round limit the open findings go in its description.
+ */
+export const REVIEW_DONE_NEXT =
+  "The review loop is done: open the pull request now, unless the user asked you not to, and link it with " +
+  "link (listing any findings still open in its description), then carry on.";
+
 /** Short badge text for cards. */
 export function reviewBadgeLabel(summary: TaskReviewSummary): string {
   const gating = summary.open.blocking + summary.open.major;

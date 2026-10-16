@@ -106,12 +106,16 @@ describe("local review loop over MCP", () => {
     });
     expect(fixed.text).toContain("R1.1 marked fixed.");
     expect(fixed.text).toContain(`start_review("${taskRef}")`);
+    expect(fixed.text).not.toContain("open the pull request");
+    // Mid-loop there is no PR to ask for yet.
+    expect((await call(agent, "get_task", { task: taskRef })).text).not.toContain("PR: the review loop is done");
 
-    // 4. Round 2 with a fresh reviewer comes back clean.
+    // 4. Round 2 with a fresh reviewer comes back clean, and the reviewer's reply says to open the PR.
     const second = await call(agent, "start_review", { task: taskRef });
     expect(second.text).toContain("Round 2 is open");
     expect(second.text).toContain(`round: 2`);
-    await call(reviewer, "submit_review", { task: taskRef, findings: [] });
+    const clean = await call(reviewer, "submit_review", { task: taskRef, findings: [] });
+    expect(clean.text).toContain("implementing agent should open the pull request now");
 
     const summary = h.services.tasks.summary(id);
     expect(summary.review).toMatchObject({ state: "clean", round: 2, open: { blocking: 0, nit: 1 } });
@@ -126,17 +130,55 @@ describe("local review loop over MCP", () => {
     );
     expect(final.text).toContain("finding R1.1 fixed: Quoting added with a test");
     expect(final.text).not.toContain("waiting for its reviewer");
+
+    // 5. The loop is done with no PR linked: get_task asks for it until one is.
+    expect(final.text).toContain("Missing links:");
+    expect(final.text).toContain("PR: the review loop is done and no pull request is linked");
+    await call(agent, "link", { task: taskRef, value: "https://github.com/acme/app/pull/3" });
+    const linked = await call(agent, "get_task", { task: taskRef });
+    expect(linked.text).not.toContain("PR: the review loop is done");
     await reviewer.close();
   });
 
-  it("refuses rounds past the limit and explains why", async () => {
+  it("refuses rounds past the limit, and says to open the PR with the open findings", async () => {
     h.services.settings.update({ autoReview: true, reviewMaxRounds: 1 });
     await call(agent, "move_task", { task: taskRef, status: "review" });
-    await call(agent, "submit_review", { task: taskRef, findings: [{ severity: "major", title: "x" }] });
+    const submitted = await call(agent, "submit_review", {
+      task: taskRef,
+      findings: [{ severity: "major", title: "x" }],
+    });
+    expect(submitted.text).toContain("implementing agent should open the pull request now");
     const refused = await call(agent, "start_review", { task: taskRef });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain("limit 1");
+    expect(refused.text).toContain("open the pull request");
     expect(h.services.tasks.summary(h.services.tasks.resolveId(taskRef)).review?.state).toBe("stuck");
+
+    const detail = await call(agent, "get_task", { task: taskRef });
+    expect(detail.text).toContain("PR: the review loop is done");
+    const resolved = await call(agent, "resolve_finding", {
+      task: taskRef,
+      finding: "R1.1",
+      status: "fixed",
+      note: "done",
+    });
+    expect(resolved.text).toContain("The review loop is done: open the pull request now");
+  });
+
+  it("doesn't ask for a PR when the review is off, still pending, or the task isn't in Review", async () => {
+    const detail = () => call(agent, "get_task", { task: taskRef }).then((r) => r.text);
+    await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(await detail()).not.toContain("PR: the review loop");
+
+    h.services.settings.update({ autoReview: true });
+    await call(agent, "move_task", { task: taskRef, status: "in_progress" });
+    await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(await detail()).not.toContain("PR: the review loop");
+
+    await call(agent, "submit_review", { task: taskRef, findings: [] });
+    expect(await detail()).toContain("PR: the review loop is done");
+    await call(agent, "move_task", { task: taskRef, status: "in_progress" });
+    expect(await detail()).not.toContain("PR: the review loop");
   });
 
   it("follows a per-task override set through update_task", async () => {

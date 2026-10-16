@@ -24,7 +24,8 @@ panel (Auto: Default / On / Off), or an agent can with `update_task(autoReview)`
    note saying why.
 5. If the round raised blocking or major findings, the agent calls `start_review` for the next round,
    with a new reviewer. It stops when a round comes back clean, or after the round limit (3 by default).
-6. Only then does it open the pull request.
+6. Only then does it open the pull request, and it always does: also at the round limit, with the findings
+   still open listed in the PR description, unless you told it not to.
 
 One round is one subagent call. Everything that has to survive between rounds lives on the board: every
 finding, every resolution note, every verdict. A new reviewer reads that history through `get_task`, so it
@@ -148,8 +149,14 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
   already short of width, and cards narrower than now get too busy, so review state is a badge.
 - **No gate.** Moving to Review is never blocked by open findings; the card signals instead.
 - **Review before the PR.** With auto-review on, "Review" means "done, being reviewed locally", and the PR
-  is opened once the loop is clean. Without it, agents open and link the PR before moving to Review, as
+  is opened once the loop ends. Without it, agents open and link the PR before moving to Review, as
   before.
+- **Say it where the loop ends.** The brief at the start of the loop was the only place that said to open
+  the PR, and agents sometimes stopped after the last round without doing it. So every end point repeats
+  it: the reply to a clean `submit_review`, the `resolve_finding` result when no further round is due, the
+  round-limit error from `start_review`, and the last step of the fix prompt. As a safety net, `get_task`
+  lists a PR under **Missing links** when the task is in Review, `reviewIsDone` says the loop ended (clean,
+  or no further round allowed) and no PR is linked. Nothing is added without auto-review.
 - **`get_task` shows a pointer, not the loop.** The reviewer reads the task with `get_task` too. If that
   result told it to start a reviewer subagent, it might start one of its own. So `get_task` only says that a
   round is waiting and who does what; the loop instructions come from `move_task` and `start_review`.

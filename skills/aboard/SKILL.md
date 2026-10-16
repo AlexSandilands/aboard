@@ -75,8 +75,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    idempotent, so linking twice is harmless.
 7. **Status transitions.** `in_progress` while implementing → `review` when the work is done → `done`
    when merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first. If the move to
-   `review` says a local review round is open, run the review loop (below) **before** opening the PR;
-   otherwise open and link the PR, then move to `review`.
+   `review` says a local review round is open, run the review loop (below) **before** opening the PR, and
+   open it when the loop ends; otherwise open and link the PR, then move to `review`.
 8. **Close what's already handled.** If a task was delivered by another task, duplicates one, or is no
    longer wanted, `close_task` it with resolution `completed` / `duplicate` (plus `byTask: "#N"`) or
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
@@ -97,7 +97,10 @@ opens review round 1, and the `move_task` result tells you what to do. In short:
    `R<round>.<n>`, e.g. `R1.2`.
 3. If the round raised blocking or major findings, `start_review` and repeat with a new reviewer. Stop
    when a round comes back clean or the round limit is reached (the board refuses further rounds).
-4. Then open the PR and link it.
+4. **Always open the PR and link it** once the loop ends, unless the user said not to: also at the
+   round limit, with any findings still open listed in the PR description. A review that ends without a
+   PR leaves the user with nothing to look at; `get_task` lists the PR under **Missing links** until one
+   is linked.
 
 If you are the reviewer: don't edit files, review the branch's changes against the task, and finish with
 `submit_review` (an empty findings list when the change is clean). If you can't start subagents, do the

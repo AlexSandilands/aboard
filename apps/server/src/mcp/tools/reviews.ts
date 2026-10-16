@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   FindingSeverity,
   FindingStatus,
+  REVIEW_DONE_NEXT,
+  reviewIsDone,
   reviewLoopInstructions,
   reviewWantsAnotherRound,
   SubmitReviewInput,
@@ -109,9 +111,14 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
         const tally = review.findings.length
           ? [...counts].map(([severity, n]) => `${n} ${severity}`).join(", ")
           : "no findings";
+        const task = services.tasks.summary(id);
+        // Only the implementer opens the PR, but the reviewer's reply is how it learns the loop ended.
+        const ending = reviewIsDone(task.review)
+          ? " No further round is needed: add that the review loop is done and the implementing agent should open the pull request now, unless the user asked it not to, and link it."
+          : "";
         return textResult(
-          `Recorded round ${review.round} on #${services.tasks.summary(id).number}: ${tally}. ` +
-            "Reply to the implementing agent with this tally; it reads the findings from the board.",
+          `Recorded round ${review.round} on #${task.number}: ${tally}. ` +
+            `Reply to the implementing agent with this tally; it reads the findings from the board.${ending}`,
         );
       }),
   );
@@ -145,9 +152,15 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
         const review = task.review;
         const gating = review ? review.open.blocking + review.open.major : 0;
         let next: string;
-        if (gating > 0) next = `${gating} blocking/major finding${gating === 1 ? "" : "s"} still open.`;
-        else if (reviewWantsAnotherRound(review)) {
+        const stillOpen = `${gating} blocking/major finding${gating === 1 ? "" : "s"} still open.`;
+        if (gating > 0) {
+          next = reviewIsDone(review)
+            ? `${stillOpen} That was the last allowed round, so don't start another. ${REVIEW_DONE_NEXT}`
+            : stillOpen;
+        } else if (reviewWantsAnotherRound(review)) {
           next = `No blocking or major findings are open. Call start_review("#${task.number}") for the next round with a fresh reviewer.`;
+        } else if (reviewIsDone(review)) {
+          next = `No blocking or major findings are open. ${REVIEW_DONE_NEXT}`;
         } else next = "No blocking or major findings are open.";
         return taskResult(services, id, `${finding.label} marked ${finding.status}. ${next}`);
       }),

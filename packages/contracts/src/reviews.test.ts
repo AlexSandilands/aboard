@@ -4,6 +4,7 @@ import {
   BOARD_REVIEWER,
   deriveReviewSummary,
   reviewBadgeLabel,
+  reviewIsDone,
   reviewWantsAnotherRound,
   type FindingSeverity,
   type FindingStatus,
@@ -78,6 +79,34 @@ describe("deriveReviewSummary", () => {
   it("counts gating findings left open in earlier rounds", () => {
     const summary = deriveReviewSummary([round(1), round(2)], [finding(1, "blocking")], 3);
     expect(summary?.state).toBe("changes_requested");
+  });
+});
+
+describe("reviewIsDone", () => {
+  const done = (rounds: ReturnType<typeof round>[], findings: ReturnType<typeof finding>[], max = 3) =>
+    reviewIsDone(deriveReviewSummary(rounds, findings, max));
+
+  it("is false before any round and while a round is unfinished", () => {
+    expect(reviewIsDone(null)).toBe(false);
+    expect(done([round(1, "pending")], [])).toBe(false);
+    expect(done([round(1), round(2, "running")], [])).toBe(false);
+    expect(done([round(1, "failed")], [])).toBe(false);
+  });
+
+  it("is false while another round is due", () => {
+    expect(done([round(1)], [finding(1, "blocking")])).toBe(false);
+    expect(done([round(1)], [finding(1, "blocking", "fixed")])).toBe(false);
+  });
+
+  it("is true for a clean round", () => {
+    expect(done([round(1)], [])).toBe(true);
+    expect(done([round(1)], [finding(1, "nit")])).toBe(true);
+  });
+
+  it("is true at the round limit, whether findings are open or fixed but unverified", () => {
+    const rounds = [round(1), round(2), round(3)];
+    expect(done(rounds, [finding(3, "major")])).toBe(true);
+    expect(done(rounds, [finding(3, "major", "fixed")])).toBe(true);
   });
 });
 
