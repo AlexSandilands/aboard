@@ -44,6 +44,9 @@ export const BUILTIN_REVIEW_SKILL_NAME = "aboard-review";
 /** Actor the board's own headless reviewer records rounds as. */
 export const BOARD_REVIEWER = "board reviewer";
 
+/** Actor of what the board does by itself in the loop, such as opening the next round once gating findings are fixed. */
+export const BOARD_ACTOR = "board";
+
 export const reviewSkillName = (skill: ReviewSkillRef): string =>
   skill.source === "builtin" ? BUILTIN_REVIEW_SKILL_NAME : skill.name;
 
@@ -182,6 +185,18 @@ export const reviewIsDone = (summary: TaskReviewSummary | null): boolean =>
   (summary.state === "clean" || summary.state === "stuck" || summary.state === "fixed") &&
   !reviewWantsAnotherRound(summary);
 
+/**
+ * Whether the local loop is still going and its round is yet to come in or its fixes are yet to be reviewed:
+ * a round pending, running or stalled, or blocking or major findings open with rounds left. A failed round isn't
+ * waited on (nothing will run it), and neither is a loop that has ended, stuck included.
+ */
+export const reviewIsInProgress = (summary: TaskReviewSummary | null): boolean =>
+  summary !== null &&
+  (summary.state === "pending" ||
+    summary.state === "running" ||
+    summary.state === "stalled" ||
+    reviewWantsAnotherRound(summary));
+
 /** A task that goes through the loop again (after PR feedback) already has its PR. */
 export const REVIEW_PR_LINKED =
   "If a pull request is already linked, push your changes to it instead of opening another.";
@@ -201,6 +216,7 @@ export const REVIEW_LIMIT_NEXT =
 
 /** Step 4 of the loop and fix prompts, where the loop may still have rounds to run. */
 export const REVIEW_PR_STEP =
+  "Don't open the pull request while the loop is running: Autopilot's PR review waits for it, and a PR opened early gets reviewed on GitHub twice. " +
   "When the loop ends (a clean round, or the round limit), always open the pull request, listing any findings " +
   `still open in its description, unless the user asked you not to; then link it and carry on. ${REVIEW_PR_LINKED}`;
 

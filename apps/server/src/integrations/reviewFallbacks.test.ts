@@ -154,6 +154,39 @@ describe("review fallbacks", () => {
     expect(s.tasks.summary(task.id).review?.state).toBe("clean");
   });
 
+  it("treats a round the board opened after the fixes like an agent's: waits, nudges the thread, then reviews headless", async () => {
+    const { s, task, fallbacks, advance, round, sent, jobs } = setup({ headless: true, thread: "done" });
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    expect(round()).toMatchObject({ round: 2, status: "pending", openedBy: "board" });
+
+    // Not a round the user asked for: the agent gets its grace before the thread is nudged.
+    await fallbacks.tick();
+    expect(sent).toEqual([]);
+    advance(PAST_AGENT_GRACE);
+    await fallbacks.tick();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toContain("round 2 is open");
+    expect(sent[0]!.commandId).toBe(`review-${round()!.id}-nudge`);
+
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    await fallbacks.idle();
+    expect(jobs).toHaveLength(1);
+    expect(round()).toMatchObject({ round: 2, status: "submitted", reviewer: BOARD_REVIEWER });
+  });
+
+  it("marks a round the board opened stalled when nothing can run it", async () => {
+    const { s, task, fallbacks, advance, round } = setup();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    advance(PAST_AGENT_GRACE);
+    await fallbacks.tick();
+    expect(round()).toMatchObject({ round: 2, status: "stalled", error: "No agent ran the review" });
+  });
+
   it("waits while the T3 thread is busy", async () => {
     const { s, task, fallbacks, advance, round, sent } = setup({ thread: "working" });
     s.tasks.move(task.id, { status: "review" }, "user");

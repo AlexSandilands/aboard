@@ -156,9 +156,11 @@ opens review round 1, and the `move_task` result tells you what to do. In short:
 2. `get_task`, fix every open **blocking** and **major** finding (minor and nit too when cheap), and mark
    each with `resolve_finding`: `fixed`, or `wont_fix` with a note saying why. Findings are labelled
    `R<round>.<n>`, e.g. `R1.2`.
-3. If the round raised blocking or major findings, `start_review` and repeat with a new reviewer. Stop
-   when a round comes back clean or the round limit is reached (the board refuses further rounds).
-4. **Always open the PR and link it** once the loop ends, unless the user said not to: also at the
+3. If the round raised blocking or major findings, the board opens the next round itself when you resolve
+   the last of them; `start_review` returns its brief. Repeat with a new reviewer. Stop when a round comes
+   back clean or the round limit is reached (the board refuses further rounds).
+4. **Never open the PR before the loop ends**: Autopilot's PR review waits for the loop, and a PR opened
+   early is reviewed on GitHub while you are still fixing. **Always open the PR and link it** once it ends, unless the user said not to: also at the
    round limit, with any findings still open listed in the PR description. If the task already has a PR
    (a re-review after feedback), push to it instead of opening another. A review that ends without a
    PR leaves the user with nothing to look at; `get_task` lists the PR under **Missing links** until one

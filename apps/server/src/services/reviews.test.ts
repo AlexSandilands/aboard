@@ -80,6 +80,66 @@ describe("reviews", () => {
     expect(reopened).toMatchObject({ status: "open", resolutionNote: null, resolvedBy: null });
   });
 
+  describe("the board opens the next round", () => {
+    const gating = {
+      findings: [
+        { severity: "blocking" as const, title: "A" },
+        { severity: "major" as const, title: "B" },
+        { severity: "minor" as const, title: "C" },
+      ],
+    };
+
+    it("when the last blocking or major finding is resolved, fixed or declined", () => {
+      const { s, task } = setup();
+      s.settings.update({ autoReview: true });
+      s.reviews.submit(task.id, gating, "reviewer");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+      // One gating finding is still open, and a minor one doesn't count.
+      expect(s.reviews.list(task.id)).toHaveLength(1);
+      s.reviews.resolveFinding(task.id, "R1.2", { status: "wont_fix", note: "By design" }, "agent");
+      const rounds = s.reviews.list(task.id);
+      expect(rounds).toHaveLength(2);
+      expect(rounds[1]).toMatchObject({ round: 2, status: "pending", trigger: "manual", openedBy: "board" });
+      expect(s.tasks.summary(task.id).review?.state).toBe("pending");
+      expect(s.tasks.detail(task.id).events.map((e) => e.type)).toContain("review_opened");
+    });
+
+    it("once: resolving more findings while the round is open doesn't open another", () => {
+      const { s, task } = setup();
+      s.settings.update({ autoReview: true });
+      s.reviews.submit(task.id, gating, "reviewer");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+      s.reviews.resolveFinding(task.id, "R1.2", { status: "fixed" }, "agent");
+      s.reviews.resolveFinding(task.id, "R1.3", { status: "fixed" }, "agent");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed", note: "again" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(2);
+    });
+
+    it("not at the round limit, not on reopening, not after a clean round, and not with auto-review off", () => {
+      const { s, task } = setup();
+      s.settings.update({ autoReview: true, reviewMaxRounds: 1 });
+      s.reviews.submit(task.id, { findings: [{ severity: "major", title: "A" }] }, "reviewer");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(1);
+
+      s.settings.update({ reviewMaxRounds: 3 });
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "open" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(1);
+
+      s.settings.update({ autoReview: false });
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(1);
+      // A task override turns it back on for this task alone.
+      s.tasks.update(task.id, { autoReview: true }, "user");
+      s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed", note: "again" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(2);
+
+      s.reviews.submit(task.id, { findings: [{ severity: "minor", title: "B" }] }, "reviewer");
+      s.reviews.resolveFinding(task.id, "R2.1", { status: "fixed" }, "agent");
+      expect(s.reviews.list(task.id)).toHaveLength(2);
+    });
+  });
+
   it("refuses a second submission to the same round", () => {
     const { s, task } = setup();
     s.reviews.submit(task.id, { findings: [] }, "reviewer");
