@@ -206,7 +206,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       description:
         "Change a task's status: backlog -> planned -> in_progress -> review -> done (any direction is allowed). " +
         "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
-        "when merged or verified. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
+        "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it, then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
@@ -237,7 +237,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
               ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
               : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
           const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
-          return taskResult(services, id, review ? `${moved}\n\n${review}` : moved);
+          return taskResult(services, id, review ? `${moved}\n\n${review}` : moved, {
+            closing: summary.status === "done",
+          });
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),

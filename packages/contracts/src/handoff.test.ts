@@ -19,6 +19,7 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("Board: http://127.0.0.1:5317/?task=abc-123");
     expect(prompt).toContain(`Call get_task("abc-123") on the ${BRAND.id} MCP server first`);
     expect(prompt).toContain("add_note");
+    expect(prompt).toContain("never all at the end of a phase");
     expect(prompt).not.toContain("already linked");
     expect(prompt).toContain("link(t3Thread: {environmentId, threadId})");
     expect(prompt).toContain("Jira issue");
@@ -56,6 +57,7 @@ describe("subagent work prompt", () => {
     expect(prompt).toContain("You are a subagent");
     expect(prompt).toContain(`Call get_task("abc-123")`);
     expect(prompt).toContain("mark the step blocked");
+    expect(prompt).toContain("never all at the end of a phase");
     expect(prompt).toContain(
       "don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review",
     );

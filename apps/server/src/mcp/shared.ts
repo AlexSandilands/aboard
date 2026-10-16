@@ -208,19 +208,21 @@ export function safeProject(services: Services, id: string): Project | undefined
 /**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
  * "Missing labels" and "Suggested model" nudges; only the planning moments (set_plan, create_task) ask for them, so
- * they aren't noise elsewhere.
+ * they aren't noise elsewhere. Every result carries the "Plan progress" nudges; `closing` (the move to Done) adds the
+ * open-steps one, which get_task never shows for a task that is already Done.
  */
 export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { planningHints?: boolean } = {},
+  opts: { planningHints?: boolean; closing?: boolean } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
+  const progress = { now: Date.now(), ...(opts.closing ? { closing: true } : {}) };
   const body = opts.planningHints
-    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage(), modelHint: true })
-    : renderTaskShort(task, project);
+    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage(), modelHint: true, progress })
+    : renderTaskShort(task, project, { progress });
   return textResult(`${headline}\n\n${body}`);
 }
 
