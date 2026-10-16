@@ -113,8 +113,11 @@ export function agentArgs(input: AgentArgsInput): string[] {
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
     ...pushDenyRules(input.defaultBranch),
     // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
-    // anything or run hooks, for anyone who can push to it.
-    ...(readOnly && input.untrusted ? ["--strict-mcp-config", "--setting-sources", "user"] : []),
+    // anything or run hooks, for anyone who can push to it. The user's own settings stay (some set up the login), so
+    // only the built-in tools it needs are available: a global allow rule for WebFetch or the like finds no tool.
+    ...(readOnly && input.untrusted
+      ? ["--strict-mcp-config", "--setting-sources", "user", "--tools", "Read,Grep,Glob,Bash"]
+      : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",

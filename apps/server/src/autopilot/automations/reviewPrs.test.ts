@@ -405,6 +405,7 @@ describe("review PRs: the agent", () => {
       "Bash(gh pr view https://github.com/acme/app/pull/7)",
       "Bash(gh pr view https://github.com/acme/app/pull/7 --comments)",
       "Bash(gh pr diff https://github.com/acme/app/pull/7)",
+      "Bash(gh pr diff https://github.com/acme/app/pull/7 --name-only)",
       "Bash(gh api repos/acme/app/pulls/7/comments)",
       "Bash(gh api repos/acme/app/pulls/7/reviews)",
     ]);

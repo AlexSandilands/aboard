@@ -77,6 +77,7 @@ export function reviewTools(pr: PrTarget): string[] {
     `Bash(gh pr view ${url})`,
     `Bash(gh pr view ${url} --comments)`,
     `Bash(gh pr diff ${url})`,
+    `Bash(gh pr diff ${url} --name-only)`,
     `Bash(gh api ${endpoint}/comments${hostFlag(pr)})`,
     `Bash(gh api ${endpoint}/reviews${hostFlag(pr)})`,
   ];
@@ -121,7 +122,7 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
     "",
     "## How to review",
     "",
-    `The skill below was written for reviewing a branch before its pull request exists. Here the change is the pull request: read it with \`gh pr view ${prUrl(pr)}\` and \`gh pr diff ${prUrl(pr)}\`, and the code around it with your file tools in the checkout (\`git log --oneline -20\` shows its history; no other git command is available, so ignore the skill's git diff steps). Follow the skill for what to look for and how to rate it. Where it says to record findings anywhere, ignore that: return them as your answer, as described below.`,
+    `The skill below was written for reviewing a branch before its pull request exists. Here the change is the pull request: read it with \`gh pr view ${prUrl(pr)}\` and \`gh pr diff ${prUrl(pr)}\`, and the code around it with your file tools in the checkout (\`git log --oneline -20\` shows its history; no other git command is available, so ignore the skill's git diff steps). Run these commands exactly as written: any other form (other flags, other repositories, a different quoting) is refused. A long diff is cut off in your output: then list the changed files with \`gh pr diff ${prUrl(pr)} --name-only\`, read them with your file tools, and say in your summary what you could not see. Follow the skill for what to look for and how to rate it. Where it says to record findings anywhere, ignore that: return them as your answer, as described below.`,
     "",
     ...skillSection(skill),
     "",

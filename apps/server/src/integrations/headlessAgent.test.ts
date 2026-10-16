@@ -59,6 +59,12 @@ describe("headless agent", () => {
       "--setting-sources",
       "user",
     ]);
+    // And only the built-in tools it needs, whatever the user's own settings allow.
+    expect(closed.slice(closed.indexOf("--tools"), closed.indexOf("--tools") + 2)).toEqual([
+      "--tools",
+      "Read,Grep,Glob,Bash",
+    ]);
+    expect(open).not.toContain("--tools");
     // git only in exact forms: diff, show and log take any path, and --output= writes to it.
     const allowed = closed.slice(closed.indexOf("--allowedTools") + 1, closed.indexOf("--disallowedTools"));
     const git = allowed.filter((t) => t.startsWith("Bash(git"));

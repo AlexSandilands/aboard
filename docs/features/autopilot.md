@@ -220,12 +220,15 @@ as comments only.
   `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
   write (the PR's description and comments), the request sets `untrustedInput`, which gives it the least it needs:
   - no board tools and no other MCP servers (`--strict-mcp-config`), and `--setting-sources user`, so the branch's
-    own `.claude/settings.json` (allow rules, hooks) never applies;
+    own `.claude/settings.json` (allow rules, hooks) never applies. The user's own settings stay, because some carry
+    the login; `--tools Read,Grep,Glob,Bash` keeps a global allow rule of theirs (WebFetch and the like) from
+    finding a tool, but a broad `Bash` allow rule of theirs would still widen what the reviewer may run;
   - file tools scoped to the worktree (`Read(./**)` and so on; a bare `Read` reaches any file the user can);
   - git in three exact commands only (`rev-parse HEAD`, `status --short`, `log --oneline -20`), because `git diff`,
     `show` and `log` take any path, so read any file (a path outside the work tree makes `diff` compare files) and
     write any file (`--output=`);
-  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` and two reads of
+  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` (also with `--name-only`, for a diff too long for
+    one command output) and two reads of
     the PR's comments and reviews with `gh api`. The PR is named by its URL, so there is no `-R` to point it at
     another repository, and no wildcard for `--web`, `-f` or `--method` to ride on.
 
