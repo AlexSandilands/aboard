@@ -34,9 +34,9 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
   const overview = useAutopilotOverview();
   const scope = useAutopilotScope(projectId);
   const board = useAutopilotScope(null, projectId !== null);
-  const set = useSetAutopilotScope(projectId);
   // Bumped when the server rejects a save, so the form controls drop the text it refused.
   const [rejected, setRejected] = useState(0);
+  const set = useSetAutopilotScope(projectId, () => setRejected((n) => n + 1));
   const automations = overview.data?.automations;
   const failed = overview.error ?? scope.error ?? board.error;
   // The forms send a scope's whole config, so they wait for the real entries rather than editing stand-ins.
@@ -65,9 +65,7 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
             pending={set.isPending}
             onMode={(mode) => set.mutate({ automation: automation.key, mode })}
             rejected={rejected}
-            onConfig={(config) =>
-              set.mutate({ automation: automation.key, config }, { onError: () => setRejected((n) => n + 1) })
-            }
+            onConfig={(config) => set.mutate({ automation: automation.key, config })}
           />
         );
       })}

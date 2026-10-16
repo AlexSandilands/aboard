@@ -364,7 +364,7 @@ export function useUpdateSettings() {
  * Building it from what the component last rendered would let a quick second edit undo the first. The server's reply
  * (the scope's entries) goes into the cache; other windows' changes arrive as autopilot.changed.
  */
-export function useSetAutopilotScope(projectId: string | null) {
+export function useSetAutopilotScope(projectId: string | null, onRejected?: () => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -390,7 +390,9 @@ export function useSetAutopilotScope(projectId: string | null) {
       // A board change moves what every project inherits.
       void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
     },
+    // Here rather than in mutate()'s options: those only run for the latest call, and a save can be queued behind.
     onError: (error) => {
+      onRejected?.();
       void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
       toastManager.add({
         type: "error",
