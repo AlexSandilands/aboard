@@ -464,5 +464,9 @@ describe("suggested model", () => {
     });
     expect(updated.modelTiers.light).toEqual({ description: null, t3 });
     expect(s.settings.get().modelTiers.standard.description).toBe("Sonnet, medium effort");
+    // A partial update leaves the other tiers alone.
+    const partial = s.settings.update({ modelTiers: { deep: { description: "Opus", t3: null } } });
+    expect(partial.modelTiers).toMatchObject({ light: { t3 }, standard: { description: "Sonnet, medium effort" } });
+    expect(partial.modelTiers.deep.description).toBe("Opus");
   });
 });

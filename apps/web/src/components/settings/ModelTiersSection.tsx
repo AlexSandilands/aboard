@@ -25,9 +25,8 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   const t3Ready = settings.t3TokenSet && t3?.detected === true;
   const catalog = useT3ModelCatalog(t3Ready);
   const save = (tier: ModelTier, patch: Partial<ModelTierSetting>) =>
-    updateSettings.mutate({
-      modelTiers: { ...settings.modelTiers, [tier]: { ...settings.modelTiers[tier], ...patch } },
-    });
+    // Only this tier is sent, so quick edits to two tiers can't overwrite each other.
+    updateSettings.mutate({ modelTiers: { [tier]: { ...settings.modelTiers[tier], ...patch } } });
 
   return (
     <SettingsSection title="Model tiers">

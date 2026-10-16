@@ -459,8 +459,8 @@ export const UpdateSettingsInput = z.object({
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
-  /** Replaces all three tiers. */
-  modelTiers: ModelTiers.optional(),
+  /** Replaces the tiers given; tiers left out keep their setting. */
+  modelTiers: ModelTiers.partial().optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

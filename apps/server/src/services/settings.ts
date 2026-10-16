@@ -19,14 +19,16 @@ const DEFAULTS: StoredSettings = {
   modelTiers: EMPTY_MODEL_TIERS,
 };
 
-/** Blank descriptions are stored as none, so the T3 label fallback applies. */
-const cleanModelTiers = (tiers: ModelTiers): ModelTiers =>
-  Object.fromEntries(
-    Object.entries(tiers).map(([tier, setting]) => [
+/** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
+const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): ModelTiers => ({
+  ...current,
+  ...Object.fromEntries(
+    Object.entries(input).map(([tier, setting]) => [
       tier,
       { ...setting, description: setting.description?.trim() || null },
     ]),
-  ) as ModelTiers;
+  ),
+});
 
 /** Stored settings over their defaults. Also read by summaries, which derive review state from max rounds. */
 export function loadSettings(repos: Repos): StoredSettings {
@@ -75,7 +77,8 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }
-        if (input.modelTiers !== undefined) repos.settings.set("modelTiers", cleanModelTiers(input.modelTiers));
+        if (input.modelTiers !== undefined)
+          repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
       });
       return get();
     },
