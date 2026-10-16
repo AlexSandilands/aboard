@@ -26,6 +26,7 @@ relations.json       blocks / blocked-by pairs
 counters.json
 autopilot.json       Autopilot switches and config per scope (optional: older dumps have none)
 recurring.json       recurring-task rules (optional: absent before Recurring tasks)
+custom-automations.json  custom Autopilot automations (optional: absent before them)
 tasks/2026-10/task-42.json   one task with its phases, steps, links, labels, reviews and findings
 events/2026-10.json          the activity log for the month the events happened
 ```

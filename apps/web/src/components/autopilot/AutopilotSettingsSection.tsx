@@ -7,6 +7,7 @@ import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayo
 import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { AutomationRows } from "./AutomationRows";
+import { CustomAutomationsSection, type CustomEdit } from "./CustomAutomationsSection";
 import { parseLimit } from "./autopilot.logic";
 
 const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> = [
@@ -17,10 +18,11 @@ const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> =
 ];
 
 /**
- * Settings → Autopilot: Pause all, the engine's limits, then the board-level switch and config of every automation.
- * Self-contained (it reads and writes its own queries), so it can move to another settings page as is.
+ * Settings → Autopilot: Pause all, the engine's limits, the board-level switch and config of every automation, then
+ * the custom automations. Reads and writes its own queries; the custom automation editor is the caller's, so it can
+ * take over the dialog.
  */
-export function AutopilotSettingsSection() {
+export function AutopilotSettingsSection({ onEditCustom }: { onEditCustom: (edit: CustomEdit) => void }) {
   const overview = useAutopilotOverview();
   if (!overview.data) {
     return (
@@ -39,6 +41,7 @@ export function AutopilotSettingsSection() {
       <SettingsSection title="Autopilot automations">
         <AutomationRows projectId={null} />
       </SettingsSection>
+      <CustomAutomationsSection onEdit={onEditCustom} />
     </>
   );
 }

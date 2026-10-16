@@ -9,6 +9,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { AutopilotSettingsSection } from "~/components/autopilot/AutopilotSettingsSection";
+import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
+import type { CustomEdit } from "~/components/autopilot/CustomAutomationsSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { TemplateEditorForm } from "~/components/templates/TemplateEditorForm";
@@ -91,6 +93,17 @@ function AppSettingsBody() {
   const integrations = useIntegrationsStatus();
   // The template editor takes over the dialog, so it doesn't stack a second modal on this one.
   const [editing, setEditing] = useState<TemplateEdit | null>(null);
+  const [editingCustom, setEditingCustom] = useState<CustomEdit | null>(null);
+  if (editingCustom) {
+    return (
+      <CustomAutomationEditorForm
+        customId={editingCustom.customId}
+        initial={editingCustom.initial}
+        onCancel={() => setEditingCustom(null)}
+        onDone={() => setEditingCustom(null)}
+      />
+    );
+  }
   if (editing) {
     return (
       <TemplateEditorForm
@@ -118,7 +131,7 @@ function AppSettingsBody() {
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
-            <AutopilotSettingsSection />
+            <AutopilotSettingsSection onEditCustom={setEditingCustom} />
             <IssueImportSection settings={settings.data} />
             <TerminalSection settings={settings.data} />
             <BackupSection settings={settings.data} />

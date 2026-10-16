@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #97 (custom automations), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per project or for
 the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -68,8 +68,9 @@ so they need no hook of their own. Events published while the engine itself writ
 5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up.
-7. Records a `queued` run, marks it `running`, and calls the action. Agent actions go on in the background;
-   board-only actions are awaited, one after another.
+7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
+   `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
+   after another.
 
 A run is never retried: once a dedupe key has a run, whatever its outcome, that candidate is done. A key that
 should act again changes (`review:pr:<headSha>`, `start:<taskId>:<statusChangedAt>`). Dry-run runs are deduped
@@ -79,7 +80,9 @@ hide work it only previewed.
 ### Runs
 
 `autopilot_runs` holds one row per run: `queued → running → succeeded | failed | skipped`. The runner fills in
-`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. Runs are history, so backups leave them out.
+`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. A custom automation's shell action fills in
+`exit_code` and `detail` (the output's tail); a dry run of a custom automation keeps in `detail` what it would have
+run (`Candidate.preview`). Runs are history, so backups leave them out.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
@@ -184,6 +187,50 @@ REST only, like the rest of Autopilot:
 | `DELETE /api/recurring/:id`              | Deletes it; tasks it made stay                                 |
 
 Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
+
+### Custom automations
+
+Automations the user defines (#97; guide: [custom automations](../guide/custom-automations.md)). Each row of
+`autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
+`custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
+(built-ins, then every custom row), so a create, edit or delete applies from the next pass; nothing is reloaded.
+Their switches and config are ordinary `autopilot_settings` rows, and the table's delete trigger removes them with
+the automation. Runs stay, under the old key.
+
+| Trigger            | Candidate                                   | Dedupe key                                     |
+| ------------------ | ------------------------------------------- | ---------------------------------------------- |
+| `status_change`    | A task in `to` (moved from `from`, if set, by its latest `status_changed` event) | `status:<taskId>:<statusChangedAt>` |
+| `pr_event`         | Per PR link: `linked`, `new_head` (headOid), `checks_failing`, `conflict`, `merged` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<oid>`, `pr_conflict:<link>:<oid>`, `pr_merged:<link>` |
+| `stale`            | A task in `status` for `hours`              | `stale:<taskId>:<statusChangedAt>`             |
+| `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
+| `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<local slot stamp>` |
+
+- **Arming.** Events before `armed_at` don't fire, so switching an automation on doesn't act on the board's history.
+  It is set at creation, when the trigger changes, when the automation's switch turns on somewhere (`onEnabled`)
+  and when Pause all is lifted. Event times are `statusChangedAt`, the blocker's, or for a PR the later of the link's
+  creation and the PR's `updatedAt` (so a PR whose state predates the automation is left alone). `stale` is a state,
+  not an event, and ignores it.
+- **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
+  contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
+  project filter (`checkCustomDefinition`, run by the service and the form).
+- **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
+  `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
+  It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
+  set to the PR's head branch. Its config is the shared runner options, per scope.
+- **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
+  `integrations/shellCommand.ts` spawns the command with `shell: true` in the project's `workspaceRoot`, with the
+  server's environment minus every `brandEnv` variable (the API token) plus the values as `brandEnv` variables
+  (`customShellEnv`). The command is never interpolated, and `{{…}}` in it is refused on save. A timeout kills the
+  process tree (`processTree.ts`, shared with `claude -p`). Non-zero exits and timeouts fail the run and flag the
+  task; the output's last 4,000 characters and the exit code go on the run.
+- **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
+  action is (or stays) a shell command needs an `Origin` header, which browsers send and the guard checks is the
+  board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
+  accident, not a boundary. Every change publishes `autopilot.changed`.
+- **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
+  `CustomAutomationEditorForm` taking over the dialog). The preview runs the same contracts helpers as the server
+  on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
+  lane popover entries, since those list the catalogue.
 
 ### Runners
 
@@ -310,6 +357,8 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | A long-running agent watching the board | Costs tokens while nothing happens, and its choices can't be tested or reasoned about |
 | Clearing `needs_attention` on task moves | Needs a hook in every path that changes status; deriving it can't go stale |
 | Recording held candidates as queued runs | Needs queue ordering and expiry; re-checking each pass is simpler |
+| Filling task values into a custom shell command | A title with quotes or `;` would change what runs; environment variables can't |
+| Acting on everything that matches when a custom automation is switched on | A "moves into Review" automation would fire for every card already there |
 
 ## Code map
 
@@ -319,6 +368,7 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/db/migrations/010_autopilot.sql` | `autopilot_settings`, `autopilot_runs`, the scope clean-up triggers |
 | `apps/server/src/db/migrations/013_task_autopilot.sql` | `tasks.autopilot`, the per-task flag |
 | `apps/server/src/db/migrations/016_autopilot_recurring.sql` | `autopilot_recurring`, the recurring-task rules |
+| `apps/server/src/db/migrations/021_autopilot_custom.sql` | `autopilot_custom`, and the runs' `detail` and `exit_code` |
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
@@ -332,6 +382,10 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
+| `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
+| `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
+| `apps/server/src/integrations/shellCommand.ts` | Running a shell action |
+| `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

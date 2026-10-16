@@ -43,7 +43,13 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
 
   /** Normalises and checks a definition, throwing what's wrong with it. */
   const checked = (def: CustomDefinition, selfId?: string): CustomDefinition => {
-    const next = { ...def, filters: { ...def.filters, labels: normalizeLabels(def.filters.labels) } };
+    let labels: string[];
+    try {
+      labels = normalizeLabels(def.filters.labels);
+    } catch (error) {
+      throw new AppError("VALIDATION", (error as Error).message);
+    }
+    const next = { ...def, filters: { ...def.filters, labels } };
     const problem = checkCustomDefinition(next);
     if (problem) throw new AppError("VALIDATION", problem);
     for (const projectId of next.filters.projectIds) {

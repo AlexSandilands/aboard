@@ -1,18 +1,20 @@
 import {
-  BRAND,
+  customAgentPrompt,
   customAutomationKey,
+  customTaskMatches,
+  customValues,
+  prLinksOf,
+  prOfTask,
   describeCustomTrigger,
   describeShellRun,
   latestDue,
   latestHourlySlot,
   localStamp,
-  renderCustomPrompt,
   customShellEnv,
   type CustomAutomation,
   type CustomTrigger,
+  type CustomData,
   type CustomValues,
-  type Project,
-  type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
@@ -23,22 +25,6 @@ import { defineAutomation, type ActionResult, type Automation, type Candidate, t
 
 // A custom automation as a catalogue entry (docs/features/autopilot.md#custom-automations): the trigger is the check,
 // the filters narrow it, and the action is an agent through the runners or a shell command in the project's folder.
-
-type PrLink = Extract<TaskLink, { kind: "pr" }>;
-
-interface CustomData {
-  /** The pull request the trigger was about, for `{{pr.url}}` and the agent's branch. */
-  prLinkId?: string;
-}
-
-const prLinks = (task: TaskSummary): PrLink[] => task.links.filter((l): l is PrLink => l.kind === "pr");
-
-/** The pull request a task's values name: the one the trigger was about, else its newest open one, else its newest. */
-const prOf = (task: TaskSummary, linkId?: string): PrLink | null => {
-  const prs = prLinks(task);
-  const open = prs.filter((l) => l.snapshot?.state === "open" || l.snapshot?.state === "draft");
-  return (linkId ? prs.find((l) => l.id === linkId) : null) ?? open.at(-1) ?? prs.at(-1) ?? null;
-};
 
 // An event at the arming instant counts: the automation was there for it.
 // Compared as instants: GitHub's stamps have no milliseconds, the board's do.
@@ -75,7 +61,7 @@ function taskEvents(
       return [{ key: `unblocked:${task.id}:${lastDoneAt}`, data: {}, what: "unblocked" }];
     }
     case "pr_event":
-      return prLinks(task).flatMap((link) => {
+      return prLinksOf(task).flatMap((link) => {
         const snap = link.snapshot;
         // When the board last saw the pull request change; a state older than the automation isn't news.
         const seen = [link.createdAt, snap?.updatedAt ?? null].reduce<string | null>(
@@ -108,44 +94,6 @@ function taskEvents(
   }
 }
 
-/** The values an action is given. */
-export function customValues(
-  custom: Pick<CustomAutomation, "name">,
-  project: Project | null,
-  task: TaskSummary | null,
-  data: CustomData = {},
-): CustomValues {
-  const pr = task ? prOf(task, data.prLinkId) : null;
-  return {
-    automation: custom.name,
-    task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
-    pr: pr ? { url: pr.url } : null,
-    project: project ? { name: project.title, path: project.workspaceRoot } : null,
-  };
-}
-
-/** The agent's prompt: the skill to use, the user's prompt filled in, and the task it is about. */
-export function customAgentPrompt(
-  custom: CustomAutomation,
-  values: CustomValues,
-  task: TaskSummary,
-  description: string | null,
-): string {
-  if (custom.action.kind !== "agent") throw new Error("Not an agent action");
-  const parts = [] as string[];
-  if (custom.action.skill) parts.push(`Use the ${custom.action.skill} skill.`);
-  parts.push(renderCustomPrompt(custom.action.prompt, values));
-  const context = [
-    `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
-    task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
-    values.pr ? `Pull request: ${values.pr.url}` : null,
-    description?.trim() ? `Description:\n${description.trim()}` : null,
-    `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
-  ].filter(Boolean);
-  parts.push(`---\nStarted by the ${BRAND.name} Autopilot automation "${custom.name}".\n${context.join("\n")}`);
-  return parts.join("\n\n");
-}
-
 const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
 
 /** The catalogue entry for a custom automation. */
@@ -156,11 +104,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
   const inScope = (ctx: CheckContext<Record<string, unknown>>) =>
     ctx.projects.filter(({ project }) => filters.projectIds.length === 0 || filters.projectIds.includes(project.id));
 
-  const matches = (task: TaskSummary) =>
-    task.kind !== "epic" &&
-    task.archivedAt === null &&
-    (filters.labels.length === 0 || task.labels.some((l) => filters.labels.includes(l))) &&
-    (!filters.epicId || task.parent?.id === filters.epicId);
+  const matches = (task: TaskSummary) => customTaskMatches(filters, task);
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services): string => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
@@ -235,7 +179,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       if (action.kind === "agent") {
         if (!task) throw new Error("An agent action needs a task to work on");
         const prompt = customAgentPrompt(custom, values, task, services.tasks.detail(task.id).description);
-        const branch = action.onPrBranch ? (prOf(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
+        const branch = action.onPrBranch ? (prOfTask(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
         const result = await ctx.runner.start({
           run: ctx.run,
           prompt,

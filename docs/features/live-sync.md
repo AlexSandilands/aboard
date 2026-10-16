@@ -23,7 +23,7 @@ to its TanStack Query cache.
 | `task.detail_changed`  | `taskId`                      | Invalidates that task's detail query                |
 | `integrations.changed` | T3 Code status                | Patches the board's T3 status, invalidates the integrations query |
 | `labels.colors_changed` | every label colour override  | Replaces the board's `labelColors`                  |
-| `autopilot.changed`    | Autopilot's pause and runs in flight | Replaces the board's `autopilot`, refetches recurring rules and project Autopilot switches ([autopilot](autopilot.md)) |
+| `autopilot.changed`    | Autopilot's pause and runs in flight | Replaces the board's `autopilot`, refetches recurring rules, custom automations and project Autopilot switches ([autopilot](autopilot.md)) |
 | `notification.created` | the notification, `unread`, `popup` | Adds it to the inbox query, shows an OS pop-up where one belongs ([notifications](notifications.md)) |
 | `notifications.changed` | `unread`                    | Invalidates the inbox query                         |
 

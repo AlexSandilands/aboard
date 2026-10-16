@@ -14,6 +14,9 @@ Off** switch. Inherit follows the board, and the switch says what that means ("I
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings.
 
+You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See
+[custom automations](custom-automations.md).
+
 ## How agents run
 
 An automation that needs an agent picks its **runner** in its settings:

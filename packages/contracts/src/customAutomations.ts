@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { brandEnv } from "./brand.ts";
+import { BRAND, brandEnv } from "./brand.ts";
 import { ModelTier } from "./modelTiers.ts";
 import { WeeklySchedule } from "./recurring.ts";
-import { TaskStatus } from "./schemas.ts";
+import { TaskStatus, type Project, type TaskLink, type TaskSummary } from "./schemas.ts";
 
 // Custom automations: Autopilot automations the user defines (docs/features/autopilot.md#custom-automations). Each
 // row is a catalogue entry `custom:<id>` with a trigger, filters and an action, switched per scope like the built-in
@@ -169,6 +169,72 @@ export function customShellEnv(values: CustomValues): Record<string, string> {
 export function describeShellRun(command: string, values: CustomValues): string {
   const env = Object.entries(customShellEnv(values)).map(([k, v]) => `${k}=${JSON.stringify(v)}`);
   return `${command}\n\nwith\n${env.join("\n")}`;
+}
+
+type PrLink = Extract<TaskLink, { kind: "pr" }>;
+
+/** What a check found that the action needs. */
+export interface CustomData {
+  /** The pull request the trigger was about, for `{{pr.url}}` and the agent's branch. */
+  prLinkId?: string;
+}
+
+export const prLinksOf = (task: Pick<TaskSummary, "links">): PrLink[] =>
+  task.links.filter((l): l is PrLink => l.kind === "pr");
+
+/** The pull request a task's values name: the one the trigger was about, else its newest open one, else its newest. */
+export function prOfTask(task: Pick<TaskSummary, "links">, linkId?: string): PrLink | null {
+  const prs = prLinksOf(task);
+  const open = prs.filter((l) => l.snapshot?.state === "open" || l.snapshot?.state === "draft");
+  return (linkId ? prs.find((l) => l.id === linkId) : null) ?? open.at(-1) ?? prs.at(-1) ?? null;
+}
+
+/** Whether a task passes the filters (projects aside, which the scopes decide with them). Epics never do. */
+export function customTaskMatches(filters: CustomFilters, task: TaskSummary): boolean {
+  return (
+    task.kind !== "epic" &&
+    task.archivedAt === null &&
+    (filters.labels.length === 0 || task.labels.some((l) => filters.labels.includes(l))) &&
+    (!filters.epicId || task.parent?.id === filters.epicId)
+  );
+}
+
+/** The values an action is given. */
+export function customValues(
+  def: Pick<CustomDefinition, "name">,
+  project: Pick<Project, "title" | "workspaceRoot"> | null,
+  task: TaskSummary | null,
+  data: CustomData = {},
+): CustomValues {
+  const pr = task ? prOfTask(task, data.prLinkId) : null;
+  return {
+    automation: def.name,
+    task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
+    pr: pr ? { url: pr.url } : null,
+    project: project ? { name: project.title, path: project.workspaceRoot } : null,
+  };
+}
+
+/** An agent action's prompt: the skill to use, the user's prompt filled in, and the task it is about. */
+export function customAgentPrompt(
+  def: Pick<CustomDefinition, "name" | "action">,
+  values: CustomValues,
+  task: TaskSummary,
+  description: string | null,
+): string {
+  if (def.action.kind !== "agent") throw new Error("Not an agent action");
+  const parts: string[] = [];
+  if (def.action.skill) parts.push(`Use the ${def.action.skill} skill.`);
+  parts.push(renderCustomPrompt(def.action.prompt, values));
+  const context = [
+    `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
+    task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
+    values.pr ? `Pull request: ${values.pr.url}` : null,
+    description?.trim() ? `Description:\n${description.trim()}` : null,
+    `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
+  ].filter(Boolean);
+  parts.push(`---\nStarted by the ${BRAND.name} Autopilot automation "${def.name}".\n${context.join("\n")}`);
+  return parts.join("\n\n");
 }
 
 /** Why a definition can't be saved, or null. Rules a field schema can't express alone. */
