@@ -90,11 +90,13 @@ by their working directory, so there's nothing to set up per repo.
 | Guide                                              | What's in it                                                        |
 | -------------------------------------------------- | ------------------------------------------------------------------- |
 | [Using the board](docs/guide/using-the-board.md)   | Plans, closing and deleting tasks, links, labels, layout, shortcuts |
+| [Templates](docs/guide/templates.md)               | Bug, Spike, Feature and your own starting points for new tasks      |
 | [Importing issues](docs/guide/importing-issues.md) | Create a task from a Jira or GitHub issue URL                       |
 | [Connecting agents](docs/guide/connect-agents.md)  | MCP setup for Claude Code, Codex, Copilot and VS Code               |
 | [Local review](docs/guide/local-review.md)         | Have agents' work reviewed on the board before they open a PR       |
 | [T3 Code](docs/guide/t3-code.md)                   | Thread links, live thread status, starting threads from a task      |
 | [Configuration](docs/guide/configuration.md)       | Data folder, ports, access token, the desktop app's tray            |
+| [Notifications](docs/guide/notifications.md)       | The inbox, pop-ups, the taskbar badge and what you're told about    |
 | [Contributing](CONTRIBUTING.md)                    | Developing, checks, and where the design docs are                   |
 
 <br>

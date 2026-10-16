@@ -11,11 +11,13 @@ import { createCore } from "./core.ts";
 import { createImportsService, type ImportsModule } from "./imports.ts";
 import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
+import { createNotificationsService } from "./notifications.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
 
@@ -28,14 +30,18 @@ export interface ServiceDeps {
   prHostHoldsTasks?: (host: string) => boolean;
   /** The Autopilot catalogue; tests swap in their own. */
   automations?: readonly Automation[];
+  /** The clock for notifications (retention, quiet hours); tests swap in their own. */
+  now?: () => Date;
 }
 
 /** Builds the service layer over one database. */
 export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
   const settings = createSettingsService(core);
+  const notifications = createNotificationsService(core);
   const projects = createProjectsService(core);
   const labels = createLabelsService(core);
+  const templates = createTemplatesService(core, { projects });
 
   let plans: PlansModule | null = null;
   let links: LinksModule | null = null;
@@ -50,6 +56,7 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
     settings,
     imports: () => imports!,
+    templates,
     relations: () => relations!,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
@@ -59,9 +66,10 @@ export function createServices(deps: ServiceDeps): Services {
     task: tasks.record,
     tasks: tasks.service,
     settings,
+    notifications,
     polls: deps.prHostHoldsTasks ?? ((host) => host === "github.com"),
   });
-  reviews = createReviewsService(core, { task: tasks.record });
+  reviews = createReviewsService(core, { task: tasks.record, notifications });
 
   return {
     projects,
@@ -74,6 +82,8 @@ export function createServices(deps: ServiceDeps): Services {
     labels: labels.service,
     imports: imports.service,
     backup: createBackupService(core),
-    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS }),
+    templates,
+    notifications,
+    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS, notifications }),
   };
 }

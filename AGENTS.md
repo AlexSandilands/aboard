@@ -67,6 +67,7 @@ and to this table.
 | Epics: grouping tasks, derived status, bands, epic tools       | [docs/features/epics.md](docs/features/epics.md)                                    |
 | Blocks / blocked by, the card lock, dependency lines           | [docs/features/relations.md](docs/features/relations.md)                            |
 | MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
+| Task templates: fields, placeholders, creating from one        | [docs/features/templates.md](docs/features/templates.md)                            |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
 | Column collapse, panel sections, which links a card shows      | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
@@ -76,6 +77,7 @@ and to this table.
 | Agent session links, their status, the terminal launcher       | [docs/features/agent-sessions.md](docs/features/agent-sessions.md)                  |
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
+| Notifications: the inbox, pop-ups, badges, their producers     | [docs/features/notifications.md](docs/features/notifications.md)                    |
 | Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
 | Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |

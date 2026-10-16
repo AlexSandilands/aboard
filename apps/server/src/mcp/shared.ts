@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AUTOPILOT_START_PLANNED,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -46,6 +47,14 @@ export const epicField = z
   .min(1)
   .describe('The epic this task belongs to: "#12", "12" or its uuid. It must be in the same project.');
 
+export const templateField = z
+  .string()
+  .min(1)
+  .describe(
+    "Start from a template: its name or id (list_templates shows them). Its title pattern, description, labels and " +
+      "plan fill in whatever you leave out, and anything you pass wins; labels you pass replace the template's.",
+  );
+
 export const blockedByField = z
   .array(z.string().min(1))
   .describe(
@@ -78,6 +87,18 @@ export const suggestedModelField = z
     "The model tier you suggest for implementing this task, judged by its complexity and risk. The user maps each " +
       "tier to a model, so the session that picks the task up starts on (or is reminded to switch to) that model.",
   );
+
+export const autopilotField = z
+  .enum(["default", "on", "off"])
+  .describe(
+    "Whether Autopilot may start this task by itself once it is planned. on: flag it. default and off: it is never " +
+      "started automatically. Set it only when the user has said so; ask first, never on your own. You can't change " +
+      "Autopilot's own settings.",
+  );
+
+/** The task's stored flag (null is Default) for a tool's `autopilot` argument. */
+export const autopilotValue = (choice: z.infer<typeof autopilotField>): boolean | null =>
+  choice === "default" ? null : choice === "on";
 
 export const t3ThreadField = z
   .object({
@@ -214,10 +235,16 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
+/** Whether Start planned tasks is on for a project, from the board or the project itself. False while it isn't registered. */
+function startPlannedOn(services: Services, projectId: string): boolean {
+  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
+  return automation !== undefined && services.autopilot.resolve(automation, projectId).enabled;
+}
+
 /**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
- * "Missing labels" and "Suggested model" nudges; only the planning moments (set_plan, create_task) ask for them, so
- * they aren't noise elsewhere.
+ * "Missing labels", "Suggested model" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
+ * moments (set_plan, create_task) ask for them, so they aren't noise elsewhere.
  */
 export function taskResult(
   services: Services,
@@ -228,7 +255,11 @@ export function taskResult(
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
   const body = opts.planningHints
-    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage(), modelHint: true })
+    ? renderTaskShort(task, project, {
+        labelsInUse: services.labels.usage(),
+        modelHint: true,
+        autopilotHint: startPlannedOn(services, task.projectId),
+      })
     : renderTaskShort(task, project);
   return textResult(`${headline}\n\n${body}`);
 }

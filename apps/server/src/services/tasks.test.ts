@@ -418,6 +418,36 @@ describe("events", () => {
   });
 });
 
+describe("autopilot flag", () => {
+  it("starts as Default, is set on create, and logs a change once", () => {
+    const { s, project } = setup();
+    const plain = s.tasks.create({ projectId: project.id, title: "Plain" });
+    expect(plain.autopilot).toBeNull();
+    const flagged = s.tasks.create({ projectId: project.id, title: "Flagged", autopilot: true });
+    expect(flagged.autopilot).toBe(true);
+
+    const off = s.tasks.update(plain.id, { autopilot: false }, "user");
+    expect(off.autopilot).toBe(false);
+    const again = s.tasks.update(plain.id, { autopilot: false }, "user");
+    const updates = again.events.filter((e) => e.type === "updated");
+    expect(updates.map((e) => e.payload)).toEqual([{ fields: ["autopilot"] }]);
+
+    expect(s.tasks.update(plain.id, { autopilot: null }, "user").autopilot).toBeNull();
+    expect(s.tasks.summaries().find((t) => t.id === flagged.id)?.autopilot).toBe(true);
+  });
+
+  it("is refused on epics, which Autopilot never starts", () => {
+    const { s, project } = setup();
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "E", kind: "epic", autopilot: true }),
+      "VALIDATION",
+    );
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { autopilot: false }, "user"), "VALIDATION");
+    expect(s.tasks.update(epic.id, { autopilot: null }, "user").autopilot).toBeNull();
+  });
+});
+
 describe("suggested model", () => {
   it("is set by set_plan and create, kept when omitted, and cleared with null", () => {
     const { s, project } = setup();

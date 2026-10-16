@@ -39,6 +39,7 @@ const FIELD_LABEL: Record<string, string> = {
   description: "description",
   planContext: "plan context",
   autoReview: "auto-review setting",
+  autopilot: "Autopilot flag",
 };
 const FINDING_STATUS_LABEL: Record<string, string> = { fixed: "fixed", wont_fix: "won't fix" };
 const LINK_KIND_LABEL: Record<string, string> = {
@@ -68,7 +69,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
   switch (event.type) {
     case "created": {
       const status = STATUS_LABEL.get(str(p.status) ?? "");
-      return line("created", status ? `created this in ${status}` : "created this");
+      const from = str(p.template) ? ` from the ${str(p.template)} template` : "";
+      return line("created", status ? `created this in ${status}${from}` : `created this${from}`);
     }
     case "status_changed": {
       const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;

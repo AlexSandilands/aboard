@@ -21,6 +21,7 @@ manifest.json        format, app, app version, schema version, row counts
 settings.json        allow-listed settings only
 projects.json
 labels.json          label colour overrides
+templates.json       task templates (absent in backups taken before templates existed)
 relations.json       blocks / blocked-by pairs
 counters.json
 autopilot.json       Autopilot switches and config per scope (optional: older dumps have none)

@@ -5,6 +5,7 @@ import {
   type ClassifiedLink,
   type LinkInput,
   type PrSnapshot,
+  type T3ThreadSnapshot,
   type TaskLink,
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ import { toLink, type LinkRow } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
@@ -94,6 +96,7 @@ export function createLinksService(
     task: (id: string) => TaskRecord;
     tasks: Pick<TasksService, "move">;
     settings: SettingsService;
+    notifications: NotificationsService;
     polls: (host: string) => boolean;
   },
 ): LinksModule {
@@ -125,6 +128,58 @@ export function createLinksService(
     const wasFinished = isFinished(parseJson<PrSnapshot>(before)?.state);
     if (wasFinished || !isFinished(parseJson<PrSnapshot>(row.snapshot_json)?.state)) return;
     completeIfPrsDone(row.task_id, row.id);
+  };
+
+  /**
+   * Tells the inbox about a poll that moved a link into a state that needs the user. Only a change counts: a link
+   * seen for the first time (no snapshot before) was already in whatever state it is in when it was linked.
+   */
+  const notifyOnChange = (row: LinkRow, before: string | null, after: string | null): void => {
+    const was = parseJson<PrSnapshot | T3ThreadSnapshot>(before);
+    const now = parseJson<PrSnapshot | T3ThreadSnapshot>(after);
+    if (!was || !now) return;
+    const task = deps.task(row.task_id);
+    const taskLabel = `#${task.number} ${task.title}`;
+    if (row.kind === "pr") {
+      const prev = was as PrSnapshot;
+      const next = now as PrSnapshot;
+      if (next.state !== "open" && next.state !== "draft") return;
+      const ref = parseJson<{ number: number }>(row.ref_json);
+      const label = ref ? `PR #${ref.number}` : "PR";
+      if (next.checks === "failing" && (prev.checks !== "failing" || prev.headOid !== next.headOid)) {
+        deps.notifications.notify({
+          kind: "pr_checks_failing",
+          taskId: task.id,
+          title: `Checks failing on ${label}`,
+          body: taskLabel,
+          dedupeKey: `checks:${row.id}:${next.headOid ?? next.updatedAt ?? ""}`,
+        });
+      }
+      if (next.reviewDecision === "changes_requested" && prev.reviewDecision !== "changes_requested") {
+        deps.notifications.notify({
+          kind: "pr_changes_requested",
+          taskId: task.id,
+          title: `Changes requested on ${label}`,
+          body: taskLabel,
+          dedupeKey: `changes:${row.id}:${next.updatedAt ?? ""}`,
+        });
+      }
+    } else if (row.kind === "t3_thread") {
+      const prev = was as T3ThreadSnapshot;
+      const next = now as T3ThreadSnapshot;
+      const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
+      // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
+      const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
+      if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {
+        deps.notifications.notify({
+          kind: "thread_waiting",
+          taskId: task.id,
+          title: next.status === "input" ? "Thread waiting for input" : "Thread waiting for approval",
+          body: `${taskLabel}\n${next.title}`,
+          dedupeKey: `thread:${row.id}:${next.status}:${next.lastActivityAt ?? ""}`,
+        });
+      }
+    }
   };
 
   const rowOrThrow = (id: string): LinkRow => {
@@ -200,6 +255,7 @@ export function createLinksService(
         repos.links.setSnapshot(linkId, json, nowIso());
         if (json === row.snapshot_json) return;
         fx.task(row.task_id);
+        notifyOnChange(row, row.snapshot_json, json);
         if (row.kind === "pr") completeOnMerge({ ...row, snapshot_json: json }, row.snapshot_json);
       });
     },

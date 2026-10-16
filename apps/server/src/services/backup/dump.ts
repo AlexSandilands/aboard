@@ -45,6 +45,7 @@ export function dumpBoard(db: Db): BoardDump {
     const projects = rowsOf(db, "projects", "SELECT * FROM projects ORDER BY id");
     const labelColors = rowsOf(db, "label_colors", "SELECT * FROM label_colors ORDER BY label");
     const counters = rowsOf(db, "counters", "SELECT * FROM counters ORDER BY name");
+    const templates = rowsOf(db, "task_templates", "SELECT * FROM task_templates ORDER BY id");
     const relations = rowsOf(db, "task_relations", "SELECT * FROM task_relations ORDER BY blocker_id, blocked_id");
     const autopilot = rowsOf(
       db,
@@ -73,6 +74,7 @@ export function dumpBoard(db: Db): BoardDump {
       projects: projects.length,
       label_colors: labelColors.length,
       counters: counters.length,
+      task_templates: templates.length,
       task_relations: relations.length,
       autopilot_settings: autopilot.length,
       tasks: tasks.length,
@@ -96,6 +98,7 @@ export function dumpBoard(db: Db): BoardDump {
       projects,
       label_colors: labelColors,
       counters,
+      task_templates: templates,
       task_relations: relations,
       autopilot_settings: autopilot,
       tasks: [...bundles.values()],

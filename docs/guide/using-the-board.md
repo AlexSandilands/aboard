@@ -46,6 +46,10 @@ Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or
 are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
 gets a colour you can change.
 
+## Templates
+
+Start a task from a template (Bug, Spike, Feature or your own) in New task, to pre-fill its description, labels and plan. See [Templates](templates.md).
+
 ## Blocking
 
 A task can wait on others, in any project: open its panel, find **Relations** and **Add** a task under
@@ -63,6 +67,13 @@ each tier means in **Settings → Model tiers**; copied prompts name it, and new
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.
+
+## Autopilot flag
+
+Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
+project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
+flag tasks but never change Autopilot's own settings.
 
 ## Handing a task to an agent
 

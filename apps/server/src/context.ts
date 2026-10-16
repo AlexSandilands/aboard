@@ -31,6 +31,7 @@ export function createContext(
     bus,
     t3Status: () => integrations.t3Status(),
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+    ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),
   });
   return { db, bus, services, integrations, config };

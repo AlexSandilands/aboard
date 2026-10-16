@@ -46,6 +46,13 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).not.toContain("t3Thread");
   });
 
+  it("tells work and planning sessions to ask before flagging the task for Autopilot", () => {
+    for (const mode of ["work", "plan"] as const) {
+      const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode });
+      expect(prompt).toContain("asks about the Autopilot flag, ask me");
+    }
+  });
+
   it("asks a planning session to link itself too", () => {
     expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).toContain("link(t3Thread:");
   });
@@ -74,6 +81,10 @@ describe("subagent work prompt", () => {
     expect(prompt).not.toContain("Suggested model");
     expect(prompt).not.toContain("link(t3Thread");
     expect(prompt).toContain("Don't link a T3 thread");
+  });
+
+  it("leaves the Autopilot flag to the user", () => {
+    expect(prompt).toContain("Don't set the task's Autopilot flag");
   });
 });
 

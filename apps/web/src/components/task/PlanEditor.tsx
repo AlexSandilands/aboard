@@ -202,7 +202,13 @@ function PlanPreview({ plan }: { plan: PlanInput }) {
   );
 }
 
-function OutlineEditor({ outline, onChange }: { outline: OutlinePhase[]; onChange: (next: OutlinePhase[]) => void }) {
+export function OutlineEditor({
+  outline,
+  onChange,
+}: {
+  outline: OutlinePhase[];
+  onChange: (next: OutlinePhase[]) => void;
+}) {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const updatePhase = (key: string, fn: (phase: OutlinePhase) => OutlinePhase) =>
     onChange(outline.map((phase) => (phase.key === key ? fn(phase) : phase)));
