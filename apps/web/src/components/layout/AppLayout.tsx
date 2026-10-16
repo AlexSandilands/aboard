@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent } from "react";
 import { Board } from "~/components/board/Board";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { CommandPalette } from "~/components/command/CommandPalette";
+import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { TaskPanel } from "~/components/task/TaskPanel";
@@ -19,6 +20,7 @@ const MAIN_CONTENT_MIN_WIDTH = 480;
 /** Route component for "/": sidebar, board, and the `?task=` detail panel docked right. */
 export function AppLayout() {
   useBoardEvents();
+  useNotificationDelivery();
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
   useGlobalKeybindings(taskId !== null, closeTask);

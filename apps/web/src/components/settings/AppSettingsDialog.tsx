@@ -8,6 +8,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { TemplateEditorForm } from "~/components/templates/TemplateEditorForm";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
@@ -35,6 +36,7 @@ import { BackupSection } from "./BackupSection";
 import { IssueImportSection } from "./IssueImportSection";
 import { ModelTiersSection } from "./ModelTiersSection";
 import { ReviewSettingsSection } from "./ReviewSettingsSection";
+import { TerminalSection } from "./TerminalSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { type TemplateEdit, TemplatesSection } from "./TemplatesSection";
 import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
@@ -102,7 +104,7 @@ function AppSettingsBody() {
     <>
       <DialogHeader>
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Appearance, integrations, backup and agent setup.</DialogDescription>
+        <DialogDescription>Appearance, notifications, integrations, backup and agent setup.</DialogDescription>
       </DialogHeader>
       <DialogPanel className="space-y-6">
         <AppearanceSection />
@@ -111,10 +113,12 @@ function AppSettingsBody() {
             <T3Section settings={settings.data} status={integrations.data?.t3} />
             <TemplatesSection onEdit={setEditing} />
             <ModelTiersSection settings={settings.data} t3={integrations.data?.t3} />
+            <NotificationsSection settings={settings.data} />
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
             <IssueImportSection settings={settings.data} />
+            <TerminalSection settings={settings.data} />
             <BackupSection settings={settings.data} />
           </>
         ) : (

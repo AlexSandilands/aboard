@@ -54,6 +54,8 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
+| `CLAUDE_CONFIG_DIR`       | `~/.claude`                 | Where Claude Code keeps running sessions, for session status        |
+| `COPILOT_HOME`            | `~/.copilot`                | The same for Copilot CLI                                            |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
@@ -91,7 +93,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed` and `autopilot.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created` and `notifications.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -110,7 +112,7 @@ ORM.
 | `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
-| `task_links`      | PR, Jira, GitHub issue, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
 | `task_templates`  | Starting points for new tasks, board-wide or per project; `tasks.template_id` records which one a task came from ([templates](features/templates.md)) |
@@ -123,6 +125,7 @@ ORM.
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
 | `autopilot_recurring` | Recurring-task rules: project, template, schedule, flag, the cursor and the last task made ([autopilot](features/autopilot.md)) |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
+| `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
@@ -149,6 +152,10 @@ on independent timers:
 - **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (`gh`, then
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
+- **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of
+  linked Claude Code and Copilot CLI sessions from their own files; and opening one in a terminal on
+  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)). See
+  [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
 - **Autopilot:** a rule engine in `apps/server/src/autopilot/`, passing over the board after board events and

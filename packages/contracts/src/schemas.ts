@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
+import { AgentSessionRef, AgentSessionSnapshot, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
+import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ export type TaskKind = z.infer<typeof TaskKind>;
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
-export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "url"]);
+export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "agent_session", "url"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 export const PROJECT_ICON_COLORS = [
@@ -228,6 +230,12 @@ export const TaskLink = z.discriminatedUnion("kind", [
     snapshot: T3ThreadSnapshot.nullable(),
   }),
   z.object({ ...LinkBase, kind: z.literal("issue"), ref: IssueRef, snapshot: IssueSnapshot.nullable() }),
+  z.object({
+    ...LinkBase,
+    kind: z.literal("agent_session"),
+    ref: AgentSessionRef,
+    snapshot: AgentSessionSnapshot.nullable(),
+  }),
   z.object({ ...LinkBase, kind: z.literal("url") }),
 ]);
 export type TaskLink = z.infer<typeof TaskLink>;
@@ -398,6 +406,18 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
   /** A run started or finished, or Autopilot settings or pause changed. Sent whole: it is small and board-wide. */
   z.object({ type: z.literal("autopilot.changed"), autopilot: AutopilotStatus }),
+  /**
+   * Something worth the user's attention happened. `unread` counts every unread notification; `popup` is false when
+   * quiet hours keep it to the inbox. The window shows the OS notification and badge from this.
+   */
+  z.object({
+    type: z.literal("notification.created"),
+    notification: InboxNotification,
+    unread: z.number(),
+    popup: z.boolean(),
+  }),
+  /** Notifications were read or removed (their task was deleted); the inbox refetches. */
+  z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -452,6 +472,8 @@ export const LinkInput = z.object({
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
+  /** A Claude Code or Copilot CLI session, so the board can show its status and resume it in a terminal. */
+  agentSession: AgentSessionRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
@@ -592,6 +614,10 @@ export const AppSettings = z
     issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Where "Open in terminal" resumes agent sessions. */
+    terminal: TerminalSetting,
+    /** Which notifications are recorded, and whether quiet hours silence their popups. */
+    notifications: NotificationSettings,
   })
   .extend(BackupSettings.shape);
 
@@ -614,6 +640,9 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  terminal: TerminalSetting.optional(),
+  /** Merges into the notification settings: kinds left out keep their switch. */
+  notifications: UpdateNotificationSettingsInput.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

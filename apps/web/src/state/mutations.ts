@@ -8,12 +8,16 @@ import type {
   LinkInput,
   MergePrInput,
   MoveTaskInput,
+  InboxNotification,
+  NotificationList,
   PlanInput,
   PlanPhase,
   PlanStep,
   PlanStepInput,
   Project,
   ResolveFindingInput,
+  ResumeMode,
+  ResumeResult,
   ReviewFinding,
   StartT3ThreadInput,
   StepPatch,
@@ -363,6 +367,16 @@ export const useMergePr = (opts?: MutationOpts) =>
       api<TaskLink>(`/api/links/${enc(linkId)}/merge`, { body: input }),
     opts,
   );
+/**
+ * Opens an agent session in a terminal. A running session comes back as a CONFLICT ApiError carrying its status;
+ * a terminal that won't start comes back as `launched: false` with the command to copy.
+ */
+export const useResumeSession = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ linkId, ...input }: { linkId: string; mode: ResumeMode; force?: boolean }) =>
+      api<ResumeResult>(`/api/links/${enc(linkId)}/resume`, { body: input }),
+    opts,
+  );
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -378,4 +392,18 @@ export function useUpdateSettings() {
         description: error instanceof Error ? error.message : String(error),
       }),
   });
+}
+
+/** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
+export function useMarkNotificationRead() {
+  return useApiMutation(
+    (id: string) => api<InboxNotification>(`/api/notifications/${enc(id)}/read`, { method: "POST" }),
+    {
+      silent: true,
+    },
+  );
+}
+
+export function useMarkAllNotificationsRead() {
+  return useApiMutation(() => api<NotificationList>("/api/notifications/read-all", { method: "POST" }));
 }

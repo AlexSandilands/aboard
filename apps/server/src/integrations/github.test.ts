@@ -1,10 +1,11 @@
-import type { AppSettings, IssueSnapshot, PrSnapshot, T3ThreadSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
+import type { AppSettings, PrSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
 import { defaultSettings } from "../test/fixtures.ts";
 import { GhError, type RunGh } from "./gh.ts";
 import { createGithubIntegration, isGithubHost, mapPrSnapshot, pollQuery, type GithubServices } from "./github.ts";
+import type { LinkSnapshot } from "../services/types.ts";
 
 const repo = {
   squashMergeAllowed: true,
@@ -122,7 +123,7 @@ const ghLink = (id: string, number: number, host = "github.com", repoName = "o/r
   prLink(id, `https://${host}/${repoName}/pull/${number}`, { host, repo: repoName, number });
 
 function fakeServices(links: TaskLink[], settings: Partial<AppSettings> = {}, taskStatus: TaskStatus = "review") {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
+  const snapshots = new Map<string, LinkSnapshot | null>();
   const services: GithubServices = {
     links: {
       listByKind: (kind) => links.filter((l) => l.kind === kind),

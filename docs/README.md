@@ -45,6 +45,7 @@ files under each app.
 - [Local review](guide/local-review.md): turning on the review loop
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
+- [Notifications](guide/notifications.md): the inbox, pop-ups, taskbar badge and what you're told about
 
 ### Features
 
@@ -60,8 +61,10 @@ files under each app.
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
 - [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
+- [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
+- [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges
 - [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
 

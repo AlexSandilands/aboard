@@ -15,6 +15,9 @@ const ICONS: Record<string, number> = {
   "tray.png": 16,
   "tray@1.5x.png": 24,
   "tray@2x.png": 32,
+  "tray-unread.png": 16,
+  "tray-unread@1.5x.png": 24,
+  "tray-unread@2x.png": 32,
   // Window/taskbar, and the installer (electron-builder converts it to .ico).
   "icon.png": 256,
 };
@@ -42,8 +45,16 @@ await build({
 });
 
 const svg = readFileSync(ICON_SOURCE);
+/** The tray icon with the unread dot: red, ringed in the icon's own dark so it reads on any tray background. */
+const unreadSvg = Buffer.from(
+  svg
+    .toString()
+    .replace("</svg>", `<circle cx="24" cy="8" r="8" fill="#ef4444" stroke="#16161b" stroke-width="2.5"/></svg>`),
+);
 mkdirSync(`${root}dist/icons`);
 for (const [name, size] of Object.entries(ICONS)) {
-  const png = new Resvg(svg, { fitTo: { mode: "width", value: size } }).render().asPng();
+  const png = new Resvg(name.startsWith("tray-unread") ? unreadSvg : svg, { fitTo: { mode: "width", value: size } })
+    .render()
+    .asPng();
   writeFileSync(`${root}dist/icons/${name}`, png);
 }

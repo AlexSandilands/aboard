@@ -1,4 +1,4 @@
-import { ConnectT3Input, MergePrInput, UpdateSettingsInput } from "@repo/contracts";
+import { ConnectT3Input, MergePrInput, ResumeMode, ResumeSessionInput, UpdateSettingsInput } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -37,6 +37,22 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
       await integrations.mergePr(id, input);
       return c.json(services.links.get(id));
     }),
+  );
+
+  app.get(
+    "/api/links/:id/resume-command",
+    handle((c) => {
+      const { mode } = parseQuery(c, z.object({ mode: ResumeMode.default("resume") }));
+      return c.json(integrations.resumeCommand(idParam(c), mode));
+    }),
+  );
+  app.post(
+    "/api/links/:id/resume",
+    handle(async (c) => c.json(await integrations.resumeSession(idParam(c), await parseBody(c, ResumeSessionInput)))),
+  );
+  app.get(
+    "/api/terminal",
+    handle((c) => c.json(integrations.terminalInfo())),
   );
 
   app.get(

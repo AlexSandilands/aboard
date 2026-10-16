@@ -193,3 +193,77 @@ describe("completing tasks that enter Review with their PRs already merged", () 
     expect(status()).toBe("review");
   });
 });
+
+describe("agent session links", () => {
+  const ID = "709f26ed-ce2f-4449-b7eb-3bb01f89f268";
+  const session = (over: Partial<{ harness: "claude-code" | "copilot-cli"; sessionId: string; cwd: string }> = {}) => ({
+    agentSession: { harness: "claude-code" as const, sessionId: ID, cwd: "/work/alpha", ...over },
+  });
+
+  it("stores the session under a synthetic URL with its ref", () => {
+    const { s, task } = setup("in_progress", []);
+    const link = s.links.add(task.id, session(), "claude-code");
+    expect(link).toMatchObject({
+      kind: "agent_session",
+      url: `agent-session://claude-code/${ID}`,
+      ref: { harness: "claude-code", sessionId: ID, cwd: "/work/alpha" },
+      snapshot: null,
+    });
+    expect(s.tasks.summary(task.id).links.map((l) => l.kind)).toEqual(["agent_session"]);
+  });
+
+  it("is one link per harness and session, however the id is cased", () => {
+    const { s, task } = setup("in_progress", []);
+    const first = s.links.add(task.id, session(), "claude-code");
+    const again = s.links.add(task.id, session({ sessionId: ID.toUpperCase() }), "claude-code");
+    const copilot = s.links.add(task.id, session({ harness: "copilot-cli" }), "copilot-cli");
+    expect(again.id).toBe(first.id);
+    expect(copilot.id).not.toBe(first.id);
+    expect(s.tasks.summary(task.id).links).toHaveLength(2);
+    expect(again).toMatchObject({ ref: { sessionId: ID } });
+    expect(s.tasks.detail(task.id).events.some((e) => e.type === "link_updated")).toBe(false);
+  });
+
+  it("takes the newest folder when a session is linked again", () => {
+    const { s, task } = setup("in_progress", []);
+    const first = s.links.add(task.id, session({ cwd: "/work" }), "claude-code");
+    const again = s.links.add(task.id, session({ cwd: "/work/alpha" }), "claude-code");
+    expect(again.id).toBe(first.id);
+    expect(s.links.get(first.id)).toMatchObject({ ref: { cwd: "/work/alpha" } });
+    expect(s.tasks.detail(task.id).events.at(-1)).toMatchObject({
+      type: "link_updated",
+      payload: { from: "/work", to: "/work/alpha" },
+    });
+  });
+
+  it("accepts a session the board started itself, in a worktree outside the project's folder", () => {
+    // Autopilot's headless runs link their `claude -p` sessions this way (#85).
+    const { s, task } = setup("in_progress", []);
+    const cwd = "C:\\Users\\me\\worktrees\\alpha-42";
+    const link = s.links.add(task.id, { ...session({ cwd }), label: "Autopilot run" }, "autopilot");
+    expect(link).toMatchObject({ kind: "agent_session", label: "Autopilot run", ref: { cwd } });
+    expect(s.tasks.detail(task.id).events.at(-1)).toMatchObject({ type: "link_added", actor: "autopilot" });
+  });
+
+  it("rejects a session id that isn't a UUID or a relative folder over REST", async () => {
+    const { s, task, request } = setup("in_progress", []);
+    for (const agentSession of [
+      { harness: "claude-code", sessionId: `${ID}; calc`, cwd: "/work" },
+      { harness: "claude-code", sessionId: ID, cwd: "work" },
+    ]) {
+      const res = await request(`/api/tasks/${task.id}/links`, { method: "POST", json: { agentSession } });
+      expect(res.status).toBe(400);
+    }
+    expect(s.tasks.summary(task.id).links).toHaveLength(0);
+  });
+
+  it("keeps the session's status snapshot and publishes when it changes", () => {
+    const { s, task, events } = setup("in_progress", []);
+    const link = s.links.add(task.id, session(), "claude-code");
+    events.length = 0;
+    s.links.setSnapshot(link.id, { status: "busy", inApp: false });
+    s.links.setSnapshot(link.id, { status: "busy", inApp: false });
+    expect(events.filter((e) => e.type === "task.upserted")).toHaveLength(1);
+    expect(s.links.get(link.id)).toMatchObject({ snapshot: { status: "busy", inApp: false } });
+  });
+});

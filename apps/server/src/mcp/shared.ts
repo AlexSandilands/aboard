@@ -24,6 +24,8 @@ export interface ToolContext {
   ctx: AppContext;
   /** Explicit `actor` arg wins, then the MCP client name, then "agent". */
   actor: (explicit?: string) => string;
+  /** The MCP client's name (from initialize, else the User-Agent), to tailor hints to the harness. */
+  client: () => string | undefined;
 }
 
 export type ToolRegistrar = (server: McpServer, tc: ToolContext) => void;

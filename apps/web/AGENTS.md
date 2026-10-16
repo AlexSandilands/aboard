@@ -19,7 +19,7 @@ React 19, Vite, Tailwind v4, Base UI, TanStack Query + zustand, TanStack Router.
 ## Components
 
 - `components/<area>/` per feature: `board`, `task`, `labels`, `sidebar`, `command`, `settings`,
-  `handoff`, `review`, `project`, `stage`, `layout`, `markdown`.
+  `handoff`, `review`, `project`, `stage`, `layout`, `markdown`, `notifications`.
 - `components/ui/*` are primitives ported from T3 Code (MIT, see `NOTICE`). Keep diffs from upstream
   small. [docs/reference/style.md](../../docs/reference/style.md) maps where the styles come from.
   `/__gallery` (dev only, `dev/StyleGallery.tsx`) shows every primitive.

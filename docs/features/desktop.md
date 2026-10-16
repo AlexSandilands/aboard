@@ -45,6 +45,15 @@ An unexpected exit after startup shows an error and quits the app.
 - Navigation: same-origin URLs load in the window; `http`, `https`, `mailto` and `t3code` links open in
   the system; anything else is blocked (`decideNavigation` in `shell.logic.ts`).
 
+### Notifications and badges
+
+The page asks the shell, through `window.desktopBridge`, to show an OS notification (`notify`) and to show the
+unread count (`setBadge`); clicks come back through `onNotificationClick`. The main process checks the
+sender's origin and validates both payloads (`parseDesktopNotification`, `parseDesktopBadge`) before acting.
+On Windows the taskbar count is an overlay image the page draws; elsewhere it is `app.setBadgeCount`. The tray
+icon swaps to a red-dot variant while anything is unread. What produces notifications and when they pop up is
+in [notifications](notifications.md).
+
 ### Title bar
 
 The window is frameless with Windows' native controls painted over the page (`titleBarOverlay`, 40px,

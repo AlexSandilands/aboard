@@ -1,4 +1,9 @@
-import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings } from "@repo/contracts";
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_REVIEW_MAX_ROUNDS,
+  EMPTY_MODEL_TIERS,
+  type AppSettings,
+} from "@repo/contracts";
 
 /** Settings as a fresh install returns them, for fakes of SettingsService. */
 export const defaultSettings: AppSettings = {
@@ -18,6 +23,8 @@ export const defaultSettings: AppSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  terminal: { kind: "auto" },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

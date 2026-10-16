@@ -3,6 +3,7 @@ import type { AppContext } from "../app.ts";
 import { registerAutopilotRoutes } from "./routes/autopilot.ts";
 import { registerBackupRoutes } from "./routes/backup.ts";
 import { registerLabelRoutes } from "./routes/labels.ts";
+import { registerNotificationRoutes } from "./routes/notifications.ts";
 import { registerPlanRoutes } from "./routes/plans.ts";
 import { registerProjectRoutes } from "./routes/projects.ts";
 import { registerRecurringRoutes } from "./routes/recurring.ts";
@@ -23,4 +24,5 @@ export function registerApiRoutes(app: Hono, ctx: AppContext): void {
   registerBackupRoutes(app, ctx);
   registerAutopilotRoutes(app, ctx);
   registerRecurringRoutes(app, ctx);
+  registerNotificationRoutes(app, ctx);
 }

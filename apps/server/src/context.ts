@@ -8,7 +8,7 @@ import type { AppContext } from "./app.ts";
 
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
-  config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome"> &
+  config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
     Partial<Pick<Config, "webDist">>,
   overrides: IntegrationOverrides = {},
 ): AppContext & { db: Db } {
@@ -31,6 +31,7 @@ export function createContext(
     bus,
     t3Status: () => integrations.t3Status(),
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+    ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),
   });
   return { db, bus, services, integrations, config };

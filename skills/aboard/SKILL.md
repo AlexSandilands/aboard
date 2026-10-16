@@ -18,7 +18,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `list_tasks`. If the user's request matches an existing task, that's the one you're working on.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
-   **Missing links**, add them now: the Jira issue, and your own T3 thread when you're in T3 Code.
+   **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
+   session when you're in Claude Code or Copilot CLI.
 3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
    follow-up, a Jira ticket for later), call `add_to_backlog` once and carry on with your current work.
    Don't derail.
@@ -180,6 +181,20 @@ it. That includes existing tasks you pick up or resume, not only ones you create
 T3 Code exposes no environment variable for this, so you must call those tools. A thread started from
 the board is already linked; its first message says so (see `docs/features/agent-handoff.md` in the
 board's repo).
+
+## Linking your session (Claude Code, Copilot CLI)
+
+In Claude Code or Copilot CLI, link your own session to every task you start or resume, so the user can
+see from the board whether it is still running and reopen it in a terminal later:
+
+```
+link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", cwd: "<your cwd>" })
+```
+
+- Claude Code puts the id in `$CLAUDE_CODE_SESSION_ID`, Copilot CLI in `$COPILOT_AGENT_SESSION_ID`
+  (harness `"copilot-cli"`). Read it with the shell (`echo $CLAUDE_CODE_SESSION_ID`); never guess it.
+- `cwd` is the absolute path you are working in.
+- Inside T3 Code, link it as well as your thread: it lets the user continue in a terminal.
 
 ## Setup
 
