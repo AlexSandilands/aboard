@@ -51,7 +51,7 @@ function seed() {
   });
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
-  s.tasks.create({ projectId: project.id, title: "Idea" });
+  const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   s.tasks.addNote(a.id, "handover", "agent");
   s.reviews.submit(
     a.id,
@@ -73,7 +73,7 @@ function seed() {
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
-  return { ...h, s, project, a, b };
+  return { ...h, s, project, a, b, idea };
 }
 
 const PRIMARY_KEYS: Record<string, string> = {
@@ -88,6 +88,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   plan_steps: "id",
   task_links: "id",
   task_labels: "task_id, label",
+  task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
   review_findings: "id",
   task_events: "id",
@@ -154,6 +155,7 @@ describe("dump", () => {
         "settings.json",
         "projects.json",
         "labels.json",
+        "relations.json",
         "counters.json",
         "autopilot.json",
         `tasks/${a.createdAt.slice(0, 7)}/task-${a.number}.json`,
@@ -329,11 +331,12 @@ describe("restore", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
     // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns, no Autopilot.
-    const { autopilot_settings: _a, ...counts } = dump.manifest.counts;
+    const { autopilot_settings: _a, task_relations: _rel, ...counts } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
       task_templates: [],
+      task_relations: [],
       autopilot_settings: [],
       tasks: dump.tasks.map((bundle) => {
         const {
@@ -370,6 +373,36 @@ describe("restore", () => {
       });
     } finally {
       restored.close();
+    }
+  });
+});
+
+describe("backups from before relations existed", () => {
+  it("reads a folder with no relations.json and a single file with no task_relations", () => {
+    const { s } = seed();
+    const dump = s.backup.dump();
+    const { task_relations: _r, ...counts } = dump.manifest.counts;
+    const oldManifest = { ...dump.manifest, counts };
+
+    const dir = tempDir();
+    writeDumpDir(dir, { ...dump, manifest: oldManifest });
+    rmSync(join(dir, "relations.json"));
+    const fromFolder = readDumpDir(dir);
+    expect(fromFolder.task_relations).toEqual([]);
+
+    const file = join(tempDir(), "board.json");
+    const { task_relations: _t, ...bare } = dump;
+    writeFileSync(file, JSON.stringify({ ...bare, manifest: oldManifest }));
+    expect(readDump(file).task_relations).toEqual([]);
+
+    const restored = join(tempDir(), "data.sqlite");
+    restoreBoard(restored, fromFolder);
+    const db = openDatabase(restored);
+    try {
+      expect(db.prepare("SELECT count(*) AS n FROM task_relations").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual({ n: dump.tasks.length });
+    } finally {
+      db.close();
     }
   });
 });
@@ -423,6 +456,21 @@ describe("restoreTask", () => {
     s.templates.delete(bug.id);
     s.backup.restoreTask(dump, a.number, { actor: "user" });
     expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: null });
+  });
+
+  it("puts back what it blocked, and keeps current relations when it replaces a task", () => {
+    const { s, a, idea } = seed();
+    const dump = s.backup.dump();
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(s.tasks.summary(idea.id).blockedBy.map((t) => t.id)).toEqual([a.id]);
+
+    // The relation changed since the backup: a forced restore leaves it as it is now.
+    s.tasks.update(idea.id, { removeBlockedBy: [a.id] }, "user");
+    s.backup.restoreTask(dump, a.number, { actor: "user", force: true });
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
   });
 
   it("refuses a task still on the board unless forced, and renumbers on a number clash", () => {

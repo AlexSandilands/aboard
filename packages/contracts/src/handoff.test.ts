@@ -24,6 +24,14 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("Jira issue");
   });
 
+  it("tells a work session not to start a blocked task", () => {
+    const free = taskHandoffPrompt({ task: { ...task, blocked: false }, boardUrl: "http://x", mode: "work" });
+    expect(free).not.toContain("is blocked");
+    const blocked = taskHandoffPrompt({ task: { ...task, blocked: true }, boardUrl: "http://x", mode: "work" });
+    expect(blocked).toContain("This task is blocked");
+    expect(blocked).toContain("Blocked by");
+  });
+
   it("asks a planning session to collaborate and not implement", () => {
     const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" });
     expect(prompt).toContain("Let's plan #9");

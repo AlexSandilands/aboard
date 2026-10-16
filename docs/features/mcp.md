@@ -47,6 +47,9 @@ epic's orchestrator can start its tasks. See [epics.md](epics.md).
 title, or, for `create_task`, no plan, when the template supplies one. Agents can't create or edit templates. See
 [templates.md](templates.md).
 
+`add_to_backlog` and `create_task` take `blockedBy`, and `update_task` takes `addBlockedBy` / `removeBlockedBy`.
+`get_task` prints **Blocked by** and **Blocks**, and task lines add `blocked by #N`. See [relations.md](relations.md).
+
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).
 

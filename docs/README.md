@@ -51,6 +51,7 @@ files under each app.
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
 - [Epics](features/epics.md): grouping a feature's tasks, derived status, bands on the board
 - [Templates](features/templates.md): starting points for tasks: title pattern, labels, plan, per project or board-wide
+- [Task relations](features/relations.md): blocks / blocked by, the card lock, dependency lines
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them

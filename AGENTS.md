@@ -65,6 +65,7 @@ and to this table.
 | Statuses, closing, archiving, deleting, numbering              | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
 | Plans, steps, the current step, Markdown plans                 | [docs/features/plans.md](docs/features/plans.md)                                    |
 | Epics: grouping tasks, derived status, bands, epic tools       | [docs/features/epics.md](docs/features/epics.md)                                    |
+| Blocks / blocked by, the card lock, dependency lines           | [docs/features/relations.md](docs/features/relations.md)                            |
 | MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
 | Task templates: fields, placeholders, creating from one        | [docs/features/templates.md](docs/features/templates.md)                            |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |

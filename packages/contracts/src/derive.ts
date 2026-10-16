@@ -7,8 +7,14 @@ import {
   type PlanPhase,
   type StepStatus,
   type TaskImport,
+  type TaskRelation,
   type TaskLink,
 } from "./schemas.ts";
+
+/** Whether any blocker is still open: a blocker is finished only once Done, whatever its resolution. */
+export function isBlocked(blockedBy: ReadonlyArray<Pick<TaskRelation, "status">>): boolean {
+  return blockedBy.some((b) => b.status !== "done");
+}
 
 /** Statuses that count as finished for progress. */
 export function isStepComplete(status: StepStatus): boolean {

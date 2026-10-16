@@ -75,8 +75,8 @@ const basic: Scenario = (s, opts) => {
     { context: "Backlog task with a plan already written.", ...steps("Retry", ["Add backoff", "Log final failures"]) },
     AGENT,
   );
-  addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
-  addTask(s, shop.id, {
+  const edgeCache = addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
+  const estimates = addTask(s, shop.id, {
     title: "Show delivery estimates on the product page",
     status: "planned",
     description: "Use the carrier API; fall back to the static table.",
@@ -141,13 +141,20 @@ const basic: Scenario = (s, opts) => {
     actor: AGENT,
   }).id;
   addTask(s, shop.id, { title: "Address autocomplete", status: "backlog", epicId: checkout });
-  addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
+  const payment = addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
   addTask(s, shop.id, { title: "Merge shipping and billing steps", status: "review", epicId: checkout });
   s.tasks.create({ projectId: billing.id, title: "Usage-based pricing", kind: "epic", actor: AGENT });
 
-  addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
+  const invoices = addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
   addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });
   addTask(s, billing.id, { title: "Nightly reconciliation report", status: "done" });
+
+  // A dependency chain across both projects: edge cache > delivery estimates > invoice PDFs, with the cart
+  // rewrite holding up the webhook retries and a finished blocker (the router upgrade) behind the payment form.
+  s.tasks.update(estimates, { addBlockedBy: [edgeCache] }, AGENT);
+  s.tasks.update(invoices, { addBlockedBy: [estimates] }, AGENT);
+  s.tasks.update(planned, { addBlockedBy: [active] }, AGENT);
+  s.tasks.update(payment, { addBlockedBy: [doneIds[2]!, active] }, AGENT);
 };
 
 const review: Scenario = (s, opts) => {

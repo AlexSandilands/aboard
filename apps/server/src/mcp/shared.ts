@@ -52,6 +52,13 @@ export const templateField = z
       "plan fill in whatever you leave out, and anything you pass wins; labels you pass replace the template's.",
   );
 
+export const blockedByField = z
+  .array(z.string().min(1))
+  .describe(
+    'Tasks that must be Done before this one is ready: "#42", "42" or uuids. They may be in other ' +
+      "projects; a relation that would make a cycle is refused.",
+  );
+
 export const actorField = z
   .string()
   .optional()
