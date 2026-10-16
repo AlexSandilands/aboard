@@ -435,6 +435,17 @@ describe("autopilot flag", () => {
     expect(s.tasks.update(plain.id, { autopilot: null }, "user").autopilot).toBeNull();
     expect(s.tasks.summaries().find((t) => t.id === flagged.id)?.autopilot).toBe(true);
   });
+
+  it("is refused on epics, which Autopilot never starts", () => {
+    const { s, project } = setup();
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "E", kind: "epic", autopilot: true }),
+      "VALIDATION",
+    );
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { autopilot: false }, "user"), "VALIDATION");
+    expect(s.tasks.update(epic.id, { autopilot: null }, "user").autopilot).toBeNull();
+  });
 });
 
 describe("suggested model", () => {

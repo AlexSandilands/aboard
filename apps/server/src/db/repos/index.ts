@@ -7,6 +7,7 @@ import { createLabelsRepo } from "./labels.ts";
 import { createLinksRepo } from "./links.ts";
 import { createPlansRepo } from "./plans.ts";
 import { createProjectsRepo } from "./projects.ts";
+import { createRelationsRepo } from "./relations.ts";
 import { createReviewsRepo } from "./reviews.ts";
 import { createSettingsRepo } from "./settings.ts";
 import { createSql } from "./sql.ts";
@@ -23,6 +24,7 @@ export function createRepos(db: Db) {
     events: createEventsRepo(sql),
     imports: createImportsRepo(sql),
     labels: createLabelsRepo(sql),
+    relations: createRelationsRepo(sql),
     reviews: createReviewsRepo(sql),
     settings: createSettingsRepo(sql),
     autopilotSettings: createAutopilotSettingsRepo(sql),

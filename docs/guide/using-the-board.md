@@ -42,6 +42,16 @@ Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or
 are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
 gets a colour you can change.
 
+## Blocking
+
+A task can wait on others, in any project: open its panel, find **Relations** and **Add** a task under
+**Blocked by** (or under **Blocks**, to make another task wait on this one). A blocked card shows a lock, and
+hovering it names what it is waiting on. It is ready once every blocker is Done. Loops are refused.
+
+Hover a card, or open one, to draw lines to the tasks it blocks (green) and is blocked by (red). Hold Shift to
+draw the whole chain, with each step further away a little darker. Agents set blockers too and are told not to
+start a blocked task.
+
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
@@ -49,6 +59,13 @@ each tier means in **Settings → Model tiers**; copied prompts name it, and new
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.
+
+## Autopilot flag
+
+Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
+project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
+flag tasks but never change Autopilot's own settings.
 
 ## Handing a task to an agent
 

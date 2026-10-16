@@ -63,6 +63,7 @@ import {
   type DragPlacement,
   type OverCell,
 } from "./dnd.logic";
+import { DependencyLines } from "./DependencyLines";
 import { TaskCardOverlay } from "./TaskCard";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<TaskStatus, string>;
@@ -227,11 +228,17 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const rowIds = useMemo(() => lanes.flatMap((lane) => laneRows(lane).map((row) => row.id)), [lanes]);
   const rows = useMemo(() => rowIndex(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
+  // Archived cards shown by Show archived take part in the dependency lines too.
+  const lineTasks = useMemo(
+    () => (archivedTasks ? [...board.tasks, ...archivedTasks.filter((t) => !tasksById.has(t.id))] : board.tasks),
+    [board.tasks, archivedTasks, tasksById],
+  );
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
     : null;
 
   const suppressClickRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const context = useMemo<BoardContextValue>(
     () => ({
       openTask: (id) => void openTask(id),
@@ -437,7 +444,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   return (
     <BoardContext value={context}>
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="w-full min-w-min pb-10">
+        <div ref={contentRef} className="relative w-full min-w-min pb-10">
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => {
@@ -510,6 +517,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
               No tasks match the current filters.
             </p>
           ) : null}
+          <DependencyLines
+            containerRef={contentRef}
+            tasks={lineTasks}
+            projects={board.projects}
+            selectedTaskId={selectedTaskId}
+            suspended={activeId !== null}
+          />
         </div>
       </div>
     </BoardContext>

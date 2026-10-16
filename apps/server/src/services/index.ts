@@ -13,6 +13,7 @@ import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
+import { createRelations, type RelationsModule } from "./relations.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTasksService } from "./tasks.ts";
@@ -40,6 +41,7 @@ export function createServices(deps: ServiceDeps): Services {
   let links: LinksModule | null = null;
   let reviews: ReviewsService | null = null;
   let imports: ImportsModule | null = null;
+  let relations: RelationsModule | null = null;
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -48,7 +50,9 @@ export function createServices(deps: ServiceDeps): Services {
     labels,
     settings,
     imports: () => imports!,
+    relations: () => relations!,
   });
+  relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, {

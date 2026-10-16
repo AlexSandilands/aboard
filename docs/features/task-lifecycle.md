@@ -82,7 +82,7 @@ Unarchiving puts the task at the end of its lane.
 ### Deleting
 
 Permanent, and only for archived tasks: archive first, then delete (task menu, `DELETE /api/tasks/:id` or
-`delete_task`). The plan, links, events and review rounds go with it. Tasks resolved by it lose the link,
+`delete_task`). The plan, links, events, review rounds and blocks / blocked-by relations go with it. Tasks resolved by it lose the link,
 not their resolution.
 
 ### Numbering

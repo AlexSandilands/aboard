@@ -7,6 +7,7 @@ import {
   actorField,
   autopilotField,
   autopilotValue,
+  blockedByField,
   epicField,
   hasProjectRef,
   labelsField,
@@ -53,8 +54,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
-        "epic when it is part of a larger feature, and t3Thread when running inside T3 Code. Set autopilot only if the " +
-        "user has said whether Autopilot may start it.",
+        "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
+        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it.",
       inputSchema: {
         title: z.string().min(1).describe("Short imperative title."),
         description: z
@@ -63,6 +64,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
         epic: epicField.optional(),
+        blockedBy: blockedByField.optional(),
         links: linksField,
         labels: labelsField.optional(),
         autopilot: autopilotField.optional(),
@@ -80,6 +82,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
           ...(args.epic ? { epicId: args.epic } : {}),
+          ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
@@ -100,14 +103,16 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
-        "suggestedModel to the tier its implementation needs, and epic when it is part of a larger feature. When the " +
-        "result asks about the Autopilot flag, ask the user before setting autopilot. " +
+        "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
+        "blockedBy when other tasks must be Done first. When the result asks about the Autopilot flag, ask the user " +
+        "before setting autopilot. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z.string().min(1),
         description: z.string().optional().describe("Markdown: what and why."),
         ...projectFields,
         epic: epicField.optional(),
+        blockedBy: blockedByField.optional(),
         ...planInputFields,
         links: linksField,
         labels: labelsField.optional(),
@@ -133,6 +138,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           title: args.title,
           ...(args.description ? { description: args.description } : {}),
           ...(args.epic ? { epicId: args.epic } : {}),
+          ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
           plan,
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
@@ -291,7 +297,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "The Autopilot flag lets the board start the task by itself, so set it only after the user has said so. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
-        "to another), or epic: null to take it out. " +
+        "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +
+        "that must be Done before this one (it is blocked while any blocker isn't Done). " +
         "For plan steps use set_plan/update_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
         task: taskField,
@@ -316,6 +323,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
         autopilot: autopilotField.optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
+        addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
+        removeBlockedBy: blockedByField.optional().describe("Blockers to remove; one that isn't a blocker is ignored."),
         actor: actorField,
       },
     },
@@ -339,6 +348,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
+            ...(args.addBlockedBy?.length ? { addBlockedBy: args.addBlockedBy } : {}),
+            ...(args.removeBlockedBy?.length ? { removeBlockedBy: args.removeBlockedBy } : {}),
           },
           actor(args.actor),
         );
