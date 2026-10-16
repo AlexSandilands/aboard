@@ -1,19 +1,18 @@
-import { describeSchedule, type Project, type RecurringRuleView } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, describeSchedule, type Project, type RecurringRuleView } from "@repo/contracts";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useBoard, useTemplates } from "~/state/queries";
+import { useAutopilotScope, useBoard, useTemplates } from "~/state/queries";
+import { useDialogs } from "~/state/ui";
 import {
   useAddSuggestedRule,
   useDeleteRecurringRule,
-  useRecurringAutomation,
   useRecurringRules,
-  useSetRecurringAutomation,
   useUpdateRecurringRule,
 } from "~/state/recurring";
 import {
@@ -61,24 +60,23 @@ function IconAction({
   );
 }
 
-/** Why the switch reads as it does: where the effective mode comes from. */
-const sourceNote = (source: string, enabled: boolean): string => {
-  if (source === "board") return enabled ? " On for the whole board." : " Off for the whole board.";
-  if (source === "default") return " Off until you switch it on.";
-  return "";
-};
-
 /**
  * A project's recurring-task rules (the Recurring tasks automation of Autopilot): the project-level switch, the
  * rules and a few example rules to start from. The editor is the caller's, so it can take over the dialog.
  */
 export function RecurringSection({ project, onEdit }: { project: Project; onEdit: (edit: RuleEdit) => void }) {
   const rules = useRecurringRules(project.id);
-  const automation = useRecurringAutomation(project.id);
-  const setAutomation = useSetRecurringAutomation(project.id);
+  const scope = useAutopilotScope(project.id);
+  const automation = scope.data?.find((entry) => entry.automation === AUTOPILOT_RECURRING);
+  const wanted = useDialogs((s) => s.projectSettingsSection) === "recurring";
+  const ref = useRef<HTMLDivElement>(null);
+  // Opened from the lane's Autopilot popover: bring this section into view.
+  useEffect(() => {
+    if (wanted) ref.current?.scrollIntoView({ block: "start" });
+  }, [wanted]);
   const templates = useTemplates();
   const paused = useBoard().data?.autopilot.paused ?? false;
-  const running = (automation.data?.enabled ?? false) && !paused;
+  const running = (automation?.enabled ?? false) && !paused;
   const update = useUpdateRecurringRule();
   const remove = useDeleteRecurringRule();
   const addSuggested = useAddSuggestedRule(project.id);
@@ -91,7 +89,7 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
       : "Template deleted: pick another";
 
   return (
-    <>
+    <div ref={ref} className="space-y-6">
       <SettingsSection
         title="Recurring tasks"
         headerAction={
@@ -101,20 +99,12 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
           </Button>
         }
       >
-        <SettingsRow
-          title="Create recurring tasks here"
-          description={`Makes a task from a template on a schedule: a weekly dependency bump, an audit. No agent is involved.${
-            automation.data ? sourceNote(automation.data.source, automation.data.enabled) : ""
-          }`}
-          control={
-            <Switch
-              aria-label="Create recurring tasks in this project"
-              checked={automation.data?.enabled ?? false}
-              disabled={!automation.data || setAutomation.isPending}
-              onCheckedChange={(checked) => setAutomation.mutate(checked)}
-            />
-          }
-        />
+        {automation && !automation.enabled ? (
+          <SettingsRow
+            title="Recurring tasks is off for this project"
+            description="Rules only run while it is on. Switch it on under Autopilot above, or from the Autopilot pill on the lane."
+          />
+        ) : null}
         {list.length === 0 ? (
           <SettingsRow
             title={rules.error ? "Couldn't load the rules" : "No recurring tasks"}
@@ -213,6 +203,6 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
         confirmLabel="Delete"
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-    </>
+    </div>
   );
 }

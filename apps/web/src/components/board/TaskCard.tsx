@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
 import { ArchiveIcon, LockIcon } from "lucide-react";
 import { memo, useCallback, useRef, type KeyboardEvent } from "react";
+import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -70,6 +71,7 @@ export const TaskCardContent = memo(function TaskCardContent({
         ) : null}
         <ResolutionChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
+        <AutopilotBadge taskId={task.id} />
         {task.archivedAt ? (
           <Badge variant="secondary" size="sm">
             Archived

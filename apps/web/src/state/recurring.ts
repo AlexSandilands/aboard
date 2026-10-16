@@ -1,6 +1,4 @@
 import {
-  AUTOPILOT_RECURRING,
-  type AutopilotScopeEntry,
   type CreateRecurringRuleInput,
   type CreateTemplateInput,
   type RecurringRuleView,
@@ -29,18 +27,6 @@ export function useRecurringRules(projectId: string) {
   });
 }
 
-/** Whether the Recurring tasks automation is on for the project, and where that came from. */
-export function useRecurringAutomation(projectId: string) {
-  return useQuery({
-    queryKey: queryKeys.autopilotScope(projectId),
-    queryFn: async ({ signal }) => {
-      const entries = await api<AutopilotScopeEntry[]>(`/api/autopilot/projects/${enc(projectId)}`, { signal });
-      return entries.find((entry) => entry.automation === AUTOPILOT_RECURRING) ?? null;
-    },
-    staleTime: 0,
-  });
-}
-
 function useRecurringMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>) {
   return useMutation({
     mutationFn: fn,
@@ -65,25 +51,6 @@ export const useUpdateRecurringRule = () =>
 
 export const useDeleteRecurringRule = () =>
   useRecurringMutation((id: string) => api<void>(`/api/recurring/${enc(id)}`, { method: "DELETE" }));
-
-/** Turns the Recurring tasks automation on or off for one project (its own mode, whatever the board says). */
-export function useSetRecurringAutomation(projectId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (on: boolean) =>
-      api<AutopilotScopeEntry[]>(`/api/autopilot/projects/${enc(projectId)}/${AUTOPILOT_RECURRING}`, {
-        method: "PUT",
-        body: { mode: on ? "on" : "off" },
-      }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScope(projectId) }),
-    onError: (error) =>
-      toastManager.add({
-        type: "error",
-        title: "Something went wrong",
-        description: error instanceof Error ? error.message : String(error),
-      }),
-  });
-}
 
 /**
  * Adds a suggested rule: the project's template of that name (made first, unless it is already there) and the rule

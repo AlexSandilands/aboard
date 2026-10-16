@@ -10,6 +10,7 @@ import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandler
 import { ApiError } from "~/lib/api";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { usePanel } from "~/state/ui";
+import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
@@ -204,6 +205,8 @@ function TaskPanelBody({
               return <RelationsSection task={task} />;
             case "review":
               return <ReviewSection task={task} />;
+            case "autopilot":
+              return <AutopilotSection task={task} />;
             case "plan":
               return <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />;
             case "details":

@@ -8,7 +8,8 @@ board creates the task, and you or an agent do the work.
 
 Open the project's settings (the gear in the sidebar) and find **Recurring tasks**.
 
-1. Switch on **Create recurring tasks here**. Until then no rule in the project runs.
+1. Switch **Recurring tasks** on under **Autopilot** in the same settings (or from the Autopilot pill on the project's
+   lane, which also links here with **Recurring tasks…**). Until then no rule in the project runs.
 2. **New rule**, or **Add** one of the examples (dependency bumps, security audit, docs drift check, stale
    branch and worktree cleanup, flaky test sweep, release prep, renewing the T3 token). An example adds a
    template for the project, which you can edit under Settings → Templates.
@@ -28,7 +29,7 @@ Each rule shows when it is next due and what became of the last task it made. Th
   logged, so a chore nobody has done doesn't pile up.
 - If the board was off when a slot came, it makes **one** task when it is back, not one per missed slot.
 - A new rule, a rule switched back on, a rule whose schedule you change, and every rule of a project when you
-  switch **Create recurring tasks here** on or lift Pause all, start from now: they don't catch up on slots that
+  switch **Recurring tasks** on or lift Pause all, start from now: they don't catch up on slots that
   passed before. Only the board being off does.
 - A task made late has the date it was made in its title, not the date of the slot.
 - With **dry-run** on, it only records what it would create.

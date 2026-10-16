@@ -200,6 +200,8 @@ export const usePalette = create<PaletteState>()(
 /** App-level dialogs opened from anywhere (sidebar gear, palette, panel menus). */
 interface DialogsState {
   projectSettingsId: string | null;
+  /** A section of project settings to scroll to when it opens. */
+  projectSettingsSection: "recurring" | null;
   appSettingsOpen: boolean;
   /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
   t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
@@ -207,7 +209,7 @@ interface DialogsState {
   mergePr: { taskId: string; linkId: string } | null;
   /** Agent session the server wouldn't reopen because it is running, with the status it read. */
   sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
-  openProjectSettings: (projectId: string) => void;
+  openProjectSettings: (projectId: string, section?: "recurring") => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
@@ -225,13 +227,15 @@ interface DialogsState {
 
 export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
+  projectSettingsSection: null,
   appSettingsOpen: false,
   t3Launch: null,
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
-  openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
-  closeProjectSettings: () => set({ projectSettingsId: null }),
+  openProjectSettings: (projectSettingsId, section) =>
+    set({ projectSettingsId, projectSettingsSection: section ?? null }),
+  closeProjectSettings: () => set({ projectSettingsId: null, projectSettingsSection: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
   openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
