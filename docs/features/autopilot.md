@@ -132,6 +132,14 @@ per scope), logged as `archived` plus the note "Archived by Autopilot after N da
 tasks with an open, draft or not-yet-polled PR. The dedupe key is `archive:<taskId>:<statusChangedAt>`, so a
 manual unarchive sticks until the task leaves Done and comes back.
 
+**Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
+switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
+duplicate), it logs a note "Unblocked: #N finished" on the dependent and sends an `autopilot_notice` notification.
+A partially unblocked dependent waits. It starts nothing: a flagged Planned dependent just becomes eligible for Start
+planned tasks on the next tick. The scope is the dependent's project. The dedupe key is
+`unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
+again, while two blockers finishing together give one notification.
+
 ### Writing an automation
 
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
