@@ -78,8 +78,8 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
 - A task's panel shows its epic as a chip under the title, and **More actions → Epic** moves it into another
   open epic in its project, out of its epic, or into a new one.
 - **New epic…** is in the command palette and the lane header.
-- The hand-off menu (copy prompt, new T3 thread) is hidden on epics: the task prompt asks for a plan and a
-  move, which an epic refuses. What's missing is a prompt that starts and coordinates an epic's tasks.
+- The hand-off menu offers the epic's one prompt, the orchestrating prompt: **Copy prompt to start its tasks**,
+  and **New T3 Code thread…** without **Plan with me** (see [Orchestrating](#orchestrating-an-epic)).
 
 ### Over MCP
 
@@ -91,6 +91,46 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
 - List lines mark epics `[epic]` with their roll-up, and tasks in one with `in epic #N`. `board_overview`
   counts only tasks and lists open epics per project.
 
+### Orchestrating an epic
+
+The point of an epic is to start its tasks together rather than one by one. Handing off an epic (the hand-off
+menu, or `get_handoff_prompt` over MCP) gives the agent an **orchestrating prompt** (`taskHandoffPrompt` with
+mode `orchestrate`, in `packages/contracts/src/handoff.ts`). The agent that runs it is the **orchestrator**:
+
+1. It reads `epic_overview`.
+2. It drafts plans for tasks still in Backlog, shows them to the user together, and saves each with `set_plan`
+   once the user approves. No task starts before its plan is approved.
+3. It works out which tasks can run in parallel and tells the user the order.
+4. It starts each task by the first route the harness supports:
+   - **Subagents** (Claude Code's Agent tool, Copilot CLI's subagents or the equivalent), one per task, each
+     given `get_handoff_prompt(task, subagent: true)`, on its own git worktree and branch when they run in
+     parallel.
+   - **Manual**: the prompts from `get_handoff_prompt(task)` for the user to paste into new sessions.
+5. It monitors through `epic_overview`, which shows what every route writes over MCP: progress, current step,
+   blocked steps, review rounds and notes. It tells a subagent things directly, and a session the user started
+   through `add_note` on its task, which that session reads on its next `get_task`.
+6. It runs the review loop for subagent tasks (below), and leaves an `add_note` handover on the epic.
+
+The prompt names harnesses only as examples, so the same text reads right in any of them.
+
+#### Subagent tasks
+
+A subagent can't ask the user anything, and most harnesses don't let it start subagents of its own, which the
+[review loop](local-review.md) needs. So a subagent gets its own variant of the work prompt
+(`subagent: true`):
+
+- when it needs an answer, it marks the step blocked with a note and reports back;
+- when its `move_task` to Review opens a review round, it doesn't run the loop or open a PR: it reports the
+  round number and stops;
+- it ends with a short report for the orchestrator, and doesn't link a T3 thread (it has none of its own);
+- the suggested model line goes to the orchestrator in `get_handoff_prompt`'s result, since only the
+  orchestrator can choose the subagent's model.
+
+The orchestrator then runs the loop for it: `start_review(task)` returns the brief of the round that is already
+open (it doesn't open another), a fresh reviewer subagent submits its findings, an implementer subagent in the
+task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
+When the loop ends, the implementer opens and links the PR. Sessions the user started run their own loop.
+
 ## Decisions
 
 - **Derived and stored status.** Deriving keeps an epic honest without anyone moving it, and storing it
@@ -100,6 +140,11 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
   more than it has done; the furthest-back task is where attention is needed.
 - **Bands span only their tasks' columns.** From the user's sketch: the band reads as "this feature is
   between Planned and Review" at a glance, and short bands don't push the loose cards far down.
+- **Subagents report back at a review round.** The alternative, letting each subagent run its own loop, fails
+  in harnesses where a subagent can't start subagents; it would review its own work. The orchestrator has a
+  subagent tool, so it runs the loop for all of them.
+- **One orchestrating prompt for every harness.** The prompt describes routes in order of preference and names
+  harnesses only as examples, rather than the board guessing which harness will receive a copied prompt.
 - **No dragging across a band's edge (yet).** A drop at a band's edge is easy to make by accident and would
   silently change the task's epic; the panel's Epic menu makes that change on purpose.
 
@@ -123,5 +168,6 @@ Each lane stacks its epic bands above the loose cards (`buildLanes` in `board.lo
 | `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
 | `apps/web/src/components/board/EpicBand.tsx`           | The band and its roll-up bar                                          |
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
-| `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`                      |
+| `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
+| `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |
 | `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events                           |

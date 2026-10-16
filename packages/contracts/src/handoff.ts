@@ -2,11 +2,14 @@ import { BRAND } from "./brand.ts";
 import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
 import type { TaskSummary } from "./schemas.ts";
 
-/** "work" picks the task up; "plan" asks the agent to shape the plan with the user first. */
-export type HandoffMode = "work" | "plan";
+/**
+ * "work" picks the task up; "plan" asks the agent to shape the plan with the user first; "orchestrate" (epics
+ * only) has the agent start the epic's tasks in other sessions and see them through.
+ */
+export type HandoffMode = "work" | "plan" | "orchestrate";
 
 export interface HandoffPromptInput {
-  task: Pick<TaskSummary, "id" | "number" | "title"> & Partial<Pick<TaskSummary, "suggestedModel">>;
+  task: Pick<TaskSummary, "id" | "number" | "title"> & Partial<Pick<TaskSummary, "suggestedModel" | "kind">>;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
@@ -14,11 +17,36 @@ export interface HandoffPromptInput {
   linkedThread?: boolean;
   /** Names the task's suggested tier in a copied work prompt; without it the line shows the bare tier. */
   modelTiers?: ModelTiers;
+  /**
+   * A work prompt for a subagent started by an epic's orchestrator: it can't ask the user or run its own
+   * review loop, so it reports back instead.
+   */
+  subagent?: boolean;
 }
 
-/** Backlog and plan-less tasks still need a plan, so they default to planning together. */
-export function defaultHandoffMode(task: Pick<TaskSummary, "status" | "progress">): HandoffMode {
+/** Epics are orchestrated. Backlog and plan-less tasks still need a plan, so they default to planning together. */
+export function defaultHandoffMode(
+  task: Pick<TaskSummary, "status" | "progress"> & Partial<Pick<TaskSummary, "kind">>,
+): HandoffMode {
+  if (task.kind === "epic") return "orchestrate";
   return task.status === "backlog" || task.progress.total === 0 ? "plan" : "work";
+}
+
+/** Why a mode doesn't fit a task, or null when it does: epics are only orchestrated, and only work prompts go to subagents. */
+export function handoffModeError(
+  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind">>,
+  mode: HandoffMode,
+  subagent = false,
+): string | null {
+  const epic = task.kind === "epic";
+  if (epic && mode !== "orchestrate") {
+    return `#${task.number} is an epic: its prompt is mode "orchestrate". Hand off its tasks with their own prompts.`;
+  }
+  if (!epic && mode === "orchestrate") return `#${task.number} isn't an epic; only epics are orchestrated`;
+  if (subagent && mode !== "work") {
+    return "Only work prompts go to subagents: a subagent can't plan with the user or orchestrate. Draft unplanned tasks' plans yourself.";
+  }
+  return null;
 }
 
 export function taskBoardUrl(boardUrl: string, taskId: string): string {
@@ -47,13 +75,14 @@ export function taskReferenceLine({
 export function suggestedModelLine(
   task: Partial<Pick<TaskSummary, "suggestedModel">>,
   modelTiers: ModelTiers | undefined,
+  advice = "Switch your session's model if it differs.",
 ): string | null {
   const suggestion = task.suggestedModel;
   if (!suggestion) return null;
   const description = modelTiers ? modelTierDescription(modelTiers, suggestion.tier) : null;
   const name = description ? `${suggestion.tier} (${description})` : suggestion.tier;
   const reason = suggestion.reason ? `: ${suggestion.reason.replace(/[.\s]+$/, "")}` : "";
-  return `Suggested model: ${name}${reason}. Switch your session's model if it differs.`;
+  return `Suggested model: ${name}${reason}. ${advice}`;
 }
 
 /**
@@ -66,9 +95,12 @@ export function taskHandoffPrompt({
   mode,
   linkedThread = false,
   modelTiers,
+  subagent = false,
 }: HandoffPromptInput): string {
   const ref = `#${task.number} "${task.title}"`;
   const getTask = `Call get_task("${task.id}") on the ${BRAND.id} MCP server`;
+  if (mode === "orchestrate") return orchestratePrompt(task, boardUrl, linkedThread);
+  if (subagent) return subagentPrompt(task, boardUrl);
   const lines =
     mode === "plan"
       ? [
@@ -100,4 +132,51 @@ export function taskHandoffPrompt({
           "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
   );
   return lines.join("\n");
+}
+
+/**
+ * The work prompt for a subagent an orchestrator started. A subagent can't talk to the user and (in most harnesses)
+ * can't start subagents of its own, so it stops at questions and at an open review round and reports back.
+ */
+function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): string {
+  const ref = `#${task.number} "${task.title}"`;
+  return [
+    `Work on ${ref} from the ${BRAND.id} task board. You are a subagent: the session that started you is orchestrating this task's epic and reads your report.`,
+    `Board: ${taskBoardUrl(boardUrl, task.id)}`,
+    "",
+    `Call get_task("${task.id}") on the ${BRAND.id} MCP server first: it has the description, plan, current step and latest handover notes.`,
+    `Then follow the ${BRAND.id} skill: pick up from the current step, keep steps current with update_step and work in the git worktree or branch you were given.`,
+    "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back.",
+    "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
+    "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",
+    "",
+    "Link the task to its Jira issue with link if it has one. Don't link a T3 thread: you run inside the orchestrator's session.",
+  ].join("\n");
+}
+
+/**
+ * The epic prompt: start the epic's tasks in other sessions, by the first route the harness supports, and see them
+ * through. Harnesses are named only as examples, so it reads right in any of them.
+ */
+function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, linkedThread: boolean): string {
+  const ref = `#${task.number}`;
+  const overview = `epic_overview("${task.id}")`;
+  return [
+    `Let's run the epic #${task.number} "${task.title}" from the ${BRAND.id} task board: start its tasks and see them through to review.`,
+    `Board: ${taskBoardUrl(boardUrl, task.id)}`,
+    "",
+    `1. Call ${overview} on the ${BRAND.id} MCP server: it lists the epic's tasks with their status, plan progress, current step and sessions. get_task("${task.id}") adds the epic's description.`,
+    "2. Tasks without a plan (in Backlog): read each with get_task and explore the code, then draft a plan for each. Show me the drafts together and save each with set_plan (with suggestedModel) once I approve. Don't start a task before its plan is approved.",
+    "3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them. Tell me the order before starting anything.",
+    "4. Start each task by the first route that works here:",
+    "   - Subagents, if you can start them (Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent): one per task, with get_handoff_prompt(task, subagent: true) as its prompt. Start it on the model of the task's suggested tier if you can choose one. Give each its own git worktree and branch when they run in parallel (your harness's worktree isolation, or git worktree add), otherwise run them one at a time.",
+    "   - Otherwise, give me get_handoff_prompt(task) for each, and I'll paste them into new sessions.",
+    `5. Keep track with ${overview}: progress, current step, blocked steps, review rounds and each task's last note. Answer a blocked step yourself if you can, else ask me. To tell a session something, message a subagent directly; for a session I started, add_note on its task, which it reads on its next get_task.`,
+    "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it: call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. If the round raised blocking or major findings, call start_review(task) for the next round with a new reviewer. When the loop ends, have the implementer open the pull request and link it. Sessions I started run their own review loop.",
+    `7. Don't set_plan, move or review the epic itself: its status follows its tasks. Finish with add_note on ${ref}: which tasks started by which route, where each is, and what's left.`,
+    "",
+    linkedThread
+      ? "This thread is already linked to the epic; don't link it again."
+      : `If you're running in T3 Code, link this thread to ${ref} with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.`,
+  ].join("\n");
 }

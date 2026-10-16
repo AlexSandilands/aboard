@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { TaskStatusInput, type TaskStatus, type Project, type TaskDetail } from "@repo/contracts";
+import {
+  defaultHandoffMode,
+  handoffModeError,
+  suggestedModelLine,
+  taskHandoffPrompt,
+  TaskStatusInput,
+  type HandoffMode,
+  type TaskStatus,
+  type Project,
+  type TaskDetail,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import {
   projectLabel,
@@ -10,6 +20,7 @@ import {
   summaryLine,
 } from "../format.ts";
 import {
+  boardUrl,
   childActivity,
   findProject,
   hasProjectRef,
@@ -31,8 +42,11 @@ function withOpenRoundPointer(detail: string, task: TaskDetail): string {
   return pointer ? `${detail}\n\n${pointer}` : detail;
 }
 
-/** Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task, epic_overview. */
-export const registerReadTools: ToolRegistrar = (server, { services }) => {
+/**
+ * Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task, epic_overview, and
+ * get_handoff_prompt.
+ */
+export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
   server.registerTool(
     "board_overview",
     {
@@ -234,6 +248,52 @@ export const registerReadTools: ToolRegistrar = (server, { services }) => {
           safeProject(services, epic.projectId),
         )}`;
         return textResult(`${header}\n\n${renderEpicChildren(epic, childActivity(services, epic))}`);
+      }),
+  );
+
+  server.registerTool(
+    "get_handoff_prompt",
+    {
+      title: "Get a task's hand-off prompt",
+      description:
+        "The prompt that starts an agent session on a task, the same one the board's Copy prompt button gives. " +
+        "Use it when orchestrating an epic: pass subagent: true for the prompt to give a subagent you start (it " +
+        "reports back instead of asking the user or running its own review loop), or leave it off for a prompt the " +
+        "user pastes into a new session. mode defaults to the task's suggested one: plan for tasks without a plan, " +
+        "work otherwise, orchestrate for an epic.",
+      inputSchema: {
+        task: taskField,
+        mode: z
+          .enum(["work", "plan", "orchestrate"])
+          .optional()
+          .describe("work: pick the task up. plan: shape its plan with the user. orchestrate: an epic's prompt."),
+        subagent: z.boolean().optional().describe("The prompt for a subagent you start. Work mode only."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    (args) =>
+      run(() => {
+        const task = services.tasks.summary(services.tasks.resolveId(args.task));
+        const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
+        const subagent = args.subagent ?? false;
+        const problem = handoffModeError(task, mode, subagent);
+        if (problem) throw new AppError("VALIDATION", problem);
+        const modelTiers = services.settings.get().modelTiers;
+        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers });
+        const head = `${mode[0]!.toUpperCase()}${mode.slice(1)} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
+        // A subagent can't switch its own model, so the suggestion goes to the orchestrator that starts it.
+        const model = subagent
+          ? suggestedModelLine(task, modelTiers, "Start the subagent on that model if you can choose one.")
+          : null;
+        const tail = model
+          ? `
+
+${model}`
+          : "";
+        return textResult(`${head}
+---
+${prompt}
+---${tail}`);
       }),
   );
 };
