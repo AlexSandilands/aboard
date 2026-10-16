@@ -13,6 +13,7 @@ import {
   shQuote,
   stripJsonc,
   wtLaunch,
+  type ResolvedTerminal,
   type TerminalHost,
   type WtProfile,
 } from "./terminal.ts";
@@ -147,12 +148,12 @@ describe("Windows Terminal settings", () => {
 describe("launching", () => {
   const bash: WtProfile = { guid: "{git}", name: "Git Bash", shell: "bash", exe: "C:\\Git\\bin\\bash.exe" };
 
-  it("opens a new Windows Terminal window, escaping ; so it reaches the shell", () => {
+  it("opens a Windows Terminal tab in the last window, escaping ; so it reaches the shell", () => {
     expect(wtLaunch("wt.exe", bash, RESUME, "C:\\a;b")).toEqual({
       file: "wt.exe",
       args: [
         "-w",
-        "new",
+        "0",
         "new-tab",
         "-p",
         "{git}",
@@ -166,6 +167,18 @@ describe("launching", () => {
       ],
       cwd: "C:\\a;b",
     });
+  });
+
+  it("opens a new window when asked, for every shell", () => {
+    const shells = ["bash", "cmd", "powershell", "pwsh"] as const;
+    for (const shell of shells) {
+      const profile: WtProfile = { guid: "{p}", name: shell, shell, exe: `${shell}.exe` };
+      const tab = wtLaunch("wt.exe", profile, RESUME, "C:\\x", "tab");
+      const window = wtLaunch("wt.exe", profile, RESUME, "C:\\x", "window");
+      expect(tab.args.slice(0, 3)).toEqual(["-w", "0", "new-tab"]);
+      expect(window.args.slice(0, 3)).toEqual(["-w", "new", "new-tab"]);
+      expect(window.args.slice(2)).toEqual(tab.args.slice(2));
+    }
   });
 
   it("runs cmd inside a profile whose shell it can't drive", () => {
@@ -202,7 +215,7 @@ describe("launching", () => {
 
   it("shows a launch the way it would be typed", () => {
     expect(displayLaunch(wtLaunch("C:\\Apps\\wt.exe", bash, RESUME, "C:\\My Code"), "win32")).toBe(
-      `wt.exe -w new new-tab -p {git} -d "C:\\My Code" C:\\Git\\bin\\bash.exe -l -i -c "claude --resume ${ID}\\; exec bash"`,
+      `wt.exe -w 0 new-tab -p {git} -d "C:\\My Code" C:\\Git\\bin\\bash.exe -l -i -c "claude --resume ${ID}\\; exec bash"`,
     );
   });
 });
@@ -228,6 +241,21 @@ describe("resolveTerminal", () => {
     expect(() => resolveTerminal({ kind: "windows-terminal", profile: "{x}" }, host({ platform: "linux" }))).toThrow(
       /only available on Windows/,
     );
+  });
+
+  it("passes open-in to Windows Terminal and leaves other terminals as they were", () => {
+    const wt = host({
+      env: { LOCALAPPDATA: "L" },
+      which: () => "wt.exe",
+      readFile: () => `{"profiles": [{"guid": "{c}", "name": "cmd", "commandline": "cmd.exe"}]}`,
+    });
+    const flag = (t: ResolvedTerminal) => t.launch(RESUME, "C:\\x").args[1];
+    expect(flag(resolveTerminal({ kind: "auto" }, wt))).toBe("0");
+    expect(flag(resolveTerminal({ kind: "auto" }, wt, "window"))).toBe("new");
+    expect(flag(resolveTerminal({ kind: "windows-terminal", profile: "{c}" }, wt, "window"))).toBe("new");
+    const cmd = (openIn: "tab" | "window") =>
+      resolveTerminal({ kind: "cmd" }, host({}), openIn).launch(RESUME, "C:\\x");
+    expect(cmd("window")).toEqual(cmd("tab"));
   });
 
   it("refuses a Windows Terminal profile that no longer exists", () => {

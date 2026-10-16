@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import type { TerminalSetting, TerminalShell, WindowsTerminalProfile } from "@repo/contracts";
+import type { TerminalOpenIn, TerminalSetting, TerminalShell, WindowsTerminalProfile } from "@repo/contracts";
 
 // Opening a command in a new terminal window, per platform and per shell. Everything here is pure except the
 // `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0009-board-starts-local-processes.md).
@@ -223,14 +223,24 @@ export function readWtSettings(host: Pick<TerminalHost, "env" | "readFile">): Wt
  */
 const wtEscape = (arg: string): string => arg.replace(/;/g, "\\;");
 
-/** A new Windows Terminal window on `profile`, running the command in the profile's shell. */
-export function wtLaunch(wt: string, profile: WtProfile, command: readonly string[], cwd: string): LaunchSpec {
+/**
+ * A Windows Terminal tab on `profile`, running the command in the profile's shell: in a window of its own, or in the
+ * most recently used one (`-w 0`, which Windows Terminal turns into a new window when none is open).
+ */
+export function wtLaunch(
+  wt: string,
+  profile: WtProfile,
+  command: readonly string[],
+  cwd: string,
+  openIn: TerminalOpenIn = "tab",
+): LaunchSpec {
   // A profile whose shell we can't drive (WSL, Azure Cloud Shell) keeps its look but runs cmd.
   const shell = profile.shell ?? "cmd";
   const exe = profile.shell ? (profile.exe ?? `${shell}.exe`) : "cmd.exe";
+  const window = openIn === "tab" ? "0" : "new";
   return {
     file: wt,
-    args: ["-w", "new", "new-tab", "-p", profile.guid, "-d", cwd, exe, ...shellArgs(shell, command)].map(wtEscape),
+    args: ["-w", window, "new-tab", "-p", profile.guid, "-d", cwd, exe, ...shellArgs(shell, command)].map(wtEscape),
     cwd,
   };
 }
@@ -277,7 +287,11 @@ const LINUX_TERMINALS = [
 ] as const;
 
 /** Resolves the terminal setting on this machine. Throws TerminalUnavailable with a reason when it can't run. */
-export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): ResolvedTerminal {
+export function resolveTerminal(
+  setting: TerminalSetting,
+  host: TerminalHost,
+  openIn: TerminalOpenIn = "tab",
+): ResolvedTerminal {
   const windows = host.platform === "win32";
   const needWindows = (what: string) => {
     if (!windows) throw new TerminalUnavailable(`${what} is only available on Windows`);
@@ -289,7 +303,7 @@ export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): R
         const wt = host.which("wt.exe");
         const settings = wt ? readWtSettings(host) : null;
         const profile = settings?.profiles[0];
-        if (wt && profile) return wtTerminal(profile);
+        if (wt && profile) return wtTerminal(profile, openIn);
         return { launch: (c, cwd) => consoleLaunch("cmd", c, cwd), shell: "cmd", label: "Command Prompt" };
       }
       if (host.platform === "darwin") {
@@ -340,7 +354,7 @@ export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): R
         (p) => p.guid.toLowerCase() === setting.profile.toLowerCase(),
       );
       if (!profile) throw new TerminalUnavailable("That Windows Terminal profile no longer exists");
-      return wtTerminal(profile);
+      return wtTerminal(profile, openIn);
     }
     case "cmd":
       needWindows("Command Prompt");
@@ -361,9 +375,9 @@ export function resolveTerminal(setting: TerminalSetting, host: TerminalHost): R
  * wt.exe is an App Execution Alias in WindowsApps: spawning it by full path fails with ENOENT, while spawning it by
  * name works, so PATH is only used to see that it is installed.
  */
-function wtTerminal(profile: WtProfile): ResolvedTerminal {
+function wtTerminal(profile: WtProfile, openIn: TerminalOpenIn): ResolvedTerminal {
   return {
-    launch: (command, cwd) => wtLaunch("wt.exe", profile, command, cwd),
+    launch: (command, cwd) => wtLaunch("wt.exe", profile, command, cwd, openIn),
     shell: profile.shell ?? "cmd",
     label: `Windows Terminal (${profile.name})`,
   };

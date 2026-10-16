@@ -217,7 +217,7 @@ describe("resuming a session", () => {
         file: "wt.exe",
         args: [
           "-w",
-          "new",
+          "0",
           "new-tab",
           "-p",
           "{bash}",
@@ -232,6 +232,14 @@ describe("resuming a session", () => {
         cwd: app.home.root,
       },
     ]);
+  });
+
+  it("opens a new Windows Terminal window when the setting says so", async () => {
+    const app = appWith();
+    app.services.settings.update({ terminalOpenIn: "window" });
+    const l = app.link(claude(A, app.home.root));
+    expect((await app.post(l.id, {})).status).toBe(200);
+    expect(app.spawned[0]?.args.slice(0, 2)).toEqual(["-w", "new"]);
   });
 
   it("refuses a running session with 409 and its status, unless forced", async () => {
@@ -308,7 +316,7 @@ describe("GET /api/terminal", () => {
       error: null,
     });
     expect((info as { preview: string }).preview).toMatch(
-      /^wt\.exe -w new new-tab -p \{bash\} -d .* -c "claude --resume /,
+      /^wt\.exe -w 0 new-tab -p \{bash\} -d .* -c "claude --resume /,
     );
   });
 

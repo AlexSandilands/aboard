@@ -157,7 +157,15 @@ describe("settings export", () => {
 
   it("makes every setting a deliberate choice: exported or listed as machine-only", () => {
     // A new setting fails here until it is added to one list or the other.
-    const machineOnly = ["t3Token", "backupEnabled", "backupDir", "backupRemote", "backupIntervalMinutes", "terminal"];
+    const machineOnly = [
+      "t3Token",
+      "backupEnabled",
+      "backupDir",
+      "backupRemote",
+      "backupIntervalMinutes",
+      "terminal",
+      "terminalOpenIn",
+    ];
     const all = Object.keys(loadSettings(createRepos(openDatabase(":memory:"))));
     expect(all.filter((k) => !EXPORTED_SETTINGS.has(k)).sort()).toEqual(machineOnly.sort());
   });

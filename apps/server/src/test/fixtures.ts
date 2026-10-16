@@ -24,6 +24,7 @@ export const defaultSettings: AppSettings = {
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
   terminal: { kind: "auto" },
+  terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
