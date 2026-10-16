@@ -61,6 +61,9 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   const epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
   fx.task(epicId);
+  // An archived epic keeps the status it left with (Done), so a task of it archived or reopened later can't move it.
+  // Its card is still republished: the roll-up may have changed.
+  if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
   const status = deriveEpicStatus(deriveEpicRollup(children));
   if (status === epic.status) return;
@@ -141,6 +144,30 @@ export function createTasksService(
   };
 
   const syncEpic = (epicId: string, actor: string, fx: Effects): void => syncEpicStatus(repos, epicId, actor, fx);
+
+  /**
+   * Archives an epic's unarchived `tasks` (all Done) along with it, stamped with the epic's `archivedAt` so
+   * unarchiving the epic can tell them from tasks archived on their own (best effort: a task Auto-archive archived
+   * one at a time later has its own stamp, so it stays archived). Not through `update`: that would re-derive
+   * the epic from its remaining tasks, and archiving the last one drops it to Backlog.
+   */
+  const archiveWithEpic = (epic: TaskRecord, tasks: TaskRecord[], actor: string, fx: Effects): void => {
+    for (const task of tasks) {
+      repos.tasks.update({ ...task, archivedAt: epic.archivedAt, updatedAt: epic.updatedAt });
+      fx.log(task.id, actor, "archived", { withEpic: epic.number });
+      fx.task(task.id);
+    }
+  };
+
+  /** Unarchives the tasks that were archived with `epic` (see archiveWithEpic) as it comes back. */
+  const unarchiveWithEpic = (epic: TaskRecord, archivedAt: string, actor: string, fx: Effects): void => {
+    for (const task of repos.tasks.childrenOf([epic.id]).filter((c) => c.archivedAt === archivedAt)) {
+      const restored = { ...task, archivedAt: null, updatedAt: epic.updatedAt };
+      repos.tasks.update({ ...restored, position: endOfLane(restored) });
+      fx.log(task.id, actor, "unarchived", { withEpic: epic.number });
+      fx.task(task.id);
+    }
+  };
 
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
   const logEpicChange = (
@@ -422,6 +449,21 @@ export function createTasksService(
           }
         }
         const archivedChanged = next.archivedAt !== current.archivedAt;
+        if (archivedChanged && current.kind === "epic") {
+          if (next.archivedAt !== null) {
+            // Open tasks were refused above, so what is left is Done.
+            archiveWithEpic(
+              next,
+              repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null),
+              actor,
+              fx,
+            );
+          } else {
+            unarchiveWithEpic(next, current.archivedAt!, actor, fx);
+            // It left as Done, but may have come back to tasks moved in or out of it since.
+            syncEpic(id, actor, fx);
+          }
+        }
         if (current.parentId && (current.parentId !== next.parentId || archivedChanged)) {
           syncEpic(current.parentId, actor, fx);
         }
@@ -535,14 +577,9 @@ export function createTasksService(
         if (epic.status !== "done")
           throw new AppError("VALIDATION", `Epic #${epic.number} isn't finished (not in Done)`);
         const now = nowIso();
-        // Not through `update`: archiving the last task there re-derives the epic from no tasks and drops it to
-        // Backlog. Archived with its tasks, it stays as it was (Done).
-        for (const task of tasks) {
-          repos.tasks.update({ ...task, archivedAt: now, updatedAt: now });
-          fx.log(task.id, actor, "archived", { withEpic: epic.number });
-          fx.task(task.id);
-        }
-        repos.tasks.update({ ...epic, archivedAt: now, updatedAt: now });
+        const archived = { ...epic, archivedAt: now, updatedAt: now };
+        archiveWithEpic(archived, tasks, actor, fx);
+        repos.tasks.update(archived);
         fx.log(id, actor, "archived", { tasks: tasks.length });
         fx.task(id);
         return tasks.length;

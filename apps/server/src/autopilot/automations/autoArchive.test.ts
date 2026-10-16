@@ -122,6 +122,20 @@ describe("auto-archive Done", () => {
       expect(s.tasks.detail(tasks[0]!.id).events.find((e) => e.type === "archived")?.actor).toBe("autopilot");
     });
 
+    it("archives the Done tasks of an epic archived by hand like loose ones", async () => {
+      const h = setup();
+      const { s, pass, archived, turnOn } = h;
+      const { epic, tasks } = epicOf(h, ["one"]);
+      s.tasks.update(epic.id, { archived: true }, "user");
+      // An epic archived before its tasks went with it left them unarchived.
+      s.tasks.update(tasks[0]!.id, { archived: false }, "user");
+      expect(archived(tasks[0]!.id)).toBe(false);
+      turnOn();
+      await pass(15);
+      expect(archived(tasks[0]!.id)).toBe(true);
+      expect(s.tasks.summary(epic.id).status).toBe("done");
+    });
+
     it("includes tasks already archived, and leaves an epic with an open task alone", async () => {
       const h = setup();
       const { s, project, done, pass, archived, turnOn } = h;

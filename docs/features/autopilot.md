@@ -159,7 +159,8 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 on. Archives (never deletes) a task that has been in Done for more than `days` days (default 14, minimum 1, set
 per scope), logged as `archived` plus the note "Archived by Autopilot after N days in Done" under the actor
 `autopilot`. It skips tasks in an epic (archiving them one by one would leave the epic with none counted and send it
-back to Backlog) and tasks with an open, draft or not-yet-polled PR. The dedupe key is
+back to Backlog), except Done tasks whose epic is already archived, which count as loose (epics archived before
+they took their Done tasks along left those behind), and tasks with an open, draft or not-yet-polled PR. The dedupe key is
 `archive:<taskId>:<statusChangedAt>`, so a manual unarchive sticks until the task leaves Done and comes back.
 
 A **finished epic** is archived with its tasks instead: an epic that isn't archived, is in Done (so every unarchived

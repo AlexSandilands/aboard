@@ -18,7 +18,8 @@ const tasksOf = (n: number): string => `${n} task${n === 1 ? "" : "s"}`;
  * it leaves Done and comes back.
  *
  * A task in an epic is never archived on its own: archived children leave the epic's roll-up, which would send a
- * finished epic back to Backlog. Instead the epic is archived with its tasks once it has been Done that long.
+ * finished epic back to Backlog. Instead the epic is archived with its tasks once it has been Done that long. A
+ * Done task whose epic is already archived (archived before epics took their tasks along) counts as loose.
  */
 export const autoArchive = defineAutomation({
   key: AUTOPILOT_AUTO_ARCHIVE,
@@ -34,8 +35,15 @@ export const autoArchive = defineAutomation({
     projects.flatMap(({ project, config }): Candidate[] => {
       const done = services.tasks.summaries({ projectId: project.id, status: "done" });
       const older = (t: TaskSummary, days: number) => Date.parse(t.statusChangedAt) < now.getTime() - days * DAY_MS;
+      const epicArchived = new Map<string, boolean>();
+      const inLiveEpic = (t: TaskSummary): boolean => {
+        if (t.parent === null) return false;
+        const id = t.parent.id;
+        if (!epicArchived.has(id)) epicArchived.set(id, services.tasks.summary(id).archivedAt !== null);
+        return !epicArchived.get(id);
+      };
       const tasks = done
-        .filter((t) => t.kind !== "epic" && t.parent === null && older(t, config.days))
+        .filter((t) => t.kind !== "epic" && !inLiveEpic(t) && older(t, config.days))
         .filter((t) => !hasUnmergedPr(t))
         .map((t): Candidate => ({
           dedupeKey: `archive:${t.id}:${t.statusChangedAt}`,

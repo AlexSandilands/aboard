@@ -1,5 +1,5 @@
 import type { PlanInput } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -16,6 +16,10 @@ function setup() {
   const child = (title: string) => s.tasks.create({ projectId: project.id, title, epicId: epic.id, plan: plan("a") });
   return { ...h, s, project, other, epic, child };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const expectCode = (fn: () => unknown, code: string, message?: RegExp) => {
   try {
@@ -259,6 +263,72 @@ describe("epics", () => {
     );
     s.tasks.move(a.id, { status: "done" }, "user");
     expect(s.tasks.update(epic.id, { archived: true }, "user").archivedAt).not.toBeNull();
+  });
+
+  it("archives an epic with its Done tasks, and unarchiving it brings back only those", () => {
+    const { s, events, epic, child } = setup();
+    const a = child("A");
+    const b = child("B");
+    const early = child("Early");
+    for (const t of [a, b, early]) s.tasks.move(t.id, { status: "done" }, "user");
+    s.tasks.update(early.id, { archived: true }, "user");
+    // The stamp is what ties a task to its epic, so the epic can't be archived in the same millisecond.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 1000);
+    const archivedAt = (id: string) => s.tasks.summary(id).archivedAt;
+
+    events.length = 0;
+    const archived = s.tasks.update(epic.id, { archived: true }, "user");
+    expect(archived.status).toBe("done");
+    const published = () => events.flatMap((e) => (e.type === "task.upserted" ? [e.task.id] : []));
+    expect(published()).toEqual(expect.arrayContaining([epic.id, a.id, b.id]));
+    // Same stamp as the epic, and the earlier one keeps its own.
+    expect(archivedAt(a.id)).toBe(archived.archivedAt);
+    expect(archivedAt(b.id)).toBe(archived.archivedAt);
+    expect(archivedAt(early.id)).not.toBe(archived.archivedAt);
+    expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({
+      type: "archived",
+      payload: { withEpic: epic.number },
+    });
+    expect(s.tasks.summary(a.id).parent?.id).toBe(epic.id);
+
+    events.length = 0;
+    const back = s.tasks.update(epic.id, { archived: false }, "user");
+    expect(back.status).toBe("done");
+    expect(published()).toEqual(expect.arrayContaining([epic.id, a.id, b.id]));
+    expect(archivedAt(a.id)).toBeNull();
+    expect(archivedAt(b.id)).toBeNull();
+    expect(archivedAt(early.id)).not.toBeNull();
+    expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({
+      type: "unarchived",
+      payload: { withEpic: epic.number },
+    });
+    expect(s.tasks.summary(epic.id).rollup).toMatchObject({ total: 2, done: 2 });
+  });
+
+  it("derives an unarchived epic from the tasks it comes back to", () => {
+    const { s, epic, child } = setup();
+    const a = child("A");
+    s.tasks.move(a.id, { status: "done" }, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    // Taken out while archived, so the epic comes back with nothing counted.
+    s.tasks.update(a.id, { epicId: null }, "user");
+    expect(s.tasks.update(epic.id, { archived: false }, "user").status).toBe("backlog");
+  });
+
+  it("doesn't re-derive an archived epic when a leftover task of it is archived or reopened", () => {
+    const { s, epic, child } = setup();
+    const a = child("A");
+    s.tasks.move(a.id, { status: "done" }, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    // What an epic archived before tasks went with it looks like: the task is back, still pointing at the epic.
+    s.tasks.update(a.id, { archived: false }, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    s.tasks.update(a.id, { archived: true }, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    s.tasks.update(a.id, { archived: false }, "user");
+    s.tasks.move(a.id, { status: "planned" }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", archivedAt: expect.any(String) });
   });
 
   it("republishes its tasks when an epic is renamed, so their cards show the new title", () => {
