@@ -13,6 +13,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
+  TerminalInfo,
   TaskTemplate,
 } from "@repo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,6 +38,7 @@ export const queryKeys = {
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
+  terminal: ["terminal"] as const,
   templates: ["templates"] as const,
 };
 
@@ -118,6 +120,15 @@ export function useIntegrationsStatus(enabled = true) {
     queryFn: ({ signal }) => api<IntegrationsStatus>("/api/integrations/status", { signal }),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/** What "Open in terminal" runs here. Read again whenever settings change it, as its preview follows the setting. */
+export function useTerminalInfo(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.terminal,
+    queryFn: ({ signal }) => api<TerminalInfo>("/api/terminal", { signal }),
+    enabled,
   });
 }
 

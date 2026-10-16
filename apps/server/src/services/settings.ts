@@ -30,6 +30,7 @@ const DEFAULTS: StoredSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  terminal: { kind: "auto" },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
@@ -39,7 +40,7 @@ const DEFAULTS: StoredSettings = {
 
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
- * someone decides otherwise. Left out: the T3 token, and the backup settings themselves, which describe this
+ * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
  * machine; a forced restore keeps them from the database it replaces. Autopilot's engine settings are stored beside
  * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
  */
@@ -147,6 +148,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.backupIntervalMinutes !== undefined) {
           repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
+        if (input.terminal !== undefined) repos.settings.set("terminal", input.terminal);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
         if (input.notifications !== undefined) {

@@ -201,6 +201,9 @@ The workspace and branch choices map to T3's `workspaceStrategy`:
 
 ### Linking an existing thread
 
+(Sessions run in a terminal, in Claude Code or Copilot CLI, link themselves with `agentSession` instead; see
+[agent sessions](agent-sessions.md).)
+
 **Add link** (panel) and `link` (MCP) accept what T3 gives you for a thread, besides `t3code://threads/…`:
 
 - A bare thread ID, as T3's "Copy thread ID" produces (a UUID, or `thread:…`). It carries no environment, so
