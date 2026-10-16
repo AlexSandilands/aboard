@@ -446,6 +446,19 @@ describe("limits", () => {
 });
 
 describe("failures and attention", () => {
+  it("records a run's outcome even when the listener for ended runs throws", async () => {
+    const { s, engine, runs, started } = setup({
+      runEnded: () => {
+        throw new Error("listener broke");
+      },
+    });
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    await engine.pass();
+    started[0]!.resolve({});
+    await engine.idle();
+    expect(runs("agent")).toMatchObject([{ status: "succeeded", error: null }]);
+  });
+
   it("tells whoever is listening that a run ended, finished or failed, with its session", async () => {
     const ended: Array<[string, string | null]> = [];
     const { s, engine, task, runs, started } = setup({ runEnded: (run) => ended.push([run.status, run.sessionId]) });

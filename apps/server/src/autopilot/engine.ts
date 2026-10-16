@@ -109,6 +109,15 @@ export function createAutopilotEngine(deps: {
     return null;
   };
 
+  /** Tells the listener, which must never change how the run ended. */
+  const ended = (run: AutopilotRun) => {
+    try {
+      deps.runEnded?.(run);
+    } catch (error) {
+      log.warn(`[autopilot] run-ended listener failed: ${messageOf(error)}`);
+    }
+  };
+
   const act = async (automation: Automation, run: AutopilotRun, candidate: Candidate, config: AutomationConfig) => {
     const s = deps.services();
     try {
@@ -131,7 +140,7 @@ export function createAutopilotEngine(deps: {
         }),
       );
       const finished = self(() => s.autopilot.finish(run.id, result));
-      deps.runEnded?.(finished);
+      ended(finished);
     } catch (error) {
       try {
         const failed = self(() =>
@@ -141,7 +150,7 @@ export function createAutopilotEngine(deps: {
             needsAttention: run.taskId !== null,
           }),
         );
-        deps.runEnded?.(failed);
+        ended(failed);
       } catch (finishError) {
         // The run went with its task (deleted meanwhile); nothing is left to record it on.
         log.warn(`[autopilot] couldn't record ${automation.key} failing: ${messageOf(finishError)}`);

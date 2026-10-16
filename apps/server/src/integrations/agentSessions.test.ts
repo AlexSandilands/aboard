@@ -300,6 +300,29 @@ describe("resuming a session", () => {
   });
 });
 
+describe("an Autopilot session through the services", () => {
+  it("is working while its run goes, then finished with when it ended, read from the stored run", async () => {
+    const app = appWith();
+    const s = app.services;
+    const run = s.autopilot.record({
+      automation: "test",
+      candidate: { dedupeKey: "k", summary: "go", taskId: app.task.id, projectId: app.task.projectId },
+      dryRun: false,
+    })!;
+    s.autopilot.start(run.id);
+    s.autopilot.update(run.id, { runner: "headless", sessionId: A });
+    const l = app.link(claude(A, app.home.root));
+    expect(s.autopilot.runForSession(B)).toBeNull();
+
+    await app.integrations.refreshLink(l.id);
+    expect(s.links.get(l.id)).toMatchObject({ snapshot: { status: "busy", inApp: false } });
+
+    const finished = s.autopilot.finish(run.id, {});
+    await app.integrations.refreshLink(l.id);
+    expect(s.links.get(l.id)).toMatchObject({ snapshot: { status: "finished", endedAt: finished.finishedAt } });
+  });
+});
+
 describe("GET /api/terminal", () => {
   it("describes auto, the profiles and what the setting would run", async () => {
     const app = appWith();

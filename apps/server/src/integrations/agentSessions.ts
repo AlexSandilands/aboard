@@ -266,7 +266,8 @@ export interface AgentSessionServices {
 
 /**
  * What an Autopilot run says of the headless session it made: working while the run is going, then finished or
- * failed. The process behind it isn't one anyone can read from the harness's files while it runs.
+ * failed. The process behind it isn't one anyone can read from the harness's files while it runs. A run that never
+ * started (skipped, a dry run) has no session, so only queued, running, failed and succeeded come here.
  */
 export function runSnapshot(run: Pick<AutopilotRun, "status" | "finishedAt" | "updatedAt">): AgentSessionSnapshot {
   if (run.status === "queued" || run.status === "running") return { status: "busy", inApp: false };
@@ -359,6 +360,8 @@ export function createAgentSessionsIntegration(deps: {
   };
 
   const pollLive = (): Promise<void> => {
+    // A poll that times out is only given up on, not stopped: if it finishes later it may overwrite a newer
+    // snapshot, which the next poll corrects.
     // `.finally` runs after this assignment even when the poll has nothing to await; resetting inside the async
     // function would run first in that case and leave `polling` set for good.
     polling ??= withTimeout(
