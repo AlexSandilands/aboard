@@ -2,6 +2,7 @@ import { EMPTY_MODEL_TIERS, type ModelTiers, type Project } from "@repo/contract
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
 import {
+  autoLaunchSettings,
   buildLaunchOptions,
   mapProviders,
   resolveSuggestion,
@@ -279,6 +280,90 @@ describe("toWorkspaceStrategy", () => {
     expect(toWorkspaceStrategy({ mode: "existing_worktree", worktreePath: "C:/wt", branch: null })).toEqual({
       type: "existing_worktree",
       worktreePath: "C:/wt",
+    });
+  });
+});
+
+describe("autoLaunchSettings", () => {
+  const sonnet = { selection: { instanceId: "claudeAgent", model: "sonnet", options: [] }, label: "Sonnet" };
+  const options = (opts: { settings?: Record<string, unknown>; refs?: WireRefs | null; suggest?: boolean } = {}) =>
+    buildLaunchOptions({
+      config: config(opts.settings ?? {}),
+      refs: opts.refs === undefined ? repo : opts.refs,
+      shell: shell(),
+      t3Project,
+      suggestedModel: opts.suggest ? { tier: "light", reason: null } : null,
+      modelTiers: { ...EMPTY_MODEL_TIERS, light: { description: null, t3: sonnet } },
+    });
+
+  it("starts work on the suggested model in a new worktree from the default branch", () => {
+    expect(autoLaunchSettings(options({ suggest: true }), { work: true })).toEqual({
+      ok: true,
+      launch: {
+        modelSelection: sonnet.selection,
+        runtimeMode: "full-access",
+        workspace: { mode: "new_worktree", baseRef: "main", startFromOrigin: true },
+      },
+    });
+  });
+
+  it("plans on T3's default model and clamps access to what the provider supports", () => {
+    const result = autoLaunchSettings(options({ suggest: true, settings: { defaultRuntimeMode: "auto" } }), {
+      work: false,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      launch: { modelSelection: { model: "opus" }, runtimeMode: "full-access" },
+    });
+  });
+
+  it("branches from the given ref, from origin only for a local branch unless told otherwise", () => {
+    const refs: WireRefs = {
+      isRepo: true,
+      refs: [
+        { name: "main", current: true, isDefault: true, worktreePath: null },
+        { name: "origin/feat/a", isRemote: true, current: false, isDefault: false, worktreePath: null },
+      ],
+    };
+    const workspace = (choice: { baseRef?: string; startFromOrigin?: boolean }) => {
+      const result = autoLaunchSettings(options({ refs }), { work: true, ...choice });
+      return result.ok ? result.launch.workspace : result.reason;
+    };
+    expect(workspace({ baseRef: "origin/feat/a" })).toEqual({
+      mode: "new_worktree",
+      baseRef: "origin/feat/a",
+      startFromOrigin: false,
+    });
+    expect(workspace({ baseRef: "feat/b", startFromOrigin: false })).toEqual({
+      mode: "new_worktree",
+      baseRef: "feat/b",
+      startFromOrigin: false,
+    });
+  });
+
+  it("runs in the folder itself when it isn't a git repository", () => {
+    const notRepo = options({ refs: null });
+    expect(autoLaunchSettings(notRepo, { work: true })).toMatchObject({
+      ok: true,
+      launch: { workspace: { mode: "current" } },
+    });
+    expect(autoLaunchSettings(notRepo, { work: true, baseRef: "main" })).toEqual({
+      ok: false,
+      reason: `${t3Project.workspaceRoot} isn't a git repository, so a thread can't branch from main`,
+    });
+  });
+
+  it("explains when no model is ready", () => {
+    const none = buildLaunchOptions({
+      config: config({}, []),
+      refs: repo,
+      shell: shell(),
+      t3Project,
+      ...noSuggestion,
+    });
+    expect(autoLaunchSettings(none, { work: true })).toEqual({
+      ok: false,
+      reason: "T3 Code has no model ready to start a thread",
     });
   });
 });

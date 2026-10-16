@@ -1,4 +1,5 @@
 import {
+  clampRuntimeMode,
   defaultHandoffMode,
   taskHandoffPrompt,
   type T3LaunchOptions,
@@ -19,7 +20,6 @@ import { useStartT3Thread } from "~/state/mutations";
 import { useBoard, useSettings, useT3LaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
-  clampRuntimeMode,
   keepsCommandId,
   findModel,
   initialWorkspaceChoice,

@@ -182,6 +182,14 @@ export function boardUrl(ctx: AppContext): string {
   return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
 }
 
+/** Why T3 Code can't start threads for a project's tasks, or null when it can (the board's canStartT3Thread). */
+export function t3LaunchBlocker(ctx: AppContext, project: Project): string | null {
+  if (!ctx.integrations.t3Status().detected) return "T3 Code isn't running";
+  if (!ctx.services.settings.get().t3TokenSet) return "No T3 Code token is set (Settings, T3 Code)";
+  if (!project.t3ProjectId && !project.workspaceRoot) return `${project.title} has no folder for T3 Code to use`;
+  return null;
+}
+
 export function safeProject(services: Services, id: string): Project | undefined {
   try {
     return services.projects.get(id);

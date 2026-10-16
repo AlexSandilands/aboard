@@ -135,3 +135,20 @@ export const StartT3ThreadInput = z.object({
   workspace: T3LaunchWorkspace,
 });
 export type StartT3ThreadInput = z.infer<typeof StartT3ThreadInput>;
+
+/** The runtime modes a provider offers; a provider that lists none offers them all. */
+export function runtimeModesFor(provider: Pick<T3LaunchProvider, "supportedRuntimeModes"> | undefined) {
+  const supported = provider?.supportedRuntimeModes ?? [];
+  return supported.length === 0 ? T3_RUNTIME_MODES : T3_RUNTIME_MODES.filter((m) => supported.includes(m.value));
+}
+
+/** Keeps the mode when the provider supports it, else its most permissive supported mode. */
+export function clampRuntimeMode(mode: T3RuntimeMode, provider: T3LaunchProvider | undefined): T3RuntimeMode {
+  const modes = runtimeModesFor(provider);
+  return modes.some((m) => m.value === mode) ? mode : (modes.at(-1)?.value ?? mode);
+}
+
+/** The base for a new worktree when none is picked: the default branch (origin/HEAD), else the current one. */
+export function defaultBaseRef(refs: ReadonlyArray<T3Ref>): T3Ref | undefined {
+  return refs.find((r) => r.isDefault && !r.isRemote) ?? refs.find((r) => r.isDefault) ?? refs.find((r) => r.current);
+}

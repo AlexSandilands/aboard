@@ -1,8 +1,11 @@
 import {
+  clampRuntimeMode,
+  defaultBaseRef,
   normalizeWorkspaceKey,
   T3RuntimeMode,
   type ModelTiers,
   type Project,
+  type StartT3ThreadInput,
   type SuggestedModel,
   type T3EnvMode,
   type T3LaunchModel,
@@ -297,4 +300,49 @@ export function toWorkspaceStrategy(workspace: T3LaunchWorkspace): Record<string
         ...(workspace.branch ? { branch: workspace.branch } : {}),
       };
   }
+}
+
+/** What a launch without the dialog is told: whether it works the task, and optionally where to branch from. */
+export interface AutoLaunchChoice {
+  /** Work launches take the task's suggested model; planning keeps T3's default, like the dialog. */
+  work: boolean;
+  /** The ref to branch the new worktree from. Defaults to the default branch, else the current one. */
+  baseRef?: string | undefined;
+  /** Defaults to T3's "start new worktrees from origin" setting, for local branches only. */
+  startFromOrigin?: boolean | undefined;
+}
+
+export type AutoLaunch =
+  | { ok: true; launch: Pick<StartT3ThreadInput, "modelSelection" | "runtimeMode" | "workspace"> }
+  | { ok: false; reason: string };
+
+/**
+ * The launch an orchestrator gets for an epic's task without the dialog: the model and access the dialog would
+ * start on, and a new worktree for every task in a git repository, so tasks running side by side never share a
+ * checkout. A folder that isn't a repository can only run in the current checkout.
+ */
+export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchChoice): AutoLaunch {
+  const modelSelection = (choice.work ? options.suggestion?.modelSelection : null) ?? options.defaults.modelSelection;
+  const provider = options.providers.find((p) => p.instanceId === modelSelection?.instanceId);
+  if (!modelSelection || !provider?.ready) return { ok: false, reason: "T3 Code has no model ready to start a thread" };
+  const runtimeMode = clampRuntimeMode(options.defaults.runtimeMode, provider);
+  if (!options.isRepo) {
+    if (choice.baseRef) {
+      return {
+        ok: false,
+        reason: `${options.workspaceRoot} isn't a git repository, so a thread can't branch from ${choice.baseRef}`,
+      };
+    }
+    return { ok: true, launch: { modelSelection, runtimeMode, workspace: { mode: "current" } } };
+  }
+  // A ref beyond the first 100 T3 lists is still passed on; T3 checks it.
+  const ref = choice.baseRef ? options.refs.find((r) => r.name === choice.baseRef) : defaultBaseRef(options.refs);
+  const baseRef = choice.baseRef ?? ref?.name;
+  if (!baseRef) return { ok: false, reason: "No branch to start a worktree from; pass baseRef" };
+  // A remote ref already names the origin commit; "start from origin" only applies to local branches.
+  const startFromOrigin = choice.startFromOrigin ?? (options.defaults.startFromOrigin && !ref?.isRemote);
+  return {
+    ok: true,
+    launch: { modelSelection, runtimeMode, workspace: { mode: "new_worktree", baseRef, startFromOrigin } },
+  };
 }

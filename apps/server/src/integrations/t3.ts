@@ -26,6 +26,8 @@ import { AppError } from "../errors.ts";
 import type { LinksService, ProjectsService, SettingsService, TasksService } from "../services/types.ts";
 import { messageOf } from "./github.ts";
 import {
+  autoLaunchSettings,
+  type AutoLaunchChoice,
   buildLaunchOptions,
   mapFavorites,
   mapProviders,
@@ -422,6 +424,8 @@ export interface T3Integration {
   modelCatalog(): Promise<T3ModelCatalog>;
   /** Starts a T3 thread for a task with the prompt as its first message, then links it to the task. */
   startThread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
+  /** Starts a task's thread without the dialog, on the settings autoLaunchSettings picks, then links it. */
+  launchTaskThread(taskId: string, input: { prompt: string } & AutoLaunchChoice, actor: string): Promise<TaskLink>;
   /**
    * Posts a message into a linked thread, as if the user had typed it: T3 starts a turn, or queues it behind
    * the running one. `commandId` de-duplicates retries. Needs the orchestration:operate scope.
@@ -651,6 +655,16 @@ export function createT3Integration(deps: {
     return link;
   };
 
+  const launchTaskThread = async (
+    taskId: string,
+    { prompt, ...choice }: { prompt: string } & AutoLaunchChoice,
+    actor: string,
+  ): Promise<TaskLink> => {
+    const auto = autoLaunchSettings(await launchOptions(taskId), choice);
+    if (!auto.ok) throw new AppError("VALIDATION", auto.reason);
+    return startThread(taskId, { prompt, ...auto.launch }, actor);
+  };
+
   /** The live origin and token for acting on a thread of this environment, or a clear reason why not. */
   const threadAccess = async (link: ThreadLink) => {
     await ensureDiscovered();
@@ -759,6 +773,7 @@ export function createT3Integration(deps: {
     launchOptions,
     modelCatalog,
     startThread,
+    launchTaskThread,
     sendToThread,
     threadWorkspace,
     resolveThread,

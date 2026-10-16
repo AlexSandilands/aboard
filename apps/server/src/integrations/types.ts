@@ -12,6 +12,8 @@ import type {
   T3ProjectCandidate,
   TaskLink,
 } from "@repo/contracts";
+import type { ThreadLink } from "./t3.ts";
+import type { AutoLaunchChoice } from "./t3Launch.ts";
 
 /** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
 export interface Integrations {
@@ -44,6 +46,10 @@ export interface Integrations {
   resolveLinkInput(input: LinkInput): Promise<{ input: LinkInput; warning?: string }>;
   /** Starts a T3 Code thread for a task and links it to the task. */
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
+  /** Starts a T3 Code thread for a task without the dialog (see autoLaunchSettings) and links it. */
+  launchT3TaskThread(taskId: string, input: { prompt: string } & AutoLaunchChoice, actor: string): Promise<TaskLink>;
+  /** Posts a message into a task's linked T3 Code thread, as if the user had typed it. */
+  messageT3Thread(link: ThreadLink, text: string): Promise<void>;
   /** Re-runs T3 discovery + a live-status request and returns the resulting status. */
   testT3(): Promise<T3IntegrationStatus>;
   /** Saves a T3 token, or exchanges a pairing link/code for one, and checks it. */

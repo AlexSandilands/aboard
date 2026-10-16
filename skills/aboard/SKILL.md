@@ -101,7 +101,9 @@ band across the columns its tasks are in, with a roll-up of how many are done.
   anything needing attention, its live T3 thread, latest note and newest activity. `list_tasks(epic: "#N")`
   lists just its tasks.
 - **Orchestrating** an epic means starting its tasks in other sessions and seeing them through. The user
-  usually hands you the epic's orchestrating prompt; follow it. `get_handoff_prompt(task)` gives the prompt
+  usually hands you the epic's orchestrating prompt; follow it. When `epic_overview` says T3 Code is available,
+  `start_task_thread(task)` starts a task in its own T3 thread and worktree, and `message_task_thread` talks to it.
+  Otherwise `get_handoff_prompt(task)` gives the prompt
   for a session the user starts, and `get_handoff_prompt(task, subagent: true)` the one for a subagent you
   start. Draft plans for Backlog tasks, get the user's approval, then `set_plan` and move them to `planned` before starting them.
 - **If you are a subagent** working one of an epic's tasks: you can't ask the user anything, so mark the step

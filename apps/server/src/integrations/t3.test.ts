@@ -687,6 +687,32 @@ describe("T3 thread launch", () => {
     expect(link.kind).toBe("t3_thread");
   });
 
+  it("launches a task's thread without the dialog in a new worktree, and links it", async () => {
+    const { t3, socket, added } = setup((frame) => {
+      if (frame.tag === "server.getConfig") return success(frame.id, SERVER_CONFIG);
+      if (frame.tag === "vcs.listRefs") {
+        return success(frame.id, {
+          isRepo: true,
+          refs: [{ name: "main", current: true, isDefault: true, worktreePath: "C:\\Code\\acme" }],
+        });
+      }
+      return success(frame.id, { threadId: "th-auto", resumed: false });
+    });
+    await t3.launchTaskThread("task-1", { prompt: "Let us work on #9", work: true, baseRef: "feat/x" }, "orch");
+    expect(socket.sent.map((f) => f.tag)).toEqual(["server.getConfig", "vcs.listRefs", "orchestration.launchThread"]);
+    expect(socket.sent[2]!.payload).toMatchObject({
+      projectId: "t3-p1",
+      title: "#9 Hand off",
+      modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },
+      runtimeMode: "full-access",
+      workspaceStrategy: { type: "worktree", baseRef: "feat/x", startFromOrigin: true },
+      initialMessage: { text: "Let us work on #9", attachments: [] },
+    });
+    expect(added).toEqual([
+      { taskId: "task-1", input: { t3Thread: { environmentId: ENV_ID, threadId: "th-auto" } }, actor: "orch" },
+    ]);
+  });
+
   it("tags an unreadable launch result so a retry keeps its commandId", async () => {
     const { t3, added } = setup((frame) => success(frame.id, { unexpected: true }));
     await expect(t3.startThread("task-1", LAUNCH, "user")).rejects.toMatchObject({

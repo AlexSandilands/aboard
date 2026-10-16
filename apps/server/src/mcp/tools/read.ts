@@ -27,6 +27,7 @@ import {
   projectFields,
   run,
   safeProject,
+  t3LaunchBlocker,
   taskField,
   textResult,
   type ToolRegistrar,
@@ -229,7 +230,8 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         "How every task in an epic is getting on, in one call: each task's status, progress and current step, " +
         "anything needing attention (blocked steps, failing PRs, open review findings), its review round, its live " +
         "T3 thread, its latest note and its newest activity. Use it to monitor an epic's tasks, however they were " +
-        "started (T3 threads, subagents or sessions the user opened). get_task on the epic shows the same list.",
+        "started (T3 threads, subagents or sessions the user opened), and whether T3 Code can start them " +
+        "(start_task_thread). get_task on the epic shows the same list.",
       inputSchema: { task: taskField.describe('The epic: "#12", "12" or its uuid.') },
       annotations: { readOnlyHint: true },
     },
@@ -244,10 +246,13 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
               : `#${epic.number} is a task, not an epic; use get_task`,
           );
         }
-        const header = `Epic #${epic.number} ${epic.title} [${statusLabel(epic.status)}]  ·  ${projectLabel(
-          safeProject(services, epic.projectId),
-        )}`;
-        return textResult(`${header}\n\n${renderEpicChildren(epic, childActivity(services, epic))}`);
+        const project = safeProject(services, epic.projectId);
+        const header = `Epic #${epic.number} ${epic.title} [${statusLabel(epic.status)}]  ·  ${projectLabel(project)}`;
+        const blocker = project ? t3LaunchBlocker(ctx, project) : "its project is missing";
+        const t3 = blocker
+          ? `T3 Code: not available (${blocker}). Start tasks as subagents or with prompts for the user.`
+          : "T3 Code: available. start_task_thread starts a task in a new thread; message_task_thread talks to it.";
+        return textResult(`${header}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic))}`);
       }),
   );
 

@@ -27,6 +27,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
+| `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for an epic's tasks (see [epics.md](epics.md#t3-code-threads)) |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their

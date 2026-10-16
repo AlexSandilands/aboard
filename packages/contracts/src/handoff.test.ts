@@ -72,13 +72,16 @@ describe("orchestrate prompt", () => {
     expect(prompt).toContain("save each with set_plan (with suggestedModel) and move_task it to planned");
   });
 
-  it("offers subagents first, then prompts to paste, without assuming one harness", () => {
+  it("offers T3 threads first, then subagents, then prompts to paste, without assuming one harness", () => {
+    const t3 = prompt.indexOf("if epic_overview says T3 Code is available: start_task_thread(task)");
     const subagents = prompt.indexOf("get_handoff_prompt(task, subagent: true)");
     const manual = prompt.indexOf("give me get_handoff_prompt(task)");
-    expect(subagents).toBeGreaterThan(0);
+    expect(t3).toBeGreaterThan(0);
+    expect(subagents).toBeGreaterThan(t3);
     expect(manual).toBeGreaterThan(subagents);
     expect(prompt).toContain("Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent");
     expect(prompt).toContain("own git worktree");
+    expect(prompt).toContain("use message_task_thread for a T3 thread");
   });
 
   it("runs the review loop for subagent tasks and leaves the epic itself alone", () => {

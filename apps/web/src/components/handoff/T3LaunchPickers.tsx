@@ -1,11 +1,12 @@
 // Composer controls modelled on T3 Code's new-thread composer (ComposerControl, ModelPickerContent,
 // TraitsPicker, BranchToolbar), MIT — see NOTICE. Rebuilt on our primitives rather than copied.
-import type {
-  T3LaunchOptions,
-  T3LaunchProvider,
-  T3ModelCatalog,
-  T3ModelSelection,
-  T3RuntimeMode,
+import {
+  runtimeModesFor,
+  type T3LaunchOptions,
+  type T3LaunchProvider,
+  type T3ModelCatalog,
+  type T3ModelSelection,
+  type T3RuntimeMode,
 } from "@repo/contracts";
 import {
   BotIcon,
@@ -48,7 +49,6 @@ import {
   refBadge,
   refDisabledReason,
   refLabel,
-  runtimeModesFor,
   selectModel,
   selectedRef,
   setOption,

@@ -64,6 +64,10 @@ them and run the review loop for subagents. It is the only prompt an epic offers
 built for a **subagent** of that orchestrator, which reports back instead of asking the user or running its own
 review loop. Both are described in [epics.md](epics.md#orchestrating-an-epic).
 
+An orchestrator in any harness can also start an epic's tasks in T3 Code threads itself, with
+`start_task_thread`. That is the launch below without the dialog: [epics.md](epics.md#t3-code-threads) says what it
+picks instead.
+
 Agents get the same prompts over MCP with `get_handoff_prompt(task, mode?, subagent?)`, which defaults the mode
 like the menu does. Its board link points at this server when it serves the built web app, else at the Vite dev
 server (`boardUrl` in `apps/server/src/mcp/shared.ts`). Under `pnpm dev` with a `dist/` left from an earlier

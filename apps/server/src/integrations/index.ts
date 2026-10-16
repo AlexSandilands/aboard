@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
@@ -106,6 +107,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
+    launchT3TaskThread: (taskId, input, actor) => t3.launchTaskThread(taskId, input, actor),
+    messageT3Thread: (link, text) => t3.sendToThread(link, text, randomUUID()),
     async resolveLinkInput(input) {
       // An explicit kind other than t3_thread means the caller chose how to read the value.
       if (input.t3Thread || !input.value || (input.kind && input.kind !== "t3_thread")) return { input };
