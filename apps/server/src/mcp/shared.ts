@@ -235,10 +235,10 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
-/** Whether Start planned tasks is on for a project, from the board or the project itself. False while it isn't registered. */
-function startPlannedOn(services: Services, projectId: string): boolean {
+/** Whether Start planned tasks is on for a task, from the board, its project or its epic. False while it isn't registered. */
+function startPlannedOn(services: Services, projectId: string, epicId: string | null): boolean {
   const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
-  return automation !== undefined && services.autopilot.resolve(automation, projectId).enabled;
+  return automation !== undefined && services.autopilot.resolve(automation, projectId, epicId).enabled;
 }
 
 /**
@@ -258,7 +258,7 @@ export function taskResult(
     ? renderTaskShort(task, project, {
         labelsInUse: services.labels.usage(),
         modelHint: true,
-        autopilotHint: startPlannedOn(services, task.projectId),
+        autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
       })
     : renderTaskShort(task, project);
   return textResult(`${headline}\n\n${body}`);

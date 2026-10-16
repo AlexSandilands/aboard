@@ -404,14 +404,18 @@ export function useUpdateSettings() {
 // ── Autopilot ────────────────────────────────────────────────────────────
 
 /**
- * Sets one automation's mode and/or config at the board (`projectId` null) or a project. The server replaces a
- * scope's whole config, so `config` is a function from the latest cached config to the new one: calls share a scope
- * so they reach the server in order, and each is built when it runs, after the one before has updated the cache.
- * Building it from what the component last rendered would let a quick second edit undo the first. The server's reply
- * (the scope's entries) goes into the cache; other windows' changes arrive as autopilot.changed.
+ * Sets one automation's mode and/or config at the board (`projectId` null), a project, or one of its epics
+ * (`epicId`). The server replaces a scope's whole config, so `config` is a function from the latest cached config to
+ * the new one: calls share a scope so they reach the server in order, and each is built when it runs, after the one
+ * before has updated the cache. Building it from what the component last rendered would let a quick second edit undo
+ * the first. The server's reply (the scope's entries) goes into the cache; other windows' changes arrive as
+ * autopilot.changed.
  */
-export function useSetAutopilotScope(projectId: string | null, onRejected?: () => void) {
+export function useSetAutopilotScope(projectId: string | null, onRejected?: () => void, epicId?: string) {
   const queryClient = useQueryClient();
+  const queryKey =
+    projectId && epicId ? queryKeys.autopilotEpicScope(projectId, epicId) : queryKeys.autopilotScope(projectId);
+  const path = projectId ? `projects/${enc(projectId)}${epicId ? `/epics/${enc(epicId)}` : ""}` : "board";
   return useMutation({
     mutationFn: ({
       automation,
@@ -422,18 +426,15 @@ export function useSetAutopilotScope(projectId: string | null, onRejected?: () =
       mode?: UpdateAutopilotSettingInput["mode"];
       config?: (current: AutopilotConfig) => AutopilotConfig;
     }) => {
-      const entries = queryClient.getQueryData<AutopilotScopeEntry[]>(queryKeys.autopilotScope(projectId));
+      const entries = queryClient.getQueryData<AutopilotScopeEntry[]>(queryKey);
       const current = entries?.find((entry) => entry.automation === automation)?.config ?? {};
       const body: UpdateAutopilotSettingInput = { mode, config: config?.(current) };
-      return api<AutopilotScopeEntry[]>(
-        `/api/autopilot/${projectId ? `projects/${enc(projectId)}` : "board"}/${enc(automation)}`,
-        { method: "PUT", body },
-      );
+      return api<AutopilotScopeEntry[]>(`/api/autopilot/${path}/${enc(automation)}`, { method: "PUT", body });
     },
-    scope: { id: `autopilot-scope:${projectId ?? "board"}` },
+    scope: { id: `autopilot-scope:${epicId ?? projectId ?? "board"}` },
     onSuccess: (entries) => {
-      queryClient.setQueryData(queryKeys.autopilotScope(projectId), entries);
-      // A board change moves what every project inherits.
+      queryClient.setQueryData(queryKey, entries);
+      // A board or project change moves what everything below it inherits.
       void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
     },
     // Here rather than in mutate()'s options: those only run for the latest call, and a save can be queued behind.
