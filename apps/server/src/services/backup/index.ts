@@ -66,7 +66,10 @@ export function createBackupService(core: Core): BackupService {
           fx.task(id);
         }
         for (const id of children) {
-          db.prepare("UPDATE tasks SET parent_id = ? WHERE id = ?").run(taskId, id);
+          // A task that moved to another project since the backup stays loose: an epic's tasks share its project.
+          if (repos.tasks.get(id)?.projectId === projectId) {
+            db.prepare("UPDATE tasks SET parent_id = ? WHERE id = ?").run(taskId, id);
+          }
           fx.task(id);
         }
         fx.log(taskId, actor, "restored", { backupNumber: number });

@@ -194,6 +194,7 @@ describe("epics", () => {
       payload: { deleted: true },
     });
 
+    s.tasks.move(a.id, { status: "done" }, "user");
     s.tasks.update(epic.id, { archived: true }, "user");
     s.tasks.delete(epic.id, "user");
     expect(s.tasks.summary(a.id).parent).toBeNull();
@@ -219,6 +220,38 @@ describe("epics", () => {
       updatedAt: null,
     });
     expect(s.tasks.summary(epic.id).status).toBe("review");
+  });
+
+  it("refuses to archive an epic with open tasks, but not one whose tasks are all done", () => {
+    const { s, epic, child } = setup();
+    const a = child("A");
+    expectCode(
+      () => s.tasks.update(epic.id, { archived: true }, "user"),
+      "VALIDATION",
+      /still has open tasks \(#\d+\)/,
+    );
+    s.tasks.move(a.id, { status: "done" }, "user");
+    expect(s.tasks.update(epic.id, { archived: true }, "user").archivedAt).not.toBeNull();
+  });
+
+  it("republishes its tasks when an epic is renamed, so their cards show the new title", () => {
+    const { s, events, epic, child } = setup();
+    const a = child("A");
+    events.length = 0;
+    s.tasks.update(epic.id, { title: "Storefront Revamp v2" }, "user");
+    const upserted = events.flatMap((e) => (e.type === "task.upserted" ? [e.task] : []));
+    expect(upserted.find((t) => t.id === a.id)?.parent?.title).toBe("Storefront Revamp v2");
+  });
+
+  it("creates an epic with its tasks all or nothing", () => {
+    const { s, project, other } = setup();
+    const a = s.tasks.create({ projectId: project.id, title: "A", plan: plan("a") });
+    const b = s.tasks.create({ projectId: other.id, title: "B", plan: plan("a") });
+    expectCode(() => s.tasks.createEpic({ projectId: project.id, title: "Half" }, [a.id, b.id], "user"), "VALIDATION");
+    expect(s.tasks.summaries().some((t) => t.title === "Half")).toBe(false);
+    expect(s.tasks.summary(a.id).parent).toBeNull();
+    const made = s.tasks.createEpic({ projectId: project.id, title: "Whole" }, [a.id], "user");
+    expect(made.children.map((c) => c.id)).toEqual([a.id]);
   });
 
   it("publishes the epic's card when a child changes", () => {

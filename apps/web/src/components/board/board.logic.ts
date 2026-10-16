@@ -206,7 +206,8 @@ export function buildLanes(
   }
 
   const bandsByProject = new Map<string, EpicBand[]>();
-  for (const epic of [...epics.values()].sort(byPosition)) {
+  // By number: an epic's position belongs to its derived column and resets whenever that changes.
+  for (const epic of [...epics.values()].sort((a, b) => a.number - b.number)) {
     const cells = bandCells.get(epic.id);
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
     if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic))) continue;

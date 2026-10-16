@@ -377,11 +377,30 @@ describe("restoreTask", () => {
     expect(s.tasks.summary(child.id).parent?.id).toBe(epic.id);
 
     // With the epic gone, the task comes back loose.
-    s.tasks.update(epic.id, { archived: true }, "user");
-    s.tasks.delete(epic.id, "user");
     s.tasks.update(child.id, { archived: true }, "user");
     s.tasks.delete(child.id, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    s.tasks.delete(epic.id, "user");
     s.backup.restoreTask(dump, child.number, { actor: "user" });
     expect(s.tasks.summary(child.id).parent).toBeNull();
+  });
+
+  it("leaves out of a restored epic any task that moved to another project since", () => {
+    const { s, project } = seed();
+    const other = s.projects.create({ title: "Other", workspaceRoot: "/work/other" });
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const stays = s.tasks.create({ projectId: project.id, title: "Stays", plan, epicId: epic.id });
+    const moves = s.tasks.create({ projectId: project.id, title: "Moves", plan, epicId: epic.id });
+    const dump = s.backup.dump();
+
+    // The epic moves (taking its tasks along), then one task comes back to the first project in it.
+    s.tasks.update(epic.id, { projectId: other.id }, "user");
+    s.tasks.update(stays.id, { projectId: project.id, epicId: null }, "user");
+    s.tasks.update(stays.id, { projectId: other.id, epicId: epic.id }, "user");
+    s.backup.restoreTask(dump, epic.number, { actor: "user", force: true });
+    // The restored epic is back in the first project; its tasks that are now elsewhere stay loose.
+    expect(s.tasks.summary(epic.id).projectId).toBe(project.id);
+    expect(s.tasks.summary(moves.id).parent).toBeNull();
+    expect(s.tasks.summary(stays.id).parent).toBeNull();
   });
 });

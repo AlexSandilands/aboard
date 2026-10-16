@@ -22,7 +22,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -110,6 +110,11 @@ const autoScroll = { threshold: { x: 0.12, y: 0.15 }, acceleration: 6 };
 export function Board() {
   const boardQuery = useBoard();
   const projectFilter = useProjectFilter();
+  const boardTasks = boardQuery.data?.tasks;
+  useEffect(() => {
+    if (!boardTasks) return;
+    useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
+  }, [boardTasks]);
   const scopedProject = boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null;
 
   return (
@@ -218,7 +223,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     lanes = reuseUnchangedLanes(stableLanes.lanes, builtLanes);
     setStableLanes({ built: builtLanes, lanes });
   }
-  const laneProjectIds = useMemo(() => lanes.map((lane) => lane.project.id), [lanes]);
+  // Every row's cells can be collapsed on their own: a lane's loose cells and each epic band.
+  const rowIds = useMemo(() => lanes.flatMap((lane) => laneRows(lane).map((row) => row.id)), [lanes]);
   const rows = useMemo(() => rowIndex(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
   const selectedProjectId = selectedTaskId
@@ -435,7 +441,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => {
-                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, laneProjectIds);
+                const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, rowIds);
                 const collapsed = !mixed && !!collapsedColumns[value];
                 const action = `${collapsed ? "Expand" : "Collapse"} ${label} for every project`;
                 return (

@@ -110,6 +110,8 @@ export interface TasksService {
    * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
    */
   create(input: CreateTaskInput): TaskDetail;
+  /** Creates an epic and puts the given tasks in it, all or nothing. */
+  createEpic(input: Omit<CreateTaskInput, "kind" | "epicId" | "plan">, taskIds: string[], actor: string): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
    * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.

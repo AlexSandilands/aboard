@@ -43,6 +43,15 @@ describe("epics over MCP", () => {
     h.db.close();
   });
 
+  it("won't take a task out of another epic when creating one", async () => {
+    await call(agent, "create_epic", { title: "First", workspacePath });
+    await call(agent, "add_to_backlog", { title: "Taken", workspacePath, epic: "#1" });
+    const refused = await call(agent, "create_epic", { title: "Second", workspacePath, tasks: ["#2"] });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("#2 is already in epic #1");
+    expect((await call(agent, "list_tasks", { workspacePath })).text).not.toContain("Second");
+  });
+
   it("lists the epic tools", async () => {
     const names = (await agent.listTools()).tools.map((t) => t.name);
     expect(names).toEqual(expect.arrayContaining(["create_epic", "epic_overview"]));
