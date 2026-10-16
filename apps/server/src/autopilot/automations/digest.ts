@@ -31,7 +31,8 @@ export const digest = defineAutomation({
   fields: DIGEST_FIELDS,
   defaults: DIGEST_DEFAULTS,
   check: ({ services, engine, now, board }) => {
-    if (!board) return [];
+    // One at a time: a digest being written (here or by hand) would overlap a second one's period.
+    if (!board || services.autopilot.status().active.some((r) => r.automation === AUTOPILOT_DIGEST)) return [];
     const since = [services.digests.latest()?.createdAt, services.autopilot.settingChangedAt(AUTOPILOT_DIGEST)]
       .filter((t) => t !== undefined && t !== null)
       .sort()

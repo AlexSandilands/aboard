@@ -48,4 +48,4 @@ out of budget or answers nothing, you get the plain digest instead, with a line 
 starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, in dry-run, or once
 today's spend cap is used up.
 
-How it works: [docs/features/autopilot.md](../features/autopilot.md#digest-of-what-changed).
+How it works: [docs/features/autopilot.md](../features/autopilot.md#automations).

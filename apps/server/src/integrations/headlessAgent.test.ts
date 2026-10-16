@@ -42,19 +42,20 @@ describe("headless agent", () => {
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
   });
 
-  it("can leave the board's tools out, and then starts no MCP servers at all", () => {
-    for (const access of ["edit", "read-only"] as const) {
-      const args = agentArgs({
-        access,
-        budgetUsd: 1,
-        sessionId: SESSION,
-        model: null,
-        defaultBranch: null,
-        boardTools: false,
-      });
-      expect(args).toContain("--strict-mcp-config");
-      expect(args).not.toContain(`mcp__${BRAND.id}`);
-    }
+  it("can have no tools at all: none built in, no MCP servers, nothing allowed", () => {
+    const args = agentArgs({
+      access: "none",
+      budgetUsd: 1,
+      sessionId: SESSION,
+      model: null,
+      defaultBranch: null,
+      tools: ["Bash(gh pr review *)"],
+    });
+    expect(after(args, "--tools")).toBe("");
+    expect(args).toContain("--strict-mcp-config");
+    expect(after(args, "--permission-mode")).toBe("dontAsk");
+    expect(args).not.toContain("--allowedTools");
+    for (const tool of ["Read", "Bash(gh pr review *)", `mcp__${BRAND.id}`]) expect(args).not.toContain(tool);
   });
 
   it("denies force-pushes, pushes to the default branch and merging, in every written form", () => {

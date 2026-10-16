@@ -1,6 +1,6 @@
 import { STATUS_LABELS, type NotificationKind, type TaskStatus } from "@repo/contracts";
 
-// The plain digest (docs/features/autopilot.md#digest-of-what-changed): what changed on the board over a period, as
+// The plain digest (docs/features/autopilot.md#automations): what changed on the board over a period, as
 // Markdown, built by code with no LLM. Pure: `services/digests.ts` gathers the data, this renders it.
 
 interface TaskRef {

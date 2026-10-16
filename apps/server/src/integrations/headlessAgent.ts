@@ -6,8 +6,11 @@ import { READ_ONLY_TOOLS } from "./headlessReview.ts";
 // Unlike the board's reviewer it keeps its session, so the user can resume it with `claude --resume <id>`, and it
 // reaches the board over the user's own MCP config.
 
-/** How much a headless agent may do: work on the code, or only read it (and call the extra tools it is given). */
-export type AgentAccess = "edit" | "read-only";
+/**
+ * How much a headless agent may do: work on the code, only read it (and call the extra tools it is given), or have
+ * no tools at all and answer from its prompt (no built-in tools, no MCP servers).
+ */
+export type AgentAccess = "edit" | "read-only" | "none";
 
 /** What an agent with edit access may use without asking. `--permission-mode acceptEdits` covers file edits. */
 export const EDIT_TOOLS = [
@@ -72,15 +75,12 @@ export interface AgentArgsInput {
   tools?: readonly string[];
   /** A JSON schema the agent's final answer must match (`--json-schema`). */
   outputSchema?: object | null;
-  /** Whether the agent may use this board's MCP tools, over the user's MCP config. Defaults to yes. */
-  boardTools?: boolean;
 }
 
 /** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
 export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
-  const boardTools = input.boardTools ?? true;
-  const board = `mcp__${BRAND.id}`;
+  const none = input.access === "none";
   return [
     "-p",
     "--output-format",
@@ -88,14 +88,16 @@ export function agentArgs(input: AgentArgsInput): string[] {
     ...(input.outputSchema ? ["--json-schema", JSON.stringify(input.outputSchema)] : []),
     // dontAsk denies everything not allowed; acceptEdits also takes file edits without asking.
     "--permission-mode",
-    readOnly ? "dontAsk" : "acceptEdits",
-    // Without the board's tools no MCP server is started at all: the agent works from its prompt alone.
-    ...(boardTools ? [] : ["--strict-mcp-config"]),
-    "--allowedTools",
-    ...(readOnly
-      ? [...READ_ONLY_TOOLS, ...(boardTools ? [board] : [])]
-      : EDIT_TOOLS.filter((t) => boardTools || t !== board)),
-    ...(input.tools ?? []),
+    readOnly || none ? "dontAsk" : "acceptEdits",
+    // No tools: an empty built-in list, and no MCP servers started, so the agent works from its prompt alone.
+    ...(none ? ["--tools", "", "--strict-mcp-config"] : []),
+    ...(none
+      ? []
+      : [
+          "--allowedTools",
+          ...(readOnly ? [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`] : EDIT_TOOLS),
+          ...(input.tools ?? []),
+        ]),
     "--disallowedTools",
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
     ...pushDenyRules(input.defaultBranch),

@@ -1,7 +1,7 @@
 import { DigestMode, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
 import { z } from "zod";
 
-// The digest automation's config (docs/features/autopilot.md#digest-of-what-changed), apart from the automation so
+// The digest automation's config (docs/features/autopilot.md#automations), apart from the automation so
 // the generator can read it without a cycle.
 
 /** The name the picker gives the board's own digest skill. */

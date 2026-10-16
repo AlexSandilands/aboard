@@ -100,6 +100,27 @@ describe("digests.collect", () => {
     expect(data.costUsd).toBeCloseTo(0.75);
   });
 
+  it("counts a run in the period it finished in, and leaves an unfinished one for later", () => {
+    const { s, alpha, task, clock } = setup();
+    const a = task(alpha.id, "Slow job");
+    clock(at(9));
+    const slow = s.autopilot.record({
+      automation: "auto_archive",
+      candidate: { dedupeKey: "slow", summary: "work", projectId: alpha.id, taskId: a.id },
+      dryRun: false,
+    })!;
+    s.autopilot.start(slow.id);
+    // Still going at the end of the first period.
+    expect(s.digests.collect(at(8), at(10)).projects[0]!.runs.total).toBe(0);
+    clock(at(11));
+    s.autopilot.finish(slow.id, { status: "failed", error: "gave up" });
+    expect(s.digests.collect(at(10), at(12)).projects[0]!.runs).toMatchObject({
+      total: 1,
+      failed: 1,
+      problems: [{ message: "gave up" }],
+    });
+  });
+
   it("takes the start of the period in and the end out", () => {
     const { s, alpha, task, clock } = setup();
     const a = task(alpha.id, "Add exports");

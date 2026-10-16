@@ -264,8 +264,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
         const { h, task, run, jobs, start, patches } = setup({ t3: T3_UP });
         const out = await start({
           run: { ...run, taskId: null },
-          access: "read-only",
-          boardTools: false,
+          access: "none",
           tier: "light",
           options: { budgetUsd: 1 },
         });

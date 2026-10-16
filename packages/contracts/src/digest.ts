@@ -2,7 +2,7 @@ import { z } from "zod";
 import { latestDue, localStamp } from "./recurring.ts";
 
 // Digest of what changed: an Autopilot automation that writes a board-wide summary of the period since the last one
-// (docs/features/autopilot.md#digest-of-what-changed).
+// (docs/features/autopilot.md#automations).
 
 /** The automation's key. Stored in settings and runs, so never renamed. */
 export const AUTOPILOT_DIGEST = "digest";

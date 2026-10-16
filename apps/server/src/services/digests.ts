@@ -37,7 +37,7 @@ export interface CreateDigestInput {
   headline: string;
 }
 
-/** The digests Autopilot has made (docs/features/autopilot.md#digest-of-what-changed). */
+/** The digests Autopilot has made (docs/features/autopilot.md#automations). */
 export interface DigestsService {
   /** Newest first, and how many are unread. */
   list(limit?: number): DigestList;
@@ -151,10 +151,10 @@ export function createDigestsService(
         project.attention.push({ number: task.number, title: task.title, kind: n.kind } satisfies DigestAttention);
       }
 
-      // The digest's own runs would only describe themselves.
+      // Runs count in the period they finished in, so a long one that fails later is reported then. The digest's
+      // own runs would only describe themselves.
       let costUsd = 0;
       for (const run of repos.autopilotRuns.between(start, end, [AUTOPILOT_DIGEST])) {
-        if (!run.finishedAt) continue;
         costUsd += run.costUsd ?? 0;
         const project = run.projectId ? projects.get(run.projectId) : null;
         if (!project) continue;

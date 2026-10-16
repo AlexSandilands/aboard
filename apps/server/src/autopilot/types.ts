@@ -109,14 +109,12 @@ export interface RunnerRequest {
    * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
    */
   workspace?: { baseRef?: string | null; branch?: string | null };
-  /** Headless only: `read-only` can't edit files (a reviewer). Defaults to edit. */
+  /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
   tools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
-  /** Headless only: whether the agent may use this board's MCP tools. Defaults to yes. */
-  boardTools?: boolean;
 }
 
 /** What a runner did. A T3 run returns once the thread is started; a headless run once the agent finished. */

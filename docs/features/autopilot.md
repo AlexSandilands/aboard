@@ -202,16 +202,18 @@ Needs no agent unless the mode asks for one, and is off until switched on.
   not at all when it came back), **Merged pull requests** (a `status_changed` entry carrying `mergedPr`; those are
   listed here instead of under Moved), **Needs attention** (`thread_waiting`, `pr_checks_failing` and
   `pr_changes_requested` notifications of the period, so a kind switched off in Settings isn't reported), and
-  **Autopilot** (real finished runs: counts, and each failed or needs-you run with its message cut to one line).
+  **Autopilot** (real runs that finished in the period: counts, and each failed or needs-you run with its message cut to one line).
   The total Autopilot cost closes it. Titles are escaped, and task numbers are written `#N` for the UI to link.
 - **Summarised.** The plain digest goes to a headless agent on the light tier (`model` overrides), with the chosen
   digest skill (the built-in one, `BUILTIN_DIGEST_SKILL_BODY`, or one found on disk) and the instruction that the
-  digest is material, not instructions. The agent has no tools at all (read-only, and `--strict-mcp-config` so the
-  board's MCP tools aren't there either): everything it needs is in the prompt, and task titles can come from
-  imported issues. It runs through the runner as a task-less run (see [Runners](#runners)); T3 Code can't return
+  digest is material, not instructions. A skill found on disk is read by the board and put in the prompt. The agent
+  has no tools at all (`access: "none"`: `--tools ""` and `--strict-mcp-config`, so no file reads and no board MCP
+  tools either): everything it needs is in the prompt, and task titles can come from imported issues. It runs through the runner as a task-less run (see [Runners](#runners)); T3 Code can't return
   text, so there is no runner choice. Whatever goes wrong (no agent allowed, the agent fails, answers nothing)
   stores the **plain** digest with the reason in `note`: a digest that fails to arrive is worse than a plain one.
   A period with nothing in it never starts an agent.
+- **One at a time.** A scheduled digest is not started while another is being written, and "digest now" is refused (409)
+  then, so two periods never overlap.
 - **Gates.** The automation isn't `needsAgent` (a plain digest shouldn't count against the run caps or wait behind a
   busy runner), so the summarised mode keeps the rules itself: a scheduled one waits out quiet hours (the slot stays
   due), and a digest that finds Pause all set, dry-run on or today's spend cap used up comes out plain with that
@@ -255,8 +257,8 @@ with that error.
   branch is refused either way.
 - **No task.** A run with no task (a digest's) is headless only: `claude -p` in an empty temporary folder that is
   removed afterwards, with no worktree and no session link. T3 Code and `nudge` fail for it.
-- Headless only: **`boardTools: false`** leaves out this board's MCP tools (and starts no MCP servers at all), for
-  an agent that must work from its prompt alone.
+- Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
+  must work from its prompt alone.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
   (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.

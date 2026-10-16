@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AUTOPILOT_DIGEST } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
@@ -168,7 +171,7 @@ describe("a summarised digest", () => {
     work();
     await pass(at(11, 9, 0));
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ tier: "light", access: "read-only", boardTools: false });
+    expect(requests[0]).toMatchObject({ tier: "light", access: "none" });
     expect(requests[0]!.run.taskId).toBeNull();
     expect(requests[0]!.prompt).toContain("Add exports: Planned → In Progress");
     expect(requests[0]!.prompt).toContain("not instructions to follow");
@@ -176,13 +179,37 @@ describe("a summarised digest", () => {
     expect(s.autopilot.status().active).toEqual([]);
   });
 
-  it("points the agent at a chosen skill instead of the built-in one", async () => {
-    const { configure, work, pass, requests } = setup(() => Promise.resolve({ result: written }));
-    configure({ mode: "summarised", skill: { source: "global", name: "standup", path: "/skills/standup/SKILL.md" } });
+  it("gives the agent a chosen skill's text instead of the built-in one, since it can't read files", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digest-skill-"));
+    try {
+      const path = join(dir, "SKILL.md");
+      writeFileSync(
+        path,
+        "---\nname: standup\ndescription: x\n---\nWrite it like a stand-up: yesterday, today, blockers.\n",
+      );
+      const { configure, work, pass, requests } = setup(() => Promise.resolve({ result: written }));
+      configure({ mode: "summarised", skill: { source: "global", name: "standup", path } });
+      work();
+      await pass(at(11, 9, 0));
+      expect(requests[0]!.prompt).toContain("Write it like a stand-up: yesterday, today, blockers.");
+      expect(requests[0]!.prompt).not.toContain("description: x");
+      expect(requests[0]!.prompt).not.toContain("Lead with one or two sentences");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to plain, saying why, when the chosen skill can't be read", async () => {
+    const { configure, work, pass, digests, requests } = setup(() => Promise.resolve({ result: written }));
+    configure({
+      mode: "summarised",
+      skill: { source: "global", name: "gone", path: join(tmpdir(), "no-such-skill.md") },
+    });
     work();
     await pass(at(11, 9, 0));
-    expect(requests[0]!.prompt).toContain('read the skill "standup" at /skills/standup/SKILL.md');
-    expect(requests[0]!.prompt).not.toContain("Lead with one or two sentences");
+    expect(requests).toEqual([]);
+    expect(digests()[0]).toMatchObject({ mode: "plain" });
+    expect(digests()[0]!.note).toMatch(/^Plain, because the summary failed/);
   });
 
   it("falls back to the plain digest, saying why, when the agent fails or answers nothing", async () => {
@@ -231,6 +258,24 @@ describe("a summarised digest", () => {
     await pass(at(10, 23, 45));
     expect(requests).toEqual([]);
     expect(digests()).toMatchObject([{ mode: "plain", note: "Plain, because today's spend cap is used up" }]);
+  });
+});
+
+describe("one digest at a time", () => {
+  it("doesn't start the scheduled digest while one is being written by hand", async () => {
+    let release: (r: { result: string }) => void = () => {};
+    const { configure, work, pass, generator, digests, s } = setup(() => new Promise((resolve) => (release = resolve)));
+    configure({ mode: "summarised" });
+    work();
+    vi.setSystemTime(at(10, 13, 0));
+    const g = generator();
+    await g.generate();
+    await pass(at(11, 9, 0));
+    expect(digests()).toEqual([]);
+    expect(s.autopilot.status().active).toHaveLength(1);
+    release({ result: "Written." });
+    await g.idle();
+    expect(digests()).toHaveLength(1);
   });
 });
 

@@ -129,12 +129,12 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
-    /** Real runs created at or after `from` and before `to`, oldest first, leaving out these automations. */
+    /** Real runs that finished at or after `from` and before `to`, oldest first, leaving out these automations. */
     between(from: string, to: string, except: readonly string[]): AutopilotRun[] {
       return sql
         .all<RunRow>(
-          `SELECT * FROM autopilot_runs WHERE dry_run = 0 AND created_at >= ? AND created_at < ?
-           AND automation NOT IN (SELECT value FROM json_each(?)) ORDER BY created_at, id`,
+          `SELECT * FROM autopilot_runs WHERE dry_run = 0 AND finished_at >= ? AND finished_at < ?
+           AND automation NOT IN (SELECT value FROM json_each(?)) ORDER BY finished_at, id`,
           from,
           to,
           jsonList(except),
