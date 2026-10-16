@@ -1,11 +1,11 @@
-import { DigestMode, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
+import { BRAND, DigestMode, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
 import { z } from "zod";
 
 // The digest automation's config (docs/features/autopilot.md#automations), apart from the automation so
 // the generator can read it without a cycle.
 
 /** The name the picker gives the board's own digest skill. */
-export const BUILTIN_DIGEST_SKILL_NAME = "aboard-digest";
+export const BUILTIN_DIGEST_SKILL_NAME = `${BRAND.id}-digest`;
 
 export const DigestConfig = z.object({
   mode: DigestMode,

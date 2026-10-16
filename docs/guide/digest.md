@@ -43,7 +43,8 @@ every project that isn't Off, even while the automation itself is off.
 ## The agent-written digest
 
 The agent gets the plain digest and rewrites it as a short update. It runs headless, on its own with no access
-to the board, your files or any tools, so nothing a task title says can make it do anything. If it fails, runs
+to the board, your files or any tools, so a task title can't make it read or do anything. The digest shows no images, since the agent's text could
+carry a link that sends it out when the page loads. If it fails, runs
 out of budget or answers nothing, you get the plain digest instead, with a line saying why. A quiet period never
 starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, in dry-run, or once
 today's spend cap is used up.

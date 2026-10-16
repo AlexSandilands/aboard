@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import {
   AUTOPILOT_DIGEST,
   type AutopilotRun,
@@ -26,10 +27,18 @@ export const BUILTIN_DIGEST_SKILL_BODY = `Write the digest for the person who ow
 - Keep it under about 200 words.`;
 
 /** Longest skill the agent is given, so a stray file can't fill its prompt. */
-const SKILL_MAX_CHARS = 20_000;
+export const SKILL_MAX_CHARS = 20_000;
+/** Largest file read at all; a skill is a short text file. */
+const SKILL_MAX_BYTES = 200_000;
 
-/** A skill's instructions, without its front matter. The agent has no tools, so it can't read the file itself. */
+/**
+ * A skill's instructions, without its front matter. The agent has no tools, so it can't read the file itself. Only a
+ * `SKILL.md` is read (the setting names a path, and the file's text goes to a model and into a stored digest).
+ */
 export function readSkillBody(path: string): string {
+  if (basename(path).toLowerCase() !== "skill.md") throw new Error(`${path} isn't a SKILL.md`);
+  const stat = statSync(path);
+  if (!stat.isFile() || stat.size > SKILL_MAX_BYTES) throw new Error(`${path} isn't a readable skill file`);
   const text = readFileSync(path, "utf8");
   const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
   if (!body) throw new Error(`The skill at ${path} is empty`);

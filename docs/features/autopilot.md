@@ -222,7 +222,7 @@ Needs no agent unless the mode asks for one, and is off until switched on.
   The total Autopilot cost closes it. Titles are escaped, and task numbers are written `#N` for the UI to link.
 - **Summarised.** The plain digest goes to a headless agent on the light tier (`model` overrides), with the chosen
   digest skill (the built-in one, `BUILTIN_DIGEST_SKILL_BODY`, or one found on disk) and the instruction that the
-  digest is material, not instructions. A skill found on disk is read by the board and put in the prompt. The agent
+  digest is material, not instructions. A skill found on disk is read by the board (only a `SKILL.md`, at most 200 KB, cut to 20,000 characters) and put in the prompt. The agent
   has no tools at all (`access: "none"`: `--tools ""` and `--strict-mcp-config`, so no file reads and no board MCP
   tools either): everything it needs is in the prompt, and task titles can come from imported issues. It runs through the runner as a task-less run (see [Runners](#runners)); T3 Code can't return
   text, so there is no runner choice. Whatever goes wrong (no agent allowed, the agent fails, answers nothing)

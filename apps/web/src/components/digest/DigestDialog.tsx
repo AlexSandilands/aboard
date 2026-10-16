@@ -102,7 +102,9 @@ function DigestContent({ onClose }: { onClose: () => void }) {
               <span>{digestFacts(shown).join(" · ")}</span>
             </div>
             {shown.note ? <p className="text-xs text-muted-foreground">{shown.note}</p> : null}
-            <Markdown taskLinks={taskLinks}>{shown.bodyMd}</Markdown>
+            <Markdown taskLinks={taskLinks} images={false}>
+              {shown.bodyMd}
+            </Markdown>
           </>
         ) : digests.isError ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Couldn't load the digests.</p>

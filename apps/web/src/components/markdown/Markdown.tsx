@@ -55,6 +55,7 @@ export const Markdown = memo(function Markdown({
   size = "sm",
   className,
   taskLinks,
+  images = true,
 }: {
   children: string;
   /** "sm" for panel body text, "xs" for notes and quotes. */
@@ -62,6 +63,8 @@ export const Markdown = memo(function Markdown({
   /** Layout only. */
   className?: string;
   taskLinks?: TaskLinks;
+  /** False drops images: text an agent wrote from imported content must not make the browser fetch a URL. */
+  images?: boolean;
 }) {
   const plugins = useMemo<Plugins>(
     () => (taskLinks ? [remarkGfm, [remarkTaskRefs, taskLinks.isKnown]] : remarkPlugins),
@@ -76,7 +79,11 @@ export const Markdown = memo(function Markdown({
       )}
     >
       <TaskLinksContext value={taskLinks ?? null}>
-        <ReactMarkdown remarkPlugins={plugins} components={components}>
+        <ReactMarkdown
+          remarkPlugins={plugins}
+          components={components}
+          {...(images ? {} : { disallowedElements: ["img"], unwrapDisallowed: true })}
+        >
           {children}
         </ReactMarkdown>
       </TaskLinksContext>
