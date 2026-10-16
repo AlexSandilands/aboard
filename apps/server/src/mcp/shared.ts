@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -173,6 +174,12 @@ export function childActivity(services: Services, epic: TaskDetail): ChildActivi
     if (newest) activity.set(child.id, newest);
   }
   return activity;
+}
+
+/** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
+export function boardUrl(ctx: AppContext): string {
+  const { webDist, port, webPort } = ctx.config;
+  return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
 }
 
 export function safeProject(services: Services, id: string): Project | undefined {

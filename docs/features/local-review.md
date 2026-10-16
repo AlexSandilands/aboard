@@ -32,6 +32,17 @@ finding, every resolution note, every verdict. A new reviewer reads that history
 checks the earlier fixes without inheriting the previous reviewer's blind spots. That also leaves an audit
 trail on the task.
 
+`start_review` on a task whose round is still waiting for its reviewer returns that round's brief rather than
+opening another, so an agent that didn't open the round can still run it.
+
+#### When an epic's orchestrator runs the loop
+
+A task worked by a subagent of an [epic's orchestrator](epics.md#subagent-tasks) can't run the loop: most
+harnesses don't let a subagent start subagents, so it would end up reviewing its own work. Its prompt tells it
+to stop when `move_task` opens a round and report the round back. The orchestrator then runs steps 2-6 for
+it: `start_review(task)` for the open round's brief, a fresh reviewer subagent, and an implementer subagent in
+the task's worktree for the fixes and the PR. The board sees the same rounds, findings and resolutions either way.
+
 A round is **clean** when it raises no blocking or major findings and none are open from earlier rounds.
 Minor findings and nits may stay open.
 

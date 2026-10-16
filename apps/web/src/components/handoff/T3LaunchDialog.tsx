@@ -89,8 +89,16 @@ function LaunchUnavailable({ task, message, onRetry }: { task: TaskSummary; mess
 }
 
 function Composer({ task, options, onDone }: { task: TaskSummary; options: T3LaunchOptions; onDone: () => void }) {
+  // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me".
+  const epic = task.kind === "epic";
   const promptFor = (plan: boolean) =>
-    taskHandoffPrompt({ task, boardUrl: window.location.origin, mode: plan ? "plan" : "work", linkedThread: true });
+    taskHandoffPrompt({
+      task,
+      boardUrl: window.location.origin,
+      mode: epic ? "orchestrate" : plan ? "plan" : "work",
+      linkedThread: true,
+    });
+  // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
   const [planWithMe, setPlanWithMe] = useState(() => defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
   const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
@@ -172,14 +180,16 @@ function Composer({ task, options, onDone }: { task: TaskSummary; options: T3Lau
           <ModelPicker options={options} selection={selection} onChange={changeSelection} />
           {selection ? <TraitsPicker options={options} selection={selection} onChange={setSelection} /> : null}
           <AccessPicker provider={provider} value={runtimeMode} onChange={setRuntimeMode} />
-          <ComposerControl
-            aria-pressed={planWithMe}
-            onClick={togglePlan}
-            title="The agent shapes the plan with you before any code is written"
-          >
-            <LightbulbIcon />
-            <span>Plan with me</span>
-          </ComposerControl>
+          {epic ? null : (
+            <ComposerControl
+              aria-pressed={planWithMe}
+              onClick={togglePlan}
+              title="The agent shapes the plan with you before any code is written"
+            >
+              <LightbulbIcon />
+              <span>Plan with me</span>
+            </ComposerControl>
+          )}
           <button
             type="submit"
             aria-label="Start thread"

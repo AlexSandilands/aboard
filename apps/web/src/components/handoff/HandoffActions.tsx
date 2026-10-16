@@ -38,7 +38,10 @@ export function copyHandoffPrompt(
     mode,
     ...(modelTiers ? { modelTiers } : {}),
   });
-  copyToClipboard(prompt, mode === "plan" ? "planning prompt" : "prompt");
+  copyToClipboard(
+    prompt,
+    mode === "plan" ? "planning prompt" : mode === "orchestrate" ? "orchestrating prompt" : "prompt",
+  );
 }
 
 /** Copies a short pointer to the task (see taskReferenceLine), for a new session on any task status. */
@@ -91,16 +94,30 @@ export function HandoffMenu({
             <MenuSeparator />
           </>
         ) : null}
-        <MenuItem onClick={() => copyHandoffPrompt(task, "work", modelTiers)}>
-          <ClipboardCopyIcon />
-          Copy prompt
-          {suggested === "work" ? <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span> : null}
-        </MenuItem>
-        <MenuItem onClick={() => copyHandoffPrompt(task, "plan", modelTiers)}>
-          <LightbulbIcon />
-          Copy planning prompt
-          {suggested === "plan" ? <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span> : null}
-        </MenuItem>
+        {suggested === "orchestrate" ? (
+          // An epic has one prompt: the one that starts its tasks.
+          <MenuItem onClick={() => copyHandoffPrompt(task, "orchestrate", modelTiers)}>
+            <ClipboardCopyIcon />
+            Copy prompt to start its tasks
+          </MenuItem>
+        ) : (
+          <>
+            <MenuItem onClick={() => copyHandoffPrompt(task, "work", modelTiers)}>
+              <ClipboardCopyIcon />
+              Copy prompt
+              {suggested === "work" ? (
+                <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span>
+              ) : null}
+            </MenuItem>
+            <MenuItem onClick={() => copyHandoffPrompt(task, "plan", modelTiers)}>
+              <LightbulbIcon />
+              Copy planning prompt
+              {suggested === "plan" ? (
+                <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span>
+              ) : null}
+            </MenuItem>
+          </>
+        )}
       </MenuPopup>
     </Menu>
   );

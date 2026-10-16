@@ -60,7 +60,9 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
       description:
         "Open the next local review round on a task and get the reviewer brief to hand to a fresh reviewer " +
         "subagent. Moving a task to Review opens round 1 by itself when auto-review is on; call this for each " +
-        "further round after fixing findings, or to review a task on request. Refused once the round limit is reached.",
+        "further round after fixing findings, or to review a task on request. When a round is already waiting for " +
+        "its reviewer (say a subagent stopped at it and reported back), it returns that round's brief instead of " +
+        "opening another. Refused once the round limit is reached.",
       inputSchema: { task: taskField, actor: actorField },
     },
     (args) =>

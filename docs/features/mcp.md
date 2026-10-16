@@ -22,7 +22,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task`, `epic_overview` (all read-only)            |
+| `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
@@ -38,7 +38,9 @@ implementing the task. `set_plan` keeps the current one when it's omitted; `upda
 
 `add_to_backlog`, `create_task` and `update_task` take `epic: "#N"` (`update_task` takes `null` to take the
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
-epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. See [epics.md](epics.md).
+epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
+the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
+epic's orchestrator can start its tasks. See [epics.md](epics.md).
 
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).

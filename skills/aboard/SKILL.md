@@ -100,6 +100,14 @@ band across the columns its tasks are in, with a roll-up of how many are done.
 - `epic_overview` (or `get_task` on the epic) lists each task with its status, progress, current step,
   anything needing attention, its live T3 thread, latest note and newest activity. `list_tasks(epic: "#N")`
   lists just its tasks.
+- **Orchestrating** an epic means starting its tasks in other sessions and seeing them through. The user
+  usually hands you the epic's orchestrating prompt; follow it. `get_handoff_prompt(task)` gives the prompt
+  for a session the user starts, and `get_handoff_prompt(task, subagent: true)` the one for a subagent you
+  start. Draft plans for Backlog tasks, get the user's approval, then `set_plan` and move them to `planned` before starting them.
+- **If you are a subagent** working one of an epic's tasks: you can't ask the user anything, so mark the step
+  blocked and report back when you need an answer. When `move_task` to `review` opens a review round, don't
+  run the loop or open the PR; stop and report the round. The orchestrator runs the review: `start_review`
+  gives it the open round's brief.
 
 ## Local review
 

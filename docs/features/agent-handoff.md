@@ -56,6 +56,19 @@ mode is a legacy beta behind a client setting the board can't read, and a thread
 with no visible way to switch back. The option is on by default for tasks in
 Backlog or without a plan, and off otherwise. The copy button offers "Copy prompt" and "Copy planning prompt".
 
+#### Orchestrate (epics) and subagents
+
+An epic has no plan of its own, so it gets a third prompt, mode `orchestrate`: start the epic's tasks in other
+sessions (subagents, or prompts for the user to paste), plan the unplanned ones with the user first, monitor
+them and run the review loop for subagents. It is the only prompt an epic offers. A work prompt can also be
+built for a **subagent** of that orchestrator, which reports back instead of asking the user or running its own
+review loop. Both are described in [epics.md](epics.md#orchestrating-an-epic).
+
+Agents get the same prompts over MCP with `get_handoff_prompt(task, mode?, subagent?)`, which defaults the mode
+like the menu does. Its board link points at this server when it serves the built web app, else at the Vite dev
+server (`boardUrl` in `apps/server/src/mcp/shared.ts`). Under `pnpm dev` with a `dist/` left from an earlier
+build, that means the server's stale copy on :4317 rather than Vite.
+
 ### Suggested model
 
 Planning often wants the strongest model; implementing a well-planned task often doesn't. So the agent that
@@ -98,11 +111,11 @@ CLI doesn't accept.
 #### When the menu appears
 
 The hand-off menu (a terminal icon) sits at the right of the card's bottom line and in the task panel
-header. It only shows on open work: not on Done or archived tasks, and not on epics, whose tasks carry the
-plans the prompt asks about ([epics](epics.md#in-the-panel)).
+header. It only shows on open work: not on Done or archived tasks.
 
-It always offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked
-_Suggested_. **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
+It offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked _Suggested_. An epic
+offers only "Copy prompt to start its tasks" (its orchestrating prompt), and its T3 dialog has no
+**Plan with me**. **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
 
 - T3 Code is running (auto-detected from `~/.t3/userdata/server-runtime.json`);
 - a token is set;
@@ -242,7 +255,7 @@ round, it posts a message into the task's linked thread (`orchestration.dispatch
 
 | File | What it does |
 |---|---|
-| `packages/contracts/src/handoff.ts` | The hand-off prompt (`taskHandoffPrompt`), its suggested model line and the default mode |
+| `packages/contracts/src/handoff.ts` | The hand-off prompts (`taskHandoffPrompt`: work, plan, orchestrate, subagent), the suggested model line and the default mode |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime mode labels |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |

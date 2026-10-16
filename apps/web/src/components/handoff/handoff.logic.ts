@@ -13,14 +13,9 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 
-/**
- * Hand-off actions belong to work that's still open. Not on epics yet: the task prompt would ask for a plan and a
- * move, which an epic refuses; epics get their own orchestrating prompt instead (board task #7, phase 4).
- */
-export function showHandoffActions(
-  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
-): boolean {
-  return task.status !== "done" && task.archivedAt === null && task.kind !== "epic";
+/** Hand-off actions belong to work that's still open. An epic's hand-off orchestrates its tasks. */
+export function showHandoffActions(task: Pick<TaskSummary, "status" | "archivedAt">): boolean {
+  return task.status !== "done" && task.archivedAt === null;
 }
 
 /**
@@ -28,7 +23,7 @@ export function showHandoffActions(
  * can have several threads (a follow-up for conflicts, a review, …), so linked ones don't hide it. Whether T3 really has the project is only known once the dialog loads its options.
  */
 export function canStartT3Thread(
-  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
+  task: Pick<TaskSummary, "status" | "archivedAt">,
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
   settings: Pick<AppSettings, "t3TokenSet"> | undefined,
