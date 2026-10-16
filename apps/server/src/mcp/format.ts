@@ -5,6 +5,7 @@ import {
   isGatingSeverity,
   type LabelUsage,
   reviewBadgeLabel,
+  reviewIsDone,
   type ReviewFinding,
   type Project,
   type TaskDetail,
@@ -177,7 +178,7 @@ function eventText(event: TaskEvent): string {
 
 /**
  * Links an open task is missing, each naming the exact call that adds it: Jira keys mentioned in the title or
- * description, and the agent's own T3 thread. Agents act on what tool results say far more reliably than on
+ * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
 export function missingLinkHints(task: TaskDetail): string[] {
@@ -192,6 +193,14 @@ export function missingLinkHints(task: TaskDetail): string[] {
     hints.push(
       `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
         "from t3_environment_read and t3_thread_configuration",
+    );
+  }
+  // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.
+  if (task.status === "review" && reviewIsDone(task.review) && !task.links.some((l) => l.kind === "pr")) {
+    hints.push(
+      "PR: the review loop has ended and no pull request is linked. Fix any open blocking/major findings you can, " +
+        "then open the pull request, listing any still open in its description, unless the user asked you not to, " +
+        `and link(task: ${ref}, value: "<PR URL>")`,
     );
   }
   return hints;

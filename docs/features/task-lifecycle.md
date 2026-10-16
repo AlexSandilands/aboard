@@ -106,7 +106,8 @@ These drive the card's ring and the sidebar's **Needs attention** list.
 ### Missing links
 
 Task results over MCP end with **Missing links** while the task is open: Jira keys in its title or
-description that aren't linked yet, and a T3 thread when it has none. Agents act on tool results more
+description that aren't linked yet, a T3 thread when it has none, and a PR when the local review loop has
+ended but none is linked. Agents act on tool results more
 reliably than on instructions they read once.
 
 ## Decisions
