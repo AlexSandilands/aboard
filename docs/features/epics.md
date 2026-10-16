@@ -138,7 +138,8 @@ ready, is only found out at launch. If it can:
   (the linked-thread variant, with the mode defaulting like the menu) and links it. There is no dialog, so
   `autoLaunchSettings` (`integrations/t3Launch.ts`) picks what the dialog would start on:
   - the model: the suggested tier's model for work, else T3's default;
-  - the access: T3's default, clamped to what the provider supports;
+  - the access: T3's default, or the most the provider allows below it, never more (no supported mode at
+    or below it refuses the launch);
   - the workspace: **always a new worktree**, so tasks can run side by side. It branches from `baseRef` (the
     default branch when there is none). With a `baseRef` it starts from the local branch unless
     `startFromOrigin` says otherwise, because a branch to build on is usually another task's unpushed one. A
@@ -147,7 +148,10 @@ ready, is only found out at launch. If it can:
     checkout.
 
   The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
-- The launch's `commandId` is derived from the task and how many threads it has. A retry after a timeout or an
+- Both tools work only on a task in an epic; other tasks are started from the board. `baseRef` must look like
+  a branch name (no leading `-`, `..`, spaces or the characters git refuses).
+- The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
+  included, so removing a link never brings an old id back). A retry after a timeout or an
   unreadable reply therefore gets the same thread back from T3 instead of a second one. The error says so and
   doesn't suggest another route.
 - It refuses a task that already has a thread on it: working, waiting, asking for input or approval, or linked
@@ -158,6 +162,9 @@ ready, is only found out at launch. If it can:
 - `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
   archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From the agent
   orchestrating this task's epic (sent through the board)". Each call is a new message, so a retry can post it twice.
+
+A Jira import run, which reads untrusted issue text, denies tools named with `message`, `dispatch`, `launch` or
+`start` among its write verbs, so an injected instruction can't drive these tools.
 
 T3 threads are top-level sessions, so they run their own review loop.
 

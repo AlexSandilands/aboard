@@ -201,6 +201,8 @@ export interface LinksService {
   get(linkId: string): TaskLink;
   /** Links of a kind on non-archived tasks — for pollers. */
   listByKind(kind: TaskLink["kind"]): TaskLink[];
+  /** How many T3 threads were ever linked to a task, unlinked ones included. Only ever grows. */
+  threadsLinked(taskId: string): number;
   /**
    * Stores a poller snapshot. Publishes task.upserted only when the snapshot changed. A PR that just became merged
    * or closed moves its task from Review to Done (actor "github") once all its PRs are finished and one merged.

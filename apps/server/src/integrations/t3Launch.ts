@@ -1,6 +1,7 @@
 import {
-  clampRuntimeMode,
   defaultBaseRef,
+  runtimeModesFor,
+  T3_RUNTIME_MODES,
   normalizeWorkspaceKey,
   T3RuntimeMode,
   type ModelTiers,
@@ -328,7 +329,18 @@ export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchC
   const modelSelection = (choice.work ? options.suggestion?.modelSelection : null) ?? options.defaults.modelSelection;
   const provider = options.providers.find((p) => p.instanceId === modelSelection?.instanceId);
   if (!modelSelection || !provider?.ready) return { ok: false, reason: "T3 Code has no model ready to start a thread" };
-  const runtimeMode = clampRuntimeMode(options.defaults.runtimeMode, provider);
+  // Unattended, so never more access than T3's default: the most permissive supported mode up to it.
+  const order = T3_RUNTIME_MODES.map((m) => m.value);
+  const ceiling = order.indexOf(options.defaults.runtimeMode);
+  const runtimeMode = runtimeModesFor(provider)
+    .map((m) => m.value)
+    .findLast((m) => order.indexOf(m) <= ceiling);
+  if (!runtimeMode) {
+    return {
+      ok: false,
+      reason: `The model's provider offers no access mode within T3's default (${options.defaults.runtimeMode})`,
+    };
+  }
   if (!options.isRepo) {
     if (choice.baseRef) {
       return {

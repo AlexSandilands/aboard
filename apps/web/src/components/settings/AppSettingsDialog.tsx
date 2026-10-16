@@ -361,7 +361,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
       </SettingsRow>
       <SettingsRow
         title="Let agents start threads"
-        description="An agent orchestrating an epic may start its tasks in new T3 threads, on T3's default model and access, and message them as you. Off: it uses subagents or gives you prompts to paste."
+        description="An agent orchestrating an epic may start its tasks in new T3 threads (each in a new worktree, on the task's suggested model or T3's default, with no more access than T3's default) and message them in your name. Off: it uses subagents or gives you prompts to paste."
         control={
           <Switch
             aria-label="Let agents start threads"

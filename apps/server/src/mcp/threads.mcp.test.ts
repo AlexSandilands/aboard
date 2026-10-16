@@ -150,6 +150,35 @@ describe("T3 threads for an epic's tasks over MCP", () => {
     expect(launches).toHaveLength(1);
   });
 
+  it("doesn't bring back an old thread's commandId after its link is removed", async () => {
+    const { launches } = fakeT3();
+    await call(agent, "start_task_thread", { task: "#2" });
+    const link = h.services.tasks.summary(taskId).links.find((l) => l.kind === "t3_thread")!;
+    h.services.links.remove(link.id, "user");
+    await call(agent, "start_task_thread", { task: "#2" });
+    expect(launches).toHaveLength(2);
+    expect(launches[1]!.input.commandId).not.toBe(launches[0]!.input.commandId);
+  });
+
+  it("is only for an epic's tasks, and takes only a branch name as baseRef", async () => {
+    const { launches } = fakeT3();
+    const loose = h.services.tasks.create({
+      projectId: h.services.tasks.summary(taskId).projectId,
+      title: "Loose",
+      plan,
+    });
+    const refused = await call(agent, "start_task_thread", { task: `#${loose.number}` });
+    expect(refused.text).toContain(`#${loose.number} isn't in an epic`);
+    expect((await call(agent, "message_task_thread", { task: `#${loose.number}`, text: "hi" })).text).toContain(
+      "isn't in an epic",
+    );
+    for (const baseRef of ["--upload-pack=x", "main..evil", "a b", "feat/x.lock"]) {
+      expect((await call(agent, "start_task_thread", { task: "#2", baseRef })).isError).toBe(true);
+    }
+    expect(launches).toEqual([]);
+    expect((await call(agent, "start_task_thread", { task: "#2", baseRef: "t3/feat-x_1.2" })).isError).toBe(false);
+  });
+
   it("refuses modes that don't fit the task", async () => {
     fakeT3();
     expect((await call(agent, "start_task_thread", { task: "#1", mode: "work" })).text).toContain("is an epic");

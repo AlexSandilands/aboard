@@ -126,6 +126,8 @@ export function createLinksService(
   };
 
   const service: LinksService = {
+    threadsLinked: (taskId) => repos.events.linksAdded(taskId, "t3_thread"),
+
     add(taskId, input, actor) {
       return core.write((fx) => {
         const task = deps.task(taskId);

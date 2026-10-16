@@ -154,6 +154,9 @@ describe("finding Jira tools", () => {
     expect(writeToolDenyRules([], ["mcp__atlassian"])).toContain("mcp__atlassian__create*");
     expect(writeToolDenyRules([], ["mcp__atlassian__*"])).toContain("mcp__atlassian__create*");
     expect(writeToolDenyRules([], ["Read"])).toEqual([]);
+    // The board's own tools that reach T3 threads: an injected issue mustn't drive them.
+    const board = writeToolDenyRules(["aboard"], []);
+    expect(board).toEqual(expect.arrayContaining(["mcp__aboard__*_message*", "mcp__aboard__start*"]));
   });
 
   it("leaves out a deny rule that would match a tool the rules allow by name", () => {

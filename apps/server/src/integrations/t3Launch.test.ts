@@ -307,13 +307,14 @@ describe("autoLaunchSettings", () => {
     });
   });
 
-  it("plans on T3's default model and clamps access to what the provider supports", () => {
+  it("plans on T3's default model, and never takes more access than T3's default", () => {
+    // The provider offers approval-required and full-access; T3's default, auto, sits between them.
     const result = autoLaunchSettings(options({ suggest: true, settings: { defaultRuntimeMode: "auto" } }), {
       work: false,
     });
     expect(result).toMatchObject({
       ok: true,
-      launch: { modelSelection: { model: "opus" }, runtimeMode: "full-access" },
+      launch: { modelSelection: { model: "opus" }, runtimeMode: "approval-required" },
     });
   });
 

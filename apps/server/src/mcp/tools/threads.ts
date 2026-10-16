@@ -43,9 +43,10 @@ function messageTarget(task: TaskSummary): ThreadLink | undefined {
 /**
  * The same id for every attempt at the task's next thread, as a UUID (v5 layout). T3 de-duplicates launches by it,
  * so a retry after a lost reply, or a second call racing the first, returns the thread instead of starting another.
+ * `threadsLinked` counts every thread ever linked, so unlinking one doesn't bring an old id back.
  */
-function launchCommandId(task: TaskSummary): string {
-  const threads = task.links.filter((l) => l.kind === "t3_thread").length;
+function launchCommandId(task: TaskSummary, threadsLinked: number): string {
+  const threads = threadsLinked;
   const hex = createHash("sha1").update(`start_task_thread:${task.id}:${threads}`).digest("hex");
   const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -55,6 +56,14 @@ function launchCommandId(task: TaskSummary): string {
 const MAYBE_STARTED = new Set(["unreachable", "protocol-after-send"]);
 
 const sentence = (text: string) => text.replace(/[.\s]+$/, "");
+
+/** These tools serve an epic's orchestrator, which is what the user turned on; other tasks use the launch dialog. */
+const notInEpic = (number: number) =>
+  `#${number} isn't in an epic. Agents start threads only for an epic's tasks; the user can start one from the board.`;
+
+/** A branch name as git allows it, so the value can't be read as an option or a revision expression. */
+// oxlint-disable-next-line eslint/no-control-regex -- git refuses control characters in ref names, so must we
+const BRANCH = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)[^\s~^:?*[\\\x00-\x1f\x7f]+(?<![./]|\.lock)$/;
 
 const fallback = (ref: string) =>
   `Start it another way: a subagent with get_handoff_prompt(${ref}, subagent: true), or give the user ` +
@@ -80,8 +89,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     {
       title: "Start a task in a new T3 Code thread",
       description:
-        "Start a new T3 Code thread working on a task, with the task's hand-off prompt as its first message, and " +
-        "link it to the task. Use it to start an epic's tasks when epic_overview says T3 Code is available. The " +
+        "Start a new T3 Code thread working on one of an epic's tasks, with the task's hand-off prompt as its first " +
+        "message, and link it to the task. Use it when epic_overview says T3 Code is available. The " +
         "thread starts on T3's default model and access (the task's suggested model for work), in a new git " +
         "worktree branched from baseRef (default: the default branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
@@ -94,7 +103,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
           .describe("Defaults like get_handoff_prompt: plan for tasks in Backlog or without a plan, else work."),
         baseRef: z
           .string()
-          .min(1)
+          .regex(BRANCH, "Not a branch name")
           .optional()
           .describe("Branch to start the worktree from, e.g. another task's branch when one builds on it."),
         startFromOrigin: z
@@ -114,6 +123,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const problem = handoffModeError(task, mode);
         if (problem) throw new AppError("VALIDATION", problem);
+        if (!task.parent) throw new AppError("VALIDATION", notInEpic(task.number));
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
         const busy = busyThread(task);
@@ -132,7 +142,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
             task.id,
             {
               prompt,
-              commandId: launchCommandId(task),
+              commandId: launchCommandId(task, services.links.threadsLinked(task.id)),
               work: mode === "work",
               ...(args.baseRef ? { baseRef: args.baseRef } : {}),
               ...(args.startFromOrigin !== undefined ? { startFromOrigin: args.startFromOrigin } : {}),
@@ -174,6 +184,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     (args) =>
       run(async () => {
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
+        if (!task.parent) throw new AppError("VALIDATION", notInEpic(task.number));
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. Leave the session an add_note on the task instead.`);
         const thread = messageTarget(task);

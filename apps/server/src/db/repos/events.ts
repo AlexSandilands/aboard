@@ -33,6 +33,16 @@ export function createEventsRepo(sql: Sql) {
       );
       return { id: Number(result.lastInsertRowid), taskId, at, actor, type, payload };
     },
+    /** How many links of a kind were ever added to a task, removed ones included. */
+    linksAdded(taskId: string, kind: string): number {
+      return (
+        sql.get<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM task_events WHERE task_id = ? AND type = 'link_added' AND json_extract(payload_json, '$.kind') = ?",
+          taskId,
+          kind,
+        )?.n ?? 0
+      );
+    },
     /** The most recent `limit` events for a task, oldest first. */
     recent(taskId: string, limit: number): TaskEvent[] {
       return sql
