@@ -27,6 +27,7 @@ export const queryKeys = {
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
+  projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
   t3Models: ["t3Models"] as const,
   skills: (projectId: string | null) => ["skills", projectId] as const,
 };
@@ -110,6 +111,19 @@ export function useT3LaunchOptions(taskId: string | null) {
     queryFn: ({ signal }) =>
       api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/t3-launch-options`, { signal }),
     enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
+/** The same for a thread about a whole project (Suggest epics). */
+export function useProjectT3LaunchOptions(projectId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.projectT3LaunchOptions(projectId ?? ""),
+    queryFn: ({ signal }) =>
+      api<T3LaunchOptions>(`/api/projects/${encodeURIComponent(projectId!)}/t3-launch-options`, { signal }),
+    enabled: !!projectId,
     staleTime: 0,
     gcTime: 0,
     retry: false,

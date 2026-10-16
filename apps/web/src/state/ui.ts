@@ -195,14 +195,15 @@ export const usePalette = create<PaletteState>()(
 interface DialogsState {
   projectSettingsId: string | null;
   appSettingsOpen: boolean;
-  /** Task whose "Start in T3 Code" dialog is open. */
-  t3LaunchTaskId: string | null;
+  /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
+  t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
   mergePr: { taskId: string; linkId: string } | null;
   openProjectSettings: (projectId: string) => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
+  openProjectT3Launch: (projectId: string) => void;
   closeT3Launch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
@@ -211,13 +212,14 @@ interface DialogsState {
 export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
   appSettingsOpen: false,
-  t3LaunchTaskId: null,
+  t3Launch: null,
   mergePr: null,
   openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
   closeProjectSettings: () => set({ projectSettingsId: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
-  openT3Launch: (t3LaunchTaskId) => set({ t3LaunchTaskId }),
-  closeT3Launch: () => set({ t3LaunchTaskId: null }),
+  openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
+  openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
+  closeT3Launch: () => set({ t3Launch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),
 }));

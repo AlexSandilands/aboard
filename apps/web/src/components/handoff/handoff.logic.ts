@@ -27,12 +27,16 @@ export function canStartT3Thread(
   t3: Pick<T3IntegrationStatus, "detected">,
   settings: Pick<AppSettings, "t3TokenSet"> | undefined,
 ): boolean {
-  return (
-    showHandoffActions(task) &&
-    t3.detected &&
-    settings?.t3TokenSet === true &&
-    !!(project?.t3ProjectId || project?.workspaceRoot)
-  );
+  return showHandoffActions(task) && canStartProjectT3Thread(project, t3, settings);
+}
+
+/** A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. */
+export function canStartProjectT3Thread(
+  project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
+  t3: Pick<T3IntegrationStatus, "detected">,
+  settings: Pick<AppSettings, "t3TokenSet"> | undefined,
+): boolean {
+  return t3.detected && settings?.t3TokenSet === true && !!(project?.t3ProjectId || project?.workspaceRoot);
 }
 
 /**

@@ -106,6 +106,8 @@ band across the columns its tasks are in, with a roll-up of how many are done.
   Otherwise `get_handoff_prompt(task)` gives the prompt
   for a session the user starts, and `get_handoff_prompt(task, subagent: true)` the one for a subagent you
   start. Draft plans for Backlog tasks, get the user's approval, then `set_plan` and move them to `planned` before starting them.
+- **Suggesting epics**: when asked to group a project's tasks into epics, propose the groups first and only
+  `create_epic` / `update_task(epic)` the ones the user agrees to. Don't plan or start the tasks.
 - **If you are a subagent** working one of an epic's tasks: you can't ask the user anything, so mark the step
   blocked and report back when you need an answer. When `move_task` to `review` opens a review round, don't
   run the loop or open the PR; stop and report the round. The orchestrator runs the review: `start_review`

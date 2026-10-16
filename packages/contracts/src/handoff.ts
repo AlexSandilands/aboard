@@ -1,6 +1,6 @@
 import { BRAND } from "./brand.ts";
 import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
-import type { TaskSummary } from "./schemas.ts";
+import type { Project, TaskSummary } from "./schemas.ts";
 
 /**
  * "work" picks the task up; "plan" asks the agent to shape the plan with the user first; "orchestrate" (epics
@@ -183,5 +183,29 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     linkedThread
       ? "This thread is already linked to the epic; don't link it again."
       : `If you're running in T3 Code, link this thread to ${ref} with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.`,
+  ].join("\n");
+}
+
+/**
+ * The project-level hand-off, "Suggest epics": an agent groups the project's open tasks into epics with the user.
+ * It only groups; planning and starting the tasks is each epic's own hand-off.
+ */
+export function suggestEpicsPrompt({
+  project,
+  boardUrl,
+}: {
+  project: Pick<Project, "id" | "title">;
+  /** Board origin, e.g. `http://127.0.0.1:5317`. */
+  boardUrl: string;
+}): string {
+  return [
+    `Let's group the open work in the ${project.title} project on the ${BRAND.id} task board into epics.`,
+    `Board: ${boardUrl.replace(/\/+$/, "")}/`,
+    "",
+    `1. Call board_overview(projectId: "${project.id}") on the ${BRAND.id} MCP server: it lists the project's open tasks, which epic each is in, and its open epics. Read a task with get_task when its title doesn't say enough.`,
+    "2. Propose epics: groups of tasks that together make one larger feature or change. Give each a title, a one-line description and its tasks, and say which tasks belong in an epic that already exists. Leave out tasks that stand alone (not everything needs an epic), and leave tasks already in an epic where they are unless you think one is misplaced; then say so and why.",
+    "3. Wait for me to agree or change the groups.",
+    `4. Then create each new epic with create_epic(projectId: "${project.id}", title, description, tasks: ["#4", "#5"]), and move tasks into existing epics with update_task(task, epic: "#N").`,
+    "Don't plan, start or move any task: this is only about grouping. Finish with a short list of the epics and their tasks.",
   ].join("\n");
 }

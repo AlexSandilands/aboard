@@ -16,6 +16,7 @@ import type {
   ReviewFinding,
   StartT3ThreadInput,
   StepPatch,
+  T3ThreadRef,
   TaskDetail,
   TaskLink,
   TaskReview,
@@ -310,6 +311,13 @@ export const useStartT3Thread = (opts?: MutationOpts) =>
   useApiMutation(
     ({ taskId, ...input }: StartT3ThreadInput & { taskId: string }) =>
       api<TaskLink>(`/api/tasks/${enc(taskId)}/t3-thread`, { body: input }),
+    opts,
+  );
+/** Starts a thread about a whole project (Suggest epics); nothing is linked, so it returns the thread. */
+export const useStartProjectT3Thread = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ projectId, ...input }: StartT3ThreadInput & { projectId: string }) =>
+      api<T3ThreadRef>(`/api/projects/${enc(projectId)}/t3-thread`, { body: input }),
     opts,
   );
 export const useRemoveLink = (opts?: MutationOpts) =>

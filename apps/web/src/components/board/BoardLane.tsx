@@ -1,6 +1,8 @@
 import { TASK_STATUSES, type Project } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
+import { canStartProjectT3Thread } from "~/components/handoff/handoff.logic";
+import { SuggestEpicsMenu } from "~/components/handoff/HandoffActions";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -8,6 +10,7 @@ import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
 import { laneCounts, laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band, type LaneCells } from "./board.logic";
 import { BoardCell } from "./BoardCell";
+import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
 import { EpicBand } from "./EpicBand";
 
@@ -44,6 +47,7 @@ export const BoardLane = memo(function BoardLane({
   const collapsed = project.collapsed;
   const toggleRow = laneHasCollapsibleCell(cells);
   const counts = laneCounts({ project, bands, cells });
+  const { t3, settings } = useBoardContext();
   const overLoose = overCell?.rowId === project.id ? overCell : null;
   return (
     <section
@@ -101,6 +105,7 @@ export const BoardLane = memo(function BoardLane({
           </TooltipTrigger>
           <TooltipPopup>Add epic</TooltipPopup>
         </Tooltip>
+        <SuggestEpicsMenu project={project} canStartT3={canStartProjectT3Thread(project, t3, settings)} />
       </header>
       {collapsed ? null : (
         <div className={cn(BOARD_GRID_CLASS_NAME, "mt-1")}>
