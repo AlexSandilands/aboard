@@ -143,7 +143,7 @@ export const BoardLane = memo(function BoardLane({
                   gridRow={bands.length ? bands.length + 1 : undefined}
                   status={status}
                   tasks={cells[status]}
-                  epicChildren={epicChildren}
+                  epicChildren={status === "done" ? epicChildren : undefined}
                   toggleRow={toggleRow}
                   selectedTaskId={selectedTaskId}
                   draggingTaskId={draggingTaskId}

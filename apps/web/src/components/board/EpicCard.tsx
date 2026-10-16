@@ -91,6 +91,8 @@ export const EpicCard = memo(function EpicCard({
             <li key={task.id}>
               <button
                 type="button"
+                // Lets dependency lines find the task inside the card.
+                data-task-card={task.id}
                 className={cn(
                   "flex w-full min-w-0 items-baseline gap-1.5 rounded-md px-2 py-1 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   task.id === selectedTaskId ? "bg-sidebar-row-selected" : "hover:bg-accent/40",

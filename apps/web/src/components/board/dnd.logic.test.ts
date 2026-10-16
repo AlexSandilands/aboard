@@ -155,6 +155,12 @@ describe("previewMove", () => {
     expect(next[0]!.cells.done).toBe(lanes[0]!.cells.done);
   });
 
+  it("puts a card dragged into Done above a finished epic's card", () => {
+    const withEpic = [lane("p", { planned: ["a"], done: ["epic", "old"] })];
+    const next = previewMove(withEpic, { taskId: "a", rowId: "p", status: "done", index: 0 });
+    expect(ids(next[0], "done")).toEqual(["a", "epic", "old"]);
+  });
+
   it("reorders within the card's own cell", () => {
     const next = previewMove(lanes, { taskId: "a", rowId: "p", status: "planned", index: 1 });
     expect(ids(next[0], "planned")).toEqual(["b", "a"]);

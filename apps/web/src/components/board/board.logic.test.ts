@@ -421,6 +421,13 @@ describe("epic bands", () => {
       expect(buildLanes(board(tasks), { ...noFilters, search: "nothing" })).toEqual([]);
     });
 
+    it("lists archived tasks of the epic in the card when they are shown", () => {
+      const archived = doneChild("old", "e", { archivedAt: "2026-01-01" });
+      const [lane] = buildLanes(board([doneEpic("e", "2026-02-01"), doneChild("a", "e")]), noFilters, [archived]);
+      expect(ids(lane!.epicChildren.e!).sort()).toEqual(["a", "old"]);
+      expect(ids(lane!.cells.done)).toEqual(["e"]);
+    });
+
     it("keeps its band when filtered to with ?epic=", () => {
       const tasks = [doneEpic("e", "2026-02-01"), doneChild("a", "e")];
       const [lane] = buildLanes(board(tasks), { ...noFilters, epicId: "e" });

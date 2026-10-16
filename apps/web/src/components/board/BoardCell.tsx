@@ -53,9 +53,17 @@ export const BoardCell = memo(function BoardCell({
   const { setNodeRef } = useDroppable({ id: cellDroppableId(rowId, status), data });
   const collapsed = useBoardView((s) => isCellCollapsed(s, rowId, status));
   const toggleCellCollapsed = useBoardView((s) => s.toggleCellCollapsed);
+  // A selected task inside a finished epic card keeps that card in view.
+  const selectedEpicId = useMemo(
+    () =>
+      selectedTaskId && epicChildren
+        ? (Object.keys(epicChildren).find((id) => epicChildren[id]!.some((t) => t.id === selectedTaskId)) ?? null)
+        : null,
+    [epicChildren, selectedTaskId],
+  );
   const { visible, hiddenCount } = useMemo(
-    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId]),
-    [tasks, collapsed, selectedTaskId, draggingTaskId],
+    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId, selectedEpicId]),
+    [tasks, collapsed, selectedTaskId, draggingTaskId, selectedEpicId],
   );
   // Epic cards aren't draggable (an epic has no status of its own), so they take no part in sorting.
   const ids = useMemo(() => visible.filter((task) => task.kind !== "epic").map((task) => task.id), [visible]);
@@ -98,7 +106,8 @@ export const BoardCell = memo(function BoardCell({
           ),
         )}
       </SortableContext>
-      {status === "backlog" && tasks.length === 0 ? (
+      {/* Under epic bands (gridRow is set) the header's + covers it, as in BoardLane. */}
+      {status === "backlog" && tasks.length === 0 && !gridRow ? (
         <Button
           variant="ghost-muted"
           size="xs"
