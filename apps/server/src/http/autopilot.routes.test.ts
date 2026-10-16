@@ -1,12 +1,14 @@
 import type {
   AutopilotEngineSettings,
+  Digest,
+  DigestList,
   AutopilotOverview,
   AutopilotRun,
   AutopilotScopeEntry,
   AutopilotStatus,
   BoardSnapshot,
 } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { defineAutomation } from "../autopilot/types.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -123,5 +125,74 @@ describe("Autopilot REST routes", () => {
     const byProject = await h.request(`/api/autopilot/runs?projectId=${h.project.id}&limit=1`);
     expect(((await byProject.json()) as AutopilotRun[]).length).toBe(1);
     expect((await h.request("/api/autopilot/runs")).status).toBe(400);
+  });
+});
+
+describe("Digest REST routes", () => {
+  const put = (h: ReturnType<typeof createTestHarness>, config: Record<string, unknown>) =>
+    h.request("/api/autopilot/board/digest", { method: "PUT", json: { mode: "on", config } });
+
+  it("makes a plain digest on request, lists it unread newest first, and marks it read", async () => {
+    const h = createTestHarness();
+    const project = h.services.projects.create({ title: "P", workspaceRoot: "/work/p" });
+    h.services.tasks.create({
+      projectId: project.id,
+      title: "T",
+      plan: { phases: [{ title: "a", steps: [{ title: "b" }] }] },
+    });
+    expect(await (await h.request("/api/autopilot/digests")).json()).toEqual({ items: [], unread: 0 });
+
+    const made = await h.request("/api/autopilot/digests", { method: "POST" });
+    expect(made.status).toBe(201);
+    const { digest } = (await made.json()) as { digest: Digest };
+    expect(digest).toMatchObject({ mode: "plain", trigger: "manual", readAt: null });
+    expect(digest.bodyMd).toContain("# Digest:");
+
+    const list = (await (await h.request("/api/autopilot/digests")).json()) as DigestList;
+    expect(list).toMatchObject({ items: [{ id: digest.id }], unread: 1 });
+    const read = await h.request(`/api/autopilot/digests/${digest.id}/read`, { method: "POST" });
+    expect(((await read.json()) as Digest).readAt).not.toBeNull();
+    expect(((await (await h.request("/api/autopilot/digests")).json()) as DigestList).unread).toBe(0);
+    expect((await h.request("/api/autopilot/digests/nope/read", { method: "POST" })).status).toBe(404);
+  });
+
+  it("answers 202 while an agent writes it, and 409 for a second request meanwhile", async () => {
+    let release: ((stdout: string) => void) | null = null;
+    const h = createTestHarness({
+      integrations: { runAgent: () => new Promise((resolve) => (release = resolve)) },
+    });
+    const project = h.services.projects.create({ title: "P", workspaceRoot: "/work/p" });
+    h.services.tasks.create({
+      projectId: project.id,
+      title: "T",
+      plan: { phases: [{ title: "a", steps: [{ title: "b" }] }] },
+    });
+    const task = h.services.tasks.summaries({})[0]!;
+    h.services.tasks.move(task.id, { status: "in_progress" }, "agent");
+    expect((await put(h, { mode: "summarised" })).status).toBe(200);
+
+    const started = await h.request("/api/autopilot/digests", { method: "POST" });
+    expect(started.status).toBe(202);
+    expect(await started.json()).toEqual({ digest: null });
+    expect((await h.request("/api/autopilot/digests", { method: "POST" })).status).toBe(409);
+    // The agent starts once its folder is made.
+    await vi.waitFor(() => expect(release).not.toBeNull());
+    release!(JSON.stringify({ type: "result", subtype: "success", result: "All quiet.", total_cost_usd: 0.1 }));
+    await h.integrations.digestsIdle();
+    const list = (await (await h.request("/api/autopilot/digests")).json()) as DigestList;
+    expect(list.items).toMatchObject([{ mode: "summarised", bodyMd: "All quiet.\n", costUsd: 0.1 }]);
+  });
+
+  it("describes the settings, and refuses a time or skill that isn't one", async () => {
+    const h = createTestHarness();
+    const overview = (await (await h.request("/api/autopilot")).json()) as AutopilotOverview;
+    const entry = overview.automations.find((a) => a.key === "digest")!;
+    expect(entry).toMatchObject({ needsAgent: false, defaults: { mode: "plain", time: "09:00", weekdaysOnly: false } });
+    expect(entry.fields.map((f) => f.kind)).toEqual(["select", "time", "boolean", "skill", "number", "number", "text"]);
+
+    expect((await put(h, { time: "9am" })).status).toBe(400);
+    expect((await put(h, { mode: "chatty" })).status).toBe(400);
+    expect((await put(h, { skill: { source: "global" } })).status).toBe(400);
+    expect((await put(h, { time: "07:30", weekdaysOnly: true })).status).toBe(200);
   });
 });

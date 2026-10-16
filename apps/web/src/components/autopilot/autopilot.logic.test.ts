@@ -6,6 +6,7 @@ import {
   fieldText,
   formatCost,
   inheritLabel,
+  isClockTime,
   parentEntry,
   parseLimit,
   parseNumberField,
@@ -123,6 +124,11 @@ describe("config forms", () => {
     expect(parseNumberField("11", field)).toBeNull();
     expect(parseNumberField("abc", field)).toBeNull();
     expect(parseNumberField("-3", {})).toBe(-3);
+  });
+
+  it("accepts only a complete 24-hour HH:MM time", () => {
+    expect(["00:00", "09:05", "23:59"].every(isClockTime)).toBe(true);
+    for (const bad of ["", "9:05", "24:00", "12:60", "12:5", "12:00:00", "ab:cd"]) expect(isClockTime(bad)).toBe(false);
   });
 
   it("shows only numbers and strings in inputs", () => {

@@ -95,7 +95,8 @@ function useGlobalKeybindings(panelOpen: boolean, closePanel: () => unknown) {
       {
         editableFocus: isEditableTarget(event.target),
         popupFocus: isInsidePopup(event.target),
-        overlayOpen: palette.open || dialogs.appSettingsOpen || dialogs.projectSettingsId !== null,
+        overlayOpen:
+          palette.open || dialogs.appSettingsOpen || dialogs.digestOpen || dialogs.projectSettingsId !== null,
         panelOpen,
       },
       IS_MAC,

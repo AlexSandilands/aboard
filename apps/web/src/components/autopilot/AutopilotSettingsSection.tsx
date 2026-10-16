@@ -8,6 +8,7 @@ import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutatio
 import { useAutopilotOverview } from "~/state/queries";
 import { AutomationRows } from "./AutomationRows";
 import { parseLimit } from "./autopilot.logic";
+import { TimeInput } from "./TimeInput";
 
 const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> = [
   { value: "blocking", label: "Blocking only" },
@@ -256,36 +257,5 @@ function LimitInput({
       />
       {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
     </span>
-  );
-}
-
-/** A 24-hour time saved when the field loses focus with a complete time. */
-function TimeInput({
-  label,
-  value,
-  disabled,
-  onSave,
-}: {
-  label: string;
-  value: string;
-  disabled: boolean;
-  onSave: (next: string) => void;
-}) {
-  return (
-    <Input
-      key={value}
-      type="time"
-      aria-label={label}
-      size="sm"
-      font="mono"
-      className="w-32"
-      disabled={disabled}
-      defaultValue={value}
-      onBlur={(event) => {
-        const next = event.currentTarget.value;
-        if (/^([01]\d|2[0-3]):[0-5]\d$/.test(next) && next !== value) onSave(next);
-        else event.currentTarget.value = value;
-      }}
-    />
   );
 }

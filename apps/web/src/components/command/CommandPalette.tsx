@@ -14,6 +14,7 @@ import {
   LayoutTemplateIcon,
   LightbulbIcon,
   ListTodoIcon,
+  NewspaperIcon,
   SearchIcon,
   SettingsIcon,
   SunMoonIcon,
@@ -30,6 +31,7 @@ import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { ApiError } from "~/lib/api";
+import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
 import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
@@ -221,6 +223,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
   const setAppSettingsOpen = useDialogs((s) => s.setAppSettingsOpen);
+  const setDigestOpen = useDialogs((s) => s.setDigestOpen);
+  const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
 
   const board = useBoard();
@@ -543,6 +547,17 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LayersIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
             run: () => pushView({ kind: "go-to-project" }),
+          },
+          {
+            value: "action:digest-now",
+            title: "Autopilot: digest now",
+            searchTerms: ["digest", "summary", "changes", "report", "generate", "what changed"],
+            icon: <NewspaperIcon className={ITEM_ICON_CLASS} />,
+            run: () => {
+              closePalette();
+              setDigestOpen(true);
+              generateDigest();
+            },
           },
           {
             value: "action:toggle-theme",

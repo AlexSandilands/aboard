@@ -18,6 +18,7 @@ import type {
   TaskLink,
   TerminalInfo,
 } from "@repo/contracts";
+import type { DigestStart } from "../autopilot/digest.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
 /** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
@@ -69,6 +70,10 @@ export interface Integrations {
   resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
   /** What "Open in terminal" runs on this machine, for settings. */
   terminalInfo(): TerminalInfo;
+  /** Makes a digest of what changed now; a summarised one is written in the background (see DigestGenerator). */
+  generateDigest(): Promise<DigestStart>;
+  /** Resolves when no digest is being written. */
+  digestsIdle(): Promise<void>;
   /** The last scheduled or manual git backup. */
   backupStatus(): BackupStatus;
   /** Backs the board up to its git repo now; failures land in the returned status. */

@@ -29,6 +29,9 @@ Headless agents can't force-push, push to the default branch or merge a pull req
 once the task's PR merges, or after **Worktree retention** days (7 by default). One with uncommitted changes is
 kept.
 
+Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
+[Digest of what changed](digest.md).
+
 ## Limits
 
 In **Settings → Autopilot**:

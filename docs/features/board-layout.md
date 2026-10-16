@@ -64,7 +64,8 @@ tasks Autopilot never touched don't show it.
 ### Autopilot on the board
 
 Three things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
-kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations:
+kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations. A fourth, the
+[digest button](#digest-of-what-changed), is always there:
 
 - **The lane's Autopilot pill**, after the lane's other header buttons (`AutopilotPill`). Off (no automation
   is on for the project) is dim; on and idle is a calm ring; paused is warning-coloured with a pause icon; while
@@ -76,6 +77,26 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
 - **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
+
+### Digest of what changed
+
+The digest (what it makes is in [autopilot.md](autopilot.md#automations)) has a button in the header, between the
+pause button and the notifications bell (`DigestButton`). It is always shown, since "Generate now" works with the
+automation off. A dot marks unread digests (with screen-reader text "Digest of what changed, N unread"), and the
+icon becomes a spinner while a run of the `digest` automation is active; it stays clickable then, so older digests
+can still be read. It opens the panel (`DigestDialog`, opened by `digestOpen` in `useDialogs`):
+
+- The newest digest: its period in local time, a badge for Plain or Summarised, whether it was made on the schedule
+  or on request, the cost when there is one, and the `note` (why a summary came out plain) as a muted line. The
+  body is Markdown through the app's shared `Markdown` component with `taskLinks`: a `#N` that is a task on the
+  board becomes a link that closes the panel and opens the task (`taskRefs.logic.ts`, a remark plugin that skips
+  code and existing links; an archived task isn't on the snapshot, so its number stays text).
+- Older and Newer buttons and a select (the last 30, unread ones marked) in the footer. Opening the panel marks the
+  digest on screen read, and browsing to another marks that one; only the one being looked at is marked.
+- **Generate now** makes a digest; it is disabled while an agent is writing one, which shows as an info alert. A 409
+  shows a toast. The command palette's **Autopilot: digest now** opens the panel and generates.
+
+The list is a query (`useDigests`, `state/digests.ts`) refetched on every `autopilot.changed` and on reconnect.
 
 ### Dependency lines
 
@@ -123,6 +144,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill and popover, header pause, card badge, panel section |
+| `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
+| `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |

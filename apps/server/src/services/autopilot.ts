@@ -93,6 +93,8 @@ export interface AutopilotService {
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
+  /** When the board's setting for an automation (its switch or config) last changed; null when it has none. */
+  settingChangedAt(automation: string): string | null;
   /** Finished headless runs that made a worktree, oldest first. */
   finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
@@ -306,6 +308,9 @@ export function createAutopilotService(
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
+    settingChangedAt: (automation) =>
+      repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
+      null,
     finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage(agentAutomations, since) {
       const agents = new Set(agentAutomations);

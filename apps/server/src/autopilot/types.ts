@@ -73,6 +73,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   description: string;
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
+  /**
+   * The action can take long (it waits on an agent) without being an agent run for the caps, so the engine doesn't
+   * hold up the rest of its pass for it. Agent automations are always like this.
+   */
+  background?: boolean;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
@@ -85,7 +90,10 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
 /** Keeps an automation's config type while letting registries hold automations with different ones. */
 export const defineAutomation = <C extends AutomationConfig>(automation: Automation<C>): Automation => automation;
 
-/** Agent work an automation asks for. Runs on a task: the run's task is the one the agent works on. */
+/**
+ * Agent work an automation asks for. Normally on a task: the run's task is the one the agent works on. A run with no
+ * task (a digest) is headless only, in an empty folder of its own, with no worktree, no session link and no nudge.
+ */
 export interface RunnerRequest {
   run: AutopilotRun;
   /** The prompt the agent starts with (or, for a nudge, the message posted). */
@@ -107,6 +115,8 @@ export interface RunnerRequest {
   tools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
+  /** Headless only: whether the agent may use this board's MCP tools. Defaults to yes. */
+  boardTools?: boolean;
 }
 
 /** What a runner did. A T3 run returns once the thread is started; a headless run once the agent finished. */

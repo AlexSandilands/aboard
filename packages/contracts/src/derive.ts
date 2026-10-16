@@ -169,7 +169,7 @@ export function deriveEpicRollup(children: ReadonlyArray<{ status: TaskStatus }>
 /** Furthest along first: the order an epic's roll-up bar fills in and its summary lists statuses. */
 export const ROLLUP_ORDER: ReadonlyArray<TaskStatus> = ["done", "review", "in_progress", "planned", "backlog"];
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
+export const STATUS_LABELS: Record<TaskStatus, string> = {
   backlog: "Backlog",
   planned: "Planned",
   in_progress: "In Progress",

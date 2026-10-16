@@ -1,5 +1,6 @@
 import type { Automation } from "../types.ts";
 import { autoArchive } from "./autoArchive.ts";
+import { digest } from "./digest.ts";
 import { recurring } from "./recurring.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 
@@ -7,4 +8,4 @@ import { unblockDependents } from "./unblockDependents.ts";
 // rename one. AUTOPILOT_START_PLANNED (in contracts) is the key the Start planned tasks automation must use.
 
 /** The automations the engine runs, in the order the UI lists them. */
-export const AUTOMATIONS: readonly Automation[] = [autoArchive, unblockDependents, recurring];
+export const AUTOMATIONS: readonly Automation[] = [autoArchive, unblockDependents, recurring, digest];

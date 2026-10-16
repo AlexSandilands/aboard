@@ -72,11 +72,15 @@ export interface AgentArgsInput {
   tools?: readonly string[];
   /** A JSON schema the agent's final answer must match (`--json-schema`). */
   outputSchema?: object | null;
+  /** Whether the agent may use this board's MCP tools, over the user's MCP config. Defaults to yes. */
+  boardTools?: boolean;
 }
 
 /** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
 export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
+  const boardTools = input.boardTools ?? true;
+  const board = `mcp__${BRAND.id}`;
   return [
     "-p",
     "--output-format",
@@ -85,8 +89,12 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // dontAsk denies everything not allowed; acceptEdits also takes file edits without asking.
     "--permission-mode",
     readOnly ? "dontAsk" : "acceptEdits",
+    // Without the board's tools no MCP server is started at all: the agent works from its prompt alone.
+    ...(boardTools ? [] : ["--strict-mcp-config"]),
     "--allowedTools",
-    ...(readOnly ? [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`] : EDIT_TOOLS),
+    ...(readOnly
+      ? [...READ_ONLY_TOOLS, ...(boardTools ? [board] : [])]
+      : EDIT_TOOLS.filter((t) => boardTools || t !== board)),
     ...(input.tools ?? []),
     "--disallowedTools",
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
