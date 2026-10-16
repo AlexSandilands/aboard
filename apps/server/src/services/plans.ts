@@ -6,7 +6,7 @@ import type { PhaseRecord, StepRecord } from "../db/repos/plans.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
-import type { PlansService } from "./types.ts";
+import type { PlanDeletion, PlansService } from "./types.ts";
 
 /** Applies a status change to a step, maintaining started/completed timestamps. */
 export function withStatus<T extends Pick<PlanStep, "status" | "startedAt" | "completedAt">>(
@@ -29,7 +29,7 @@ const toPlanStep = ({ taskId: _taskId, ...step }: StepRecord): PlanStep => step;
 export interface PlansModule {
   service: PlansService;
   /** Replaces a task's plan inside an open write (no detail returned). */
-  replacePlan(task: TaskRecord, plan: PlanInput, actor: string, fx: Effects): void;
+  replacePlan(task: TaskRecord, plan: PlanInput, actor: string, fx: Effects, opts?: { protectStarted?: boolean }): void;
   /** Ordered phases with steps for one task. */
   phasesOf(taskId: string): PlanPhase[];
 }
@@ -90,9 +90,38 @@ export function createPlans(
       now,
     );
 
-  const replacePlan: PlansModule["replacePlan"] = (task, plan, actor, fx) => {
+  const deletionsOf = (taskId: string, plan: PlanInput): PlanDeletion[] => {
+    const kept = new Set(plan.phases.flatMap((p) => p.steps.map((s) => s.id)));
+    return phasesOf(taskId).flatMap((phase, pi) =>
+      phase.steps.flatMap((step, si) =>
+        kept.has(step.id)
+          ? []
+          : [
+              {
+                label: `${pi + 1}.${si + 1}`,
+                title: step.title,
+                status: step.status,
+                hasNotes: Boolean(step.notes?.trim()),
+                phaseDropped: phase.steps.every((s) => !kept.has(s.id)),
+              },
+            ],
+      ),
+    );
+  };
+
+  const replacePlan: PlansModule["replacePlan"] = (task, plan, actor, fx, opts) => {
     const stepCount = plan.phases.reduce((n, p) => n + p.steps.length, 0);
     gate(task, stepCount);
+    const deleted = deletionsOf(task.id, plan);
+    if (opts?.protectStarted) {
+      // A call that keeps some existing steps but drops a whole phase is a partial update (the #25 mistake),
+      // not a rewrite, so it is protected even when the dropped steps are untouched todos.
+      const keepsExisting = deleted.length < repos.plans.countSteps(task.id);
+      const protectedSteps = deleted.filter(
+        (d) => d.status !== "todo" || d.hasNotes || (keepsExisting && d.phaseDropped),
+      );
+      if (protectedSteps.length > 0) throw wouldDelete(protectedSteps);
+    }
     const now = nowIso();
     const oldPhases = new Map(repos.plans.phasesFor([task.id]).map((p) => [p.id, p]));
     const oldSteps = new Map(repos.plans.stepsFor([task.id]).map((s) => [s.id, s]));
@@ -143,12 +172,94 @@ export function createPlans(
     for (const id of oldSteps.keys()) if (!keptSteps.has(id)) repos.plans.deleteStep(id);
     for (const id of oldPhases.keys()) if (!keptPhases.has(id)) repos.plans.deletePhase(id);
     touchTask({ ...task, planContext: plan.context !== undefined ? plan.context : task.planContext }, now);
-    fx.log(task.id, actor, "plan_set", { phases: plan.phases.length, steps: stepCount });
+    // Titles, so a plan wiped by mistake can be rebuilt from the activity log.
+    fx.log(task.id, actor, "plan_set", {
+      phases: plan.phases.length,
+      steps: stepCount,
+      ...(deleted.length > 0 ? { deleted: deleted.map((d) => `${d.label} ${d.title}`) } : {}),
+    });
+  };
+
+  /** Resolves a "phase.step" label or step id against `plan` as it is now (not the live database). */
+  const resolveIn = (plan: PlanPhase[], taskId: string, ref: string): string => {
+    const trimmed = ref.trim();
+    const label = /^(\d+)\.(\d+)$/.exec(trimmed);
+    if (label) {
+      const step = plan[Number(label[1]) - 1]?.steps[Number(label[2]) - 1];
+      if (!step) throw notFound("Step", trimmed);
+      return step.id;
+    }
+    const step = repos.plans.step(trimmed);
+    if (!step || step.taskId !== taskId) throw notFound("Step", trimmed);
+    return step.id;
   };
 
   const service: PlansService = {
-    setPlan(taskId, plan, actor) {
-      core.write((fx) => replacePlan(deps.task(taskId), plan, actor, fx));
+    setPlan(taskId, plan, actor, opts) {
+      core.write((fx) => replacePlan(deps.task(taskId), plan, actor, fx, opts));
+      return deps.detail(taskId);
+    },
+
+    deletionsOf(taskId, plan) {
+      deps.task(taskId);
+      return deletionsOf(taskId, plan);
+    },
+
+    updatePlan(taskId, input, actor) {
+      const stepEdits = input.steps ?? [];
+      const phaseEdits = input.phases ?? [];
+      if (stepEdits.length === 0 && phaseEdits.length === 0) {
+        throw new AppError("VALIDATION", "Pass steps or phases to update.");
+      }
+      deps.task(taskId);
+      core.write(() => {
+        // Resolve every reference first: a move early in the batch must not shift what a later `2.3` points to.
+        const plan = phasesOf(taskId);
+        const resolvePhase = (ref: string): string => {
+          const trimmed = ref.trim();
+          const found = /^\d+$/.test(trimmed) ? plan[Number(trimmed) - 1] : plan.find((p) => p.id === trimmed);
+          if (!found) throw notFound("Phase", trimmed);
+          return found.id;
+        };
+
+        const renames = phaseEdits.map((edit) => ({ phaseId: resolvePhase(edit.phase), title: edit.title }));
+        const edits = stepEdits.map((edit) => {
+          const { step, move, ...patch } = edit;
+          const stepId = resolveIn(plan, taskId, step);
+          const changes = Object.values(patch).some((v) => v !== undefined);
+          if (!changes && !move) throw new AppError("VALIDATION", `Step ${step}: nothing to change.`);
+          let to: { phaseId?: string; beforeId?: string; afterId?: string } | undefined;
+          if (move) {
+            if (move.before && move.after) {
+              throw new AppError("VALIDATION", `Step ${step}: pass either before or after in move, not both.`);
+            }
+            const beforeId = move.before ? resolveIn(plan, taskId, move.before) : undefined;
+            const afterId = move.after ? resolveIn(plan, taskId, move.after) : undefined;
+            const phaseId = move.phase ? resolvePhase(move.phase) : undefined;
+            if (!phaseId && !beforeId && !afterId) {
+              throw new AppError("VALIDATION", `Step ${step}: move needs a phase, before or after.`);
+            }
+            to = {
+              ...(phaseId ? { phaseId } : {}),
+              ...(beforeId ? { beforeId } : {}),
+              ...(afterId ? { afterId } : {}),
+            };
+          }
+          return { stepId, patch: changes ? patch : null, to };
+        });
+
+        for (const { phaseId, title } of renames) service.updatePhase(phaseId, { title }, actor);
+        for (const { stepId, patch, to } of edits) {
+          if (patch) service.updateStep(stepId, patch, actor);
+          if (to) {
+            // With no phase given, the step joins the anchor's phase as it is now, so an anchor moved earlier in
+            // the batch is followed rather than rejected.
+            const anchorId = to.beforeId ?? to.afterId;
+            const phaseId = to.phaseId ?? (anchorId ? repos.plans.step(anchorId)?.phaseId : undefined);
+            service.moveStep(stepId, { ...to, ...(phaseId ? { phaseId } : {}) }, actor);
+          }
+        }
+      });
       return deps.detail(taskId);
     },
 
@@ -267,20 +378,32 @@ export function createPlans(
     },
 
     resolveStepId(taskId, ref) {
-      const trimmed = ref.trim();
-      const label = /^(\d+)\.(\d+)$/.exec(trimmed);
-      if (label) {
-        const step = phasesOf(taskId)[Number(label[1]) - 1]?.steps[Number(label[2]) - 1];
-        if (!step) throw notFound("Step", trimmed);
-        return step.id;
-      }
-      const step = repos.plans.step(trimmed);
-      if (!step || step.taskId !== taskId) throw notFound("Step", trimmed);
-      return step.id;
+      return resolveIn(phasesOf(taskId), taskId, ref);
     },
   };
 
   return { service, replacePlan, phasesOf };
+}
+
+const SHOWN_DELETIONS = 12;
+
+/** CONFLICT for a replace that would drop steps with progress or notes; says which, so the agent can see what it'd lose. */
+function wouldDelete(steps: PlanDeletion[]): AppError {
+  const shown = steps.slice(0, SHOWN_DELETIONS).map((d) => {
+    const why = [
+      ...(d.status !== "todo" ? [d.status] : []),
+      ...(d.hasNotes ? ["notes"] : []),
+      ...(d.status === "todo" && !d.hasNotes ? ["all steps of its phase are dropped"] : []),
+    ].join(", ");
+    return `${d.label} "${d.title}" (${why})`;
+  });
+  const more = steps.length - shown.length;
+  return new AppError(
+    "CONFLICT",
+    `This plan would delete ${steps.length} step(s) that have progress or notes, or that sit in a phase whose steps are all dropped: ${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}. ` +
+      "Steps and phases you leave out (or pass without their id) are deleted.",
+    { steps },
+  );
 }
 
 function requireTitle(title: string): string {

@@ -50,6 +50,7 @@ describe("MCP endpoint", () => {
       "add_to_backlog",
       "create_task",
       "set_plan",
+      "update_plan",
       "add_steps",
       "update_step",
       "move_task",
@@ -164,6 +165,112 @@ describe("MCP endpoint", () => {
     expect(detail).toContain("Ship search");
     expect(detail).toContain("Index titles");
     expect(detail).toContain("1.1 [ ] Add FTS table");
+  });
+
+  describe("changing a plan that has progress", () => {
+    const markdown = "## One\n- [x] a\n- [ ] b\n\n## Two\n- [ ] c\n- [ ] d\n";
+    let task: string;
+
+    beforeEach(() => {
+      const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+      const created = h.services.tasks.create({ projectId: project.id, title: "Big task" });
+      task = `#${created.number}`;
+    });
+
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: { task, ...args } });
+      return { error: result.isError === true, body: text(result) };
+    };
+    const planText = async () => (await call("get_task", {})).body.replace(/ {2}\(id: [^)]+\)/g, "");
+
+    it("refuses a set_plan that would delete finished work and says how to update instead", async () => {
+      expect((await call("set_plan", { markdown })).error).toBe(false);
+      // The #25 mistake: only the phase being updated is passed, so phase One would be wiped.
+      const refused = await call("set_plan", { markdown: "## Two\n- [x] c\n- [x] d\n" });
+      expect(refused.error).toBe(true);
+      expect(refused.body).toMatch(/^CONFLICT: /);
+      expect(refused.body).toContain('1.1 "a" (done)');
+      expect(refused.body).toContain("update_plan");
+      expect(refused.body).toContain("allowDeletes: true");
+      const after = await planText();
+      expect(after).toContain("1.1 [x] a");
+      expect(after).toContain("1.2 [ ] b");
+      expect(after).toContain("2.1 [ ] c");
+    });
+
+    it("refuses a set_plan that passes only the current phase and would drop later phases", async () => {
+      await call("set_plan", { markdown });
+      const one = h.services.tasks.detail(h.services.tasks.resolveId(task)).phases[0]!;
+      // Phase One passed back with its ids and both steps done: untouched todos in phase Two would be dropped.
+      const onlyPhaseOne = {
+        phases: [
+          { id: one.id, title: "One", steps: one.steps.map((s) => ({ id: s.id, title: s.title, status: "done" })) },
+        ],
+      };
+      const refused = await call("set_plan", onlyPhaseOne);
+      expect(refused.error).toBe(true);
+      expect(refused.body).toMatch(/^CONFLICT: /);
+      expect(refused.body).toContain('2.1 "c" (all steps of its phase are dropped)');
+      expect(await planText()).toContain("2.2 [ ] d");
+      expect((await call("set_plan", { ...onlyPhaseOne, allowDeletes: true })).error).toBe(false);
+    });
+
+    it("lets set_plan delete started steps with allowDeletes and lists what went", async () => {
+      await call("set_plan", { markdown });
+      const result = await call("set_plan", { markdown: "## Two\n- [ ] c\n", allowDeletes: true });
+      expect(result.error).toBe(false);
+      expect(result.body).toContain("Deleted 4 step(s): 1.1 a, 1.2 b, 2.1 c, 2.2 d.");
+      expect(await planText()).toContain("1.1 [ ] c");
+      // The activity log keeps every deleted title, uncut, so the plan can be rebuilt.
+      expect((await call("get_task", {})).body).toContain("deleted 4: 1.1 a, 1.2 b, 2.1 c, 2.2 d");
+    });
+
+    it("lets a first plan and a replace that only drops untouched steps through", async () => {
+      const first = await call("set_plan", { markdown: "## One\n- [ ] a\n- [ ] b\n" });
+      expect(first.error).toBe(false);
+      expect(first.body).not.toContain("Deleted");
+      // Nothing started, no notes: replacing is allowed, and the result still says what was dropped.
+      const replaced = await call("set_plan", { markdown: "## One\n- [ ] x\n" });
+      expect(replaced.error).toBe(false);
+      expect(replaced.body).toContain("Deleted 2 step(s): 1.1 a, 1.2 b.");
+    });
+
+    it("update_plan marks several steps done, moves a step and renames a phase in one call", async () => {
+      await call("set_plan", { markdown });
+      const result = await call("update_plan", {
+        steps: [
+          { step: "1.2", status: "done", appendNotes: "merged" },
+          { step: "2.1", status: "done" },
+          { step: "2.2", move: { phase: "1" } },
+        ],
+        phases: [{ phase: "2", title: "Two renamed" }],
+      });
+      expect(result.error).toBe(false);
+      expect(result.body).toContain("Updated 3 step(s) and 1 phase(s) in the plan.");
+      const body = await planText();
+      expect(body).toContain("Phase 1: One");
+      expect(body).toContain("1.1 [x] a");
+      expect(body).toContain("1.2 [x] b");
+      expect(body).toContain("1.3 [ ] d");
+      expect(body).toContain("Phase 2: Two renamed");
+      expect(body).toContain("2.1 [x] c");
+      expect(body).toContain("merged");
+    });
+
+    it("update_plan changes nothing when one reference is bad", async () => {
+      await call("set_plan", { markdown });
+      const before = await planText();
+      const result = await call("update_plan", {
+        steps: [
+          { step: "1.2", status: "done" },
+          { step: "7.7", status: "done" },
+        ],
+      });
+      expect(result.error).toBe(true);
+      expect(result.body).toMatch(/^NOT_FOUND: /);
+      expect(await planText()).toBe(before);
+      expect((await call("update_plan", {})).body).toMatch(/^VALIDATION: /);
+    });
   });
 
   it("update_task only moves projects through the explicit moveTo params", async () => {
