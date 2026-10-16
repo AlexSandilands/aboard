@@ -6,6 +6,8 @@ import type {
   MergeMethod,
   MergePrInput,
   PrRef,
+  PrReviewCommentInfo,
+  PrReviewInfo,
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
@@ -44,6 +46,26 @@ const RollupItem = z
 
 const MergeMethodJson = z.string().transform((m) => m.toLowerCase());
 
+const Author = z.object({ login: z.string() }).nullish();
+
+const ReviewNode = z.object({
+  databaseId: z.number().nullish(),
+  state: z.string(),
+  submittedAt: z.string().nullish(),
+  authorAssociation: z.string().nullish(),
+  viewerDidAuthor: z.boolean().nullish(),
+  author: Author,
+});
+
+const ReviewCommentNode = z.object({
+  databaseId: z.number().nullish(),
+  createdAt: z.string(),
+  authorAssociation: z.string().nullish(),
+  viewerDidAuthor: z.boolean().nullish(),
+  author: Author,
+  pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
+});
+
 /** The fields of one pull request the poll reads (`PR_FIELDS`). */
 export const GraphqlPr = z.object({
   number: z.number().optional(),
@@ -57,6 +79,16 @@ export const GraphqlPr = z.object({
   isCrossRepository: z.boolean().nullish(),
   updatedAt: z.string().nullish(),
   autoMergeRequest: z.object({ mergeMethod: MergeMethodJson.nullish() }).nullish(),
+  reviews: z.object({ nodes: z.array(ReviewNode.nullable()) }).nullish(),
+  reviewThreads: z
+    .object({
+      nodes: z.array(
+        z
+          .object({ isResolved: z.boolean(), comments: z.object({ nodes: z.array(ReviewCommentNode.nullable()) }) })
+          .nullable(),
+      ),
+    })
+    .nullish(),
   commits: z
     .object({
       nodes: z.array(
@@ -87,6 +119,54 @@ const FAILING = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_R
 const PENDING = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"]);
 /** Permissions that can push to the repo, and so merge. */
 const CAN_MERGE = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+/** Authors whose reviews the fix automation acts on: people the repository gave access, not anyone who can comment. */
+const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+
+const REVIEW_STATES: Record<string, PrReviewInfo["state"]> = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes_requested",
+  COMMENTED: "commented",
+  DISMISSED: "dismissed",
+};
+
+/** Submitted reviews, oldest first; a pending one is only its author's draft. */
+function mapReviews(nodes: ReadonlyArray<z.infer<typeof ReviewNode> | null> | undefined): PrReviewInfo[] {
+  return (nodes ?? []).flatMap((node) => {
+    const state = node && REVIEW_STATES[node.state.toUpperCase()];
+    if (!node || !state) return [];
+    return [
+      {
+        id: node.databaseId ?? null,
+        author: node.author?.login ?? null,
+        state,
+        submittedAt: node.submittedAt ?? null,
+        own: node.viewerDidAuthor ?? false,
+        trusted: TRUSTED.has(node.authorAssociation?.toUpperCase() ?? ""),
+      },
+    ];
+  });
+}
+
+/** Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with. */
+function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]): PrReviewCommentInfo[] {
+  return (threads?.nodes ?? [])
+    .flatMap((thread) => (thread && !thread.isResolved ? thread.comments.nodes : []))
+    .flatMap((c): PrReviewCommentInfo[] =>
+      c && typeof c.databaseId === "number"
+        ? [
+            {
+              id: c.databaseId,
+              author: c.author?.login ?? null,
+              createdAt: c.createdAt,
+              reviewId: c.pullRequestReview?.databaseId ?? null,
+              own: c.viewerDidAuthor ?? false,
+              trusted: TRUSTED.has(c.authorAssociation?.toUpperCase() ?? ""),
+            },
+          ]
+        : [],
+    )
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id));
+}
 
 /** One rollup entry's effective state: StatusContext.state, or CheckRun conclusion once completed. */
 function rollupItemState(item: z.infer<typeof RollupItem>): string {
@@ -145,6 +225,8 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     canMerge: CAN_MERGE.has(repo.viewerPermission?.toUpperCase() ?? ""),
     headOid: pr.headRefOid || null,
     isCrossRepository: pr.isCrossRepository ?? false,
+    reviews: mapReviews(pr.reviews?.nodes),
+    reviewComments: mapReviewComments(pr.reviewThreads),
   };
 }
 
@@ -153,6 +235,10 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
 const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
+      reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
+      reviewThreads(last: 30) { nodes { isResolved comments(last: 5) { nodes {
+        databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
+      } } } }
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
         ... on CheckRun { status conclusion }

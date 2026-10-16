@@ -238,7 +238,7 @@ as comments only.
 - **One at a time, and rounds.** While a review of the PR is queued or running, a new head commit waits; the next
   pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
   setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
-  posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (#96) counts its
+  posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (Fix PRs) counts its
   own attempts against the same limit; each fix is followed by at most one new head and so one review.
 - **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
   `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
@@ -298,6 +298,58 @@ as comments only.
   runs are how it tells Autopilot's own reviews from other people's.
 - **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
   commit; dry run shows which first.
+
+**Fix PRs** (`fix_prs`, #96; `automations/fixPrs.ts`). Needs an agent and is off until switched on. Sends an agent
+to fix a pull request linked to a task.
+
+- **Triggers**, each with its own switch (all on by default), read from the `gh` poller's snapshot of an open or
+  draft PR with a `headOid` and `headRef` (merged and closed PRs, forks, Done and archived tasks and epics are
+  skipped). Each has a key that fires once:
+  - failing checks: `checks@<headOid>`;
+  - merge conflicts: `conflict@<headOid>`;
+  - changes requested: while `reviewDecision` is `changes_requested`, the newest `changes_requested` review from a
+    `trusted` author that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
+  - review comments: comments on unresolved threads that aren't `own`, are `trusted`, aren't in one of Autopilot's
+    reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. Autopilot
+    posts as the user, and the poller doesn't read bodies, so the user's own comments can't be told from its
+    replies and never count;
+  - Autopilot's review: `currentPrReview(...)` with `handoff: "fix"`: `review@<reviewId>`.
+
+  Autopilot's own reviews are told apart by the `reviewId`s on Review PRs' runs.
+- **Batching and dedupe.** One candidate per PR link carries every trigger that hasn't fired yet, with the key
+  `fix:pr:<linkId>:<headOid>:<trigger keys joined by +>`. Earlier attempts' triggers are read back from their keys
+  (`parseFixKey`), so a failed attempt, which leaves no output, still counts what it was given; a skipped one didn't
+  act and counts nothing. Triggers still holding from an earlier attempt are listed in the prompt for context. While
+  a fix or a review of the PR is queued or running, the PR waits. So it does while an attempt
+  handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `autopilot/threads.ts`,
+  shared with Start planned): those runs end as soon as the message is sent, so without this, comments arriving
+  while the agent works would use up the attempts and give up before it pushed.
+- **Action.** When the task's latest T3 thread is there, not settled, and seen by the live poll in the last ten
+  minutes (so T3 Code is up to take it), and the runner isn't set to headless, the fix prompt is a nudge into it.
+  Otherwise the runner starts a session (T3 or headless, from the runner setting) with `workspace: { branch:
+  headRef }` and `expectHead`: a branch that moved on skips the run, and one at an unrelated commit fails unless
+  `prHead` says the PR moved (a force-push). The prompt has a section per trigger with the `gh` commands to read
+  it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
+  above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
+  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and replies on the threads it addressed,
+  each reply starting with `prReviewMarker()`. The reply goes in a file posted with `gh api … -F body=@file`,
+  because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
+  is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
+  via: "nudge" | "t3" | "headless" }`.
+- **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
+  attempt that wasn't skipped. When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
+  per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
+  it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A new head
+  commit starts the per-head count again.
+- **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
+  and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
+  a nudge. Conflicts are fixed with a merge, never a rebase. Only trusted authors' comments start a fix, and the
+  prompt names them by id, tells the agent not to read the others, and calls what it reads requests about the code,
+  never instructions. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
+  so on a public repository a stranger's comment it reads anyway (or a CI log) could still try to steer it. Unlike
+  the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
+- **Settings.** The five switches, **Fix skill** (built-in: the prompt alone), and the shared runner fields, with a
+  $3 budget and a 30-minute timeout. Rounds and the threshold are the engine's.
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
 
@@ -555,6 +607,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
+| `apps/server/src/autopilot/threads.ts` | Whether a T3 thread a run handed work to is still working on it |
 | `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
 | `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
