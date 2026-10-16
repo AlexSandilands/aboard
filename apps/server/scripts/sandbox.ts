@@ -2,7 +2,7 @@
  * `pnpm sandbox`: runs this checkout's board on its own ports so a change can be tried in the browser
  * without touching the board the user runs from main.
  *
- *   pnpm sandbox [--seed basic|review|threads|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox [--seed basic|review|threads|showcase|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
  *   pnpm sandbox status                               prints the running sandbox's ready line
  *   pnpm sandbox stop                                 stops it and deletes its data dir
@@ -272,7 +272,7 @@ function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   );
   if (unknown !== undefined) fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live)`);
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
-    fail(`unknown seed "${seed}" (basic, review, threads, none)`);
+    fail(`unknown seed "${seed}" (basic, review, threads, showcase, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
   return { live, seed };
 }
