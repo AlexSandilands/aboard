@@ -21,6 +21,11 @@ export function createContext(
       return services;
     },
   });
-  services = createServices({ db, bus, t3Status: () => integrations.t3Status() });
+  services = createServices({
+    db,
+    bus,
+    t3Status: () => integrations.t3Status(),
+    prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+  });
   return { db, bus, services, integrations, config };
 }

@@ -5,6 +5,7 @@ import type {
   CloseTaskInput,
   CreateTaskInput,
   LinkInput,
+  MergePrInput,
   MoveTaskInput,
   PlanInput,
   PlanPhase,
@@ -309,6 +310,13 @@ export const useRemoveLink = (opts?: MutationOpts) =>
   useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }), opts);
 export const useRefreshLink = (opts?: MutationOpts) =>
   useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }), opts);
+/** Merges a PR, or turns auto-merge on or off. The snapshot and any move to Done arrive over SSE. */
+export const useMergePr = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ linkId, ...input }: MergePrInput & { linkId: string }) =>
+      api<TaskLink>(`/api/links/${enc(linkId)}/merge`, { body: input }),
+    opts,
+  );
 
 // ── Settings ─────────────────────────────────────────────────────────────
 

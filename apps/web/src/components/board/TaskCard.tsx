@@ -89,7 +89,7 @@ export const TaskCardContent = memo(function TaskCardContent({
       <TaskProgressLine task={task} />
       {hasCardLinks(task.links) || handoff ? (
         <div className="flex min-w-0 items-center gap-1">
-          <CardLinks links={task.links} />
+          <CardLinks taskId={task.id} taskStatus={task.status} links={task.links} />
           {handoff ? (
             <div className="ms-auto flex shrink-0 items-center gap-0.5">
               <HandoffMenu task={task} variant="card" canStartT3={startT3} />

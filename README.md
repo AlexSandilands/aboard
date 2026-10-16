@@ -1,168 +1,103 @@
-# Aboard
+<p align="center">
+  <img src="apps/web/public/favicons/a-card.svg" alt="Aboard" width="112" />
+</p>
 
-A local kanban board for juggling work across many projects, built for working with coding agents.
-Agents add tasks to a backlog, write structured plans and move tasks along over MCP; the board updates live.
-Styled after [T3 Code](https://github.com/pingdotgg/t3code), and integrates with it when it's running.
+<h1 align="center">Aboard</h1>
 
-- **Swimlane per project**, columns **Backlog → Planned → In Progress → Review → Done**.
-- **Plans first:** a backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leave
-  Backlog until it has a plan.
-  Plans are phases of steps; the detail panel shows exactly where a task is up to.
-- **Closing without doing:** a task delivered by another one, a duplicate, or one you won't do can be
-  closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or `close_task` over MCP). It
-  moves to Done without a plan, and the other task lists it under "Also resolved". Moving it out of Done
-  reopens it. Archive is for clearing cards away, not for resolving them.
-- **Deleting:** an archived task can be deleted permanently, with its plan, links and activity (task
-  menu, or `delete_task` over MCP). Archive first; active tasks can't be deleted.
-- **Links:** GitHub PRs (live state via `gh`), Jira keys, T3 Code threads (one click back to the
-  conversation), any URL. Failing checks, requested changes and blocked steps surface under
-  **Needs attention**. Jira keys in a task title are linked automatically, and agents are told which
-  Jira keys and T3 thread a task is still missing.
-- **Labels:** tag tasks with the kind of work (`ui`, `backend`, `bug`), from the task panel or by agents,
-  and filter the board to any of several labels. Agents are asked to suggest labels for tasks that have
-  none. Each label gets a colour you can change.
-- **Suggested model:** the agent that plans a task suggests a model tier (light, standard or deep) for
-  implementing it. Say what each tier means in **Settings → Model tiers**; copied prompts name it, and new
-  T3 Code threads start on it.
-- **Your layout:** collapse a column (Done starts collapsed) or just one project's cell, and collapse,
-  reorder or hide the task panel's sections. Layout is saved per browser.
+<p align="center">
+  <strong>Mission control for your coding agents.</strong><br>
+  A local kanban board where agents log ideas, write plans and report progress over MCP,<br>
+  so you can run dozens of streams of work at once without losing track of any of them.
+</p>
 
-## Run it
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20browser-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Platform: Windows or browser" />
+  <img src="https://img.shields.io/badge/MCP-server-8B5CF6?style=flat-square" alt="MCP server" />
+  <img src="https://img.shields.io/badge/node-24%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node 24+" />
+  <img src="https://img.shields.io/badge/electron-44-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 44" />
+  <img src="https://img.shields.io/badge/react-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/typescript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 6" />
+</p>
 
-Requires Node 24+ and pnpm.
+<br>
+
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="Agents update the board live: a new idea appears, a step is ticked off, a blocked step shows up under Needs attention, then a task opens with its plan and agent thread" width="900" />
+</p>
+
+<br>
+
+## Why
+
+Coding agents made it cheap to start work. Keeping track of it is the hard part: five repos, a dozen
+agent threads, PRs waiting on checks, ideas you had halfway through something else. All of that ends
+up living in your head.
+
+Aboard moves it onto a board, and the agents keep the board up to date themselves:
+
+- **One glance, every project.** A swimlane per repo, columns from **Backlog** to **Done**. You can see
+  what's moving, what's stuck and what's waiting on you.
+- **Agents do the bookkeeping.** Over MCP they capture ideas, write a plan before they start, tick off
+  steps as they go and leave a handover note when they stop. You don't have to update anything.
+- **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, Jira issue and
+  agent thread. Resume it yourself, or hand it to a fresh agent with one click.
+- **Problems come to you.** Failing checks, requested changes and blocked steps collect under
+  **Needs attention**, so you don't have to go looking.
+- **Ideas don't get lost.** Anything worth doing later goes into the Backlog in one call, and the agent
+  carries on with what it was doing.
+
+Everything runs on your machine: a local server and a SQLite file, with no account and no cloud.
+
+## Install
+
+> [!NOTE]
+> A Windows installer on [GitHub Releases](https://github.com/example/aboard/releases) is on the
+> way. Until then, run it from source as below.
+
+## Run from source
+
+You need [Node 24+](https://nodejs.org) and [pnpm](https://pnpm.io).
 
 ```sh
+git clone https://github.com/example/aboard.git
+cd aboard
 pnpm install
-pnpm start        # builds the web app and serves everything on http://127.0.0.1:4317
-pnpm dev          # development: server on 4317, Vite on http://127.0.0.1:5317
 ```
 
-Data lives in `~/.aboard/` (override with `ABOARD_HOME`; all env vars use the `ABOARD_` prefix). The server only
-listens on 127.0.0.1. Set `ABOARD_TOKEN` to require a bearer token on the API and MCP endpoint. With a token set, open the UI at `http://127.0.0.1:4317/#token=<token>`; the page keeps it for the browser tab and strips it from the address bar.
-In development, `ABOARD_PORT` moves the server and `ABOARD_WEB_PORT` moves Vite (default 5317); the server only accepts
-browser writes from its own port and the Vite port.
-
-## Desktop app (Windows)
-
-The desktop app starts the server for you and keeps it running in the tray, so the board and the MCP
-endpoint are up without a terminal.
+Then pick one:
 
 ```sh
-pnpm desktop:package   # builds apps/desktop/release/Aboard-Setup-<version>.exe
-pnpm desktop           # development: pnpm dev plus an Electron window on the Vite server
+pnpm start              # in the browser: http://127.0.0.1:4317
+pnpm desktop:package    # the Windows app: apps/desktop/release/Aboard-Setup-<version>.exe
 ```
 
-- Closing the window hides it to the tray; agents can still reach MCP. **Quit** from the tray stops the server.
-- The tray menu has **Copy MCP URL** and **Start at login** (starts hidden in the tray).
-- If a server is already running on the port (for example `pnpm dev`), the app uses it instead of
-  starting a second one. Both share `~/.aboard/`, so it's one board either way.
-- Links to PRs, Jira and T3 Code threads open in your browser or T3 Code, not inside the app.
-- Server logs: `%APPDATA%\Aboard\logs\server.log`.
+The desktop app keeps the board running in the tray, so agents can reach it with no terminal open.
 
-The installer isn't code-signed yet, so Windows SmartScreen warns on first run.
+## Connect an agent
 
-### Developing with the desktop app
-
-`pnpm desktop` starts the server (`node --watch`) and Vite, waits until both answer, then opens the
-window on Vite. Web edits hot-reload in place; server edits restart the server and the board reconnects
-on its own. Changes under `apps/desktop` need a restart of `pnpm desktop`. Quitting the app from the
-tray stops the whole set.
-
-Stop it with `Ctrl+C`. On Windows each script runs through `cmd`, which asks
-`Terminate batch job (Y/N)?`: answer `y` (more than once if asked), and run `reset` if the terminal is
-left garbled. To confirm nothing is still holding the ports:
+Add the MCP server once for your user (Claude Code shown; [other agents](docs/guide/connect-agents.md)):
 
 ```sh
-netstat -ano | grep -E "127.0.0.1:(4317|5317) " | grep LISTEN   # empty when everything has stopped
-taskkill //PID <pid> //T //F                                    # for anything still listed
+claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp
 ```
 
-To try the built app without packaging it: `pnpm desktop:build && pnpm --filter @repo/desktop start`.
+Then teach it the workflow: copy [`skills/aboard`](skills/aboard) to `~/.claude/skills/aboard`, or paste
+[`AGENTS-snippet.md`](skills/aboard/AGENTS-snippet.md) into your `AGENTS.md`. Agents identify the project
+by their working directory, so there's nothing to set up per repo.
 
-## Connect your agents
+## Learn more
 
-The MCP endpoint is `http://127.0.0.1:4317/mcp`.
+| Guide                                             | What's in it                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------- |
+| [Using the board](docs/guide/using-the-board.md)  | Plans, closing and deleting tasks, links, labels, layout, shortcuts |
+| [Connecting agents](docs/guide/connect-agents.md) | MCP setup for Claude Code, Codex, Copilot and VS Code               |
+| [Local review](docs/guide/local-review.md)        | Have agents' work reviewed on the board before they open a PR       |
+| [T3 Code](docs/guide/t3-code.md)                  | Thread links, live thread status, starting threads from a task      |
+| [Configuration](docs/guide/configuration.md)      | Data folder, ports, access token, the desktop app's tray            |
+| [Contributing](CONTRIBUTING.md)                   | Developing, checks, and where the design docs are                   |
 
-```sh
-claude mcp add --transport http aboard http://127.0.0.1:4317/mcp
-codex mcp add aboard --url http://127.0.0.1:4317/mcp
-copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp   # GitHub Copilot CLI
-code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'   # GitHub Copilot in VS Code
-```
+<br>
 
-For GitHub Copilot in VS Code you can also add this to `.vscode/mcp.json` (note the `servers` key):
-
-```json
-{ "servers": { "aboard": { "type": "http", "url": "http://127.0.0.1:4317/mcp" } } }
-```
-
-Then give your agent the workflow:
-
-- **Claude Code:** copy `skills/aboard` to `~/.claude/skills/aboard`.
-- **Other agents:** paste `skills/aboard/AGENTS-snippet.md` into your `AGENTS.md` / `CLAUDE.md`.
-
-Copy them again after upgrading: tools get renamed (for example `create_idea` became `add_to_backlog`), and
-an old copy sends agents to tools that no longer exist.
-
-Agents identify the project by passing their working directory, so there's nothing to configure
-per repo. Unknown folders become new projects automatically.
-
-## Local review (optional)
-
-Turn on **Settings → Local review** and agents get their work reviewed before they open a pull request.
-When an agent moves a task to Review, the board tells it to run a review loop: a fresh reviewer subagent
-records findings on the task, the agent fixes them, and the loop repeats until nothing blocking is left.
-The card shows the review state, and the task panel lists every finding and how it was resolved.
-
-The reviewer follows the built-in review skill, or any skill you have installed for Claude Code, Copilot or
-Codex (per project, if you like). When no agent runs a review, the board nudges the task's T3 thread, and
-can review it itself with Claude Code headless. See
-[docs/features/local-review.md](docs/features/local-review.md).
-
-## T3 Code integration (optional)
-
-When T3 Code is running, it is detected automatically.
-
-- **Thread links:** agents inside T3 Code attach their thread to the task. The card (while the thread
-  is active) and the detail panel then get an **Open in T3 Code** button (desktop app deep link, or your paired browser —
-  choose in Settings).
-- **Import projects:** command palette → _Add project → From T3 Code_. Read-only; this app never
-  touches T3 Code's data files (it only starts threads through T3's own API when you ask it to).
-- **Live thread status and new threads:** in T3 Code, open Settings → Connections → Create link
-  (allow "View environment" and "Operate tasks"), and paste the pairing link into Settings → T3 Code
-  within 5 minutes. The board exchanges it for a 30-day token. If you have the `t3` CLI, you can
-  paste a token from it instead:
-  ```sh
-  t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
-  ```
-  Linked threads then show whether they're working, waiting for input, or done, and the hand-off
-  menu gets **New T3 Code thread…**, which opens a new thread for the task (model, access, worktree and
-  branch are picked in a dialog). `orchestration:read` alone is enough for status only.
-- **Copy prompt:** every open task has a hand-off menu that copies a ready-to-paste prompt for any agent
-  (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. See
-  [docs/features/agent-handoff.md](docs/features/agent-handoff.md).
-
-## Keyboard
-
-| Key          | Action                 |
-| ------------ | ---------------------- |
-| `Ctrl/Cmd K` | Command palette        |
-| `N`          | New task               |
-| `Esc`        | Close the detail panel |
-
-## Development
-
-```sh
-pnpm check       # format, lint, typecheck, unused-code check (knip), tests
-pnpm format      # apply formatting
-```
-
-Git hooks (lefthook) are installed by `pnpm install` and format, lint and check commit messages on
-commit; CI runs `pnpm check` and commitlint on every PR. Commits follow Conventional Commits. Contributor
-and agent conventions are in `AGENTS.md`.
-
-Layout: `packages/contracts` (shared zod schemas and helpers), `apps/server` (Hono, `node:sqlite`,
-REST, SSE, MCP, integrations), `apps/web` (React, Tailwind v4, Base UI), `apps/desktop` (Electron
-shell). Design notes live in `docs/`.
-
-UI primitives and design tokens are adapted from T3 Code under the MIT license — see `NOTICE`.
+<p align="center">
+  <sub>UI components and design tokens adapted from <a href="https://github.com/pingdotgg/t3code">T3 Code</a> under the MIT license. See <a href="NOTICE">NOTICE</a>.</sub>
+</p>

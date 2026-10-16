@@ -52,16 +52,20 @@ type PolledPr = Extract<TaskLink, { kind: "pr" }> & { ref: NonNullable<Extract<T
 
 const isFinished = (state: PrSnapshot["state"] | null | undefined): boolean => state === "merged" || state === "closed";
 
-/** A task's polled PRs: links without a ref are never fetched, so they can't hold a task back. */
-const polledPrs = (links: readonly TaskLink[]): PolledPr[] =>
-  links.filter((l): l is PolledPr => l.kind === "pr" && l.ref !== null);
+/**
+ * A task's polled PRs. Links without a ref, or on a host that isn't polled (not GitHub, or `gh` isn't
+ * signed in to it), are never fetched, so they can't hold a task back. One fetched before still counts,
+ * so a sign-in check that fails for a moment can't let its open PR be skipped.
+ */
+const polledPrs = (links: readonly TaskLink[], polls: (host: string) => boolean): PolledPr[] =>
+  links.filter((l): l is PolledPr => l.kind === "pr" && l.ref !== null && (l.snapshot !== null || polls(l.ref.host)));
 
 /**
  * True when a task's pull requests are done with: every polled PR is merged or closed, and at least one merged.
  * A PR not fetched yet counts as unfinished, so one merge can't finish a task whose other PR is still open.
  */
-export function prsCompleteTask(links: readonly TaskLink[]): boolean {
-  const prs = polledPrs(links);
+export function prsCompleteTask(links: readonly TaskLink[], polls: (host: string) => boolean): boolean {
+  const prs = polledPrs(links, polls);
   return prs.some((l) => l.snapshot?.state === "merged") && prs.every((l) => isFinished(l.snapshot?.state));
 }
 
@@ -77,7 +81,12 @@ export interface LinksModule {
 /** Task links (PRs, Jira, T3 threads, URLs) and their poller snapshots. */
 export function createLinksService(
   core: Core,
-  deps: { task: (id: string) => TaskRecord; tasks: Pick<TasksService, "move">; settings: SettingsService },
+  deps: {
+    task: (id: string) => TaskRecord;
+    tasks: Pick<TasksService, "move">;
+    settings: SettingsService;
+    polls: (host: string) => boolean;
+  },
 ): LinksModule {
   const { repos } = core;
 
@@ -86,8 +95,8 @@ export function createLinksService(
     const task = deps.task(taskId);
     if (task.status !== "review" || task.archivedAt !== null) return;
     const links = repos.links.forTasks([task.id]).map(toLink);
-    if (!prsCompleteTask(links)) return;
-    const merged = polledPrs(links).filter((l) => l.snapshot?.state === "merged");
+    if (!prsCompleteTask(links, deps.polls)) return;
+    const merged = polledPrs(links, deps.polls).filter((l) => l.snapshot?.state === "merged");
     const pr = merged.find((l) => l.id === creditLinkId) ?? merged[0]!;
     try {
       deps.tasks.move(task.id, { status: "done" }, GITHUB_ACTOR, { mergedPr: `${pr.ref.repo}#${pr.ref.number}` });

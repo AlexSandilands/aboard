@@ -7,7 +7,8 @@ export type ClassifiedLink =
   | { kind: "url"; url: string };
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
-const GITHUB_PR = /^https?:\/\/(github\.com)\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/i;
+// Any host, since GitHub Enterprise lives on its own domains. The server decides which hosts to poll.
+const GITHUB_PR = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/pull\/(\d+)(?:[/?#]|$)/i;
 const ADO_PR = /^https?:\/\/[^/\s]*(dev\.azure\.com|visualstudio\.com)\/.+\/pullrequest\/(\d+)/i;
 const BITBUCKET_PR = /^https?:\/\/bitbucket\.org\/([^/\s]+\/[^/\s]+)\/pull-requests\/(\d+)/i;
 const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
@@ -57,9 +58,9 @@ export function parseT3ThreadInput(value: string, t3: T3Target | null | undefine
 }
 
 /**
- * Infers link kind from user/agent input: GitHub/ADO/Bitbucket PR URLs, Jira keys or
- * /browse/ URLs, t3code:// thread deep links, otherwise a plain URL. With `t3` (the detected T3 server),
- * bare thread ids and that server's browser URLs are thread links too.
+ * Infers link kind from user/agent input: GitHub-style PR URLs on any host (`/<owner>/<repo>/pull/<n>`),
+ * ADO/Bitbucket PR URLs, Jira keys or /browse/ URLs, t3code:// thread deep links, otherwise a plain URL.
+ * With `t3` (the detected T3 server), bare thread ids and that server's browser URLs are thread links too.
  */
 export function classifyLink(
   value: string,
@@ -85,12 +86,12 @@ export function classifyLink(
   const t3Ref = parseT3ThreadInput(input, opts.t3);
   if (t3Ref) return { kind: "t3_thread", url: t3DesktopThreadUrl(t3Ref), ref: t3Ref };
 
+  if (ADO_PR.test(input) || BITBUCKET_PR.test(input)) {
+    return { kind: "pr", url: input, ref: null };
+  }
   const gh = GITHUB_PR.exec(input);
   if (gh) {
     return { kind: "pr", url: input, ref: { host: gh[1]!.toLowerCase(), repo: gh[2]!, number: Number(gh[3]) } };
-  }
-  if (ADO_PR.test(input) || BITBUCKET_PR.test(input)) {
-    return { kind: "pr", url: input, ref: null };
   }
 
   const jiraUrl = JIRA_BROWSE.exec(input);

@@ -144,6 +144,9 @@ export type PlanPhase = z.infer<typeof PlanPhase>;
 export const PrRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
 export type PrRef = z.infer<typeof PrRef>;
 
+export const MergeMethod = z.enum(["squash", "merge", "rebase"]);
+export type MergeMethod = z.infer<typeof MergeMethod>;
+
 export const PrSnapshot = z.object({
   state: z.enum(["open", "draft", "merged", "closed"]),
   title: z.string(),
@@ -152,6 +155,16 @@ export const PrSnapshot = z.object({
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   headRef: z.string().nullable(),
   updatedAt: IsoDate.nullable(),
+  // Optional so snapshots stored by the gh poller, before merging existed, still parse.
+  /** The method auto-merge is set to merge with, or null when auto-merge is off. */
+  autoMerge: MergeMethod.nullable().optional(),
+  /** Methods the repo allows, in GitHub's order. */
+  mergeMethods: z.array(MergeMethod).optional(),
+  /** Whether the repo lets auto-merge be turned on. */
+  autoMergeAllowed: z.boolean().optional(),
+  /** Whether the signed-in account can push to the repo, and so merge. */
+  canMerge: z.boolean().optional(),
+  headOid: z.string().nullable().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
@@ -473,10 +486,20 @@ export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 export const ConnectT3Input = z.object({ value: z.string().trim().min(1) });
 export type ConnectT3Input = z.infer<typeof ConnectT3Input>;
 
+export const GithubHostStatus = z.object({
+  host: z.string(),
+  login: z.string().nullable(),
+  authenticated: z.boolean(),
+});
+export type GithubHostStatus = z.infer<typeof GithubHostStatus>;
+
 export const GithubStatus = z.object({
   available: z.boolean(),
+  /** Signed in to at least one host. */
   authenticated: z.boolean(),
   error: z.string().nullable(),
+  /** Hosts `gh` holds a login for. Empty when `gh` is too old to report them. */
+  hosts: z.array(GithubHostStatus),
 });
 export type GithubStatus = z.infer<typeof GithubStatus>;
 

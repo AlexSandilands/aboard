@@ -8,7 +8,8 @@ import { EventBus } from "../bus.ts";
 import { openDatabase } from "../db/database.ts";
 import { createServices } from "../services/index.ts";
 import type { Services } from "../services/types.ts";
-import type { RunGh } from "./github.ts";
+import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
+import type { RunGh } from "./gh.ts";
 import { createIntegrations } from "./index.ts";
 import type { FetchFn } from "./t3.ts";
 
@@ -18,7 +19,7 @@ afterEach(() => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
 
-function setup(opts: { runGh?: RunGh; fetch?: FetchFn; withDb?: boolean } = {}) {
+function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; withDb?: boolean } = {}) {
   const t3Home = mkdtempSync(join(tmpdir(), `${BRAND.id}-int-`));
   homes.push(t3Home);
   mkdirSync(join(t3Home, "userdata"));
@@ -42,30 +43,41 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; withDb?: boolean } = {}) 
       log: { warn: () => {} },
       ...(opts.runGh ? { runGh: opts.runGh } : {}),
       ...(opts.fetch ? { fetch: opts.fetch } : {}),
+      ...(opts.githubFetch ? { githubFetch: opts.githubFetch } : {}),
     },
   );
-  services = createServices({ db: openDatabase(":memory:"), bus, t3Status: () => integrations.t3Status() });
+  services = createServices({
+    db: openDatabase(":memory:"),
+    bus,
+    t3Status: () => integrations.t3Status(),
+    prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+  });
   return { services, integrations, events };
 }
 
-const ghPr: RunGh = async (args) =>
-  args[0] === "pr"
-    ? JSON.stringify({
-        number: 5,
-        title: "Fix it",
-        state: "OPEN",
-        isDraft: false,
-        reviewDecision: "CHANGES_REQUESTED",
-        mergeable: "CONFLICTING",
-        statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" }],
-        headRefName: "fix",
-        updatedAt: "2026-10-01T00:00:00Z",
-      })
-    : "ok";
-
 describe("createIntegrations with real services", () => {
   it("refreshLink stores a PR snapshot and surfaces attention", async () => {
-    const { services, integrations, events } = setup({ runGh: ghPr });
+    const gh = createFakeGithub();
+    gh.prs.set(
+      "o/r#5",
+      fakePr({
+        title: "Fix it",
+        reviewDecision: "CHANGES_REQUESTED",
+        mergeable: "CONFLICTING",
+        commits: {
+          nodes: [
+            {
+              commit: {
+                statusCheckRollup: {
+                  contexts: { nodes: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" }] },
+                },
+              },
+            },
+          ],
+        },
+      }),
+    );
+    const { services, integrations, events } = setup({ runGh: gh.runGh, githubFetch: gh.fetch });
     const project = services.projects.create({ title: "P", workspaceRoot: "C:/p" });
     const task = services.tasks.create({ projectId: project.id, title: "T" });
     const link = services.links.add(task.id, { value: "https://github.com/o/r/pull/5" }, "user");
@@ -80,6 +92,22 @@ describe("createIntegrations with real services", () => {
       "pr_conflict",
     ]);
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("mergePr merges a Review task's PR and the task moves to Done", async () => {
+    const gh = createFakeGithub();
+    gh.prs.set("o/r#5", fakePr());
+    const { services, integrations } = setup({ runGh: gh.runGh, githubFetch: gh.fetch });
+    const project = services.projects.create({ title: "P", workspaceRoot: "C:/p" });
+    const task = services.tasks.create({ projectId: project.id, title: "T" });
+    services.plans.setPlan(task.id, { phases: [{ title: "Do", steps: [{ title: "It", status: "done" }] }] }, "agent");
+    const link = services.links.add(task.id, { value: "https://github.com/o/r/pull/5" }, "agent");
+    await integrations.refreshLink(link.id);
+    services.tasks.move(task.id, { status: "review" }, "agent");
+    await integrations.mergePr(link.id, { action: "merge", method: "squash" });
+    expect(gh.mutations.map((m) => m.operation)).toEqual(["MergePullRequest"]);
+    expect(services.links.get(link.id)).toMatchObject({ snapshot: { state: "merged" } });
+    expect(services.tasks.summary(task.id).status).toBe("done");
   });
 
   it("refreshLink on a T3 thread link uses the shell API", async () => {
@@ -101,13 +129,19 @@ describe("createIntegrations with real services", () => {
             ],
             archivedThreads: [],
           });
-    const { services, integrations } = setup({ fetch: fetchFn });
+    const ghCalls: string[][] = [];
+    const runGh: RunGh = async (args) => {
+      ghCalls.push(args);
+      return "";
+    };
+    const { services, integrations } = setup({ fetch: fetchFn, runGh });
     services.settings.update({ t3Token: "tok" });
     const project = services.projects.create({ title: "P", workspaceRoot: "C:/p" });
     const task = services.tasks.create({ projectId: project.id, title: "T" });
     const link = services.links.add(task.id, { value: `t3code://threads/${ENV_ID}/th1` }, "user");
     await integrations.refreshLink(link.id);
     expect(services.links.get(link.id)).toMatchObject({ snapshot: { title: "Agent thread", status: "approval" } });
+    expect(ghCalls).toEqual([]);
     expect(services.tasks.summary(task.id).attention.map((a) => a.kind)).toEqual(["thread_needs_input"]);
     expect(integrations.t3Status()).toMatchObject({ detected: true, environmentId: ENV_ID, liveStatus: "ok" });
   });
