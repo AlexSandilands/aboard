@@ -9,6 +9,9 @@ export const AUTOPILOT_ACTOR = "autopilot";
 /** The automation that starts flagged Planned tasks. Shared so hints can name it before it is registered. */
 export const AUTOPILOT_START_PLANNED = "start_planned";
 
+/** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
+export const AUTOPILOT_UNSTICK = "unstick";
+
 /** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
