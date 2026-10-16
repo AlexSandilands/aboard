@@ -1,6 +1,7 @@
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
 import type { RunHeadless } from "./headlessReview.ts";
@@ -25,6 +26,7 @@ export interface IntegrationOverrides {
   githubFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
+  runGit?: RunGit;
   log?: Logger;
 }
 
@@ -50,6 +52,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const backup = createBackupIntegration({
+    services: deps.services,
+    ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -62,12 +69,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       github.start();
       t3.start();
       reviews.start();
+      backup.start();
     },
     stop() {
       started = false;
       github.stop();
       t3.stop();
       reviews.stop();
+      backup.stop();
     },
     listT3Projects: () => t3.listProjects(),
     importT3Projects: (ids) => t3.importProjects(ids),
@@ -92,5 +101,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const { value: _value, ...rest } = input;
       return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
     },
+    backupStatus: () => backup.status(),
+    runBackup: () => backup.run(),
   };
 }

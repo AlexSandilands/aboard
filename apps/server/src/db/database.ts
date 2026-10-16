@@ -7,24 +7,39 @@ export type Db = DatabaseSync;
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
 
-/** Opens (or creates) the database at `path` (":memory:" for tests) and applies pending migrations. */
-export function openDatabase(path: string): Db {
+/**
+ * Opens (or creates) the database at `path` (":memory:" for tests) and applies pending migrations, or only those
+ * up to and including `migrateTo` (a restore loads a backup at the schema it was taken at).
+ */
+export function openDatabase(path: string, options: { migrateTo?: string } = {}): Db {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-  migrate(db);
+  migrate(db, options.migrateTo);
   return db;
 }
 
-function migrate(db: Db): void {
+/** Migration file names in the order they apply. */
+export function migrationNames(): string[] {
+  return [...readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")), ...Object.keys(CODE_MIGRATIONS)].sort();
+}
+
+/** The last migration applied: the schema version a backup records. */
+export function schemaVersion(db: Db): string {
+  const row = db.prepare("SELECT max(name) AS name FROM migrations").get() as { name: string | null };
+  if (!row.name) throw new Error("The database has no migrations applied");
+  return row.name;
+}
+
+/** Applies pending migrations, or those up to and including `upTo`. */
+export function migrate(db: Db, upTo?: string): void {
+  const files = migrationNames();
+  if (upTo !== undefined && !files.includes(upTo)) throw new Error(`Unknown schema version ${upTo}`);
   db.exec("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
   const applied = new Set(
     (db.prepare("SELECT name FROM migrations").all() as Array<{ name: string }>).map((r) => r.name),
   );
-  const files = [
-    ...readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")),
-    ...Object.keys(CODE_MIGRATIONS),
-  ].sort();
   for (const file of files) {
+    if (upTo !== undefined && file > upTo) break;
     if (applied.has(file)) continue;
     const code = CODE_MIGRATIONS[file];
     const sql = code ? "" : readFileSync(MIGRATIONS_DIR + file, "utf8");

@@ -30,6 +30,7 @@ import { cn } from "~/lib/utils";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
 import { useAppearance, useDialogs } from "~/state/ui";
+import { BackupSection } from "./BackupSection";
 import { ModelTiersSection } from "./ModelTiersSection";
 import { ReviewSettingsSection } from "./ReviewSettingsSection";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -86,7 +87,7 @@ function AppSettingsBody() {
     <>
       <DialogHeader>
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Appearance, integrations and agent setup.</DialogDescription>
+        <DialogDescription>Appearance, integrations, backup and agent setup.</DialogDescription>
       </DialogHeader>
       <DialogPanel className="space-y-6">
         <AppearanceSection />
@@ -97,6 +98,7 @@ function AppSettingsBody() {
             <GithubSection settings={settings.data} status={integrations.data?.github} />
             <JiraSection settings={settings.data} />
             <ReviewSettingsSection settings={settings.data} />
+            <BackupSection settings={settings.data} />
           </>
         ) : (
           <p className="px-4 text-sm text-muted-foreground">

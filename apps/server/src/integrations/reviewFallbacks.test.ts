@@ -99,6 +99,34 @@ describe("review fallbacks", () => {
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("review_unattended");
   });
 
+  /** The board's headless review of a task finds only a nit; returns the "open the PR" messages sent. */
+  const cleanBoardReview = async (linkPr: boolean) => {
+    const { s, task, fallbacks, advance, round, sent } = setup({
+      headless: true,
+      thread: "done",
+      review: () => Promise.resolve({ summary: "Fine", findings: [{ severity: "nit", title: "x" }], costUsd: null }),
+    });
+    if (linkPr) s.links.add(task.id, { value: "https://github.com/acme/app/pull/3" }, "agent");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    await fallbacks.tick();
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    await fallbacks.idle();
+    expect(round()?.status).toBe("submitted");
+    return sent.filter((m) => m.commandId.endsWith("-done"));
+  };
+
+  it("tells the thread to open the PR when the board's review comes back clean", async () => {
+    const done = await cleanBoardReview(false);
+    expect(done).toHaveLength(1);
+    expect(done[0]!.text).toContain("came back clean");
+    expect(done[0]!.text).toContain("open the pull request now");
+  });
+
+  it("doesn't, when the task already has a PR", async () => {
+    expect(await cleanBoardReview(true)).toEqual([]);
+  });
+
   it("keeps ticking after a pass with nothing to do", async () => {
     const { s, task, fallbacks, advance, round } = setup();
     await fallbacks.tick();

@@ -95,7 +95,7 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
       if (inCycle >= max) {
         throw new AppError(
           "VALIDATION",
-          `Already ${inCycle} review round${inCycle === 1 ? "" : "s"} for this cycle (limit ${max}). Stop and leave the open findings for the user.`,
+          `Already ${inCycle} review round${inCycle === 1 ? "" : "s"} for this cycle (limit ${max}). Stop reviewing, then open the pull request, unless the user asked you not to, listing any open findings in its description, and link it. If a pull request is already linked, push to it instead.`,
         );
       }
     }
