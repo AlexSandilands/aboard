@@ -61,13 +61,22 @@ function useSectionExpanded(id: SectionId, task: TaskDetail) {
  * The detail panel's reorderable sections in the saved order, hidden ones skipped. Each section's
  * component renders a TaskSection, which picks up its frame from context.
  */
-export function ManagedSections({ task, render }: { task: TaskDetail; render: (id: SectionId) => ReactNode }) {
+export function ManagedSections({
+  task,
+  exclude,
+  render,
+}: {
+  task: TaskDetail;
+  /** Sections that don't apply to this task (an epic's plan), left out whatever the layout says. */
+  exclude?: ReadonlyArray<SectionId>;
+  render: (id: SectionId) => ReactNode;
+}) {
   const layout = useSectionLayout();
   const move = useTaskPanelPrefs((s) => s.moveSection);
   const showAll = useTaskPanelPrefs((s) => s.showAllSections);
   const sensors = useSortableSensors();
   const [dragging, setDragging] = useState<SectionId | null>(null);
-  const visible = layout.order.filter((id) => !layout.hidden.includes(id));
+  const visible = layout.order.filter((id) => !layout.hidden.includes(id) && !exclude?.includes(id));
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);

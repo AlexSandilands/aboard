@@ -177,13 +177,16 @@ function ResolutionChip({ task }: { task: TaskSummary }) {
 /** A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. */
 export const SortableTaskCard = memo(function SortableTaskCard({
   task,
+  rowId,
   selected,
 }: {
   task: TaskSummary;
+  /** The row the card shows in (see Row in board.logic). */
+  rowId: string;
   selected: boolean;
 }) {
   const { openTask, suppressClickRef } = useBoardContext();
-  const data: DragData = { type: "task", projectId: task.projectId, status: task.status };
+  const data: DragData = { type: "task", rowId, status: task.status };
   // Archived cards (Show archived) open in the panel but can't be dragged; unarchive first.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,

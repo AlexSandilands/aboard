@@ -45,6 +45,9 @@ describe("seed scenarios", () => {
     expect(tasks.some((t) => t.archivedAt)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
     expect(details.some((t) => t.status === "backlog" && t.phases.length > 0)).toBe(true);
+    const epic = details.find((t) => t.kind === "epic" && t.children.length > 0);
+    expect(new Set(epic?.children.map((c) => c.status))).toEqual(new Set(["backlog", "in_progress", "review"]));
+    expect(epic?.status).toBe("backlog");
   });
 
   it("review covers every round status and finding severity", () => {

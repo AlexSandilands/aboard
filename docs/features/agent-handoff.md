@@ -98,7 +98,8 @@ CLI doesn't accept.
 #### When the menu appears
 
 The hand-off menu (a terminal icon) sits at the right of the card's bottom line and in the task panel
-header. It only shows on open work: not on Done or archived tasks.
+header. It only shows on open work: not on Done or archived tasks, and not on epics, whose tasks carry the
+plans the prompt asks about ([epics](epics.md#in-the-panel)).
 
 It always offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked
 _Suggested_. **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):

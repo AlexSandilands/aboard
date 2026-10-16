@@ -16,6 +16,9 @@ The first column was called Ideas (`idea`) until migration 006 renamed it. Statu
 `move_task`, `list_tasks`) still read `idea` as `backlog` through `TaskStatusInput`, so agents with older
 instructions keep working; outputs only ever say `backlog`.
 
+An epic is a task of kind `epic` that groups others. It skips most of this: it has no plan, its status
+follows its tasks, and it can't be closed. See [epics.md](epics.md).
+
 ### Creating
 
 - `add_to_backlog` (MCP) or **New task** (UI): no plan, lands in Backlog.

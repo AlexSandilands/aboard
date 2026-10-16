@@ -59,7 +59,10 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
   };
 
   const openRoundIn = (taskId: string, opts: OpenRoundOptions, fx: Effects): ReviewRecord => {
-    deps.task(taskId);
+    const task = deps.task(taskId);
+    if (task.kind === "epic") {
+      throw new AppError("VALIDATION", `#${task.number} is an epic; review its child tasks instead`);
+    }
     const latest = repos.reviews.latest(taskId);
     const now = nowIso();
     if (latest?.status === "running") {

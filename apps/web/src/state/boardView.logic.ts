@@ -5,6 +5,8 @@ export interface PersistedBoardView extends CollapseState {
   attentionOnly: boolean;
   hasPrOnly: boolean;
   showArchived: boolean;
+  /** Added in version 2 without a bump; a stored view without it gets the default ({}) when merged. */
+  collapsedEpics?: Record<string, true>;
 }
 
 export const DEFAULT_COLLAPSE: CollapseState = { collapsedColumns: { done: true }, cellOverrides: {} };

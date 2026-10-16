@@ -1,6 +1,6 @@
 ---
 name: aboard
-description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, step progress, PR/Jira/T3 thread links and handover notes.
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, step progress, PR/Jira/T3 thread links and handover notes.
 ---
 
 # Aboard (task board)
@@ -84,6 +84,22 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    only works on archived tasks; use it only when the user asks for a task to be deleted.
 9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
    exact next action. The next agent starts from `get_task`.
+
+## Epics
+
+An epic groups the tasks of a large feature (say "One-page checkout") in one project. On the board it is a
+band across the columns its tasks are in, with a roll-up of how many are done.
+
+- `create_epic` makes one; pass `tasks: ["#4", "#5"]` to group existing tasks straight away.
+- Put new tasks in it with `epic: "#N"` on `create_task` / `add_to_backlog`. Move a task in, across or out
+  with `update_task(task, epic: "#N")` or `epic: null`. Moving a task to another project takes it out of its
+  epic. Epics don't nest.
+- An epic has **no plan and no column of its own**: `set_plan`, `move_task` and `close_task` refuse it. Its
+  status follows its tasks (the furthest-back open one sets it; Done once they all are), so plan, move and
+  review the tasks.
+- `epic_overview` (or `get_task` on the epic) lists each task with its status, progress, current step,
+  anything needing attention, its live T3 thread, latest note and newest activity. `list_tasks(epic: "#N")`
+  lists just its tasks.
 
 ## Local review
 

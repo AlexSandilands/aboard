@@ -1,13 +1,15 @@
-import { TASK_STATUSES, type Project, type TaskStatus } from "@repo/contracts";
-import { ChevronRightIcon, PlusIcon } from "lucide-react";
+import { TASK_STATUSES, type Project } from "@repo/contracts";
+import { ChevronRightIcon, GroupIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
-import { laneHasCollapsibleCell, STATUS_ORDER, type LaneCells } from "./board.logic";
+import { laneCounts, laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band, type LaneCells } from "./board.logic";
 import { BoardCell } from "./BoardCell";
+import type { OverCell } from "./dnd.logic";
+import { EpicBand } from "./EpicBand";
 
 /**
  * Shared by the column header row and every lane so they stay aligned: columns share the width
@@ -16,28 +18,33 @@ import { BoardCell } from "./BoardCell";
 export const BOARD_GRID_CLASS_NAME =
   "grid grid-cols-[repeat(5,minmax(240px,1fr))] gap-3 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end)";
 
-/** A project swimlane: collapsible header, then one cell per status. */
+/** A project swimlane: collapsible header, its epic bands, then one cell per status for the other cards. */
 export const BoardLane = memo(function BoardLane({
   project,
+  bands,
   cells,
   selectedTaskId,
   draggingTaskId,
-  overStatus,
-  overInvalid,
+  draggingRowId,
+  overCell,
   onToggleCollapsed,
 }: {
   project: Project;
+  bands: ReadonlyArray<Band>;
   cells: LaneCells;
   selectedTaskId: string | null;
   /** The card being dragged, when it belongs to this lane. */
   draggingTaskId: string | null;
+  /** The row of the card being dragged, when it belongs to this lane: its band covers every column. */
+  draggingRowId: string | null;
   /** The cell currently hovered by a dragged card, if it is in this lane. */
-  overStatus: TaskStatus | null;
-  overInvalid: boolean;
+  overCell: OverCell | null;
   onToggleCollapsed: (project: Project) => void;
 }) {
   const collapsed = project.collapsed;
   const toggleRow = laneHasCollapsibleCell(cells);
+  const counts = laneCounts({ project, bands, cells });
+  const overLoose = overCell?.rowId === project.id ? overCell : null;
   return (
     <section
       id={`lane-${project.id}`}
@@ -60,7 +67,7 @@ export const BoardLane = memo(function BoardLane({
           {STATUS_ORDER.map((status, index) => (
             <span key={status} className="flex items-center gap-1" title={TASK_STATUSES[index]!.label}>
               {index > 0 ? <span aria-hidden>·</span> : null}
-              {cells[status].length}
+              {counts[status]}
             </span>
           ))}
         </span>
@@ -79,21 +86,53 @@ export const BoardLane = memo(function BoardLane({
           </TooltipTrigger>
           <TooltipPopup>Add task</TooltipPopup>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost-muted"
+                size="icon-xs"
+                aria-label={`Add epic to ${project.title}`}
+                onClick={() => usePalette.getState().openPalette({ kind: "new-epic", projectId: project.id })}
+              />
+            }
+          >
+            <GroupIcon />
+          </TooltipTrigger>
+          <TooltipPopup>Add epic</TooltipPopup>
+        </Tooltip>
       </header>
       {collapsed ? null : (
         <div className={cn(BOARD_GRID_CLASS_NAME, "mt-1")}>
-          {STATUS_ORDER.map((status) => (
-            <BoardCell
-              key={status}
+          {bands.map((band, index) => (
+            <EpicBand
+              key={band.id}
+              band={band}
               projectId={project.id}
-              status={status}
-              tasks={cells[status]}
-              toggleRow={toggleRow}
+              row={index + 1}
+              expanded={draggingRowId === band.id}
               selectedTaskId={selectedTaskId}
-              draggingTaskId={draggingTaskId}
-              dropState={overStatus === status ? (overInvalid ? "invalid" : "valid") : null}
+              draggingTaskId={draggingRowId === band.id ? draggingTaskId : null}
+              overCell={overCell?.rowId === band.id ? overCell : null}
             />
           ))}
+          {/* Under bands, an empty loose row would only add a stray Add task; the header's + covers it. */}
+          {bands.length > 0 && STATUS_ORDER.every((status) => cells[status].length === 0) && !overLoose
+            ? null
+            : STATUS_ORDER.map((status) => (
+                <BoardCell
+                  key={status}
+                  projectId={project.id}
+                  rowId={project.id}
+                  gridRow={bands.length ? bands.length + 1 : undefined}
+                  status={status}
+                  tasks={cells[status]}
+                  toggleRow={toggleRow}
+                  selectedTaskId={selectedTaskId}
+                  draggingTaskId={draggingTaskId}
+                  dropState={overLoose?.status === status ? (overLoose.invalid ? "invalid" : "valid") : null}
+                />
+              ))}
         </div>
       )}
     </section>

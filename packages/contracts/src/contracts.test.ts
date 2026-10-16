@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyLink,
   deriveAttention,
+  describeEpicRollup,
   deriveCurrentStep,
   deriveProgress,
   deriveProjectIdentity,
@@ -235,5 +236,15 @@ describe("TaskStatusInput", () => {
     expect(TaskStatusInput.parse("idea")).toBe("backlog");
     expect(TaskStatusInput.parse("planned")).toBe("planned");
     expect(TaskStatus.safeParse("idea").success).toBe(false);
+  });
+});
+
+describe("describeEpicRollup", () => {
+  it("says how many are done and where the rest are", () => {
+    const byStatus = { backlog: 1, planned: 0, in_progress: 2, review: 0, done: 2 };
+    expect(describeEpicRollup({ total: 5, done: 2, byStatus })).toBe("2/5 done · 2 In Progress, 1 Backlog");
+    expect(
+      describeEpicRollup({ total: 0, done: 0, byStatus: { ...byStatus, backlog: 0, in_progress: 0, done: 0 } }),
+    ).toBe("No tasks yet");
   });
 });

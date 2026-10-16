@@ -89,6 +89,8 @@ export interface TaskQuery {
   /** Tasks carrying any of these labels (normalised before matching). */
   labels?: string[];
   attentionOnly?: boolean;
+  /** Children of this epic (an id). */
+  epicId?: string;
 }
 
 export interface TasksService {

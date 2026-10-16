@@ -40,6 +40,19 @@ export function useCloseTask() {
   return useCallback(() => navigate({ to: "/", search: (prev) => ({ ...prev, task: undefined }) }), [navigate]);
 }
 
+/** `?epic=`: the epic the board is filtered to. */
+export function useEpicFilter(): string | null {
+  return useSearch({ strict: false, select: (search) => search.epic ?? null });
+}
+
+export function useSetEpicFilter() {
+  const navigate = useNavigate();
+  return useCallback(
+    (epicId: string | null) => navigate({ to: "/", search: (prev) => ({ ...prev, epic: epicId ?? undefined }) }),
+    [navigate],
+  );
+}
+
 export function useSetProjectFilter() {
   const navigate = useNavigate();
   return useCallback(

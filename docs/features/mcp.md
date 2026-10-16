@@ -16,14 +16,14 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
 `get_task` before resuming, plan before leaving Backlog (with a suggested model tier, and suggest labels if
 the task has none), keep
-steps current, link the Jira issue and the T3 thread, finish with `add_note`.
+steps current, group large features into epics, link the Jira issue and the T3 thread, finish with `add_note`.
 
 ### Tools
 
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task` (all read-only)                             |
-| `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`       |
+| `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task`, `epic_overview` (all read-only)            |
+| `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, or a T3 thread `{environmentId, threadId}`; idempotent)                  |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
@@ -35,6 +35,10 @@ counts. See [labels.md](labels.md).
 `set_plan`, `create_task` and `update_task` take `suggestedModel: {tier, reason}`: the model tier for
 implementing the task. `set_plan` keeps the current one when it's omitted; `update_task` clears it with
 `null`. See [agent-handoff.md](agent-handoff.md#suggested-model).
+
+`add_to_backlog`, `create_task` and `update_task` take `epic: "#N"` (`update_task` takes `null` to take the
+task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
+epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. See [epics.md](epics.md).
 
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).
@@ -73,7 +77,9 @@ text when both are present.
   `get_task` leaves it out so implementing agents aren't nagged. The task render shows
   `Suggested model: deep (reason)` once set.
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
-  `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`.
+  `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`. An epic's line shows `[epic]` and its roll-up
+  (`0/3 done · 2 In Progress, 1 Backlog`); a task in one ends with `in epic #N`. `board_overview` counts only
+  tasks and lists each project's open epics under it.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`); `set_plan` adds one to `CONFLICT` (use
   `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says

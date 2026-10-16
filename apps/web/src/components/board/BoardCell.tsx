@@ -16,10 +16,13 @@ const noSorting: SortingStrategy = () => null;
 
 export type CellDropState = "valid" | "invalid" | null;
 
-/** One project × status cell: a droppable column segment holding sortable cards. */
+/** One row × status cell (a project's loose cards or an epic band): a droppable column segment holding sortable cards. */
 export const BoardCell = memo(function BoardCell({
   projectId,
+  rowId,
+  epicId,
   status,
+  gridRow,
   tasks,
   toggleRow,
   selectedTaskId,
@@ -27,7 +30,13 @@ export const BoardCell = memo(function BoardCell({
   dropState,
 }: {
   projectId: string;
+  /** The project id for loose cards, the epic id in a band. */
+  rowId: string;
+  /** Set in an epic band: Add task puts new tasks in the epic. */
+  epicId?: string;
   status: TaskStatus;
+  /** Grid row, for the loose cells under a lane's epic bands. */
+  gridRow?: number;
   tasks: ReadonlyArray<TaskSummary>;
   /** Some cell in this lane has a collapse toggle; the others keep a spacer so cards stay aligned. */
   toggleRow: boolean;
@@ -36,9 +45,9 @@ export const BoardCell = memo(function BoardCell({
   draggingTaskId: string | null;
   dropState: CellDropState;
 }) {
-  const data: DragData = { type: "cell", projectId, status };
-  const { setNodeRef } = useDroppable({ id: cellDroppableId(projectId, status), data });
-  const collapsed = useBoardView((s) => isCellCollapsed(s, projectId, status));
+  const data: DragData = { type: "cell", rowId, status };
+  const { setNodeRef } = useDroppable({ id: cellDroppableId(rowId, status), data });
+  const collapsed = useBoardView((s) => isCellCollapsed(s, rowId, status));
   const toggleCellCollapsed = useBoardView((s) => s.toggleCellCollapsed);
   const { visible, hiddenCount } = useMemo(
     () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId]),
@@ -49,6 +58,7 @@ export const BoardCell = memo(function BoardCell({
   return (
     <div
       ref={setNodeRef}
+      style={gridRow ? { gridRow } : undefined}
       data-drop-state={dropState ?? undefined}
       className={cn(
         "flex min-h-14 min-w-0 flex-col gap-1.5 rounded-xl p-1",
@@ -62,7 +72,7 @@ export const BoardCell = memo(function BoardCell({
           size="xs"
           className="justify-start"
           aria-expanded={!collapsed}
-          onClick={() => toggleCellCollapsed(projectId, status)}
+          onClick={() => toggleCellCollapsed(rowId, status)}
         >
           {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
           {collapsed ? `Show all ${tasks.length}` : "Collapse"}
@@ -71,12 +81,12 @@ export const BoardCell = memo(function BoardCell({
         <div aria-hidden className="h-7 shrink-0 sm:h-6" />
       ) : null}
       <SortableContext
-        id={cellKey(projectId, status)}
+        id={cellKey(rowId, status)}
         items={ids}
         strategy={status === "done" ? noSorting : verticalListSortingStrategy}
       >
         {visible.map((task) => (
-          <SortableTaskCard key={task.id} task={task} selected={task.id === selectedTaskId} />
+          <SortableTaskCard key={task.id} task={task} rowId={rowId} selected={task.id === selectedTaskId} />
         ))}
       </SortableContext>
       {status === "backlog" && tasks.length === 0 ? (
@@ -84,7 +94,7 @@ export const BoardCell = memo(function BoardCell({
           variant="ghost-muted"
           size="xs"
           className="justify-start"
-          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId })}
+          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId, epicId })}
         >
           <PlusIcon />
           Add task
@@ -95,7 +105,7 @@ export const BoardCell = memo(function BoardCell({
           variant="ghost-muted"
           size="xs"
           className="justify-start"
-          onClick={() => toggleCellCollapsed(projectId, status)}
+          onClick={() => toggleCellCollapsed(rowId, status)}
         >
           Show {hiddenCount} more
         </Button>

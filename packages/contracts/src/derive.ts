@@ -1,5 +1,13 @@
 import type { TaskReviewSummary } from "./reviews.ts";
-import type { AttentionReason, CurrentStep, PlanPhase, StepStatus, TaskLink } from "./schemas.ts";
+import {
+  TaskStatus,
+  type AttentionReason,
+  type CurrentStep,
+  type EpicRollup,
+  type PlanPhase,
+  type StepStatus,
+  type TaskLink,
+} from "./schemas.ts";
 
 /** Statuses that count as finished for progress. */
 export function isStepComplete(status: StepStatus): boolean {
@@ -131,4 +139,40 @@ export function formatPlanText(phases: ReadonlyArray<PlanPhase>, current?: Curre
     });
   });
   return lines.join("\n");
+}
+
+/** Counts an epic's children by status. Pass only the children that count (not archived). */
+export function deriveEpicRollup(children: ReadonlyArray<{ status: TaskStatus }>): EpicRollup {
+  const byStatus = Object.fromEntries(TaskStatus.options.map((s) => [s, 0])) as Record<TaskStatus, number>;
+  for (const child of children) byStatus[child.status] += 1;
+  return { total: children.length, done: byStatus.done, byStatus };
+}
+
+/** Furthest along first: the order an epic's roll-up bar fills in and its summary lists statuses. */
+export const ROLLUP_ORDER: ReadonlyArray<TaskStatus> = ["done", "review", "in_progress", "planned", "backlog"];
+
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  backlog: "Backlog",
+  planned: "Planned",
+  in_progress: "In Progress",
+  review: "Review",
+  done: "Done",
+};
+
+/** "2/5 done · 2 In Progress, 1 Backlog", or "No tasks yet". */
+export function describeEpicRollup(rollup: EpicRollup): string {
+  if (rollup.total === 0) return "No tasks yet";
+  const open = ROLLUP_ORDER.filter((s) => s !== "done" && rollup.byStatus[s] > 0)
+    .map((s) => `${rollup.byStatus[s]} ${STATUS_LABELS[s]}`)
+    .join(", ");
+  return `${rollup.done}/${rollup.total} done${open ? ` · ${open}` : ""}`;
+}
+
+/**
+ * An epic sits where its furthest-back open child is, so the column shows how far the whole feature has got.
+ * Done once every child is done or closed; Backlog while it has no children.
+ */
+export function deriveEpicStatus(rollup: EpicRollup): TaskStatus {
+  if (rollup.total === 0) return "backlog";
+  return TaskStatus.options.find((s) => rollup.byStatus[s] > 0) ?? "backlog";
 }

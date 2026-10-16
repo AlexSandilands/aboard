@@ -38,6 +38,7 @@ files under each app.
 
 - [Task lifecycle](features/task-lifecycle.md): statuses, the plan gate, closing, archiving, deleting, numbering
 - [Plans](features/plans.md): phases and steps, the current step, Markdown plans
+- [Epics](features/epics.md): grouping a feature's tasks, derived status, bands on the board
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
@@ -54,6 +55,7 @@ files under each app.
 - [0003 Localhost only, with an Origin check](decisions/0003-localhost-guard.md)
 - [0004 A task needs a plan to leave Ideas](decisions/0004-plan-gate.md)
 - [0005 Live updates patch the cache, with no replay](decisions/0005-sse-without-replay.md)
+- [0006 An epic is a task with kind 'epic'](decisions/0006-epic-is-a-task-kind.md)
 
 ### Reference
 

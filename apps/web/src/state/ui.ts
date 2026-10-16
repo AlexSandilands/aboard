@@ -19,6 +19,8 @@ interface BoardViewState extends CollapseState {
   attentionOnly: boolean;
   hasPrOnly: boolean;
   showArchived: boolean;
+  /** Epic bands folded to their header, by epic id. */
+  collapsedEpics: Record<string, true>;
   /** Free-text card filter from the sidebar search. Not persisted. */
   search: string;
   setAttentionOnly: (value: boolean) => void;
@@ -26,7 +28,9 @@ interface BoardViewState extends CollapseState {
   setShowArchived: (value: boolean) => void;
   /** `mixed`: some shown project differs from the column, so the header collapses them all. */
   toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
-  toggleCellCollapsed: (projectId: string, status: TaskStatus) => void;
+  /** `rowId`: a project id for its loose cards, or an epic id for its band. */
+  toggleCellCollapsed: (rowId: string, status: TaskStatus) => void;
+  toggleEpicCollapsed: (epicId: string) => void;
   setSearch: (value: string) => void;
 }
 
@@ -36,23 +40,29 @@ export const useBoardView = create<BoardViewState>()(
       attentionOnly: false,
       hasPrOnly: false,
       showArchived: false,
+      collapsedEpics: {},
       ...DEFAULT_COLLAPSE,
       search: "",
       setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
       setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
       setShowArchived: (showArchived) => set({ showArchived }),
       toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
-      toggleCellCollapsed: (projectId, status) => set((s) => toggleCell(s, projectId, status)),
+      toggleCellCollapsed: (rowId, status) => set((s) => toggleCell(s, rowId, status)),
+      toggleEpicCollapsed: (epicId) =>
+        set(({ collapsedEpics: { [epicId]: was, ...rest } }) => ({
+          collapsedEpics: was ? rest : { ...rest, [epicId]: true },
+        })),
       setSearch: (search) => set({ search }),
     }),
     {
       name: storageKey("board-view"),
       version: 2,
       migrate: migrateBoardView,
-      partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedColumns, cellOverrides }) => ({
+      partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedEpics, collapsedColumns, cellOverrides }) => ({
         attentionOnly,
         hasPrOnly,
         showArchived,
+        collapsedEpics,
         collapsedColumns,
         cellOverrides,
       }),
@@ -140,10 +150,12 @@ export type PaletteIntent =
   | { kind: "root" }
   | { kind: "add-project" }
   | { kind: "import-t3" }
-  /** A task for the Backlog: just a title and description. */
-  | { kind: "new-task"; projectId?: string }
+  /** A task for the Backlog: just a title and description. `epicId` puts it in that epic. */
+  | { kind: "new-task"; projectId?: string; epicId?: string }
+  /** An epic, which groups tasks. */
+  | { kind: "new-epic"; projectId?: string }
   /** A task that opens with the plan editor, to land in Planned. */
-  | { kind: "new-planned-task"; projectId?: string }
+  | { kind: "new-planned-task"; projectId?: string; epicId?: string }
   | { kind: "go-to-task" };
 
 interface PaletteState {

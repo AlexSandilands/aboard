@@ -7,10 +7,12 @@ import {
   CopyIcon,
   EllipsisIcon,
   FolderInputIcon,
+  GroupIcon,
   HashIcon,
   LinkIcon,
   ListTodoIcon,
   PinIcon,
+  PlusIcon,
   RotateCcwIcon,
   SquareCheckIcon,
   Trash2Icon,
@@ -38,7 +40,8 @@ import { copyTaskReference, HandoffMenu } from "~/components/handoff/HandoffActi
 import { cn } from "~/lib/utils";
 import { useDeleteTask, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { useBoard, useSettings } from "~/state/queries";
-import { useTaskPanelPrefs } from "~/state/ui";
+import { usePalette, useTaskPanelPrefs } from "~/state/ui";
+import { epicOptions } from "./epic.logic";
 import { CloseTaskDialog, type PickResolution } from "./CloseTaskDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { copyToClipboard } from "./InlineInput";
@@ -73,7 +76,9 @@ export function TaskActions({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const hasPlan = task.progress.total > 0;
   const archived = task.archivedAt !== null;
-  const t3 = useBoard().data?.integrations.t3;
+  const board = useBoard().data;
+  const t3 = board?.integrations.t3;
+  const epics = epicOptions(board?.tasks ?? [], task);
   const settings = useSettings().data;
   const taskProject = projects.find((p) => p.id === task.projectId);
   const handoff = showHandoffActions(task);
@@ -148,30 +153,64 @@ export function TaskActions({
                 ))}
             </MenuSubPopup>
           </MenuSub>
+          {task.kind === "epic" ? null : (
+            <MenuSub>
+              <MenuSubTrigger>
+                <GroupIcon />
+                Epic
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                {epics.map((epic) => (
+                  <MenuItem
+                    key={epic.id}
+                    disabled={epic.id === task.parent?.id}
+                    onClick={() => updateTask({ id: task.id, epicId: epic.id })}
+                  >
+                    <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+                    <MenuItemLabel>{epic.title}</MenuItemLabel>
+                    {epic.id === task.parent?.id ? <CheckIcon className="ms-auto size-3.5" /> : null}
+                  </MenuItem>
+                ))}
+                {epics.length ? <MenuSeparator /> : null}
+                <MenuItem disabled={!task.parent} onClick={() => updateTask({ id: task.id, epicId: null })}>
+                  <XIcon />
+                  No epic
+                </MenuItem>
+                <MenuItem
+                  onClick={() => usePalette.getState().openPalette({ kind: "new-epic", projectId: task.projectId })}
+                >
+                  <PlusIcon />
+                  New epic…
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
+          )}
           {item("reopen")}
-          <MenuSub>
-            <MenuSubTrigger>
-              <CircleCheckBigIcon />
-              {task.resolution ? "Close differently" : "Close as…"}
-            </MenuSubTrigger>
-            <MenuSubPopup>
-              <MenuItem onClick={() => setCloseAs("completed")}>
-                <SquareCheckIcon />
-                Done by another task…
-              </MenuItem>
-              <MenuItem onClick={() => setCloseAs("duplicate")}>
-                <CopyIcon />
-                Duplicate of…
-              </MenuItem>
-              <MenuItem
-                disabled={task.resolution === "wont_do"}
-                onClick={() => resolveTask({ id: task.id, resolution: "wont_do" })}
-              >
-                <XIcon />
-                Won&apos;t do
-              </MenuItem>
-            </MenuSubPopup>
-          </MenuSub>
+          {task.kind === "epic" ? null : (
+            <MenuSub>
+              <MenuSubTrigger>
+                <CircleCheckBigIcon />
+                {task.resolution ? "Close differently" : "Close as…"}
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <MenuItem onClick={() => setCloseAs("completed")}>
+                  <SquareCheckIcon />
+                  Done by another task…
+                </MenuItem>
+                <MenuItem onClick={() => setCloseAs("duplicate")}>
+                  <CopyIcon />
+                  Duplicate of…
+                </MenuItem>
+                <MenuItem
+                  disabled={task.resolution === "wont_do"}
+                  onClick={() => resolveTask({ id: task.id, resolution: "wont_do" })}
+                >
+                  <XIcon />
+                  Won&apos;t do
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
+          )}
           {item("archive")}
           {archived ? (
             // Deleting is a second step after archiving, so it never sits next to everyday actions.

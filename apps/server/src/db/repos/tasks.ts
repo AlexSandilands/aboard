@@ -1,4 +1,4 @@
-import type { ModelTier, SuggestedModel, TaskResolution, TaskStatus } from "@repo/contracts";
+import type { ModelTier, SuggestedModel, TaskKind, TaskResolution, TaskStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */
@@ -6,6 +6,9 @@ export interface TaskRecord {
   id: string;
   number: number;
   projectId: string;
+  kind: TaskKind;
+  /** The epic this task belongs to. */
+  parentId: string | null;
   title: string;
   description: string | null;
   planContext: string | null;
@@ -27,6 +30,8 @@ interface TaskRow {
   id: string;
   number: number;
   project_id: string;
+  kind: TaskKind;
+  parent_id: string | null;
   title: string;
   description: string | null;
   plan_context: string | null;
@@ -48,6 +53,8 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   id: r.id,
   number: r.number,
   projectId: r.project_id,
+  kind: r.kind,
+  parentId: r.parent_id,
   title: r.title,
   description: r.description,
   planContext: r.plan_context,
@@ -68,6 +75,8 @@ const toRow = (t: TaskRecord): TaskRow => ({
   id: t.id,
   number: t.number,
   project_id: t.projectId,
+  kind: t.kind,
+  parent_id: t.parentId,
   title: t.title,
   description: t.description,
   plan_context: t.planContext,
@@ -148,6 +157,17 @@ export function createTasksRepo(sql: Sql) {
         .all<TaskRow>(
           "SELECT * FROM tasks WHERE resolved_by_task_id IN (SELECT value FROM json_each(?)) ORDER BY number",
           jsonList(ids),
+        )
+        .map(toRecord);
+    },
+    /** Children of any of `epicIds`, archived ones included, in lane order (status, then position). */
+    childrenOf(epicIds: readonly string[]): TaskRecord[] {
+      return sql
+        .all<TaskRow>(
+          `SELECT * FROM tasks WHERE parent_id IN (SELECT value FROM json_each(?))
+           ORDER BY CASE status WHEN 'backlog' THEN 0 WHEN 'planned' THEN 1 WHEN 'in_progress' THEN 2
+             WHEN 'review' THEN 3 ELSE 4 END, position, id`,
+          jsonList(epicIds),
         )
         .map(toRecord);
     },
