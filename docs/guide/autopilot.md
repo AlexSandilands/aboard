@@ -14,6 +14,27 @@ Off** switch. Inherit follows the board, and the switch says what that means ("I
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings.
 
+## Review PRs
+
+When a task has a pull request linked, **Review PRs** has an agent review it and post the review on GitHub as
+comments, from your own `gh` account. The review starts with a line naming this app's Autopilot, and each inline
+comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges.
+
+- It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
+  Settings → Autopilot) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
+  are never reviewed.
+- From the second round it looks for regressions and for points still not fixed, and keeps new small points in an
+  "FYI (no action needed)" section. On the last round only major and blocking points count.
+- The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a
+  note "Autopilot reviewed PR #N at …" linking the review.
+- Points at or above the **fix threshold** (major by default) are the ones a fix would address. When the last
+  round still has some, the card says "Autopilot gave up" under Needs attention and you get a notification.
+- Its settings: the **review skill** it follows (the built-in one by default), **Review drafts**, the runner, the
+  **budget** ($2 by default) and the **timeout**. It always runs headless, since it must be held to read-only. It
+  needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
+- Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
+  which first.
+
 ## How agents run
 
 An automation that needs an agent picks its **runner** in its settings:

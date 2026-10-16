@@ -86,6 +86,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       costUsd: null,
       error: null,
       needsAttention: false,
+      output: null,
       createdAt: "2026-10-17T00:00:00.000Z",
       startedAt: "2026-10-17T00:00:00.000Z",
       finishedAt: null,

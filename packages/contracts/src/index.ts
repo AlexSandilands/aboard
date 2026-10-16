@@ -16,5 +16,6 @@ export * from "./backup.ts";
 export * from "./agentSessions.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
+export * from "./prReview.ts";
 export * from "./recurring.ts";
 export * from "./notifications.ts";

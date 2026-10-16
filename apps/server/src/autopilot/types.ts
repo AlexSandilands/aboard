@@ -60,6 +60,8 @@ export interface ActionResult extends RunPatch {
   error?: string;
   /** Show the run's error (or summary) on the task under Needs attention. */
   needsAttention?: boolean;
+  /** Kept on the run for later automations to read, e.g. the verdict of a review. */
+  output?: Record<string, unknown>;
 }
 
 /**

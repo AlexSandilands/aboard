@@ -28,7 +28,8 @@ export const EDIT_TOOLS = [
 
 /**
  * Git and gh commands no Autopilot agent may run, whatever it was allowed: force-pushes, pushes that delete or
- * mirror refs, pushes to the default branch, and merging pull requests (docs/decisions/0008-autopilot-engine.md).
+ * mirror refs, pushes to the default branch, merging pull requests, and approving or blocking them
+ * (docs/decisions/0008-autopilot-engine.md).
  * Deny rules win over allow rules. They match the command as written, so they are a guard rail, not a sandbox:
  * the prompt says the same, and the worktree's branch never tracks the default branch.
  */
@@ -49,6 +50,15 @@ export function pushDenyRules(defaultBranch: string | null): string[] {
     ...push("-d *"),
     "Bash(gh pr merge*)",
     "Bash(gh api *merge*)",
+    // Autopilot comments on pull requests; approving or blocking one is the user's call.
+    "Bash(gh pr review*--approve*)",
+    "Bash(gh pr review*--request-changes*)",
+    "Bash(gh pr review* -a)",
+    "Bash(gh pr review* -a *)",
+    "Bash(gh pr review* -r)",
+    "Bash(gh pr review* -r *)",
+    "Bash(gh api *APPROVE*)",
+    "Bash(gh api *REQUEST_CHANGES*)",
   ];
   if (defaultBranch) {
     for (const ref of [defaultBranch, `refs/heads/${defaultBranch}`]) {

@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #95 (PR review), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per project or for
 the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -79,7 +79,9 @@ hide work it only previewed.
 ### Runs
 
 `autopilot_runs` holds one row per run: `queued → running → succeeded | failed | skipped`. The runner fills in
-`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. Runs are history, so backups leave them out.
+`runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
+`output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
+verdict there. Runs are history, so backups leave them out.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
@@ -184,6 +186,52 @@ REST only, like the rest of Autopilot:
 | `DELETE /api/recurring/:id`              | Deletes it; tasks it made stay                                 |
 
 Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
+
+**Review PRs** (`review_prs`, #95; `automations/reviewPrs.ts`, contract in `packages/contracts/src/prReview.ts`).
+Needs an agent and is off until switched on. Reviews a pull request linked to a task and posts the review on GitHub,
+as comments only.
+
+- **Trigger.** A `pr` link whose snapshot (from the `gh` poller) is open, or draft when **Review drafts** is on
+  (off by default), and has a `headOid` and `headRef`. Merged and closed PRs, Done and archived tasks, epics and
+  links with no snapshot yet are skipped. The dedupe key is `review:pr:<linkId>:<headOid>`: one review per PR and
+  head commit, and a push gives a new one.
+- **Rounds.** A PR gets at most `prReviewRounds` reviews (engine setting, default 3). The rounds a PR has used are
+  its real review runs, a failed one included; once they are used up, a new head commit isn't reviewed. The fix
+  automation (#96) is meant to count its own attempts against the same limit.
+- **The agent** runs headless in a worktree on the PR's branch. A review has to be held to read-only and given
+  tools, which a T3 thread can't be, so the runner setting is Auto or Headless and both run headless. The request
+  is `access: "read-only"`, the extra tools `gh pr view`, `gh pr diff`, `gh pr review` and `gh api`, and an output
+  schema. It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill** chosen (the
+  built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt tells it not to use
+  the board's tools: the findings aren't recorded on the board, which keeps them apart from local review findings.
+- **Posting.** The agent posts one review with `gh api repos/<repo>/pulls/<n>/reviews`, the payload on stdin
+  (`--hostname` for an Enterprise host), `event: "COMMENT"` and `commit_id` the head commit, so it comes from the
+  user's own `gh` login. The summary starts with `🤖 <displayName> Autopilot review` and each inline comment with
+  `🤖 <displayName> Autopilot` and its severity, built from `BRAND` (`prReviewHeader`, `prReviewMarker`). Approving
+  and requesting changes are in the push deny list (`--approve`, `--request-changes`, `APPROVE`,
+  `REQUEST_CHANGES`) as well as the prompt. A point GitHub won't take inline (a line outside the diff) goes into
+  the summary.
+- **Verdict.** The structured answer is the review's URL and id, the commit reviewed, a summary and every point
+  raised with its severity and an `fyi` flag. The board counts the non-FYI points by severity; those at or above
+  the **fix threshold** (engine setting, default major) are the actionable ones.
+- **Anti-spiral.** From round 2 the prompt carries the round ("round 2 of 3"), the earlier Autopilot reviews with
+  their URLs and counts, and the rules: look for regressions and earlier points still unfixed, don't raise again
+  what was fixed or declined with a reason, and put new minors and nits in an "FYI (no action needed)" section.
+  On the last allowed round the bar is raised to at least major (`effectiveFixThreshold`: minor and nit become
+  major; blocking stays) and the prompt says no round follows.
+- **What the board keeps.** The task gets a note "Autopilot reviewed PR #N at `<sha>` (round R of M): review on
+  GitHub", linking the review, and the run gets its verdict in `output` (`PrReviewRunOutput`: review URL and id,
+  head commit, round, counts, FYI count, threshold, actionable count and `handoff`). A verdict that can't be read
+  fails the run, flagged. The review may already be posted by then, and a run is never retried, so there is still
+  one review per head commit.
+- **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
+  (something is, with rounds left: the fix automation takes it from the run's output, `prReviewOutput(run)`) or
+  `gave_up` (something is, on the last round: the run ends flagged "Autopilot gave up…", which shows under Needs
+  attention and sends an `autopilot_failed` notification). The review ids on the runs are how the fix automation
+  tells Autopilot's own reviews from other people's.
+- **Limits.** A PR from a fork isn't reviewed (its branch isn't on `origin`, so the worktree can't be made and the
+  run fails). Switching the automation on reviews every open PR already linked in the project, once per head commit;
+  dry run shows which first.
 
 ### Runners
 
@@ -329,7 +377,10 @@ Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-boar
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
+| `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, the threshold rules, the header |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |

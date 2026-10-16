@@ -63,6 +63,12 @@ The last five are optional, so snapshots stored by the old `gh pr view` poller s
 no merge until the next poll). `links.setSnapshot` stores the snapshot, and publishes the card only
 when it changed.
 
+### Reviews by Autopilot
+
+The poller's snapshot (`state`, `headRef`, `headOid`) is what the **Review PRs** automation reads: it reviews an
+open (or, if asked, draft) PR once per head commit and posts the review through `gh` as the user, as a comment
+review. See [Autopilot](autopilot.md#automations).
+
 ### Attention
 
 An open or draft PR puts the task under **Needs attention** when checks fail (error), changes are
