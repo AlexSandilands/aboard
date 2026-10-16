@@ -142,7 +142,7 @@ function CardLabels({ labels }: { labels: ReadonlyArray<string> }) {
 }
 
 /** Quick archive for Done cards. Must not open the panel or start a drag, like the card's links. */
-function ArchiveButton({ task }: { task: TaskSummary }) {
+export function ArchiveButton({ task }: { task: TaskSummary }) {
   const { mutate: updateTask, isPending } = useUpdateTask();
   return (
     <Tooltip>

@@ -146,6 +146,14 @@ const basic: Scenario = (s, opts) => {
   const payment = addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
   addTask(s, shop.id, { title: "Merge shipping and billing steps", status: "review", epicId: checkout });
   s.tasks.create({ projectId: billing.id, title: "Usage-based pricing", kind: "epic", actor: AGENT });
+  // Finished epics, which show as cards among the Done cards instead of bands.
+  for (const [title, tasks] of [
+    ["Faster product pages", ["Preload hero images", "Split the product bundle", "Cache price lookups"]],
+    ["Guest checkout", ["Skip account creation", "Email receipts to guests"]],
+  ] as const) {
+    const done = s.tasks.create({ projectId: shop.id, title, kind: "epic", actor: AGENT }).id;
+    for (const child of tasks) addTask(s, shop.id, { title: child, status: "done", epicId: done });
+  }
 
   const invoices = addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
   addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });

@@ -47,9 +47,12 @@ describe("seed scenarios", () => {
     expect(tasks.some((t) => t.archivedAt)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
     expect(details.some((t) => t.status === "backlog" && t.phases.length > 0)).toBe(true);
-    const epic = details.find((t) => t.kind === "epic" && t.children.length > 0);
+    const epic = details.find((t) => t.title === "One-page checkout");
     expect(new Set(epic?.children.map((c) => c.status))).toEqual(new Set(["backlog", "in_progress", "review"]));
     expect(epic?.status).toBe("backlog");
+    const finished = details.filter((t) => t.kind === "epic" && t.status === "done");
+    expect(finished.length).toBeGreaterThan(1);
+    expect(finished.every((t) => t.children.length > 0)).toBe(true);
   });
 
   it("basic has a dependency chain across projects, with a finished blocker", () => {

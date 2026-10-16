@@ -9,6 +9,7 @@ import { cn } from "~/lib/utils";
 import { COLUMN_PREVIEW_COUNT, visibleCellTasks } from "./board.logic";
 import { isCellCollapsed } from "./columnCollapse.logic";
 import { cellDroppableId, cellKey, type DragData } from "./dnd.logic";
+import { EpicCard } from "./EpicCard";
 import { SortableTaskCard } from "./TaskCard";
 
 // Done is newest-first whatever the drag, so its cards don't shuffle to make room.
@@ -24,6 +25,7 @@ export const BoardCell = memo(function BoardCell({
   status,
   gridRow,
   tasks,
+  epicChildren,
   toggleRow,
   selectedTaskId,
   draggingTaskId,
@@ -38,6 +40,8 @@ export const BoardCell = memo(function BoardCell({
   /** Grid row, for the loose cells under a lane's epic bands. */
   gridRow?: number;
   tasks: ReadonlyArray<TaskSummary>;
+  /** The tasks inside each finished epic card among `tasks`, by epic id. */
+  epicChildren?: Readonly<Record<string, ReadonlyArray<TaskSummary>>>;
   /** Some cell in this lane has a collapse toggle; the others keep a spacer so cards stay aligned. */
   toggleRow: boolean;
   selectedTaskId: string | null;
@@ -49,11 +53,20 @@ export const BoardCell = memo(function BoardCell({
   const { setNodeRef } = useDroppable({ id: cellDroppableId(rowId, status), data });
   const collapsed = useBoardView((s) => isCellCollapsed(s, rowId, status));
   const toggleCellCollapsed = useBoardView((s) => s.toggleCellCollapsed);
-  const { visible, hiddenCount } = useMemo(
-    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId]),
-    [tasks, collapsed, selectedTaskId, draggingTaskId],
+  // A selected task inside a finished epic card keeps that card in view.
+  const selectedEpicId = useMemo(
+    () =>
+      selectedTaskId && epicChildren
+        ? (Object.keys(epicChildren).find((id) => epicChildren[id]!.some((t) => t.id === selectedTaskId)) ?? null)
+        : null,
+    [epicChildren, selectedTaskId],
   );
-  const ids = useMemo(() => visible.map((task) => task.id), [visible]);
+  const { visible, hiddenCount } = useMemo(
+    () => visibleCellTasks(tasks, collapsed, [selectedTaskId, draggingTaskId, selectedEpicId]),
+    [tasks, collapsed, selectedTaskId, draggingTaskId, selectedEpicId],
+  );
+  // Epic cards aren't draggable (an epic has no status of its own), so they take no part in sorting.
+  const ids = useMemo(() => visible.filter((task) => task.kind !== "epic").map((task) => task.id), [visible]);
 
   return (
     <div
@@ -85,11 +98,16 @@ export const BoardCell = memo(function BoardCell({
         items={ids}
         strategy={status === "done" ? noSorting : verticalListSortingStrategy}
       >
-        {visible.map((task) => (
-          <SortableTaskCard key={task.id} task={task} rowId={rowId} selected={task.id === selectedTaskId} />
-        ))}
+        {visible.map((task) =>
+          task.kind === "epic" ? (
+            <EpicCard key={task.id} epic={task} tasks={epicChildren?.[task.id] ?? []} selectedTaskId={selectedTaskId} />
+          ) : (
+            <SortableTaskCard key={task.id} task={task} rowId={rowId} selected={task.id === selectedTaskId} />
+          ),
+        )}
       </SortableContext>
-      {status === "backlog" && tasks.length === 0 ? (
+      {/* Under epic bands (gridRow is set) the header's + covers it, as in BoardLane. */}
+      {status === "backlog" && tasks.length === 0 && !gridRow ? (
         <Button
           variant="ghost-muted"
           size="xs"
