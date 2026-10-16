@@ -22,6 +22,7 @@ const ROOT_FILES = {
   settings: "settings.json",
   projects: "projects.json",
   label_colors: "labels.json",
+  task_relations: "relations.json",
   counters: "counters.json",
 } as const;
 const TASKS_DIR = "tasks";
@@ -56,6 +57,7 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.settings, rowsJson(dump.settings));
   add(ROOT_FILES.projects, rowsJson(dump.projects));
   add(ROOT_FILES.label_colors, rowsJson(dump.label_colors));
+  add(ROOT_FILES.task_relations, rowsJson(dump.task_relations));
   add(ROOT_FILES.counters, rowsJson(dump.counters));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
   const months = new Map<string, BackupRow[]>();
@@ -149,6 +151,8 @@ export function readDumpDir(dir: string): BoardDump {
     settings: root(ROOT_FILES.settings),
     projects: root(ROOT_FILES.projects),
     label_colors: root(ROOT_FILES.label_colors),
+    // Absent in backups taken before relations existed.
+    task_relations: existsSync(join(dir, ROOT_FILES.task_relations)) ? root(ROOT_FILES.task_relations) : [],
     counters: root(ROOT_FILES.counters),
     tasks: tasks.sort((a, b) => Number(a.task?.number) - Number(b.task?.number)),
     task_events: events.sort((a, b) => Number(a.id) - Number(b.id)),

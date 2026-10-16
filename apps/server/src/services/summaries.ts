@@ -1,5 +1,6 @@
 import {
   deriveAttention,
+  isBlocked,
   deriveReviewSummary,
   deriveCurrentStep,
   deriveEpicRollup,
@@ -8,6 +9,7 @@ import {
   type PlanStep,
   type TaskRef,
   type TaskImport,
+  type TaskRelation,
   type TaskReview,
   type TaskSummary,
 } from "@repo/contracts";
@@ -82,6 +84,21 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const roundsByTask = groupBy(repos.reviews.forTasks(ids), (r) => r.taskId);
   const findingsByTask = groupBy(repos.reviews.findingsFor(ids), (f) => f.taskId);
   const labelsByTask = repos.labels.forTasks(ids);
+  const relations = repos.relations.forTasks(ids);
+  const related = new Map(
+    repos.tasks.getMany([...new Set(relations.flatMap((r) => [r.blockerId, r.blockedId]))]).map((t) => [t.id, t]),
+  );
+  const toRelation = (id: string): TaskRelation | null => {
+    const task = related.get(id);
+    return task
+      ? { id: task.id, number: task.number, title: task.title, status: task.status, archived: task.archivedAt !== null }
+      : null;
+  };
+  const relatedTasks = (relatedIds: string[]): TaskRelation[] =>
+    relatedIds
+      .map((id) => toRelation(id))
+      .filter((t): t is TaskRelation => t !== null)
+      .sort((x, y) => x.number - y.number);
   const importsByTask = repos.imports.forTasks(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
@@ -98,6 +115,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const findings = findingsByTask.get(record.id) ?? [];
     const review = deriveReviewSummary(rounds, findings, reviewMaxRounds);
     const issueImport = toTaskImport(importsByTask.get(record.id));
+    const blockedBy = relatedTasks(relations.filter((r) => r.blockedId === record.id).map((r) => r.blockerId));
     const summary: TaskSummary = {
       id: record.id,
       number: record.number,
@@ -114,6 +132,9 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       updatedAt: record.updatedAt,
       statusChangedAt: record.statusChangedAt,
       labels: labelsByTask.get(record.id) ?? [],
+      blockedBy,
+      blocks: relatedTasks(relations.filter((r) => r.blockerId === record.id).map((r) => r.blockedId)),
+      blocked: isBlocked(blockedBy),
       resolution: record.resolution,
       resolvedBy: taskRef(record.resolvedByTaskId ? referenced.get(record.resolvedByTaskId) : undefined),
       progress: deriveProgress(phases),

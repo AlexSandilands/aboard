@@ -152,6 +152,8 @@ export function createProjectsService(core: Core): ProjectsService {
         get(id);
         const taskIds = repos.tasks.idsForProject(id);
         for (const taskId of taskIds) fx.taskDeleted(taskId);
+        // Tasks elsewhere that blocked, or were blocked by, these lose the relation (ON DELETE CASCADE).
+        for (const other of repos.relations.neighbours(taskIds)) if (!taskIds.includes(other)) fx.task(other);
         // Tasks elsewhere that were closed against these lose the link (ON DELETE SET NULL); refresh their cards.
         for (const resolved of repos.tasks.resolvedBy(taskIds)) {
           if (resolved.projectId !== id) fx.task(resolved.id);

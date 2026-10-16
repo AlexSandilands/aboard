@@ -43,7 +43,7 @@ function seed() {
   });
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
-  s.tasks.create({ projectId: project.id, title: "Idea" });
+  const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   s.tasks.addNote(a.id, "handover", "agent");
   s.reviews.submit(
     a.id,
@@ -54,7 +54,7 @@ function seed() {
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
-  return { ...h, s, project, a, b };
+  return { ...h, s, project, a, b, idea };
 }
 
 const PRIMARY_KEYS: Record<string, string> = {
@@ -67,6 +67,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   plan_steps: "id",
   task_links: "id",
   task_labels: "task_id, label",
+  task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
   review_findings: "id",
   task_events: "id",
@@ -133,6 +134,7 @@ describe("dump", () => {
         "settings.json",
         "projects.json",
         "labels.json",
+        "relations.json",
         "counters.json",
         `tasks/${a.createdAt.slice(0, 7)}/task-${a.number}.json`,
         `events/${a.createdAt.slice(0, 7)}.json`,
@@ -274,6 +276,7 @@ describe("restore", () => {
     const old: BoardDump = {
       ...dump,
       manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
+      task_relations: [],
       tasks: dump.tasks.map((bundle) => {
         const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
@@ -340,6 +343,21 @@ describe("restoreTask", () => {
     expect(after.links.map((l) => l.url)).toEqual(before.links.map((l) => l.url));
     expect(after.events.at(-1)).toMatchObject({ type: "restored", actor: "user" });
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("puts back what it blocked, and keeps current relations when it replaces a task", () => {
+    const { s, a, idea } = seed();
+    const dump = s.backup.dump();
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(s.tasks.summary(idea.id).blockedBy.map((t) => t.id)).toEqual([a.id]);
+
+    // The relation changed since the backup: a forced restore leaves it as it is now.
+    s.tasks.update(idea.id, { removeBlockedBy: [a.id] }, "user");
+    s.backup.restoreTask(dump, a.number, { actor: "user", force: true });
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
   });
 
   it("refuses a task still on the board unless forced, and renumbers on a number clash", () => {

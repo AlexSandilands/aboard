@@ -52,6 +52,8 @@ export const BoardDump = z.object({
   projects: z.array(BackupRow),
   label_colors: z.array(BackupRow),
   counters: z.array(BackupRow),
+  /** Blocks / blocked-by pairs. Backups from before relations existed have none. */
+  task_relations: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
 });
