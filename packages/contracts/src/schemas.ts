@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LabelHue } from "./labels.ts";
+import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
@@ -440,26 +441,28 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-export const AppSettings = z.object({
-  jiraBaseUrl: z.string().nullable(),
-  githubPolling: z.boolean(),
-  /** Which T3 link the primary "Open in T3 Code" action uses. */
-  t3LinkTarget: z.enum(["desktop", "browser"]),
-  /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
-  t3TokenSet: z.boolean(),
-  /** Moving a task to Review opens a local review round, unless the task overrides it. */
-  autoReview: z.boolean(),
-  /** The skill reviewers follow, unless the task's project overrides it. */
-  reviewSkill: ReviewSkillRef,
-  reviewMaxRounds: z.number().int().min(1).max(10),
-  /** Let the board run a headless reviewer when no agent picks a round up. */
-  headlessReviewEnabled: z.boolean(),
-  /** The Claude Code CLI to run; null looks up `claude` on PATH. */
-  headlessReviewCli: z.string().nullable(),
-  headlessReviewBudgetUsd: z.number().positive().max(100),
-  /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
-  modelTiers: ModelTiers,
-});
+export const AppSettings = z
+  .object({
+    jiraBaseUrl: z.string().nullable(),
+    githubPolling: z.boolean(),
+    /** Which T3 link the primary "Open in T3 Code" action uses. */
+    t3LinkTarget: z.enum(["desktop", "browser"]),
+    /** Whether a T3 orchestration:read token is stored (the token itself is never returned). */
+    t3TokenSet: z.boolean(),
+    /** Moving a task to Review opens a local review round, unless the task overrides it. */
+    autoReview: z.boolean(),
+    /** The skill reviewers follow, unless the task's project overrides it. */
+    reviewSkill: ReviewSkillRef,
+    reviewMaxRounds: z.number().int().min(1).max(10),
+    /** Let the board run a headless reviewer when no agent picks a round up. */
+    headlessReviewEnabled: z.boolean(),
+    /** The Claude Code CLI to run; null looks up `claude` on PATH. */
+    headlessReviewCli: z.string().nullable(),
+    headlessReviewBudgetUsd: z.number().positive().max(100),
+    /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
+    modelTiers: ModelTiers,
+  })
+  .extend(BackupSettings.shape);
 export type AppSettings = z.infer<typeof AppSettings>;
 
 export const UpdateSettingsInput = z.object({
@@ -474,6 +477,10 @@ export const UpdateSettingsInput = z.object({
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  backupEnabled: z.boolean().optional(),
+  backupDir: z.string().trim().nullable().optional(),
+  backupRemote: z.string().trim().nullable().optional(),
+  backupIntervalMinutes: BackupSettings.shape.backupIntervalMinutes.optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

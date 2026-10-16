@@ -1,4 +1,5 @@
 import type {
+  BackupStatus,
   ConnectT3Result,
   GithubStatus,
   MergePrInput,
@@ -37,4 +38,8 @@ export interface Integrations {
   testT3(): Promise<T3IntegrationStatus>;
   /** Saves a T3 token, or exchanges a pairing link/code for one, and checks it. */
   connectT3(value: string): Promise<ConnectT3Result>;
+  /** The last scheduled or manual git backup. */
+  backupStatus(): BackupStatus;
+  /** Backs the board up to its git repo now; failures land in the returned status. */
+  runBackup(): Promise<BackupStatus>;
 }
