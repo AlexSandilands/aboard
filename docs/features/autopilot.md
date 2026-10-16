@@ -217,18 +217,28 @@ as comments only.
   posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (#96) counts its
   own attempts against the same limit; each fix is followed by at most one new head and so one review.
 - **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
-  `access: "read-only"`, the extra tools `gh pr view <n>`, `gh pr diff <n>` and two exact, wildcard-free `gh api`
-  reads of the PR's comments and reviews, and an output schema. It has no way to write to GitHub. Because it reads
-  text anyone can write (the PR's description and comments), the request sets `untrustedInput`: no board tools and
-  no other MCP servers (`--strict-mcp-config`), file tools scoped to the worktree (`Read(./**)` and so on, where a
-  bare `Read` reaches any file the user can), and `git --no-index` and `git -C` denied. Before the agent starts the
-  runner checks the worktree is at the commit the run is about (`expectHead`, `WorktreeHeadError`): a branch that
-  moved past it skips the run, a worktree that isn't descended from it (a stale `origin`, a fork's branch name that
-  exists on `origin`, a PR in another repository) fails it, flagged, before any budget is spent. A review has to be
-  held to read-only, which a T3 thread can't be, so the runner setting is Auto or Headless and both run headless.
-  It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill** chosen (the built-in
-  `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the PR's text untrusted,
-  and says nothing is recorded on the board.
+  `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
+  write (the PR's description and comments), the request sets `untrustedInput`, which gives it the least it needs:
+  - no board tools and no other MCP servers (`--strict-mcp-config`), and `--setting-sources user`, so the branch's
+    own `.claude/settings.json` (allow rules, hooks) never applies;
+  - file tools scoped to the worktree (`Read(./**)` and so on; a bare `Read` reaches any file the user can);
+  - git in three exact commands only (`rev-parse HEAD`, `status --short`, `log --oneline -20`), because `git diff`,
+    `show` and `log` take any path, so read any file (a path outside the work tree makes `diff` compare files) and
+    write any file (`--output=`);
+  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` and two reads of
+    the PR's comments and reviews with `gh api`. The PR is named by its URL, so there is no `-R` to point it at
+    another repository, and no wildcard for `--web`, `-f` or `--method` to ride on.
+
+  Before the agent starts the runner checks the worktree is at the commit the run is about (`expectHead`,
+  `WorktreeHeadError`) and, when it isn't, removes the worktree and its branch (the run records neither). A branch
+  that moved past the commit skips the run. So does a rewritten branch (a force-push) once `GithubActions.prHead`
+  says GitHub's head is no longer that commit; if GitHub still says it is, the checkout is what's wrong (a stale
+  `origin`, a fork's branch name that exists on `origin`, a PR in another repository) and the run fails, flagged,
+  before any budget is spent. A read-only run may read the default branch (a PR from `main`), since it can't push.
+  A review has to be held to read-only, which a T3 thread can't be, so the runner setting is Auto or Headless and
+  both run headless. It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill**
+  chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the
+  PR's text untrusted, and says nothing is recorded on the board.
 - **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
   `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot review`
   (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
@@ -277,12 +287,12 @@ with that error.
   session, and fails when the task has no live thread.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
-  branch is refused either way.
+  branch is refused either way, except for a read-only run, which can't push.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
   (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
-  Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers,
-  file tools limited to the worktree) and **`expectHead`**, the commit the worktree must be at, checked before the
+  Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
+  checkout settings, file tools limited to the worktree, only exact git commands) and **`expectHead`**, the commit the worktree must be at, checked before the
   agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:

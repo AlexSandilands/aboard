@@ -9,7 +9,7 @@ import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import { WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult, type RunPatch } from "./types.ts";
-import { createWorktree, defaultBranchOf, type Worktree } from "./worktrees.ts";
+import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "./worktrees.ts";
 
 // Carries out Autopilot's agent actions (docs/features/autopilot.md#runners): a new T3 Code thread, a nudge into
 // the task's live thread, or `claude -p` in a worktree of its own.
@@ -145,9 +145,21 @@ export function createAutopilotRunner(deps: {
       runId: request.run.id,
       baseRef: request.workspace?.baseRef,
       branch: request.workspace?.branch,
+      // A reviewer can't push, so it may read the default branch too.
+      readOnly: request.access === "read-only",
     });
     // Before the agent costs anything: it must be reading the commit it was asked about.
-    if (request.expectHead) await checkHead(worktree.path, request.expectHead);
+    if (request.expectHead) {
+      try {
+        await checkHead(worktree.path, request.expectHead);
+      } catch (error) {
+        // The run records no worktree yet, so cleanup would never find this one: remove it now, with its branch (the
+        // agent never ran, so the branch holds nothing of its own).
+        await removeWorktree(runGit, worktree.path).catch(() => null);
+        await runGit(["branch", "-D", worktree.branch], project.workspaceRoot).catch(() => null);
+        throw error;
+      }
+    }
     const sessionId = newSessionId();
     update({ runner: "headless", worktreePath: worktree.path, sessionId });
     try {

@@ -61,15 +61,19 @@ export function pushDenyRules(defaultBranch: string | null): string[] {
 }
 
 /**
- * The read-only tools with the file tools limited to the working directory: a bare `Read` reaches any file the user
- * can, which a prompt injection could post publicly through the review.
+ * What an agent that reads untrusted text may use, instead of the read-only list. The file tools reach only the working
+ * directory (a bare `Read` reaches any file the user can). git is limited to three exact commands: `git diff`, `show`
+ * and `log` take any path, so they read any file (a path outside the work tree makes `diff` compare files) and write
+ * any file (`--output=`). The change itself comes from `gh pr diff`, which the caller allows.
  */
-const SCOPED_READ_ONLY_TOOLS = READ_ONLY_TOOLS.map((tool) =>
-  tool === "Read" || tool === "Grep" || tool === "Glob" ? `${tool}(./**)` : tool,
-);
-
-/** git can read any file with `--no-index`, or any repository with `-C`: not for an agent that reads untrusted text. */
-const UNTRUSTED_DENY_RULES = ["Bash(git *--no-index*)", "Bash(git -C *)", "Bash(git * -C *)"];
+const UNTRUSTED_TOOLS = [
+  "Read(./**)",
+  "Grep(./**)",
+  "Glob(./**)",
+  "Bash(git rev-parse HEAD)",
+  "Bash(git status --short)",
+  "Bash(git log --oneline -20)",
+];
 
 export interface AgentArgsInput {
   access: AgentAccess;
@@ -85,7 +89,8 @@ export interface AgentArgsInput {
   outputSchema?: object | null;
   /**
    * The agent reads text anyone can write, so a prompt injection could try to steal or misuse what it can reach: it
-   * gets no MCP servers (the board's included), and its file tools only reach its own worktree. Read-only agents only.
+   * gets no MCP servers (the board's included), no settings from the checkout, only exact git commands, and file tools
+   * that reach only its own worktree. Read-only agents only.
    */
   untrusted?: boolean;
 }
@@ -102,14 +107,14 @@ export function agentArgs(input: AgentArgsInput): string[] {
     "--permission-mode",
     readOnly ? "dontAsk" : "acceptEdits",
     "--allowedTools",
-    ...(readOnly ? (input.untrusted ? SCOPED_READ_ONLY_TOOLS : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]) : EDIT_TOOLS),
+    ...(readOnly ? (input.untrusted ? UNTRUSTED_TOOLS : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]) : EDIT_TOOLS),
     ...(input.tools ?? []),
     "--disallowedTools",
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
-    ...(readOnly && input.untrusted ? UNTRUSTED_DENY_RULES : []),
     ...pushDenyRules(input.defaultBranch),
-    // No MCP servers at all: a reviewer of untrusted text has no use for them.
-    ...(readOnly && input.untrusted ? ["--strict-mcp-config"] : []),
+    // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
+    // anything or run hooks, for anyone who can push to it.
+    ...(readOnly && input.untrusted ? ["--strict-mcp-config", "--setting-sources", "user"] : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",

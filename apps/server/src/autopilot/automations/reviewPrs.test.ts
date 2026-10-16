@@ -66,6 +66,7 @@ function setup() {
   let runnerError: Error | null = null;
   /** The PR's head on GitHub right now: what the snapshot says, as in the real integration. */
   let live: () => string = () => SHA_A;
+  let liveOverride: string | null = null;
   const runner: Runner = {
     start: async (request, update = () => {}): Promise<RunnerResult> => {
       requests.push(request);
@@ -86,6 +87,7 @@ function setup() {
       const id = 100 + posts.length;
       return { id, url: `https://github.com/acme/app/pull/7#pullrequestreview-${id}`, headOid, folded: 0 };
     },
+    prHead: async () => live(),
   };
   const h = createTestHarness({ integrations: { automations: [reviewPrs] } });
   const engine = createAutopilotEngine({
@@ -109,6 +111,7 @@ function setup() {
   const linkId = () => s.tasks.summary(task.id).links.find((l) => l.kind === "pr")!.id;
   const setPr = (over: Partial<PrSnapshot> = {}) => s.links.setSnapshot(linkId(), snapshot(over));
   live = () => {
+    if (liveOverride) return liveOverride;
     const link = s.tasks.summary(task.id).links.find((l) => l.kind === "pr");
     return (link?.kind === "pr" && link.snapshot?.headOid) || SHA_A;
   };
@@ -143,6 +146,9 @@ function setup() {
     },
     failPost: (message: string | null) => (postError = message),
     failRunner: (error: Error | null) => (runnerError = error),
+    setLive: (sha: string | null) => {
+      liveOverride = sha;
+    },
     setPr,
     pass,
     turnOn,
@@ -279,12 +285,34 @@ describe("review PRs: triggers", () => {
   it("fails the run, flagged, when the worktree is at a commit that was never the PR's", async () => {
     const { setPr, pass, turnOn, failRunner, runs, posts } = setup();
     turnOn();
+    // GitHub still says a1b2c3d is the head, so it is the checkout that's wrong.
     failRunner(new WorktreeHeadError("The worktree is at 9999999, not the PR's head a1b2c3d", "9999999", false));
     setPr();
     await pass();
     expect(runs()[0]).toMatchObject({ status: "failed", needsAttention: true });
     expect(runs()[0]!.error).toContain("not the PR's head");
     expect(posts).toEqual([]);
+  });
+
+  it("skips, not fails, when the branch was rewritten: the worktree isn't past the commit, but GitHub's head isn't it either", async () => {
+    const { setPr, pass, turnOn, failRunner, setLive, runs, requests } = setup();
+    turnOn();
+    failRunner(new WorktreeHeadError("The worktree is at ffffff0, not the PR's head a1b2c3d", "ffffff0", false));
+    // The poll hasn't caught up yet, but GitHub already has the force-pushed head.
+    setLive(SHA_C);
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({
+      status: "skipped",
+      summary: "PR #7 moved on while it was being reviewed",
+      needsAttention: false,
+    });
+    // And it is no round used: the new head is the first.
+    failRunner(null);
+    setLive(null);
+    setPr({ headOid: SHA_C });
+    await pass();
+    expect(requests.at(-1)!.prompt).toContain("review round 1 of 3");
   });
 
   it("stops after the rounds the engine allows for a PR", async () => {
@@ -374,18 +402,20 @@ describe("review PRs: the agent", () => {
   it("can read this PR and nothing else, and can't write to GitHub at all", () => {
     const tools = reviewTools({ host: "github.com", repo: "acme/app", number: 7 });
     expect(tools).toEqual([
-      "Bash(gh pr view 7)",
-      "Bash(gh pr view 7 *)",
-      "Bash(gh pr diff 7)",
-      "Bash(gh pr diff 7 *)",
+      "Bash(gh pr view https://github.com/acme/app/pull/7)",
+      "Bash(gh pr view https://github.com/acme/app/pull/7 --comments)",
+      "Bash(gh pr diff https://github.com/acme/app/pull/7)",
       "Bash(gh api repos/acme/app/pulls/7/comments)",
       "Bash(gh api repos/acme/app/pulls/7/reviews)",
     ]);
-    // The only `gh api` rules are exact: no wildcard that a write flag could ride on, and no `gh pr review`.
-    expect(tools.filter((t) => t.startsWith("Bash(gh api")).every((t) => !t.includes("*"))).toBe(true);
+    // Every rule is exact: no wildcard for -R, --web, -f or --method to ride on, and no `gh pr review`.
+    expect(tools.some((t) => t.includes("*"))).toBe(false);
     expect(tools.some((t) => t.includes("gh pr review"))).toBe(false);
     expect(reviewTools({ host: "github.example.com", repo: "acme/app", number: 9 })).toContain(
       "Bash(gh api repos/acme/app/pulls/9/reviews --hostname github.example.com)",
+    );
+    expect(reviewTools({ host: "github.example.com", repo: "acme/app", number: 9 })).toContain(
+      "Bash(gh pr diff https://github.example.com/acme/app/pull/9)",
     );
   });
 
@@ -458,7 +488,10 @@ describe("review PRs: the agent", () => {
     const result = await reviewPrs.act(candidate!, {
       services: s,
       runner: { start: () => Promise.reject(new Error("must not run")) },
-      github: { postReview: () => Promise.reject(new Error("must not post")) },
+      github: {
+        postReview: () => Promise.reject(new Error("must not post")),
+        prHead: () => Promise.reject(new Error("must not read")),
+      },
       engine: s.autopilot.engine(),
       config: reviewPrs.defaults,
       run: { id: "r" } as never,

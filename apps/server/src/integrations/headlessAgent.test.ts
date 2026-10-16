@@ -52,13 +52,21 @@ describe("headless agent", () => {
     expect(closed).not.toContain(`mcp__${BRAND.id}`);
     expect(closed).toContain("--strict-mcp-config");
     // File tools only reach the working directory: a bare Read would reach any file the user can.
-    expect(closed).toEqual(expect.arrayContaining(["Read(./**)", "Grep(./**)", "Glob(./**)", "Bash(git diff *)"]));
+    expect(closed).toEqual(expect.arrayContaining(["Read(./**)", "Grep(./**)", "Glob(./**)"]));
     for (const bare of ["Read", "Grep", "Glob"]) expect(closed).not.toContain(bare);
-    // git can read other files and repositories too.
-    const denied = closed.slice(closed.indexOf("--disallowedTools") + 1);
-    expect(denied).toEqual(expect.arrayContaining(["Bash(git *--no-index*)", "Bash(git -C *)"]));
+    // The checkout's own settings (allow rules, hooks) must not apply.
+    expect(closed.slice(closed.indexOf("--setting-sources"), closed.indexOf("--setting-sources") + 2)).toEqual([
+      "--setting-sources",
+      "user",
+    ]);
+    // git only in exact forms: diff, show and log take any path, and --output= writes to it.
+    const allowed = closed.slice(closed.indexOf("--allowedTools") + 1, closed.indexOf("--disallowedTools"));
+    const git = allowed.filter((t) => t.startsWith("Bash(git"));
+    expect(git).toEqual(["Bash(git rev-parse HEAD)", "Bash(git status --short)", "Bash(git log --oneline -20)"]);
+    expect(git.some((t) => t.includes("*"))).toBe(false);
     // Untrusted only means something for a read-only agent.
     expect(agentArgs({ ...base, access: "edit", untrusted: true })).not.toContain("--strict-mcp-config");
+    expect(open).not.toContain("--setting-sources");
   });
 
   it("denies force-pushes, pushes to the default branch and merging, in every written form", () => {

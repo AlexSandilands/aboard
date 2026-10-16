@@ -342,6 +342,8 @@ export interface GithubIntegration {
    * changes). Throws AppError: `gh` missing or not signed in, the PR's head isn't the commit read, GitHub's refusal.
    */
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
+  /** The PR's head commit on GitHub now. Throws AppError. */
+  prHead(ref: PrRef): Promise<string>;
   start(): void;
   stop(): void;
 }
@@ -519,6 +521,18 @@ export function createGithubIntegration(deps: {
     }
   };
 
+  /** Checks `gh` can be used for the host, as an AppError. */
+  const requireSignedIn = async (host: string): Promise<void> => {
+    const current = await ensureStatus();
+    if (!current.available) throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
+    if (!isGithubHost(host, signedInHosts(current)) || !signedInTo(host, current)) {
+      throw new AppError(
+        "VALIDATION",
+        `GitHub CLI (gh) is not signed in to ${host}: run \`gh auth login --hostname ${host}\``,
+      );
+    }
+  };
+
   const refreshOne = async (link: RefPrLink): Promise<void> => {
     const [owner, name] = splitRepo(link.ref.repo);
     const { query, variables } = pollQuery([link.ref.number]);
@@ -623,15 +637,20 @@ export function createGithubIntegration(deps: {
         logOnce(link.id, link.url, messageOf(error));
       }
     },
-    async postReview(ref, input) {
-      const current = await ensureStatus();
-      if (!current.available) throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
-      if (!isGithubHost(ref.host, signedInHosts(current)) || !signedInTo(ref.host, current)) {
-        throw new AppError(
-          "VALIDATION",
-          `GitHub CLI (gh) is not signed in to ${ref.host}: run \`gh auth login --hostname ${ref.host}\``,
-        );
+    async prHead(ref) {
+      await requireSignedIn(ref.host);
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const raw = await api.graphql(ref.host, ACTION_STATE_QUERY, { owner, name, number: ref.number });
+        const parsed = ActionState.safeParse(raw);
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        return parsed.data.repository.pullRequest.headRefOid;
+      } catch (error) {
+        throw new AppError("VALIDATION", messageOf(error));
       }
+    },
+    async postReview(ref, input) {
+      await requireSignedIn(ref.host);
       const [owner, name] = splitRepo(ref.repo);
       try {
         const raw = await api.graphql(ref.host, ACTION_STATE_QUERY, { owner, name, number: ref.number });

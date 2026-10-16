@@ -42,11 +42,14 @@ export type RunPatch = Partial<Pick<AutopilotRun, "runner" | "sessionId" | "thre
 /** What an action may do on GitHub: post a review as the user's `gh` account. */
 export interface GithubActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
+  /** The PR's head commit on GitHub now, in full. */
+  prHead(ref: PrRef): Promise<string>;
 }
 
 /** GitHub until one is configured: every action that needs it fails with a clear reason. */
 export const NO_GITHUB: GithubActions = {
   postReview: () => Promise.reject(new Error("GitHub isn't available")),
+  prHead: () => Promise.reject(new Error("GitHub isn't available")),
 };
 
 export interface ActionContext<C> {

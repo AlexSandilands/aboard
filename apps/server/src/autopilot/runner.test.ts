@@ -193,6 +193,18 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       expect(jobs).toEqual([]);
     });
 
+    it("removes the worktree it made when the check refuses, since the run never records it", async () => {
+      const { run, task, start, patches } = setup();
+      const old = git(repo.checkout, "rev-parse", "main");
+      await start({ options: { runner: "headless" }, workspace: { branch: "feature" }, expectHead: old }).catch(
+        () => null,
+      );
+      const path = join(repo.worktrees, "app", `${task.number}-${run.id.slice(0, 8)}`);
+      expect(existsSync(path)).toBe(false);
+      expect(git(repo.checkout, "branch", "--list", "autopilot/*")).toBe("");
+      expect(patches).toEqual([]);
+    });
+
     it("refuses, saying it isn't the PR's, when the worktree is at an unrelated commit", async () => {
       const { jobs, start } = setup();
       git(repo.checkout, "commit", "--quiet", "--allow-empty", "-m", "elsewhere");
@@ -207,6 +219,15 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       expect((failure as Error).message).toContain("not the PR's head");
       expect(jobs).toEqual([]);
     });
+  });
+
+  it("lets a read-only agent read the default branch, but never an agent that can push", async () => {
+    const { jobs, start } = setup({ agent: async () => result({ result: "ok" }) });
+    await start({ options: { runner: "headless" }, access: "read-only", workspace: { branch: "main" } });
+    expect(readFileSync(join(jobs[0]!.cwd, "README.md"), "utf8")).toBe("hello\n");
+    await expect(setup().start({ options: { runner: "headless" }, workspace: { branch: "main" } })).rejects.toThrow(
+      "default branch",
+    );
   });
 
   it("fails a run that stopped, keeping its cost and session", async () => {

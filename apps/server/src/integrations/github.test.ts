@@ -487,6 +487,13 @@ describe("github postReview", () => {
     expect(retried.endsWith("_…cut off_")).toBe(true);
   });
 
+  it("reads the PR's head commit", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await expect(github.prHead(ref)).resolves.toBe("abcdef1234567890");
+    await expect(github.prHead({ ...ref, number: 404 })).rejects.toThrow(/Could not resolve to a PullRequest/);
+  });
+
   it("posts a review with no inline comments without a threads field", async () => {
     const { gh, github } = setup([ghLink("l1", 7)]);
     gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
