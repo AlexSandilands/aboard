@@ -145,6 +145,15 @@ describe("issue import", () => {
     expect(s.imports.pending()).toEqual([]);
   });
 
+  it("says why when the MCP servers couldn't be listed", async () => {
+    const { create, run, warnings } = setup({ listServers: () => Promise.reject(new Error("claude not found")) });
+    const failed = await run(create("PROJ-7").id);
+    expect(failed.import?.error).toContain(
+      "No Jira tool available (couldn't list Claude Code's MCP servers: claude not found)",
+    );
+    expect(warnings.join()).toContain("claude not found");
+  });
+
   it("asks again after a listing that came back empty", async () => {
     const { create, run, listed } = setup({ servers: [] });
     await run(create("PROJ-7").id);

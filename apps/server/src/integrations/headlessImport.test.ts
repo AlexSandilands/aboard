@@ -128,6 +128,7 @@ describe("finding Jira tools", () => {
         "mcp__jira__create*",
         "mcp__jira__Create*",
         "mcp__jira__*_comment*",
+        "mcp__jira__*-comment*",
         "mcp__jira__*Comment*",
         "mcp__slack__post*",
         "mcp__slack__set*",
@@ -144,6 +145,8 @@ describe("finding Jira tools", () => {
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__set_jira_due_date"))).toBe(true);
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__addCommentToJiraIssue"))).toBe(true);
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__link_jira_issues"))).toBe(true);
+    expect(rules.some((rule) => globMatches(rule, "mcp__jira__notion-create-pages"))).toBe(true);
+    expect(rules.some((rule) => globMatches(rule, "mcp__jira__get-jira-issue"))).toBe(false);
   });
 
   it("covers a server only the allow rules name, even one allowed as a whole", () => {

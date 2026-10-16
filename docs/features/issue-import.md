@@ -74,7 +74,7 @@ part is skipped), so "any read-only Jira tool on any server" can't be written. T
 blanket rule such as `mcp__atlassian` there would let an injected request create or comment on an issue. So
 the run also denies, on every connected MCP server and every server a Jira rule names (even one allowed as a
 whole), the tools whose names look like writes: a verb from a list (`create`, `update`, `post`, `set`, `link`,
-`move`, `transition`, `comment`, …) at the start of the name or after a word break, in snake and camel case
+`move`, `transition`, `comment`, …) at the start of the name or after a word break, in snake, kebab and camel case
 (`set_due_date`, `addCommentToIssue`), so `get_…` is never mistaken for `set`. Deny rules win over allow rules
 in every mode. A tool a Jira rule allows by name is never denied. This is a best effort by name, not a
 sandbox.

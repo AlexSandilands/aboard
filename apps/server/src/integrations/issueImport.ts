@@ -47,6 +47,8 @@ export function createIssueImporter(deps: {
   const log = deps.log ?? console;
   /** `claude mcp list` health-checks every server, which takes seconds; the answer is kept for a while. */
   let listing: { at: number; list: Promise<string[]> } | null = null;
+  /** Why the last listing failed, to say so when no Jira tool turns up. */
+  let listError: string | null = null;
   const queue: string[] = [];
   const running = new Set<string>();
   let idleWaiters: Array<() => void> = [];
@@ -112,7 +114,15 @@ export function createIssueImporter(deps: {
     const entry = {
       at: Date.now(),
       list: listServers(cli, tmpdir())
-        .catch(() => [])
+        .then((list) => {
+          listError = null;
+          return list;
+        })
+        .catch((error: unknown) => {
+          listError = messageOf(error);
+          log.warn(`[import] couldn't list Claude Code's MCP servers: ${listError}`);
+          return [];
+        })
         .then((list) => {
           if (list.length === 0 && listing === entry) listing = null;
           return list;
@@ -134,7 +144,7 @@ export function createIssueImporter(deps: {
     const jiraTools = settings.issueImportJiraTools.length ? settings.issueImportJiraTools : jiraToolRules(servers);
     if (jiraTools.length === 0) {
       throw new Error(
-        "No Jira tool available: connect a Jira MCP server to Claude Code (claude mcp add), or list its tools in Settings",
+        `No Jira tool available${listError ? ` (couldn't list Claude Code's MCP servers: ${listError})` : ""}: connect a Jira MCP server to Claude Code (claude mcp add --scope user), or list its tools in Settings`,
       );
     }
     const outcome = await runImport({

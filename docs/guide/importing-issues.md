@@ -19,8 +19,9 @@ issue key.
   summarises the issue with Claude Code; without it, the issue's own title and text are used instead.
 - **Jira issues** are read through your own Jira MCP server in Claude Code, so you need one connected
   (`claude mcp list` shows it as connected), such as Atlassian's, added for you rather than for one project
-  (`claude mcp add --scope user …`). The board only lets the run read: it denies tools whose names look like
-  writes (create, update, comment, transition, …), even where your own Claude Code settings allow them.
+  (`claude mcp add --scope user …`). The board allows only the read tools for the run and denies tools whose names
+  look like writes (create, update, comment, transition, …) even where your own Claude Code settings allow
+  them. That is a check by name, not a sandbox.
 
 Both run the Claude Code CLI, the one named under **Settings → Local review** (it's `claude` from your PATH
 unless you set another), on a small model (Haiku by default).

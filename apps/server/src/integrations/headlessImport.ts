@@ -274,8 +274,8 @@ export function globMatches(glob: string, text: string): boolean {
 
 /**
  * Deny rules for the write-looking tools of every server in `servers` and of every server the allowed rules name,
- * except a tool the rules allow by name. A verb counts at the start of a tool name or after a word break, in snake
- * and camel case (`set_due_date`, `getAndSetX`), so `get_…` is never mistaken for `set`. Deny rules win over allow
+ * except a tool the rules allow by name. A verb counts at the start of a tool name or after a word break, in snake,
+ * kebab and camel case (`set_due_date`, `notion-create-pages`, `getAndSetX`), so `get_…` is never mistaken for `set`. Deny rules win over allow
  * rules in every mode, including ones from the user's settings.
  */
 export function writeToolDenyRules(servers: readonly string[], allowed: readonly string[]): string[] {
@@ -285,6 +285,7 @@ export function writeToolDenyRules(servers: readonly string[], allowed: readonly
       `${prefix}${verb}*`,
       `${prefix}${capitalised(verb)}*`,
       `${prefix}*_${verb}*`,
+      `${prefix}*-${verb}*`,
       `${prefix}*${capitalised(verb)}*`,
     ]).filter((rule) => !allowed.some((allow) => globMatches(rule, allow))),
   );
