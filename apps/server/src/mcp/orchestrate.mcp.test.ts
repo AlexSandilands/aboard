@@ -76,6 +76,14 @@ describe("orchestrating an epic over MCP", () => {
     );
   });
 
+  it("gives a subagent a work prompt for a task the orchestrator just planned", async () => {
+    const planned = await call(agent, "set_plan", { task: "#3", ...plan });
+    expect(planned.isError).toBe(false);
+    const result = await call(agent, "get_handoff_prompt", { task: "#3", subagent: true });
+    expect(result.isError).toBe(false);
+    expect(result.text).toContain("Work prompt for #3, for a subagent.");
+  });
+
   it("refuses modes that don't fit the task", async () => {
     const epicWork = await call(agent, "get_handoff_prompt", { task: "#1", mode: "work" });
     expect(epicWork.isError).toBe(true);

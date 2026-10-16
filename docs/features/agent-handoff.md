@@ -66,7 +66,8 @@ review loop. Both are described in [epics.md](epics.md#orchestrating-an-epic).
 
 Agents get the same prompts over MCP with `get_handoff_prompt(task, mode?, subagent?)`, which defaults the mode
 like the menu does. Its board link points at this server when it serves the built web app, else at the Vite dev
-server (`boardUrl` in `apps/server/src/mcp/shared.ts`).
+server (`boardUrl` in `apps/server/src/mcp/shared.ts`). Under `pnpm dev` with a `dist/` left from an earlier
+build, that means the server's stale copy on :4317 rather than Vite.
 
 ### Suggested model
 

@@ -259,8 +259,8 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         "The prompt that starts an agent session on a task, the same one the board's Copy prompt button gives. " +
         "Use it when orchestrating an epic: pass subagent: true for the prompt to give a subagent you start (it " +
         "reports back instead of asking the user or running its own review loop), or leave it off for a prompt the " +
-        "user pastes into a new session. mode defaults to the task's suggested one: plan for tasks without a plan, " +
-        "work otherwise, orchestrate for an epic.",
+        "user pastes into a new session. mode defaults to work for a subagent, else to the task's suggested one: " +
+        "plan for tasks in Backlog or without a plan, work otherwise, orchestrate for an epic.",
       inputSchema: {
         task: taskField,
         mode: z
@@ -274,8 +274,9 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
     (args) =>
       run(() => {
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
-        const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const subagent = args.subagent ?? false;
+        // A subagent only ever gets a work prompt; its orchestrator plans the task first.
+        const mode: HandoffMode = args.mode ?? (subagent ? "work" : defaultHandoffMode(task));
         const problem = handoffModeError(task, mode, subagent);
         if (problem) throw new AppError("VALIDATION", problem);
         const modelTiers = services.settings.get().modelTiers;

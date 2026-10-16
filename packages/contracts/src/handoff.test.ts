@@ -49,7 +49,9 @@ describe("subagent work prompt", () => {
     expect(prompt).toContain("You are a subagent");
     expect(prompt).toContain(`Call get_task("abc-123")`);
     expect(prompt).toContain("mark the step blocked");
-    expect(prompt).toContain("don't run the review loop and don't open a pull request");
+    expect(prompt).toContain(
+      "don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review",
+    );
     expect(prompt).toContain("end your reply with a short report");
   });
 
@@ -67,7 +69,7 @@ describe("orchestrate prompt", () => {
   it("starts from the epic overview and plans unplanned tasks with the user first", () => {
     expect(prompt).toContain(`Let's run the epic #7 "Epics"`);
     expect(prompt).toContain(`epic_overview("epic-1")`);
-    expect(prompt).toContain("Show me the drafts together and save each with set_plan");
+    expect(prompt).toContain("save each with set_plan (with suggestedModel) and move_task it to planned");
   });
 
   it("offers subagents first, then prompts to paste, without assuming one harness", () => {
@@ -81,7 +83,9 @@ describe("orchestrate prompt", () => {
 
   it("runs the review loop for subagent tasks and leaves the epic itself alone", () => {
     expect(prompt).toContain("call start_review(task) for the open round's reviewer brief");
+    expect(prompt).toContain("fresh reviewer subagent working in the task's worktree");
     expect(prompt).toContain("resolve_finding");
+    expect(prompt).toContain("the board's own reviewer has it");
     expect(prompt).toContain("Don't set_plan, move or review the epic itself");
   });
 

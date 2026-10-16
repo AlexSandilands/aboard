@@ -98,8 +98,8 @@ menu, or `get_handoff_prompt` over MCP) gives the agent an **orchestrating promp
 mode `orchestrate`, in `packages/contracts/src/handoff.ts`). The agent that runs it is the **orchestrator**:
 
 1. It reads `epic_overview`.
-2. It drafts plans for tasks still in Backlog, shows them to the user together, and saves each with `set_plan`
-   once the user approves. No task starts before its plan is approved.
+2. It drafts plans for tasks still in Backlog, shows them to the user together, and once the user approves
+   saves each with `set_plan` and moves it to Planned. No task starts before its plan is approved.
 3. It works out which tasks can run in parallel and tells the user the order.
 4. It starts each task by the first route the harness supports:
    - **Subagents** (Claude Code's Agent tool, Copilot CLI's subagents or the equivalent), one per task, each
@@ -127,9 +127,11 @@ A subagent can't ask the user anything, and most harnesses don't let it start su
   orchestrator can choose the subagent's model.
 
 The orchestrator then runs the loop for it: `start_review(task)` returns the brief of the round that is already
-open (it doesn't open another), a fresh reviewer subagent submits its findings, an implementer subagent in the
+open (it doesn't open another), a fresh reviewer subagent in the task's worktree submits its findings, an implementer subagent in the
 task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
-When the loop ends, the implementer opens and links the PR. Sessions the user started run their own loop.
+When the loop ends, the implementer opens and links the PR. If the board's own reviewer has already taken the round
+(`start_review` says it is being reviewed), the orchestrator waits for it. The `move_task` result still describes
+the loop to the subagent, so its prompt says to ignore that. Sessions the user started run their own loop.
 
 ## Decisions
 
