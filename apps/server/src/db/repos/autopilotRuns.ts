@@ -1,4 +1,4 @@
-import type { AutopilotRun, AutopilotRunStatus } from "@repo/contracts";
+import { AUTOPILOT_ACTOR, AUTOPILOT_UNSTICK, type AutopilotRun, type AutopilotRunStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 interface RunRow {
@@ -152,6 +152,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
     /**
      * Per task, the message of its latest run flagged needs_attention, while it stands: no real run of the same
      * automation on the task has succeeded since, and the task hasn't changed status since.
+     * A flagged Unstick run also clears when anyone but Autopilot has logged activity on the task since.
      */
     attentionFor(taskIds: readonly string[]): Map<string, string> {
       const rows = sql.all<{ task_id: string; message: string }>(
@@ -159,12 +160,17 @@ export function createAutopilotRunsRepo(sql: Sql) {
          FROM autopilot_runs r JOIN tasks t ON t.id = r.task_id
          WHERE r.task_id IN (SELECT value FROM json_each(?)) AND r.needs_attention = 1
            AND r.updated_at >= t.status_changed_at
+           AND NOT (r.automation = ? AND EXISTS (
+             SELECT 1 FROM task_events e WHERE e.task_id = r.task_id AND e.actor <> ? AND e.at > r.updated_at
+           ))
            AND NOT EXISTS (
              SELECT 1 FROM autopilot_runs s
              WHERE s.task_id = r.task_id AND s.automation = r.automation AND s.status = 'succeeded' AND s.dry_run = 0 AND s.finished_at > r.updated_at
            )
          ORDER BY r.updated_at, r.id`,
         jsonList(taskIds),
+        AUTOPILOT_UNSTICK,
+        AUTOPILOT_ACTOR,
       );
       // Ordered oldest first, so the latest flagged run's message wins.
       return new Map(rows.map((r) => [r.task_id, r.message]));

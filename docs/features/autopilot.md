@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -157,6 +157,22 @@ A partially unblocked dependent waits. It starts nothing: a flagged Planned depe
 planned tasks on the next tick. It only reports blockers that finished in the last 24 hours, so switching it on doesn't announce old work. The scope is the dependent's project. The dedupe key is
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
+
+**Unstick stale tasks** (`unstick`, #88; `automations/unstick.ts`). Needs no agent and is off until switched on.
+Watches tasks In Progress for two things, each reported once:
+
+- **Quiet**: no activity for `staleHours` (default 24). Activity is any activity entry not written by `autopilot`
+  (its own notes and run entries don't count), or the move into In Progress. Puts "Stale: no activity for 26h" under
+  Needs attention, which clears on the next activity by anyone else (or when the task changes status). The dedupe
+  key is `stale:<taskId>:<lastActivityAt>`.
+- **Waiting**: the task's latest T3 thread has waited on input or approval for `waitingMinutes` (default 30), by
+  the snapshot's `lastActivityAt`. The thread already shows its own Needs attention reason, so only the run and the
+  notification are added. The dedupe key is `waiting:<threadLinkId>:<lastActivityAt>`.
+
+Either way it logs a note under `autopilot` and sends an `autopilot_notice`. With `nudge` on (off by default) it
+also posts `nudgeMessage` ("Continue, or report what's blocking you.") into the task's live thread through the
+nudge runner; it never starts a session, and a task with no live thread just says so in the run's summary. The
+nudge isn't an agent run, so quiet hours and the caps don't hold it back.
 
 **Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
 per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
@@ -348,6 +364,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
