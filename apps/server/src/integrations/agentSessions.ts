@@ -21,6 +21,7 @@ import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";
+import { createTitleReader } from "./claudeSessionTitle.ts";
 import { messageOf } from "./github.ts";
 import {
   copyCommand,
@@ -61,6 +62,9 @@ const ClaudeSessionFile = z.object({
   pid: z.number().int().positive(),
   sessionId: z.string(),
   status: z.string().optional(),
+  // What the user or `--name` called the session; Claude derives one from the folder and branch otherwise.
+  name: z.string().optional(),
+  nameSource: z.string().optional(),
   procStart: z.string().optional(),
   entrypoint: z.string().optional(),
 });
@@ -125,6 +129,7 @@ export function createSessionStatusReader(deps: {
   const now = deps.now ?? Date.now;
   // `${pid}:${procStart}` → whether that pid's process is the one that wrote the file, and when we checked.
   const verified = new Map<string, { same: boolean; at: number }>();
+  const titles = createTitleReader(deps.dirs.claudeDir);
 
   /** Drops session files whose pid now belongs to another process. */
   const sameProcess = async (sessions: ClaudeSessionFile[]): Promise<ClaudeSessionFile[]> => {
@@ -144,11 +149,20 @@ export function createSessionStatusReader(deps: {
     return sessions.filter((s) => !s.procStart || verified.get(key(s))?.same !== false);
   };
 
+  /** A live session's own name, unless Claude only derived it from the folder, then the transcript's title. */
+  const titleOf = (ref: AgentSessionRef, live: readonly ClaudeSessionFile[]): string | null => {
+    const named = live.find((s) => s.name?.trim() && s.nameSource !== "derived");
+    return named?.name?.trim() || titles.read(ref.sessionId, ref.cwd);
+  };
+
   const claude = async (refs: readonly AgentSessionRef[], out: Map<string, AgentSessionSnapshot>) => {
     if (!refs.length) return;
     const scan = scanClaudeSessions(deps.dirs.claudeDir);
     if (!scan) {
-      for (const ref of refs) out.set(sessionKey(ref), SNAPSHOT_UNKNOWN);
+      for (const ref of refs) {
+        const title = titleOf(ref, []);
+        out.set(sessionKey(ref), title ? { ...SNAPSHOT_UNKNOWN, title } : SNAPSHOT_UNKNOWN);
+      }
       return;
     }
     const wanted = new Set(refs.map((r) => r.sessionId));
@@ -161,9 +175,12 @@ export function createSessionStatusReader(deps: {
       if (mine.length) {
         const statuses = new Set(mine.map((s) => claudeRunStatus(s.status)));
         const status = statuses.has("busy") ? "busy" : statuses.has("idle") ? "idle" : "running";
-        out.set(sessionKey(ref), { status, inApp: mine.some((s) => inApp(s.entrypoint)) });
+        const title = titleOf(ref, mine);
+        out.set(sessionKey(ref), { status, inApp: mine.some((s) => inApp(s.entrypoint)), ...(title ? { title } : {}) });
       } else {
-        out.set(sessionKey(ref), unreadableAlive ? SNAPSHOT_UNKNOWN : SNAPSHOT_NOT_RUNNING);
+        const base = unreadableAlive ? SNAPSHOT_UNKNOWN : SNAPSHOT_NOT_RUNNING;
+        const title = titleOf(ref, []);
+        out.set(sessionKey(ref), title ? { ...base, title } : base);
       }
     }
   };

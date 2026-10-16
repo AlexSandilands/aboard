@@ -320,7 +320,8 @@ export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness 
     const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
     hints.push(
       `Your session: if you are the one working on this task, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
-        "cwd: <your working directory>}), so the user can see it running and reopen it in a terminal from the board",
+        'cwd: <your working directory>}, label: "<what this session does, e.g. Implementing #N>"), so the user can see it running ' +
+        "and reopen it in a terminal from the board",
     );
   }
   // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.

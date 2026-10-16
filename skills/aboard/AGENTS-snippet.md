@@ -18,7 +18,7 @@ Track work on the user's local task board via the `aboard` MCP server (Backlog �
 - **Already handled:** `close_task` with `completed`/`duplicate` + `byTask: "#N"`, or `wont_do`. No plan needed; don't archive these.
 - **Handover:** end every session with `add_note`: done, left, gotchas, next action.
 - **T3 Code:** if you have T3 tools, call `t3_thread_configuration` (→ threadId) and `t3_environment_read` (→ environmentId) once, and pass `t3Thread: {environmentId, threadId}` to `create_task` / `add_to_backlog`, or to `link` whenever you start or resume an existing task.
-- **Your session:** in Claude Code or Copilot CLI (inside T3 Code too), when you start or resume a task, `link(agentSession: {harness: "claude-code" | "copilot-cli", sessionId, cwd})` with the id from `$CLAUDE_CODE_SESSION_ID` or `$COPILOT_AGENT_SESSION_ID` and your working directory. The board shows whether it is running and can reopen it in a terminal.
+- **Your session:** in Claude Code or Copilot CLI (inside T3 Code too), when you start or resume a task, `link(agentSession: {harness: "claude-code" | "copilot-cli", sessionId, cwd}, label)` with the id from `$CLAUDE_CODE_SESSION_ID` or `$COPILOT_AGENT_SESSION_ID` and your working directory. The `label` says what the session does (`Implementing #42`, `Planning #42`, `Reviewing #42 round 2`) and is the name the board shows. The board shows whether it is running and can reopen it in a terminal.
 
 Register the server (it runs on 127.0.0.1:4317):
 

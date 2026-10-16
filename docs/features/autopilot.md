@@ -540,6 +540,10 @@ with that error.
   **Auto** (a T3 Code thread when T3 is detected and its live poll is ok, else headless), **T3 only** (fails
   when T3 isn't connected) or **Headless only**. Once Auto has asked T3 it never falls back to headless: the
   thread may have started even when the reply was lost.
+- **`label`** is what the run is, short: "Review PRs · PR #73 round 1", "Fix PRs · PR #73", "Start planned · #107",
+  "<custom name> · #42", "Digest". Each automation supplies it, and the runner (`sessionName`) prefixes it with
+  "Autopilot · " and uses it as the session link's label, `claude --name` and the T3 thread's title
+  (`TaskThreadInput.title`, default the task's number and title). Without one the name is "Autopilot session".
 - **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
   session, and fails when the task has no live thread.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
@@ -579,7 +583,7 @@ so the model is the one the user mapped to the task's suggested tier. The thread
    folder that overlaps the project's checkout is refused.
 2. The board picks the session id and records it on the run, with the worktree, before the agent starts. It
    also links the session to the task as an `agent_session` link ([agent sessions](agent-sessions.md)) with the
-   worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
+   run's name as its label and the worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
    there is no `--no-session-persistence`.
 3. `--permission-mode acceptEdits`, with Bash, the file tools and this board's MCP tools (`mcp__<id>`) allowed.
    Read-only runs use `dontAsk` with the reviewer's read-only list. The agent reaches the board through the

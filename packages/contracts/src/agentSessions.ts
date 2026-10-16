@@ -46,6 +46,11 @@ export const AgentSessionSnapshot = z.object({
   status: AgentSessionStatus,
   /** Running inside an app on the Agent SDK (T3 Code) rather than in a terminal. */
   inApp: z.boolean(),
+  /**
+   * The title Claude Code keeps for the session (a name it was given, else the one Claude wrote), for links with no
+   * label of their own. Absent when none was found, or for Copilot CLI.
+   */
+  title: z.string().nullish(),
 });
 export type AgentSessionSnapshot = z.infer<typeof AgentSessionSnapshot>;
 

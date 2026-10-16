@@ -188,8 +188,11 @@ In Claude Code or Copilot CLI, link your own session to every task you start or 
 see from the board whether it is still running and reopen it in a terminal later:
 
 ```
-link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", cwd: "<your cwd>" })
+link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", cwd: "<your cwd>" }, label: "Implementing #42")
 ```
+
+- `label` is the name the board shows for the session, so say what it does: "Implementing #42", "Planning #42",
+  "Reviewing #42 round 2". Linking the same session again with a new label renames it (when the work changes).
 
 - Claude Code puts the id in `$CLAUDE_CODE_SESSION_ID`, Copilot CLI in `$COPILOT_AGENT_SESSION_ID`
   (harness `"copilot-cli"`). Read it with the shell (`echo $CLAUDE_CODE_SESSION_ID`); never guess it.

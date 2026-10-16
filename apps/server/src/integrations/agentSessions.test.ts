@@ -320,3 +320,42 @@ describe("GET /api/terminal", () => {
     expect(info.error).toMatch(/only available on Windows/);
   });
 });
+
+describe("Claude Code session titles", () => {
+  const writeTranscript = (home: ReturnType<typeof tempHome>, id: string, cwd: string, body: object[]) => {
+    const folder = join(home.dirs.claudeDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, `${id}.jsonl`), body.map((entry) => `${JSON.stringify(entry)}\n`).join(""));
+  };
+
+  it("shows the title of a session that has ended, from its transcript", async () => {
+    const home = tempHome();
+    writeTranscript(home, A, "/w/app", [{ type: "ai-title", aiTitle: "Name the sessions" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([]).probe });
+    const out = await reader.read([claude(A, "/w/app"), claude(B, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "not_running", inApp: false, title: "Name the sessions" });
+    // No transcript: no title, and the snapshot is what it always was.
+    expect(out.get(sessionKey(claude(B)))).toEqual({ status: "not_running", inApp: false });
+  });
+
+  it("prefers a live session's own name, but not one Claude only derived from the folder", async () => {
+    const home = tempHome();
+    home.claudeFile(100, { sessionId: A, status: "busy", name: "Autopilot · Fix PRs", nameSource: "flag" });
+    home.claudeFile(200, { sessionId: B, status: "idle", name: "app-12", nameSource: "derived" });
+    writeTranscript(home, A, "/w/app", [{ type: "ai-title", aiTitle: "Generated" }]);
+    writeTranscript(home, B, "/w/app", [{ type: "ai-title", aiTitle: "Generated for B" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([100, 200]).probe });
+    const out = await reader.read([claude(A, "/w/app"), claude(B, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "busy", inApp: false, title: "Autopilot · Fix PRs" });
+    expect(out.get(sessionKey(claude(B)))).toEqual({ status: "idle", inApp: false, title: "Generated for B" });
+  });
+
+  it("still finds a title when the sessions folder can't be read", async () => {
+    const home = tempHome();
+    rmSync(join(home.dirs.claudeDir, "sessions"), { recursive: true });
+    writeTranscript(home, A, "/w/app", [{ type: "custom-title", customTitle: "Reviewing #7" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([]).probe });
+    const out = await reader.read([claude(A, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "unknown", inApp: false, title: "Reviewing #7" });
+  });
+});

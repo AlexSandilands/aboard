@@ -34,7 +34,12 @@ import { useState, type ReactNode } from "react";
 
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
 import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
-import { folderName, sessionStatusPresentation, type SessionLink } from "~/components/sessions/sessions.logic";
+import {
+  folderName,
+  sessionName,
+  sessionStatusPresentation,
+  type SessionLink,
+} from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
@@ -496,6 +501,7 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
   const { open, pending } = useSessionActions(taskId);
   const status = sessionStatusPresentation(link.snapshot);
   const harness = AGENT_HARNESSES[link.ref.harness].label;
+  const name = sessionName(link);
   return (
     <PanelSplitGroup className={cn(link.snapshot?.status === "not_running" && "opacity-80 hover:opacity-100")}>
       <PanelControl
@@ -505,9 +511,9 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
         onClick={() => open(link)}
       >
         <HarnessIcon harness={link.ref.harness} className="size-4" />
-        <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in terminal</span>
-        <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>
-          {link.label ?? `${harness} · ${folderName(link.ref.cwd)}`}
+        <span className={cn(PANEL_LABEL_CLASS, "min-w-0 flex-1")}>{name ?? `${harness} session`}</span>
+        <span className={cn(PANEL_LABEL_CLASS, "max-w-[35%] shrink-0 font-normal text-muted-foreground")}>
+          {folderName(link.ref.cwd)}
         </span>
         <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
           <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />

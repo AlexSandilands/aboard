@@ -12,7 +12,7 @@ terminal, and gives a session inside T3 Code a way out to one.
 
 ### Linking a session
 
-The agent calls `link(task, agentSession: {harness, sessionId, cwd})`. Each harness puts the id in an env
+The agent calls `link(task, agentSession: {harness, sessionId, cwd}, label)`. Each harness puts the id in an env
 var the agent reads with its shell:
 
 | Harness | `harness` | Id from | Resume | Fork |
@@ -22,7 +22,9 @@ var the agent reads with its shell:
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
-since Claude Code finds a conversation to resume by its folder. The id must be a UUID and the folder an
+since Claude Code finds a conversation to resume by its folder. The `label` says what the session does
+("Implementing #107", "Planning #107", "Reviewing #107 round 2"; see [Names](#names)); linking again with a
+different label renames the session (also logged as `link_updated`). The id must be a UUID and the folder an
 absolute path, with trailing separators dropped (`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
 `services.links.add` with the same input; their folder can be a worktree outside the project.
 
@@ -91,11 +93,31 @@ example session.
 
 The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md).
 
+### Names
+
+A session's name is, in order:
+
+1. the link's **label**: what the agent said it does, or what Autopilot called the run
+   ([runners](autopilot.md#runners));
+2. the **title Claude Code keeps** for the session, read by the status reader and stored on the snapshot as
+   `title`: the live session file's `name` (`<claudeDir>/sessions/<pid>.json`) unless its `nameSource` is
+   `derived` (Claude's own guess from the folder and branch), else the transcript's newest `custom-title`
+   (a name the session was given: `--name`, `/rename`), else its newest `ai-title` (what Claude wrote after the
+   first exchange). The transcript is `<claudeDir>/projects/<folder>/<id>.jsonl`, found by the session's folder
+   (`claudeProjectSlug`) or else by looking in every project folder, and only its start and end are read
+   (`integrations/claudeSessionTitle.ts`). A transcript is read again only when its size or time changed. Never
+   an LLM call; Copilot CLI has no title;
+3. nothing: the web shows "Claude Code session in <folder>".
+
+`claudeDir` is `$CLAUDE_CONFIG_DIR`, else `~/.claude`. Neither file format is documented, so a title that can't
+be read is left out rather than guessed.
+
 ### On the card and in the panel
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
 the command. A task with a T3 thread shows no session chips, since the thread runs a Claude session
-underneath and would show twice. The task panel lists every session with its folder and status.
+underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status; a chip's tooltip shows the
+name.
 
 Copilot CLI support is unit-tested only.
 
@@ -115,7 +137,7 @@ Copilot CLI support is unit-tested only.
 | Option | Why not chosen |
 | --- | --- |
 | A `claude://` style URL handler | Neither CLI registers one, and it would need installing per machine |
-| Reading the transcript files for status | Larger and slower than the running-session files, with no pid to check |
+| Reading the transcript files for status (it is read for the title only) | Larger and slower than the running-session files, with no pid to check |
 | Focusing a window that already shows the session | No reliable way across terminals |
 
 ## Code map
