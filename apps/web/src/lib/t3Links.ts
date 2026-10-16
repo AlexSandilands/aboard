@@ -1,3 +1,4 @@
+import { isWebUrl } from "~/components/task/links.logic";
 import {
   t3BrowserThreadUrl,
   t3DesktopThreadUrl,
@@ -24,4 +25,10 @@ export function t3LinkTargets(
   const browser = t3.origin ? { href: t3BrowserThreadUrl(t3.origin, ref), label: "Open in browser" } : null;
   if (settings?.t3LinkTarget === "browser" && browser) return { primary: browser, secondary: desktop };
   return { primary: desktop, secondary: browser };
+}
+
+/** Web URLs open in a new tab, app deep links (t3code://) in place. */
+export function openHref(href: string) {
+  if (isWebUrl(href)) window.open(href, "_blank", "noreferrer");
+  else window.location.assign(href);
 }

@@ -8,6 +8,7 @@ import {
   type T3LaunchOptions,
   type T3LaunchSuggestion,
   type T3ModelSelection,
+  type T3ThreadRef,
   type TaskSummary,
 } from "@repo/contracts";
 import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
@@ -18,6 +19,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { ApiError } from "~/lib/api";
+import { openHref, t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
 import { useStartProjectT3Thread, useStartT3Thread } from "~/state/mutations";
 import { useBoard, useProjectT3LaunchOptions, useSettings, useT3LaunchOptions } from "~/state/queries";
@@ -44,12 +46,17 @@ interface LaunchSubject {
   initialPlan: boolean;
   successDescription: string;
   copyPrompt: () => void;
+  /** Offer to open the new thread: nothing on the board links to a project's thread. */
+  offerOpen: boolean;
 }
 
 /** The subject's launch mutation, with its id already bound. */
 interface Starter {
   isPending: boolean;
-  start: (input: StartT3ThreadInput, callbacks: { onSuccess: () => void; onError: (error: Error) => void }) => void;
+  start: (
+    input: StartT3ThreadInput,
+    callbacks: { onSuccess: (thread: T3ThreadRef) => void; onError: (error: Error) => void },
+  ) => void;
 }
 
 type LaunchOptionsQuery = ReturnType<typeof useT3LaunchOptions>;
@@ -93,10 +100,15 @@ function TaskLaunch({ task, onDone }: { task: TaskSummary; onDone: () => void })
     initialPlan: defaultHandoffMode(task) === "plan",
     successDescription: `#${task.number} is linked to the new thread.`,
     copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
+    offerOpen: false,
   };
   const starter: Starter = {
     isPending: mutation.isPending,
-    start: (input, callbacks) => mutation.mutate({ taskId: task.id, ...input }, callbacks),
+    start: (input, { onSuccess, onError }) =>
+      mutation.mutate(
+        { taskId: task.id, ...input },
+        { onSuccess: (link) => link.kind === "t3_thread" && onSuccess(link.ref), onError },
+      ),
   };
   return <LaunchContent subject={subject} options={options} starter={starter} onDone={onDone} />;
 }
@@ -111,6 +123,7 @@ function ProjectLaunch({ project, onDone }: { project: Project; onDone: () => vo
     initialPlan: false,
     successDescription: `The new thread will propose epics for ${project.title}.`,
     copyPrompt: () => copySuggestEpicsPrompt(project),
+    offerOpen: true,
   };
   const starter: Starter = {
     isPending: mutation.isPending,
@@ -195,6 +208,8 @@ function Composer({
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
   const [choice, setChoice] = useState<WorkspaceChoice>(() => initialWorkspaceChoice(options));
   const [commandId, setCommandId] = useState(() => crypto.randomUUID());
+  const t3 = useBoard().data?.integrations.t3;
+  const settings = useSettings().data;
 
   const workspace = toLaunchWorkspace(options, choice);
   const model = findModel(options, selection);
@@ -226,11 +241,13 @@ function Composer({
         workspace,
       },
       {
-        onSuccess: () => {
+        onSuccess: (thread) => {
+          const open = subject.offerOpen && t3 ? t3LinkTargets(thread, t3, settings).primary : null;
           toastManager.add({
             type: "success",
             title: "Started in T3 Code",
             description: subject.successDescription,
+            ...(open ? { actionProps: { children: "Open thread", onClick: () => openHref(open.href) } } : {}),
           });
           onDone();
         },

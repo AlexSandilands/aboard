@@ -181,7 +181,9 @@ describe("suggestEpicsPrompt", () => {
   it("reads the project's open tasks and existing epics, then proposes groups for the user to agree", () => {
     expect(prompt).toContain("group the open work in the Billing API project");
     expect(prompt).toContain("Board: http://x/");
-    expect(prompt).toContain(`list_tasks(projectId: "p-1")`);
+    expect(prompt).toContain(`board_overview(projectId: "p-1")`);
+    expect(prompt).toContain(`create_epic(projectId: "p-1"`);
+    expect(prompt).toContain("leave tasks already in an epic where they are");
     expect(prompt).toContain("Wait for me to agree");
     expect(prompt).toContain("create_epic");
     expect(prompt).toContain(`update_task(task, epic: "#N")`);

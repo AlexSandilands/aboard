@@ -273,6 +273,6 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
-| `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task |
+| `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task or a project) and its pickers; pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Model tiers |

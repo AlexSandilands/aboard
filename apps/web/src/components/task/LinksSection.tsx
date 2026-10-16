@@ -37,7 +37,7 @@ import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { t3LinkTargets } from "~/lib/t3Links";
+import { openHref, t3LinkTargets } from "~/lib/t3Links";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useAddLink, useMergePr, useRefreshLink, useRemoveLink } from "~/state/mutations";
@@ -94,11 +94,6 @@ export const LINK_KIND_ICON: Record<TaskLink["kind"], LucideIcon> = {
 
 /** Anchor props: web URLs open in a new tab, app deep links (t3code://) in place. */
 const linkProps = (href: string) => (isWebUrl(href) ? { href, target: "_blank", rel: "noreferrer" } : { href });
-
-function openHref(href: string) {
-  if (isWebUrl(href)) window.open(href, "_blank", "noreferrer");
-  else window.location.assign(href);
-}
 
 export function LinksSection({ task }: { task: TaskDetail }) {
   const board = useBoard().data;

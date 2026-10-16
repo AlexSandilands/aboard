@@ -173,4 +173,19 @@ describe("REST", () => {
     expect(((await options.json()) as ApiErrorBody).error.message).toBe("T3 Code is not running");
     expect((await h.request("/api/tasks/missing/t3-launch-options")).status).toBe(404);
   });
+
+  it("validates project-level T3 launches the same way", async () => {
+    const h = await setup();
+    const id = h.task.projectId;
+    expect((await h.request(`/api/projects/${id}/t3-thread`, { method: "POST", json: { prompt: "" } })).status).toBe(
+      400,
+    );
+    const options = await h.request(`/api/projects/${id}/t3-launch-options`);
+    expect(options.status).toBe(400);
+    expect(((await options.json()) as ApiErrorBody).error.message).toBe("T3 Code is not running");
+    expect((await h.request("/api/projects/missing/t3-launch-options")).status).toBe(404);
+    expect((await h.request("/api/projects/missing/t3-thread", { method: "POST", json: { prompt: "x" } })).status).toBe(
+      404,
+    );
+  });
 });

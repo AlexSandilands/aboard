@@ -198,10 +198,10 @@ export function suggestEpicsPrompt({
     `Let's group the open work in the ${project.title} project on the ${BRAND.id} task board into epics.`,
     `Board: ${boardUrl.replace(/\/+$/, "")}/`,
     "",
-    `1. Call list_tasks(projectId: "${project.id}") on the ${BRAND.id} MCP server for the open tasks, and board_overview for the epics that already exist. Read a task with get_task when its title doesn't say enough.`,
-    "2. Propose epics: groups of tasks that together make one larger feature or change. Give each a title, a one-line description and its tasks, and say which tasks belong in an epic that already exists. Leave out tasks that stand alone; not everything needs an epic.",
+    `1. Call board_overview(projectId: "${project.id}") on the ${BRAND.id} MCP server: it lists the project's open tasks, which epic each is in, and its open epics. Read a task with get_task when its title doesn't say enough.`,
+    "2. Propose epics: groups of tasks that together make one larger feature or change. Give each a title, a one-line description and its tasks, and say which tasks belong in an epic that already exists. Leave out tasks that stand alone (not everything needs an epic), and leave tasks already in an epic where they are unless you think one is misplaced; then say so and why.",
     "3. Wait for me to agree or change the groups.",
-    `4. Then create each new epic with create_epic (project, title, description, tasks: ["#4", "#5"]), and move tasks into existing epics with update_task(task, epic: "#N").`,
+    `4. Then create each new epic with create_epic(projectId: "${project.id}", title, description, tasks: ["#4", "#5"]), and move tasks into existing epics with update_task(task, epic: "#N").`,
     "Don't plan, start or move any task: this is only about grouping. Finish with a short list of the epics and their tasks.",
   ].join("\n");
 }

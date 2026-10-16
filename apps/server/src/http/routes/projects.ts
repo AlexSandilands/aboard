@@ -38,7 +38,7 @@ export function registerProjectRoutes(app: Hono, { services, integrations }: App
   );
   app.get(
     "/api/projects/:id/t3-launch-options",
-    handle(async (c) => c.json(await integrations.t3ProjectLaunchOptions(idParam(c)))),
+    handle(async (c) => c.json(await integrations.t3ProjectLaunchOptions(services.projects.get(idParam(c)).id))),
   );
   // The only project-level hand-off is Suggest epics, so the thread is named for it.
   app.post(
