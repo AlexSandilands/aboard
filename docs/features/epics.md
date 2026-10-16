@@ -49,6 +49,8 @@ moves the epic to the end of its new column.
 - An epic is archived only once none of its tasks is open: an archived epic leaves the board, and its open
   tasks would show loose while still claiming it. Restoring an epic from a backup takes back only the tasks
   still in its project.
+- An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
+  with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
   `epicDeleted` on each. Deleting a task logs `child_removed` with `deleted` on its epic.
 - The roll-up (`rollup` on `TaskSummary`: total, done and a count per status) ignores archived tasks; the
@@ -64,7 +66,8 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
   `subgrid`, so its cards line up with the loose cards below.
-- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. It
+- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. Its Autopilot
+  button, at the end, sets what Autopilot does for the epic's tasks. It
   folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the
   roll-up moves under the title.
 - Drag and drop is per **row**: a project's loose cards, or one band (`Row` in `board.logic.ts`; the drag
@@ -80,6 +83,8 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - An epic's panel shows **Tasks** where a task shows where it's up to (`EpicChildren.tsx`): the roll-up, then
   each task by status with its progress, current step, attention and live T3 thread. **Show on board** sets
   `?epic=`, **Add task** opens the palette with the epic preselected.
+- An **Autopilot** button in the top bar switches automations on or off for the epic's tasks
+  ([Autopilot](autopilot.md#switches-and-scopes); the band's header has the same button).
 - The status in the top bar is read-only (`Epic · Backlog`), and Plan, Local review, Reopen and Close as… are
   hidden.
 - A task's panel shows its epic as a chip under the title, and **More actions → Epic** moves it into another
@@ -248,7 +253,7 @@ launch has no suggested model and returns the thread instead of a link.
 | `apps/server/src/services/summaries.ts`                | `parent` and `rollup` on summaries                                    |
 | `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |
 | `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
-| `apps/web/src/components/board/EpicBand.tsx`           | The band and its roll-up bar                                          |
+| `apps/web/src/components/board/EpicBand.tsx`           | The band, its roll-up bar and its Autopilot button                    |
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
 | `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
 | `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |

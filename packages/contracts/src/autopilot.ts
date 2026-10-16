@@ -13,7 +13,7 @@ export const AUTOPILOT_START_PLANNED = "start_planned";
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
 
-/** Most specific last. Epic rows can be stored but aren't resolved yet. */
+/** Most specific last. An epic's setting applies to the tasks in it. */
 export const AutopilotScopeKind = z.enum(["board", "project", "epic"]);
 export type AutopilotScopeKind = z.infer<typeof AutopilotScopeKind>;
 
@@ -58,8 +58,9 @@ export interface ResolvedAutopilot {
 
 /**
  * The effective mode and config of one automation, given its settings from least to most specific scope (board,
- * then project). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys merge in the
- * same order whatever the modes, so a project can tune an automation that is switched on for the whole board.
+ * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys
+ * merge in the same order whatever the modes, so a project can tune an automation that is switched on for the whole
+ * board.
  */
 export function resolveAutopilot(
   chain: ReadonlyArray<Pick<AutopilotSetting, "scopeKind" | "mode" | "config"> | null | undefined>,
@@ -213,13 +214,16 @@ export const AutopilotRun = z.object({
 });
 export type AutopilotRun = z.infer<typeof AutopilotRun>;
 
-/** A run that hasn't finished, for spinners on lanes and cards. */
+/** A run that hasn't finished, for spinners on lanes, epic bands and cards. */
 export const AutopilotActiveRun = AutopilotRun.pick({
   id: true,
   automation: true,
   taskId: true,
   projectId: true,
   status: true,
+}).extend({
+  /** The epic the run's task is in, so an epic's button can spin; not stored, read from the task. */
+  epicId: z.string().nullable(),
 });
 export type AutopilotActiveRun = z.infer<typeof AutopilotActiveRun>;
 

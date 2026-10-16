@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   automationTitle,
   entryFor,
+  epicActiveRuns,
+  epicPillState,
   fieldText,
   formatCost,
   inheritLabel,
@@ -18,12 +20,18 @@ import {
   withConfigValue,
 } from "./autopilot.logic";
 
-const run = (taskId: string | null, projectId: string | null, status: "queued" | "running" = "running") => ({
+const run = (
+  taskId: string | null,
+  projectId: string | null,
+  status: "queued" | "running" = "running",
+  epicId: string | null = null,
+) => ({
   id: `${taskId}-${projectId}`,
   automation: "review_prs",
   taskId,
   projectId,
   status,
+  epicId,
 });
 
 const status = (active: AutopilotStatus["active"] = [], paused = false): AutopilotStatus => ({ paused, active });
@@ -56,6 +64,42 @@ describe("pillState", () => {
   });
 });
 
+describe("epicPillState", () => {
+  const on = [{ enabled: false }, { enabled: true }];
+  it("is off when nothing is on for the epic, or its scope hasn't loaded", () => {
+    expect(epicPillState(status(), "e1", [{ enabled: false }])).toBe("off");
+    expect(epicPillState(status(), "e1", undefined)).toBe("off");
+  });
+
+  it("is idle when something is on, whether the epic sets it or inherits it", () => {
+    expect(epicPillState(status(), "e1", on)).toBe("idle");
+  });
+
+  it("is active while a run on one of the epic's tasks is going, whatever the switches or pause say", () => {
+    const going = status([run("t1", "p1", "running", "e1")], true);
+    expect(epicPillState(going, "e1", on)).toBe("active");
+    expect(epicPillState(going, "e1", [{ enabled: false }])).toBe("active");
+  });
+
+  it("ignores runs in other epics, loose runs and runs only in the same project", () => {
+    const others = status([run("t1", "p1", "running", "e2"), run("t2", "p1")]);
+    expect(epicPillState(others, "e1", on)).toBe("idle");
+    expect(epicActiveRuns(others, "e1")).toEqual([]);
+  });
+
+  it("shows paused for an epic with something on when Pause all is set", () => {
+    expect(epicPillState(status([], true), "e1", on)).toBe("paused");
+    expect(epicPillState(status([], true), "e1", [{ enabled: false }])).toBe("off");
+  });
+
+  it("words the tooltip for an epic", () => {
+    expect(pillTooltip("idle", 0, "epic")).toBe("Autopilot is on for this epic");
+    expect(pillTooltip("off", 0, "epic")).toBe("Autopilot is off for this epic");
+    expect(pillTooltip("paused", 0, "epic")).toBe("Autopilot is on for this epic, but paused");
+    expect(pillTooltip("idle", 0)).toBe("Autopilot is on for this project");
+  });
+});
+
 describe("active runs", () => {
   it("finds a project's runs and a task's run", () => {
     const s = status([run("t1", "p1"), run("t2", "p1", "queued"), run("t3", "p2")]);
@@ -81,6 +125,14 @@ describe("inheritLabel", () => {
   it("is off by default with no parent, as for the board itself or while it loads", () => {
     expect(inheritLabel(null)).toBe("Inherit (Off by default)");
     expect(inheritLabel({ enabled: false, source: "default" })).toBe("Inherit (Off by default)");
+  });
+
+  it("says what an epic inherits from its project's entry, which already resolves through the board", () => {
+    // The project turned it off; the board had it on.
+    const project = [{ automation: "a", enabled: false, source: "project" }] as AutopilotScopeEntry[];
+    expect(inheritLabel(parentEntry(project, "a"))).toBe("Inherit (Off from project)");
+    const fromBoard = [{ automation: "a", enabled: true, source: "board" }] as AutopilotScopeEntry[];
+    expect(inheritLabel(parentEntry(fromBoard, "a"))).toBe("Inherit (On from board)");
   });
 
   it("finds the board's entry for an automation", () => {

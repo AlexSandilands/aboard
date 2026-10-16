@@ -42,7 +42,14 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
     paused: repos.settings.all().get(AUTOPILOT_PAUSED_KEY) === true,
     active: repos.autopilotRuns
       .withStatus(AUTOPILOT_ACTIVE_STATUSES)
-      .map(({ id, automation, taskId, projectId, status }) => ({ id, automation, taskId, projectId, status })),
+      .map(({ id, automation, taskId, projectId, status }) => ({
+        id,
+        automation,
+        taskId,
+        projectId,
+        status,
+        epicId: (taskId && repos.tasks.get(taskId)?.parentId) || null,
+      })),
   };
 }
 
@@ -77,17 +84,26 @@ export interface AutopilotService {
   updateEngine(input: UpdateAutopilotEngineInput): AutopilotEngineSettings;
   /** Pause all: no new runs start; runs already going finish. */
   setPaused(paused: boolean): AutopilotStatus;
-  /** Every automation as seen from a scope: its setting there and what it resolves to. Epic scope isn't resolved yet. */
-  scope(kind: AutopilotScopeKind, id: string | null): AutopilotScopeEntry[];
+  /**
+   * Every automation as seen from a scope: its setting there and what it resolves to. An epic scope needs the
+   * project it must be in (`projectId`); any other epic is not found.
+   */
+  scope(kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[];
   /** Sets one automation's mode and/or config at a scope. Inherit with no config removes the row. */
   setScope(
     kind: AutopilotScopeKind,
     id: string | null,
     automation: string,
     input: UpdateAutopilotSettingInput,
+    projectId?: string,
   ): AutopilotScopeEntry[];
-  /** What the engine uses: on or off for the project (or the board), and the config. */
-  resolve(automation: Automation, projectId: string | null): ResolvedAutomation;
+  /**
+   * What the engine uses: on or off, and the config, for the board (null), a project, or a task of the project in
+   * `epicId` (an epic that is archived or in another project doesn't count).
+   */
+  resolve(automation: Automation, projectId: string | null, epicId?: string | null): ResolvedAutomation;
+  /** Projects with an epic, not archived, that switches the automation on: the engine must look there even when the project is off. */
+  projectsWithEpicOn(automation: Automation): ReadonlySet<string>;
   /** Newest first. */
   runsForTask(taskId: string, limit?: number): AutopilotRun[];
   /** Newest first. */
@@ -132,33 +148,56 @@ export function createAutopilotService(
     return run;
   };
 
-  /** Checks the scope exists and returns its id as stored (null for the board). */
-  const checkScope = (kind: AutopilotScopeKind, id: string | null): string | null => {
+  /** Checks the scope exists and returns its id as stored (null for the board). An epic must be one in `projectId`. */
+  const checkScope = (kind: AutopilotScopeKind, id: string | null, projectId?: string): string | null => {
     if (kind === "board") {
       if (id) throw new AppError("VALIDATION", "The board scope has no id");
       return null;
     }
-    if (kind === "epic") throw new AppError("VALIDATION", "Autopilot can't be set per epic yet");
+    if (kind === "epic") {
+      const epic = id ? repos.tasks.get(id) : undefined;
+      if (!epic || epic.kind !== "epic" || epic.projectId !== projectId) {
+        throw new AppError("NOT_FOUND", `Epic ${id ?? ""} not found in this project`);
+      }
+      return epic.id;
+    }
     if (!id || !repos.projects.get(id)) throw new AppError("NOT_FOUND", `Project ${id ?? ""} not found`);
     return id;
   };
 
-  /** Settings from least to most specific scope for a project (or just the board). */
-  const chainFor = (all: readonly AutopilotSetting[], automation: string, projectId: string | null) => [
-    all.find((s) => s.scopeKind === "board" && s.automation === automation),
-    projectId === null
-      ? undefined
-      : all.find((s) => s.scopeKind === "project" && s.scopeId === projectId && s.automation === automation),
-  ];
+  /** Whether an epic is a scope for its tasks: one in the project, and not archived. */
+  const countsAsScope = (epicId: string | null | undefined, projectId: string | null): epicId is string => {
+    if (!epicId || projectId === null) return false;
+    const epic = repos.tasks.get(epicId);
+    return epic?.kind === "epic" && epic.projectId === projectId && epic.archivedAt === null;
+  };
+
+  /** Settings from least to most specific scope for a project (or just the board), and for an epic in it. */
+  const chainFor = (
+    all: readonly AutopilotSetting[],
+    automation: string,
+    projectId: string | null,
+    epicId: string | null = null,
+  ) => {
+    const at = (kind: AutopilotScopeKind, id: string) =>
+      all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation);
+    return [
+      all.find((s) => s.scopeKind === "board" && s.automation === automation),
+      projectId === null ? undefined : at("project", projectId),
+      epicId === null ? undefined : at("epic", epicId),
+    ];
+  };
 
   const parseConfig = (automation: Automation, config: AutomationConfig) =>
     automation.schema.safeParse({ ...automation.defaults, ...config });
 
-  const entries = (kind: AutopilotScopeKind, id: string | null): AutopilotScopeEntry[] => {
+  const entries = (kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
     return deps.automations.map((automation) => {
       const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
-      const resolved = resolveAutopilot(chainFor(all, automation.key, kind === "project" ? id : null));
+      const resolved = resolveAutopilot(
+        chainFor(all, automation.key, kind === "board" ? null : (projectId ?? id), kind === "epic" ? id : null),
+      );
       const parsed = parseConfig(automation, resolved.config);
       return {
         automation: automation.key,
@@ -239,11 +278,11 @@ export function createAutopilotService(
       });
       return loadAutopilotStatus(repos);
     },
-    scope(kind, id) {
-      return entries(kind, checkScope(kind, id));
+    scope(kind, id, projectId) {
+      return entries(kind, checkScope(kind, id, projectId), projectId);
     },
-    setScope(kind, id, key, input) {
-      const scopeId = checkScope(kind, id);
+    setScope(kind, id, key, input, projectId) {
+      const scopeId = checkScope(kind, id, projectId);
       const automation = automationOf(key);
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
@@ -270,12 +309,22 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
-      return entries(kind, scopeId);
+      return entries(kind, scopeId, projectId);
     },
-    resolve(automation, projectId) {
-      const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId));
+    resolve(automation, projectId, epicId = null) {
+      const epic = countsAsScope(epicId, projectId) ? epicId : null;
+      const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
       return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
+    },
+    projectsWithEpicOn(automation) {
+      const projects = new Set<string>();
+      for (const s of repos.autopilotSettings.all()) {
+        if (s.scopeKind !== "epic" || s.mode !== "on" || s.automation !== automation.key) continue;
+        const epic = repos.tasks.get(s.scopeId!);
+        if (epic && countsAsScope(epic.id, epic.projectId)) projects.add(epic.projectId);
+      }
+      return projects;
     },
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),

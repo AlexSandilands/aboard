@@ -10,9 +10,9 @@ import {
   type AutopilotStatus,
 } from "@repo/contracts";
 
-// ── Lane pill ────────────────────────────────────────────────────────────
+// ── Lane pill and epic button ────────────────────────────────────────────
 
-/** Off: nothing is on for the project. Idle: on, nothing running. Active: a run is going. Paused: on, but Pause all is set. */
+/** Off: nothing is on for the scope. Idle: on, nothing running. Active: a run is going. Paused: on, but Pause all is set. */
 export type PillState = "off" | "idle" | "active" | "paused";
 
 /** Runs in flight in a project. Runs already going finish under Pause all, so they still count. */
@@ -25,31 +25,46 @@ export function taskActiveRun(status: AutopilotStatus | undefined, taskId: strin
   return status?.active.find((run) => run.taskId === taskId);
 }
 
+/** Runs in flight on tasks of an epic. They still count under Pause all, as runs already going finish. */
+export function epicActiveRuns(status: AutopilotStatus | undefined, epicId: string): AutopilotActiveRun[] {
+  return status?.active.filter((run) => run.epicId === epicId) ?? [];
+}
+
+type ScopeEntries = ReadonlyArray<Pick<AutopilotScopeEntry, "enabled">> | null | undefined;
+
+function scopeState(activeRuns: number, paused: boolean | undefined, scope: ScopeEntries): PillState {
+  if (activeRuns > 0) return "active";
+  if (!scope?.some((entry) => entry.enabled)) return "off";
+  return paused ? "paused" : "idle";
+}
+
 /**
  * The lane pill's look. `scope` is the project's entries (null until they load: shown as off, since nothing is
  * known to be on).
  */
-export function pillState(
-  status: AutopilotStatus | undefined,
-  projectId: string,
-  scope: ReadonlyArray<Pick<AutopilotScopeEntry, "enabled">> | null | undefined,
-): PillState {
-  if (projectActiveRuns(status, projectId).length > 0) return "active";
-  if (!scope?.some((entry) => entry.enabled)) return "off";
-  return status?.paused ? "paused" : "idle";
+export function pillState(status: AutopilotStatus | undefined, projectId: string, scope: ScopeEntries): PillState {
+  return scopeState(projectActiveRuns(status, projectId).length, status?.paused, scope);
 }
 
-/** The pill's tooltip. */
-export function pillTooltip(state: PillState, activeRuns: number): string {
+/**
+ * The epic button's look, the same states as the pill's. `scope` is the epic's entries, which resolve through its
+ * project and the board, so an epic that inherits an automation from the project counts as on.
+ */
+export function epicPillState(status: AutopilotStatus | undefined, epicId: string, scope: ScopeEntries): PillState {
+  return scopeState(epicActiveRuns(status, epicId).length, status?.paused, scope);
+}
+
+/** The pill's (or epic button's) tooltip. */
+export function pillTooltip(state: PillState, activeRuns: number, subject: "project" | "epic" = "project"): string {
   switch (state) {
     case "active":
       return activeRuns === 1 ? "Autopilot is working on 1 run" : `Autopilot is working on ${activeRuns} runs`;
     case "idle":
-      return "Autopilot is on for this project";
+      return `Autopilot is on for this ${subject}`;
     case "paused":
-      return "Autopilot is on for this project, but paused";
+      return `Autopilot is on for this ${subject}, but paused`;
     case "off":
-      return "Autopilot is off for this project";
+      return `Autopilot is off for this ${subject}`;
   }
 }
 
@@ -63,18 +78,19 @@ export const AUTOPILOT_MODES: ReadonlyArray<{ value: AutopilotMode; label: strin
 
 /**
  * What the Inherit choice resolves to at a scope, e.g. "Inherit (On from board)". `parent` is the entry at the scope
- * above (the board's, for a project); the board itself has none, so Inherit there is off by default.
+ * above (the board's, for a project; the project's, for an epic, which already resolves through the board); the board
+ * itself has none, so Inherit there is off by default.
  */
 export function inheritLabel(parent: Pick<AutopilotScopeEntry, "enabled" | "source"> | null | undefined): string {
   return describeInherited(parent ?? { enabled: false, source: "default" });
 }
 
-/** The board's entry for `automation`, which a project's Inherit follows. */
+/** The entry for `automation` at the scope above (the board's for a project, the project's for an epic), which Inherit follows. */
 export function parentEntry(
-  boardEntries: ReadonlyArray<AutopilotScopeEntry> | undefined,
+  parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined,
   automation: string,
 ): AutopilotScopeEntry | null {
-  return boardEntries?.find((entry) => entry.automation === automation) ?? null;
+  return parentEntries?.find((entry) => entry.automation === automation) ?? null;
 }
 
 // ── Config forms ─────────────────────────────────────────────────────────

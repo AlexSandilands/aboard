@@ -138,11 +138,16 @@ export function createAutopilotEngine(deps: {
 
   const runAutomation = async (s: Services, automation: Automation, engine: AutopilotEngineSettings, at: Date) => {
     const board = s.autopilot.resolve(automation, null);
+    // A project is looked at where it is on, and where one of its epics is: the check returns every task of the
+    // project there, and the per-task resolve below keeps the ones the epic's setting reaches.
+    const withEpicOn = s.autopilot.projectsWithEpicOn(automation);
     const projects = s.projects
       .list()
       .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
-        resolved.enabled && resolved.config ? [{ project, config: resolved.config }] : [],
+        (resolved.enabled || withEpicOn.has(project.id)) && resolved.config
+          ? [{ project, config: resolved.config }]
+          : [],
       );
     const boardConfig = board.enabled ? board.config : null;
     if (projects.length === 0 && !boardConfig) return;
@@ -150,19 +155,22 @@ export function createAutopilotEngine(deps: {
     const candidates = await automation.check({ services: s, engine, now: at, projects, board: boardConfig });
     for (const found of candidates) {
       let candidate = found;
-      // A task's run belongs to the task's project, whatever the check said, so that project's switch applies.
+      // A task's run belongs to the task's project and epic, whatever the check said, so their switches apply.
+      let epicId: string | null = null;
       if (candidate.taskId) {
-        let projectId: string;
+        let task: { projectId: string; parent: { id: string } | null };
         try {
-          projectId = s.tasks.summary(candidate.taskId).projectId;
+          task = s.tasks.summary(candidate.taskId);
         } catch {
           continue;
         }
-        candidate = { ...candidate, projectId };
+        candidate = { ...candidate, projectId: task.projectId };
+        epicId = task.parent?.id ?? null;
       }
       const projectId = candidate.projectId ?? null;
       // Only where the automation is on: a check may return more than it was asked for.
-      const config = projectId ? projects.find((p) => p.project.id === projectId)?.config : boardConfig;
+      const resolved = projectId ? s.autopilot.resolve(automation, projectId, epicId) : board;
+      const config = resolved.enabled ? resolved.config : null;
       if (!config) continue;
       if (s.autopilot.status().paused) return;
       if (engine.dryRun) {

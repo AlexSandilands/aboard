@@ -28,7 +28,11 @@ export interface CheckContext<C> {
   services: Services;
   engine: AutopilotEngineSettings;
   now: Date;
-  /** Projects where the automation is on. Only candidates in these (or board-wide ones while `board` is set) count. */
+  /**
+   * Projects where the automation is on, or has an epic it is on for (then the check sees the whole project, and the
+   * engine drops the tasks the epic's setting doesn't reach). `config` is the project's. Only candidates in these (or
+   * board-wide ones while `board` is set) count.
+   */
   projects: ReadonlyArray<ProjectScope<C>>;
   /** The board-level config when the automation is on for the board itself; null otherwise. */
   board: C | null;
