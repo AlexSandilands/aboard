@@ -1,4 +1,11 @@
-import type { ClassifiedLink, T3ThreadSnapshot, T3ThreadStatus, TaskLink } from "@repo/contracts";
+import {
+  isT3ThreadId,
+  type ClassifiedLink,
+  type T3IntegrationStatus,
+  type T3ThreadSnapshot,
+  type T3ThreadStatus,
+  type TaskLink,
+} from "@repo/contracts";
 
 /** What the "Add link" input will create, for the live preview. Null when unrecognised. */
 export function describeLinkInput(link: ClassifiedLink | null): { kind: ClassifiedLink["kind"]; label: string } | null {
@@ -13,6 +20,14 @@ export function describeLinkInput(link: ClassifiedLink | null): { kind: Classifi
     case "url":
       return { kind: "url", label: `Link to ${hostnameOf(link.url) ?? link.url}` };
   }
+}
+
+/** Why the "Add link" input isn't recognised: a T3 thread id needs a running T3 to know which environment it is in. */
+export function unrecognisedLinkHint(value: string, t3: Pick<T3IntegrationStatus, "detected">): string {
+  if (isT3ThreadId(value) && !t3.detected) {
+    return "T3 Code isn't running, so this thread ID can't be placed. Start it, or paste the t3code:// link.";
+  }
+  return "Not recognised. Paste a full URL, a Jira key like ABC-123 or a T3 thread ID.";
 }
 
 export function hostnameOf(url: string): string | null {

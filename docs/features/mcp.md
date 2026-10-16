@@ -25,7 +25,7 @@ steps current, link the Jira issue and the T3 thread, finish with `add_note`.
 | `tools/read.ts`    | `board_overview`, `list_projects`, `list_tasks`, `get_task` (all read-only)                             |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`       |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
-| `tools/links.ts`   | `link` (PR URL, Jira key, URL, or a T3 thread `{environmentId, threadId}`; idempotent)                  |
+| `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and

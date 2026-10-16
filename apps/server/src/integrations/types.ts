@@ -2,6 +2,7 @@ import type {
   BackupStatus,
   ConnectT3Result,
   GithubStatus,
+  LinkInput,
   MergePrInput,
   Project,
   StartT3ThreadInput,
@@ -32,6 +33,11 @@ export interface Integrations {
   t3LaunchOptions(taskId: string): Promise<T3LaunchOptions>;
   /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */
   t3ModelCatalog(): Promise<T3ModelCatalog>;
+  /**
+   * Prepares link input for `links.add`: a bare T3 thread id (or browser URL of this T3) becomes a `t3Thread` ref in
+   * the detected environment, after checking the thread exists. Anything else is returned as is.
+   */
+  resolveLinkInput(input: LinkInput): Promise<{ input: LinkInput; warning?: string }>;
   /** Starts a T3 Code thread for a task and links it to the task. */
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Re-runs T3 discovery + a live-status request and returns the resulting status. */

@@ -93,6 +93,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
+    async resolveLinkInput(input) {
+      // An explicit kind other than t3_thread means the caller chose how to read the value.
+      if (input.t3Thread || !input.value || (input.kind && input.kind !== "t3_thread")) return { input };
+      const resolved = await t3.resolveThread(input.value);
+      if (!resolved) return { input };
+      const { value: _value, ...rest } = input;
+      return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
+    },
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };

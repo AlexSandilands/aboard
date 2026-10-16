@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -133,6 +133,20 @@ describe("MCP endpoint", () => {
 
     const overview = text(await client.callTool({ name: "board_overview", arguments: { workspacePath } }));
     expect(overview).toContain("In Progress 1");
+  });
+
+  it("links a pasted T3 thread id as a thread and passes on the warning", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:\\Fake\\proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "Link a thread" });
+    const threadId = "bca46358-2812-4417-93f7-e151c0f96292";
+    vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({
+      input: { t3Thread: { environmentId: "env-1", threadId } },
+      warning: "Linked without checking the thread exists",
+    });
+    const linked = await client.callTool({ name: "link", arguments: { task: `#${task.number}`, value: threadId } });
+    expect(linked.isError).toBeFalsy();
+    expect(text(linked)).toContain("Warning: Linked without checking the thread exists");
+    expect(h.services.tasks.detail(task.id).links).toMatchObject([{ kind: "t3_thread", ref: { threadId } }]);
   });
 
   it("puts the full detail in the text and sends no structuredContent", async () => {

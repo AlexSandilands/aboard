@@ -146,6 +146,41 @@ describe("createIntegrations with real services", () => {
     expect(integrations.t3Status()).toMatchObject({ detected: true, environmentId: ENV_ID, liveStatus: "ok" });
   });
 
+  it("resolveLinkInput turns a pasted thread id into a thread link, checked against the shell", async () => {
+    const copied = "bca46358-2812-4417-93f7-e151c0f96292";
+    const fetchFn: FetchFn = async (url) =>
+      url.endsWith("/environment")
+        ? Response.json({ environmentId: ENV_ID, label: "box" })
+        : Response.json({
+            projects: [],
+            threads: [{ id: copied, projectId: "p", title: "Mine", status: "completed" }],
+            archivedThreads: [],
+          });
+    const { services, integrations } = setup({ fetch: fetchFn });
+    services.settings.update({ t3Token: "tok" });
+    const project = services.projects.create({ title: "P", workspaceRoot: "C:/p" });
+    const task = services.tasks.create({ projectId: project.id, title: "T" });
+
+    const resolved = await integrations.resolveLinkInput({ value: ` ${copied} `, label: "mine" });
+    expect(resolved).toEqual({
+      input: { label: "mine", t3Thread: { environmentId: ENV_ID, threadId: copied } },
+    });
+    expect(services.links.add(task.id, resolved.input, "user")).toMatchObject({
+      kind: "t3_thread",
+      url: `t3code://threads/${ENV_ID}/${copied}`,
+      label: "mine",
+      ref: { environmentId: ENV_ID, threadId: copied },
+    });
+
+    await expect(integrations.resolveLinkInput({ value: "11111111-2222-4333-8444-555555555555" })).rejects.toThrow(
+      "No T3 Code thread with ID",
+    );
+    // Anything else, or an explicit kind, passes through untouched.
+    for (const input of [{ value: "https://example.com" }, { value: copied, kind: "url" as const }]) {
+      expect(await integrations.resolveLinkInput(input)).toEqual({ input });
+    }
+  });
+
   it("imports T3 projects from the sqlite copy and skips existing ones", async () => {
     const { services, integrations } = setup({ withDb: true, fetch: async () => Response.json({}, { status: 503 }) });
     const existing = services.projects.create({ title: "Mine", workspaceRoot: "c:/work/beta" });
