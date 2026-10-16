@@ -71,7 +71,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
   in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
   even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
-  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)").
+  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
+  "Recurring tasks…" link opens the project's settings at that section.
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active

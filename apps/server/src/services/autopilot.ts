@@ -109,6 +109,8 @@ export interface AutopilotService {
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
+  /** Finished headless runs that made a worktree, oldest first. */
+  finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
   usage(agentAutomations: readonly string[], since: string): { started: number; spendUsd: number; active: number };
   /**
@@ -130,7 +132,15 @@ const RUN_LIMIT = 50;
 
 export function createAutopilotService(
   core: Core,
-  deps: { automations: readonly Automation[]; notifications: NotificationsService },
+  deps: {
+    automations: readonly Automation[];
+    notifications: NotificationsService;
+    /**
+     * An automation just started applying to these projects: its switch went on for them, or Pause all was lifted.
+     * For automations that keep their own schedule and must not catch up on what passed meanwhile.
+     */
+    onEnabled?: (automation: string, projectIds: readonly string[]) => void;
+  },
 ): AutopilotService {
   const { repos } = core;
   const byKey = new Map(deps.automations.map((a) => [a.key, a]));
@@ -210,6 +220,15 @@ export function createAutopilotService(
     });
   };
 
+  /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
+  const enabledProjects = (key: string): string[] => {
+    const all = repos.autopilotSettings.all();
+    return repos.projects
+      .list()
+      .filter((p) => resolveAutopilot(chainFor(all, key, p.id)).enabled)
+      .map((p) => p.id);
+  };
+
   const logRun = (fx: Effects, run: AutopilotRun) => {
     if (!run.taskId) return;
     fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
@@ -272,10 +291,14 @@ export function createAutopilotService(
       return next.data;
     },
     setPaused(paused) {
+      const wasPaused = loadAutopilotStatus(repos).paused;
       core.write((fx) => {
         repos.settings.set(AUTOPILOT_PAUSED_KEY, paused);
         fx.autopilot();
       });
+      if (wasPaused && !paused) {
+        for (const a of deps.automations) deps.onEnabled?.(a.key, enabledProjects(a.key));
+      }
       return loadAutopilotStatus(repos);
     },
     scope(kind, id, projectId) {
@@ -294,6 +317,7 @@ export function createAutopilotService(
       if (!parsed.success) {
         throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);
       }
+      const before = new Set(enabledProjects(key));
       core.write((fx) => {
         if (mode === "inherit" && Object.keys(config).length === 0) {
           repos.autopilotSettings.delete(kind, scopeId, key);
@@ -309,6 +333,8 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
+      const started = enabledProjects(key).filter((enabledId) => !before.has(enabledId));
+      if (started.length > 0) deps.onEnabled?.(key, started);
       return entries(kind, scopeId, projectId);
     },
     resolve(automation, projectId, epicId = null) {
@@ -329,6 +355,7 @@ export function createAutopilotService(
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
+    finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage(agentAutomations, since) {
       const agents = new Set(agentAutomations);
       return {

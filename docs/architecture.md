@@ -46,7 +46,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files) and `server.json` while a server runs |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -123,6 +123,7 @@ ORM.
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
+| `autopilot_recurring` | Recurring-task rules: project, template, schedule, flag, the cursor and the last task made ([autopilot](features/autopilot.md)) |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
 | `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |

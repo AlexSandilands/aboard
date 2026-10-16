@@ -35,7 +35,7 @@ export interface ReviewFallbacks {
 }
 
 /** The task's most recently linked T3 thread that isn't archived. */
-function latestThread(task: TaskSummary): ThreadLink | null {
+export function latestThread(task: TaskSummary): ThreadLink | null {
   const threads = task.links.filter(
     (l): l is Extract<TaskLink, { kind: "t3_thread" }> => l.kind === "t3_thread" && !l.snapshot?.archived,
   );

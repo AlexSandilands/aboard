@@ -39,6 +39,7 @@ files under each app.
 
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
 - [Templates](guide/templates.md): Bug, Spike, Feature and your own starting points for tasks
+- [Recurring tasks](guide/recurring-tasks.md): tasks made from a template on a schedule
 - [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop

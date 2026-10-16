@@ -1,15 +1,14 @@
 # Autopilot
 
-Board task: #79 (engine core), in epic #101.
+Board tasks: #79 (engine core), #85 (runners), in epic #101.
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
 the server. It never calls an LLM itself; an automation whose action needs one starts an agent through a runner.
 The rules every automation lives under are in [ADR 0008](../decisions/0008-autopilot-engine.md).
 
-This doc covers the engine, the per-task flag, the automations that have landed (below) and the settings UI. The rest
-of the catalogue is each its own task in the epic, and so are the runners (#85). Until a runner is configured, every
-agent action fails with "No agent runner is available yet".
+This doc covers the engine, the runners, the per-task flag, the automations that have landed (below) and the
+settings UI. The rest of the catalogue is each its own task in the epic.
 
 ## How it works
 
@@ -29,8 +28,9 @@ Inherit wins: epic over project over board. With nothing set anywhere, an automa
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
-card itself isn't "in" an epic, so it follows its project. Board-wide automations, which have no task, never see
-epic settings.
+card itself isn't "in" an epic, so it follows its project. Automations whose candidates have no task (board-wide
+ones, and Recurring tasks, which works per project) never see epic settings, so an epic's switch for them changes
+nothing.
 
 Each automation also has config (a skill, a budget, a number of days). Config keys merge the same way, board
 first, then project, then epic, over the automation's defaults, whatever the modes: a project can tune an
@@ -63,6 +63,7 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dryRun`               | off             | Record what would run, and do nothing                                |
 | `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR                          |
 | `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
+| `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 
 Quiet hours and the caps only hold back automations with `needsAgent`; board-only actions (archiving a card)
 go ahead. **Pause all** stops every new run; runs already going finish. Backups carry the engine settings but not
@@ -157,6 +158,112 @@ planned tasks on the next tick. It only reports blockers that finished in the la
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
 
+**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
+per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
+this automation's own switch decides whether a project's rules run. It has no config of its own.
+
+- A rule has a name, a template (board-wide or the project's, with a title pattern), a schedule, whether its tasks
+  carry the Autopilot flag (On), and an enabled switch. The schedule is `weekly` (weekdays and a time) or `every`
+  (N days from a start date, at a time), in the server's local time (`nextDue` and `latestDue` in
+  `packages/contracts/src/recurring.ts`). Slots are found by calendar day, so a DST change never shifts them: a
+  time the clock skips runs an hour later, a repeated one runs the first time.
+- `check` returns, per enabled rule, the latest slot after the rule's cursor `last_due_at` that is due. Only the
+  latest: after downtime of the board there is one catch-up task, not one per missed slot. The dedupe key is
+  `recurring:<ruleId>:<slot>`. The cursor and the key hold the slot as a local wall-clock stamp
+  (`2026-10-12T09:00:00`, `localStamp`), not an instant, so a machine that moves to another time zone doesn't see a
+  handled slot as new.
+- `act` creates the task through `services.tasks.create` with the template: Planned when the template has a plan,
+  Backlog otherwise, flagged On when the rule says so, under the actor `autopilot`, then adds the note "Created by
+  Autopilot from recurring rule <name>". The title and description render `{{date}}` and `{{project}}` as of when the
+  task is made, so a catch-up task carries the day it was made, not the day of the slot it stands for.
+- It skips (the run is `skipped`, with the reason) while the task the rule made last is still open: not Done
+  (closed tasks are Done) and not archived. A deleted template fails the run with "pick another one".
+- Whatever the outcome, `act` moves the cursor to the slot (`recurring.handled`), so the next pass looks for the
+  slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
+  doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
+- A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
+  changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
+  for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
+  project's rules restart from now (`recurring.restart`). Only downtime of the board itself catches up.
+- Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
+  example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
+  The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
+  these settings ("Recurring tasks…", `openProjectSettings(id, "recurring")`), scrolled to the section.
+
+#### Recurring rules API
+
+REST only, like the rest of Autopilot:
+
+| Route                                    | Does                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `GET /api/projects/:id/recurring`        | The project's rules, each with `nextDueAt`                     |
+| `POST /api/projects/:id/recurring`       | Creates one (`name`, `templateId`, `schedule`, `flagAutopilot`, `enabled`); 409 on a name the project has |
+| `PATCH /api/recurring/:id`               | Edits it                                                       |
+| `DELETE /api/recurring/:id`              | Deletes it; tasks it made stay                                 |
+
+Every change publishes `autopilot.changed`, which the web app uses to refetch the rules.
+
+### Runners
+
+An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
+binds the run's `update` into it, so the session, thread or worktree is on the run as soon as it exists, and a
+run that fails afterwards still shows it. A runner throws when the work couldn't be done, and the run fails
+with that error.
+
+- **`kind: "start"`** (the default) begins a new session. The automation's `runner` option picks the runner:
+  **Auto** (a T3 Code thread when T3 is detected and its live poll is ok, else headless), **T3 only** (fails
+  when T3 isn't connected) or **Headless only**. Once Auto has asked T3 it never falls back to headless: the
+  thread may have started even when the reply was lost.
+- **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
+  session, and fails when the task has no live thread.
+- **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
+  starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
+  branch is refused either way.
+- Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
+  (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
+  can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
+
+Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
+`RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):
+
+| Option           | Default | Meaning                                                                          |
+| ---------------- | ------- | -------------------------------------------------------------------------------- |
+| `runner`         | auto    | auto, t3 or headless                                                             |
+| `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
+| `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
+| `model`          | blank   | Headless: `--model`; blank takes the task's tier when it maps to a Claude model  |
+| `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
+
+**T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
+so the model is the one the user mapped to the task's suggested tier. The thread gets a new T3 worktree; for a
+`branch` it starts from origin's copy of it. The prompt ends with a note on where to push and the safety rules.
+
+**Headless.** `claude -p` in a worktree of its own (`autopilot/worktrees.ts`):
+
+1. `git worktree add --no-track -b autopilot/<task#>-<run8> <data dir>/worktrees/<repo>/<task#>-<run8> <start>`,
+   where `<start>` is the base ref, `origin/<default branch>` or `origin/<branch>`, after a best-effort fetch.
+   The new branch tracks nothing, so a bare `git push` can't land on the branch it started from. A worktree
+   folder that overlaps the project's checkout is refused.
+2. The board picks the session id and records it on the run, with the worktree, before the agent starts. It
+   also links the session to the task as an `agent_session` link ([agent sessions](agent-sessions.md)) with the
+   worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
+   there is no `--no-session-persistence`.
+3. `--permission-mode acceptEdits`, with Bash, the file tools and this board's MCP tools (`mcp__<id>`) allowed.
+   Read-only runs use `dontAsk` with the reviewer's read-only list. The agent reaches the board through the
+   user's own MCP config.
+4. **Push safety:** Claude Code checks deny rules before allow rules, and in every part of a compound command.
+   The deny rules block force-pushes (`--force*`, `-f`, `+ref`), `--mirror` and `--delete`. They block pushes to
+   the default branch, including ones written `*:main` or `refs/heads/main` or run as `git -C <dir> push`. They
+   also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
+   not a sandbox; the prompt states the same rules.
+5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
+   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`).
+
+**Cleanup** (`autopilot/cleanup.ts`) runs hourly with the pollers. It removes a finished headless run's worktree
+once the task has a merged PR, or `worktreeRetentionDays` after the run finished. It uses `git worktree remove`
+without `--force`, so a worktree with uncommitted changes is kept and logged once. The branch is deleted with
+`git branch -d`, which keeps a branch that has unmerged commits.
+
 ### Writing an automation
 
 One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` in its `index.ts`, wrapped in
@@ -169,8 +276,8 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
-  Agent work goes through `ctx.runner.start`; `ctx.update` records runner details while it runs. Return
-  `needsAttention: true` for a failure the user should see.
+  Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
+  it runs. Return `needsAttention: true` for a failure the user should see.
 
 An automation must never merge, close or delete tasks, force-push or push to the default branch.
 
@@ -182,7 +289,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 
 - **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
-  rounds and the fix threshold. A number that is out of range is put back with a toast; an empty cap means no cap.
+  rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
 - **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
   board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text or select
   per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored
@@ -204,6 +311,10 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   again next pass gives the same result with nothing stored.
 - **Engine settings are one key.** They are always read and validated together; pause is its own key because
   it is a switch, not configuration.
+- **The board picks the headless session id** (`--session-id`) rather than reading it from the result. That
+  way the session is linked while the agent works, and survives a timeout that leaves no result.
+- **Headless worktrees live under the data dir**, never in the project's folder. They can't show up in the
+  user's checkout or its `git status`, and cleanup can't touch anything Autopilot didn't make.
 - **Self-made events are ignored by a depth counter** around the engine's synchronous writes, including the
   synchronous part of an action. Changes an action makes after an `await` do start a pass, which dedupe keys
   make harmless.
@@ -212,6 +323,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 
 | Option | Why not chosen |
 | ------ | -------------- |
+| Headless runs in the project's own checkout | Would switch the user's branch and mix the agent's edits with theirs |
+| `--permission-mode bypassPermissions` for headless runs | Allows tools nobody listed; acceptEdits with an explicit list says what the agent may do |
 | A long-running agent watching the board | Costs tokens while nothing happens, and its choices can't be tested or reasoned about |
 | Clearing `needs_attention` on task moves | Needs a hook in every path that changes status; deriving it can't go stale |
 | Recording held candidates as queued runs | Needs queue ordering and expiry; re-checking each pass is simpler |
@@ -223,12 +336,20 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/autopilot.ts` | Modes, scopes, runs, engine settings, field descriptors, `resolveAutopilot`, `inQuietHours` |
 | `apps/server/src/db/migrations/010_autopilot.sql` | `autopilot_settings`, `autopilot_runs`, the scope clean-up triggers |
 | `apps/server/src/db/migrations/013_task_autopilot.sql` | `tasks.autopilot`, the per-task flag |
+| `apps/server/src/db/migrations/016_autopilot_recurring.sql` | `autopilot_recurring`, the recurring-task rules |
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
-| `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner` |
+| `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner`, `RunnerRequest` |
+| `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |
+| `apps/server/src/autopilot/runnerOptions.ts` | The runner options every agent automation shares |
+| `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
+| `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
+| `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
+| `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
+| `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

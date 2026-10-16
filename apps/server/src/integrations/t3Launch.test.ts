@@ -318,6 +318,16 @@ describe("autoLaunchSettings", () => {
     });
   });
 
+  it("lowers the access to an automation's ceiling but never raises it past T3's default", () => {
+    const mode = (settings: Record<string, unknown>, maxRuntimeMode: "approval-required" | "full-access") => {
+      const result = autoLaunchSettings(options({ settings }), { work: true, maxRuntimeMode });
+      return result.ok ? result.launch.runtimeMode : result.reason;
+    };
+    expect(mode({ defaultRuntimeMode: "full-access" }, "approval-required")).toBe("approval-required");
+    expect(mode({ defaultRuntimeMode: "approval-required" }, "full-access")).toBe("approval-required");
+    expect(mode({ defaultRuntimeMode: "full-access" }, "full-access")).toBe("full-access");
+  });
+
   it("branches from the given ref locally unless told to use origin's copy", () => {
     const refs: WireRefs = {
       isRepo: true,

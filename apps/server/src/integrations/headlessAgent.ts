@@ -1,0 +1,142 @@
+import { BRAND } from "@repo/contracts";
+import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
+import { READ_ONLY_TOOLS } from "./headlessReview.ts";
+
+// Autopilot's headless agent: Claude Code (`claude -p`) doing real work in a worktree the board made for the run.
+// Unlike the board's reviewer it keeps its session, so the user can resume it with `claude --resume <id>`, and it
+// reaches the board over the user's own MCP config.
+
+/** How much a headless agent may do: work on the code, or only read it (and call the extra tools it is given). */
+export type AgentAccess = "edit" | "read-only";
+
+/** What an agent with edit access may use without asking. `--permission-mode acceptEdits` covers file edits. */
+export const EDIT_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "Edit",
+  "Write",
+  "NotebookEdit",
+  "Bash",
+  "TodoWrite",
+  "Task",
+  "WebFetch",
+  "WebSearch",
+  // This board, so the agent can move its task, keep its plan current and link its PR.
+  `mcp__${BRAND.id}`,
+];
+
+/**
+ * Git and gh commands no Autopilot agent may run, whatever it was allowed: force-pushes, pushes that delete or
+ * mirror refs, pushes to the default branch, and merging pull requests (docs/decisions/0008-autopilot-engine.md).
+ * Deny rules win over allow rules. They match the command as written, so they are a guard rail, not a sandbox:
+ * the prompt says the same, and the worktree's branch never tracks the default branch.
+ */
+export function pushDenyRules(defaultBranch: string | null): string[] {
+  // `git -C <dir> push` is written differently, so it needs its own rules.
+  const push = (pattern: string) =>
+    ["git push", "git -C * push"].flatMap((cmd) => [`Bash(${cmd} ${pattern})`, `Bash(${cmd} * ${pattern})`]);
+  const rules = [
+    ...push("--force*"),
+    ...push("-f"),
+    ...push("-f *"),
+    // A refspec starting with + forces that ref.
+    ...push("+*"),
+    ...push("--mirror*"),
+    ...push("--delete*"),
+    // Not `:*` for `git push origin :branch`: a rule ending in `:*` is Claude Code's prefix syntax and would deny
+    // every push.
+    ...push("-d *"),
+    "Bash(gh pr merge*)",
+    "Bash(gh api *merge*)",
+  ];
+  if (defaultBranch) {
+    for (const ref of [defaultBranch, `refs/heads/${defaultBranch}`]) {
+      for (const pattern of [ref, `${ref} *`, `*:${ref}`, `*:${ref} *`]) {
+        rules.push(...push(pattern));
+      }
+    }
+  }
+  return rules;
+}
+
+export interface AgentArgsInput {
+  access: AgentAccess;
+  budgetUsd: number;
+  /** The board assigns it, so the session can be linked before the run ends. */
+  sessionId: string;
+  /** As `--model` takes it; null keeps the CLI's default. */
+  model: string | null;
+  defaultBranch: string | null;
+  /** Allowed on top of the access's own list, e.g. `Bash(gh pr review *)` for a read-only reviewer. */
+  tools?: readonly string[];
+  /** A JSON schema the agent's final answer must match (`--json-schema`). */
+  outputSchema?: object | null;
+}
+
+/** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
+export function agentArgs(input: AgentArgsInput): string[] {
+  const readOnly = input.access === "read-only";
+  return [
+    "-p",
+    "--output-format",
+    "json",
+    ...(input.outputSchema ? ["--json-schema", JSON.stringify(input.outputSchema)] : []),
+    // dontAsk denies everything not allowed; acceptEdits also takes file edits without asking.
+    "--permission-mode",
+    readOnly ? "dontAsk" : "acceptEdits",
+    "--allowedTools",
+    ...(readOnly ? [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`] : EDIT_TOOLS),
+    ...(input.tools ?? []),
+    "--disallowedTools",
+    ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
+    ...pushDenyRules(input.defaultBranch),
+    "--max-budget-usd",
+    String(input.budgetUsd),
+    "--session-id",
+    input.sessionId,
+    ...(input.model ? ["--model", input.model] : []),
+  ];
+}
+
+/** How a headless agent run ended. */
+export interface AgentOutcome {
+  ok: boolean;
+  /** Why it failed, when it did. */
+  error: string | null;
+  /** The agent's final message. */
+  result: string | null;
+  /** The structured output, when an output schema was given. */
+  output: unknown;
+  sessionId: string | null;
+  costUsd: number | null;
+}
+
+/** Reads `--output-format json` stdout. A run that stopped (budget, turn limit) still reports what it cost. */
+export function parseAgentOutput(stdout: string, wantsOutput: boolean): AgentOutcome {
+  const out = readClaudeResult(stdout);
+  const failed = out.isError || (wantsOutput && out.structuredOutput === undefined);
+  return {
+    ok: !failed,
+    error: failed ? claudeFailure(out, "agent") : null,
+    result: out.result,
+    output: out.structuredOutput,
+    sessionId: out.sessionId,
+    costUsd: out.costUsd,
+  };
+}
+
+export interface AgentJob {
+  cli: string | null;
+  cwd: string;
+  prompt: string;
+  args: string[];
+  timeoutMs: number;
+}
+
+/** Runs one headless agent to the end and returns its stdout. */
+export type RunAgent = (job: AgentJob) => Promise<string>;
+
+export const runHeadlessAgent: RunAgent = (job) =>
+  // A missing credential must fail the push instead of waiting for input nobody will type.
+  runClaude({ ...job, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });

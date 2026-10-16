@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
+import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
 import type { EventBus } from "../bus.ts";
 import type { Config } from "../config.ts";
@@ -8,6 +10,7 @@ import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessio
 import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration } from "./github.ts";
+import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
@@ -19,7 +22,7 @@ import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome">;
+  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir">;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -41,8 +44,12 @@ export interface IntegrationOverrides {
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
   terminalHost?: () => TerminalHost;
   spawnTerminal?: SpawnTerminal;
-  /** Carries out Autopilot's agent actions. */
+  /** Carries out Autopilot's agent actions; replaces the T3 and headless runners entirely. */
   autopilotRunner?: Runner;
+  /** Git for Autopilot's worktrees (the runner and their cleanup). */
+  autopilotGit?: RunGit;
+  /** Runs one headless Autopilot agent (`claude -p`) to the end. */
+  runAgent?: RunAgent;
   /** Replaces the Autopilot catalogue (read by the services, see createContext). */
   automations?: readonly Automation[];
   /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
@@ -94,10 +101,25 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const runner =
+    overrides.autopilotRunner ??
+    createAutopilotRunner({
+      services: deps.services,
+      t3,
+      worktreesDir: deps.config.worktreesDir,
+      ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
+      ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
+      ...(overrides.log ? { log: overrides.log } : {}),
+    });
   const autopilot = createAutopilotEngine({
     services: deps.services,
     bus: deps.bus,
-    ...(overrides.autopilotRunner ? { runner: overrides.autopilotRunner } : {}),
+    runner,
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const worktrees = createWorktreeCleanup({
+    services: deps.services,
+    ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   let started = false;
@@ -115,6 +137,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       backup.start();
       sessions.start();
       autopilot.start();
+      worktrees.start();
     },
     stop() {
       started = false;
@@ -124,6 +147,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       backup.stop();
       sessions.stop();
       autopilot.stop();
+      worktrees.stop();
     },
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),

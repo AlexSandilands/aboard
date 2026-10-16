@@ -162,6 +162,8 @@ export const AutopilotEngineSettings = z.object({
   prReviewRounds: z.number().int().min(1).max(10),
   /** The lowest finding severity the PR automations ask an agent to fix. */
   prFixThreshold: FindingSeverity,
+  /** Days a finished headless run's worktree is kept when its PR hasn't merged; clean ones are then removed. */
+  worktreeRetentionDays: z.number().int().min(1).max(365),
 });
 export type AutopilotEngineSettings = z.infer<typeof AutopilotEngineSettings>;
 
@@ -173,6 +175,7 @@ export const DEFAULT_AUTOPILOT_ENGINE: AutopilotEngineSettings = {
   dryRun: false,
   prReviewRounds: 3,
   prFixThreshold: "major",
+  worktreeRetentionDays: 7,
 };
 
 export const UpdateAutopilotEngineInput = AutopilotEngineSettings.extend({

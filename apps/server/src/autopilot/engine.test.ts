@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createTestHarness } from "../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
-import { defineAutomation, type Candidate, type CheckContext, type Runner, type RunPatch } from "./types.ts";
+import {
+  defineAutomation,
+  type Candidate,
+  type CheckContext,
+  type Runner,
+  type RunnerResult,
+  type RunPatch,
+} from "./types.ts";
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 
@@ -19,6 +26,8 @@ interface Deferred {
   run: AutopilotRun;
   resolve(patch: RunPatch): void;
   reject(error: Error): void;
+  /** What the engine gave the runner to record details while the run goes. */
+  update: (patch: RunPatch) => void;
 }
 
 function setup(opts: { now?: () => Date } = {}) {
@@ -68,9 +77,9 @@ function setup(opts: { now?: () => Date } = {}) {
   });
   const started: Deferred[] = [];
   const runner: Runner = {
-    start: ({ run }) =>
-      new Promise<RunPatch>((resolve, reject) => {
-        started.push({ run, resolve, reject });
+    start: ({ run }, update = () => {}) =>
+      new Promise<RunnerResult>((resolve, reject) => {
+        started.push({ run, resolve: (patch) => resolve({ ...patch, result: null }), reject, update });
       }),
   };
   const h = createTestHarness({ integrations: { automations: [noop, agent, stray] } });
@@ -396,9 +405,14 @@ describe("failures and attention", () => {
     const { s, engine, task, runs, started } = setup();
     s.autopilot.setScope("board", null, "agent", { mode: "on" });
     await engine.pass();
+    // What the runner recorded before failing stays on the run.
+    started[0]!.update({ runner: "headless", sessionId: "s-1", worktreePath: "/wt/1" });
+    expect(runs("agent")).toMatchObject([{ status: "running", sessionId: "s-1" }]);
     started[0]!.reject(new Error("no runner today"));
     await engine.idle();
-    expect(runs("agent")).toMatchObject([{ status: "failed", error: "no runner today", needsAttention: true }]);
+    expect(runs("agent")).toMatchObject([
+      { status: "failed", error: "no runner today", needsAttention: true, runner: "headless", worktreePath: "/wt/1" },
+    ]);
     expect(s.tasks.summary(task.id).attention).toContainEqual({
       kind: "autopilot",
       severity: "warning",

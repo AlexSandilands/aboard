@@ -1,4 +1,4 @@
-import type { AutopilotScopeEntry } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, type AutopilotScopeEntry } from "@repo/contracts";
 import { PopoverClose } from "~/components/ui/popover";
 import type { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
@@ -15,12 +15,15 @@ export function ScopePopover({
   entries,
   parentEntries,
   set,
+  projectId,
 }: {
   /** The project's or epic's name, for the switches' labels. */
   title: string;
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   set: ReturnType<typeof useSetAutopilotScope>;
+  /** Set for a project's popover: under Recurring tasks a link opens the project's settings at that section. */
+  projectId?: string;
 }) {
   const overview = useAutopilotOverview();
   const paused = overview.data?.paused ?? false;
@@ -61,6 +64,14 @@ export function ScopePopover({
                   {inheritLabel(parent)}
                 </span>
               </div>
+              {projectId && automation.key === AUTOPILOT_RECURRING ? (
+                <PopoverClose
+                  className="w-fit cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => useDialogs.getState().openProjectSettings(projectId, "recurring")}
+                >
+                  Recurring tasks…
+                </PopoverClose>
+              ) : null}
             </li>
           );
         })}

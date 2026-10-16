@@ -54,6 +54,9 @@ export const queryKeys = {
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
   templates: ["templates"] as const,
+  /** Prefix of every project's recurring rules query. */
+  recurring: ["recurring"] as const,
+  recurringRules: (projectId: string) => ["recurring", projectId] as const,
 };
 
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
@@ -317,12 +320,15 @@ export function useBoardEvents() {
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        // A rule's "last task" line follows that task (done, archived).
+        void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
       }
       if (event.type === "notification.created") {
         if (queryClient.getQueryData(queryKeys.notifications)) {

@@ -1,5 +1,6 @@
 import type { AutopilotEngineSettings, AutopilotField, AutopilotRun, ModelTier, Project } from "@repo/contracts";
 import type { z } from "zod";
+import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { Services } from "../services/types.ts";
 
 /** Config values keyed by field. */
@@ -43,8 +44,8 @@ export type RunPatch = Partial<Pick<AutopilotRun, "runner" | "sessionId" | "thre
 
 export interface ActionContext<C> {
   services: Services;
-  /** Starts agent work; only for automations with needsAgent. */
-  runner: Runner;
+  /** Starts agent work; only for automations with needsAgent. What it records goes on this run as it happens. */
+  runner: { start(request: RunnerRequest): Promise<RunnerResult> };
   engine: AutopilotEngineSettings;
   /** The effective config for the candidate's project (or the board's). */
   config: C;
@@ -88,23 +89,45 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
 /** Keeps an automation's config type while letting registries hold automations with different ones. */
 export const defineAutomation = <C extends AutomationConfig>(automation: Automation<C>): Automation => automation;
 
-/** Agent work an automation asks for. */
+/** Agent work an automation asks for. Runs on a task: the run's task is the one the agent works on. */
 export interface RunnerRequest {
   run: AutopilotRun;
-  /** The prompt the agent starts with. */
+  /** The prompt the agent starts with (or, for a nudge, the message posted). */
   prompt: string;
   /** The task's suggested tier, mapped to a model through the user's tier settings. */
   tier: ModelTier | null;
-  /** The automation's runner options (runner choice, budget, timeout, T3 access), as its config holds them. */
+  /** The automation's config; the runner reads its RunnerOptions fields (runner choice, budget, timeout, access). */
   options: AutomationConfig;
+  /** `start` (default) begins a new session; `nudge` posts the prompt into the task's live T3 thread. */
+  kind?: "start" | "nudge";
+  /**
+   * Where a new session works. A new branch from `baseRef` (default: the default branch), or one based on an
+   * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
+   */
+  workspace?: { baseRef?: string | null; branch?: string | null };
+  /** Headless only: `read-only` can't edit files (a reviewer). Defaults to edit. */
+  access?: AgentAccess;
+  /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
+  tools?: readonly string[];
+  /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
+  outputSchema?: object | null;
+}
+
+/** What a runner did. A T3 run returns once the thread is started; a headless run once the agent finished. */
+export interface RunnerResult extends RunPatch {
+  /** The headless agent's final message; null for T3 runs. */
+  result: string | null;
+  /** The structured output, when an output schema was asked for. */
+  output?: unknown;
 }
 
 /**
- * Carries out agent work for automations: a T3 Code thread, or `claude -p` in a worktree. Resolves once the agent
- * has been started (or, for headless runs, has finished), with what it recorded.
+ * Carries out agent work for automations: a T3 Code thread, a nudge into one, or `claude -p` in a worktree.
+ * `update` records the session, thread or worktree on the run as soon as they exist, so a run that fails later
+ * still shows them. Throws when the work couldn't be done; the run then fails with the error.
  */
 export interface Runner {
-  start(request: RunnerRequest): Promise<RunPatch>;
+  start(request: RunnerRequest, update?: (patch: RunPatch) => void): Promise<RunnerResult>;
 }
 
 /** The runner until one is configured: every agent action fails with a clear reason. */

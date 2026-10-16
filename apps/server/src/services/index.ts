@@ -1,4 +1,4 @@
-import type { T3IntegrationStatus } from "@repo/contracts";
+import { AUTOPILOT_RECURRING, type T3IntegrationStatus } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -15,6 +15,7 @@ import { createNotificationsService } from "./notifications.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
+import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createTemplatesService } from "./templates.ts";
@@ -39,7 +40,9 @@ export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
   const settings = createSettingsService(core);
   const notifications = createNotificationsService(core);
-  const projects = createProjectsService(core);
+  // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
+  let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
+  const projects = createProjectsService(core, { onUnarchived: (id) => restartRecurring?.([id]) });
   const labels = createLabelsService(core);
   const templates = createTemplatesService(core, { projects });
 
@@ -71,6 +74,9 @@ export function createServices(deps: ServiceDeps): Services {
   });
   reviews = createReviewsService(core, { task: tasks.record, notifications });
 
+  const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
+  restartRecurring = (ids) => recurring.restart(ids);
+
   return {
     projects,
     tasks: tasks.service,
@@ -84,6 +90,14 @@ export function createServices(deps: ServiceDeps): Services {
     backup: createBackupService(core),
     templates,
     notifications,
-    autopilot: createAutopilotService(core, { automations: deps.automations ?? AUTOMATIONS, notifications }),
+    autopilot: createAutopilotService(core, {
+      automations: deps.automations ?? AUTOMATIONS,
+      notifications,
+      // Recurring rules keep their own schedule: switching the automation on, or lifting Pause all, doesn't catch up.
+      onEnabled: (automation, projectIds) => {
+        if (automation === AUTOPILOT_RECURRING) recurring.restart(projectIds);
+      },
+    }),
+    recurring,
   };
 }
