@@ -21,6 +21,7 @@ manifest.json        format, app, app version, schema version, row counts
 settings.json        allow-listed settings only
 projects.json
 labels.json          label colour overrides
+relations.json       blocks / blocked-by pairs
 counters.json
 tasks/2026-10/task-42.json   one task with its phases, steps, links, labels, reviews and findings
 events/2026-10.json          the activity log for the month the events happened

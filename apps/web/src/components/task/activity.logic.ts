@@ -166,6 +166,24 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("link", `linked ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
     case "link_removed":
       return line("link", `removed ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
+    case "blocker_added":
+    case "blocker_removed":
+    case "blocks_added":
+    case "blocks_removed":
+    case "blocker_deleted":
+    case "blocked_deleted": {
+      const other = num(p.task);
+      const task = `${other !== null ? `#${other}` : "a task"}${str(p.title) ? ` ${str(p.title)}` : ""}`;
+      const text = {
+        blocker_added: `made this blocked by ${task}`,
+        blocker_removed: `removed ${task} as a blocker`,
+        blocks_added: `made this block ${task}`,
+        blocks_removed: `stopped this blocking ${task}`,
+        blocker_deleted: `deleted ${task}, which blocked this`,
+        blocked_deleted: `deleted ${task}, which this blocked`,
+      } as const;
+      return line(event.type.endsWith("_deleted") ? "delete" : "link", text[event.type]);
+    }
     case "review_opened": {
       const round = num(p.round);
       const why = str(p.trigger) === "move" ? " (moved to Review)" : "";

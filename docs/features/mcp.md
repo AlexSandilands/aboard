@@ -43,6 +43,9 @@ epic. `get_task` on an epic and `epic_overview` render its tasks instead of a pl
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
 epic's orchestrator can start its tasks. See [epics.md](epics.md).
 
+`add_to_backlog` and `create_task` take `blockedBy`, and `update_task` takes `addBlockedBy` / `removeBlockedBy`.
+`get_task` prints **Blocked by** and **Blocks**, and task lines add `blocked by #N`. See [relations.md](relations.md).
+
 Every tool validates its input with zod and calls a service; none holds rules of its own
 ([ADR 0001](../decisions/0001-service-layer.md)).
 
