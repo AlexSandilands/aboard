@@ -10,7 +10,8 @@ React 19, Vite, Tailwind v4, Base UI, TanStack Query + zustand, TanStack Router.
 - Mutation hooks (`state/mutations.ts`) don't write results into the cache; the server's event does.
   Edits that must feel instant patch the cache optimistically: card moves inside `useMoveTask` (rolled
   back on error) and label colours inside `useSetLabelColor` (refetched on error); lane collapse and
-  order, plan edits and link removal in the caller (refetched on error).
+  order, plan edits and link removal in the caller (refetched on error). The Autopilot settings hooks also
+  write the server's reply into the cache (the reply is the whole scope).
 - UI-only state is in zustand stores in `state/ui.ts`. Persisted keys go through `storageKey()`. When a
   persisted shape changes incompatibly, bump the store's `version` and add a `migrate` (see
   `state/boardView.logic.ts`).

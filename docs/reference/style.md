@@ -57,6 +57,9 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 - Popups enter/exit via `data-starting-style:`/`data-ending-style:` `scale-98 opacity-0`.
 - Theme-only rules use `@variant dark/light`, never `.dark` selectors in CSS.
 - **No continuously repainting animations.** Spinners use `motion-safe:visible-animate-spin`; pulses are `steps()`.
+  The one exception is the Autopilot pill (`.autopilot-pill` in `index.css`): a conic-gradient arc circles its border
+  and a glow breathes while a run is going, so it reads as alive. It is a deliberate product choice, runs only while
+  a run is active, and is off under `prefers-reduced-motion`.
 
 ## 4. Pattern sources for our components
 

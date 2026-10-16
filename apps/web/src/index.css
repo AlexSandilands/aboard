@@ -238,6 +238,86 @@
   animation-timing-function: steps(8);
 }
 
+/* The Autopilot pill on a swimlane header (components/autopilot/AutopilotPill.tsx). While a run is going, a
+   bright arc circles its border and a soft glow breathes behind it; on but idle it is a calm static ring.
+   Both animations are off under prefers-reduced-motion, leaving the arc parked as a static highlight. */
+@property --autopilot-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.autopilot-pill {
+  position: relative;
+  isolation: isolate;
+}
+
+.autopilot-pill[data-autopilot-state="active"]::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--autopilot-angle),
+    transparent 0%,
+    transparent 45%,
+    color-mix(in srgb, var(--primary) 30%, transparent) 62%,
+    var(--primary) 82%,
+    color-mix(in srgb, var(--primary) 60%, white) 92%,
+    transparent 100%
+  );
+  /* Keep only the 1.5px border box of the gradient. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.autopilot-pill[data-autopilot-state="active"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -2;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--primary) 28%, transparent);
+  filter: blur(8px);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .autopilot-pill[data-autopilot-state="active"]::before {
+    animation: autopilot-sweep 1.8s linear infinite;
+  }
+  .autopilot-pill[data-autopilot-state="active"]::after {
+    animation: autopilot-glow 2.4s ease-in-out infinite;
+  }
+  .autopilot-pill[data-autopilot-state="active"] .autopilot-pill-icon {
+    animation: autopilot-glow 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes autopilot-sweep {
+  to {
+    --autopilot-angle: 360deg;
+  }
+}
+
+@keyframes autopilot-glow {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
 @utility surface-glass {
   background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));

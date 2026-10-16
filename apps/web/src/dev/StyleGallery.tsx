@@ -76,6 +76,7 @@ import {
   SidebarTrigger,
 } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
+import { pillClassName, PillLabel } from "~/components/autopilot/AutopilotPill";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -436,6 +437,18 @@ export function StyleGallery() {
             <Kbd>K</Kbd>
           </KbdGroup>
           <Separator className="w-full" />
+        </Section>
+
+        <Section title="Autopilot pill (off, idle, paused, active) and card badge">
+          {(["off", "idle", "paused", "active"] as const).map((state) => (
+            <span key={state} data-autopilot-state={state} className={pillClassName(state)}>
+              <PillLabel state={state} />
+            </span>
+          ))}
+          <Badge variant="info" size="sm">
+            <Spinner size="xs" aria-hidden role="presentation" />
+            Autopilot
+          </Badge>
         </Section>
 
         <Section title="Skeleton, spinner, scroll area">

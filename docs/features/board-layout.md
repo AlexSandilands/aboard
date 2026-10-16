@@ -32,10 +32,10 @@ An override equal to its column's setting is pruned, so any override present mea
 
 ### Task panel sections
 
-The panel's sections are Labels, Links, Local review, Plan, Details (description and plan context
+The panel's sections are Labels, Links, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the link count and
-any link problem, open findings, plan progress and the current step, the first line of the description (or of the
+any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
 Until the user chooses, sections collapse by content (`collapsedByDefault`):
@@ -46,6 +46,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Links                | The task has no links                             |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
+| Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
 
@@ -55,6 +56,25 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended.
+
+The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
+runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
+tasks Autopilot never touched don't show it.
+
+### Autopilot on the board
+
+Three things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
+kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations:
+
+- **The lane's Autopilot pill**, after the lane's other header buttons (`AutopilotPill`). Off (no automation
+  is on for the project) is dim; on and idle is a calm ring; paused is warning-coloured with a pause icon; while
+  a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
+  in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
+  even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
+  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)").
+- **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
+  Resume" while set.
+- **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
 
 ### Dependency lines
 
@@ -100,6 +120,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
+| `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
+| `apps/web/src/components/autopilot/AutopilotPill.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill and popover, header pause, card badge, panel section |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |

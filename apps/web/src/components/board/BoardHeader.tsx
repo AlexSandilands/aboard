@@ -1,5 +1,6 @@
 import type { Project } from "@repo/contracts";
 import { useMemo } from "react";
+import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
@@ -83,6 +84,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       <ActiveEpicFilter />
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
+        <PauseAllButton />
         <NotificationsBell />
         <Menu>
           <Tooltip>
