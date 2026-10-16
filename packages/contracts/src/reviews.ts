@@ -182,23 +182,27 @@ export const reviewIsDone = (summary: TaskReviewSummary | null): boolean =>
   (summary.state === "clean" || summary.state === "stuck" || summary.state === "fixed") &&
   !reviewWantsAnotherRound(summary);
 
+/** A task that goes through the loop again (after PR feedback) already has its PR. */
+export const REVIEW_PR_LINKED =
+  "If a pull request is already linked, push your changes to it instead of opening another.";
+
 /**
  * What the agent is told wherever the loop has ended with nothing left to fix: the PR comes next, always, or
  * work finished on the board never reaches review on GitHub.
  */
 export const REVIEW_DONE_NEXT =
   "The review loop is done: open the pull request now, listing any findings still open in its description, " +
-  "unless the user asked you not to; then link it and carry on.";
+  `unless the user asked you not to; then link it and carry on. ${REVIEW_PR_LINKED}`;
 
 /** The same for the round limit with blocking or major findings still open: fix what can be fixed first. */
 export const REVIEW_LIMIT_NEXT =
   "That was the last allowed round, so don't start another: fix or wont_fix what's still open, then open the " +
-  "pull request, listing any findings still open in its description, unless the user asked you not to, and link it.";
+  `pull request, listing any findings still open in its description, unless the user asked you not to, and link it. ${REVIEW_PR_LINKED}`;
 
 /** Step 4 of the loop and fix prompts, where the loop may still have rounds to run. */
 export const REVIEW_PR_STEP =
   "When the loop ends (a clean round, or the round limit), always open the pull request, listing any findings " +
-  "still open in its description, unless the user asked you not to; then link it and carry on.";
+  `still open in its description, unless the user asked you not to; then link it and carry on. ${REVIEW_PR_LINKED}`;
 
 /** Short badge text for cards. */
 export function reviewBadgeLabel(summary: TaskReviewSummary): string {

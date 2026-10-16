@@ -1,7 +1,9 @@
 import {
   BOARD_REVIEWER,
   isGatingSeverity,
+  REVIEW_DONE_NEXT,
   reviewFixInstructions,
+  reviewIsDone,
   reviewLoopInstructions,
   type TaskLink,
   type TaskSummary,
@@ -126,16 +128,26 @@ export function createReviewFallbacks(deps: {
         if (error instanceof AppError && error.code === "CONFLICT") return;
         throw error;
       }
-      // Findings nobody is looping on: hand them to the thread's agent to fix, if there is one.
-      if (thread && submitted.findings.some((f) => isGatingSeverity(f.severity))) {
-        const text = reviewFixInstructions({
+      // Nobody is looping on this round, so tell the thread's agent what to do next, if there is one: fix
+      // the findings, or, when the loop is over, open the PR (the idle agent would never read the board).
+      if (!thread) return;
+      const after = s.tasks.summary(task.id);
+      let text: string | null = null;
+      let key = `review-${round.id}-fix`;
+      if (submitted.findings.some((f) => isGatingSeverity(f.severity))) {
+        text = reviewFixInstructions({
           task,
           round: round.round,
-          cycleRound: s.tasks.summary(task.id).review?.round ?? 1,
+          cycleRound: after.review?.round ?? 1,
           maxRounds: settings.reviewMaxRounds,
         });
-        await deps.t3.sendToThread(thread, text, `review-${round.id}-fix`).catch((error: unknown) => {
-          log.warn(`[review] couldn't send findings to the T3 thread of #${task.number}: ${messageOf(error)}`);
+      } else if (reviewIsDone(after.review) && !after.links.some((l) => l.kind === "pr")) {
+        text = `Review round ${round.round} of task #${task.number} "${task.title}" came back clean. ${REVIEW_DONE_NEXT}`;
+        key = `review-${round.id}-done`;
+      }
+      if (text) {
+        await deps.t3.sendToThread(thread, text, key).catch((error: unknown) => {
+          log.warn(`[review] couldn't send to the T3 thread of #${task.number}: ${messageOf(error)}`);
         });
       }
     } catch (error) {

@@ -117,8 +117,8 @@ export const registerReviewTools: ToolRegistrar = (server, { services, actor }) 
         const ending = !reviewIsDone(task.review)
           ? ""
           : task.review?.state === "stuck"
-            ? " No further round is allowed: add that the implementing agent should fix what it can, then open the pull request, listing the findings still open in its description, and link it."
-            : " No further round is needed: add that the review loop is done and the implementing agent should open the pull request now, unless the user asked it not to, and link it.";
+            ? " No further round is allowed: add that the implementing agent should fix what it can, then open the pull request, listing the findings still open in its description, unless the user asked it not to, and link it. If a pull request is already linked it should push to it instead."
+            : " No further round is needed: add that the review loop is done and the implementing agent should open the pull request now, unless the user asked it not to, and link it (or push to the pull request already linked).";
         return textResult(
           `Recorded round ${review.round} on #${task.number}: ${tally}. ` +
             `Reply to the implementing agent with this tally; it reads the findings from the board.${ending}`,

@@ -154,7 +154,9 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 - **Say it where the loop ends.** The brief at the start of the loop was the only place that said to open
   the PR, and agents sometimes stopped after the last round without doing it. So every end point repeats
   it: the reply to a clean `submit_review`, the `resolve_finding` result when no further round is due, the
-  round-limit error from `start_review`, and the last step of the fix prompt. As a safety net, `get_task`
+  round-limit error from `start_review`, the last step of the fix prompt, and, when the board's own reviewer
+  finds nothing to fix, the message it posts into the task's T3 thread (an idle agent never reads the
+  board). Each says to push to the PR instead when one is already linked, as after a re-review. As a safety net, `get_task`
   lists a PR under **Missing links** when the task is in Review, `reviewIsDone` says the loop ended (clean,
   or no further round allowed) and no PR is linked. Nothing is added without auto-review.
 - **`get_task` shows a pointer, not the loop.** The reviewer reads the task with `get_task` too. If that

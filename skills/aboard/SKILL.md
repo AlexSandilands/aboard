@@ -98,7 +98,8 @@ opens review round 1, and the `move_task` result tells you what to do. In short:
 3. If the round raised blocking or major findings, `start_review` and repeat with a new reviewer. Stop
    when a round comes back clean or the round limit is reached (the board refuses further rounds).
 4. **Always open the PR and link it** once the loop ends, unless the user said not to: also at the
-   round limit, with any findings still open listed in the PR description. A review that ends without a
+   round limit, with any findings still open listed in the PR description. If the task already has a PR
+   (a re-review after feedback), push to it instead of opening another. A review that ends without a
    PR leaves the user with nothing to look at; `get_task` lists the PR under **Missing links** until one
    is linked.
 
