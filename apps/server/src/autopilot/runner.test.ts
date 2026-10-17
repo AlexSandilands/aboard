@@ -308,6 +308,15 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       ).rejects.toThrow("default branch");
     });
 
+    it("starts T3 from origin's copy of an epic's branch and says to open the PR against it", async () => {
+      const { launches, start } = setup({ t3: T3_UP });
+      await start({ options: { runner: "t3" }, workspace: { prBase: "epic/4-checkout" } });
+      expect(launches[0]).toMatchObject({ baseRef: "epic/4-checkout", startFromOrigin: true });
+      expect(launches[0]!.prompt).toContain("Your worktree starts from `epic/4-checkout`.");
+      expect(launches[0]!.prompt).toContain("gh pr create --base epic/4-checkout");
+      expect(launches[0]!.prompt).toContain("never merge a pull request");
+    });
+
     it("Auto runs headless when T3 isn't connected; T3 only fails; Headless only skips T3", async () => {
       const auto = setup({ t3: T3_DOWN });
       expect((await auto.start({ options: { runner: "auto" } })).runner).toBe("headless");

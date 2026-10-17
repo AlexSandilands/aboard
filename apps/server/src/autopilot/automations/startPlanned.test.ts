@@ -550,6 +550,17 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
     expect(requests[0]?.workspace).toEqual({ baseRef: "feat/autopilot" });
     expect(requests[0]?.prompt).toContain('read the skill "implement" at /home/u/.claude/skills/implement/SKILL.md');
   });
+
+  it("starts a task of an integration epic from the epic's branch, whatever Start from says", async () => {
+    const { s, task, pass, requests, turnOn } = setup();
+    const t = task("Flagged");
+    const epic = s.tasks.createEpic({ projectId: t.projectId, title: "Checkout" }, [t.id], "user");
+    s.tasks.setDelivery(epic.id, "integration", "epic/9-checkout", "user");
+    turnOn({ baseRef: "feat/autopilot" });
+    await pass();
+    expect(requests[0]?.workspace).toEqual({ prBase: "epic/9-checkout" });
+    expect(requests[0]?.prompt).toContain("gh pr create --base epic/9-checkout");
+  });
 });
 
 describe("start planned tasks: skipped when no longer eligible", () => {

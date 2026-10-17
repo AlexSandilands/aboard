@@ -53,6 +53,8 @@ function seed() {
   const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
   const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
+  const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [idea.id], "agent");
+  s.tasks.setDelivery(epic.id, "integration", "epic/4-checkout", "agent");
   s.tasks.addNote(a.id, "handover", "agent");
   s.reviews.submit(
     a.id,
@@ -255,6 +257,11 @@ describe("restore", () => {
         { autopilot: 1 },
         { autopilot: 0 },
         { autopilot: null },
+        { autopilot: null },
+      ]);
+      // An epic's delivery and its branch survive.
+      expect(restored.prepare("SELECT delivery, integration_branch FROM tasks WHERE kind = 'epic'").all()).toEqual([
+        { delivery: "integration", integration_branch: "epic/4-checkout" },
       ]);
       expect(restored.prepare("SELECT snapshot_json FROM task_links").all()).toEqual(
         expect.arrayContaining([{ snapshot_json: null }]),
@@ -413,6 +420,8 @@ describe("restore", () => {
           parent_id: _p,
           autopilot: _f,
           template_id: _m,
+          delivery: _d,
+          integration_branch: _b,
           ...task
         } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
