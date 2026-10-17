@@ -276,7 +276,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
         "when merged or verified. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
-        "the review loop; finish it, then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
+        "the review loop; finish it before opening the PR (a PR opened earlier is reviewed on GitHub too), then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
       inputSchema: {
         task: taskField,
@@ -305,7 +305,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
               ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
               : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
           const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
-          return taskResult(services, id, review ? `${moved}\n\n${review}` : moved);
+          // The PR was opened before the loop (the old order): it can be reviewed on GitHub while the loop runs.
+          const early =
+            review && summary.links.some((l) => l.kind === "pr")
+              ? "A pull request is already linked. Finish the local review loop below first, and push every fix to that PR; don't open another. Until the loop ends, Autopilot holds off its own review of the PR."
+              : null;
+          return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved);
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),

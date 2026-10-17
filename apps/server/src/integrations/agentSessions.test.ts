@@ -1,14 +1,18 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentSessionRef } from "@repo/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import type { AgentSessionRef, AgentSessionSnapshot, AutopilotRun, TaskLink } from "@repo/contracts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import {
+  createAgentSessionsIntegration,
   createSessionStatusReader,
   scanClaudeSessions,
+  SESSION_INTERVAL_MS,
+  SESSION_POLL_TIMEOUT_MS,
   sessionKey,
   START_TIME_TTL_MS,
+  type AgentSessionServices,
   type ProcessProbe,
 } from "./agentSessions.ts";
 import { shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
@@ -217,7 +221,7 @@ describe("resuming a session", () => {
         file: "wt.exe",
         args: [
           "-w",
-          "new",
+          "0",
           "new-tab",
           "-p",
           "{bash}",
@@ -232,6 +236,14 @@ describe("resuming a session", () => {
         cwd: app.home.root,
       },
     ]);
+  });
+
+  it("opens a new Windows Terminal window when the setting says so", async () => {
+    const app = appWith();
+    app.services.settings.update({ terminalOpenIn: "window" });
+    const l = app.link(claude(A, app.home.root));
+    expect((await app.post(l.id, {})).status).toBe(200);
+    expect(app.spawned[0]?.args.slice(0, 2)).toEqual(["-w", "new"]);
   });
 
   it("refuses a running session with 409 and its status, unless forced", async () => {
@@ -296,6 +308,29 @@ describe("resuming a session", () => {
   });
 });
 
+describe("an Autopilot session through the services", () => {
+  it("is working while its run goes, then finished with when it ended, read from the stored run", async () => {
+    const app = appWith();
+    const s = app.services;
+    const run = s.autopilot.record({
+      automation: "test",
+      candidate: { dedupeKey: "k", summary: "go", taskId: app.task.id, projectId: app.task.projectId },
+      dryRun: false,
+    })!;
+    s.autopilot.start(run.id);
+    s.autopilot.update(run.id, { runner: "headless", sessionId: A });
+    const l = app.link(claude(A, app.home.root));
+    expect(s.autopilot.runForSession(B)).toBeNull();
+
+    await app.integrations.refreshLink(l.id);
+    expect(s.links.get(l.id)).toMatchObject({ snapshot: { status: "busy", inApp: false } });
+
+    const finished = s.autopilot.finish(run.id, {});
+    await app.integrations.refreshLink(l.id);
+    expect(s.links.get(l.id)).toMatchObject({ snapshot: { status: "finished", endedAt: finished.finishedAt } });
+  });
+});
+
 describe("GET /api/terminal", () => {
   it("describes auto, the profiles and what the setting would run", async () => {
     const app = appWith();
@@ -308,7 +343,7 @@ describe("GET /api/terminal", () => {
       error: null,
     });
     expect((info as { preview: string }).preview).toMatch(
-      /^wt\.exe -w new new-tab -p \{bash\} -d .* -c "claude --resume /,
+      /^wt\.exe -w 0 new-tab -p \{bash\} -d .* -c "claude --resume /,
     );
   });
 
@@ -368,5 +403,210 @@ describe("Claude Code session titles", () => {
     const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([]).probe });
     const out = await reader.read([claude(A, "/w/app")]);
     expect(out.get(sessionKey(claude(A)))).toEqual({ status: "unknown", inApp: false, title: "Reviewing #7" });
+  });
+});
+
+describe("the background poll", () => {
+  /** An integration over a fake link store and run table, so the poll can be driven without the app. */
+  function pollWith(
+    home: ReturnType<typeof tempHome>,
+    opts: { alive?: number[]; probe?: ProcessProbe; bus?: { size: number } } = {},
+  ) {
+    const links: TaskLink[] = [];
+    const stored = new Map<string, AgentSessionSnapshot>();
+    const runs = new Map<string, Pick<AutopilotRun, "status" | "finishedAt" | "updatedAt">>();
+    const warnings: string[] = [];
+    let listError: Error | null = null;
+    const integration = createAgentSessionsIntegration({
+      services: () =>
+        ({
+          links: {
+            listByKind: () => {
+              if (listError) throw listError;
+              return links;
+            },
+            setSnapshot: (id: string, snapshot: AgentSessionSnapshot) => void stored.set(id, snapshot),
+            get: (id: string) => links.find((l) => l.id === id)!,
+          },
+          settings: { get: () => ({}) },
+          autopilot: { runForSession: (id: string) => runs.get(id) ?? null },
+        }) as unknown as AgentSessionServices,
+      bus: opts.bus ?? { size: 1 },
+      dirs: home.dirs,
+      userHome: home.root,
+      probe: opts.probe ?? fakeProbe(opts.alive ?? []).probe,
+      log: { warn: (m: string) => void warnings.push(m), error: () => {} } as never,
+    });
+    const add = (ref: AgentSessionRef) => {
+      const link = { id: `link-${links.length}`, kind: "agent_session", ref } as unknown as TaskLink;
+      links.push(link);
+      return link;
+    };
+    return { integration, add, stored, runs, warnings, failListing: (e: Error | null) => (listError = e) };
+  }
+
+  it("still polls after a poll that found no session links", async () => {
+    const home = tempHome();
+    home.claudeFile(100, { sessionId: A, status: "busy" });
+    const { integration, add, stored } = pollWith(home, { alive: [100] });
+    await integration.pollLive();
+    const link = add(claude(A));
+    await integration.pollLive();
+    expect(stored.get(link.id)?.status).toBe("busy");
+  });
+
+  it("still polls after a poll that failed", async () => {
+    const home = tempHome();
+    home.claudeFile(100, { sessionId: A, status: "idle" });
+    const { integration, add, stored, warnings, failListing } = pollWith(home, { alive: [100] });
+    const link = add(claude(A));
+    failListing(new Error("database is locked"));
+    await integration.pollLive();
+    expect(warnings).toEqual(["[sessions] poll failed: database is locked"]);
+    failListing(null);
+    await integration.pollLive();
+    expect(stored.get(link.id)?.status).toBe("idle");
+  });
+
+  describe("on its timer", () => {
+    beforeEach(() => void vi.useFakeTimers());
+    afterEach(() => void vi.useRealTimers());
+
+    it("updates stored statuses every interval while a browser is connected", async () => {
+      const home = tempHome();
+      home.claudeFile(100, { sessionId: A, status: "busy" });
+      const { integration, add, stored } = pollWith(home, { alive: [100] });
+      const link = add(claude(A));
+      integration.start();
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      expect(stored.get(link.id)?.status).toBe("busy");
+      home.claudeFile(100, { sessionId: A, status: "idle" });
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      expect(stored.get(link.id)?.status).toBe("idle");
+      integration.stop();
+    });
+
+    it("keeps polling when the first tick found no links", async () => {
+      const home = tempHome();
+      home.claudeFile(100, { sessionId: A, status: "busy" });
+      const { integration, add, stored } = pollWith(home, { alive: [100] });
+      integration.start();
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      const link = add(claude(A));
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      expect(stored.get(link.id)?.status).toBe("busy");
+      integration.stop();
+    });
+
+    it("does nothing without a connected browser", async () => {
+      const home = tempHome();
+      home.claudeFile(100, { sessionId: A, status: "busy" });
+      const { integration, add, stored } = pollWith(home, { alive: [100], bus: { size: 0 } });
+      add(claude(A));
+      integration.start();
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS * 2);
+      expect(stored.size).toBe(0);
+      integration.stop();
+    });
+
+    it("gives up on a read that hangs, so the next poll still runs", async () => {
+      const home = tempHome();
+      home.claudeFile(100, { sessionId: A, status: "idle", procStart: "111" });
+      let hang = true;
+      const probe: ProcessProbe = {
+        isAlive: () => true,
+        startTimes: () => (hang ? new Promise(() => {}) : Promise.resolve(new Map([[100, "111"]]))),
+      };
+      const { integration, add, stored, warnings } = pollWith(home, { probe });
+      const link = add(claude(A));
+      integration.start();
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(SESSION_POLL_TIMEOUT_MS);
+      expect(warnings.some((w) => w.includes("timed out"))).toBe(true);
+      expect(stored.size).toBe(0);
+      hang = false;
+      await vi.advanceTimersByTimeAsync(SESSION_INTERVAL_MS);
+      expect(stored.get(link.id)?.status).toBe("idle");
+      integration.stop();
+    });
+  });
+
+  describe("a session Autopilot ran", () => {
+    const run = (status: AutopilotRun["status"], finishedAt: string | null = null) => ({
+      status,
+      finishedAt,
+      updatedAt: "2026-10-17T10:00:00.000Z",
+    });
+
+    it("is working while its run is queued or going, without reading the harness's files", async () => {
+      const home = tempHome();
+      const { integration, add, stored, runs } = pollWith(home);
+      const link = add(claude(A));
+      for (const status of ["queued", "running"] as const) {
+        runs.set(A, run(status));
+        await integration.pollLive();
+        expect(stored.get(link.id)).toEqual({ status: "busy", inApp: false });
+        stored.clear();
+      }
+    });
+
+    it("is finished or failed, with when, once its run ended", async () => {
+      const home = tempHome();
+      const { integration, add, stored, runs } = pollWith(home);
+      const link = add(claude(A));
+      runs.set(A, run("succeeded", "2026-10-17T10:05:00.000Z"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({ status: "finished", inApp: false, endedAt: "2026-10-17T10:05:00.000Z" });
+      runs.set(A, run("failed", "2026-10-17T10:06:00.000Z"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({ status: "failed", inApp: false, endedAt: "2026-10-17T10:06:00.000Z" });
+    });
+
+    it("keeps the title Claude Code gave it, for a link with no label, when the run's state replaces the status", async () => {
+      const home = tempHome();
+      const folder = join(home.dirs.claudeDir, "projects", "some-folder");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(
+        join(folder, `${A}.jsonl`),
+        `${JSON.stringify({ type: "ai-title", aiTitle: "Fix the build" })}
+`,
+      );
+      const { integration, add, stored, runs } = pollWith(home);
+      const link = add(claude(A));
+      // While the run goes the harness's files aren't read, so there is no title yet.
+      runs.set(A, run("running"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({ status: "busy", inApp: false });
+      runs.set(A, run("succeeded", "2026-10-17T10:05:00.000Z"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({
+        status: "finished",
+        inApp: false,
+        endedAt: "2026-10-17T10:05:00.000Z",
+        title: "Fix the build",
+      });
+    });
+
+    it("shows the live status again when someone resumes the session after it ended", async () => {
+      const home = tempHome();
+      home.claudeFile(100, { sessionId: A, status: "busy", entrypoint: "cli" });
+      const { integration, add, stored, runs } = pollWith(home, { alive: [100] });
+      const link = add(claude(A));
+      runs.set(A, run("succeeded", "2026-10-17T10:05:00.000Z"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({ status: "busy", inApp: false });
+    });
+
+    it("refreshes just that session's link, as the run is linked and ended", async () => {
+      const home = tempHome();
+      const { integration, add, stored, runs } = pollWith(home);
+      const mine = add(claude(A));
+      const other = add(claude(B));
+      runs.set(A, run("running"));
+      await integration.refreshSession(A.toUpperCase());
+      expect(stored.get(mine.id)?.status).toBe("busy");
+      expect(stored.has(other.id)).toBe(false);
+      await integration.refreshSession("00000000-0000-4000-8000-000000000000");
+    });
   });
 });

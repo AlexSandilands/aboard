@@ -65,6 +65,8 @@ export function createAutopilotRunner(deps: {
   runGit?: RunGit;
   runAgent?: RunAgent;
   newSessionId?: () => string;
+  /** A headless session was just linked to its task, so the board can read its state at once. */
+  sessionLinked?: (sessionId: string) => void;
   log?: Logger;
 }): Runner {
   const runGit = deps.runGit ?? defaultRunGit;
@@ -175,6 +177,7 @@ export function createAutopilotRunner(deps: {
         { agentSession: { harness: "claude-code", sessionId, cwd: worktree.path }, label: sessionName(request.label) },
         AUTOPILOT_ACTOR,
       );
+      deps.sessionLinked?.(sessionId);
     } catch (error) {
       log.warn(`[autopilot] couldn't link the session of #${task.number}: ${messageOf(error)}`);
     }

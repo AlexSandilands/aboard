@@ -82,6 +82,10 @@ text when both are present.
   `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting.
+- `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
+  the board open the next round (under the limit), and the result says so and points to `start_review` for its
+  brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.
+  See [local-review.md](local-review.md).
 - **Missing labels** appears in `set_plan`, `create_task` and `get_task` results when the task has no
   labels and is still open. It names the labels in use and asks the agent to suggest 1–3 and wait for
   the user before calling `update_task`. Other mutation results leave it out (`taskResult`'s

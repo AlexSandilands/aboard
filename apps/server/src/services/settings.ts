@@ -31,6 +31,7 @@ const DEFAULTS: StoredSettings = {
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
   terminal: { kind: "auto" },
+  terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
@@ -149,6 +150,7 @@ export function createSettingsService(core: Core): SettingsService {
           repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
         if (input.terminal !== undefined) repos.settings.set("terminal", input.terminal);
+        if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
         if (input.notifications !== undefined) {

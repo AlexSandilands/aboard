@@ -1,6 +1,9 @@
 import {
+  BOARD_ACTOR,
+  deriveReviewSummary,
   FindingSeverity,
   reviewSkillName,
+  reviewWantsAnotherRound,
   type ReviewFinding,
   type ReviewRoundStatus,
   type ReviewSkillRef,
@@ -236,6 +239,20 @@ export function createReviewsService(
           status: input.status,
           ...(note ? { note } : {}),
         });
+        // The agent that fixed the last gating finding is mid-turn and may stop before it asks for the next round,
+        // so the board opens it: the task would sit at "Fixed, re-review" with nobody to run it.
+        // Only in Review: that's where the watchdog runs rounds, so on a Done or archived task it would sit pending.
+        const task = deps.task(taskId);
+        if (!reopened && task.status === "review" && !task.archivedAt && service.effectiveAutoReview(taskId)) {
+          const summary = deriveReviewSummary(
+            repos.reviews.forTasks([taskId]),
+            repos.reviews.findingsFor([taskId]),
+            loadSettings(repos).reviewMaxRounds,
+          );
+          if (summary?.state === "fixed" && reviewWantsAnotherRound(summary)) {
+            openRoundIn(taskId, { trigger: "manual", actor: BOARD_ACTOR }, fx);
+          }
+        }
         touch(taskId, fx);
         return finding.id;
       });

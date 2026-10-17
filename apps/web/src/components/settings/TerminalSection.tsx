@@ -1,4 +1,4 @@
-import { TerminalSetting, type AppSettings } from "@repo/contracts";
+import { TerminalOpenIn, TerminalSetting, type AppSettings } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateSettings } from "~/state/mutations";
@@ -6,6 +6,11 @@ import { queryKeys, useTerminalInfo } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
 import { terminalOptions, terminalOptionValue, terminalSettingFor } from "./terminal.logic";
+
+const OPEN_IN_ITEMS: { value: TerminalOpenIn; label: string }[] = [
+  { value: "tab", label: "New tab in the last window" },
+  { value: "window", label: "New window" },
+];
 
 /** Where "Open in terminal" resumes agent sessions, with what it would run. */
 export function TerminalSection({ settings }: { settings: AppSettings }) {
@@ -47,6 +52,39 @@ export function TerminalSection({ settings }: { settings: AppSettings }) {
           </Select>
         }
       />
+      {info?.platform === "win32" &&
+      (settings.terminal.kind === "auto" || settings.terminal.kind === "windows-terminal") ? (
+        <SettingsRow
+          title="Open in"
+          description="Windows Terminal only: a new tab in the window you used last (a new window if none is open), or always a new window. Command Prompt, PowerShell and custom commands always open as their command says."
+          control={
+            <Select
+              items={OPEN_IN_ITEMS}
+              value={settings.terminalOpenIn}
+              onValueChange={(value) => {
+                const parsed = TerminalOpenIn.safeParse(value);
+                if (parsed.success) {
+                  updateSettings.mutate(
+                    { terminalOpenIn: parsed.data },
+                    { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.terminal }) },
+                  );
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="sm:w-64" aria-label="Open in">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                {OPEN_IN_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+      ) : null}
       {settings.terminal.kind === "custom" ? (
         <SettingsRow
           title="Command"

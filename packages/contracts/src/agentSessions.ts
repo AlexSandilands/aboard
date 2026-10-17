@@ -38,8 +38,9 @@ export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 /**
  * Whether the session's process is alive, read from the harness's own files. busy and idle are Claude Code's;
  * Copilot CLI only says whether it is running. unknown: the files weren't where or what we expected.
+ * finished and failed are only for sessions Autopilot ran: they come from the run, not the files.
  */
-export const AgentSessionStatus = z.enum(["busy", "idle", "running", "not_running", "unknown"]);
+export const AgentSessionStatus = z.enum(["busy", "idle", "running", "not_running", "unknown", "finished", "failed"]);
 export type AgentSessionStatus = z.infer<typeof AgentSessionStatus>;
 
 export const AgentSessionSnapshot = z.object({
@@ -51,6 +52,8 @@ export const AgentSessionSnapshot = z.object({
    * label of their own. Absent when none was found, or for Copilot CLI.
    */
   title: z.string().nullish(),
+  /** When an Autopilot run's session ended (finished or failed). */
+  endedAt: z.string().optional(),
 });
 export type AgentSessionSnapshot = z.infer<typeof AgentSessionSnapshot>;
 
@@ -124,6 +127,13 @@ export const TerminalSetting = z.discriminatedUnion("kind", [
   }),
 ]);
 export type TerminalSetting = z.infer<typeof TerminalSetting>;
+
+/**
+ * Whether Windows Terminal opens a session as a tab of its most recently used window or in a window of its own.
+ * Other terminals (cmd, PowerShell, macOS, Linux, custom commands) always do what their command says.
+ */
+export const TerminalOpenIn = z.enum(["tab", "window"]);
+export type TerminalOpenIn = z.infer<typeof TerminalOpenIn>;
 
 /** The shell a session is started in; it decides how the command is quoted and kept open. */
 export const TerminalShell = z.enum(["bash", "cmd", "powershell", "pwsh", "sh"]);

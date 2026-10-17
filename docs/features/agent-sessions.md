@@ -36,8 +36,13 @@ Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`).
 
 Every 20 seconds, while a browser is connected and at least one session is linked, the server reads the
 harnesses' own files and stores what it finds as the link's snapshot. A changed snapshot reaches browsers
-as `task.upserted`, as PR and T3 thread state do. A session's status is also read when it is linked and
-again just before it is opened.
+as `task.upserted`, as PR and T3 thread state do. A session's status is also read when it is linked (by an
+agent, or by Autopilot as its run starts) and again just before it is opened.
+
+A poll that fails, finds no links or takes longer than 30 seconds (a hung PowerShell, a stalled disk) never
+stops the next one. Don't reset the in-flight guard from inside the async function that is being guarded:
+with nothing to await, it runs before the guard is assigned and leaves it set for good, which once stopped
+polling until the server restarted.
 
 | Status | Shown as | Claude Code | Copilot CLI |
 | --- | --- | --- | --- |
@@ -46,6 +51,8 @@ again just before it is opened.
 | `running` | Running | it says something else | a live process holds `session-state/<id>/inuse.<pid>.lock` |
 | `not_running` | Not running | no live file for the session | no live lock, or no session folder |
 | `unknown` | Status unknown | no `sessions` folder, or a live process's file can't be read | no `session-state` folder |
+| `finished` | Finished 5m ago | an Autopilot run's session whose run ended well | |
+| `failed` | Failed 5m ago | an Autopilot run's session whose run failed | |
 
 - Claude Code's folder is `$CLAUDE_CONFIG_DIR`, else `~/.claude`; Copilot's is `$COPILOT_HOME`, else
   `~/.copilot`. Neither format is documented, so anything unexpected reads as unknown rather than a guess.
@@ -53,6 +60,12 @@ again just before it is opened.
   a crash the file stays and the pid can be reused. On Windows `procStart` is the process's creation time as a
   FILETIME, compared with `Get-Process`'s start time in one PowerShell call for all pids, cached for five
   minutes per pid. Elsewhere the reuse check is skipped.
+- **Autopilot's headless sessions** take their state from the run that made them (`autopilot_runs.session_id`),
+  not from the files: `busy` while the run is queued or running, then `finished` or `failed` with `endedAt`,
+  the time the run ended. Once it ended, a live process for the session (someone resumed it in a terminal)
+  shows its own status instead, so Open in terminal still warns. The runner refreshes the link as it adds it,
+  and the engine as the run ends, rather than waiting for the poll. Open in terminal and Fork work on a
+  finished or failed session as on a stopped one.
 - `inApp` is set when Claude Code's `entrypoint` starts with `sdk` (T3 Code runs it through the Agent SDK).
 
 ### Opening a session
@@ -79,9 +92,14 @@ quoted for the shell the terminal setting opens.
 | Automatic, Windows | Windows Terminal's default profile, else a Command Prompt window |
 | Automatic, macOS | Terminal, through `osascript` |
 | Automatic, Linux | the first of `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xfce4-terminal`, `xterm`, running `bash -c 'cd <folder> && <command>; exec bash'` |
-| A Windows Terminal profile | `wt -w new new-tab -p <guid> -d <folder> <shell> …` |
+| A Windows Terminal profile | `wt -w 0 new-tab -p <guid> -d <folder> <shell> …` (`-w new` with **Open in: New window**) |
 | Command Prompt, Windows PowerShell | a console window through `cmd /c start` |
 | Custom command | the template, with `{cwd}` (quoted) and `{command}`, run by cmd on Windows and sh elsewhere. On Windows a folder containing `%` is refused, as cmd would expand it |
+
+**Open in** (`terminalOpenIn`, machine-only; shown on Windows for Automatic and Windows Terminal profiles) is
+a new tab in the last window (default) or a new window. `-w 0` is Windows Terminal's most recently used
+window, and it starts a window itself when none is open. It doesn't apply to Command Prompt, PowerShell, macOS,
+Linux or custom commands.
 
 Windows Terminal's settings are read from the Store, Preview and unpackaged locations, with comments and
 trailing commas allowed. A profile's shell comes from its `commandline` (or its `source` for PowerShell 7
@@ -145,7 +163,7 @@ Copilot CLI support is unit-tested only.
 | File | What it does |
 | --- | --- |
 | `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `TerminalSetting`, REST shapes |
-| `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller, resume and terminal info |
+| `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
 | `apps/server/src/integrations/terminal.ts` | Quoting, Windows Terminal detection, the launch for each terminal and shell, spawning |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal` |

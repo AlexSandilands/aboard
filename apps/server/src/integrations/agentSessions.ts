@@ -10,6 +10,7 @@ import {
   resumeArgv,
   type AgentSessionSnapshot,
   type AgentSessionStatus,
+  type AutopilotRun,
   type ResumeCommand,
   type ResumeMode,
   type ResumeResult,
@@ -20,6 +21,7 @@ import {
 import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
+import type { AutopilotService } from "../services/autopilot.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";
 import { createTitleReader, tidy } from "./claudeSessionTitle.ts";
 import { messageOf } from "./github.ts";
@@ -267,6 +269,8 @@ export const systemProcessProbe: ProcessProbe = {
 // ── The integration: polling and resuming ────────────────────────────────
 
 export const SESSION_INTERVAL_MS = 20_000;
+/** A poll that takes this long is given up on, so one hung read (PowerShell, a stalled disk) can't end polling. */
+export const SESSION_POLL_TIMEOUT_MS = 30_000;
 
 /** A session id that only shows what a terminal setting would run. */
 const EXAMPLE_SESSION_ID = "00000000-0000-4000-8000-000000000000";
@@ -274,7 +278,30 @@ const EXAMPLE_SESSION_ID = "00000000-0000-4000-8000-000000000000";
 export interface AgentSessionServices {
   links: Pick<LinksService, "listByKind" | "setSnapshot" | "get">;
   settings: Pick<SettingsService, "get">;
+  autopilot: Pick<AutopilotService, "runForSession">;
 }
+
+/**
+ * What an Autopilot run says of the headless session it made: working while the run is going, then finished or
+ * failed. The process behind it isn't one anyone can read from the harness's files while it runs. A run that never
+ * started (skipped, a dry run) has no session, so only queued, running, failed and succeeded come here.
+ */
+export function runSnapshot(run: Pick<AutopilotRun, "status" | "finishedAt" | "updatedAt">): AgentSessionSnapshot {
+  if (run.status === "queued" || run.status === "running") return { status: "busy", inApp: false };
+  return {
+    status: run.status === "failed" ? "failed" : "finished",
+    inApp: false,
+    endedAt: run.finishedAt ?? run.updatedAt,
+  };
+}
+
+const runIsGoing = (run: Pick<AutopilotRun, "status">): boolean => run.status === "queued" || run.status === "running";
+
+const withTimeout = <T>(work: Promise<T>, ms: number): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms / 1000}s`)), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 
 type SessionLink = Extract<TaskLink, { kind: "agent_session" }>;
 
@@ -283,6 +310,8 @@ export interface AgentSessionsIntegration {
   pollLive(): Promise<void>;
   /** Refreshes one link. False when it isn't an agent session. */
   refresh(link: TaskLink): Promise<boolean>;
+  /** Refreshes the link of this session, if the board has one: its Autopilot run was linked or ended. */
+  refreshSession(sessionId: string): Promise<void>;
   /** What to paste to resume by hand, for the shell "Open in terminal" would use. */
   resumeCommand(linkId: string, mode: ResumeMode): ResumeCommand;
   /**
@@ -319,26 +348,56 @@ export function createAgentSessionsIntegration(deps: {
       .links.listByKind("agent_session")
       .filter((l): l is SessionLink => l.kind === "agent_session");
 
+  /**
+   * Reads and stores each link's status. A session Autopilot ran takes it from the run: working while the run goes,
+   * finished or failed once it ended, unless the process is alive again (someone resumed it) and says so itself.
+   */
   const store = async (links: readonly SessionLink[]): Promise<Map<string, AgentSessionSnapshot>> => {
-    const snapshots = await reader.read(links.map((l) => l.ref));
+    const s = deps.services();
+    const runs = new Map(
+      links.flatMap((l) => {
+        const run = s.autopilot.runForSession(l.ref.sessionId);
+        return run ? [[l.id, run] as const] : [];
+      }),
+    );
+    const read = await reader.read(
+      links.filter((l) => !runIsGoing(runs.get(l.id) ?? { status: "succeeded" })).map((l) => l.ref),
+    );
+    const snapshots = new Map<string, AgentSessionSnapshot>();
     for (const link of links) {
-      const snapshot = snapshots.get(sessionKey(link.ref));
-      if (snapshot) deps.services().links.setSnapshot(link.id, snapshot);
+      const key = sessionKey(link.ref);
+      const run = runs.get(link.id);
+      const live = read.get(key);
+      // A run's snapshot says nothing of the session's title, which a label-less link falls back on: keep the one read.
+      const fromRun = run && (runIsGoing(run) || !isRunningSession(live?.status));
+      const snapshot = !run
+        ? live
+        : fromRun
+          ? { ...runSnapshot(run), ...(live?.title ? { title: live.title } : {}) }
+          : live;
+      if (!snapshot) continue;
+      snapshots.set(key, snapshot);
+      s.links.setSnapshot(link.id, snapshot);
     }
     return snapshots;
   };
 
   const pollLive = (): Promise<void> => {
-    polling ??= (async () => {
-      try {
+    // A poll that times out is only given up on, not stopped: if it finishes later it may overwrite a newer
+    // snapshot, which the next poll corrects.
+    // `.finally` runs after this assignment even when the poll has nothing to await; resetting inside the async
+    // function would run first in that case and leave `polling` set for good.
+    polling ??= withTimeout(
+      (async () => {
         const links = sessionLinks();
         if (links.length) await store(links);
-      } catch (error) {
-        log.warn(`[sessions] poll failed: ${messageOf(error)}`);
-      } finally {
+      })(),
+      SESSION_POLL_TIMEOUT_MS,
+    )
+      .catch((error: unknown) => log.warn(`[sessions] poll failed: ${messageOf(error)}`))
+      .finally(() => {
         polling = null;
-      }
-    })();
+      });
     return polling;
   };
 
@@ -357,7 +416,8 @@ export function createAgentSessionsIntegration(deps: {
   const terminal = (): { resolved: ResolvedTerminal | null; error: string | null; host: TerminalHost } => {
     const h = host();
     try {
-      return { resolved: resolveTerminal(deps.services().settings.get().terminal, h), error: null, host: h };
+      const settings = deps.services().settings.get();
+      return { resolved: resolveTerminal(settings.terminal, h, settings.terminalOpenIn), error: null, host: h };
     } catch (error) {
       return { resolved: null, error: messageOf(error), host: h };
     }
@@ -373,6 +433,11 @@ export function createAgentSessionsIntegration(deps: {
       if (link.kind !== "agent_session") return false;
       await store([link]);
       return true;
+    },
+
+    async refreshSession(sessionId) {
+      const links = sessionLinks().filter((l) => l.ref.sessionId === sessionId.toLowerCase());
+      if (links.length) await store(links);
     },
 
     resumeCommand(linkId, mode) {
