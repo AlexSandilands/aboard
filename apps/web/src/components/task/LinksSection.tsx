@@ -180,7 +180,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
                 <SessionRow key={row.id} taskId={task.id} link={row} onRemove={() => remove(row.id)} />
               ),
             )}
-            {hidden > 0 || (showAllSessions && sessionRows.length > SESSION_PREVIEW_COUNT) ? (
+            {sessionRows.length > SESSION_PREVIEW_COUNT ? (
               <PanelControl
                 part="meta"
                 tone="muted"
@@ -466,7 +466,10 @@ function FoldedSession({
       <MenuSubTrigger>
         <HarnessIcon harness={link.ref.harness} />
         <span className="min-w-0 max-w-56 truncate">{sessionTitle(link)}</span>
-        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", status.dotClass)} />
+        <span className={cn("flex shrink-0 items-center gap-1.5 text-xs", status.colorClass)}>
+          <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
+          {status.label}
+        </span>
       </MenuSubTrigger>
       <MenuSubPopup>
         <SessionMenuItems link={link} onOpen={onOpen} />

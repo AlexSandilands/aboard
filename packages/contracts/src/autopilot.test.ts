@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { autopilotRunEventText, describeInherited, inQuietHours, resolveAutopilot } from "./autopilot.ts";
+import {
+  autopilotRunEventText,
+  autopilotSessionName,
+  describeInherited,
+  inQuietHours,
+  isAutopilotSessionName,
+  resolveAutopilot,
+} from "./autopilot.ts";
 
 const board = (mode: "inherit" | "on" | "off", config = {}) => ({ scopeKind: "board" as const, mode, config });
 const project = (mode: "inherit" | "on" | "off", config = {}) => ({ scopeKind: "project" as const, mode, config });
@@ -67,5 +74,21 @@ describe("autopilotRunEventText", () => {
     expect(autopilotRunEventText({ ...base, status: "skipped", summary: "Would archive #4", dryRun: true })).toBe(
       "Archive (dry run): Would archive #4",
     );
+  });
+});
+
+describe("Autopilot session names", () => {
+  it("names a session by its run's label, else plainly", () => {
+    expect(autopilotSessionName("Review #7")).toBe("Autopilot · Review #7");
+    expect(autopilotSessionName("  ")).toBe("Autopilot session");
+    expect(autopilotSessionName(undefined)).toBe("Autopilot session");
+  });
+
+  it("recognises the names it makes, and nothing a person would give a session", () => {
+    expect(isAutopilotSessionName(autopilotSessionName("Review #7"))).toBe(true);
+    expect(isAutopilotSessionName(autopilotSessionName(undefined))).toBe(true);
+    expect(isAutopilotSessionName("Implementing the cart")).toBe(false);
+    expect(isAutopilotSessionName("Autopilot notes")).toBe(false);
+    expect(isAutopilotSessionName(null)).toBe(false);
   });
 });
