@@ -151,6 +151,12 @@ model for the task's tier, and whether sessions get a named window) and offers:
    reads its status. When the terminal won't start the result carries the command to run by hand; the session is
    linked all the same, since that command has its id and its prompt says the board linked it.
 
+A lane's **Plan tasks…** starts a session that plans several tasks (`POST /api/projects/:id/plan-session`,
+[agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)). It always runs in the project's checkout, starts
+on the CLI's default model unless one is typed, opens in the window named for the first task, and links the one
+session to every task, labelled "Planning #3, #4, #7". Its short prompt asks the agent for
+`get_handoff_prompt(tasks: […], mode: "plan")`.
+
 The prompt is one argument (`textArgument` in `terminal.ts`). POSIX shells get it as written, single-quoted. On
 Windows it crosses Windows Terminal, which quotes an argument with spaces but not the quotes inside it, and often
 cmd.exe, which has no escape inside quotes and expands `%NAME%` even there; so line breaks become spaces, `"`
@@ -235,10 +241,11 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
 | `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
-| `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session |
+| `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
+| `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
 | `apps/web/src/components/handoff/SessionLaunchDialog.tsx` | The new-session dialog (`sessionLaunch.logic.ts`) |

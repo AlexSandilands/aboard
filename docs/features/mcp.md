@@ -49,7 +49,9 @@ only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't 
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
-epic's orchestrator can start its tasks. `create_epic` and `update_task` (epics only) take `delivery: "main" |
+epic's orchestrator can start its tasks; with `tasks: ["#3", "#4"]` instead of `task`, it returns the prompt that
+plans several of a project's tasks with the user ([agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)).
+`create_epic` and `update_task` (epics only) take `delivery: "main" |
 "integration"`; switching to integration makes the epic's branch on origin first. See [epics.md](epics.md#delivery).
 
 `add_to_backlog` and `create_task` take `template` (a name or id; `list_templates` shows them) and then need no
