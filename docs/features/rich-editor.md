@@ -55,7 +55,8 @@ while typing, so the editor doesn't swap under the cursor.
 
 TipTap and ProseMirror are about a fifth of the app's code, so `richEditor.module.ts` is its own chunk.
 `loadRichEditor` loads it once the browser is idle after start, or when an editor first needs it; until then the
-input shows an empty frame.
+input shows an empty frame. If the load fails (the app was redeployed under an open tab, the network dropped), the
+input falls back to the textarea and says the editor couldn't load; the next editor opened tries the load again.
 
 ## Decisions
 

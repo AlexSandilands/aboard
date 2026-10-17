@@ -37,17 +37,20 @@ export function useMarkdownInput({
   /** Runs when the last upload in flight is done, whether it worked or not. */
   onSettled?: () => void;
 }) {
-  const rich = useRichEditor();
-  // Text the rich editor would change or show wrongly is edited as it is, in a textarea.
-  const modeFor = (text: string): MarkdownInputMode =>
-    rich ? (rich.fitsRichEditor(text) ? "rich" : "plain") : "loading";
+  const { module: rich, failed } = useRichEditor();
+  // Text the rich editor would change or show wrongly is edited as it is, in a textarea, as is all text
+  // when the editor's code couldn't be loaded.
+  const modeFor = (text: string): MarkdownInputMode => {
+    if (rich) return rich.fitsRichEditor(text) ? "rich" : "plain";
+    return failed ? "plain" : "loading";
+  };
   // The last text this input sent out; a value that differs came from outside.
   const [sent, setSent] = useState(value);
   const [mode, setMode] = useState<MarkdownInputMode>(() => modeFor(value));
   if (value !== sent) {
     setSent(value);
     setMode(modeFor(value));
-  } else if (mode === "loading" && rich) {
+  } else if (mode === "loading" && (rich || failed)) {
     setMode(modeFor(value));
   }
   // The text as of now, for the uploads that land after the next keystroke.
@@ -124,7 +127,7 @@ export function MarkdownInput({
   className?: string;
 }) {
   const { mode, value, emit, editor, paste } = input;
-  const rich = useRichEditor();
+  const { module: rich, failed } = useRichEditor();
   const frame = cn(
     "relative w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding text-base text-foreground shadow-xs/5 ring-ring/24 transition-shadow focus-within:border-ring focus-within:shadow-none focus-within:ring-[3px] focus-within:ring-inset sm:text-sm dark:bg-input/32",
     className,
@@ -199,9 +202,11 @@ export function MarkdownInput({
         }}
         {...paste.handlers}
       />
-      {value.trim() ? (
+      {failed || value.trim() ? (
         <span className="px-1 text-2xs text-muted-foreground">
-          Editing as plain Markdown: this text has formatting the editor can't show.
+          {failed
+            ? "Editing as plain Markdown: the editor couldn't load."
+            : "Editing as plain Markdown: this text has formatting the editor can't show."}
         </span>
       ) : null}
     </div>
