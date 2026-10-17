@@ -1,10 +1,10 @@
 import type { AppSettings, BoardFilterParams, SavedView } from "@repo/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toastManager } from "~/components/ui/toast";
 import { addView, removeView, renameView, restoreView } from "~/components/views/views.logic";
 import { queryKeys, useSettings } from "./queries";
-import { useUpdateSettings } from "./mutations";
+import { api } from "~/lib/api";
 
 const NO_VIEWS: ReadonlyArray<SavedView> = [];
 
@@ -15,25 +15,32 @@ export function useSavedViews(): ReadonlyArray<SavedView> {
 
 /**
  * Saves, renames and deletes views. Each builds the list from the cache and writes the result there before it is
- * sent, so an edit made before the last one is answered (two quick deletes) builds on it instead of undoing it. A
- * failed save reads the settings again.
+ * sent, so an edit made before the last one is answered (two quick deletes) builds on it instead of undoing it.
+ * The saves share a scope, so they reach the server in order, and the server's reply isn't written back (it would
+ * show the list as it was before a later edit); a failed save reads the settings again.
  */
 export function useViewActions() {
   const queryClient = useQueryClient();
-  const { mutate, isPending } = useUpdateSettings();
+  const { mutate, isPending } = useMutation({
+    mutationFn: (savedViews: SavedView[]) =>
+      api<AppSettings>("/api/settings", { method: "PATCH", body: { savedViews } }),
+    scope: { id: "saved-views" },
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the views",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const actions = useMemo(() => {
     const current = () => queryClient.getQueryData<AppSettings>(queryKeys.settings)?.savedViews ?? [];
     const write = (savedViews: SavedView[], onSaved?: () => void) => {
       queryClient.setQueryData<AppSettings>(queryKeys.settings, (settings) =>
         settings ? { ...settings, savedViews } : settings,
       );
-      mutate(
-        { savedViews },
-        {
-          onSuccess: onSaved,
-          onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.settings }),
-        },
-      );
+      mutate(savedViews, { onSuccess: onSaved });
     };
     return {
       save: (name: string, filters: BoardFilterParams, onSaved?: () => void) =>
