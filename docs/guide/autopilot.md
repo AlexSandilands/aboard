@@ -137,9 +137,11 @@ start means the epic stops every time a task is done. An epic can instead delive
   hand-off prompts and **New T3 Code thread…** all default to it.
 - **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit, once all of
   these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
-  PRs (when it's on) found nothing at or above the fix threshold at the current commit, its checks pass and it
-  merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
-- If GitHub won't let it merge (a branch rule wants an approving review, say), the task shows **Ready to merge into
+  PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
+  changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just
+  haven't started) and it merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- If the merge fails for a reason that may pass (another task's pull request merged into the branch first), it
+  tries again a couple of times. If GitHub won't let it merge (a branch rule wants an approving review, say), the task shows **Ready to merge into
   the epic branch** under Needs attention and you get a notification. Merge it yourself.
 - After the first merge it opens a **draft pull request** from the epic's branch into the default branch, links it
   on the epic and keeps its description listing every task with its pull request and reviews. If it conflicts with

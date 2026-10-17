@@ -386,19 +386,25 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
   blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
-  on for the task, its review of the current head (`currentPrReview`) has nothing actionable; checks pass (or there
-  are none) and GitHub says it merges cleanly. The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
+  on for the task, its review of the current head (`currentPrReview`) has nothing actionable; no reviewer requested
+  changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
+  the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
+  GitHub says it merges cleanly. The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
   of it, then calls `GithubIntegration.mergeIntoEpicBranch`: a fresh read of the PR and the repository's default
   branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
   retargeted since the check, with `MergeTargetError`), and `mergePullRequest` with `MERGE` and `expectedHeadOid`.
   The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so Unblock dependents
   notifies and Start planned starts what waited on it, from the updated branch.
-- **Refused.** GitHub refusing (branch rules wanting an approval, a push racing the merge) ends the run skipped
-  with `needsAttention` and "Ready to merge into the epic branch: … Merge it yourself." as the task's attention
-  reason, and the engine notifies. A `MergeTargetError` fails the run, flagged.
+- **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still
+  computing mergeability, the network) ends the run skipped with `output.retry`, and the next pass tries the same
+  head again under `merge:<linkId>:<headOid>:<n>`, up to `MERGE_ATTEMPTS` (3). Anything else, such as branch rules
+  wanting an approval, or the last try failing, ends it skipped with `needsAttention` and "Ready to merge into the
+  epic branch: … Merge it yourself." as the task's attention reason, and the engine notifies. A `MergeTargetError`
+  fails the run, flagged.
 - **The epic's PR.** Once a task PR has merged into the branch and the epic has no PR from it, it opens a draft PR
   from the branch into the default branch (`ensureEpicPr`: an open one already there is used instead) and links it
-  on the epic (`epic-pr:<epicId>:<branch>`, once). Then it keeps the PR's description, `epicPrBody` (each task with
+  on the epic (`epic-pr:<epicId>:<branch>:<task PRs merged>`, so a failed attempt is tried again after the next
+  merge). Then it keeps the PR's description, `epicPrBody` (each task with
   its state, its PRs into the branch, its latest Autopilot review counts and its local review), current: the key
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.
