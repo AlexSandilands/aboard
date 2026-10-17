@@ -31,7 +31,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
-import { useBoardView, usePalette, usePanel } from "~/state/ui";
+import { useBoardView, usePalette, usePanel, useReveal } from "~/state/ui";
 import {
   buildLanes,
   COLUMN_PREVIEW_COUNT,
@@ -68,6 +68,8 @@ import {
   type OverCell,
 } from "./dnd.logic";
 import { DependencyLines } from "./DependencyLines";
+import { advanceReveal } from "./reveal.logic";
+import { revealCard } from "./revealCard";
 import { TaskCardOverlay } from "./TaskCard";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<TaskStatus, string>;
@@ -276,7 +278,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const contentRef = useRef<HTMLDivElement>(null);
   const context = useMemo<BoardContextValue>(
     () => ({
-      openTask: (id) => void openTask(id),
+      openTask: (id) => void openTask(id, { reveal: false }),
+      revealTask: (id) => void openTask(id),
       suppressClickRef,
       t3: board.integrations.t3,
       settings,
@@ -372,7 +375,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   };
 
   const openPlanEditor = (taskId: string) => {
-    void openTask(taskId).then(() => usePanel.getState().requestPlanEditor());
+    void openTask(taskId, { reveal: false }).then(() => usePanel.getState().requestPlanEditor());
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -483,6 +486,52 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     [queryClient, updateProject],
   );
 
+  // A task opened from outside the board (search, a link, a notification): bring its card into view. The steps run
+  // as the board changes (advanceReveal): expand what hides the card, then scroll once it is on screen. A card a
+  // filter leaves out is skipped, and the filters stay as they are.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const columnHeaderRef = useRef<HTMLDivElement>(null);
+  const reveal = useReveal((s) => s.request);
+  const collapsedEpics = useBoardView((s) => s.collapsedEpics);
+  const revealExpanded = useRef<{ nonce: number; ids: Set<string> } | null>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    if (revealExpanded.current?.nonce !== reveal.nonce)
+      revealExpanded.current = { nonce: reveal.nonce, ids: new Set() };
+    const { ids } = revealExpanded.current;
+    const cardSelector = `[data-task-card="${CSS.escape(reveal.taskId)}"]`;
+    const action = advanceReveal({
+      taskId: reveal.taskId,
+      age: Date.now() - reveal.at,
+      lanes,
+      collapsedEpics,
+      expanded: ids,
+      selectedTaskId,
+      cardDrawn: () => !!scrollRef.current?.querySelector(cardSelector),
+    });
+    switch (action.kind) {
+      case "wait":
+        return;
+      case "drop":
+        useReveal.getState().consumeReveal(reveal.nonce);
+        return;
+      case "expand-lane":
+        ids.add(action.project.id);
+        handleToggleCollapsed(action.project);
+        return;
+      case "expand-band":
+        ids.add(action.epicId);
+        useBoardView.getState().toggleEpicCollapsed(action.epicId);
+        return;
+      case "scroll": {
+        // Consumed first, so a board that remounts within the window doesn't scroll again.
+        useReveal.getState().consumeReveal(reveal.nonce);
+        const card = scrollRef.current?.querySelector(cardSelector);
+        if (card) revealCard(scrollRef.current!, columnHeaderRef.current, card);
+      }
+    }
+  }, [reveal, lanes, collapsedEpics, selectedTaskId, handleToggleCollapsed]);
+
   if (board.projects.length === 0) {
     return (
       <Empty>
@@ -504,9 +553,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   return (
     <BoardContext value={context}>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <div ref={contentRef} className="relative w-full min-w-min pb-10">
-          <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
+          <div
+            ref={columnHeaderRef}
+            className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain"
+          >
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => {
                 const mixed = isColumnMixed({ collapsedColumns, cellOverrides }, value, rowIds);

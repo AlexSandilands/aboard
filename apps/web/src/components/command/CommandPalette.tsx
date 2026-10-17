@@ -47,6 +47,7 @@ import {
   boardSearchFrom,
   useApplyFilterParams,
   useBoardFilterParams,
+  useOpenTask,
   useResetFilters,
 } from "~/components/board/boardNavigation";
 import { activeFilterCount, isEmptyView, readFilters } from "~/components/board/boardFilters.logic";
@@ -235,6 +236,7 @@ function projectIcon(project: Pick<Project, "title" | "icon">) {
 
 function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const navigate = useNavigate();
+  const openTaskAndReveal = useOpenTask();
   const search = useSearch({ strict: false });
   const closePalette = usePalette((s) => s.closePalette);
   const lastProjectId = usePalette((s) => s.lastProjectId);
@@ -367,7 +369,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   }
 
   function openTask(taskId: string): void {
-    void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) });
+    void openTaskAndReveal(taskId);
   }
 
   // ── Actions ────────────────────────────────────────────────────────────

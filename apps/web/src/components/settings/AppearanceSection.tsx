@@ -49,7 +49,21 @@ export function AppearanceSection() {
       />
       <BannerRow />
       <PriorityLaneRow />
+      <ScrollToTaskRow />
     </SettingsSection>
+  );
+}
+
+function ScrollToTaskRow() {
+  const scroll = useAppearance((s) => s.scrollToTask);
+  const setScroll = useAppearance((s) => s.setScrollToTask);
+  return (
+    <SettingsRow
+      id="board.appearance.scroll-to-task"
+      title="Scroll to a task when opening it"
+      description="Opening a task from search, a link or a notification slides the board to its card. Off, only the panel opens."
+      control={<Switch checked={scroll} onCheckedChange={setScroll} aria-label="Scroll to a task when opening it" />}
+    />
   );
 }
 

@@ -10,6 +10,7 @@ import {
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
+import { useTaskLinks } from "~/components/markdown/useTaskLinks";
 import { Button, InlineButton } from "~/components/ui/button";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
@@ -130,6 +131,7 @@ export function WhereItsUpTo({
 function ClampedMarkdown({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
+  const taskLinks = useTaskLinks();
   const ref = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -152,7 +154,9 @@ function ClampedMarkdown({ text }: { text: string }) {
         className={cn(!expanded && "max-h-[4.5rem] overflow-hidden", !expanded && overflows && "mask-b-from-50%")}
       >
         <div ref={contentRef}>
-          <Markdown size="xs">{text}</Markdown>
+          <Markdown size="xs" taskLinks={taskLinks}>
+            {text}
+          </Markdown>
         </div>
       </div>
       {overflows || expanded ? (

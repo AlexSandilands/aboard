@@ -6,7 +6,10 @@ import { createContext, use, type RefObject } from "react";
  * cards only re-render when their own task object or selection changes.
  */
 export interface BoardContextValue {
+  /** Opens the panel for a card the pointer is on, so the board stays where it is. */
   openTask: (taskId: string) => void;
+  /** Opens the panel and scrolls the board to the task's card, for a link on a card that leads to another task. */
+  revealTask: (taskId: string) => void;
   /** Set while a drag finishes so the click that ends it does not open the panel. */
   suppressClickRef: RefObject<boolean>;
   t3: T3IntegrationStatus;
