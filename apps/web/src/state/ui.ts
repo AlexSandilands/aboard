@@ -103,14 +103,19 @@ export const useAppearance = create<AppearanceState>()(
 interface RevealState {
   request: { taskId: string; nonce: number; at: number } | null;
   requestReveal: (taskId: string) => void;
+  /** The board is done with a request (shown, hidden or expired), so a remounted board doesn't act on it again. */
+  consumeReveal: (nonce: number) => void;
 }
+
+let revealNonce = 0;
 
 export const useReveal = create<RevealState>()((set) => ({
   request: null,
   requestReveal: (taskId) => {
     if (!useAppearance.getState().scrollToTask) return;
-    set((s) => ({ request: { taskId, nonce: (s.request?.nonce ?? 0) + 1, at: Date.now() } }));
+    set({ request: { taskId, nonce: ++revealNonce, at: Date.now() } });
   },
+  consumeReveal: (nonce) => set((s) => (s.request?.nonce === nonce ? { request: null } : {})),
 }));
 
 /** Persisted task panel preferences. */

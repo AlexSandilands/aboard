@@ -68,7 +68,7 @@ import {
   type OverCell,
 } from "./dnd.logic";
 import { DependencyLines } from "./DependencyLines";
-import { REVEAL_EXPIRY_MS, revealStep } from "./reveal.logic";
+import { advanceReveal } from "./reveal.logic";
 import { revealCard } from "./revealCard";
 import { TaskCardOverlay } from "./TaskCard";
 
@@ -487,45 +487,49 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   );
 
   // A task opened from outside the board (search, a link, a notification): bring its card into view. The steps run
-  // as the board changes: expand what hides the card, then scroll once it is on screen. A card a filter leaves out
-  // is skipped, and the filters stay as they are.
+  // as the board changes (advanceReveal): expand what hides the card, then scroll once it is on screen. A card a
+  // filter leaves out is skipped, and the filters stay as they are.
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnHeaderRef = useRef<HTMLDivElement>(null);
   const reveal = useReveal((s) => s.request);
   const collapsedEpics = useBoardView((s) => s.collapsedEpics);
-  const revealProgress = useRef<{ nonce: number; done: boolean; expanded: Set<string> } | null>(null);
+  const revealExpanded = useRef<{ nonce: number; ids: Set<string> } | null>(null);
   useEffect(() => {
     if (!reveal) return;
-    if (revealProgress.current?.nonce !== reveal.nonce) {
-      revealProgress.current = { nonce: reveal.nonce, done: false, expanded: new Set() };
+    if (revealExpanded.current?.nonce !== reveal.nonce)
+      revealExpanded.current = { nonce: reveal.nonce, ids: new Set() };
+    const { ids } = revealExpanded.current;
+    const cardSelector = `[data-task-card="${CSS.escape(reveal.taskId)}"]`;
+    const action = advanceReveal({
+      taskId: reveal.taskId,
+      age: Date.now() - reveal.at,
+      lanes,
+      collapsedEpics,
+      expanded: ids,
+      selectedTaskId,
+      cardDrawn: () => !!scrollRef.current?.querySelector(cardSelector),
+    });
+    switch (action.kind) {
+      case "wait":
+        return;
+      case "drop":
+        useReveal.getState().consumeReveal(reveal.nonce);
+        return;
+      case "expand-lane":
+        ids.add(action.project.id);
+        handleToggleCollapsed(action.project);
+        return;
+      case "expand-band":
+        ids.add(action.epicId);
+        useBoardView.getState().toggleEpicCollapsed(action.epicId);
+        return;
+      case "scroll": {
+        // Consumed first, so a board that remounts within the window doesn't scroll again.
+        useReveal.getState().consumeReveal(reveal.nonce);
+        const card = scrollRef.current?.querySelector(cardSelector);
+        if (card) revealCard(scrollRef.current!, columnHeaderRef.current, card);
+      }
     }
-    const progress = revealProgress.current;
-    if (progress.done) return;
-    if (Date.now() - reveal.at > REVEAL_EXPIRY_MS) {
-      progress.done = true;
-      return;
-    }
-    const step = revealStep(lanes, reveal.taskId, collapsedEpics);
-    if (step.kind === "hidden") {
-      progress.done = true;
-      return;
-    }
-    // Each is tried once per request, so a refused update doesn't loop.
-    if (step.kind === "expand-lane" || step.kind === "expand-band") {
-      const id = step.kind === "expand-lane" ? step.project.id : step.epicId;
-      if (progress.expanded.has(id)) return;
-      progress.expanded.add(id);
-      if (step.kind === "expand-lane") handleToggleCollapsed(step.project);
-      else useBoardView.getState().toggleEpicCollapsed(step.epicId);
-      return;
-    }
-    // The open task keeps its card in a collapsed column, so wait until it is the open one.
-    if (selectedTaskId !== reveal.taskId) return;
-    const card = scrollRef.current?.querySelector(`[data-task-card="${CSS.escape(reveal.taskId)}"]`);
-    // Not drawn yet: the next change tries again.
-    if (!card) return;
-    progress.done = true;
-    revealCard(scrollRef.current!, columnHeaderRef.current, card);
   }, [reveal, lanes, collapsedEpics, selectedTaskId, handleToggleCollapsed]);
 
   if (board.projects.length === 0) {

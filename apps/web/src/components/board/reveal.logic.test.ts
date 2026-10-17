@@ -1,7 +1,7 @@
 import type { Project, TaskStatus, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { EpicBand, Lane, LaneCells } from "./board.logic";
-import { revealScrollTarget, revealStep } from "./reveal.logic";
+import { advanceReveal, REVEAL_EXPIRY_MS, revealScrollTarget, revealStep } from "./reveal.logic";
 
 const project = (id: string, collapsed = false): Project => ({
   id,
@@ -128,5 +128,68 @@ describe("revealScrollTarget", () => {
       top: 100 + 664,
       left: 20,
     });
+  });
+});
+
+describe("advanceReveal", () => {
+  const p = project("p");
+  const shown = [lane(p, { cells: cells({ planned: ["t"] }) })];
+  const base = {
+    taskId: "t",
+    age: 0,
+    lanes: shown,
+    collapsedEpics: {},
+    expanded: new Set<string>(),
+    selectedTaskId: "t",
+    cardDrawn: () => true,
+  };
+
+  it("scrolls once the task is open and its card is drawn", () => {
+    expect(advanceReveal(base)).toEqual({ kind: "scroll" });
+  });
+
+  it("waits until the task is the open one, and until its card is drawn", () => {
+    expect(advanceReveal({ ...base, selectedTaskId: null })).toEqual({ kind: "wait" });
+    expect(advanceReveal({ ...base, selectedTaskId: "other" })).toEqual({ kind: "wait" });
+    expect(advanceReveal({ ...base, cardDrawn: () => false })).toEqual({ kind: "wait" });
+  });
+
+  it("drops a request that expired, even with the card on screen", () => {
+    expect(advanceReveal({ ...base, age: REVEAL_EXPIRY_MS + 1 })).toEqual({ kind: "drop" });
+    expect(advanceReveal({ ...base, age: REVEAL_EXPIRY_MS })).toEqual({ kind: "scroll" });
+  });
+
+  it("drops a request for a card the filters leave out", () => {
+    expect(advanceReveal({ ...base, lanes: [lane(p)] })).toEqual({ kind: "drop" });
+  });
+
+  it("expands what hides the card once, then waits for the board to show it", () => {
+    const folded = project("p", true);
+    const lanes = [lane(folded, { cells: cells({ planned: ["t"] }) })];
+    expect(advanceReveal({ ...base, lanes })).toEqual({ kind: "expand-lane", project: folded });
+    // The update was refused (the lane is still folded): no second try, no scroll.
+    expect(advanceReveal({ ...base, lanes, expanded: new Set(["p"]) })).toEqual({ kind: "wait" });
+
+    const bands = [lane(p, { bands: [band("e", { planned: ["t"] })] })];
+    expect(advanceReveal({ ...base, lanes: bands, collapsedEpics: { e: true } })).toEqual({
+      kind: "expand-band",
+      epicId: "e",
+    });
+    expect(advanceReveal({ ...base, lanes: bands, collapsedEpics: { e: true }, expanded: new Set(["e"]) })).toEqual({
+      kind: "wait",
+    });
+  });
+
+  it("only looks for the card once everything else is in place", () => {
+    let looked = false;
+    advanceReveal({
+      ...base,
+      selectedTaskId: null,
+      cardDrawn: () => {
+        looked = true;
+        return true;
+      },
+    });
+    expect(looked).toBe(false);
   });
 });

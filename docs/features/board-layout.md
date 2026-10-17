@@ -83,7 +83,8 @@ on by default) is on.
 expand the project lane or folded epic band hiding the card (each once per request), wait for the task to be the open
 one (which keeps its card in a collapsed column), then `revealCard` scrolls the board's scroll box to it. A card in no
 lane (filtered out, archived) ends the request: the panel opens, nothing scrolls, the filters stay. A request nobody
-fulfils expires after `REVEAL_EXPIRY_MS`.
+fulfils expires after `REVEAL_EXPIRY_MS`. The decisions are `advanceReveal` (pure, tested). A request that ends is
+cleared from the store (`consumeReveal`), so a board that remounts doesn't act on it again.
 
 `revealScrollTarget` centres the card on each axis it isn't fully visible on, allowing for the sticky column header, and
 leaves the other axis. The scroll is smooth (instant under `prefers-reduced-motion`), followed by one correction once it

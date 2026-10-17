@@ -75,3 +75,39 @@ export function revealScrollTarget(view: Box, card: Box, scroll: ScrollPosition)
   const left = alignAxis(view.left, view.right, card.left, card.right, scroll.left);
   return top === scroll.top && left === scroll.left ? null : { top, left };
 }
+
+/** What the board does with an open reveal request on this pass. */
+export type RevealAction =
+  /** Nothing yet: the task isn't the open one, or its card isn't drawn; the next change tries again. */
+  | { kind: "wait" }
+  /** The request is finished without a scroll: it expired, or a filter leaves the card out. */
+  | { kind: "drop" }
+  | { kind: "expand-lane"; project: Project }
+  | { kind: "expand-band"; epicId: string }
+  | { kind: "scroll" };
+
+/**
+ * The next action for a reveal request. `expanded` holds the lanes and bands already expanded for it, so a refused
+ * update can't loop; the caller adds to it when it acts. `cardDrawn` is whether the card is in the DOM.
+ */
+export function advanceReveal(input: {
+  taskId: string;
+  /** Milliseconds since the request was made. */
+  age: number;
+  lanes: ReadonlyArray<Lane>;
+  collapsedEpics: Readonly<Record<string, true>>;
+  expanded: ReadonlySet<string>;
+  selectedTaskId: string | null;
+  cardDrawn: () => boolean;
+}): RevealAction {
+  if (input.age > REVEAL_EXPIRY_MS) return { kind: "drop" };
+  const step = revealStep(input.lanes, input.taskId, input.collapsedEpics);
+  if (step.kind === "hidden") return { kind: "drop" };
+  if (step.kind === "expand-lane") {
+    return input.expanded.has(step.project.id) ? { kind: "wait" } : step;
+  }
+  if (step.kind === "expand-band") return input.expanded.has(step.epicId) ? { kind: "wait" } : step;
+  // The open task keeps its card in a collapsed column, so wait until it is the open one.
+  if (input.selectedTaskId !== input.taskId || !input.cardDrawn()) return { kind: "wait" };
+  return { kind: "scroll" };
+}
