@@ -14,6 +14,11 @@ code. One command does all of it; don't rebuild it by hand.
 - **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|none]`. This checkout's server on
   a temp data dir, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
+- **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
+  to it, for changes under `apps/desktop` (or to see the board in the shell). The window's title ends in
+  "Sandbox" and it keeps its profile in the sandbox's data dir, so it can run beside the user's real app.
+  Starts the sandbox if needed; on a running one it only opens the shell. `pnpm sandbox stop` closes it.
+  Its log is `desktop.log` in the sandbox home. Not combinable with `--live`.
 - **Live:** `pnpm sandbox --live`. This checkout's Vite on the user's real server and real data. The
   real server rejects writes from the sandbox port (403), so it's for _looking_ at a web-only change
   against real data. Needs the real server running.
@@ -51,6 +56,8 @@ Seeds (`apps/server/src/dev/seeds.ts`):
 
 - Never point a sandbox at the user's real data dir. The script refuses to, and strips the inherited
   home and token env vars; don't work around it.
+- Never run `pnpm desktop` from a worktree to try the shell; use `--desktop`. The shell refuses to start on
+  the real data dir or ports; don't work around that.
 - `--live` shows the user's real board. Don't try to make it writable.
 - Need data the seeds don't have? Add or extend a scenario in `apps/server/src/dev/seeds.ts` (it calls
   the services, and `links.setSnapshot` for PR and T3 thread state) and its test, instead of curling

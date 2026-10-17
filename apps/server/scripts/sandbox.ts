@@ -3,6 +3,7 @@
  * without touching the board the user runs from main.
  *
  *   pnpm sandbox [--seed basic|review|threads|showcase|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
  *   pnpm sandbox status                               prints the running sandbox's ready line
  *   pnpm sandbox stop                                 stops it and deletes its data dir
@@ -10,22 +11,21 @@
  * Prints one `SANDBOX_READY {json}` line once the board answers; agents wait for it before opening the URL.
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { connect, createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND, brandEnv } from "@repo/contracts";
+import { BRAND, DEFAULT_SERVER_PORT, DEFAULT_WEB_PORT, brandEnv, desktopSandboxEnv } from "@repo/contracts";
 
 const READY_PREFIX = "SANDBOX_READY";
-const DEFAULT_SERVER_PORT = 4317;
-const DEFAULT_WEB_PORT = 5317;
 const isWindows = process.platform === "win32";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const serverDir = join(repoRoot, "apps", "server");
 const webDir = join(repoRoot, "apps", "web");
+const desktopDir = join(repoRoot, "apps", "desktop");
 // One sandbox per checkout: a second `pnpm sandbox` in the same worktree finds the first instead of racing it.
 const sandboxName = basename(resolve(repoRoot)).replace(/[^\w.-]/g, "_");
 const home = join(tmpdir(), `${BRAND.id}-sandbox-${sandboxName}`);
@@ -42,6 +42,8 @@ interface SandboxState {
   serverPort: number;
   webPort: number;
   home: string;
+  /** The Electron shell `--desktop` opened on this sandbox; stopping the sandbox closes it. */
+  desktop?: { pid: number; startedAt: number };
 }
 
 function fail(message: string): never {
@@ -163,8 +165,26 @@ function ownedPids(state: SandboxState): number[] {
   });
 }
 
+/** The shell launcher's pid while it still is the process `--desktop` started (same checks as `ownedPids`). */
+function ownedDesktopPid(state: SandboxState): number | null {
+  if (!state.desktop) return null;
+  const { pid, startedAt } = state.desktop;
+  const found = processInfo([pid]).get(pid);
+  const ours = found && normalizePath(found.commandLine).includes(normalizePath(desktopDir));
+  return ours && found.startedAt <= startedAt ? pid : null;
+}
+
+/** Closes the sandbox's Electron shell, if it is still open. */
+async function stopDesktop(state: SandboxState): Promise<void> {
+  const pid = ownedDesktopPid(state);
+  if (pid === null) return;
+  killTree(pid);
+  await waitForExit([pid]);
+}
+
 /** Kills what's left of a sandbox (only processes it started) and deletes its home. */
 async function cleanUp(state: SandboxState): Promise<void> {
+  await stopDesktop(state);
   const pids = ownedPids(state);
   for (const pid of pids) killTree(pid);
   await waitForExit(pids);
@@ -263,24 +283,66 @@ function run(name: string, args: string[], cwd: string, env: NodeJS.ProcessEnv):
   return child;
 }
 
+/**
+ * Opens the Electron shell on the sandbox, unless one is already open. It runs detached from this command, so
+ * `--desktop` also works on a sandbox an earlier command started; `stop` closes it again.
+ */
+async function openDesktop(state: SandboxState): Promise<void> {
+  if (state.mode !== "isolated") {
+    throw new Error("--desktop needs the isolated sandbox: the shell must never attach to the real board");
+  }
+  if (ownedDesktopPid(state) !== null) {
+    console.log("[sandbox] the desktop shell is already open");
+    return;
+  }
+  const logPath = join(state.home, "desktop.log");
+  const log = openSync(logPath, "w");
+  const child = spawn(process.execPath, [join(desktopDir, "scripts", "launch.ts")], {
+    cwd: desktopDir,
+    env: desktopSandboxEnv(process.env, state),
+    stdio: ["ignore", log, log],
+    detached: !isWindows,
+    windowsHide: true,
+  });
+  closeSync(log);
+  child.unref();
+  let exitCode: number | undefined;
+  child.once("exit", (code) => (exitCode = code ?? 1));
+  // A broken build or a refused sandbox ends the launcher within moments; say so rather than leave no window.
+  await sleep(4000);
+  if (!child.pid || exitCode !== undefined) {
+    const tail = readFileSync(logPath, "utf8").slice(-2000);
+    throw new Error(`the desktop shell exited (code ${exitCode}); log ${logPath}\n${tail}`);
+  }
+  writeFileSync(
+    stateFile,
+    JSON.stringify({ ...state, desktop: { pid: child.pid, startedAt: Date.now() } } satisfies SandboxState, null, 2),
+  );
+  console.log(`[sandbox] desktop shell open (log ${logPath}); \`pnpm sandbox stop\` closes it`);
+}
+
 function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   const live = argv.includes("--live");
+  const desktop = argv.includes("--desktop");
   const seedIndex = argv.indexOf("--seed");
   const seed = seedIndex >= 0 ? argv[seedIndex + 1] : "basic";
   const unknown = argv.find(
-    (arg, i) => arg !== "--live" && arg !== "--seed" && !(seedIndex >= 0 && i === seedIndex + 1),
+    (arg, i) => arg !== "--live" && arg !== "--desktop" && arg !== "--seed" && !(seedIndex >= 0 && i === seedIndex + 1),
   );
-  if (unknown !== undefined) fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live)`);
+  if (unknown !== undefined) {
+    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop)`);
+  }
+  if (live && desktop) fail("--desktop has no effect with --live: the shell must never attach to the real board");
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
     fail(`unknown seed "${seed}" (basic, review, threads, showcase, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
-  return { live, seed };
+  return { live, seed, desktop };
 }
 
 async function start(argv: string[]): Promise<void> {
   // Loaded here so `status` and `stop` don't open SQLite (and print its experimental warning).
   const { isScenarioName, seedDatabase } = await import("../src/dev/seeds.ts");
-  const { live, seed } = parseArgs(argv, isScenarioName);
+  const { live, seed, desktop } = parseArgs(argv, isScenarioName);
   const existing = readState();
   if (existing && ownedPids(existing).includes(existing.pid)) {
     // Same checkout, so Vite already hot-reloads its edits: hand back the running one instead of a port clash.
@@ -289,6 +351,7 @@ async function start(argv: string[]): Promise<void> {
         "run `pnpm sandbox stop` first for a fresh one",
     );
     console.log(`${READY_PREFIX} ${JSON.stringify(existing)}`);
+    if (desktop) await openDesktop(existing).catch((error: Error) => fail(error.message));
     return;
   }
   // A crashed sandbox can leave its server or Vite running; stop them before reusing the home.
@@ -314,11 +377,16 @@ async function start(argv: string[]): Promise<void> {
   const shutdown = (code: number) => {
     if (stopping) return;
     stopping = true;
-    for (const child of children) if (child.pid) killTree(child.pid);
-    void waitForExit(children.flatMap((c) => (c.pid ? [c.pid] : []))).then(() => {
-      removeHome();
-      process.exit(code);
-    });
+    const current = readState();
+    void (current ? stopDesktop(current) : Promise.resolve())
+      .then(() => {
+        for (const child of children) if (child.pid) killTree(child.pid);
+        return waitForExit(children.flatMap((c) => (c.pid ? [c.pid] : [])));
+      })
+      .then(() => {
+        removeHome();
+        process.exit(code);
+      });
   };
   process.on("SIGINT", () => shutdown(0));
   process.on("SIGTERM", () => shutdown(0));
@@ -403,6 +471,8 @@ async function start(argv: string[]): Promise<void> {
   }
   console.log(`${READY_PREFIX} ${JSON.stringify(state)}`);
   console.log(`[sandbox] open ${url}  ·  stop with \`pnpm sandbox stop\` (or Ctrl+C)`);
+  // The board itself is fine without the shell, so a failed launch is reported but doesn't stop it.
+  if (desktop) await openDesktop(state).catch((error: Error) => console.error(`[sandbox] ${error.message}`));
 }
 
 // pnpm forwards a literal "--" when the caller used one to separate its own flags.
@@ -414,4 +484,4 @@ else if (command === "status") {
   else console.log("[sandbox] no sandbox running");
 } else if (command === undefined || command.startsWith("--"))
   await start(command === undefined ? [] : [command, ...rest]);
-else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live)`);
+else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop)`);
