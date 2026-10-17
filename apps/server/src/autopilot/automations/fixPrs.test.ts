@@ -21,7 +21,7 @@ import {
   type RunnerRequest,
   type RunnerResult,
 } from "../types.ts";
-import { fixDedupeKey, fixPrompt, fixPrs, parseFixKey } from "./fixPrs.ts";
+import { fixDedupeKey, fixPrompt, fixPrs, manualFix, parseFixKey } from "./fixPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -586,6 +586,94 @@ describe("fixPrompt", () => {
       skill: { source: "global", name: "fixer", path: "/nowhere/fixer/SKILL.md" },
     });
     expect(prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
+  });
+});
+
+describe("manualFix: Fix in → on a PR", () => {
+  it("builds the prompt for every problem the PR has, for a user who is watching", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ checks: "failing", mergeable: "conflicting", reviewDecision: "changes_requested", reviews: [review(5)] });
+    const fix = manualFix(s, linkId());
+    expect(fix).toMatchObject({
+      branch: "feat/thing",
+      headOid: SHA_A,
+      number: 7,
+      problems: ["checks", "conflict", "changes"],
+    });
+    expect(fix.prompt).toContain("The user asked you to fix what is listed below");
+    expect(fix.prompt).toContain("already linked it to the task, so don't link it yourself");
+    expect(fix.prompt).toContain("**Failing checks.**");
+    expect(fix.prompt).toContain("**Merge conflicts**");
+    expect(fix.prompt).toContain("**Changes requested** by @ana");
+    expect(fix.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/5");
+    expect(fix.prompt).toContain("git push origin HEAD:feat/thing");
+    expect(fix.prompt).toContain("Never force-push, never push to the default branch and never merge the pull request");
+    expect(fix.prompt).toContain("The user is watching this session");
+    expect(fix.prompt).not.toContain("Autopilot");
+    expect(fix.prompt).not.toContain("Nobody is watching");
+    expect(fix.prompt).not.toContain(prReviewMarker());
+  });
+
+  it("reads a request for changes from a review it can't trust as a pointer, not a review id", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ reviewDecision: "changes_requested", reviews: [review(5, { trusted: false })] });
+    const { prompt, problems } = manualFix(s, linkId());
+    expect(problems).toEqual(["changes"]);
+    expect(prompt).toContain(
+      "**Changes requested.** Find the review with `gh pr view https://github.com/acme/app/pull/7 --comments`",
+    );
+    expect(prompt).not.toContain("reviews/5");
+  });
+
+  it("refuses a PR with nothing to fix, a merged one and a fork's", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ checks: "passing" });
+    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+    setPr({ checks: "failing", state: "merged" });
+    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+    setPr({ checks: "failing", isCrossRepository: true });
+    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+  });
+
+  it("follows the Fix skill chosen for the task's scope", () => {
+    const { s, setPr, linkId, turnOn } = setup();
+    setPr({ checks: "failing" });
+    turnOn({ skill: { source: "global", name: "fixer", path: "/nowhere/fixer/SKILL.md" } });
+    expect(manualFix(s, linkId()).prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
+  });
+
+  it("quotes the branch name wherever the agent is told to run it", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ checks: "failing", headRef: "fix/a;touch x'y" });
+    const { prompt } = manualFix(s, linkId());
+    expect(prompt).toContain(String.raw`git push origin 'HEAD:fix/a;touch x'\''y'`);
+    expect(prompt).toContain(String.raw`git merge --ff-only 'origin/fix/a;touch x'\''y'`);
+  });
+
+  it("answers 400 for a link that isn't a PR, a PR not read yet, and one with nothing to fix", async () => {
+    const { request, s, task, setPr, linkId } = setup();
+    const url = s.links.add(task.id, { value: "https://example.com/docs" }, "agent");
+    const unread = s.links.add(task.id, { value: "https://github.com/acme/app/pull/8" }, "agent");
+    const fixOf = (id: string) => request(`/api/links/${id}/fix`);
+    expect((await fixOf(url.id)).status).toBe(400);
+    expect((await fixOf(unread.id)).status).toBe(400);
+    setPr({ checks: "passing" });
+    const none = await fixOf(linkId());
+    expect(none.status).toBe(400);
+    expect(await none.json()).toMatchObject({ error: { message: expect.stringContaining("nothing to fix") } });
+    setPr({ checks: "failing", state: "closed" });
+    expect((await fixOf(linkId())).status).toBe(400);
+  });
+
+  it("is served at GET /api/links/:id/fix", async () => {
+    const { request, setPr, linkId } = setup();
+    setPr({ checks: "failing" });
+    const res = await request(`/api/links/${linkId()}/fix`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ branch: "feat/thing", problems: ["checks"] });
+    setPr({ checks: "passing" });
+    expect((await request(`/api/links/${linkId()}/fix`)).status).toBe(400);
+    expect((await request("/api/links/missing/fix")).status).toBe(404);
   });
 });
 

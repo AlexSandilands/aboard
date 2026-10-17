@@ -7,6 +7,8 @@ export * from "./derive.ts";
 export * from "./identity.ts";
 export * from "./links.ts";
 export * from "./merge.ts";
+export * from "./prFix.ts";
+export * from "./runThreads.ts";
 export * from "./planMarkdown.ts";
 export * from "./desktop.ts";
 export * from "./handoff.ts";

@@ -26,7 +26,7 @@ export function EpicActions({ epic, className }: { epic: TaskSummary; className?
   if (!hasLinks && !handoff) return null;
   return (
     <div className={cn("flex shrink-0 items-center gap-0.5", className)}>
-      {hasLinks ? <CardLinks taskId={epic.id} taskStatus={epic.status} links={links} /> : null}
+      {hasLinks ? <CardLinks task={{ ...epic, links }} /> : null}
       {handoff ? <HandoffMenu task={epic} variant="card" canStartT3={startT3} /> : null}
     </div>
   );

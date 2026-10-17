@@ -350,7 +350,7 @@ to fix a pull request linked to a task.
   (`parseFixKey`), so a failed attempt, which leaves no output, still counts what it was given; a skipped one didn't
   act and counts nothing. Triggers still holding from an earlier attempt are listed in the prompt for context. While
   a fix or a review of the PR is queued or running, the PR waits. So it does while an attempt
-  handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `autopilot/threads.ts`,
+  handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `packages/contracts/src/runThreads.ts`,
   shared with Start planned): those runs end as soon as the message is sent, so without this, comments arriving
   while the agent works would use up the attempts and give up before it pushed.
 - **Action.** When the task's latest T3 thread is there, not settled, and seen by the live poll in the last ten
@@ -365,6 +365,10 @@ to fix a pull request linked to a task.
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
   is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
   via: "nudge" | "t3" | "headless" }`.
+- **By hand.** The PR row's **Fix in →** starts the same kind of fix for the user ([GitHub PRs](github-prs.md#fixing-a-pr-by-hand)),
+  with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
+  for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
+  (it may start an attempt of its own on the branch while one is at work).
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
   attempt that wasn't skipped. When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
   per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
@@ -772,7 +776,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
 | `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
 | `apps/server/src/autopilot/epicBranch.ts` | `ensureEpicBranch`: making an epic's integration branch on origin |
-| `apps/server/src/autopilot/threads.ts` | Whether a T3 thread a run handed work to is still working on it |
+| `packages/contracts/src/runThreads.ts` | `t3RunWorking`: whether a T3 thread a run handed work to is still working on it, for Start planned, Fix PRs and the PR row |
+| `apps/server/src/autopilot/threads.ts` | `threadSeen`: whether the live poll has seen a thread lately |
 | `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
 | `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback; `mergeIntoEpicBranch`, `checkAutopilotMergeTarget`, `ensureEpicPr`, `setPrBody` |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |

@@ -96,7 +96,8 @@ order as T3 Code's PR panel. Only a task in **Review** whose PR the account can 
 4. checks not passing, and the repo allows auto-merge: **Enable auto-merge**;
 5. otherwise: **Merge**.
 
-The panel's PR row shows the button; the card shows a merge icon next to the PR chip. Both open
+The panel's PR row shows the button; the card shows a merge icon next to the PR chip. While the PR has something to fix
+the slot is Fix in → instead, and Merge is in the row's menu ([below](#fixing-a-pr-by-hand)). Both open
 `MergePrDialog`, where the method can be changed. It offers the method last picked for the repo
 (`useMergeMethods`, in local storage), else squash, merge, rebase, whichever the repo allows.
 
@@ -114,6 +115,53 @@ The panel's PR row shows the button; the card shows a merge icon next to the PR 
 - Then the link is refreshed. A merged PR then finishes the task the usual way (below).
 
 Merging is UI only: there's no MCP tool for it.
+
+### Fixing a PR by hand
+
+Board task: #78. The PR row has one action slot (`prRowSlot` in `packages/contracts/src/prFix.ts`), in the panel and on
+the card. `prProblems(snapshot)` says what is wrong: failing checks, a conflict, changes requested; and only for an open
+or draft PR in the base repository (`isCrossRepository` is false) with a `headRef` and `headOid`, as Fix PRs does.
+
+| The PR has                                  | The slot (panel row; card chip)          | In the row's ⌄ menu (the card chip's menu)   |
+| ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
+| nothing to fix                              | Merge, as above (`prMergeAction`)        |                                              |
+| a problem                                   | **Fix in →** (a menu: the targets below) | the Merge or Enable auto-merge that gave way |
+| a problem, Fix PRs on for the task, running | **Autopilot is fixing**                  | Fix in →, and that Merge                     |
+| a problem, Fix PRs on for the task, gave up | **Autopilot gave up**                    | Fix in →, and that Merge                     |
+
+No Fix in → on a Done task (Autopilot skips them too), an epic (its sessions start from its tasks) or a link with no
+repository and number. **Fix PRs on for the task** is its resolution at the task's epic, project or board
+(`useAutopilotScope`, `useAutopilotEpicScope`), read only while the PR has a problem. **Running** is a `fix_prs` run for
+this link (`fixRunKeyPrefix`, from the task's runs) that is queued or running, or that handed the fix to a T3 thread, a
+new one or a nudge into the task's own, which is still working: those runs end at once, so `t3RunWorking` (shared with
+Fix PRs, in `packages/contracts/src/runThreads.ts`) reads the thread. **Gave up** is the task's Needs attention reason `fixGaveUpPrefix(n)`. The board can't tell
+"Autopilot is about to fix it" from "Autopilot has done all it will" without redoing the automation's check in the
+browser, so in those states Fix in → stays the primary action.
+
+**Fix in →** offers **T3 Code thread…** (as in the hand-off menu), **Claude Code session…** and **Copilot CLI session…**,
+each opening its launch dialog with `fixLinkId` set (`useDialogs().openT3Launch(taskId, fixLinkId)`,
+`openSessionLaunch(taskId, harness, fixLinkId)`), and **Copy fix prompt**. The dialogs read `GET /api/links/:id/fix`:
+
+- `manualFix` (`autopilot/automations/fixPrs.ts`) builds Fix PRs' prompt (`fixPrompt` with `manual: true`) for every
+  problem the PR has now, whoever raised it and whether or not Autopilot has tried it. Review comments and Autopilot's
+  own review aren't listed: the user points the agent at those. Changes requested read the newest trusted review, or tell
+  the agent to find it with `gh pr view --comments` when there is none. The scope's **Fix skill** is followed, as for
+  Autopilot's attempts. The response also carries the PR's `branch`, `headOid`, `number` and `problems`. It is a 400 for a
+  PR with nothing to fix, as `prProblems` says.
+- The prompt differs from Autopilot's for a user who is watching: no "Autopilot sent you" or attempt count, the agent may
+  ask instead of stopping, replies carry no Autopilot marker (the reply file is `fix-reply.md`), the agent is told the
+  board linked the session, and the push is `git push origin HEAD:<branch>` since the worktree's own branch is a new one.
+  The safety rules are the same: never force-push, never push to the default branch, never merge, conflicts by merge.
+- **CLI sessions** use the workspace `{mode: "pr_branch", branch}` ([agent sessions](agent-sessions.md#starting-a-session)):
+  a worktree on origin's copy of the PR's branch, like Fix PRs' headless runs. The dialog has no "where" choice and needs a
+  git repository. The session is labelled "Fixing the PR of #N" and linked to the task.
+- **Fix PRs doesn't know about these sessions.** Its check defers only to its own runs and to the T3 threads they started
+  (`t3RunWorking`). If a session you started pushes and the checks fail again at the new head while Fix PRs is on, it may
+  start an attempt of its own on the same branch. Turn Fix PRs off for the task, or Pause all, while you work by hand.
+- **T3 threads** start in a new worktree from `origin/<branch>` (the dialog's initial choice, as for an integration epic's
+  branch). The dialog never starts a fix in your checkout or an existing worktree (the launch is blocked), since the
+  prompt has the agent fast-forward its branch to the PR's when the worktree lacks the head commit. It warns when T3 lists
+  no ref for the PR's branch (the worktree then starts from the default branch). The thread is linked to the task.
 
 ### Finishing on merge
 
@@ -154,4 +202,8 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | `packages/contracts/src/derive.ts`                       | `deriveAttention`                                               |
 | `apps/web/src/components/board/CardLinks.tsx`, `task/LinksSection.tsx` | PR chips and merge controls on the card and in the panel |
 | `apps/web/src/components/merge/MergePrDialog.tsx`        | The merge dialog                                                |
+| `packages/contracts/src/prFix.ts`                        | `prProblems`, `prRowSlot`, `PrFixInfo`                          |
+| `apps/web/src/components/handoff/FixPrMenu.tsx`          | The slot hook (`usePrSlot`) and the Fix in → menu items         |
+| `apps/web/src/components/handoff/fixPr.logic.ts`         | `prAutopilotState`: Fix PRs' state for the slot                 |
+| `apps/server/src/autopilot/automations/fixPrs.ts`        | `manualFix` and `fixPrompt`, which Fix PRs and Fix in → share   |
 | `apps/web/src/components/settings/IntegrationsSections.tsx` | The GitHub section in Settings → Integrations                |

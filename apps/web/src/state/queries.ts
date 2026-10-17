@@ -11,6 +11,7 @@ import type {
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  PrFixInfo,
   SettingsAskStatus,
   NotificationList,
   SkillInfo,
@@ -60,6 +61,7 @@ export const queryKeys = {
   terminal: ["terminal"] as const,
   agentClis: ["agentClis"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
+  prFix: (linkId: string) => ["prFix", linkId] as const,
   templates: ["templates"] as const,
   /** Prefix of every project's recurring rules query. */
   recurring: ["recurring"] as const,
@@ -247,6 +249,18 @@ export function useSessionLaunchOptions(taskId: string | null) {
     queryFn: ({ signal }) =>
       api<SessionLaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/session-launch-options`, { signal }),
     enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
+/** What "Fix in →" starts a session with: the PR's branch and Fix PRs' prompt for its problems now. Read each time. */
+export function usePrFix(linkId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.prFix(linkId ?? ""),
+    queryFn: ({ signal }) => api<PrFixInfo>(`/api/links/${encodeURIComponent(linkId!)}/fix`, { signal }),
+    enabled: !!linkId,
     staleTime: 0,
     gcTime: 0,
     retry: false,

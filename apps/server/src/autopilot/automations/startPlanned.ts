@@ -1,6 +1,7 @@
 import {
   AUTOPILOT_START_PLANNED,
   ReviewSkillRef,
+  t3RunWorking,
   taskHandoffPrompt,
   type AutopilotField,
   type TaskSummary,
@@ -9,7 +10,6 @@ import { z } from "zod";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import { t3RunWorking } from "../threads.ts";
 import { defineAutomation, RunAbandonedError, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
 
 export { AUTOPILOT_START_PLANNED };
