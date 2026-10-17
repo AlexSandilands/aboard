@@ -66,9 +66,10 @@ An issue that is an epic becomes one on the board, and its children become its t
   `gh api --paginate repos/{o}/{r}/issues/{n}/sub_issues --jq '.[].html_url'` (`fetchSubIssues`); an issue with any
   is an epic. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
   child) isn't asked, since epics don't nest. Jira: the prompt asks the run, when the issue's
-  type is Epic or its hierarchy level is 1, to set `isEpic`, search with the JQL `parent = KEY` (falling back to
-  `"Epic Link" = KEY`, for company-managed projects on older Jira) and return up to 50 child keys in `children`
-  and the count in `childTotal`. It doesn't read the children.
+  type is Epic or its hierarchy level is 1, to set `isEpic`, run two searches, `"Epic Link" = KEY` (the epic's
+  issues in company-managed projects; a failure because the field is unknown in the project, as in team-managed projects, is ignored; any other failure fails the import) and
+  `parent = KEY` (its sub-tasks), merge the keys without duplicates with the Epic Link results first, and return the
+  first 50 in `children` and the count of the whole union in `childTotal`. It doesn't read the children.
 - **Converting.** `ImportsService.complete` applies the result as usual, then `fillEpic` (same write) turns the
   task into an epic with `tasks.makeEpic`, which logs `became_epic` and re-derives its status from its tasks. It
   refuses a task that has a plan, is in an epic, is archived or closed, or has an Autopilot flag or priority (none of
