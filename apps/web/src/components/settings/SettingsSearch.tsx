@@ -37,6 +37,8 @@ export function SettingsSearch({
     // Ctrl/Cmd+F works from a text field too (it is the browser's find otherwise); a typed "/" must not be taken.
     if (event.key === "/" && isEditableTarget(event.target)) return;
     if (isInsidePopup(event.target) || usePalette.getState().open) return;
+    // On a narrow window with the sheet closed the box isn't mounted: leave the browser's find alone.
+    if (!inputRef.current) return;
     event.preventDefault();
     if (!open) setOpen(true);
     // A hidden sidebar has no input to focus until it has rendered open.

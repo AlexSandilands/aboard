@@ -81,7 +81,8 @@ export function useSettingsBack(): () => unknown {
 
 /**
  * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
- * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow windows this is the off-canvas sheet, which closes on a pick.
+ * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow
+ * windows this is the off-canvas sheet, which closes on a pick.
  */
 export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
@@ -266,6 +267,10 @@ function pinInView(area: HTMLElement, element: HTMLElement, onSettled: () => voi
 }
 const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
+/** Frames (about 60 a second) to wait for a target to render, and for one in a page that is already loaded. */
+const MAX_TRIES = 120;
+const JUMP_TRIES = 20;
+
 /** How long a picked setting stays marked; the animation in `index.css` fades it over this time. */
 const FLASH_MS = 1600;
 
@@ -386,13 +391,16 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
     }
     const jump = !fromHash && target !== null && target.at >= openedAt;
     const smooth = jump && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A hash is never a jump, so it always gets the full wait.
+    const limit = jump ? JUMP_TRIES : MAX_TRIES;
     let tries = 0;
     let frame = 0;
     let unpin = () => {};
     let cancelFlash = () => {};
     const attempt = () => {
-      // Once the wait is up, settle for the nearest part of the page that is there.
-      const last = tries >= 119;
+      // Once the wait is up, a search pick settles for the nearest part of the page that is there. A jump within a
+      // loaded page needn't wait for content to load, so it gives up sooner. A URL hash gets no fallback.
+      const last = !fromHash && tries >= limit - 1;
       const element = last ? nearestRendered(id) : document.getElementById(id);
       if (element && area.contains(element)) {
         const handled = () => {
@@ -419,7 +427,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
         return;
       }
       // Give loading content about two seconds to render the target.
-      if (++tries < 120) frame = requestAnimationFrame(attempt);
+      if (++tries < limit) frame = requestAnimationFrame(attempt);
     };
     attempt();
     return () => {

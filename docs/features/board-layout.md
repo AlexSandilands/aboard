@@ -178,8 +178,9 @@ rule editor take `?project=`; without it the page shows the project the board wa
   Ctrl/Cmd+F focus the box (`isSearchShortcut`). A pick calls `useOpenSettings` with `highlight`, which
   `requestScroll` carries to `SettingsScroller`; it scrolls, `FoldedSettingsSection` opens when the id is its own or
   under it, and `flashElement` adds `.settings-flash` for 1.6 s, once a smooth jump has landed (`afterScroll`). Picking a
-  sub-section only scrolls. A row that isn't rendered (the issue import's model with import off) falls back, after
-  the two-second wait, to the nearest id that is, dropping trailing segments (`nearestRendered`). The index's titles
+  sub-section only scrolls. A row that isn't rendered (the issue import's model with import off) falls back to the nearest id that is,
+  dropping trailing segments (`nearestRendered`): after about a third of a second for a pick within a loaded page, after
+  the two-second wait for a page that is still opening. A URL hash never falls back. The index's titles
   may be more specific than the rendered label ("Backup interval" for "Every"); the rendered label goes in its
   keywords.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
