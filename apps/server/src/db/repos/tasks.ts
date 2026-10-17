@@ -1,4 +1,4 @@
-import type { ModelTier, SuggestedModel, TaskKind, TaskResolution, TaskStatus } from "@repo/contracts";
+import type { EpicDelivery, ModelTier, SuggestedModel, TaskKind, TaskResolution, TaskStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */
@@ -28,6 +28,10 @@ export interface TaskRecord {
   suggestedModel: SuggestedModel | null;
   /** The template it was created from; null for none, or once that template is deleted. */
   templateId: string | null;
+  /** An epic's delivery; null until someone chooses one (which delivers to main). */
+  delivery: EpicDelivery | null;
+  /** An epic's integration branch while it uses integration delivery. */
+  integrationBranch: string | null;
 }
 
 interface TaskRow {
@@ -53,6 +57,8 @@ interface TaskRow {
   suggested_tier: ModelTier | null;
   suggested_reason: string | null;
   template_id: string | null;
+  delivery: EpicDelivery | null;
+  integration_branch: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -77,6 +83,8 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   autopilot: r.autopilot === null ? null : r.autopilot !== 0,
   suggestedModel: r.suggested_tier ? { tier: r.suggested_tier, reason: r.suggested_reason } : null,
   templateId: r.template_id,
+  delivery: r.delivery,
+  integrationBranch: r.integration_branch,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -102,6 +110,8 @@ const toRow = (t: TaskRecord): TaskRow => ({
   suggested_tier: t.suggestedModel?.tier ?? null,
   suggested_reason: t.suggestedModel?.reason ?? null,
   template_id: t.templateId,
+  delivery: t.delivery,
+  integration_branch: t.integrationBranch,
 });
 
 export interface TaskFilter {

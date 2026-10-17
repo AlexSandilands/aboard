@@ -1,3 +1,5 @@
+import type { TaskSummary } from "@repo/contracts";
+import { EpicDeliveryControl } from "~/components/task/EpicDelivery";
 import { cn } from "~/lib/utils";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -16,7 +18,10 @@ export function AutopilotEpicButton({
   epic,
   className,
 }: {
-  epic: { id: string; number: number; projectId: string; archivedAt: string | null };
+  epic: Pick<
+    TaskSummary,
+    "id" | "number" | "title" | "kind" | "projectId" | "archivedAt" | "delivery" | "integrationBranch"
+  >;
   className?: string;
 }) {
   const overview = useAutopilotOverview();
@@ -57,6 +62,10 @@ export function AutopilotEpicButton({
           set={set}
           epic
         />
+        {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
+        <div className="mt-2 border-t border-border/50 pt-2">
+          <EpicDeliveryControl epic={epic} />
+        </div>
       </PopoverPopup>
     </Popover>
   );

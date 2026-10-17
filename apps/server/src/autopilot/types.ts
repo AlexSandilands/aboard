@@ -1,6 +1,14 @@
-import type { AutopilotEngineSettings, AutopilotField, AutopilotRun, ModelTier, PrRef, Project } from "@repo/contracts";
+import type {
+  AutopilotEngineSettings,
+  AutopilotField,
+  AutopilotRun,
+  ModelTier,
+  PrRef,
+  Project,
+  TaskLink,
+} from "@repo/contracts";
 import type { z } from "zod";
-import type { PostedReview, PostReviewInput } from "../integrations/github.ts";
+import type { EpicMergeInput, EpicPrInput, PostedReview, PostReviewInput } from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { Services } from "../services/types.ts";
 
@@ -47,17 +55,29 @@ export type RunPatch = Partial<
   Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode">
 >;
 
-/** What an action may do on GitHub: post a review as the user's `gh` account. */
+/**
+ * What an action may do on GitHub, as the user's `gh` account: post a review, merge a task's PR into its epic's
+ * integration branch (never into the default branch: checkAutopilotMergeTarget), and open and describe the epic's
+ * draft PR (never merge it).
+ */
 export interface GithubActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's head commit on GitHub now, in full. */
   prHead(ref: PrRef): Promise<string>;
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
+  setPrBody(ref: PrRef, body: string): Promise<void>;
 }
+
+const noGithub = () => Promise.reject(new Error("GitHub isn't available"));
 
 /** GitHub until one is configured: every action that needs it fails with a clear reason. */
 export const NO_GITHUB: GithubActions = {
-  postReview: () => Promise.reject(new Error("GitHub isn't available")),
-  prHead: () => Promise.reject(new Error("GitHub isn't available")),
+  postReview: noGithub,
+  prHead: noGithub,
+  mergeIntoEpicBranch: noGithub,
+  ensureEpicPr: noGithub,
+  setPrBody: noGithub,
 };
 
 export interface ActionContext<C> {
@@ -91,8 +111,9 @@ export interface ActionResult extends RunPatch {
 
 /**
  * One automation: a deterministic check over board state and an action per candidate. The engine resolves scopes,
- * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never merge,
- * close or delete tasks, force-push or push to the default branch (docs/decisions/0008-autopilot-engine.md).
+ * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never merge into
+ * the default branch, close or delete tasks, force-push or push to the default branch; the one merge it may make is a
+ * task's PR into its epic's integration branch (docs/decisions/0008-autopilot-engine.md).
  */
 export interface Automation<C extends AutomationConfig = AutomationConfig> {
   key: string;
@@ -145,9 +166,11 @@ export interface RunnerRequest {
   kind?: "start" | "nudge";
   /**
    * Where a new session works. A new branch from `baseRef` (default: the default branch), or one based on an
-   * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
+   * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch. `prBase` is the branch
+   * the agent's pull request goes to when that isn't the default branch (an integration epic's): the session starts
+   * from origin's copy of it, and the workspace note says to open the pull request against it.
    */
-  workspace?: { baseRef?: string | null; branch?: string | null };
+  workspace?: { baseRef?: string | null; branch?: string | null; prBase?: string | null };
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */

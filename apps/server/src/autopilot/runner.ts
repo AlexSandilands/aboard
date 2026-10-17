@@ -59,8 +59,14 @@ const SAFETY = (defaultBranch: string | null) =>
   `Never force-push, never push to ${defaultBranch ? `\`${defaultBranch}\`` : "the default branch"} and never merge a pull request; ` +
   "fix conflicts with a merge, not a rebase.";
 
+/** Where the agent's pull request goes when it isn't the default branch: an integration epic's branch. */
+const prBaseNote = (prBase: string | null | undefined) =>
+  prBase
+    ? ` Open your pull request against \`${prBase}\`, the epic's integration branch (\`gh pr create --base ${prBase}\`), not the default branch; Autopilot merges it there once it is reviewed and green.`
+    : "";
+
 /** What a headless agent is told about where it works and how its work leaves the worktree. */
-export function headlessWorkspaceNote(worktree: Worktree, readOnly: boolean): string {
+export function headlessWorkspaceNote(worktree: Worktree, readOnly: boolean, prBase?: string | null): string {
   // The board links this session itself, under the run's name; an agent linking it again would rename it.
   const where = `You are running unattended as ${BRAND.name} Autopilot, in a git worktree made for this run (${worktree.path}) on branch \`${worktree.branch}\`. Autopilot has already linked this session to the task, so don't link it yourself.`;
   if (readOnly) return `${where} Don't edit files, commit or push.`;
@@ -68,14 +74,16 @@ export function headlessWorkspaceNote(worktree: Worktree, readOnly: boolean): st
     worktree.pushTo === worktree.branch
       ? `Commit there and push with \`git push -u origin ${worktree.branch}\`.`
       : `Commit there and push to the pull request's branch with \`git push origin HEAD:${worktree.pushTo}\`.`;
-  return `${where} ${push} ${SAFETY(worktree.defaultBranch)}`;
+  return `${where} ${push}${prBaseNote(prBase)} ${SAFETY(worktree.defaultBranch)}`;
 }
 
 /** The same for a T3 thread, which gets its worktree from T3. */
-export function t3WorkspaceNote(branch: string | null, defaultBranch: string | null): string {
+export function t3WorkspaceNote(branch: string | null, defaultBranch: string | null, prBase?: string | null): string {
   const push = branch
     ? `Your worktree starts from the pull request's branch \`${branch}\`; push your commits to it with \`git push origin HEAD:${branch}\`. `
-    : "";
+    : prBase
+      ? `Your worktree starts from \`${prBase}\`.${prBaseNote(prBase)} `
+      : "";
   return `You were started by ${BRAND.name} Autopilot. ${push}${SAFETY(defaultBranch)}`;
 }
 
@@ -154,23 +162,26 @@ export function createAutopilotRunner(deps: {
     hold: Hold,
   ): Promise<RunnerResult> => {
     const branch = request.workspace?.branch ?? null;
+    const prBase = branch ? null : (request.workspace?.prBase ?? null);
     const project = deps.services().projects.get(task.projectId);
-    const defaultBranch = await checkBranch(project.workspaceRoot, branch);
+    const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
     const launch = await whileUnavailable(
       () =>
         deps.t3.launchTaskThread(
           task.id,
           {
-            prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch)}`,
+            prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
             commandId: runCommandId(request.run.id),
             ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
             work: true,
             // A pull request's branch is on origin, and origin's copy is the one to build on.
             ...(branch
               ? { baseRef: branch, startFromOrigin: true }
-              : request.workspace?.baseRef
-                ? { baseRef: request.workspace.baseRef }
-                : {}),
+              : prBase
+                ? { baseRef: prBase, startFromOrigin: true }
+                : request.workspace?.baseRef
+                  ? { baseRef: request.workspace.baseRef }
+                  : {}),
             ...(options.t3Access !== "default" ? { maxRuntimeMode: options.t3Access } : {}),
           },
           AUTOPILOT_ACTOR,
@@ -210,7 +221,8 @@ export function createAutopilotRunner(deps: {
       root: deps.worktreesDir,
       taskNumber: task.number,
       runId: request.run.id,
-      baseRef: request.workspace?.baseRef,
+      baseRef: request.workspace?.prBase || request.workspace?.baseRef,
+      baseFromOrigin: Boolean(request.workspace?.prBase),
       branch: request.workspace?.branch,
       // A reviewer can't push, so it may read the default branch too.
       readOnly: request.access === "read-only",
@@ -249,7 +261,7 @@ export function createAutopilotRunner(deps: {
     const stdout = await runAgent({
       cli: settings.headlessReviewCli,
       cwd: worktree.path,
-      prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly)}`,
+      prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
       timeoutMs: options.timeoutMinutes * 60_000,
       args: agentArgs({
         access: request.access ?? "edit",

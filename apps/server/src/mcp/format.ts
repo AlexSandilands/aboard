@@ -229,6 +229,12 @@ export function eventText(event: TaskEvent): string {
       what = `review round ${typeof p.round === "number" ? p.round : "?"} submitted: ${tally.join(", ") || "no findings"}`;
       break;
     }
+    case "delivery_changed":
+      what =
+        str("delivery") === "integration"
+          ? `delivery set to the integration branch ${str("branch") ?? ""}`.trimEnd()
+          : "delivery set to pull requests to main";
+      break;
     case "suggested_model_changed":
       what = str("tier")
         ? `suggested model ${str("tier")}${str("reason") ? ` (${str("reason")})` : ""}`
@@ -374,6 +380,22 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
     "Autopilot's Start planned tasks is on for this task, and only starts tasks flagged for Autopilot. " +
     "Ask the user whether to flag this one, and never set it without their answer. Once they decide, call " +
     `update_task(task: "#${task.number}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
+  );
+}
+
+/**
+ * The question about an epic's delivery, for when deliveryHintApplies: its tasks build on each other, so running them
+ * through an integration branch lets Autopilot carry the epic unattended. It changes where every task's pull request
+ * goes and lets Autopilot merge into that branch, so it is the user's call.
+ */
+export function deliveryHint(epic: { number: number }): string {
+  return (
+    `Epic #${epic.number}'s tasks look like they build on each other. Ask the user how to deliver them, and never ` +
+    "choose without their answer. Pull requests to main (the default): each task opens a pull request to the default " +
+    "branch, the user merges it, and a task waiting on it starts after that. Integration branch: the tasks start from " +
+    "a branch of the epic's own and open their pull requests against it, Autopilot merges each one there once it is " +
+    "reviewed and green, and the user merges the epic's single pull request into the default branch at the end. " +
+    `Once they decide, call update_task(task: "#${epic.number}", delivery: "integration" | "main").`
   );
 }
 
@@ -546,6 +568,17 @@ export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = n
   return lines.join("\n");
 }
 
+/**
+ * Where an integration epic's work goes: for the epic its branch, for its tasks the branch they start from and open
+ * their pull requests against. Null for everything delivered to main.
+ */
+export function deliveryLine(task: Pick<TaskSummary, "kind" | "delivery" | "integrationBranch">): string | null {
+  if (!task.integrationBranch) return null;
+  return task.kind === "epic"
+    ? `Delivery: integration branch ${task.integrationBranch} (Autopilot merges its tasks' pull requests into it; the user merges it into the default branch)`
+    : `Delivery: start from ${task.integrationBranch} and open your pull request against it, not the default branch`;
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
@@ -558,6 +591,8 @@ export function renderTaskDetail(
     sessionHarness?: AgentHarness | null;
     /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
     autopilotHint?: boolean;
+    /** The epic delivery question (deliveryHint), when the caller found it applies. */
+    deliveryHint?: string | null;
     /** Adds the "Plan progress" nudges; off for renderings that aren't for the implementing agent. */
     progress?: { now: number; closing?: boolean };
     /** For an epic: each child's newest activity, shown in its overview. */
@@ -572,6 +607,8 @@ export function renderTaskDetail(
   lines.push(`#${task.number} ${task.title} [${status}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
   if (task.parent) lines.push(`Epic: #${task.parent.number} ${task.parent.title}`);
+  const delivery = deliveryLine(task);
+  if (delivery) lines.push(delivery);
   if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
   if (task.suggestedModel) {
     const { tier, reason } = task.suggestedModel;
@@ -659,6 +696,7 @@ export function renderTaskDetail(
   if (model) lines.push("", "Missing suggested model:", `- ${model}`);
   const autopilot = opts.autopilotHint ? autopilotFlagHint(task) : null;
   if (autopilot) lines.push("", "Autopilot flag not set:", `- ${autopilot}`);
+  if (opts.deliveryHint) lines.push("", "Epic delivery not chosen:", `- ${opts.deliveryHint}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -677,6 +715,7 @@ export function renderTaskShort(
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
     autopilotHint?: boolean;
+    deliveryHint?: string | null;
     progress?: { now: number; closing?: boolean };
   } = {},
 ): string {

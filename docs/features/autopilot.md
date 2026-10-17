@@ -1,7 +1,7 @@
 # Autopilot
 
 Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101.
+(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -374,6 +374,42 @@ to fix a pull request linked to a task.
   the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
 - **Settings.** The five switches, **Fix skill** (built-in: the prompt alone), and the shared runner fields, with a
   $3 budget and a 30-minute timeout. Rounds and the threshold are the engine's.
+- **An integration epic's own PR.** For an epic delivered through an integration branch
+  ([epics](epics.md#delivery)), the epic's PR from that branch into the default branch is a candidate too, for the
+  conflict trigger only, even once the epic is Done (it stays open until the user merges it). It never gets a nudge:
+  a thread linked on an epic orchestrates its tasks. The agent merges the default branch into the epic's branch and
+  pushes there; pushing to `epic/*` needs no deny-rule change, since only the default branch is denied.
+
+**Merge into epic branch** (`merge_epic_prs`, #123; `automations/mergeEpicPrs.ts`). Needs no agent and is off until
+switched on, with no settings. Only epics with integration delivery ([epics](epics.md#delivery)) give it work.
+
+- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` finds nothing in the way: the task
+  is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
+  `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
+  blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
+  on for the task, its review of the current head (`currentPrReview`) has nothing actionable; no reviewer requested
+  changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
+  the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
+  GitHub says it merges cleanly. The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
+  of it, then calls `GithubIntegration.mergeIntoEpicBranch`: a fresh read of the PR and the repository's default
+  branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
+  retargeted since the check, with `MergeTargetError`), and `mergePullRequest` with `MERGE` and `expectedHeadOid`.
+  The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so Unblock dependents
+  notifies and Start planned starts what waited on it, from the updated branch.
+- **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still
+  computing mergeability, the network) ends the run skipped with `output.retry`, and the next pass tries the same
+  head again under `merge:<linkId>:<headOid>:<n>`, up to `MERGE_ATTEMPTS` (3). Anything else, such as branch rules
+  wanting an approval, or the last try failing, ends it skipped with `needsAttention` and "Ready to merge into the
+  epic branch: … Merge it yourself." as the task's attention reason, and the engine notifies. A `MergeTargetError`
+  fails the run, flagged.
+- **The epic's PR.** Once a task PR has merged into the branch and the epic has no PR from it, it opens a draft PR
+  from the branch into the default branch (`ensureEpicPr`: an open one already there is used instead) and links it
+  on the epic (`epic-pr:<epicId>:<branch>:<task PRs merged>`, so a failed attempt is tried again after the next
+  merge). Then it keeps the PR's description, `epicPrBody` (each task with
+  its state, its PRs into the branch, its latest Autopilot review counts and its local review), current: the key
+  `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
+  epic PR is left alone. Nothing in Autopilot merges it.
+
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
 
@@ -410,7 +446,8 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
-  (15).
+  (15). A task of an integration epic ignores `baseRef`: it starts from its epic's branch (`workspace.prBase`, below)
+  and its prompt says to open its PR against it.
 
 **Digest of what changed** (`digest`, #90; `automations/digest.ts`, `autopilot/digest.ts`). Writes a board-wide summary
 of what changed since the previous digest, shown in the header's Digest panel and announced in the inbox. It is a
@@ -564,6 +601,10 @@ with that error.
   (`TaskThreadInput.title`, default the task's number and title). Without one the name is "Autopilot session".
 - **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
   session, and fails when the task has no live thread.
+- **`workspace.prBase`**: the branch the agent's PR goes to when it isn't the default branch (an integration
+  epic's). The session starts from origin's copy of it (T3: `baseRef` with `startFromOrigin`; headless:
+  `createWorktree` with `baseFromOrigin`), and both workspace notes say to open the PR against it with
+  `gh pr create --base`.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
   branch is refused either way, except for a read-only run, which can't push.
@@ -639,7 +680,8 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
   it runs. Return `needsAttention: true` for a failure the user should see.
 
-An automation must never merge, close or delete tasks, force-push or push to the default branch.
+An automation must never merge into the default branch, close or delete tasks, force-push or push to the default
+branch. The only merge allowed is Merge into epic branch's, through `GithubIntegration.mergeIntoEpicBranch`.
 
 ### The UI
 
@@ -722,9 +764,11 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
+| `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
+| `apps/server/src/autopilot/epicBranch.ts` | `ensureEpicBranch`: making an epic's integration branch on origin |
 | `apps/server/src/autopilot/threads.ts` | Whether a T3 thread a run handed work to is still working on it |
 | `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
-| `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback |
+| `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback; `mergeIntoEpicBranch`, `checkAutopilotMergeTarget`, `ensureEpicPr`, `setPrBody` |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |

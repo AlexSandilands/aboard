@@ -352,9 +352,14 @@ export const fixPrs = defineAutomation({
   check: ({ services, engine, projects, now }) =>
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
-        if (task.kind === "epic" || task.archivedAt !== null || task.status === "done") return [];
+        // An integration epic's own PR into the default branch is fixed too, for conflicts only: the epic stays open
+        // (Done included, once its tasks are) until the user merges it.
+        const epicBranch = task.kind === "epic" ? task.integrationBranch : null;
+        if (task.archivedAt !== null) return [];
+        if (task.kind === "epic" ? !epicBranch : task.status === "done") return [];
         const links = task.links.flatMap((link) => {
           if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
+          if (epicBranch && link.snapshot.headRef !== epicBranch) return [];
           const { state, headOid, headRef, isCrossRepository } = link.snapshot;
           // A fork's branch isn't on origin, so there is nowhere to push a fix.
           if (state === "merged" || state === "closed" || isCrossRepository) return [];
@@ -385,7 +390,7 @@ export const fixPrs = defineAutomation({
             ownReviewIds,
             sinceComment: newestHandledComment(handled),
           });
-          const fresh = active.filter((t) => !handled.has(t.key));
+          const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
           if (fresh.length === 0) return [];
 
           const atHead = used.filter((f) => f.headOid === snapshot.headOid).length;
@@ -462,12 +467,17 @@ export const fixPrs = defineAutomation({
       skill: config.skill,
     });
     const what = describeTriggers(data.triggers.map((t) => t.kind));
-    const thread = liveThread(task, config.runner, Date.now());
-    // A wait for T3 can take minutes: the fix is for this head commit of an open PR.
+    // An epic's thread (if any) orchestrates its tasks; the epic's PR gets a session of its own.
+    const thread = task.kind === "epic" ? null : liveThread(task, config.runner, Date.now());
+    // A wait for T3 can take minutes: the fix is for this head commit of an open (or draft: an epic's) PR.
     const stillWanted = () => {
       try {
         const now = services.tasks.summary(task.id).links.find((l) => l.id === data.linkId);
-        return now?.kind === "pr" && now.snapshot?.state === "open" && now.snapshot.headOid === data.headOid;
+        return (
+          now?.kind === "pr" &&
+          (now.snapshot?.state === "open" || now.snapshot?.state === "draft") &&
+          now.snapshot.headOid === data.headOid
+        );
       } catch {
         // The task was deleted meanwhile.
         return false;

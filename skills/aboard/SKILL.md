@@ -133,6 +133,15 @@ band across the columns its tasks are in, with a roll-up of how many are done.
   Otherwise `get_handoff_prompt(task)` gives the prompt
   for a session the user starts, and `get_handoff_prompt(task, subagent: true)` the one for a subagent you
   start. Draft plans for Backlog tasks, get the user's approval, then `set_plan` and move them to `planned` before starting them.
+- **Delivery**: an epic's tasks are delivered through **pull requests to main** (the default: each task's PR
+  goes to the default branch and the user merges it) or an **integration branch** (`epic/<number>-<slug>`:
+  the tasks start from it and open their PRs against it, Autopilot merges each one there once it is reviewed
+  and green, and the user merges the epic's single PR into the default branch). When a result says **Epic
+  delivery not chosen**, ask the user which they want, then `update_task(epic, delivery: "integration" | "main")`;
+  never choose unasked. Going back to main is refused once a task has started.
+- **Working a task of an integration epic**: `get_task` shows a `Delivery:` line. Branch from
+  `origin/<epic branch>`, open your PR against it (`gh pr create --base <epic branch>`) and don't merge it:
+  Autopilot does, and never into the default branch.
 - **Suggesting epics**: when asked to group a project's tasks into epics, propose the groups first and only
   `create_epic` / `update_task(epic)` the ones the user agrees to. Don't plan or start the tasks.
 - **If you are a subagent** working one of an epic's tasks: you can't ask the user anything, so mark the step

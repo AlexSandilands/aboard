@@ -1,5 +1,6 @@
 import type {
   BackupStatus,
+  EpicDelivery,
   ConnectT3Result,
   GithubStatus,
   LinkInput,
@@ -15,6 +16,7 @@ import type {
   T3ModelCatalog,
   T3ProjectCandidate,
   T3ThreadRef,
+  TaskDetail,
   TaskLink,
   TerminalInfo,
 } from "@repo/contracts";
@@ -41,6 +43,11 @@ export interface Integrations {
   refreshLink(linkId: string): Promise<void>;
   /** Merges a Review task's GitHub PR, or turns auto-merge on or off, then refreshes its snapshot. */
   mergePr(linkId: string, input: MergePrInput): Promise<void>;
+  /**
+   * Sets an epic's delivery. Switching to integration first makes sure its branch (`epic/<n>-<slug>`) is on origin,
+   * creating it from origin's default branch and pushing it; a git failure refuses the switch.
+   */
+  setEpicDelivery(epicId: string, delivery: EpicDelivery, actor: string): Promise<TaskDetail>;
   /** Models, refs and defaults for starting a T3 Code thread for a task. */
   t3LaunchOptions(taskId: string): Promise<T3LaunchOptions>;
   /** The same for a thread about a whole project, such as Suggest epics. */

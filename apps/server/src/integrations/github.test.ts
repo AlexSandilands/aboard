@@ -8,6 +8,7 @@ import {
   createGithubIntegration,
   isGithubHost,
   mapPrSnapshot,
+  MergeTargetError,
   pollQuery,
   StaleReviewError,
   type GithubServices,
@@ -37,6 +38,7 @@ describe("mapPrSnapshot", () => {
       reviewDecision: null,
       mergeable: "mergeable",
       headRef: "feat/poller",
+      baseRef: "main",
       updatedAt: "2026-10-01T10:00:00Z",
       autoMerge: null,
       mergeMethods: ["merge", "squash"],
@@ -438,6 +440,96 @@ describe("github poller", () => {
     await expect(github.refresh(ghLink("l1", 404))).rejects.toThrow(
       /Could not fetch PR: Could not resolve to a Repository/,
     );
+  });
+});
+
+describe("github merge into an epic's branch", () => {
+  const link = () => ghLink("l1", 7);
+
+  it("merges with a merge commit at the checked head, then refreshes the snapshot", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" });
+    expect(gh.mutations).toEqual([
+      {
+        operation: "MergePullRequest",
+        input: { pullRequestId: "PR_o/r#7", mergeMethod: "MERGE", expectedHeadOid: "head-1" },
+      },
+    ]);
+    expect(snapshots.get("l1")).toMatchObject({ state: "merged", baseRef: "epic/3-checkout" });
+  });
+
+  it("never merges into the default branch, whatever it was asked", async () => {
+    const { gh, github } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "main" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).rejects.toThrow(
+      /never merges into the default branch \(main\)/,
+    );
+    await expect(github.mergeIntoEpicBranch(link(), { base: "main", headOid: "head-1" })).rejects.toThrow(
+      MergeTargetError,
+    );
+    expect(gh.mutations).toEqual([]);
+  });
+
+  it("refuses a PR retargeted elsewhere, or moved past the checked head", async () => {
+    const { gh, github } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/4-other" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).rejects.toThrow(
+      /now merges into epic\/4-other/,
+    );
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout", headRefOid: "head-2" }));
+    await expect(
+      github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(gh.mutations).toEqual([]);
+  });
+
+  it("refreshes the snapshot when it doesn't merge, so the next check sees the new head", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout", headRefOid: "head-2" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).rejects.toThrow(
+      "moved on to head-2",
+    );
+    expect(snapshots.get("l1")).toMatchObject({ headOid: "head-2" });
+  });
+});
+
+describe("the epic's pull request", () => {
+  const input = { host: "github.com", repo: "o/r", head: "epic/3-checkout", title: "Epic #3: Checkout", body: "Tasks" };
+
+  it("opens a draft from the epic's branch into the default branch, once", async () => {
+    const { gh, github } = setup([]);
+    gh.prs.set("o/r#1", fakePr());
+    expect(await github.ensureEpicPr(input)).toEqual({
+      number: 101,
+      url: "https://github.com/o/r/pull/101",
+      created: true,
+    });
+    expect(gh.mutations).toEqual([
+      {
+        operation: "CreatePullRequest",
+        input: {
+          repositoryId: "R_o/r",
+          baseRefName: "main",
+          headRefName: "epic/3-checkout",
+          title: "Epic #3: Checkout",
+          body: "Tasks",
+          draft: true,
+        },
+      },
+    ]);
+    expect(await github.ensureEpicPr(input)).toMatchObject({ number: 101, created: false });
+    expect(gh.mutations).toHaveLength(1);
+  });
+
+  it("refuses the default branch as the epic's branch, and updates a description", async () => {
+    const { gh, github } = setup([]);
+    gh.prs.set("o/r#1", fakePr());
+    await expect(github.ensureEpicPr({ ...input, head: "main" })).rejects.toThrow(/can't be the default branch/);
+    await github.setPrBody({ host: "github.com", repo: "o/r", number: 1 }, "New body");
+    expect(gh.mutations).toEqual([
+      { operation: "UpdatePullRequestBody", input: { pullRequestId: "PR_o/r#1", body: "New body" } },
+    ]);
   });
 });
 

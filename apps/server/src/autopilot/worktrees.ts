@@ -21,6 +21,8 @@ export interface WorktreeRequest {
   branch?: string | null | undefined;
   /** The agent can't push (a reviewer), so reading the default branch is harmless. */
   readOnly?: boolean | undefined;
+  /** Start from origin's copy of `baseRef` when there is one: a branch others merge into, such as an epic's. */
+  baseFromOrigin?: boolean | undefined;
 }
 
 export interface Worktree {
@@ -111,7 +113,10 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
     }
     pushTo = req.branch;
   } else if (req.baseRef) {
-    start = req.baseRef;
+    start =
+      req.baseFromOrigin && hasOrigin && (await refExists(runGit, checkout, `refs/remotes/origin/${req.baseRef}`))
+        ? `origin/${req.baseRef}`
+        : req.baseRef;
   } else if (defaultBranch) {
     start =
       hasOrigin && (await refExists(runGit, checkout, `refs/remotes/origin/${defaultBranch}`))

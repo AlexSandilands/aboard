@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyLink,
+  deliveryHintApplies,
+  epicBranchName,
+  startedEpicTasks,
   deriveAttention,
   describeEpicRollup,
   deriveCurrentStep,
@@ -375,5 +378,51 @@ describe("describeEpicRollup", () => {
     expect(
       describeEpicRollup({ total: 0, done: 0, byStatus: { ...byStatus, backlog: 0, in_progress: 0, done: 0 } }),
     ).toBe("No tasks yet");
+  });
+});
+
+describe("epic delivery helpers", () => {
+  it("names an epic's branch from its number and title", () => {
+    expect(epicBranchName({ number: 12, title: "One-page checkout!" })).toBe("epic/12-one-page-checkout");
+    expect(epicBranchName({ number: 3, title: "Café ✨" })).toBe("epic/3-cafe");
+    expect(epicBranchName({ number: 5, title: "???" })).toBe("epic/5");
+    expect(epicBranchName({ number: 6, title: "a".repeat(80) })).toBe(`epic/6-${"a".repeat(40)}`);
+  });
+
+  const child = (id: string, status: TaskStatus, over: Record<string, unknown> = {}) => ({
+    id,
+    number: Number(id),
+    status,
+    resolution: null,
+    archivedAt: null,
+    blockedBy: [] as Array<{ id: string; number: number; title: string; status: TaskStatus; archived: boolean }>,
+    ...over,
+  });
+  const epic = { kind: "epic" as const, delivery: null, archivedAt: null, status: "planned" as const };
+
+  it("asks about delivery for related or plentiful tasks, until a delivery is chosen", () => {
+    const blocker = { id: "1", number: 1, title: "A", status: "planned" as const, archived: false };
+    const related = [child("1", "planned"), child("2", "backlog", { blockedBy: [blocker] })];
+    expect(deliveryHintApplies(epic, related)).toBe(true);
+    expect(deliveryHintApplies(epic, [child("1", "planned"), child("2", "backlog")])).toBe(false);
+    expect(
+      deliveryHintApplies(
+        epic,
+        ["1", "2", "3"].map((id) => child(id, "planned")),
+      ),
+    ).toBe(true);
+    expect(deliveryHintApplies({ ...epic, delivery: "main" }, related)).toBe(false);
+    expect(deliveryHintApplies({ ...epic, status: "done" }, related)).toBe(false);
+  });
+
+  it("counts tasks past Planned as started, but not closed ones", () => {
+    const started = startedEpicTasks([
+      child("1", "planned"),
+      child("2", "in_progress"),
+      child("3", "done"),
+      child("4", "done", { resolution: "wont_do" }),
+      child("5", "review", { archivedAt: "2026-01-01T00:00:00Z" }),
+    ]);
+    expect(started.map((c) => c.id)).toEqual(["2", "3"]);
   });
 });

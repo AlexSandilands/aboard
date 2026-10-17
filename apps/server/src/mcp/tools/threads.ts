@@ -92,7 +92,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         "Start a new T3 Code thread working on one of an epic's tasks, with the task's hand-off prompt as its first " +
         "message, and link it to the task. Use it when epic_overview says T3 Code is available. The " +
         "thread starts on T3's default model and access (the task's suggested model for work), in a new git " +
-        "worktree branched from baseRef (default: the default branch), so tasks can run side by side. Calling it " +
+        "worktree branched from baseRef (default: the epic's integration branch when it has one, else the default " +
+        "branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
         "has a thread working on it (use message_task_thread), or when T3 Code can't take it.",
       inputSchema: {
@@ -146,6 +147,10 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
               work: mode === "work",
               ...(args.baseRef ? { baseRef: args.baseRef } : {}),
               ...(args.startFromOrigin !== undefined ? { startFromOrigin: args.startFromOrigin } : {}),
+              // An integration epic's task starts from origin's copy of its branch, where the tasks before it merged.
+              ...(!args.baseRef && task.integrationBranch
+                ? { baseRef: task.integrationBranch, startFromOrigin: args.startFromOrigin ?? true }
+                : {}),
             },
             actor(args.actor),
           );

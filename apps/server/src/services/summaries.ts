@@ -59,6 +59,12 @@ export function taskRef(task: TaskRecord | undefined): TaskRef | null {
   return task ? { id: task.id, number: task.number, title: task.title } : null;
 }
 
+/** An integration epic's branch, for the epic itself and for its tasks; null otherwise. */
+function integrationBranchOf(record: TaskRecord, parent: TaskRecord | undefined): string | null {
+  const epic = record.kind === "epic" ? record : parent;
+  return epic?.delivery === "integration" ? epic.integrationBranch : null;
+}
+
 /**
  * Builds summaries (and ordered phases) for many tasks with a fixed number of queries.
  * The returned map preserves the order of `records`.
@@ -155,6 +161,8 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
         : null,
       autoReview: record.autoReview,
       autopilot: record.autopilot,
+      delivery: record.kind === "epic" ? record.delivery : null,
+      integrationBranch: integrationBranchOf(record, record.parentId ? referenced.get(record.parentId) : undefined),
       review,
       suggestedModel: record.suggestedModel,
       import: issueImport,

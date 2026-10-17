@@ -18,6 +18,7 @@ import {
   renderTemplate,
   renderTaskDetail,
   renderTaskGroups,
+  deliveryLine,
   statusLabel,
   summaryLine,
 } from "../format.ts";
@@ -30,6 +31,7 @@ import {
   run,
   safeProject,
   t3LaunchBlocker,
+  epicDeliveryHint,
   taskField,
   textResult,
   type ToolRegistrar,
@@ -282,8 +284,13 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         const blocker = project ? t3LaunchBlocker(ctx, project) : "its project is missing";
         const t3 = blocker
           ? `T3 Code: not available (${blocker}). Start tasks as subagents or with prompts for the user.`
-          : "T3 Code: available. start_task_thread starts a task in a new thread; message_task_thread talks to it.";
-        return textResult(`${header}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic))}`);
+          : `T3 Code: available. start_task_thread starts a task in a new thread${epic.integrationBranch ? ` from ${epic.integrationBranch}` : ""}; message_task_thread talks to it.`;
+        const delivery = deliveryLine(epic) ?? "Delivery: pull requests to the default branch, which the user merges.";
+        const hint = epicDeliveryHint(services, epic.id);
+        const ask = hint ? `\n\nEpic delivery not chosen:\n- ${hint}` : "";
+        return textResult(
+          `${header}\n${delivery}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic))}${ask}`,
+        );
       }),
   );
 

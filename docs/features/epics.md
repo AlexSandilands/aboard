@@ -128,11 +128,49 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 
 - `create_epic` creates one, optionally with existing `tasks`, all checked before anything is written.
 - `add_to_backlog`, `create_task` and `update_task` take `epic`; `list_tasks` filters by it.
+- `create_epic` and `update_task` (on an epic) take `delivery` ([Delivery](#delivery)).
 - `get_task` on an epic, and `epic_overview`, list its tasks by status with each one's summary line, live T3
   thread, latest note and newest activity: enough to monitor tasks however they were started. The epic's
   render explains that it has no plan instead of asking for one.
 - List lines mark epics `[epic]` with their roll-up, and tasks in one with `in epic #N`. `board_overview`
   counts only tasks and lists open epics per project.
+
+### Delivery
+
+Board task: #123. How an epic's tasks reach the default branch (`tasks.delivery`, `tasks.integration_branch`,
+`025_epic_delivery.sql`; only an epic has them):
+
+- **Pull requests to main** (null, or `main` once someone chose it): each task opens its PR to the default branch
+  and the user merges it. A task blocked by it becomes startable after that.
+- **Integration branch** (`integration`): the epic has a branch `epic/<number>-<slug>` (`epicBranchName`). Its tasks
+  start from origin's copy of it and open their PRs against it; Autopilot's Merge into epic branch merges each one
+  there once it is reviewed and green, and keeps a draft PR from the branch into the default branch, which only the
+  user merges ([Autopilot](autopilot.md)). It suits an epic whose tasks build on each other, which would otherwise
+  stop at every merge.
+
+`TaskSummary.delivery` is the epic's choice (null for tasks and for an epic nobody chose for), and
+`TaskSummary.integrationBranch` its branch: on the epic, and on each of its tasks too, so whatever starts a task
+reads it from the task.
+
+- **Switching.** `PUT /api/tasks/:id/delivery` (the panel's branch button next to the Autopilot button, and the
+  bottom of the epic's Autopilot popover: `EpicDelivery.tsx`), `update_task(epic, delivery)` and
+  `create_epic(delivery)` all go through `Integrations.setEpicDelivery`. Switching to integration first runs
+  `ensureEpicBranch` (`autopilot/epicBranch.ts`): fetch origin, then push `origin/<default branch>` to the new branch.
+  A branch already on origin (switching back and forth) is used as it is. A git failure refuses the switch with
+  git's message; `create_epic` still creates the epic and says why its delivery wasn't set. Then
+  `tasks.setDelivery` stores it, logs `delivery_changed` and republishes the epic's tasks.
+- **Going back** to main is refused once one of its tasks has started (`startedEpicTasks`: In Progress, Review, or
+  Done without being closed), since their branches and PRs already target the epic's branch.
+- **Starting tasks.** Start planned passes the branch as `workspace.prBase`; `taskHandoffPrompt` adds
+  `integrationBranchLine` to work and subagent prompts, and the orchestrating prompt says how the epic is
+  delivered; `start_task_thread` defaults `baseRef` to the branch with `startFromOrigin`; the launch dialog opens
+  on a new worktree from it (`initialWorkspaceChoice`). `get_task` shows a `Delivery:` line on the epic and its
+  tasks, and `epic_overview` on the epic.
+- **Asking the user.** `deliveryHintApplies`: an open epic with no delivery chosen whose open tasks block one
+  another (two or more), or that has three or more Planned. Then `create_epic`, `set_plan` / `create_task` for one
+  of its tasks and `epic_overview` add **Epic delivery not chosen**, which explains both options and tells the agent
+  to ask the user and call `update_task(epic, delivery)` only once they answer (`deliveryHint`, `epicDeliveryHint`).
+  Choosing either answers it for good.
 
 ### Orchestrating an epic
 
@@ -263,6 +301,11 @@ launch has no suggested model and returns the thread instead of a link.
   subagent tool, so it runs the loop for all of them.
 - **One orchestrating prompt for every harness.** The prompt describes routes in order of preference and names
   harnesses only as examples, rather than the board guessing which harness will receive a copied prompt.
+- **Delivery is chosen, not inferred.** Integration delivery lets Autopilot merge into a branch and changes where
+  every task's PR goes, so the board only ever asks (through the agent) and never switches by itself.
+- **The board makes the branch, on origin.** Agents and T3 threads start from origin's copy, and Autopilot merges
+  on GitHub, so a branch only in the user's checkout would help nobody; making it at the switch means a git
+  problem shows up then, not when the first task starts.
 - **No dragging across a band's edge (yet).** A drop at a band's edge is easy to make by accident and would
   silently change the task's epic; the panel's Epic menu makes that change on purpose.
 
@@ -293,4 +336,7 @@ launch has no suggested model and returns the thread instead of a link.
 | `apps/web/src/components/handoff/HandoffActions.tsx`, `T3LaunchDialog.tsx` | Suggest epics in the lane header; the dialog launching for a task or a project |
 | `apps/server/src/mcp/tools/threads.ts`                  | `start_task_thread`, `message_task_thread`                            |
 | `apps/server/src/integrations/t3Launch.ts`              | `autoLaunchSettings`: a launch without the dialog                      |
-| `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events                           |
+| `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events, `deliveryLine`, `deliveryHint` |
+| `packages/contracts/src/delivery.ts`                   | `epicBranchName`, `startedEpicTasks`, `deliveryHintApplies`           |
+| `apps/server/src/autopilot/epicBranch.ts`              | Making the integration branch on origin                               |
+| `apps/web/src/components/task/EpicDelivery.tsx`        | The Delivery control and the panel's branch button                    |
