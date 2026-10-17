@@ -10,12 +10,12 @@ import {
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import { ClipboardCopyIcon, LightbulbIcon, SparklesIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
 import { useAgentClis, useSettings } from "~/state/queries";
@@ -76,7 +76,7 @@ export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; ca
       <MenuPopup align="start">
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openProjectT3Launch(project.id)}>
-            <MessageSquarePlusIcon />
+            <T3Icon />
             Suggest epics in a new T3 Code thread…
           </MenuItem>
         ) : null}
@@ -135,7 +135,7 @@ export function HandoffMenu({
       <MenuPopup align={variant === "card" ? "start" : "end"} {...cardHandlers}>
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
-            <MessageSquarePlusIcon />
+            <T3Icon />
             New T3 Code thread…
           </MenuItem>
         ) : null}

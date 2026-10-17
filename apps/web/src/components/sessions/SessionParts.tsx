@@ -1,18 +1,20 @@
 import { canFork, type AgentHarness } from "@repo/contracts";
-import { CopyIcon, GitForkIcon, SquareTerminalIcon, TerminalIcon } from "lucide-react";
-import { ClaudeAI } from "~/components/handoff/providerIcons";
+import { CopyIcon, GitForkIcon, SquareTerminalIcon } from "lucide-react";
+import { ClaudeAI, CopilotCli, T3Code } from "~/components/handoff/providerIcons";
 import { MenuItem } from "~/components/ui/menu";
 import { cn } from "~/lib/utils";
 import type { SessionLink } from "./sessions.logic";
 import { copyResumeCommand } from "./useSessionActions";
 
-/** The harness's mark: Claude's logo, or a terminal for Copilot CLI (no licensed mark to hand). */
+/** The harness's mark: Claude's logo, or the stand-in Copilot mark. */
 export function HarnessIcon({ harness, className }: { harness: AgentHarness; className?: string }) {
-  return harness === "claude-code" ? (
-    <ClaudeAI aria-hidden className={cn("size-3.5 shrink-0", className)} />
-  ) : (
-    <TerminalIcon aria-hidden className={cn("size-3.5 shrink-0", className)} />
-  );
+  const Icon = harness === "claude-code" ? ClaudeAI : CopilotCli;
+  return <Icon aria-hidden className={cn("size-3.5 shrink-0", className)} />;
+}
+
+/** T3 Code's mark, sized like HarnessIcon. */
+export function T3Icon({ className }: { className?: string }) {
+  return <T3Code aria-hidden className={cn("size-3.5 shrink-0", className)} />;
 }
 
 /** Open, fork (where the harness can) and copy, shared by the card chip and the panel row. */
