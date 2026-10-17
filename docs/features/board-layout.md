@@ -58,8 +58,8 @@ the smart default apply. **Collapse all** and **Expand all** store a choice for 
 them until **Reset**. The **Customize sections** popover in the panel's top bar reorders, shows and
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
-appended, except Sessions, which goes before Links in a layout saved without it (and is hidden when that layout
-hid or collapsed Links, since it used to be part of it).
+appended, except Sessions, which goes before Links in a layout saved without it (and takes its hidden and collapsed state from Links when that layout
+had them, since it used to be part of Links).
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
