@@ -63,6 +63,20 @@ describe("applyBoardEvent", () => {
     expect(archived.tasks).toHaveLength(0);
   });
 
+  it("takes a task that an import turned into an epic, with the tasks it gained", () => {
+    const b = board([task("a", "backlog", "a0")]);
+    const epic = { ...task("a", "backlog", "a0"), kind: "epic" as const };
+    const child = { ...task("c", "backlog", "a1"), parent: { id: "a", number: 1, title: "a" } };
+    const next = applyBoardEvent(applyBoardEvent(b, { type: "task.upserted", task: epic }), {
+      type: "task.upserted",
+      task: child,
+    });
+    expect(next.tasks.map((t) => [t.id, t.kind, t.parent?.id ?? null])).toEqual([
+      ["a", "epic", null],
+      ["c", "task", "a"],
+    ]);
+  });
+
   it("drops a deleted task and leaves the rest alone", () => {
     const b = board([task("a", "backlog", "a0"), task("b", "done", "a0")]);
     const deleted = applyBoardEvent(b, { type: "task.deleted", taskId: "a" });

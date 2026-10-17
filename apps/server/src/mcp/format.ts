@@ -245,6 +245,9 @@ export function eventText(event: TaskEvent): string {
       if (typeof p.epic === "number") what += ` in epic #${p.epic}`;
       if (str("template")) what += ` from template "${str("template")}"`;
       break;
+    case "became_epic":
+      what = "turned into an epic: the imported issue is one";
+      break;
     case "epic_changed": {
       const num = (k: string) => (typeof p[k] === "number" ? `#${p[k]}` : null);
       const [from, to] = [num("from"), num("to")];

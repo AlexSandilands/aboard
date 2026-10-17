@@ -1,5 +1,6 @@
 import type {
   AddLinkResult,
+  AgentIntegrations,
   AppSettings,
   AskSettingsInput,
   AskSettingsResult,
@@ -303,10 +304,23 @@ export const useResolveFinding = (opts?: MutationOpts) =>
     opts,
   );
 
-export type ReviewCliCheck = { ok: true; path: string; version: string } | { ok: false; error: string };
-/** Checks the board reviewer's Claude Code CLI (the saved one unless `cli` is given). */
-export const useTestReviewCli = (opts?: MutationOpts) =>
-  useApiMutation((cli?: string | null) => api<ReviewCliCheck>("/api/review/test-cli", { body: { cli } }), opts);
+/** Runs the CLIs and the MCP checks again, past the server's cache, and shows the answer. */
+export function useRecheckAgentIntegrations() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<AgentIntegrations>("/api/agent-integrations?refresh=1"),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.agentIntegrations, result);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis });
+    },
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't check the integrations",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
 
 /** The review loop prompt for pasting into any harness. */
 export const fetchReviewPrompt = async (taskId: string): Promise<string> =>

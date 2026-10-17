@@ -27,6 +27,12 @@ describe("describeEvent", () => {
     });
   });
 
+  it("describes an import turning a task into an epic", () => {
+    expect(describeEvent(event("became_epic"), ctx).text).toBe(
+      "turned this into an epic, since the imported issue is one",
+    );
+  });
+
   it("describes label changes", () => {
     const text = (payload: Record<string, unknown>) => describeEvent(event("labels_changed", payload), ctx).text;
     expect(text({ added: ["ui", "bug"], removed: ["server"] })).toBe("added 2 labels ui, bug; removed server");

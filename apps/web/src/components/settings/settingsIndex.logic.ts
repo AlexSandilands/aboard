@@ -112,6 +112,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Gathers the tasks marked as priority, from every project, in a lane above the projects. Off, they stay in their own lanes.",
     ["star", "urgent", "pinned", "top", "hide"],
   ),
+  draft(
+    "board.appearance.scroll-to-task",
+    "Scroll to a task when opening it",
+    "Opening a task from search, a link or a notification slides the board to its card. Off, only the panel opens.",
+    ["jump", "find", "locate", "animation", "motion", "position"],
+  ),
   // Board › Notifications
   draft(
     "board.notifications.popups",

@@ -925,6 +925,94 @@ code {
   background: transparent !important;
 }
 
+/* The rich Markdown editor (components/editor). Each line of the Markdown is a block, so blocks sit
+   without the prose margins, and blank lines in the text are the spacing. */
+.rich-markdown {
+  min-height: 4.125rem;
+  padding: calc(var(--spacing) * 1 - 1px) calc(var(--spacing) * 2.5 - 1px);
+  white-space: pre-wrap;
+}
+
+.rich-markdown p,
+.rich-markdown ul,
+.rich-markdown ol,
+.rich-markdown blockquote,
+.rich-markdown pre {
+  margin: 0;
+}
+
+.rich-markdown h1,
+.rich-markdown h2,
+.rich-markdown h3,
+.rich-markdown h4,
+.rich-markdown h5,
+.rich-markdown h6 {
+  margin: 0.25rem 0;
+}
+
+.rich-markdown li + li {
+  margin-top: 0;
+}
+
+.rich-markdown pre {
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.rich-markdown hr {
+  margin: 0.5rem 0;
+  border-color: var(--border);
+}
+
+.rich-markdown ul[data-type="taskList"] {
+  padding-left: 0;
+  list-style: none;
+}
+
+.rich-markdown ul[data-type="taskList"] ul[data-type="taskList"] {
+  padding-left: 1.25rem;
+}
+
+.rich-markdown li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.rich-markdown li[data-type="taskItem"] > label {
+  flex-shrink: 0;
+  margin-top: 0.2em;
+  user-select: none;
+}
+
+.rich-markdown li[data-type="taskItem"] > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.rich-markdown li[data-type="taskItem"][data-checked="true"] > div {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.rich-markdown span[data-attachment-upload] {
+  margin: 0 0.125rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.rich-markdown p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
 /* Paragraphs and code blocks arrive in chunks while a response streams. Fade
    each new block in so the chunk does not pop. @starting-style only applies
    when an element is first inserted, and the rule is gated on data-streaming,

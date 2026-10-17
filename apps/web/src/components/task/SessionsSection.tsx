@@ -8,7 +8,7 @@ import {
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 
-import { HarnessIcon, SessionMenuItems, T3Icon } from "~/components/sessions/SessionParts";
+import { HarnessIcon, SessionMenuItems, T3Icon, useHarnessAvailable } from "~/components/sessions/SessionParts";
 import {
   folderName,
   isSettledSession,
@@ -269,12 +269,17 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
   const status = sessionStatusPresentation(link.snapshot);
   const harness = AGENT_HARNESSES[link.ref.harness].label;
   const name = sessionName(link);
+  const available = useHarnessAvailable(link.ref.harness);
   return (
     <PanelSplitGroup className={cn(isSettledSession(link.snapshot) && "opacity-80 hover:opacity-100")}>
       <PanelControl
         part="primary"
-        title={`Open in a terminal: ${harness} session ${link.ref.sessionId} in ${link.ref.cwd}`}
-        disabled={pending}
+        title={
+          available
+            ? `Open in a terminal: ${harness} session ${link.ref.sessionId} in ${link.ref.cwd}`
+            : `The ${harness} CLI isn't available here: set it up in Settings → Integrations, or copy the resume command`
+        }
+        disabled={pending || !available}
         onClick={() => open(link)}
       >
         <HarnessIcon harness={link.ref.harness} className="size-4" />

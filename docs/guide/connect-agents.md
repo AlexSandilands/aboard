@@ -22,6 +22,9 @@ To share it with a single repo instead, VS Code also reads `.vscode/mcp.json` (n
 If you've set an [access token](configuration.md#access-token), the agent must send it as a bearer
 token.
 
+**Settings → Integrations** shows whether Claude Code and Copilot CLI have the server: a green dot means the CLI
+runs and an entry with the board's address is registered, under any name.
+
 ## Teach it the workflow
 
 The server explains the basics when an agent connects. For the full workflow:

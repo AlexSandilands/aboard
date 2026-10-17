@@ -1,5 +1,7 @@
 Aboard includes styles, UI components and helpers adapted from T3 Code
-(https://github.com/pingdotgg/t3code), used under the MIT License:
+(https://github.com/pingdotgg/t3code), used under the MIT License. The rich Markdown editor in
+apps/web/src/components/editor/ (its Markdown parser, serializer and TipTap extensions) is adapted
+from T3 Code's composer (composer-rich-text.ts, composer-rich-text-doc.ts):
 
 MIT License
 
