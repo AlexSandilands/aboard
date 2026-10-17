@@ -34,7 +34,14 @@ function setup(
       sent.push({ text, commandId });
       return Promise.resolve();
     },
-    threadWorkspace: () => Promise.resolve({ worktreePath: "/wt/export", branch: "t3/export" }),
+    threadWorkspace: () =>
+      Promise.resolve({
+        worktreePath: "/wt/export",
+        branch: "t3/export",
+        runStatus: "running",
+        latestRunId: "run-1",
+        lastError: null,
+      }),
   };
   const fallbacks = createReviewFallbacks({
     services: () => s,

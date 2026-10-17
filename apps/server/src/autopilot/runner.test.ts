@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
-import { t3Unavailable, type T3Integration, type TaskThreadInput } from "../integrations/t3.ts";
+import { t3Unavailable, type T3Integration, type TaskThreadInput, type ThreadWorkspace } from "../integrations/t3.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
@@ -23,6 +23,16 @@ const T3_UP: T3IntegrationStatus = {
   error: null,
 };
 const T3_DOWN: T3IntegrationStatus = { ...T3_UP, detected: false, origin: null, liveStatus: "off" };
+
+/** A thread whose workspace is ready and whose agent is running. */
+const WORKSPACE: ThreadWorkspace = {
+  worktreePath: "/t3/worktrees/app/t3-1",
+  branch: "t3/1",
+  runStatus: "running",
+  latestRunId: "run-1",
+  lastError: null,
+};
+const FETCH_FAILED = "Workspace preparation failed during provision worktree: git fetch origin failed";
 
 const result = (fields: Record<string, unknown>) => JSON.stringify({ type: "result", subtype: "success", ...fields });
 
@@ -45,6 +55,11 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       /** Fails the first posts into a thread, in order. */
       nudgeFailures?: Error[];
       holdMs?: number;
+      /** What T3 says about the thread on each look while its workspace is prepared; the last one repeats. */
+      workspaces?: Array<Partial<ThreadWorkspace> | null>;
+      /** Fails the request to prepare a workspace again. */
+      retryFailure?: Error;
+      prepareMs?: number;
       agent?: (job: AgentJob) => Promise<string>;
     } = {},
   ) {
@@ -58,7 +73,12 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     const looks: number[] = [];
     const failures = [...(opts.launchFailures ?? [])];
     const nudgeFailures = [...(opts.nudgeFailures ?? [])];
-    const t3: Pick<T3Integration, "status" | "test" | "launchTaskThread" | "sendToThread"> = {
+    const workspaces = [...(opts.workspaces ?? [{}])];
+    const retries: Array<{ runId: string; commandId: string }> = [];
+    const t3: Pick<
+      T3Integration,
+      "status" | "test" | "launchTaskThread" | "sendToThread" | "threadWorkspace" | "retryPreparation"
+    > = {
       status: () => opts.t3 ?? T3_DOWN,
       test: async () => {
         looks.push(1);
@@ -82,12 +102,22 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         const failure = nudgeFailures.shift();
         if (failure) throw failure;
       },
+      threadWorkspace: async () => {
+        const next = workspaces.length > 1 ? workspaces.shift()! : workspaces[0]!;
+        return next === null ? null : { ...WORKSPACE, ...next };
+      },
+      retryPreparation: async (_link, runId, commandId) => {
+        retries.push({ runId, commandId });
+        if (opts.retryFailure) throw opts.retryFailure;
+      },
     };
     const runner = createAutopilotRunner({
       services: () => h.services,
       t3,
       t3HoldMs: opts.holdMs ?? 0,
       t3RetryMs: 5,
+      t3PrepareMs: opts.prepareMs ?? 10_000,
+      t3PreparePollMs: 2,
       worktreesDir: repo.worktrees,
       newSessionId: () => SESSION,
       sessionLinked: (id) => linked.push(id),
@@ -125,7 +155,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     const patches: RunPatch[] = [];
     const start = (request: Partial<RunnerRequest> & { options?: Record<string, unknown> } = {}) =>
       runner.start({ run, prompt: "Do the task", tier: null, options: {}, ...request }, (p) => patches.push(p));
-    return { h, task, run, jobs, launches, sent, linked, t3, start, patches, looks };
+    return { h, project, task, run, runner, jobs, launches, sent, linked, t3, start, patches, looks, retries };
   }
 
   it("runs headless in a new worktree, records the session and cost, and links the session", async () => {
@@ -473,6 +503,136 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       it("fails at once when T3 is there but has no working token", async () => {
         const { start } = setup({ t3: { ...T3_UP, liveStatus: "off" }, holdMs: 10_000 });
         await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code isn't connected");
+      });
+    });
+
+    describe("T3 workspace preparation", () => {
+      it("launches one thread at a time per repository, each once T3 has prepared the one before", async () => {
+        const { h, project, run, runner, t3 } = setup({ t3: T3_UP });
+        // Threads stay "preparing" until the test lets them through.
+        const ready = new Set<string>();
+        const launched: string[] = [];
+        t3.launchTaskThread = async (taskId) => {
+          const threadId = `thread-${launched.length + 1}`;
+          launched.push(threadId);
+          const link = h.services.links.add(taskId, { t3Thread: { environmentId: "env-1", threadId } }, "x");
+          return {
+            link,
+            modelSelection: { instanceId: "claude", model: "m", options: [] },
+            runtimeMode: "full-access",
+            workspace: { mode: "current" },
+            suggestionUnavailable: null,
+          };
+        };
+        t3.threadWorkspace = async (link) => ({
+          ...WORKSPACE,
+          runStatus: ready.has(link.ref.threadId) ? "running" : "preparing",
+        });
+        const tasks = ["a", "b", "c"].map((title) => h.services.tasks.create({ projectId: project.id, title, plan }));
+        const outs = Promise.all(
+          tasks.map((task) =>
+            runner.start({
+              run: { ...run, id: randomUUID(), taskId: task.id },
+              prompt: "Do it",
+              tier: null,
+              options: { runner: "t3" },
+            }),
+          ),
+        );
+        for (const threadId of ["thread-1", "thread-2", "thread-3"]) {
+          await vi.waitFor(() => expect(launched.at(-1)).toBe(threadId));
+          // Long enough for the others to launch too, were they not waiting their turn.
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          expect(launched.at(-1)).toBe(threadId);
+          ready.add(threadId);
+        }
+        expect((await outs).map((o) => o.runner)).toEqual(["t3", "t3", "t3"]);
+      });
+
+      it("doesn't make another repository's launch wait", async () => {
+        const { h, run, runner, t3, start } = setup({ t3: T3_UP });
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => (release = resolve));
+        let held = true;
+        void released.then(() => (held = false));
+        t3.threadWorkspace = async (link) =>
+          link.ref.threadId === "thread-9" && held ? { ...WORKSPACE, runStatus: "preparing" } : WORKSPACE;
+        const first = start({ options: { runner: "t3" } });
+        const other = h.services.projects.create({ title: "Other", workspaceRoot: join(repo.worktrees, "other") });
+        const task = h.services.tasks.create({ projectId: other.id, title: "Elsewhere", plan });
+        const launchOther = t3.launchTaskThread;
+        t3.launchTaskThread = async (taskId, input) => {
+          const out = await launchOther(taskId, input, "x");
+          if (taskId !== task.id) return out;
+          const link = h.services.links.add(
+            taskId,
+            { t3Thread: { environmentId: "env-1", threadId: "thread-x" } },
+            "x",
+          );
+          return { ...out, link };
+        };
+        // The first launch is in and holding its repository's gate.
+        await vi.waitFor(() => expect(h.services.links.listByKind("t3_thread")).toHaveLength(1));
+        const second = await runner.start({
+          run: { ...run, id: randomUUID(), taskId: task.id },
+          prompt: "Do it",
+          tier: null,
+          options: { runner: "t3" },
+        });
+        expect(second.threadUrl).toMatch(/thread-x/);
+        release();
+        expect((await first).runner).toBe("t3");
+      });
+
+      it("lets the gate go once the wait for T3 runs out, and the run carries on", async () => {
+        const { start, launches, retries } = setup({
+          t3: T3_UP,
+          prepareMs: 20,
+          workspaces: [{ runStatus: "preparing" }],
+        });
+        expect((await start({ options: { runner: "t3" } })).runner).toBe("t3");
+        expect((await start({ options: { runner: "t3" } })).runner).toBe("t3");
+        expect(launches).toHaveLength(2);
+        expect(retries).toEqual([]);
+      });
+
+      it("prepares a failed workspace again once, in the same thread", async () => {
+        const { run, start, launches, retries, patches } = setup({
+          t3: T3_UP,
+          workspaces: [
+            { runStatus: "preparing", worktreePath: null },
+            { runStatus: "failed", worktreePath: null, latestRunId: "run-7", lastError: FETCH_FAILED },
+            { runStatus: "preparing", worktreePath: null },
+            {},
+          ],
+        });
+        const out = await start({ options: { runner: "t3" } });
+        expect(out.threadUrl).toMatch(/thread-9/);
+        expect(launches).toHaveLength(1);
+        expect(retries).toEqual([{ runId: "run-7", commandId: `autopilot-${run.id}-retry` }]);
+        expect(patches).toEqual([{ runner: "t3", threadUrl: out.threadUrl }]);
+      });
+
+      it("fails the run when the workspace fails again, keeping the thread on the run", async () => {
+        const failedRun = { runStatus: "failed", worktreePath: null, latestRunId: "run-7", lastError: FETCH_FAILED };
+        const { start, retries, patches } = setup({ t3: T3_UP, workspaces: [failedRun] });
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow(
+          `T3 Code couldn't prepare the thread's workspace: ${FETCH_FAILED}`,
+        );
+        expect(retries).toHaveLength(1);
+        expect(patches[0]).toMatchObject({ runner: "t3" });
+      });
+
+      it("fails at once when T3 won't prepare the thread again: it failed for another reason", async () => {
+        const { start, retries } = setup({
+          t3: T3_UP,
+          workspaces: [{ runStatus: "failed", lastError: "Provider crashed" }],
+          retryFailure: new Error("Run run-1 has no failed workspace preparation to retry."),
+        });
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow(
+          "T3 Code couldn't start the thread: Provider crashed",
+        );
+        expect(retries).toHaveLength(1);
       });
     });
 
