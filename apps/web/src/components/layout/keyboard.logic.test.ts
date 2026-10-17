@@ -1,10 +1,12 @@
+import { resolveKeybindings, type KeybindingContext } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  formatShortcut,
   matchesShortcut,
   parseShortcut,
   resolveCommand,
   runsImmediately,
-  type KeybindingContext,
+  shortcutFromEvent,
   type KeyEventLike,
 } from "./keyboard.logic";
 
@@ -21,6 +23,10 @@ const idle: KeybindingContext = {
   editableFocus: false,
   popupFocus: false,
   overlayOpen: false,
+  paletteOpen: false,
+  dialogOpen: false,
+  settingsOpen: false,
+  panelOpen: false,
   canGoBack: false,
 };
 
@@ -53,12 +59,17 @@ describe("matchesShortcut", () => {
     expect(matchesShortcut(key("n", { altKey: true }), "n", false)).toBe(false);
     expect(matchesShortcut(key("Escape", { shiftKey: true }), "escape", false)).toBe(false);
   });
+
+  it("names the space and plus keys", () => {
+    expect(matchesShortcut(key(" "), "space", false)).toBe(true);
+    expect(matchesShortcut(key("+", { ctrlKey: true }), "mod+plus", false)).toBe(true);
+  });
 });
 
 describe("resolveCommand", () => {
   it("opens the palette on mod+k whatever has focus or is open", () => {
     const event = key("k", { ctrlKey: true });
-    const busy = { editableFocus: true, popupFocus: true, overlayOpen: true, canGoBack: true };
+    const busy = { ...idle, editableFocus: true, popupFocus: true, overlayOpen: true, canGoBack: true };
     expect(resolveCommand(event, idle, false)).toBe("palette.open");
     expect(resolveCommand(event, busy, false)).toBe("palette.open");
   });
@@ -90,12 +101,21 @@ describe("resolveCommand", () => {
   });
 
   it("lets the last matching binding win", () => {
-    const bindings = [
-      { key: "n", command: "idea.new" as const },
-      { key: "n", command: "back" as const, when: (c: KeybindingContext) => c.canGoBack },
-    ];
+    const bindings = resolveKeybindings({ back: { key: "n", when: "canGoBack" } });
     expect(resolveCommand(key("n"), idle, false, bindings)).toBe("idea.new");
     expect(resolveCommand(key("n"), { ...idle, canGoBack: true }, false, bindings)).toBe("back");
+  });
+
+  it("follows a user's key and when", () => {
+    const bindings = resolveKeybindings({
+      "palette.open": { when: "!editableFocus" },
+      "idea.new": { key: "mod+j" },
+    });
+    const event = key("k", { ctrlKey: true });
+    expect(resolveCommand(event, idle, false, bindings)).toBe("palette.open");
+    expect(resolveCommand(event, { ...idle, editableFocus: true }, false, bindings)).toBeNull();
+    expect(resolveCommand(key("n"), idle, false, bindings)).toBeNull();
+    expect(resolveCommand(key("j", { ctrlKey: true }), idle, false, bindings)).toBe("idea.new");
   });
 
   it("has no binding for other keys", () => {
@@ -109,5 +129,40 @@ describe("runsImmediately", () => {
     expect(runsImmediately("idea.new")).toBe(false);
     expect(runsImmediately("back")).toBe(false);
     expect(runsImmediately("settings.open")).toBe(false);
+  });
+});
+
+describe("shortcutFromEvent", () => {
+  it("spells the event as a shortcut", () => {
+    expect(shortcutFromEvent(key("K", { ctrlKey: true }), false)).toBe("mod+k");
+    expect(shortcutFromEvent(key("k", { metaKey: true }), true)).toBe("mod+k");
+    expect(shortcutFromEvent(key("?", { shiftKey: true }), false)).toBe("shift+?");
+    expect(shortcutFromEvent(key("Escape"), false)).toBe("escape");
+    expect(shortcutFromEvent(key(" ", { altKey: true }), false)).toBe("alt+space");
+    expect(shortcutFromEvent(key("+", { ctrlKey: true }), false)).toBe("mod+plus");
+  });
+
+  it("waits for a key besides the modifiers, and refuses the modifier mod never matches", () => {
+    expect(shortcutFromEvent(key("Control", { ctrlKey: true }), false)).toBeNull();
+    expect(shortcutFromEvent(key("Shift", { shiftKey: true }), false)).toBeNull();
+    expect(shortcutFromEvent(key("k", { metaKey: true }), false)).toBeNull();
+    expect(shortcutFromEvent(key("k", { ctrlKey: true }), true)).toBeNull();
+  });
+
+  it("round-trips through matchesShortcut", () => {
+    const events = [key(",", { ctrlKey: true }), key("+", { ctrlKey: true }), key(" "), key("F5", { altKey: true })];
+    for (const event of events) {
+      expect(matchesShortcut(event, shortcutFromEvent(event, false)!, false)).toBe(true);
+    }
+  });
+});
+
+describe("formatShortcut", () => {
+  it("reads as Ctrl+K off macOS and ⌘K on it", () => {
+    expect(formatShortcut("mod+k", false)).toBe("Ctrl+K");
+    expect(formatShortcut("mod+k", true)).toBe("⌘K");
+    expect(formatShortcut("mod+shift+,", false)).toBe("Ctrl+Shift+,");
+    expect(formatShortcut("escape", false)).toBe("Esc");
+    expect(formatShortcut("n", true)).toBe("N");
   });
 });

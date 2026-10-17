@@ -17,6 +17,7 @@ import {
   T3Section,
 } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
+import { KeybindingsSection } from "../KeybindingsSection";
 import { ModelTiersSection } from "../ModelTiersSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
@@ -57,6 +58,9 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           </SettingsSubsection>
           <SettingsSubsection id="board.notifications">
             <WithSettings>{(settings) => <NotificationsSection settings={settings} />}</WithSettings>
+          </SettingsSubsection>
+          <SettingsSubsection id="board.keybindings">
+            <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>
           </SettingsSubsection>
           <SettingsSubsection id="board.data">
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>

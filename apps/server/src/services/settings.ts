@@ -5,6 +5,7 @@ import {
   type AppSettings,
   type ModelTiers,
   type NotificationSettings,
+  sanitizeKeybindingOverrides,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
@@ -33,6 +34,7 @@ const DEFAULTS: StoredSettings = {
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  keybindings: {},
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -64,6 +66,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "issueImportJiraTools",
     "modelTiers",
     "notifications",
+    "keybindings",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -94,6 +97,7 @@ export function loadSettings(repos: Repos): StoredSettings {
       (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
     ) as unknown as StoredSettings),
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
+    keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
   };
 }
 
@@ -153,6 +157,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
+        if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.notifications !== undefined) {
           const current = load().notifications;
           repos.settings.set("notifications", {

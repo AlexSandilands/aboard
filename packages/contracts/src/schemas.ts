@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
+import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
@@ -726,6 +727,8 @@ export const AppSettings = z
     terminalOpenIn: TerminalOpenIn,
     /** Which notifications are recorded, and whether quiet hours silence their popups. */
     notifications: NotificationSettings,
+    /** The shortcuts the user changed; every other command keeps its default. */
+    keybindings: KeybindingOverrides,
   })
   .extend(BackupSettings.shape);
 
@@ -752,6 +755,8 @@ export const UpdateSettingsInput = z.object({
   terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */
   notifications: UpdateNotificationSettingsInput.optional(),
+  /** Replaces the overrides: a command left out goes back to its default. */
+  keybindings: KeybindingOverrides.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

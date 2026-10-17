@@ -1,4 +1,4 @@
-import { storageKey } from "@repo/contracts";
+import { type KeybindingCommand, storageKey } from "@repo/contracts";
 import { type ReactNode, useEffect, useEffectEvent } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
@@ -7,8 +7,9 @@ import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 import { useBoardEvents } from "~/state/queries";
 import { useDialogs, usePalette } from "~/state/ui";
-import { isEditableTarget, isInsidePopup } from "./keyboard";
-import { resolveCommand, runsImmediately, type KeybindingCommand } from "./keyboard.logic";
+import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
+import { resolveCommand, runsImmediately } from "./keyboard.logic";
+import { useResolvedKeybindings } from "./useKeybindings";
 
 const SIDEBAR_WIDTH_STORAGE_KEY = storageKey("sidebar-width");
 /** The main area keeps at least this much room when the sidebar is dragged wider. */
@@ -63,22 +64,22 @@ export function AppShell({
   );
 }
 
-const IS_MAC = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
-
 /**
- * App-wide shortcuts from the table in `keyboard.logic.ts`: Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings,
- * N starts a new task (in the scoped project), Esc goes back (closes the detail panel, or leaves Settings).
+ * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
+ * (Settings → Board → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
+ * task (in the scoped project), Esc goes back (closes the detail panel, or leaves Settings).
  *
  * It listens in the capture phase because card controls stop their keydowns from bubbling, which
  * would otherwise hide every shortcut while one of them has focus. Ctrl/Cmd+K runs right away.
  * The rest must still yield to anything nearer the focus (inline inputs, plan editors, menus), and
  * those signal that with `preventDefault`, so they wait until the event has finished dispatching
  * and run only if nothing called it. A plain `stopPropagation` doesn't count as a claim.
- * They therefore can't `preventDefault` themselves, which is fine: none of these keys has a default action
+ * They therefore can't `preventDefault` themselves, which is fine for the default keys: none has a default action
  * outside text fields.
  */
 function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: string | undefined) {
   const openSettings = useOpenSettings();
+  const bindings = useResolvedKeybindings();
   const run = (command: KeybindingCommand) => {
     const palette = usePalette.getState();
     switch (command) {
@@ -99,21 +100,27 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
     }
   };
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.isComposing) return;
+    if (event.isComposing || isRecordingShortcut(event.target)) return;
     const palette = usePalette.getState();
     const dialogs = useDialogs.getState();
+    const settingsOpen = location.pathname.startsWith("/settings");
     const command = resolveCommand(
       event,
       {
         editableFocus: isEditableTarget(event.target),
         popupFocus: isInsidePopup(event.target),
         overlayOpen: palette.open || dialogs.digestOpen,
+        paletteOpen: palette.open,
+        dialogOpen: dialogs.digestOpen,
+        settingsOpen,
+        panelOpen: onBack !== null && !settingsOpen,
         canGoBack: onBack !== null,
       },
       IS_MAC,
+      bindings,
     );
     if (command === null) return;
-    if (runsImmediately(command)) {
+    if (runsImmediately(command, bindings)) {
       event.preventDefault();
       run(command);
       return;

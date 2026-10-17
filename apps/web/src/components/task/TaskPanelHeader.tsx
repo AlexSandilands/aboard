@@ -4,6 +4,7 @@ import { ArchiveIcon, XIcon } from "lucide-react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { Kbd } from "~/components/ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
@@ -31,6 +32,7 @@ export const PANEL_TOP_BAR_CLASS =
  * next to the window's own X is easy to mistake for it.
  */
 export function ClosePanelButton({ onClose }: { onClose: () => void }) {
+  const backShortcut = useShortcutLabel("back");
   return (
     <>
       <Tooltip>
@@ -40,7 +42,7 @@ export function ClosePanelButton({ onClose }: { onClose: () => void }) {
         <TooltipPopup side="bottom">
           <span className="flex items-center gap-2">
             Close panel
-            <Kbd>Esc</Kbd>
+            {backShortcut ? <Kbd>{backShortcut}</Kbd> : null}
           </span>
         </TooltipPopup>
       </Tooltip>

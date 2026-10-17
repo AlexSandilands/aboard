@@ -2,6 +2,7 @@ import type { Project } from "@repo/contracts";
 import { useMemo } from "react";
 import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { DigestButton } from "~/components/digest/DigestButton";
+import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
@@ -33,11 +34,10 @@ import {
 } from "./boardNavigation";
 import { cn } from "~/lib/utils";
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-
 /** The board's top bar (52px; 40px under the desktop title bar): title or scoped project, filters, and the palette hint. */
 export function BoardHeader({ scopedProject }: { scopedProject: Project | null }) {
   const { isMobile, open } = useSidebar();
+  const paletteShortcut = useShortcutLabel("palette.open");
   const attentionOnly = useBoardView((s) => s.attentionOnly);
   const setAttentionOnly = useBoardView((s) => s.setAttentionOnly);
   const hasPrOnly = useBoardView((s) => s.hasPrOnly);
@@ -126,10 +126,11 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
         <Button variant="outline" size="xs" onClick={() => usePalette.getState().openPalette()}>
           <SearchIcon />
           <span className="text-muted-foreground">Search</span>
-          <KbdGroup>
-            <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
-            <Kbd>K</Kbd>
-          </KbdGroup>
+          {paletteShortcut ? (
+            <KbdGroup>
+              <Kbd>{paletteShortcut}</Kbd>
+            </KbdGroup>
+          ) : null}
         </Button>
       </div>
     </header>
