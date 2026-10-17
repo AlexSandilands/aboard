@@ -61,7 +61,7 @@ interface RunResult {
 function run(
   exe: string,
   args: string[],
-  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv },
+  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv; label?: string },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
@@ -79,7 +79,7 @@ function run(
     let stderr = "";
     const timer = setTimeout(() => {
       killTree(child);
-      reject(new Error(`Claude Code didn't finish within ${formatDuration(opts.timeoutMs)}`));
+      reject(new Error(`${opts.label ?? "Claude Code"} didn't finish within ${formatDuration(opts.timeoutMs)}`));
     }, opts.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
@@ -202,8 +202,8 @@ export async function claudeOutput(
 }
 
 /** `<exe> --version` for any CLI (Claude Code, Copilot): the first line it prints. Throws when it can't run. */
-export async function executableVersion(exe: string): Promise<string> {
-  const result = await run(exe, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS });
+export async function executableVersion(exe: string, label?: string): Promise<string> {
+  const result = await run(exe, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS, ...(label ? { label } : {}) });
   if (result.code !== 0) throw new Error(result.stderr.trim() || `exited with code ${result.code}`);
   return result.stdout.trim().split(/\r?\n/)[0] ?? "";
 }

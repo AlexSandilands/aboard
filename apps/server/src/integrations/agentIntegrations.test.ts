@@ -238,6 +238,28 @@ describe("agent integrations: Claude Code", () => {
   });
 });
 
+describe("agent integrations: Claude Code local scope", () => {
+  const stored = JSON.stringify({
+    mcpServers: {},
+    projects: {
+      "/work/app": {
+        mcpServers: { aboard: { type: "http", url: "http://localhost:4317/mcp", headers: { A: "secret" } } },
+      },
+    },
+  });
+
+  it("finds a server added in one project, which `claude mcp list` only shows from there", async () => {
+    const { svc } = service({
+      claudeMcp: () => Promise.resolve("other: http://127.0.0.1:9999/mcp (HTTP) - ✓ Connected"),
+      readFile: (path) => (path.endsWith(".claude.json") ? stored : null),
+    });
+    const mcp = claudeOf(await svc.status()).mcp;
+    expect(mcp).toMatchObject({ registered: true, connected: null, scope: "local", name: "aboard" });
+    expect(mcp.detail).toContain("--scope user");
+    expect(JSON.stringify(mcp)).not.toContain("secret");
+  });
+});
+
 describe("agent integrations: Copilot CLI", () => {
   const config = (url: string) =>
     JSON.stringify({

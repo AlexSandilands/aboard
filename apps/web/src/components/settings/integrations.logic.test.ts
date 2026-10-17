@@ -43,6 +43,7 @@ describe("integration dots", () => {
 
   it("a CLI harness is green only when its CLI runs and the board's MCP is registered", () => {
     expect(agentDot("Claude Code", undefined)).toEqual({ tone: "muted", label: "Checking" });
+    expect(agentDot("Claude Code", undefined, true)).toEqual({ tone: "warning", label: "Couldn't check Claude Code" });
     expect(agentDot("Claude Code", agent())).toEqual({ tone: "success", label: "Ready" });
     expect(agentDot("Claude Code", agent({ cli: { found: false, error: "claude isn't on PATH" } }))).toEqual({
       tone: "warning",

@@ -376,12 +376,13 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
   const recheck = useRecheckAgentIntegrations();
-  const claude = useAgentIntegrations().data?.harnesses.find((h) => h.harness === "claude-code");
+  const integrations = useAgentIntegrations();
+  const claude = integrations.data?.harnesses.find((h) => h.harness === "claude-code");
   return (
     <SettingsSection
       id="integrations.claude-code.status"
       title="Claude Code"
-      status={<Dot dot={agentDot("Claude Code", claude)} />}
+      status={<Dot dot={agentDot("Claude Code", claude, integrations.isError)} />}
     >
       <SettingsRow
         id="integrations.claude-code.mcp"
@@ -492,12 +493,13 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
   const recheck = useRecheckAgentIntegrations();
-  const copilot = useAgentIntegrations().data?.harnesses.find((h) => h.harness === "copilot-cli");
+  const integrations = useAgentIntegrations();
+  const copilot = integrations.data?.harnesses.find((h) => h.harness === "copilot-cli");
   return (
     <SettingsSection
       id="integrations.copilot.status"
       title="GitHub Copilot"
-      status={<Dot dot={agentDot("Copilot", copilot)} />}
+      status={<Dot dot={agentDot("Copilot", copilot, integrations.isError)} />}
     >
       <SettingsRow
         id="integrations.copilot.cli"

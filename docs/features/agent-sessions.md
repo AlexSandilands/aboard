@@ -130,8 +130,9 @@ its one-minute cache; Re-check sends it). Per harness it returns:
 
 The entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
 the port and path, and ignores a trailing slash and the query (which may carry a token). Claude Code is asked with
-`claude mcp list` (and `mcp get` for the scope), run from the home folder; if that fails or times out the user config
-`~/.claude.json` is read instead. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
+`claude mcp list` (and `mcp get` for the scope), run from the home folder, which doesn't list servers added to one
+project (local scope), so `~/.claude.json` is also read for those (reported as local scope, with a hint to use
+`--scope user`); if the CLI fails or times out, that file is all there is. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
 `$COPILOT_HOME/mcp-config.json`) is read. Config files are only read for server names and `url` strings, never
 headers or env, and no URL or token is put in the result.
 

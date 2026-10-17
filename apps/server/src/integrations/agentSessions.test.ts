@@ -352,6 +352,19 @@ describe("resuming a session", () => {
     expect(((await copy.json()) as { command: string }).command).toContain(`/opt/claude/bin/claude --resume ${A}`);
   });
 
+  it("won't start a configured CLI with spaces in its path in Command Prompt", async () => {
+    const app = appWith();
+    app.services.settings.update({
+      terminal: { kind: "cmd" },
+      headlessReviewCli: "C:\\Program Files\\Claude\\claude.exe",
+    });
+    const l = app.link(claude(A, app.home.root));
+    const body = (await (await app.post(l.id, {})).json()) as { launched: boolean; error: string };
+    expect(body.launched).toBe(false);
+    expect(body.error).toMatch(/Command Prompt can't start a CLI whose path has spaces/);
+    expect(app.spawned).toHaveLength(0);
+  });
+
   it("refuses links that aren't agent sessions", async () => {
     const app = appWith();
     const l = app.services.links.add(app.task.id, { value: "https://example.com" }, "u");

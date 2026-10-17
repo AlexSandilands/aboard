@@ -24,8 +24,13 @@ export function t3Dot(status: T3IntegrationStatus | undefined, tokenSet: boolean
  * amber with the reason when either is missing. Whether the harness reports the server as connected is detail, not a
  * condition: it can't always tell.
  */
-export function agentDot(name: string, status: AgentIntegrationStatus | undefined): IntegrationDot {
-  if (!status) return dot("muted", "Checking");
+export function agentDot(
+  name: string,
+  status: AgentIntegrationStatus | undefined,
+  /** The request for the status failed, so there is none to wait for. */
+  failed = false,
+): IntegrationDot {
+  if (!status) return failed ? dot("warning", `Couldn't check ${name}`) : dot("muted", "Checking");
   if (!status.cli.found) {
     return dot("warning", `${name} CLI not working${status.cli.error ? `: ${status.cli.error}` : ""}`);
   }

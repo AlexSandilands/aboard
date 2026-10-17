@@ -108,6 +108,16 @@ export function mcpEntriesOf(json: unknown): McpEntry[] {
   });
 }
 
+/**
+ * Entries `claude mcp add` stored for one project (local scope): `projects[<folder>].mcpServers` of ~/.claude.json.
+ * `claude mcp list` only shows them from that folder, which the board can't know.
+ */
+export function projectMcpEntriesOf(json: unknown): McpEntry[] {
+  const projects = json && typeof json === "object" ? (json as { projects?: unknown }).projects : null;
+  if (!projects || typeof projects !== "object") return [];
+  return Object.values(projects as Record<string, unknown>).flatMap(mcpEntriesOf);
+}
+
 const entriesInFile = (read: (path: string) => string | null, path: string): McpEntry[] => {
   const text = read(path);
   if (text === null) return [];
@@ -121,6 +131,25 @@ const entriesInFile = (read: (path: string) => string | null, path: string): Mcp
 const matching = <T extends McpEntry>(entries: readonly T[], boardUrl: string): T | undefined =>
   entries.find((entry) => entry.url !== null && sameMcpUrl(entry.url, boardUrl));
 
+/** ~/.claude.json's entry for the board: the user-scope ones first, then any project's. */
+const claudeConfigMatch = (
+  read: (path: string) => string | null,
+  home: string,
+  boardUrl: string,
+): { entry: McpEntry; scope: "user" | "local" } | null => {
+  const text = read(join(home, ".claude.json"));
+  let json: unknown;
+  try {
+    json = text === null ? null : JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const user = matching(mcpEntriesOf(json), boardUrl);
+  if (user) return { entry: user, scope: "user" };
+  const local = matching(projectMcpEntriesOf(json), boardUrl);
+  return local ? { entry: local, scope: "local" } : null;
+};
+
 const NOT_REGISTERED = (detail: string): AgentIntegrationStatus["mcp"] => ({
   registered: false,
   connected: null,
@@ -133,7 +162,7 @@ const NOT_REGISTERED = (detail: string): AgentIntegrationStatus["mcp"] => ({
 export interface AgentIntegrationProbes {
   /** The CLI's executable on this machine, or null. */
   resolve: (command: string) => string | null;
-  version: (exe: string) => Promise<string>;
+  version: (exe: string, label: string) => Promise<string>;
   /** `claude mcp <args>`'s stdout; throws when it fails or times out. */
   claudeMcp: (exe: string, args: string[], timeoutMs: number) => Promise<string>;
   readFile: (path: string) => string | null;
@@ -184,7 +213,7 @@ export function createAgentIntegrations(deps: {
       };
     }
     try {
-      return { ...base, found: true, version: await probes.version(path) };
+      return { ...base, found: true, version: await probes.version(path, AGENT_HARNESSES[harness].label) };
     } catch (error) {
       return { ...base, error: messageOf(error).slice(0, 200) };
     }
@@ -198,8 +227,19 @@ export function createAgentIntegrations(deps: {
       try {
         const listed = parseClaudeMcpList(await probes.claudeMcp(exe, ["mcp", "list"], MCP_LIST_TIMEOUT_MS));
         const found = matching(listed, boardUrl);
-        if (!found)
-          return NOT_REGISTERED(`No Claude Code MCP server points at the board (${listed.length} registered)`);
+        if (!found) {
+          // Added with `claude mcp add` in a project folder (local scope), it is only listed from there.
+          const stored = claudeConfigMatch(probes.readFile, deps.userHome, boardUrl);
+          return stored
+            ? {
+                registered: true,
+                connected: null,
+                scope: stored.scope,
+                name: stored.entry.name,
+                detail: "Registered for one project only: add it with --scope user to use it everywhere",
+              }
+            : NOT_REGISTERED(`No Claude Code MCP server points at the board (${listed.length} registered)`);
+        }
         const scope = await probes
           .claudeMcp(exe, ["mcp", "get", found.name], MCP_GET_TIMEOUT_MS)
           .then(parseClaudeMcpScope)
@@ -215,13 +255,13 @@ export function createAgentIntegrations(deps: {
         askError = `claude mcp list failed: ${messageOf(error).slice(0, 120)}`;
       }
     }
-    const fromFile = matching(entriesInFile(probes.readFile, join(deps.userHome, ".claude.json")), boardUrl);
-    return fromFile
+    const stored = claudeConfigMatch(probes.readFile, deps.userHome, boardUrl);
+    return stored
       ? {
           registered: true,
           connected: null,
-          scope: "user",
-          name: fromFile.name,
+          scope: stored.scope,
+          name: stored.entry.name,
           detail: `${askError}; found in the user config`,
         }
       : NOT_REGISTERED(`${askError}; not in the user config either`);
