@@ -86,6 +86,17 @@ export type RevealAction =
   | { kind: "expand-band"; epicId: string }
   | { kind: "scroll" };
 
+/** What the board has done for the open reveal request: the lanes and bands it already expanded. */
+export interface RevealProgress {
+  nonce: number;
+  expanded: Set<string>;
+}
+
+/** The progress for a request: the previous one while it is the same request, a fresh one for a new nonce. */
+export function revealProgressFor(previous: RevealProgress | null, nonce: number): RevealProgress {
+  return previous?.nonce === nonce ? previous : { nonce, expanded: new Set() };
+}
+
 /**
  * The next action for a reveal request. `expanded` holds the lanes and bands already expanded for it, so a refused
  * update can't loop; the caller adds to it when it acts. `cardDrawn` is whether the card is in the DOM.

@@ -18,6 +18,7 @@ import { LinksSection } from "./LinksSection";
 import { DetailsSection } from "./DetailsSection";
 import { ImportCallout } from "./ImportCallout";
 import { ManagedSections } from "./ManagedSections";
+import { PanelTaskLinksProvider } from "./PanelTaskLinks";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
 import { RelationsSection } from "./RelationsSection";
@@ -144,14 +145,16 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
       <TaskPanelHeader task={task} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
       <div className="min-h-0 flex-1">
         <ScrollArea scrollFade>
-          <TaskPanelBody
-            task={task}
-            projects={projects}
-            onOpenEditor={openEditor}
-            titleActions={
-              <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
-            }
-          />
+          <PanelTaskLinksProvider>
+            <TaskPanelBody
+              task={task}
+              projects={projects}
+              onOpenEditor={openEditor}
+              titleActions={
+                <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
+              }
+            />
+          </PanelTaskLinksProvider>
         </ScrollArea>
       </div>
       <PlanEditor

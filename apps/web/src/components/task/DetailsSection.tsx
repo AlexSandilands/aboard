@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { Markdown } from "~/components/markdown/Markdown";
-import { useTaskLinks } from "~/components/markdown/useTaskLinks";
+import { usePanelTaskLinks } from "./PanelTaskLinks";
 import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateTask } from "~/state/mutations";
@@ -130,7 +130,7 @@ function MarkdownField({
   onSave: (next: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const taskLinks = useTaskLinks();
+  const taskLinks = usePanelTaskLinks();
   const text = value?.trim() ? value : null;
   return (
     <div className="px-1.5">

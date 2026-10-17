@@ -88,9 +88,11 @@ cleared from the store (`consumeReveal`), so a board that remounts doesn't act o
 
 `revealScrollTarget` centres the card on each axis it isn't fully visible on, allowing for the sticky column header, and
 leaves the other axis. The scroll is smooth (instant under `prefers-reduced-motion`), followed by one correction once it
-settles (off-screen cards are laid out at an estimated height, and the panel may still be docking) and a fading ring on
-the card, drawn with the Web Animations API because React would drop a class on re-render. `#N` in the panel's Markdown
-links through `useTaskLinks` and the same path.
+settles (off-screen cards are laid out at an estimated height, and the panel may still be docking; if the card's node was
+swapped meanwhile it aims at the fresh one, and if there is none it stops) and a fading ring on the card, drawn with the
+Web Animations API because React would drop a class on re-render. `#N` in the panel's Markdown links through
+`useTaskLinks` and the same path; the task panel builds them once (`PanelTaskLinksProvider`) and its rows read them with
+`usePanelTaskLinks`.
 
 ### Task panel sections
 

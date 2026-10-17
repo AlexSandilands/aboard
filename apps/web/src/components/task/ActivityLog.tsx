@@ -19,7 +19,7 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
-import { useTaskLinks } from "~/components/markdown/useTaskLinks";
+import { usePanelTaskLinks } from "./PanelTaskLinks";
 import { Input } from "~/components/ui/input";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useAddNote } from "~/state/mutations";
@@ -53,7 +53,7 @@ const ICONS: Record<ActivityIcon, ReactNode> = {
 export function ActivityLog({ task, projects }: { task: TaskDetail; projects: ReadonlyArray<Project> }) {
   // Held here rather than in the input: collapsing the section unmounts the input, not this.
   const [draft, setDraft] = useState("");
-  const taskLinks = useTaskLinks();
+  const taskLinks = usePanelTaskLinks();
   const lines = useMemo(() => {
     const ctx = {
       steps: stepIndexLabels(task.phases),
