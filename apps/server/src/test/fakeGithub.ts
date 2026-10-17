@@ -89,6 +89,10 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
         },
       };
     }
+    if (operation === "PullRequestId") {
+      const { owner, name, number } = variables as { owner: string; name: string; number: number };
+      return { data: { repository: { pullRequest: { id: `PR_${owner}/${name}#${number}` } } } };
+    }
     if (operation === "PullRequestMergeTarget") {
       const { owner, name, number } = variables as { owner: string; name: string; number: number };
       const key = `${owner}/${name}#${number}`;
@@ -108,7 +112,35 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
         },
       };
     }
+    if (operation === "EpicPullRequest") {
+      const { owner, name, head } = variables as { owner: string; name: string; head: string };
+      const nodes = [...prs.entries()]
+        .filter(([key, pr]) => key.startsWith(`${owner}/${name}#`) && pr.headRefName === head && pr.state === "OPEN")
+        .map(([key, pr]) => {
+          const number = Number(key.slice(key.indexOf("#") + 1));
+          return { number, url: `https://github.com/${owner}/${name}/pull/${number}`, baseRefName: pr.baseRefName };
+        });
+      return {
+        data: {
+          repository: { id: `R_${owner}/${name}`, defaultBranchRef: { name: "main" }, pullRequests: { nodes } },
+        },
+      };
+    }
     const input = (variables.input ?? variables) as Record<string, unknown>;
+    if (operation === "CreatePullRequest") {
+      mutations.push({ operation, input });
+      const repo = String(input.repositoryId).slice(2);
+      const number = 100 + [...prs.keys()].filter((k) => k.startsWith(`${repo}#`)).length;
+      prs.set(`${repo}#${number}`, {
+        ...fakePr({ number, title: String(input.title) }),
+        headRefName: String(input.headRefName),
+        baseRefName: String(input.baseRefName),
+        isDraft: input.draft === true,
+      });
+      return {
+        data: { createPullRequest: { pullRequest: { number, url: `https://github.com/${repo}/pull/${number}` } } },
+      };
+    }
     mutations.push({ operation, input });
     if (failNextMutation) {
       const message = failNextMutation;
@@ -136,6 +168,7 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
     if (operation === "MergePullRequest") pr.state = "MERGED";
     else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
     else if (operation === "DisableAutoMerge") pr.autoMergeRequest = null;
+    else if (operation === "UpdatePullRequestBody") return { data: { updatePullRequest: { clientMutationId: null } } };
     else throw new Error(`fake github: unknown operation ${operation}`);
     return { data: { [operation]: { clientMutationId: null } } };
   };

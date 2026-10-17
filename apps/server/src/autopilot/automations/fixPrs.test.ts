@@ -572,3 +572,41 @@ describe("fixPrompt", () => {
     expect(prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
   });
 });
+
+describe("fix PRs: an integration epic's own PR", () => {
+  it("fixes only its conflicts with the default branch, in a session of its own on the epic's branch", async () => {
+    const { s, project, requests, pass, turnOn } = setup();
+    turnOn();
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [], "user");
+    const pr = () => s.tasks.summary(epic.id).links.find((l) => l.kind === "pr")!;
+    s.links.add(epic.id, { value: "https://github.com/acme/app/pull/90" }, "autopilot");
+    s.links.add(epic.id, { value: "t3code://threads/env/orchestrator" }, "agent");
+    s.links.setSnapshot(s.tasks.summary(epic.id).links.find((l) => l.kind === "t3_thread")!.id, {
+      title: "Orchestrating",
+      status: "idle",
+      settled: false,
+    });
+    const epicPr = (over: Partial<PrSnapshot> = {}) =>
+      s.links.setSnapshot(
+        pr().id,
+        snapshot({ state: "draft", headRef: "epic/1-checkout", baseRef: "main", headOid: SHA_C, ...over }),
+      );
+    // Delivered to main: its PRs are none of Fix PRs' business.
+    epicPr({ mergeable: "conflicting" });
+    await pass();
+    expect(requests).toHaveLength(0);
+
+    s.tasks.setDelivery(epic.id, "integration", "epic/1-checkout", "user");
+    epicPr({ checks: "failing", mergeable: "mergeable" });
+    await pass();
+    expect(requests).toHaveLength(0); // failing checks aren't fixed on the epic's PR
+    epicPr({ checks: "failing", mergeable: "conflicting" });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ workspace: { branch: "epic/1-checkout" }, expectHead: SHA_C });
+    expect(requests[0]!.kind).toBeUndefined();
+    expect(requests[0]!.prompt).toContain("**Merge conflicts**");
+    expect(requests[0]!.prompt).not.toContain("**Failing checks.**");
+    expect(requests[0]!.prompt).toContain("never merge the pull request");
+  });
+});

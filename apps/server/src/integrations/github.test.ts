@@ -485,6 +485,45 @@ describe("github merge into an epic's branch", () => {
   });
 });
 
+describe("the epic's pull request", () => {
+  const input = { host: "github.com", repo: "o/r", head: "epic/3-checkout", title: "Epic #3: Checkout", body: "Tasks" };
+
+  it("opens a draft from the epic's branch into the default branch, once", async () => {
+    const { gh, github } = setup([]);
+    gh.prs.set("o/r#1", fakePr());
+    expect(await github.ensureEpicPr(input)).toEqual({
+      number: 101,
+      url: "https://github.com/o/r/pull/101",
+      created: true,
+    });
+    expect(gh.mutations).toEqual([
+      {
+        operation: "CreatePullRequest",
+        input: {
+          repositoryId: "R_o/r",
+          baseRefName: "main",
+          headRefName: "epic/3-checkout",
+          title: "Epic #3: Checkout",
+          body: "Tasks",
+          draft: true,
+        },
+      },
+    ]);
+    expect(await github.ensureEpicPr(input)).toMatchObject({ number: 101, created: false });
+    expect(gh.mutations).toHaveLength(1);
+  });
+
+  it("refuses the default branch as the epic's branch, and updates a description", async () => {
+    const { gh, github } = setup([]);
+    gh.prs.set("o/r#1", fakePr());
+    await expect(github.ensureEpicPr({ ...input, head: "main" })).rejects.toThrow(/can't be the default branch/);
+    await github.setPrBody({ host: "github.com", repo: "o/r", number: 1 }, "New body");
+    expect(gh.mutations).toEqual([
+      { operation: "UpdatePullRequestBody", input: { pullRequestId: "PR_o/r#1", body: "New body" } },
+    ]);
+  });
+});
+
 describe("github merge", () => {
   const ready = (overrides = {}) => ({
     ...ghLink("l1", 7),
