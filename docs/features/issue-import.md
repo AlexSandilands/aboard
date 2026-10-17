@@ -67,7 +67,7 @@ An issue that is an epic becomes one on the board, and its children become its t
   is an epic. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
   child) isn't asked, since epics don't nest. Jira: the prompt asks the run, when the issue's
   type is Epic or its hierarchy level is 1, to set `isEpic`, run two searches, `"Epic Link" = KEY` (the epic's
-  issues in company-managed projects; a failure because the field doesn't exist, as on Jira Cloud, is ignored) and
+  issues in company-managed projects; a failure because the field is unknown in the project, as in team-managed projects, is ignored; any other failure fails the import) and
   `parent = KEY` (its sub-tasks), merge the keys without duplicates with the Epic Link results first, and return the
   first 50 in `children` and the count of the whole union in `childTotal`. It doesn't read the children.
 - **Converting.** `ImportsService.complete` applies the result as usual, then `fillEpic` (same write) turns the

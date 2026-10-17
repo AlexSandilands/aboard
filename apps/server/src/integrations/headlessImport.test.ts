@@ -100,7 +100,7 @@ describe("import prompt", () => {
     expect(prompt).toContain('`"Epic Link" = PROJ-7`');
     expect(prompt).toContain("run both searches");
     expect(prompt).toContain("without duplicates, the Epic Link results first");
-    expect(prompt).toContain("doesn't exist");
+    expect(prompt).toContain("unknown in the issue's project");
     expect(prompt).toContain("first 50");
   });
 
