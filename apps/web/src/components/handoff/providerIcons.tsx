@@ -21,9 +21,11 @@ export const ClaudeAI: Icon = ({ className, ...props }) => (
   </svg>
 );
 
-// T3 Code's own mark (assets/prod/logo.svg, MIT, see NOTICE): the tile in the current colour with the "T3" cut out.
+// T3 Code's own mark (assets/prod/logo.svg, MIT, see NOTICE): a blue tile (the blueprint palette of its dev icon)
+// with the "T3" cut out, over a white rect so the letters read white on any theme.
 export const T3Code: Icon = ({ className, ...props }) => (
-  <svg {...props} viewBox="0 0 128 128" className={cn("fill-current", className)}>
+  <svg {...props} viewBox="0 0 128 128" className={cn("fill-[#347FF8]", className)}>
+    <rect x="1" y="1" width="126" height="126" rx="9" fill="white" />
     <path
       fillRule="evenodd"
       clipRule="evenodd"
