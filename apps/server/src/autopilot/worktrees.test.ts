@@ -1,19 +1,22 @@
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultRunGit } from "../integrations/backup.ts";
-import { createGitFixture, git } from "../test/gitRepo.ts";
+import { createGitFixture, disposeGitFixtureTemplate, git } from "../test/gitRepo.ts";
+import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { canonicalPath, createWorktree, isInside, removeWorktree } from "./worktrees.ts";
 
 const RUN_ID = "abcdef12-3456-4789-8abc-def012345678";
 
-// Real git processes are slow on the Windows CI runner.
-describe("Autopilot worktrees", { timeout: 30_000 }, () => {
+afterAll(disposeGitFixtureTemplate);
+
+// Real git processes are slow on a loaded Windows machine.
+describe("Autopilot worktrees", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   let repo: ReturnType<typeof createGitFixture>;
-  // Building the fixture runs several git processes, which can outlast the default hook timeout on Windows.
+  // The first fixture in a file builds the template repositories, a dozen git processes.
   beforeEach(() => {
     repo = createGitFixture();
-  }, 30_000);
+  }, PROCESS_TEST_TIMEOUT);
   afterEach(() => repo.cleanup());
 
   const make = (extra: { baseRef?: string; branch?: string; root?: string } = {}) =>
