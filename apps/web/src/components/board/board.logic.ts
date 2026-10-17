@@ -131,6 +131,14 @@ export function laneHasCollapsibleCell(cells: LaneCells): boolean {
   return STATUS_ORDER.some((status) => cells[status].length > COLUMN_PREVIEW_COUNT);
 }
 
+/**
+ * Whether a task belongs in the priority lane, when the lane is on: a priority task that isn't an epic, archived or
+ * Done. Finished work goes back to its project, so the lane only holds what is still open.
+ */
+export function isInPriorityLane(task: TaskSummary): boolean {
+  return task.priority && task.kind !== "epic" && !task.archivedAt && task.status !== "done";
+}
+
 export interface BoardFilters {
   /** `?project=` id; unknown ids are ignored. */
   projectId: string | null;
@@ -216,13 +224,7 @@ export function buildLanes(
     filters.inProgressOnly === true ||
     epicFilter !== null;
   const statusOk = (task: TaskSummary) => !filters.inProgressOnly || task.status === "in_progress";
-  const inPriorityLane = (task: TaskSummary) =>
-    filters.priorityLane === true &&
-    task.priority &&
-    task.kind !== "epic" &&
-    !task.archivedAt &&
-    // Finished work goes back to its project, so the lane only holds what is still open.
-    task.status !== "done";
+  const inPriorityLane = (task: TaskSummary) => filters.priorityLane === true && isInPriorityLane(task);
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
     (!filters.hasPrOnly || hasPr(task)) &&

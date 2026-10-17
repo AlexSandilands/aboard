@@ -6,6 +6,7 @@ import {
   columnCounts,
   COLUMN_PREVIEW_COUNT,
   findRow,
+  isInPriorityLane,
   laneHasCollapsibleCell,
   matchesTaskSearch,
   openTaskCounts,
@@ -510,6 +511,16 @@ describe("buildLanes: the priority lane", () => {
     expect(next[0]).toBe(first[0]);
     const changed = reuseUnchangedLanes(first, buildLanes(board([...tasks, task("e", { priority: true })]), withLane));
     expect(changed[0]!.priority).toBe(true);
+  });
+});
+
+describe("isInPriorityLane", () => {
+  it("holds open priority tasks only", () => {
+    expect(isInPriorityLane(task("a", { priority: true, status: "review" }))).toBe(true);
+    expect(isInPriorityLane(task("a", { status: "review" }))).toBe(false);
+    expect(isInPriorityLane(task("a", { priority: true, status: "done" }))).toBe(false);
+    expect(isInPriorityLane(task("a", { priority: true, archivedAt: "2026-01-01T00:00:00.000Z" }))).toBe(false);
+    expect(isInPriorityLane(task("a", { priority: true, kind: "epic" }))).toBe(false);
   });
 });
 

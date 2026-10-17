@@ -1,5 +1,6 @@
 import type { Project, TaskSummary } from "@repo/contracts";
 import { useEffect, useLayoutEffect, useMemo, useState, type RefObject } from "react";
+import { isInPriorityLane } from "./board.logic";
 import {
   arrowPath,
   curvePath,
@@ -138,9 +139,7 @@ export function DependencyLines({
   if (!focusId || edges.length === 0 || !layout.boxes.has(focusId)) return null;
 
   const laneIndex = (task: TaskSummary) =>
-    priorityLane && task.priority && task.kind !== "epic" && !task.archivedAt
-      ? -1
-      : projects.findIndex((p) => p.id === task.projectId);
+    priorityLane && isInPriorityLane(task) ? -1 : projects.findIndex((p) => p.id === task.projectId);
   const stubCounts = new Map<string, number>();
   const opacity = hovering ? 1 : SELECTED_OPACITY;
 
