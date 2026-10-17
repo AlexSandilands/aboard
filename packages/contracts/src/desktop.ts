@@ -84,7 +84,8 @@ export function readDesktopSandbox(env: Env, realHome: string): DesktopSandbox |
   if (home === undefined) return null;
   const real = normalizeDir(realHome);
   const dir = normalizeDir(home);
-  if (!home || dir === real || dir.startsWith(`${real}/`)) {
+  if (!/^([a-z]:)?\//i.test(dir)) return { error: `the sandbox home ${home || "(empty)"} is not an absolute path` };
+  if (dir === real || dir.startsWith(`${real}/`)) {
     return { error: `the sandbox home ${home || "(empty)"} is the real data dir` };
   }
   const serverPort = portOf(env[brandEnv("PORT")], DEFAULT_SERVER_PORT);

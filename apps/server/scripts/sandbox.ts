@@ -308,16 +308,17 @@ async function openDesktop(state: SandboxState): Promise<void> {
   child.unref();
   let exitCode: number | undefined;
   child.once("exit", (code) => (exitCode = code ?? 1));
+  // Recorded at once, so a `stop` during the wait below still finds the shell and closes it.
+  const writeState = (desktop: SandboxState["desktop"]) =>
+    writeFileSync(stateFile, JSON.stringify({ ...state, desktop } satisfies SandboxState, null, 2));
+  if (child.pid) writeState({ pid: child.pid, startedAt: Date.now() });
   // A broken build or a refused sandbox ends the launcher within moments; say so rather than leave no window.
   await sleep(4000);
   if (!child.pid || exitCode !== undefined) {
+    writeState(undefined);
     const tail = readFileSync(logPath, "utf8").slice(-2000);
     throw new Error(`the desktop shell exited (code ${exitCode}); log ${logPath}\n${tail}`);
   }
-  writeFileSync(
-    stateFile,
-    JSON.stringify({ ...state, desktop: { pid: child.pid, startedAt: Date.now() } } satisfies SandboxState, null, 2),
-  );
   console.log(`[sandbox] desktop shell open (log ${logPath}); \`pnpm sandbox stop\` closes it`);
 }
 

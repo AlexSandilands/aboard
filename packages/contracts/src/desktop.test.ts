@@ -41,7 +41,7 @@ describe("readDesktopSandbox", () => {
   });
 
   it("refuses the real data dir or anything inside it", () => {
-    for (const home of [realHome, `${realHome}/`, "/HOME/me/.board/data", ""]) {
+    for (const home of [realHome, `${realHome}/`, "/HOME/me/.board/data", "", "relative/sandbox"]) {
       const env = { ...desktopSandboxEnv({}, sandbox), [DESKTOP_SANDBOX_ENV]: home };
       expect(readDesktopSandbox(env, realHome)).toHaveProperty("error");
     }
