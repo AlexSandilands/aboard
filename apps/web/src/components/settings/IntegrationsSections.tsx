@@ -450,8 +450,8 @@ function SessionModelsRow({
     <SettingsRow
       id={`integrations.${section}.session-models`}
       title="Session models"
-      description="The model a new session starts on, by the task's suggested tier."
-      info="Used by a new session from a task's hand-off menu. Leave empty for the CLI's default."
+      description="The model a new session starts on, by the task's suggested tier. Empty uses the CLI's default."
+      info="Used by a new session from a task's hand-off menu."
     >
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {MODEL_TIERS.map(({ value: tier, label }) => {
