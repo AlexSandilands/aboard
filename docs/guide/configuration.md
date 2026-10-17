@@ -18,7 +18,7 @@ Set `ABOARD_TOKEN` to require a bearer token on the API and the MCP endpoint. Wi
 
 ## Backup and restore
 
-The board is one SQLite file in the data dir. To keep a copy off the machine, open **Settings → Backup**,
+The board is one SQLite file in the data dir. To keep a copy off the machine, open **Settings → Board → Data**,
 choose an empty folder and, optionally, a remote, and turn it on. The server writes the board as JSON into
 that folder (one file per task), commits when anything changed, and pushes using your machine's git
 credentials, so no token is stored. Use a private repo: task text, notes and links end

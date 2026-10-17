@@ -29,10 +29,11 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
     updateSettings.mutate({ modelTiers: { [tier]: { ...settings.modelTiers[tier], ...patch } } });
 
   return (
-    <SettingsSection title="Model tiers">
+    <SettingsSection id="tasks.models.tiers" title="Model tiers">
       {MODEL_TIERS.map(({ value: tier, label, description }) => (
         <SettingsRow
           key={tier}
+          id={`tasks.models.${tier}`}
           title={label}
           description={description}
           control={

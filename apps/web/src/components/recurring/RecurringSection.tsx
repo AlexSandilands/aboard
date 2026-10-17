@@ -1,34 +1,21 @@
 import { AUTOPILOT_RECURRING, describeSchedule, type Project, type RecurringRuleView } from "@repo/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { useState } from "react";
+import { SettingsLink, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useAutopilotOverview, useAutopilotScope, useBoard, useTemplates } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
 import {
   useAddSuggestedRule,
   useDeleteRecurringRule,
   useRecurringRules,
   useUpdateRecurringRule,
 } from "~/state/recurring";
-import {
-  anchorSchedule,
-  emptyRuleForm,
-  formFromRule,
-  lastTaskLabel,
-  nextDueLabel,
-  remainingSuggestions,
-  type RuleForm,
-} from "./recurring.logic";
-
-export interface RuleEdit {
-  ruleId: string | null;
-  initial: RuleForm;
-}
+import { anchorSchedule, lastTaskLabel, nextDueLabel, remainingSuggestions } from "./recurring.logic";
 
 function IconAction({
   label,
@@ -62,18 +49,19 @@ function IconAction({
 
 /**
  * A project's recurring-task rules (the Recurring tasks automation of Autopilot): the project-level switch, the
- * rules and a few example rules to start from. The editor is the caller's, so it can take over the dialog.
+ * rules and a few example rules to start from. The rule editor is a sub-page.
  */
-export function RecurringSection({ project, onEdit }: { project: Project; onEdit: (edit: RuleEdit) => void }) {
+export function RecurringSection({ project }: { project: Project }) {
+  const navigate = useNavigate();
+  const onEdit = (ruleId: string) =>
+    void navigate({
+      to: "/settings/project/recurring/$ruleId",
+      params: { ruleId },
+      search: { project: project.id },
+    });
   const rules = useRecurringRules(project.id);
   const scope = useAutopilotScope(project.id);
   const automation = scope.data?.find((entry) => entry.automation === AUTOPILOT_RECURRING);
-  const wanted = useDialogs((s) => s.projectSettingsSection) === "recurring";
-  const ref = useRef<HTMLDivElement>(null);
-  // Opened from the lane's Autopilot popover: bring this section into view.
-  useEffect(() => {
-    if (wanted) ref.current?.scrollIntoView({ block: "start" });
-  }, [wanted]);
   const templates = useTemplates();
   const paused = useBoard().data?.autopilot.paused ?? false;
   const dryRun = useAutopilotOverview().data?.engine.dryRun ?? false;
@@ -90,11 +78,12 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
       : "Template deleted: pick another";
 
   return (
-    <div ref={ref} className="space-y-6">
+    <>
       <SettingsSection
+        id="project.recurring.rules"
         title="Recurring tasks"
         headerAction={
-          <Button size="xs" variant="outline" onClick={() => onEdit({ ruleId: null, initial: emptyRuleForm() })}>
+          <Button size="xs" variant="outline" onClick={() => onEdit("new")}>
             <PlusIcon />
             New rule
           </Button>
@@ -103,7 +92,15 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
         {automation && !automation.enabled ? (
           <SettingsRow
             title="Recurring tasks is off for this project"
-            description="Rules only run while it is on. Switch it on under Autopilot above, or from the Autopilot pill on the lane."
+            description={
+              <>
+                Rules only run while it is on. Switch it on under{" "}
+                <SettingsLink to="project.autopilot" project={project.id}>
+                  Autopilot overrides
+                </SettingsLink>
+                , or from the Autopilot pill on the lane.
+              </>
+            }
           />
         ) : null}
         {list.length === 0 ? (
@@ -153,10 +150,7 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
                       disabled={update.isPending}
                       onCheckedChange={(enabled) => update.mutate({ id: rule.id, enabled })}
                     />
-                    <IconAction
-                      label={`Edit ${rule.name}`}
-                      onClick={() => onEdit({ ruleId: rule.id, initial: formFromRule(rule) })}
-                    >
+                    <IconAction label={`Edit ${rule.name}`} onClick={() => onEdit(rule.id)}>
                       <PencilIcon />
                     </IconAction>
                     <IconAction destructive label={`Delete ${rule.name}`} onClick={() => setDeleting(rule)}>
@@ -170,7 +164,7 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
         )}
       </SettingsSection>
       {suggestions.length > 0 ? (
-        <SettingsSection title="Examples">
+        <SettingsSection id="project.recurring.examples" title="Examples">
           {suggestions.map((suggestion) => (
             <SettingsRow
               key={suggestion.id}
@@ -204,6 +198,6 @@ export function RecurringSection({ project, onEdit }: { project: Project; onEdit
         confirmLabel="Delete"
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-    </div>
+    </>
   );
 }

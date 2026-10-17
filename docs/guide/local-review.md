@@ -1,7 +1,7 @@
 # Local review
 
 Local review gets an agent's work reviewed before it opens a pull request. It's off by default; turn it
-on in **Settings → Local review**.
+on in **Settings → Tasks → Review**.
 
 When an agent moves a task to Review, the board tells it to run a review loop:
 

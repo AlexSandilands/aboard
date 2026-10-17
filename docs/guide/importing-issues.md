@@ -23,12 +23,12 @@ issue key.
   look like writes (create, update, comment, transition, …) even where your own Claude Code settings allow
   them. That is a check by name, not a sandbox.
 
-Both run the Claude Code CLI, the one named under **Settings → Local review** (it's `claude` from your PATH
+Both run the Claude Code CLI, the one named under **Settings → Integrations → Claude Code** (it's `claude` from your PATH
 unless you set another), on a small model (Haiku by default).
 
 ## Settings
 
-**Settings → Issue import** has the switch, the model, the most one import may spend, and the Jira tools it
+**Settings → Tasks → New tasks** (Issue import) has the switch, the model, the most one import may spend, and the Jira tools it
 may call. By default the board looks for the common one-issue read tools (`get_jira_issue`, `getJiraIssue`,
 `jira_get_issue`) on every connected MCP server. If your Jira server names its read tool differently, list
 it there as `mcp__<server>__<tool>`.

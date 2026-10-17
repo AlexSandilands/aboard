@@ -1,6 +1,21 @@
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
 import { z } from "zod";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
+import {
+  CustomAutomationEditorPage,
+  RuleEditorPage,
+  TemplateEditorPage,
+} from "./components/settings/pages/EditorPages.tsx";
+import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage.tsx";
+import { SettingsShell } from "./components/settings/SettingsShell.tsx";
+import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
 
 /**
  * Board search params: `task` opens the detail panel, `project` scopes the board, `labels` (comma-separated)
@@ -23,6 +38,55 @@ export const boardRoute = createRoute({
   component: AppLayout,
 });
 
+/** `?project=` on the project settings page and its rule editor: the project shown. */
+const SettingsProjectSearch = z.object({ project: z.string().optional() });
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsShell,
+});
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
+  },
+});
+
+export const settingsGroupRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "$group",
+  validateSearch: (search) => SettingsProjectSearch.parse(search),
+  beforeLoad: ({ params }) => {
+    if (!isSettingsGroup(params.group)) {
+      throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
+    }
+  },
+  component: SettingsGroupPage,
+});
+
+// Editors are sub-pages; "new" stands for one not saved yet.
+export const templateEditorRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "tasks/templates/$templateId",
+  component: TemplateEditorPage,
+});
+
+export const customAutomationEditorRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "autopilot/custom/$customId",
+  component: CustomAutomationEditorPage,
+});
+
+export const ruleEditorRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "project/recurring/$ruleId",
+  validateSearch: (search) => SettingsProjectSearch.parse(search),
+  component: RuleEditorPage,
+});
+
 // Dev-only component gallery; the DEV guard lets the production build drop it entirely.
 const devRoutes = import.meta.env.DEV
   ? [
@@ -34,7 +98,19 @@ const devRoutes = import.meta.env.DEV
     ]
   : [];
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([boardRoute, ...devRoutes]) });
+export const router = createRouter({
+  routeTree: rootRoute.addChildren([
+    boardRoute,
+    settingsRoute.addChildren([
+      settingsIndexRoute,
+      settingsGroupRoute,
+      templateEditorRoute,
+      customAutomationEditorRoute,
+      ruleEditorRoute,
+    ]),
+    ...devRoutes,
+  ]),
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

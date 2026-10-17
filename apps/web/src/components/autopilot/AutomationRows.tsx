@@ -14,7 +14,7 @@ import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { skillOptions } from "~/components/review/review.logic";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
-import { SettingsRow } from "~/components/settings/settingsLayout";
+import { FoldedSettingsSection, SettingsGroup, SettingsRow } from "~/components/settings/settingsLayout";
 import { cn } from "~/lib/utils";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
@@ -34,12 +34,19 @@ import { TimeInput } from "./TimeInput";
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
 type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
 
+interface AutomationItem {
+  automation: AutopilotAutomation;
+  entry: AutopilotScopeEntry;
+  inherited: AutopilotScopeEntry | null;
+  onMode: (mode: AutopilotScopeEntry["mode"]) => void;
+  onConfig: ConfigUpdate;
+}
+
 /**
- * One row per automation at a scope: its Inherit / On / Off switch, and a form for its config generated from the
- * automation's field descriptors. `projectId` null is the board. Config set here applies at this scope only; a key
- * left alone inherits (from the board, for a project; from the automation's default, for the board).
+ * Every automation at a scope, with its entry there and the scope's setters, or the message to show instead while
+ * loading, on an error or with no automations. `projectId` null is the board.
  */
-export function AutomationRows({ projectId }: { projectId: string | null }) {
+function useScopeAutomations(projectId: string | null) {
   const overview = useAutopilotOverview();
   const scope = useAutopilotScope(projectId);
   const board = useAutopilotScope(null, projectId !== null);
@@ -50,35 +57,87 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
   const failed = overview.error ?? scope.error ?? board.error;
   // The forms send a scope's whole config, so they wait for the real entries rather than editing stand-ins.
   const loaded = automations && scope.data && (projectId === null || board.data);
-  if (!loaded) {
-    return (
-      <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
-        {failed ? failed.message : "Loading automations..."}
-      </p>
-    );
-  }
-  if (automations.length === 0) {
-    return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">No automations are installed yet.</p>;
-  }
+  if (!loaded) return { message: failed ? failed.message : "Loading automations...", items: [] };
+  if (automations.length === 0) return { message: "No automations are installed yet.", items: [] };
+  const items = automations.map((automation): AutomationItem => ({
+    automation,
+    entry: entryFor(scope.data, automation),
+    inherited: projectId ? parentEntry(board.data, automation.key) : null,
+    onMode: (mode) => set.mutate({ automation: automation.key, mode }),
+    onConfig: (config) => set.mutate({ automation: automation.key, config }),
+  }));
+  return { message: null, items, pending: set.isPending, rejected };
+}
+
+/**
+ * One row per automation at a scope: its Inherit / On / Off switch, and a form for its config generated from the
+ * automation's field descriptors. `projectId` null is the board. Config set here applies at this scope only; a key
+ * left alone inherits (from the board, for a project; from the automation's default, for the board).
+ */
+export function AutomationRows({ projectId }: { projectId: string | null }) {
+  const { message, items, pending = false, rejected = 0 } = useScopeAutomations(projectId);
+  if (message) return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">{message}</p>;
   return (
     <>
-      {automations.map((automation) => {
-        const entry = entryFor(scope.data, automation);
-        return (
-          <AutomationRow
-            key={automation.key}
-            automation={automation}
-            entry={entry}
-            inherited={projectId ? parentEntry(board.data, automation.key) : null}
-            projectId={projectId}
-            pending={set.isPending}
-            onMode={(mode) => set.mutate({ automation: automation.key, mode })}
-            rejected={rejected}
-            onConfig={(config) => set.mutate({ automation: automation.key, config })}
-          />
-        );
-      })}
+      {items.map((item) => (
+        <AutomationRow
+          key={item.automation.key}
+          {...item}
+          projectId={projectId}
+          pending={pending}
+          rejected={rejected}
+        />
+      ))}
     </>
+  );
+}
+
+/**
+ * The board's automations as folded sections, for the Autopilot settings page: the header has the automation's
+ * Inherit / On / Off switch and what it resolves to; opening it shows what it does and its config.
+ */
+export function AutomationSections() {
+  const { message, items, pending = false, rejected = 0 } = useScopeAutomations(null);
+  if (message) {
+    return (
+      <SettingsGroup>
+        <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">{message}</p>
+      </SettingsGroup>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {items.map(({ automation, entry, onMode, onConfig }) => (
+        <FoldedSettingsSection
+          key={automation.key}
+          id={`autopilot.engine.automation-${automation.key}`}
+          title={automation.title}
+          summary={entry.mode === "inherit" ? inheritLabel(null) : `Set to ${entry.mode} for the board`}
+          control={
+            <ModeSwitch
+              label={`${automation.title} for the board`}
+              value={entry.mode}
+              disabled={pending}
+              onChange={onMode}
+            />
+          }
+        >
+          <p className="px-3 py-3 text-xs leading-normal text-muted-foreground/80 sm:px-4">{automation.description}</p>
+          {automation.fields.map((field) => (
+            <div key={field.key} className="@container/settings-row px-3 sm:px-4">
+              <FieldRow
+                automation={automation}
+                field={field}
+                entry={entry}
+                projectId={null}
+                rejected={rejected}
+                onConfig={onConfig}
+              />
+            </div>
+          ))}
+        </FoldedSettingsSection>
+      ))}
+    </div>
   );
 }
 

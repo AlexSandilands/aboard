@@ -1,4 +1,5 @@
 import { describeCustomTrigger, type CustomAutomation } from "@repo/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
@@ -7,12 +8,6 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCustomAutomations, useDeleteCustomAutomation } from "~/state/customAutomations";
-import { emptyCustomForm, formFromCustom, type CustomForm } from "./customAutomations.logic";
-
-export interface CustomEdit {
-  customId: string | null;
-  initial: CustomForm;
-}
 
 function IconAction({
   label,
@@ -49,10 +44,12 @@ const actionLabel = (custom: CustomAutomation) =>
 
 /**
  * The automations the user defined: what each watches for and does, with edit and delete. Their switches and
- * runner settings are rows in the automation list like the built-in ones. The editor is the caller's, so it can
- * take over the dialog.
+ * runner settings are in the automation list like the built-in ones. The editor is a sub-page.
  */
-export function CustomAutomationsSection({ onEdit }: { onEdit: (edit: CustomEdit) => void }) {
+export function CustomAutomationsSection() {
+  const navigate = useNavigate();
+  const onEdit = (customId: string) =>
+    void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId } });
   const customs = useCustomAutomations();
   const remove = useDeleteCustomAutomation();
   const [deleting, setDeleting] = useState<CustomAutomation | null>(null);
@@ -61,7 +58,7 @@ export function CustomAutomationsSection({ onEdit }: { onEdit: (edit: CustomEdit
     <SettingsSection
       title="Custom automations"
       headerAction={
-        <Button size="xs" variant="outline" onClick={() => onEdit({ customId: null, initial: emptyCustomForm() })}>
+        <Button size="xs" variant="outline" onClick={() => onEdit("new")}>
           <PlusIcon />
           New automation
         </Button>
@@ -91,10 +88,7 @@ export function CustomAutomationsSection({ onEdit }: { onEdit: (edit: CustomEdit
             description={`${describeCustomTrigger(custom.trigger)}, ${actionLabel(custom)}`}
             control={
               <div className="flex items-center gap-1">
-                <IconAction
-                  label={`Edit ${custom.name}`}
-                  onClick={() => onEdit({ customId: custom.id, initial: formFromCustom(custom) })}
-                >
+                <IconAction label={`Edit ${custom.name}`} onClick={() => onEdit(custom.id)}>
                   <PencilIcon />
                 </IconAction>
                 <IconAction destructive label={`Delete ${custom.name}`} onClick={() => setDeleting(custom)}>

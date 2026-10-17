@@ -229,7 +229,7 @@ this automation's own switch decides whether a project's rules run. It has no co
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
   example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
   The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings ("Recurring tasks…", `openProjectSettings(id, "recurring")`), scrolled to the section.
+  these settings ("Recurring tasks…", `useOpenSettings()("project.recurring", { project })`), scrolled to the section.
 
 #### Recurring rules API
 
@@ -531,7 +531,7 @@ the automation. Runs stay, under the old key.
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
-  `CustomAutomationEditorForm` taking over the dialog). The preview runs the same contracts helpers as the server
+  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`). The preview runs the same contracts helpers as the server
   on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
 
@@ -635,15 +635,15 @@ How Autopilot looks on the board (the lane pill, the epic button, the header pau
 task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
 `components/autopilot/`:
 
-- **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
+- **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
-  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text, 24-hour time
+- **Automations** (`AutomationSections`): one folded section per automation with its Inherit / On / Off switch at
+  the board in the header; opening it shows what it does and a form with a form generated from its `fields`: a switch, number, text, 24-hour time
   or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
-  it has one, such as the digest's own skill). The same rows appear in a project's settings,
-  where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
+  it has one, such as the digest's own skill). A project's settings page shows them as rows
+  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
@@ -723,6 +723,6 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
-| `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
+| `apps/web/src/components/recurring/` | The rule list, editor and examples on the project settings page |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

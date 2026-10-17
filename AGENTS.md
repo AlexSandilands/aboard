@@ -70,7 +70,7 @@ and to this table.
 | Task templates: fields, placeholders, creating from one        | [docs/features/templates.md](docs/features/templates.md)                            |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
-| Column collapse, panel sections, which links a card shows      | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
+| Column collapse, panel sections, card links, the settings page | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
 | PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
 | Creating tasks from Jira or GitHub issue URLs                  | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
 | The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
