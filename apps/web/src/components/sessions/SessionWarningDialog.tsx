@@ -1,5 +1,6 @@
-import { GitForkIcon, MessagesSquareIcon, SquareTerminalIcon } from "lucide-react";
+import { GitForkIcon, SquareTerminalIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { T3Icon } from "./SessionParts";
 import {
   Dialog,
   DialogClose,
@@ -56,7 +57,7 @@ function WarningContent({ taskId, link, onDone }: { taskId: string; link: Sessio
         <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
         {threadHref ? (
           <Button variant="outline" render={<a href={threadHref} aria-label="Open T3 thread" onClick={onDone} />}>
-            <MessagesSquareIcon className="size-4" />
+            <T3Icon className="size-4" />
             Open T3 thread
           </Button>
         ) : null}

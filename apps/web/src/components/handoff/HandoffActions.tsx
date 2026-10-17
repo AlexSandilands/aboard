@@ -76,7 +76,7 @@ export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; ca
       <MenuPopup align="start">
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openProjectT3Launch(project.id)}>
-            <T3Icon />
+            <T3Icon className="size-4.5 sm:size-4" />
             Suggest epics in a new T3 Code thread…
           </MenuItem>
         ) : null}
@@ -135,7 +135,7 @@ export function HandoffMenu({
       <MenuPopup align={variant === "card" ? "start" : "end"} {...cardHandlers}>
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
-            <T3Icon />
+            <T3Icon className="size-4.5 sm:size-4" />
             New T3 Code thread…
           </MenuItem>
         ) : null}
