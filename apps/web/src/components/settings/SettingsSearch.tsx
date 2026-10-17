@@ -1,4 +1,5 @@
 // Layout adapted from T3 Code (apps/web/src/components/settings/SettingsSidebarNav.tsx), MIT — see NOTICE.
+import { SETTINGS_ASK_QUESTION_MAX } from "@repo/contracts";
 import { SearchIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { isEditableTarget, isInsidePopup } from "~/components/layout/keyboard";
@@ -134,6 +135,7 @@ export function SettingsSearch({
                 else event.currentTarget.blur();
               }
             }}
+            maxLength={SETTINGS_ASK_QUESTION_MAX}
             placeholder="Search settings"
             aria-label="Search settings"
             className="min-w-0 flex-1"

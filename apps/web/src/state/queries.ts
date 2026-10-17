@@ -208,6 +208,10 @@ export function useSettingsAskStatus(cli: string | null) {
   return useQuery({
     queryKey: queryKeys.settingsAsk(cli),
     queryFn: ({ signal }) => api<SettingsAskStatus>("/api/settings/ask", { signal }),
+    // A cheap local check, and the answer changes when the user installs the CLI: look again when the page opens.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
