@@ -12,9 +12,14 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 
-/** Hand-off actions belong to work that's still open. An epic's hand-off orchestrates its tasks. */
-export function showHandoffActions(task: Pick<TaskSummary, "status" | "archivedAt">): boolean {
-  return task.status !== "done" && task.archivedAt === null;
+/**
+ * Hand-off actions belong to work that's still open. An epic's hand-off orchestrates its tasks, and stays on a
+ * finished epic (its card in Done) so its session can be reopened and tasks added to it can be started.
+ */
+export function showHandoffActions(
+  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
+) {
+  return (task.status !== "done" || task.kind === "epic") && task.archivedAt === null;
 }
 
 /**

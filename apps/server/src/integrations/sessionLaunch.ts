@@ -5,6 +5,7 @@ import {
   AGENT_HARNESSES,
   AgentHarness,
   BRAND,
+  handoffModeError,
   isAbsolutePath,
   newSessionArgv,
   sessionLabel,
@@ -70,8 +71,9 @@ export function shortPrompt(
   task: { id: string; number: number },
   platform: NodeJS.Platform,
 ): string {
+  const verb = mode === "plan" ? "Let's plan" : mode === "orchestrate" ? "Let's run the epic" : "Let's work on";
   const text =
-    `${mode === "plan" ? "Let's plan" : "Let's work on"} #${task.number} from the ${BRAND.id} task board: ` +
+    `${verb} #${task.number} from the ${BRAND.id} task board: ` +
     `call get_task("${task.id}") on the ${BRAND.id} MCP server first. The board started this session and already ` +
     "linked it to the task; don't link it again.";
   const fitted = textArgument(text, platform);
@@ -123,7 +125,6 @@ export function createSessionLaunch(deps: {
   const subject = (taskId: string) => {
     const s = deps.services();
     const task = s.tasks.summary(taskId);
-    if (task.kind === "epic") throw new AppError("VALIDATION", "An epic's sessions start from its tasks");
     const root = s.projects.get(task.projectId).workspaceRoot;
     return { task, root: root && isAbsolutePath(root) && isDirectory(root) ? root : null };
   };
@@ -175,6 +176,9 @@ export function createSessionLaunch(deps: {
     async start(taskId, rawInput, actor) {
       const input = StartSessionInputSchema.parse(rawInput);
       const { task, root } = subject(taskId);
+      // An epic's session orchestrates its tasks; a task's does its own work.
+      const modeError = handoffModeError(task, input.mode);
+      if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const settings = deps.services().settings.get();
       const h = deps.host();

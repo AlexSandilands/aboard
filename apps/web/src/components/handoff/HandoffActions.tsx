@@ -96,7 +96,7 @@ export function copyTaskReference(task: Pick<TaskSummary, "id" | "number" | "tit
 
 /**
  * Hands a task to an agent: starts a T3 Code thread (when `canStartT3`, see canStartT3Thread), a Claude Code or
- * Copilot CLI session in a terminal (when the CLI is installed; not for epics, whose tasks get the sessions), or
+ * Copilot CLI session in a terminal (when the CLI is installed; an epic's orchestrates its tasks), or
  * copies a ready-to-paste prompt for any harness.
  */
 export function HandoffMenu({
@@ -111,7 +111,7 @@ export function HandoffMenu({
   const suggested = defaultHandoffMode(task);
   const modelTiers = useSettings().data?.modelTiers;
   const clis = useAgentClis().data ?? [];
-  const sessionClis = task.kind === "epic" ? [] : clis.filter((c) => c.available);
+  const sessionClis = clis.filter((c) => c.available);
   return (
     <Menu>
       <Tooltip>

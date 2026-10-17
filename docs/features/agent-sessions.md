@@ -121,13 +121,15 @@ sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 ### Starting a session
 
 The hand-off menu on a card and in the panel offers **New Claude Code session…** and **New Copilot CLI session…**
-on any open task but an epic, for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
+on any open task, and on an epic (finished ones too), for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
 path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
 model for the task's tier, and whether sessions get a named window) and offers:
 
 - the hand-off prompt, editable, with **Plan with me** swapping the work and planning prompts. It is the prompt
-  with `linkedSession`: the agent is told the board linked the session and has no suggested-model line;
+  with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
+  is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
+  the server refuses a mode that doesn't fit the task (`handoffModeError`);
 - a model, filled in from **Session models** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
 - **New worktree** from a branch, or **This checkout**. The branch starts on the task's integration branch when its
