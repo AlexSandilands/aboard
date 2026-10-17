@@ -65,7 +65,8 @@ moves the epic to the end of its new column.
   unarchiving it (`update`) unarchives the epic in the same write (`unarchiveEpicFor`), then `syncEpic` re-derives
   its status from the tasks that are unarchived. Otherwise the open task would show loose while still saying
   "in epic #N". The epic logs `unarchived` with `becauseTask` and `reopened`. Its other archived tasks stay archived
-  (unlike unarchiving the epic itself). Creating a task in an archived epic, or moving one into it, is still refused
+  (unlike unarchiving the epic itself). Archiving that task again doesn't archive the epic with it: the epic stays
+  unarchived and, with no unarchived tasks left, drops to Backlog; archive it by hand if that isn't wanted. Creating a task in an archived epic, or moving one into it, is still refused
   (`epicFor`: "unarchive it first"). Both paths go through the tasks service, so the UI, REST and MCP share the rule.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).

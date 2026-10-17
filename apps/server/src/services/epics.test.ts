@@ -341,13 +341,23 @@ describe("epics", () => {
     });
   });
 
-  it("unarchives an archived epic when a task archived with it is unarchived, leaving the others archived", () => {
-    const { s, epic, child } = setup();
+  it("unarchives an archived epic when a task archived with it is unarchived, leaving the others archived", async () => {
+    const { s, events, epic, child, request } = setup();
     const [a, b] = [child("A"), child("B")];
     for (const t of [a, b]) s.tasks.move(t.id, { status: "done" }, "user");
     s.tasks.update(epic.id, { archived: true }, "user");
 
-    s.tasks.update(a.id, { archived: false }, "user");
+    events.length = 0;
+    // Through REST, as the UI does it.
+    const res = await request(`/api/tasks/${a.id}`, { method: "PATCH", json: { archived: false } });
+    expect(res.status).toBe(200);
+    // The board relies on this to show the epic again.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "task.upserted",
+        task: expect.objectContaining({ id: epic.id, archivedAt: null }),
+      }),
+    );
     expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", archivedAt: null });
     expect(s.tasks.summary(a.id).archivedAt).toBeNull();
     expect(s.tasks.summary(b.id).archivedAt).not.toBeNull();
@@ -358,6 +368,16 @@ describe("epics", () => {
     // Reopening it afterwards moves the epic like any other.
     s.tasks.move(a.id, { status: "in_progress" }, "user");
     expect(s.tasks.summary(epic.id).status).toBe("in_progress");
+  });
+
+  it("leaves the epic unarchived, and empty in Backlog, when its only task is archived again", () => {
+    const { s, epic, child } = setup();
+    const a = child("A");
+    s.tasks.move(a.id, { status: "done" }, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+    s.tasks.update(a.id, { archived: false }, "user");
+    s.tasks.update(a.id, { archived: true }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "backlog", archivedAt: null });
   });
 
   it("still refuses to create a task in, or move one into, an archived epic", () => {

@@ -61,8 +61,9 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   const epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
   fx.task(epicId);
-  // An archived epic keeps the status it left with (Done), so a task of it archived or reopened later can't move it.
-  // Its card is still republished: the roll-up may have changed.
+  // An archived epic keeps the status it left with (Done), so a task of it archived later can't move it (reopening or
+  // unarchiving one unarchives the epic first, see unarchiveEpicFor). Its card is still republished: the roll-up may
+  // have changed.
   if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
   const status = deriveEpicStatus(deriveEpicRollup(children));
