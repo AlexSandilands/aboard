@@ -2,6 +2,7 @@ import type { Project, TaskStatus, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { Lane } from "./board.logic";
 import {
+  canDropIn,
   computeDrop,
   landsPastPreview,
   parseCellKey,
@@ -10,15 +11,83 @@ import {
   previewPlacement,
   readDragData,
   type DropInput,
+  type DropTask,
   type PlacementInput,
 } from "./dnd.logic";
 
+const dropTask = (id: string, rowId: string, status: TaskStatus): DropTask => ({
+  id,
+  rowId,
+  status,
+  projectId: "p",
+  epicId: null,
+});
+
 const base = (overrides: Partial<DropInput>): DropInput => ({
-  task: { id: "a", rowId: "p", status: "planned" },
+  task: dropTask("a", "p", "planned"),
   target: { rowId: "p", status: "planned" },
   cellTaskIds: ["a", "b", "c"],
   overTaskId: null,
   ...overrides,
+});
+
+describe("computeDrop from the priority lane", () => {
+  const fromPriority = (overrides: Partial<DropInput>): DropInput =>
+    base({
+      task: dropTask("a", "priority", "planned"),
+      target: { rowId: "priority", status: "planned" },
+      ...overrides,
+    });
+
+  it("changes column without a place, since positions don't compare across projects", () => {
+    expect(computeDrop(fromPriority({ target: { rowId: "priority", status: "review" }, overTaskId: "b" }))).toEqual({
+      kind: "move",
+      status: "review",
+    });
+    expect(computeDrop(fromPriority({ overTaskId: "b" }))).toEqual({ kind: "noop" });
+  });
+
+  it("rejects another project's lane", () => {
+    expect(computeDrop(fromPriority({ target: { rowId: "q", status: "planned" } }))).toEqual({ kind: "invalid" });
+  });
+
+  it("clears priority when dropped on its own project, placing it like any card there", () => {
+    const own = { rowId: "p", status: "review" as const };
+    expect(computeDrop(fromPriority({ target: own, cellTaskIds: ["x", "y"], overTaskId: "y" }))).toEqual({
+      kind: "move",
+      status: "review",
+      afterId: "x",
+      clearPriority: true,
+    });
+    expect(computeDrop(fromPriority({ target: { rowId: "p", status: "planned" }, cellTaskIds: [] }))).toEqual({
+      kind: "noop",
+      clearPriority: true,
+    });
+  });
+
+  it("clears priority when dropped in its own epic's band", () => {
+    const input = fromPriority({
+      task: { ...dropTask("a", "priority", "planned"), epicId: "e" },
+      target: { rowId: "e", status: "done" },
+      cellTaskIds: [],
+    });
+    expect(computeDrop(input)).toEqual({ kind: "move", status: "done", clearPriority: true });
+  });
+});
+
+describe("canDropIn", () => {
+  const card = { rowId: "p", projectId: "p", epicId: null };
+  it("keeps a card in its row", () => {
+    expect(canDropIn(card, "p")).toBe(true);
+    expect(canDropIn(card, "q")).toBe(false);
+  });
+  it("lets only a priority card go to its project or epic", () => {
+    const priority = { rowId: "priority", projectId: "p", epicId: "e" };
+    expect(canDropIn(priority, "priority")).toBe(true);
+    expect(canDropIn(priority, "p")).toBe(true);
+    expect(canDropIn(priority, "e")).toBe(true);
+    expect(canDropIn(priority, "q")).toBe(false);
+  });
 });
 
 describe("computeDrop", () => {
@@ -37,14 +106,14 @@ describe("computeDrop", () => {
   });
 
   it("reorders up within a cell, landing before the hovered card", () => {
-    const input = base({ task: { id: "c", rowId: "p", status: "planned" }, overTaskId: "a" });
+    const input = base({ task: dropTask("c", "p", "planned"), overTaskId: "a" });
     expect(computeDrop(input)).toEqual({ kind: "move", status: "planned", beforeId: "a" });
     expect(computeDrop({ ...input, overTaskId: "b" })).toEqual({ kind: "move", status: "planned", afterId: "a" });
   });
 
   it("ignores reordering inside Done", () => {
     const input = base({
-      task: { id: "a", rowId: "p", status: "done" },
+      task: dropTask("a", "p", "done"),
       target: { rowId: "p", status: "done" },
       overTaskId: "c",
     });
@@ -83,7 +152,7 @@ describe("computeDrop", () => {
 
 describe("previewPlacement", () => {
   const input = (overrides: Partial<PlacementInput>): PlacementInput => ({
-    task: { id: "a", rowId: "p", status: "planned" },
+    task: dropTask("a", "p", "planned"),
     target: { rowId: "p", status: "review" },
     cellTaskIds: ["x", "y"],
     overTaskId: null,

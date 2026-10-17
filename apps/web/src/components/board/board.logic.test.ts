@@ -9,6 +9,7 @@ import {
   laneHasCollapsibleCell,
   matchesTaskSearch,
   openTaskCounts,
+  PRIORITY_ROW_ID,
   reuseUnchangedLanes,
   rowIndex,
   visibleCellTasks,
@@ -450,3 +451,86 @@ describe("epic bands", () => {
     });
   });
 });
+
+describe("buildLanes: the priority lane", () => {
+  const withLane = { ...noFilters, priorityLane: true };
+  const tasks = [
+    task("a", { projectId: "p", priority: true, status: "planned" }),
+    task("b", { projectId: "q", priority: true, status: "planned", position: "a0" }),
+    task("c", { projectId: "p", status: "planned" }),
+    task("d", { projectId: "p", priority: true, status: "backlog", archivedAt: "2026-01-01T00:00:00.000Z" }),
+  ];
+
+  it("gathers priority tasks from every project in a lane before the projects, which no longer hold them", () => {
+    const lanes = buildLanes(board(tasks), withLane);
+    expect(lanes.map((l) => l.project.id)).toEqual([PRIORITY_ROW_ID, "p", "q"]);
+    expect(lanes[0]!.priority).toBe(true);
+    expect(lanes[0]!.cells.planned.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(lanes[1]!.cells.planned.map((t) => t.id)).toEqual(["c"]);
+    expect(lanes[2]!.cells.planned).toEqual([]);
+    expect(rowIndex(lanes).get("b")).toBe(PRIORITY_ROW_ID);
+  });
+
+  it("leaves priority tasks in their projects when the lane is off, and builds no empty lane", () => {
+    expect(buildLanes(board(tasks), noFilters).map((l) => l.project.id)).toEqual(["p", "q"]);
+    const none = buildLanes(board([task("c")]), withLane);
+    expect(none.some((l) => l.priority)).toBe(false);
+  });
+
+  it("keeps archived priority tasks in their project", () => {
+    const lanes = buildLanes(board(tasks), withLane, [tasks[3]!]);
+    expect(lanes[0]!.cells.backlog).toEqual([]);
+    expect(lanes[1]!.cells.backlog.map((t) => t.id)).toEqual(["d"]);
+  });
+
+  it("shows whatever project is scoped to, and still applies the card filters", () => {
+    expect(buildLanes(board(tasks), { ...withLane, projectId: "q" }).map((l) => l.project.id)).toEqual([
+      PRIORITY_ROW_ID,
+      "q",
+    ]);
+    const filtered = buildLanes(board(tasks), { ...withLane, search: "zzz" });
+    expect(filtered).toEqual([]);
+    const search = buildLanes(board(tasks), { ...withLane, search: "b" });
+    expect(search.map((l) => l.project.id)).toEqual([PRIORITY_ROW_ID]);
+    expect(search[0]!.cells.planned.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("is kept through reuseUnchangedLanes", () => {
+    const first = buildLanes(board(tasks), withLane);
+    const next = reuseUnchangedLanes(first, buildLanes(board(tasks), withLane));
+    expect(next[0]).toBe(first[0]);
+    const changed = reuseUnchangedLanes(first, buildLanes(board([...tasks, task("e", { priority: true })]), withLane));
+    expect(changed[0]!.priority).toBe(true);
+  });
+});
+
+describe("buildLanes: in progress only", () => {
+  it("shows only In Progress cards, from every project", () => {
+    const lanes = buildLanes(
+      board([
+        task("a", { projectId: "p", status: "in_progress" }),
+        task("b", { projectId: "q", status: "in_progress" }),
+        task("c", { projectId: "p", status: "planned" }),
+      ]),
+      { ...noFilters, inProgressOnly: true },
+    );
+    expect(lanes.map((l) => l.project.id)).toEqual(["p", "q"]);
+    expect(lanes.flatMap((l) => STATUS_ALL.flatMap((s) => l.cells[s].map((t) => t.id)))).toEqual(["a", "b"]);
+  });
+
+  it("holds back a task whose epic is in progress", () => {
+    const epic = task("e", { kind: "epic", status: "in_progress" });
+    const lanes = buildLanes(
+      board([
+        epic,
+        task("a", { status: "in_progress", parent: { id: "e", number: 1, title: "e" } }),
+        task("b", { status: "planned", parent: { id: "e", number: 1, title: "e" } }),
+      ]),
+      { ...noFilters, inProgressOnly: true },
+    );
+    expect(lanes[0]!.bands[0]!.cells.planned).toEqual([]);
+    expect(lanes[0]!.bands[0]!.cells.in_progress.map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+const STATUS_ALL = ["backlog", "planned", "in_progress", "review", "done"] as const;

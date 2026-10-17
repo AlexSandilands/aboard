@@ -104,6 +104,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "logo",
     "header",
   ]),
+  draft(
+    "board.appearance.priority-lane",
+    "Priority lane",
+    "Gathers the tasks marked as priority, from every project, in a lane above the projects. Off, they stay in their own lanes.",
+    ["star", "urgent", "pinned", "top", "hide"],
+  ),
   // Board › Notifications
   draft(
     "board.notifications.popups",

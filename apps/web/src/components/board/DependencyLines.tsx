@@ -36,6 +36,7 @@ export function DependencyLines({
   containerRef,
   tasks,
   projects,
+  priorityLane,
   selectedTaskId,
   suspended,
 }: {
@@ -43,6 +44,8 @@ export function DependencyLines({
   containerRef: RefObject<HTMLElement | null>;
   tasks: ReadonlyArray<TaskSummary>;
   projects: ReadonlyArray<Project>;
+  /** The priority lane is shown, above every project: its cards sit before the first lane. */
+  priorityLane: boolean;
   selectedTaskId: string | null;
   /** Hidden while a card is being dragged, since cards are moving under it. */
   suspended: boolean;
@@ -134,7 +137,10 @@ export function DependencyLines({
 
   if (!focusId || edges.length === 0 || !layout.boxes.has(focusId)) return null;
 
-  const laneIndex = (task: TaskSummary) => projects.findIndex((p) => p.id === task.projectId);
+  const laneIndex = (task: TaskSummary) =>
+    priorityLane && task.priority && task.kind !== "epic" && !task.archivedAt
+      ? -1
+      : projects.findIndex((p) => p.id === task.projectId);
   const stubCounts = new Map<string, number>();
   const opacity = hovering ? 1 : SELECTED_OPACITY;
 

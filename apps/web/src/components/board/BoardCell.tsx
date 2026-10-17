@@ -31,8 +31,9 @@ export const BoardCell = memo(function BoardCell({
   draggingTaskId,
   dropState,
 }: {
-  projectId: string;
-  /** The project id for loose cards, the epic id in a band. */
+  /** Where Add task puts a task; none in the priority lane, which has no project of its own. */
+  projectId?: string;
+  /** The project id for loose cards, the epic id in a band, "priority" in the priority lane. */
   rowId: string;
   /** Set in an epic band: Add task puts new tasks in the epic. */
   epicId?: string;
@@ -107,7 +108,7 @@ export const BoardCell = memo(function BoardCell({
         )}
       </SortableContext>
       {/* Under epic bands (gridRow is set) the header's + covers it, as in BoardLane. */}
-      {status === "backlog" && tasks.length === 0 && !gridRow ? (
+      {status === "backlog" && tasks.length === 0 && !gridRow && projectId ? (
         <Button
           variant="ghost-muted"
           size="xs"
