@@ -104,16 +104,17 @@ export function createAutopilotRunsRepo(sql: Sql) {
     /** The run that made this headless session, if any. */
     forSession(sessionId: string): AutopilotRun | null {
       const row = sql.get<RunRow>(
-        "SELECT * FROM autopilot_runs WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+        "SELECT * FROM autopilot_runs WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
         sessionId,
       );
       return row ? toRun(row) : null;
     },
     /** Newest first. */
+    // Newest first; rowid breaks a tie in created_at (runs made in one millisecond), which a random id can't.
     forTask(taskId: string, limit: number): AutopilotRun[] {
       return sql
         .all<RunRow>(
-          "SELECT * FROM autopilot_runs WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+          "SELECT * FROM autopilot_runs WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
           taskId,
           limit,
         )
@@ -123,7 +124,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
     forProject(projectId: string, limit: number): AutopilotRun[] {
       return sql
         .all<RunRow>(
-          "SELECT * FROM autopilot_runs WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+          "SELECT * FROM autopilot_runs WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
           projectId,
           limit,
         )
