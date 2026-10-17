@@ -217,6 +217,25 @@ describe("REST", () => {
     expect(await (await h.request("/api/settings")).json()).toMatchObject({ savedViews: [{ id: "a" }, { id: "b" }] });
   });
 
+  it("stores keybinding overrides, replacing them on each save and refusing bad ones", async () => {
+    const h = await setup();
+    const patch = (keybindings: unknown) => h.request("/api/settings", { method: "PATCH", json: { keybindings } });
+    expect(await (await h.request("/api/settings")).json()).toMatchObject({ keybindings: {} });
+    expect(
+      await (await patch({ back: { key: "Q" }, "palette.open": { when: "!editableFocus" } })).json(),
+    ).toMatchObject({
+      keybindings: { back: { key: "q" }, "palette.open": { when: "!editableFocus" } },
+    });
+    expect(await (await patch({ "idea.new": { key: "c" } })).json()).toMatchObject({
+      keybindings: { "idea.new": { key: "c" } },
+    });
+    const kept = await (await h.request("/api/settings")).json();
+    expect((kept as { keybindings: object }).keybindings).toEqual({ "idea.new": { key: "c" } });
+    expect((await patch({ back: { key: "ctrl+k" } })).status).toBe(400);
+    expect((await patch({ back: { when: "nope" } })).status).toBe(400);
+    expect((await patch({ nope: { key: "k" } })).status).toBe(400);
+  });
+
   it("validates T3 thread launches and explains when T3 Code isn't available", async () => {
     const h = await setup();
     const bad = await h.request(`/api/tasks/${h.task.id}/t3-thread`, { method: "POST", json: { prompt: "" } });

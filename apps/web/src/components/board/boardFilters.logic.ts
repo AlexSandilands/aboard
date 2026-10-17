@@ -163,7 +163,7 @@ export function activeFilterCount(filters: FilterState): number {
 
 /** The params to put over the current search to turn every filter off but the project scope. */
 export function clearedParams(): BoardFilterParams {
-  return { ...filterParams(EMPTY_FILTERS), project: undefined };
+  return Object.fromEntries(FILTER_PARAM_KEYS.filter((key) => key !== "project").map((key) => [key, undefined]));
 }
 
 /** Whether a view has nothing to apply, so saving it would save an empty board. */
@@ -196,6 +196,11 @@ export function hasTaskOwnFilters(filters: TaskOwnFilters): boolean {
     filters.blocked ||
     filters.priority
   );
+}
+
+/** Whether any of the task filters other than status is set. */
+export function hasNonStatusTaskFilters(filters: TaskOwnFilters): boolean {
+  return hasTaskOwnFilters({ ...filters, statuses: [] });
 }
 
 export function matchesTaskOwnFilters(task: TaskSummary, filters: TaskOwnFilters): boolean {

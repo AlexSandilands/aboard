@@ -1,7 +1,7 @@
 // Adapted from T3 Code (apps/web/src/components/CommandPaletteResults.tsx), MIT — see NOTICE.
 import { ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { CommandItem, CommandList, CommandListHeading } from "~/components/ui/command";
+import { CommandItem, CommandList, CommandListHeading, CommandShortcut } from "~/components/ui/command";
 
 export const ITEM_ICON_CLASS = "size-4 text-icon-muted";
 
@@ -17,6 +17,8 @@ export interface PaletteItem {
   readonly trailing?: ReactNode;
   /** Shows a chevron: the item opens another view. */
   readonly submenu?: boolean;
+  /** The key bound to the same action, shown at the end of the row ("Ctrl+,"). */
+  readonly shortcut?: string;
   readonly disabled?: boolean;
   readonly run: () => void;
 }
@@ -103,6 +105,7 @@ function ItemRow({ item, index }: { item: PaletteItem; index: number }) {
       onClick={() => item.run()}
     >
       <RowBody item={item} />
+      {item.shortcut ? <CommandShortcut>{item.shortcut}</CommandShortcut> : null}
       {item.submenu ? <ChevronRightIcon className="-me-0.5 ms-auto size-4 shrink-0 text-muted-foreground/70" /> : null}
     </CommandItem>
   );

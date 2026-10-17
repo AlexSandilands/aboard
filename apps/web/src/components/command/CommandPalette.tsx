@@ -41,6 +41,7 @@ import { useCreateTask, useImportT3Projects } from "~/state/mutations";
 import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
+import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import {
   boardSearchFrom,
@@ -239,6 +240,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
   const openSettingsPage = useOpenSettings();
+  const newTaskShortcut = useShortcutLabel("idea.new");
+  const settingsShortcut = useShortcutLabel("settings.open");
   const setDigestOpen = useDialogs((s) => s.setDigestOpen);
   const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
@@ -538,6 +541,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           {
             value: "action:new-task",
             title: "New task…",
+            shortcut: newTaskShortcut ?? undefined,
             searchTerms: ["create", "capture", "add", "backlog", "idea", "todo"],
             icon: <LightbulbIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
@@ -650,6 +654,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
               title: entry.title,
               searchTerms: entry.searchTerms,
               icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+              // The shortcut opens Settings at its first page, which is Board.
+              shortcut: entry.target === "board" ? (settingsShortcut ?? undefined) : undefined,
               run: () => openSettings(entry.target),
             })),
         ];

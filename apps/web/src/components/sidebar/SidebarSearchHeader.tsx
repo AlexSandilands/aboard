@@ -23,6 +23,7 @@ import {
 } from "~/components/ui/combobox";
 import { SidebarInput } from "~/components/ui/sidebar";
 import { usePalette } from "~/state/ui";
+import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import {
   useBoardFilters,
@@ -35,6 +36,7 @@ import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
 /** Search field plus the segmented project-filter / add-project / new-task buttons. */
 export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Project> }) {
   const [search, setSearch] = useSearchText();
+  const newTaskShortcut = useShortcutLabel("idea.new");
   const searchFieldRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const projectFilter = useProjectFilter();
@@ -92,7 +94,7 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
         ) : null}
         <SidebarHeaderIconButton
           label="New task"
-          tooltip="New task (N)"
+          tooltip={newTaskShortcut ? `New task (${newTaskShortcut})` : "New task"}
           onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId: projectFilter ?? undefined })}
         >
           <SquarePenIcon />

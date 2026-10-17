@@ -8,6 +8,7 @@ import {
   type ModelTierSetting,
   type NotificationSettings,
   type SavedViews,
+  sanitizeKeybindingOverrides,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
@@ -39,6 +40,7 @@ const DEFAULTS: StoredSettings = {
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   savedViews: [],
+  keybindings: {},
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -72,6 +74,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "modelTiers",
     "notifications",
     "savedViews",
+    "keybindings",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -118,6 +121,7 @@ export function loadSettings(repos: Repos): StoredSettings {
       (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
     ) as unknown as StoredSettings),
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
+    keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
   };
 }
 
@@ -183,6 +187,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
         if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
+        if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.notifications !== undefined) {
           const current = load().notifications;
           repos.settings.set("notifications", {

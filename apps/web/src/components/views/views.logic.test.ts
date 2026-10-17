@@ -1,6 +1,6 @@
 import { SAVED_VIEW_NAME_MAX, SAVED_VIEWS_MAX, type SavedView } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { activeView, addView, canAddView, removeView, renameView, viewNameError } from "./views.logic";
+import { activeView, addView, canAddView, removeView, renameView, restoreView, viewNameError } from "./views.logic";
 
 const view = (id: string, name: string, filters: SavedView["filters"] = {}): SavedView => ({ id, name, filters });
 
@@ -40,6 +40,13 @@ describe("addView / renameView / removeView", () => {
 
   it("removes one view", () => {
     expect(removeView([view("1", "a"), view("2", "b")], "1").map((v) => v.id)).toEqual(["2"]);
+  });
+
+  it("puts a removed view back where it was", () => {
+    const [a, b, c] = [view("1", "a"), view("2", "b"), view("3", "c")];
+    expect(restoreView([a, c], b, 1).map((v) => v.id)).toEqual(["1", "2", "3"]);
+    expect(restoreView([a], c, 5).map((v) => v.id)).toEqual(["1", "3"]);
+    expect(restoreView([a, b], b, 0).map((v) => v.id)).toEqual(["1", "2"]);
   });
 
   it("stops at the limit", () => {

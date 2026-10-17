@@ -114,9 +114,11 @@ describe("activeFilterCount / isEmptyView / clearedParams", () => {
     expect(isEmptyView({ priority: true })).toBe(false);
   });
 
-  it("clears every filter, the project scope included, for the caller to keep what it wants", () => {
+  it("clears every filter but names no project, so spreading it over a search keeps the scope", () => {
     expect(Object.values(clearedParams()).every((value) => value === undefined)).toBe(true);
     expect(Object.keys(clearedParams())).toContain("status");
+    expect(Object.keys(clearedParams())).not.toContain("project");
+    expect({ project: "p", status: "done", ...clearedParams() }).toEqual({ project: "p", status: undefined });
   });
 });
 

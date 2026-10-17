@@ -593,6 +593,18 @@ describe("buildLanes: task filters", () => {
     expect(ids(lanes)).toEqual(["a"]);
   });
 
+  it("leaves no empty band for tier, Autopilot, blocked or priority filters, which describe tasks, not epics", () => {
+    const epic = task("e", { kind: "epic" });
+    const deep = { tier: "deep", reason: null } as const;
+    const child = task("a", { parent: { id: "e", number: 1, title: "e" }, suggestedModel: deep, autopilot: true });
+    const lanes = (taskFilters: Partial<TaskOwnFilters>) =>
+      buildLanes(board([epic, child]), { ...noFilters, taskFilters: { ...own, ...taskFilters } });
+    expect(lanes({ tiers: ["none"] })).toEqual([]);
+    expect(lanes({ autopilot: ["default"] })).toEqual([]);
+    expect(lanes({ blocked: true })).toEqual([]);
+    expect(lanes({ tiers: ["deep"] })[0]!.bands.map((b) => b.id)).toEqual(["e"]);
+  });
+
   it("holds an epic's children to the filter, and drops an epic left with none", () => {
     const epic = task("e", { kind: "epic", status: "in_progress" });
     const empty = task("e2", { kind: "epic" });

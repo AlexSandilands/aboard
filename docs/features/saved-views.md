@@ -68,7 +68,7 @@ The open task isn't part of it.
   name. Names are unique ignoring case. It is disabled with nothing to save. Filters are stored normalised
   (`normalizeParams`).
 - **Switching.** The sidebar's **Views** section (hidden until there is one) applies a view on click; rename and delete
-  show on hover. The filter menu's Views submenu and the palette's **Views** group do the same. Applying replaces every
+  show on hover (a delete shows a toast with **Undo**). The filter menu's Views submenu and the palette's **Views** group do the same. Applying replaces every
   filter, the project scope included, and leaves the open task.
 - **Active view.** The view whose filters equal the board's now (`activeView`, order- and blank-insensitive) is marked
   in the sidebar, the menu and the palette, and named in the pill. Nothing tracks "the view you came from": change a

@@ -6,7 +6,12 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
-import { hasTaskOwnFilters, matchesTaskOwnFilters, type TaskOwnFilters } from "./boardFilters.logic";
+import {
+  hasNonStatusTaskFilters,
+  hasTaskOwnFilters,
+  matchesTaskOwnFilters,
+  type TaskOwnFilters,
+} from "./boardFilters.logic";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** A collapsed column shows only the first few cards of each lane until it is expanded. */
@@ -227,7 +232,11 @@ export function buildLanes(
     filters.inProgressOnly === true ||
     epicFilter !== null ||
     (filters.taskFilters !== undefined && hasTaskOwnFilters(filters.taskFilters));
-  // An epic with no matching children shows on these too, so a status filter can't leave empty bands behind.
+  // An epic with no matching children shows only when it passes the status filters itself. The rest (tier, Autopilot,
+  // blocked, priority) describe tasks: an epic has no tier or flag of its own, so it would pass "No tier" and
+  // "Default" and leave an empty band.
+  const epicOk = (epic: TaskSummary) =>
+    statusOk(epic) && (!filters.taskFilters || !hasNonStatusTaskFilters(filters.taskFilters));
   const statusOk = (task: TaskSummary) =>
     (!filters.inProgressOnly || task.status === "in_progress") &&
     (!filters.taskFilters || matchesTaskOwnFilters(task, filters.taskFilters));
@@ -277,7 +286,7 @@ export function buildLanes(
   for (const epic of [...epics.values()].sort((a, b) => a.number - b.number)) {
     const cells = bandCells.get(epic.id);
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
-    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && statusOk(epic)))
+    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && epicOk(epic)))
       continue;
     const resolved = sortCells(cells ?? emptyCells());
     // A finished epic would stack above everything in Done, so it is one card there instead. Filtered to

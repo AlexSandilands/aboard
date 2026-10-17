@@ -31,6 +31,14 @@ export function removeView(views: ReadonlyArray<SavedView>, id: string): SavedVi
   return views.filter((view) => view.id !== id);
 }
 
+/** The views with one put back at its old place (or the end, when the list is shorter now). A view already there stays. */
+export function restoreView(views: ReadonlyArray<SavedView>, view: SavedView, index: number): SavedView[] {
+  if (views.some((v) => v.id === view.id)) return [...views];
+  const next = [...views];
+  next.splice(Math.min(index, next.length), 0, view);
+  return next;
+}
+
 /** The view whose filters are the board's now, if any. */
 export function activeView(views: ReadonlyArray<SavedView>, params: BoardFilterParams): SavedView | null {
   return views.find((view) => sameFilters(view.filters, params)) ?? null;

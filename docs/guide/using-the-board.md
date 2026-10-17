@@ -148,3 +148,11 @@ sections of the task panel. Your layout is saved per browser.
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
 | `Esc`        | Close the task panel, or leave Settings |
+
+These are the defaults. Change any of them, or say when one applies, under **Settings → Board → Keybindings**:
+click a key and press the new combination, and use **Reset** to go back. A **When** condition combines
+`editableFocus` (typing in a text field), `popupFocus` (inside a menu or dialog), `overlayOpen`, `paletteOpen`,
+`dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack` with `!`, `&&` and `||`. For example, `!editableFocus` on
+the palette stops **Ctrl/Cmd K** from firing while you type in a description. Two commands on one key, where both can
+apply at once, are flagged; the one listed later wins. Your changes are saved with the board's settings, so they
+follow you to another browser and are in backups.
