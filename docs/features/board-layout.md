@@ -238,6 +238,13 @@ rule editor take `?project=`; without it the page shows the project the board wa
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
   (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
   targets them.
+- **Rows.** The column is `max-w-4xl` (as T3's readable page width). A `SettingsRow` (`settingsLayout.tsx`) is a
+  title, at most one short line of description (or none when the title says it), and the control on the right.
+  Anything longer goes in `info`, an `InfoHover` button beside the title that opens a popover on hover, focus or
+  click (setup steps, how Jira tools are matched, what a CLI path is used for). Status details (Found / version /
+  path, Registered / scope, Connected) go in `status`, a compact line under the description built with
+  `StatusLine`, so they never squeeze beside the control. The search index has its own descriptions and keywords,
+  so text moved behind an info button is still found.
 - **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
   `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the

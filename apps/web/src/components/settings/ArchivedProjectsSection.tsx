@@ -13,9 +13,7 @@ export function ArchivedProjectsSection() {
       {projects.length === 0 ? (
         <SettingsRow
           title={archived.error ? "Couldn't load archived projects" : "No archived projects"}
-          description={
-            archived.error ? archived.error.message : "Archiving a project hides its lane; it can be restored here."
-          }
+          description={archived.error ? archived.error.message : "Archived projects can be restored here."}
         />
       ) : null}
       {projects.map((project) => (

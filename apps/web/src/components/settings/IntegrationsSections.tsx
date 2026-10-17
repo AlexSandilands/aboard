@@ -9,12 +9,10 @@ import {
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
@@ -22,32 +20,24 @@ import { useRecheckAgentIntegrations, useUpdateSettings } from "~/state/mutation
 import { queryKeys, useAgentIntegrations } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { agentDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
-import { CommandSnippet, SettingsRow, SettingsSection, StatusDot } from "./settingsLayout";
+import { CommandSnippet, SettingsRow, SettingsSection, StatusDot, StatusLine } from "./settingsLayout";
 
 const Dot = ({ dot }: { dot: IntegrationDot }) => <StatusDot tone={dot.tone} label={dot.label} />;
 
-/** How to get a pairing link, behind an info icon so the settings row stays short. */
+/** How to get a pairing link, for the info button of the connection row. */
 function PairingHelp() {
   return (
-    <Popover>
-      <PopoverTrigger
-        openOnHover
-        aria-label="How to connect T3 Code"
-        className="inline-flex size-4 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <InfoIcon className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverPopup side="top" className="max-w-72 text-xs leading-relaxed">
-        <ol className="list-decimal space-y-1 ps-4">
-          <li>In T3 Code, open Settings → Connections → Create link.</li>
-          <li>Allow “View environment” and “Operate tasks”.</li>
-          <li>Paste the link here within 5 minutes and press Connect.</li>
-        </ol>
-        <p className="mt-2 text-muted-foreground">A token from the t3 CLI works too.</p>
-      </PopoverPopup>
-    </Popover>
+    <>
+      <ol className="list-decimal space-y-1 ps-4">
+        <li>In T3 Code, open Settings → Connections → Create link.</li>
+        <li>Allow “View environment” and “Operate tasks”.</li>
+        <li>Paste the link here within 5 minutes and press Connect.</li>
+      </ol>
+      <p className="mt-2 text-muted-foreground">A token from the t3 CLI works too.</p>
+    </>
   );
 }
+
 const LINK_TARGETS = [
   { value: "desktop", label: "Desktop app" },
   { value: "browser", label: "Browser" },
@@ -106,12 +96,16 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
       <SettingsRow
         id="integrations.t3-code.connection"
         title="Connection"
-        description={
-          status === undefined
-            ? "Checking for T3 Code..."
-            : detected
-              ? `${status.origin ?? "Unknown origin"}${status.label ? ` · ${status.label}` : ""}`
-              : "T3 Code not detected — start T3 Code to enable thread links and import."
+        description={status !== undefined && !detected ? "Start T3 Code to enable thread links and import." : undefined}
+        status={
+          status === undefined ? (
+            "Checking for T3 Code..."
+          ) : detected ? (
+            <StatusLine>
+              {status.origin ?? "Unknown origin"}
+              {status.label ? ` · ${status.label}` : ""}
+            </StatusLine>
+          ) : null
         }
         control={
           status === undefined ? null : detected ? (
@@ -124,7 +118,8 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
       <SettingsRow
         id="integrations.t3-code.open-links-in"
         title="Open thread links in"
-        description="Where “Open in T3 Code” goes. The other target stays in the link's menu."
+        description="Where “Open in T3 Code” goes."
+        info="The other target stays in the link's menu."
         control={
           <Select
             items={LINK_TARGETS}
@@ -149,21 +144,18 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
       <SettingsRow
         id="integrations.t3-code.pairing"
         title="T3 connection"
-        description={
-          <span className="inline-flex items-center gap-1.5">
-            Optional. Live thread status and starting threads from a task.
-            <PairingHelp />
-          </span>
-        }
+        description="Optional. Live thread status and starting threads from a task."
+        info={<PairingHelp />}
+        infoLabel="How to connect T3 Code"
         status={
           settings.t3TokenSet ? (
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <StatusLine>
               <span className="text-foreground/80">Token saved</span>
-              {live?.liveStatus === "ok" ? <span className="text-success-foreground">Connected</span> : null}
+              {live?.liveStatus === "ok" ? <span className="ms-3 text-success-foreground">Connected</span> : null}
               {live?.liveStatus === "error" ? (
-                <span className="text-destructive-foreground">{live.error ?? "Connection failed"}</span>
+                <span className="ms-3 text-destructive-foreground">{live.error ?? "Connection failed"}</span>
               ) : null}
-            </span>
+            </StatusLine>
           ) : null
         }
         control={
@@ -213,7 +205,8 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
       <SettingsRow
         id="integrations.t3-code.agent-threads"
         title="Let agents start threads"
-        description="An agent orchestrating an epic may start its tasks in new T3 threads (each in a new worktree, on the task's suggested model or T3's default, with no more access than T3's default) and message them in your name. Off: it uses subagents or gives you prompts to paste."
+        description="Let an agent orchestrating an epic start its tasks in new T3 threads."
+        info="Each thread gets a new worktree, the task's suggested model or T3's default, and no more access than T3's default. The agent may also message them in your name. Off: it uses subagents or gives you prompts to paste."
         control={
           <Switch
             aria-label="Let agents start threads"
@@ -238,16 +231,17 @@ export function GithubSection({
     status === undefined
       ? "Checking the GitHub CLI..."
       : !status.available
-        ? "The GitHub CLI (gh) isn't installed. PR links still work, without live status."
+        ? "gh isn't installed. PR links still work, without live status."
         : !status.authenticated
-          ? (status.error ?? "gh is installed but not signed in. Run `gh auth login`.")
-          : `PR status and merging use the account gh is signed in with. Add a GitHub Enterprise host with \`gh auth login --hostname <host>\`.`;
+          ? (status.error ?? "gh isn't signed in. Run `gh auth login`.")
+          : "PR status and merging use the account gh is signed in with.";
   return (
     <SettingsSection id="integrations.github.status" title="GitHub" status={<Dot dot={githubDot(status)} />}>
       <SettingsRow
         id="integrations.github.cli"
         title="GitHub CLI"
         description={description}
+        info="Add a GitHub Enterprise host with `gh auth login --hostname <host>`."
         control={
           status === undefined ? null : status.available && status.authenticated ? (
             <Badge variant="success">Ready</Badge>
@@ -264,7 +258,7 @@ export function GithubSection({
           description={
             host.authenticated
               ? `Signed in${host.login ? ` as ${host.login}` : ""}.`
-              : `Sign-in has expired. Run \`gh auth login --hostname ${host.host}\`.`
+              : `Sign-in expired. Run \`gh auth login --hostname ${host.host}\`.`
           }
           control={
             host.authenticated ? (
@@ -278,7 +272,8 @@ export function GithubSection({
       <SettingsRow
         id="integrations.github.poll-prs"
         title="Poll PR status"
-        description="Refresh state, checks and reviews of GitHub PR links every 2 minutes, on github.com and Enterprise hosts gh is signed in to."
+        description="Refresh the state, checks and reviews of PR links every 2 minutes."
+        info="Covers github.com and the Enterprise hosts gh is signed in to."
         control={
           <Switch
             aria-label="Poll PR status"
@@ -328,19 +323,15 @@ export function JiraSection({ settings }: { settings: AppSettings }) {
   );
 }
 
-/** What the CLI check found, beside a CLI's row. */
+/** What the CLI check found, on the row's status line. */
 function CliStatus({ cli }: { cli: AgentIntegrationStatus["cli"] | undefined }) {
   if (!cli) return null;
   return cli.found ? (
-    <span className="inline-flex items-center gap-1.5">
-      <Badge variant="success">Found</Badge>
+    <StatusLine badge={<Badge variant="success">Found</Badge>}>
       {cli.version} · <span className="font-mono">{cli.path}</span>
-    </span>
+    </StatusLine>
   ) : (
-    <span className="inline-flex items-center gap-1.5">
-      <Badge variant="warning">Not working</Badge>
-      {cli.error}
-    </span>
+    <StatusLine badge={<Badge variant="warning">Not working</Badge>}>{cli.error}</StatusLine>
   );
 }
 
@@ -348,22 +339,20 @@ function CliStatus({ cli }: { cli: AgentIntegrationStatus["cli"] | undefined }) 
 function McpStatus({ mcp }: { mcp: AgentIntegrationStatus["mcp"] | undefined }) {
   if (!mcp) return null;
   if (!mcp.registered) {
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <Badge variant="warning">Not registered</Badge>
-        {mcp.detail}
-      </span>
-    );
+    return <StatusLine badge={<Badge variant="warning">Not registered</Badge>}>{mcp.detail}</StatusLine>;
   }
   const where = [mcp.name, mcp.scope && `${mcp.scope} scope`].filter(Boolean).join(", ");
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <Badge variant={mcp.connected === false ? "warning" : "success"}>
-        {mcp.connected === false ? "Not connected" : "Registered"}
-      </Badge>
+    <StatusLine
+      badge={
+        <Badge variant={mcp.connected === false ? "warning" : "success"}>
+          {mcp.connected === false ? "Not connected" : "Registered"}
+        </Badge>
+      }
+    >
       {where}
       {mcp.connected === false && mcp.detail ? ` · ${mcp.detail}` : null}
-    </span>
+    </StatusLine>
   );
 }
 
@@ -387,7 +376,7 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.claude-code.mcp"
         title="MCP server"
-        description={`Register the ${BRAND.id} MCP server.`}
+        description="Register the MCP server."
         status={<McpStatus mcp={claude?.mcp} />}
       >
         <div className="mt-2">
@@ -397,7 +386,8 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.claude-code.skill"
         title="Skill"
-        description={`Teaches Claude Code when to add to the backlog, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
+        description={`Copy skills/${BRAND.id} from this repo to:`}
+        info="Teaches Claude Code when to add to the backlog, write plans and update steps."
       >
         <div className="mt-2">
           <CommandSnippet command={`~/.claude/skills/${BRAND.id}`} />
@@ -406,7 +396,8 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.claude-code.cli-path"
         title="Claude Code CLI"
-        description="What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH."
+        description="Empty uses claude from your PATH."
+        info="The board runs it headless for the board reviewer and issue import, and opens it for a new Claude Code session."
         status={<CliStatus cli={claude?.cli} />}
         control={
           <>
@@ -459,7 +450,8 @@ function SessionModelsRow({
     <SettingsRow
       id={`integrations.${section}.session-models`}
       title="Session models"
-      description="The model a new session from a task's hand-off menu starts on, by the task's suggested tier. Leave empty for the CLI's default."
+      description="The model a new session starts on, by the task's suggested tier."
+      info="Used by a new session from a task's hand-off menu. Leave empty for the CLI's default."
     >
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {MODEL_TIERS.map(({ value: tier, label }) => {
@@ -504,7 +496,8 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.copilot.cli"
         title="Copilot CLI"
-        description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
+        description="Register the MCP server."
+        info="Adds it to ~/.copilot/mcp-config.json."
         status={<McpStatus mcp={copilot?.mcp} />}
       >
         <div className="mt-2">
@@ -514,7 +507,8 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.copilot.vscode"
         title="VS Code"
-        description={`Add the ${BRAND.id} MCP server to your VS Code user profile, or put the same entry under "servers" in .vscode/mcp.json.`}
+        description="Add the MCP server to your VS Code user profile."
+        info={'Or put the same entry under "servers" in .vscode/mcp.json.'}
       >
         <div className="mt-2">
           <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
@@ -523,7 +517,8 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.copilot.cli-path"
         title="Copilot CLI path"
-        description="What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH."
+        description="Empty uses copilot from your PATH."
+        info="What the board opens for a new Copilot CLI session."
         status={<CliStatus cli={copilot?.cli} />}
         control={
           <>
@@ -559,7 +554,7 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
 export function CodexSection() {
   return (
     <SettingsSection id="integrations.codex.status" title="Codex" status={<Dot dot={SNIPPET_DOT} />}>
-      <SettingsRow id="integrations.codex.mcp" title="MCP server" description={`Register the ${BRAND.id} MCP server.`}>
+      <SettingsRow id="integrations.codex.mcp" title="MCP server" description="Register the MCP server.">
         <div className="mt-2">
           <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${mcpUrl()}`} />
         </div>

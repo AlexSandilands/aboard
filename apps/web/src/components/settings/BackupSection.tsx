@@ -39,7 +39,8 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.data.backup-enabled"
         title="Back up to git"
-        description="Writes the board as JSON into a git repo and commits when it changes. Restore with pnpm backup import."
+        description="Writes the board as JSON into a git repo and commits when it changes."
+        info="Restore with pnpm backup import."
         control={
           <Switch
             aria-label="Back up to git"
@@ -56,7 +57,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
           settings.backupDir ? (
             <span className="break-all font-mono">{settings.backupDir}</span>
           ) : (
-            "An empty folder (it becomes a clone of the remote) or an existing backup clone."
+            "An empty folder or an existing backup clone."
           )
         }
         control={
@@ -79,7 +80,8 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.data.backup-remote"
         title="Remote"
-        description="Optional. Use a private repo: task text stays in its history for good. Pushes use git's own sign-in."
+        description="Optional. Use a private repo."
+        info="Task text stays in its history for good. Pushes use git's own sign-in. An empty folder becomes a clone of the remote."
         control={
           <BlurInput
             aria-label="Backup remote"
@@ -94,7 +96,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.data.backup-interval"
         title="Every"
-        description="How often to check for changes. A run with nothing new makes no commit."
+        description="How often to check for changes."
         control={
           <Select
             items={intervals.map((i) => ({ value: String(i.value), label: i.label }))}
