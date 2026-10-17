@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { BRAND } from "@repo/contracts";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
+import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { commitMessage, createBackupIntegration } from "./backup.ts";
 
 const dirs: string[] = [];
@@ -58,8 +59,8 @@ function setup() {
   return { ...h, root, remote, clone, task, backup, warnings };
 }
 
-// Real git processes are slow on the Windows CI runner.
-describe("git backup", { timeout: 30_000 }, () => {
+// Real git processes are slow on a loaded Windows machine.
+describe("git backup", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   it("clones the remote, commits and pushes, and makes no commit when nothing changed", async () => {
     const { backup, remote, services, task } = setup();
     const first = await backup.run();
