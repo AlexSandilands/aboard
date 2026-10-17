@@ -1,7 +1,7 @@
 import { RECURRING_NAME_MAX } from "@repo/contracts";
 import { type ReactNode, useState } from "react";
+import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
 import { Button } from "~/components/ui/button";
-import { DialogFooter, DialogHeader, DialogPanel, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
@@ -21,7 +21,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 /**
- * The body of the recurring rule editor: a header, the fields and Save. It takes over the project settings dialog.
+ * The body of the recurring rule editor: a header, the fields and Save. It is a settings sub-page.
  * `ruleId` is null for a new rule. `onDone` runs after a save, `onCancel` on Cancel.
  */
 export function RuleEditorForm({
@@ -65,14 +65,14 @@ export function RuleEditorForm({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>{ruleId ? "Edit recurring task" : "New recurring task"}</DialogTitle>
+      <EditorHeader>
+        <EditorTitle>{ruleId ? "Edit recurring task" : "New recurring task"}</EditorTitle>
         <p className="text-sm text-muted-foreground">
           Creates a task from a template on a schedule, in local time. It waits while the task it made last time is
           still open, so a chore nobody has done doesn&apos;t pile up.
         </p>
-      </DialogHeader>
-      <DialogPanel className="space-y-4">
+      </EditorHeader>
+      <EditorPanel className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name">
             <Input
@@ -209,15 +209,15 @@ export function RuleEditorForm({
             {error}
           </p>
         ) : null}
-      </DialogPanel>
-      <DialogFooter>
+      </EditorPanel>
+      <EditorFooter>
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
         <Button disabled={pending} onClick={save}>
           {ruleId ? "Save rule" : "Create rule"}
         </Button>
-      </DialogFooter>
+      </EditorFooter>
     </>
   );
 }

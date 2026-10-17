@@ -22,7 +22,8 @@ import {
   ComboboxTrigger,
 } from "~/components/ui/combobox";
 import { SidebarInput } from "~/components/ui/sidebar";
-import { useBoardView, useDialogs, usePalette } from "~/state/ui";
+import { useBoardView, usePalette } from "~/state/ui";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { useProjectFilter, useSetProjectFilter } from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
 
@@ -116,6 +117,7 @@ function ProjectScopeCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const setProjectFilter = useSetProjectFilter();
+  const openSettings = useOpenSettings();
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const items = useMemo<ScopeItem[]>(
     () => [ALL_PROJECTS, ...projects.map((p) => ({ value: p.id, label: p.title }))],
@@ -173,7 +175,7 @@ function ProjectScopeCombobox({
                   if (!project) return;
                   event.preventDefault();
                   setOpen(false);
-                  useDialogs.getState().openProjectSettings(project.id);
+                  openSettings("project", { project: project.id });
                 }}
               >
                 {project ? (
@@ -194,7 +196,7 @@ function ProjectScopeCombobox({
                     onClick={(event) => {
                       event.stopPropagation();
                       setOpen(false);
-                      useDialogs.getState().openProjectSettings(project.id);
+                      openSettings("project", { project: project.id });
                     }}
                   >
                     <SettingsIcon className="size-3.5" />

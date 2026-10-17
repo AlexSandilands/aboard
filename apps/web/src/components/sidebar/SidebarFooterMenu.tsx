@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
-import { useDialogs } from "~/state/ui";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 
 function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
@@ -26,15 +26,12 @@ function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: 
 /** Bottom row of the sidebar: settings and the light/dark theme flip. */
 export function SidebarFooterMenu() {
   const { resolvedTheme, setTheme } = useTheme();
+  const openSettings = useOpenSettings();
   const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
   return (
     <SidebarFooter>
       <SidebarMenu className="flex-row items-center">
-        <SidebarUtilityItem
-          icon={<SettingsIcon />}
-          label="Settings"
-          onClick={() => useDialogs.getState().setAppSettingsOpen(true)}
-        />
+        <SidebarUtilityItem icon={<SettingsIcon />} label="Settings" onClick={() => openSettings("board")} />
         <SidebarUtilityItem
           icon={resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
           label={`Switch to ${nextTheme} theme`}

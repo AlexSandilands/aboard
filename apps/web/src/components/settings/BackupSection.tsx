@@ -35,8 +35,9 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
     : [...INTERVALS, { value: settings.backupIntervalMinutes, label: `${settings.backupIntervalMinutes} minutes` }];
 
   return (
-    <SettingsSection title="Backup">
+    <SettingsSection id="board.data.backup" title="Backup">
       <SettingsRow
+        id="board.data.backup-enabled"
         title="Back up to git"
         description="Writes the board as JSON into a git repo and commits when it changes. Restore with pnpm backup import."
         control={
@@ -49,6 +50,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       <SettingsRow
+        id="board.data.backup-folder"
         title="Folder"
         description={
           settings.backupDir ? (
@@ -75,6 +77,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         ) : null}
       </SettingsRow>
       <SettingsRow
+        id="board.data.backup-remote"
         title="Remote"
         description="Optional. Use a private repo: task text stays in its history for good. Pushes use git's own sign-in."
         control={
@@ -89,6 +92,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       <SettingsRow
+        id="board.data.backup-interval"
         title="Every"
         description="How often to check for changes. A run with nothing new makes no commit."
         control={
@@ -113,6 +117,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       <SettingsRow
+        id="board.data.backup-last"
         title="Last backup"
         description={<BackupStatusLine status={status.data} />}
         control={

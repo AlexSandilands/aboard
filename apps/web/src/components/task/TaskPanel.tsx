@@ -22,13 +22,14 @@ import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
 import { RelationsSection } from "./RelationsSection";
 import { ResolutionCallout } from "./ResolutionCallout";
+import { SessionsSection } from "./SessionsSection";
 import { TaskActions } from "./TaskActions";
 import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
 import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
 import { EpicChildren } from "./EpicChildren";
-import { useSetEpicFilter } from "~/components/board/boardNavigation";
+import { useEpicFilter, useSetEpicFilter } from "~/components/board/boardNavigation";
 import type { SectionId } from "./sections.logic";
 
 const MIN_WIDTH = 380;
@@ -177,6 +178,7 @@ function TaskPanelBody({
 }) {
   const actions = usePlanActions(task.id);
   const setEpicFilter = useSetEpicFilter();
+  const boardEpicFilter = useEpicFilter();
   return (
     <div className="flex flex-col pb-10">
       <div className="px-4 pt-4 pb-3">
@@ -186,7 +188,7 @@ function TaskPanelBody({
         <ImportCallout task={task} />
         <ResolutionCallout task={task} />
         {task.kind === "epic" ? (
-          <EpicChildren task={task} onFilter={() => void setEpicFilter(task.id)} />
+          <EpicChildren task={task} boardFilter={boardEpicFilter} onFilter={(epicId) => void setEpicFilter(epicId)} />
         ) : // A task closed without a plan has nothing to be up to.
         task.resolution && task.progress.total === 0 ? null : (
           <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
@@ -199,6 +201,8 @@ function TaskPanelBody({
           switch (id) {
             case "labels":
               return <LabelsSection task={task} />;
+            case "sessions":
+              return <SessionsSection task={task} />;
             case "links":
               return <LinksSection task={task} />;
             case "relations":

@@ -173,7 +173,8 @@ unarchived task and then the epic, as `autopilot`, without re-deriving the epic'
 "Archived by Autopilot with its N tasks after D days in Done" on the epic. Tasks already archived stay as they were.
 The dedupe key is `archive-epic:<epicId>:<statusChangedAt>`, so unarchiving the epic by hand sticks until it leaves
 Done and comes back. The engine resolves a candidate that is an epic on the epic itself; a dry run says "Would
-archive #N with its K tasks after D days in Done". Unarchiving a task inside an archived epic is #100's question.
+archive #N with its K tasks after D days in Done". Unarchiving such a task, or reopening it, unarchives its epic
+([epics.md](epics.md#joining-and-leaving)).
 
 **Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
 switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
@@ -229,7 +230,7 @@ this automation's own switch decides whether a project's rules run. It has no co
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
   example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
   The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings ("Recurring tasks…", `openProjectSettings(id, "recurring")`), scrolled to the section.
+  these settings ("Recurring tasks…", `useOpenSettings()("project.recurring", { project })`), scrolled to the section.
 
 #### Recurring rules API
 
@@ -386,8 +387,8 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   thread or session itself, and the model line is left out, since the tier picks the model) plus an unattended note
   (no one to ask: block the step and stop) and, for a chosen skill, a line pointing at its `SKILL.md`. `tier` is the
   task's suggested tier. The agent moves the task to In Progress itself.
-- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the action
-  began. A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
+- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the thread
+  started (the runner may first have waited up to ten minutes for T3, see [Runners](#runners)). A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
   the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
   error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
   finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
@@ -531,7 +532,7 @@ the automation. Runs stay, under the old key.
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
-  `CustomAutomationEditorForm` taking over the dialog). The preview runs the same contracts helpers as the server
+  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`). The preview runs the same contracts helpers as the server
   on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
 
@@ -545,7 +546,18 @@ with that error.
 - **`kind: "start"`** (the default) begins a new session. The automation's `runner` option picks the runner:
   **Auto** (a T3 Code thread when T3 is detected and its live poll is ok, else headless), **T3 only** (fails
   when T3 isn't connected) or **Headless only**. Once Auto has asked T3 it never falls back to headless: the
-  thread may have started even when the reply was lost.
+  thread may have started even when the reply was lost. Before choosing, a status that isn't ready is refreshed
+  (`t3.test()`: discover and poll again), because the cached one is empty just after a restart.
+- **A T3 that can't be reached is waited for.** A T3 launch or nudge that fails because T3 isn't answering
+  (`isT3Unavailable`: not running yet, shell, socket or branch listing unreachable), and T3 only finding T3 not
+  detected, is retried every 15 seconds for up to ten minutes in all (`T3_HOLD_MS`, `T3_RETRY_MS`; the clock starts at the
+  first failure and is shared by the readiness check and the launch). Auto doesn't wait: a T3 that isn't ready after
+  a fresh look sends it headless, as before. T3 only waits while T3 isn't detected; a detected T3 whose shell isn't answering goes on to the launch, which waits if it is unreachable and fails if T3 refuses (an expired token). A request can pass `stillWanted`, asked after each wait: Start planned
+  uses it so a task started by hand, moved or archived meanwhile ends the run as skipped (no thread, no flag). The run stays `running` meanwhile:
+  no failed run, no attention flag. A retried launch keeps its command id, so T3 never starts two threads. Anything
+  else fails at once (no model ready, no token, project not in T3, a changed protocol), and so does a T3 that is
+  still unreachable when the ten minutes end. A board restart during the wait fails the run like any run a restart
+  strands.
 - **`label`** is what the run is, short: "Review PRs · PR #73 round 1", "Fix PRs · PR #73", "Start planned · #107",
   "<custom name> · #42", "Digest". Each automation supplies it, and the runner (`sessionName`) prefixes it with
   "Autopilot · " and uses it as the session link's label, `claude --name` and the T3 thread's title
@@ -635,15 +647,15 @@ How Autopilot looks on the board (the lane pill, the epic button, the header pau
 task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
 `components/autopilot/`:
 
-- **Settings → Autopilot** (`AutopilotSettingsSection`, self-contained: it reads and writes its own queries):
+- **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Autopilot automations** (`AutomationRows`): one row per automation with its Inherit / On / Off switch at the
-  board, and a **Settings** disclosure with a form generated from its `fields`: a switch, number, text, 24-hour time
+- **Automations** (`AutomationSections`): one folded section per automation with its Inherit / On / Off switch at
+  the board in the header; opening it shows what it does and a form with a form generated from its `fields`: a switch, number, text, 24-hour time
   or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
-  it has one, such as the digest's own skill). The same rows appear in a project's settings,
-  where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
+  it has one, such as the digest's own skill). A project's settings page shows them as rows
+  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
@@ -723,6 +735,6 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
-| `apps/web/src/components/recurring/` | The rule list, editor and examples in project settings |
+| `apps/web/src/components/recurring/` | The rule list, editor and examples on the project settings page |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

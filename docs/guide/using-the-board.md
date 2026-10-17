@@ -41,12 +41,13 @@ A task can link to:
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
 - **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
   session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
-  Code, when it is still running). Choose the terminal in **Settings → Terminal**; **Copy resume command**
+  Code, when it is still running). Choose the terminal in **Settings → Integrations → Terminal**; **Copy resume command**
   works anywhere.
 - **Any URL.**
 
-In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) sit under a
-**Sessions** heading, and everything else under **Links**: PRs first, then issues, Jira keys and other URLs. Past
+In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) have a
+**Sessions** section of their own, above **Links**, which holds everything else: PRs first, then issues, Jira keys
+and other URLs. Like the other sections, each can be collapsed, moved or hidden from **Customize sections**. Past
 three sessions, **Show N more** reveals the rest. When the task has one T3 thread, its Claude Code sessions are in
 the thread's ⌄ menu instead of rows of their own.
 
@@ -77,7 +78,7 @@ start a blocked task.
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
-each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it.
+each tier means in **Settings → Tasks → Models**; copied prompts name it, and new T3 Code threads start on it.
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.
@@ -105,5 +106,6 @@ sections of the task panel. Your layout is saved per browser.
 | Key          | Action               |
 | ------------ | -------------------- |
 | `Ctrl/Cmd K` | Command palette      |
+| `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
-| `Esc`        | Close the task panel |
+| `Esc`        | Close the task panel, or leave Settings |

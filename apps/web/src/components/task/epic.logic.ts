@@ -25,3 +25,12 @@ export function epicOptions(
     .filter((t) => t.kind === "epic" && t.projectId === task.projectId && t.archivedAt === null)
     .sort((a, b) => a.number - b.number);
 }
+
+/** The "Show on board" button for an epic: its label, whether it's pressed, and the epic filter a click sets. */
+export function showOnBoardToggle(
+  epicId: string,
+  activeFilter: string | null,
+): { label: string; pressed: boolean; next: string | null } {
+  const pressed = activeFilter === epicId;
+  return { label: pressed ? "Showing on board" : "Show on board", pressed, next: pressed ? null : epicId };
+}

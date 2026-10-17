@@ -38,6 +38,7 @@ files under each app.
 ### Guides
 
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
+- [Settings](guide/settings.md): the settings page, its groups and how to get to them
 - [Templates](guide/templates.md): Bug, Spike, Feature and your own starting points for tasks
 - [Recurring tasks](guide/recurring-tasks.md): tasks made from a template on a schedule
 - [Custom automations](guide/custom-automations.md): your own triggers and actions, an agent or a command
@@ -60,7 +61,7 @@ files under each app.
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
-- [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards
+- [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards, the settings page
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
 - [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread

@@ -1,6 +1,7 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND, brandEnv, type DesktopBadge } from "@repo/contracts";
+import { BRAND, brandEnv, readDesktopSandbox, type DesktopBadge } from "@repo/contracts";
 import {
   BrowserWindow,
   Menu,
@@ -28,9 +29,22 @@ const token = process.env[brandEnv("TOKEN")] || null;
 /** Passed by the login item so a start at login stays in the tray. */
 const HIDDEN_ARG = "--hidden";
 
+// `pnpm sandbox --desktop` opens the shell on the sandbox. It must never point at the real board, so a setup
+// that would is refused before anything else runs.
+const sandbox = app.isPackaged ? null : readDesktopSandbox(process.env, join(homedir(), `.${BRAND.id}`));
+if (sandbox && "error" in sandbox) {
+  console.error(`[${BRAND.id}] refusing to open the desktop sandbox: ${sandbox.error}`);
+  process.exit(1);
+}
+/** What the window, tray and notifications call the app; a sandbox shell says so. */
+const productName = sandbox ? `${BRAND.name} Sandbox` : BRAND.name;
+
 // Before anything reads app paths: userData, logs and the single-instance lock live under the app name.
 // Dev builds get their own, so `pnpm desktop` doesn't hand off to an installed copy that's running.
-app.setName(app.isPackaged ? BRAND.name : `${BRAND.name} Dev`);
+app.setName(app.isPackaged ? BRAND.name : sandbox ? productName : `${BRAND.name} Dev`);
+// The sandbox shell's profile and lock live in the sandbox's throwaway home, so it runs beside the real app
+// (and other worktrees' sandboxes) and `pnpm sandbox stop` removes what it wrote.
+if (sandbox) app.setPath("userData", join(sandbox.home, "desktop"));
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const bundle = app.isPackaged
@@ -76,7 +90,7 @@ function createWindow(show: boolean): BrowserWindow {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    title: BRAND.name,
+    title: productName,
     icon: appIcon(),
     autoHideMenuBar: true,
     ...titleBarOptions(nativeTheme.shouldUseDarkColors),
@@ -87,6 +101,13 @@ function createWindow(show: boolean): BrowserWindow {
   // navigator.windowControlsOverlay stuck at visible=false (Electron 44), so the board would lay out
   // as if there were no title bar. The page reports its theme while loading, so apply it on show.
   win.on("show", () => syncTitleBar(win, nativeTheme.shouldUseDarkColors));
+  // The page sets the title; keep "Sandbox" on it so the taskbar and Alt+Tab tell the two shells apart.
+  if (sandbox) {
+    win.on("page-title-updated", (event, title) => {
+      event.preventDefault();
+      win.setTitle(`${title} - Sandbox`);
+    });
+  }
   win.once("ready-to-show", () => applyWindowBadge(win));
   // Closing hides to the tray so the MCP endpoint stays up for agents.
   win.on("close", (event) => {
@@ -120,7 +141,7 @@ function applyBadge(next: DesktopBadge): void {
   if (window) applyWindowBadge(window);
   if (process.platform !== "win32") app.setBadgeCount(next.count);
   tray?.setImage(trayIcon(next.count > 0));
-  tray?.setToolTip(next.count > 0 ? `${BRAND.name}: ${next.description}` : BRAND.name);
+  tray?.setToolTip(next.count > 0 ? `${productName}: ${next.description}` : productName);
 }
 
 function showWindow(): void {
@@ -140,7 +161,7 @@ function loginItemArgs() {
 
 function buildTrayMenu(): Menu {
   return Menu.buildFromTemplate([
-    { label: `Open ${BRAND.name}`, click: showWindow },
+    { label: `Open ${productName}`, click: showWindow },
     {
       label: "Copy MCP URL",
       enabled: server !== null,
@@ -163,7 +184,7 @@ function buildTrayMenu(): Menu {
 
 function createTray(): Tray {
   const t = new Tray(trayIcon());
-  t.setToolTip(BRAND.name);
+  t.setToolTip(productName);
   t.setContextMenu(buildTrayMenu());
   t.on("click", showWindow);
   return t;
@@ -173,8 +194,8 @@ async function reportStartFailure(error: unknown): Promise<void> {
   const logs = error instanceof ServerStartError ? error.logs : String(error);
   const { response } = await dialog.showMessageBox({
     type: "error",
-    title: BRAND.name,
-    message: `${BRAND.name} could not start its server`,
+    title: productName,
+    message: `${productName} could not start its server`,
     detail: `${error instanceof Error ? error.message : ""}\n\n${logs}`.trim(),
     buttons: ["Quit", "Open log folder"],
     defaultId: 0,
@@ -191,7 +212,7 @@ async function start(): Promise<void> {
       webDist,
       attachOnly: devUrl !== null,
       onUnexpectedExit(details) {
-        dialog.showErrorBox(`${BRAND.name} server stopped`, details);
+        dialog.showErrorBox(`${productName} server stopped`, details);
         app.exit(1);
       },
     });
@@ -206,7 +227,7 @@ async function start(): Promise<void> {
 }
 
 if (app.requestSingleInstanceLock()) {
-  app.setAppUserModelId(`com.${BRAND.id}.desktop`);
+  app.setAppUserModelId(`com.${BRAND.id}.desktop${sandbox ? ".sandbox" : ""}`);
   app.on("second-instance", showWindow);
   app.on("activate", showWindow);
   // Without a listener Electron quits when the last window closes; we live in the tray.

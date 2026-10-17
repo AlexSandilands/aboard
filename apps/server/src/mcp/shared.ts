@@ -218,9 +218,9 @@ export function boardUrl(ctx: AppContext): string {
 export function t3LaunchBlocker(ctx: AppContext, project: Project): string | null {
   if (!ctx.integrations.t3Status().detected) return "T3 Code isn't running";
   const settings = ctx.services.settings.get();
-  if (!settings.t3TokenSet) return "No T3 Code token is set (Settings, T3 Code)";
+  if (!settings.t3TokenSet) return "No T3 Code token is set (Settings, Integrations, T3 Code)";
   if (!settings.agentT3Threads) {
-    return "The user hasn't let agents start T3 threads (Settings, T3 Code, Let agents start threads)";
+    return "The user hasn't let agents start T3 threads (Settings, Integrations, T3 Code, Let agents start threads)";
   }
   if (!project.t3ProjectId && !project.workspaceRoot) return `${project.title} has no folder for T3 Code to use`;
   return null;

@@ -1,11 +1,11 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
 panel sections, and which links a card shows. These are browser-only preferences: nothing here is stored
-on the server.
+on the server. It also covers the settings page, which takes the board's place.
 
 ## How it works
 
@@ -34,9 +34,9 @@ An override equal to its column's setting is pruned, so any override present mea
 
 ### Task panel sections
 
-The panel's sections are Labels, Links, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Links, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
-section shows a one-line summary in its header (`summarizeSection`): the label names, the link count and
+section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
 any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
@@ -45,7 +45,8 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Section              | Starts collapsed when                             |
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
-| Links                | The task has no links                             |
+| Sessions             | The task has no T3 threads or agent sessions      |
+| Links                | The task has no PRs, issues, Jira keys or URLs    |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
 | Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
@@ -57,27 +58,33 @@ the smart default apply. **Collapse all** and **Expand all** store a choice for 
 them until **Reset**. The **Customize sections** popover in the panel's top bar reorders, shows and
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
-appended.
+appended, except Sessions, which goes before Links in a layout saved without it (and takes its hidden and collapsed state from Links when that layout
+had them, since it used to be part of Links).
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
 
-#### The Links section
+#### The Sessions section
 
-The Links section has two groups, each a small heading with a rule (`GroupHeading`, not another collapse). They
-show only when the task has sessions; without any, the section is the plain list it was.
+Sessions is a section of its own, above Links by default (`SessionsSection`). It holds what used to sit in a
+Sessions group of the Links section (#111, split out by #118). A task with none shows "No coding sessions yet" and
+starts collapsed.
 
-- **Sessions** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first
-  (`orderLinks`), then its agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`)
-  the first three show, and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is
-  per panel visit, not stored).
+- **Rows** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first (`orderLinks`), then its
+  agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`) the first three show,
+  and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is per panel visit, not
+  stored).
 - **Folded sessions.** When the task has exactly one T3 thread, its Claude Code sessions leave the rows and sit in
   the thread's ⌄ menu, one submenu each (open, fork, copy the resume command, copy the id, remove), as the thread
   runs a Claude session underneath. Sessions don't say which thread they belong to, so with several threads
   nothing folds. Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
   runner's "Autopilot ·" name) and Copilot CLI sessions always stay rows.
-- **Links**: PRs, then issues, Jira keys and other URLs, each kind in link order.
+
+#### The Links section
+
+PRs, then issues, Jira keys and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
+and the list ends with **Add link**; pasting a T3 thread there still works, and the thread lands in Sessions.
 
 ### Autopilot on the board
 
@@ -135,6 +142,42 @@ with no snapshot yet counts as active, since it may be. The first Jira key shows
 top row. Settled and archived threads, other Jira keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
+### The settings page
+
+Settings is a route, `/settings/<group>` with group `board`, `tasks`, `autopilot`, `integrations` or `project`
+(`/settings` and unknown groups redirect to `board`). The editors are sub-routes: `tasks/templates/<id>`,
+`autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
+rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
+
+- **Shell.** The board and Settings sit under one pathless layout route (`_app`, `AppFrame`) that renders a single
+  `AppShell`: the resizable sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync
+  and the shortcuts. It stays mounted between them, so the event stream doesn't reconnect and miss events. On `/settings` the sidebar holds the settings list instead of the
+  projects: every group with its sections, always expanded, and **Back** at the bottom. Esc leaves an editor for its
+  page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
+- **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
+  `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
+  (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
+  will target them.
+- **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
+  `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
+- **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
+  anchor as the hash and asks the page to scroll to it (`requestScroll`). The page (`SettingsScroller`) waits up to
+  about two seconds for the target to render and opens a folded section that holds it. On a page that has just
+  opened, sections are still filling in as their queries load, so the target stays pinned to the top until that
+  settles (`pinInView`, about 1.5 s, or until the user scrolls). A request counts as handled only then, so the page
+  being left, which sees the request first, leaves it for the page being opened. A reload honours the hash.
+- **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
+  `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
+  bottom). The list highlights that section.
+- **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
+  entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
+  popover (its Settings link, and Recurring tasks… for the project's rules).
+- **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
+  default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
+  leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that
+  list (the `settingsEditorFromList` history state), it steps back in history, so the browser's Back doesn't
+  repeat the page; opened from a link or a reload, it opens the list as a new entry.
+
 ### Persistence
 
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
@@ -172,7 +215,13 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
 | `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
-| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx` | The Links section's groups, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
+| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx`, `SessionsSection.tsx` | Which links are sessions, the two sections' rows, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
-| `apps/web/src/state/ui.ts`                             | The persisted stores                                             |
+| `apps/web/src/state/ui.ts`                             | The persisted stores, and `useSettingsNav` (scroll-spy, scroll requests, `boardReturn`) |
+| `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
+| `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
+| `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
+| `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
+| `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
+| `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |

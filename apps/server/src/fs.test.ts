@@ -24,7 +24,9 @@ describe("fs browse", () => {
     expect(browseDirectory("~").path).toBe(homedir());
   });
 
-  it("lists drive roots for / on Windows", () => {
+  // The first listing probes every drive letter, and an unmapped or network drive can take seconds to answer. The
+  // next test reads the cached result.
+  it("lists drive roots for / on Windows", { timeout: 60_000 }, () => {
     const drives = browseDirectory("/", "win32");
     expect(drives.parentPath).toBeNull();
   });

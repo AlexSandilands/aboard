@@ -6,13 +6,13 @@ board creates the task, and you or an agent do the work.
 
 ## Setting one up
 
-Open the project's settings (the gear in the sidebar) and find **Recurring tasks**.
+Open the project's settings (the gear beside it in the sidebar, or right-click it) and go to **Recurring tasks**.
 
-1. Switch **Recurring tasks** on under **Autopilot** in the same settings (or from the Autopilot pill on the project's
+1. Switch **Recurring tasks** on under **Autopilot overrides** on the same page (or from the Autopilot pill on the project's
    lane, which also links here with **Recurring tasks…**). Until then no rule in the project runs.
 2. **New rule**, or **Add** one of the examples (dependency bumps, security audit, docs drift check, stale
    branch and worktree cleanup, flaky test sweep, release prep, renewing the T3 token). An example adds a
-   template for the project, which you can edit under Settings → Templates.
+   template for the project, which you can edit under Settings → Tasks → New tasks.
 3. In the editor, give it a name and pick the template. The template needs a title pattern, which names each
    task (`Bump dependencies {{date}}`).
 4. Choose when: on chosen **weekdays**, or **every N days** counted from a start date, at a time of day. Times

@@ -164,6 +164,19 @@ export interface RunnerRequest {
    * throws `WorktreeHeadError`.
    */
   expectHead?: string;
+  /**
+   * T3 only: asked before each retry while the runner waits for T3 Code to come up. False when the work is no longer
+   * wanted (the task moved on meanwhile), which ends the wait with a RunAbandonedError.
+   */
+  stillWanted?: () => boolean;
+}
+
+/** The runner stopped waiting because the request is no longer wanted (`stillWanted` said no). Not a failure. */
+export class RunAbandonedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RunAbandonedError";
+  }
 }
 
 /** The worktree isn't at the commit `expectHead` named. `moved` is true when it is ahead of it: the branch moved on. */

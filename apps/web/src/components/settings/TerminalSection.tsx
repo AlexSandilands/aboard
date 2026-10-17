@@ -4,7 +4,8 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useTerminalInfo } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
+import { terminalDot } from "./integrations.logic";
+import { CommandSnippet, SettingsRow, SettingsSection, StatusDot } from "./settingsLayout";
 import { terminalOptions, terminalOptionValue, terminalSettingFor } from "./terminal.logic";
 
 const OPEN_IN_ITEMS: { value: TerminalOpenIn; label: string }[] = [
@@ -25,8 +26,13 @@ export function TerminalSection({ settings }: { settings: AppSettings }) {
     );
 
   return (
-    <SettingsSection title="Terminal">
+    <SettingsSection
+      id="integrations.terminal.status"
+      title="Terminal"
+      status={<StatusDot tone={terminalDot(info).tone} label={terminalDot(info).label} />}
+    >
       <SettingsRow
+        id="integrations.terminal.terminal"
         title="Open sessions in"
         description="Where Open in terminal resumes a linked Claude Code or Copilot CLI session. Automatic uses Windows Terminal's default profile on Windows, Terminal on macOS and the system terminal on Linux."
         control={
@@ -55,6 +61,7 @@ export function TerminalSection({ settings }: { settings: AppSettings }) {
       {info?.platform === "win32" &&
       (settings.terminal.kind === "auto" || settings.terminal.kind === "windows-terminal") ? (
         <SettingsRow
+          id="integrations.terminal.open-in"
           title="Open in"
           description="Windows Terminal only: a new tab in the window you used last (a new window if none is open), or always a new window. Command Prompt, PowerShell and custom commands always open as their command says."
           control={
@@ -87,6 +94,7 @@ export function TerminalSection({ settings }: { settings: AppSettings }) {
       ) : null}
       {settings.terminal.kind === "custom" ? (
         <SettingsRow
+          id="integrations.terminal.command"
           title="Command"
           description="One command line, run by cmd on Windows and sh elsewhere. {cwd} is the session's folder, quoted; {command} is the resume command."
           control={
@@ -105,6 +113,7 @@ export function TerminalSection({ settings }: { settings: AppSettings }) {
         />
       ) : null}
       <SettingsRow
+        id="integrations.terminal.preview"
         title="Runs"
         description={info?.error ?? "What opening a session runs, for an example session in your home folder."}
       >

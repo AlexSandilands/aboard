@@ -30,7 +30,8 @@ import { SidebarGroup, SidebarMenu, SidebarMenuButton, useSidebar } from "~/comp
 import { cn } from "~/lib/utils";
 import { useReorderProjects } from "~/state/mutations";
 import { queryKeys } from "~/state/queries";
-import { useDialogs, usePalette } from "~/state/ui";
+import { usePalette } from "~/state/ui";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { openTaskCounts } from "~/components/board/board.logic";
 import { scrollToLane, useProjectFilter, useSetProjectFilter } from "~/components/board/boardNavigation";
 
@@ -147,7 +148,8 @@ const SortableProjectRow = memo(function SortableProjectRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: project.id,
   });
-  const openSettings = () => useDialogs.getState().openProjectSettings(project.id);
+  const openSettingsPage = useOpenSettings();
+  const openSettings = () => openSettingsPage("project", { project: project.id });
   return (
     <li
       ref={setNodeRef}

@@ -13,7 +13,7 @@
     "backup": "pnpm --filter @repo/server backup",
     "desktop:build": "pnpm build && pnpm --filter @repo/server bundle && pnpm --filter @repo/desktop build",
     "desktop:package": "pnpm desktop:build && pnpm --filter @repo/desktop package",
-    "test": "pnpm -r --no-bail test",
+    "test": "pnpm -r --no-bail --workspace-concurrency=1 test",
     "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",

@@ -85,7 +85,7 @@ quoted for the shell the terminal setting opens.
 
 ### The terminal
 
-**Settings → Terminal** picks where sessions open (`terminal` setting, machine-only, not in backups):
+**Settings → Integrations → Terminal** picks where sessions open (`terminal` setting, machine-only, not in backups):
 
 | Setting | Runs |
 | --- | --- |
@@ -134,8 +134,8 @@ be read is left out rather than guessed.
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
 the command. A task with a T3 thread shows no session chips, since the thread runs a Claude session
-underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, under its Sessions
-heading ([board-layout](board-layout.md#the-links-section)); a chip's tooltip shows the name.
+underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, in the panel's
+Sessions section ([board-layout](board-layout.md#the-sessions-section)); a chip's tooltip shows the name.
 
 Copilot CLI support is unit-tested only.
 
@@ -169,4 +169,4 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
-| `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Terminal |
+| `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Integrations → Terminal |

@@ -21,7 +21,7 @@ const idle: KeybindingContext = {
   editableFocus: false,
   popupFocus: false,
   overlayOpen: false,
-  panelOpen: false,
+  canGoBack: false,
 };
 
 describe("parseShortcut", () => {
@@ -58,7 +58,7 @@ describe("matchesShortcut", () => {
 describe("resolveCommand", () => {
   it("opens the palette on mod+k whatever has focus or is open", () => {
     const event = key("k", { ctrlKey: true });
-    const busy = { editableFocus: true, popupFocus: true, overlayOpen: true, panelOpen: true };
+    const busy = { editableFocus: true, popupFocus: true, overlayOpen: true, canGoBack: true };
     expect(resolveCommand(event, idle, false)).toBe("palette.open");
     expect(resolveCommand(event, busy, false)).toBe("palette.open");
   });
@@ -72,9 +72,17 @@ describe("resolveCommand", () => {
     expect(resolveCommand(key("n", { shiftKey: true }), idle, false)).toBeNull();
   });
 
-  it("closes the panel on Escape only when it is open and nothing claims the focus", () => {
-    const open = { ...idle, panelOpen: true };
-    expect(resolveCommand(key("Escape"), open, false)).toBe("panel.close");
+  it("opens Settings on mod+, unless a dialog or the palette is open", () => {
+    const event = key(",", { ctrlKey: true });
+    expect(resolveCommand(event, idle, false)).toBe("settings.open");
+    expect(resolveCommand(event, { ...idle, editableFocus: true }, false)).toBe("settings.open");
+    expect(resolveCommand(event, { ...idle, overlayOpen: true }, false)).toBeNull();
+    expect(resolveCommand(key(","), idle, false)).toBeNull();
+  });
+
+  it("goes back on Escape only when there is somewhere to go and nothing claims the focus", () => {
+    const open = { ...idle, canGoBack: true };
+    expect(resolveCommand(key("Escape"), open, false)).toBe("back");
     expect(resolveCommand(key("Escape"), idle, false)).toBeNull();
     expect(resolveCommand(key("Escape"), { ...open, editableFocus: true }, false)).toBeNull();
     expect(resolveCommand(key("Escape"), { ...open, popupFocus: true }, false)).toBeNull();
@@ -84,10 +92,10 @@ describe("resolveCommand", () => {
   it("lets the last matching binding win", () => {
     const bindings = [
       { key: "n", command: "idea.new" as const },
-      { key: "n", command: "panel.close" as const, when: (c: KeybindingContext) => c.panelOpen },
+      { key: "n", command: "back" as const, when: (c: KeybindingContext) => c.canGoBack },
     ];
     expect(resolveCommand(key("n"), idle, false, bindings)).toBe("idea.new");
-    expect(resolveCommand(key("n"), { ...idle, panelOpen: true }, false, bindings)).toBe("panel.close");
+    expect(resolveCommand(key("n"), { ...idle, canGoBack: true }, false, bindings)).toBe("back");
   });
 
   it("has no binding for other keys", () => {
@@ -99,6 +107,7 @@ describe("runsImmediately", () => {
   it("only runs the palette shortcut before the rest of the dispatch", () => {
     expect(runsImmediately("palette.open")).toBe(true);
     expect(runsImmediately("idea.new")).toBe(false);
-    expect(runsImmediately("panel.close")).toBe(false);
+    expect(runsImmediately("back")).toBe(false);
+    expect(runsImmediately("settings.open")).toBe(false);
   });
 });

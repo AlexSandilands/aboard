@@ -19,7 +19,14 @@ import { z } from "zod";
 import { latestThread } from "../../integrations/reviewFallbacks.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { t3RunWorking, threadSeen } from "../threads.ts";
-import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
+import {
+  RunAbandonedError,
+  WorktreeHeadError,
+  defineAutomation,
+  type ActionResult,
+  type Candidate,
+  type RunnerResult,
+} from "../types.ts";
 import { hostFlag, prUrl } from "./reviewPrs.ts";
 
 export { AUTOPILOT_FIX_PRS };
@@ -456,6 +463,16 @@ export const fixPrs = defineAutomation({
     });
     const what = describeTriggers(data.triggers.map((t) => t.kind));
     const thread = liveThread(task, config.runner, Date.now());
+    // A wait for T3 can take minutes: the fix is for this head commit of an open PR.
+    const stillWanted = () => {
+      try {
+        const now = services.tasks.summary(task.id).links.find((l) => l.id === data.linkId);
+        return now?.kind === "pr" && now.snapshot?.state === "open" && now.snapshot.headOid === data.headOid;
+      } catch {
+        // The task was deleted meanwhile.
+        return false;
+      }
+    };
     let started: RunnerResult;
     try {
       started = await runner.start({
@@ -464,9 +481,13 @@ export const fixPrs = defineAutomation({
         prompt,
         tier: task.suggestedModel?.tier ?? null,
         options: config,
+        stillWanted,
         ...(thread ? { kind: "nudge" as const } : { workspace: { branch: data.headRef }, expectHead: data.headOid }),
       });
     } catch (error) {
+      if (error instanceof RunAbandonedError) {
+        return { status: "skipped", summary: `PR #${data.number} changed while waiting for T3 Code` };
+      }
       // The branch moved on before the agent started: what it was sent for may be gone, and the new head is looked
       // at afresh. A worktree at some other commit fails, unless GitHub agrees the PR moved (a force-push).
       if (error instanceof WorktreeHeadError) {

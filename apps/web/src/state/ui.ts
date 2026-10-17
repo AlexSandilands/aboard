@@ -6,6 +6,7 @@ import {
   type TaskStatus,
 } from "@repo/contracts";
 import { create } from "zustand";
+import type { BoardSearch } from "~/router";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
 import { DEFAULT_COLLAPSE, migrateBoardView } from "./boardView.logic";
@@ -197,12 +198,8 @@ export const usePalette = create<PaletteState>()(
   ),
 );
 
-/** App-level dialogs opened from anywhere (sidebar gear, palette, panel menus). */
+/** App-level dialogs opened from anywhere (header buttons, palette, panel menus). */
 interface DialogsState {
-  projectSettingsId: string | null;
-  /** A section of project settings to scroll to when it opens. */
-  projectSettingsSection: "recurring" | null;
-  appSettingsOpen: boolean;
   /** The Autopilot digest panel, from the header button or the palette. */
   digestOpen: boolean;
   /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
@@ -211,9 +208,6 @@ interface DialogsState {
   mergePr: { taskId: string; linkId: string } | null;
   /** Agent session the server wouldn't reopen because it is running, with the status it read. */
   sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
-  openProjectSettings: (projectId: string, section?: "recurring") => void;
-  closeProjectSettings: () => void;
-  setAppSettingsOpen: (open: boolean) => void;
   setDigestOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
   openProjectT3Launch: (projectId: string) => void;
@@ -233,19 +227,12 @@ interface DialogsState {
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
-  projectSettingsId: null,
-  projectSettingsSection: null,
-  appSettingsOpen: false,
   digestOpen: false,
   t3Launch: null,
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
   imagePreview: null,
-  openProjectSettings: (projectSettingsId, section) =>
-    set({ projectSettingsId, projectSettingsSection: section ?? null }),
-  closeProjectSettings: () => set({ projectSettingsId: null, projectSettingsSection: null }),
-  setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
   setDigestOpen: (digestOpen) => set({ digestOpen }),
   openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
@@ -258,6 +245,32 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeTemplateDraft: () => set({ templateDraft: null }),
   openImagePreview: (imagePreview) => set({ imagePreview }),
   closeImagePreview: () => set({ imagePreview: null }),
+}));
+
+/** The settings page's scroll state, shared by its sidebar list and the page. Not persisted. */
+interface SettingsNavState {
+  /** The section in view (scroll-spy), highlighted in the list. */
+  activeSection: string | null;
+  /**
+   * A section or row to bring into view once it renders. `nonce` repeats a scroll to the same target; `at` lets a
+   * request nobody could fulfil expire rather than fire on some later page.
+   */
+  scrollTarget: { id: string; nonce: number; at: number } | null;
+  /** The board's search when Settings opened, so Back returns to the same view. */
+  boardReturn: BoardSearch;
+  setActiveSection: (id: string | null) => void;
+  requestScroll: (id: string) => void;
+  setBoardReturn: (search: BoardSearch) => void;
+}
+
+export const useSettingsNav = create<SettingsNavState>()((set) => ({
+  activeSection: null,
+  scrollTarget: null,
+  boardReturn: {},
+  setActiveSection: (activeSection) => set({ activeSection }),
+  requestScroll: (id) =>
+    set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1, at: Date.now() } })),
+  setBoardReturn: (boardReturn) => set({ boardReturn }),
 }));
 
 /** The merge method last picked per repo (`host/owner/repo`), offered first next time. */

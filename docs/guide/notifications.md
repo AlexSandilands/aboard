@@ -24,11 +24,11 @@ In the desktop app, a pop-up appears when you're not looking at the board; click
 forward and opens the task. The taskbar button shows the unread count (a red circle, `9+` past nine), and the
 tray icon gets a red dot while anything is unread.
 
-In a browser, open **Settings → Notifications** and choose **Allow in this browser**. Pop-ups then come from
+In a browser, open **Settings → Board → Notifications** and choose **Allow in this browser**. Pop-ups then come from
 one tab, and only while you're not looking at the board. The tab's icon shows the count too.
 
 ## Settings
 
-**Settings → Notifications** has a switch for each type. A type that is off isn't recorded at all, in the inbox
+**Settings → Board → Notifications** has a switch for each type. A type that is off isn't recorded at all, in the inbox
 or as a pop-up. **Mute during quiet hours** keeps pop-ups quiet while Autopilot's quiet hours are on; the
 notifications still wait in the inbox.

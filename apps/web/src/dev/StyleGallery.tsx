@@ -78,7 +78,7 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
 import { ModeSwitch } from "~/components/autopilot/ModeSwitch";
-import { GroupHeading } from "~/components/task/LinksSection";
+import { FoldedSettingsSection, SettingsRow, SettingsSection, StatusDot } from "~/components/settings/settingsLayout";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -471,13 +471,35 @@ export function StyleGallery() {
           <span className="text-2xs text-muted-foreground">Inherit (Off by default)</span>
         </Section>
 
-        <Section title="Task panel group heading (Sessions and Links)">
-          <div className="flex w-full max-w-sm flex-col gap-0.5">
-            <GroupHeading>Sessions</GroupHeading>
-            <GroupHeading className="mt-1.5">Links</GroupHeading>
+        <Section title="Settings: section with status dots, folded section">
+          <div className="w-full max-w-2xl space-y-4">
+            <SettingsSection title="Integration" status={<StatusDot tone="success" label="Ready" />}>
+              <SettingsRow
+                title="Working"
+                description="A green dot."
+                control={<StatusDot tone="success" label="Ready" />}
+              />
+              <SettingsRow
+                title="Needs fixing"
+                description="An amber dot."
+                control={<StatusDot tone="warning" label="Not signed in" />}
+              />
+              <SettingsRow
+                title="Unknown"
+                description="A grey dot."
+                control={<StatusDot tone="muted" label="Not set up" />}
+              />
+            </SettingsSection>
+            <FoldedSettingsSection
+              id="gallery.folded"
+              title="Folded section"
+              summary="Inherit (Off by default)"
+              control={<ModeSwitch label="Folded section" value="inherit" onChange={() => {}} />}
+            >
+              <p className="px-4 py-3 text-xs text-muted-foreground">What it does, then its settings.</p>
+            </FoldedSettingsSection>
           </div>
         </Section>
-
         <Section title="Skeleton, spinner, scroll area">
           <div className="flex w-64 flex-col gap-2">
             <Skeleton className="h-4 w-full" />

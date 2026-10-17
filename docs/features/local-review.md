@@ -10,7 +10,7 @@ for a review or relayed what it found.
 
 ### The loop
 
-Turn it on in Settings → Local review ("Review before the PR"). A task can override the setting in its
+Turn it on in Settings → Tasks → Review ("Review before the PR"). A task can override the setting in its
 panel (Auto: Default / On / Off), or an agent can with `update_task(autoReview)`.
 
 1. The implementing agent finishes and calls `move_task` to `review`. The board opens **review round 1**.
@@ -111,7 +111,7 @@ fallbacks in order:
    (`orchestration.dispatchCommand` with a `message.dispatch` command and `deliveryIntent: "auto"`, so T3
    starts a turn or queues it behind the running one). The command id is stable per round, so a retry
    doesn't post twice. It needs the `orchestration:operate` scope.
-3. **The board reviewer.** If it's on (Settings → Local review → Board reviewer), the board reviews the
+3. **The board reviewer.** If it's on (Settings → Tasks → Review → Board reviewer), the board reviews the
    round itself with Claude Code headless. If an agent's reviewer submits while it runs, the agent's review
    stands and the board's is dropped. Moving the task to Review meanwhile isn't blocked; the running review
    covers it. When blocking or major findings are open and a T3 thread is linked,

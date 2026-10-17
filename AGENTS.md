@@ -14,7 +14,8 @@ the code are the rest of `docs/` (start at [docs/README.md](docs/README.md)).
 - **PR titles follow Conventional Commits**, like the commits: `feat(web): add favicon options`.
 - **Don't run `pnpm dev` or `pnpm desktop` from a worktree.** They use the user's real data dir and the
   ports of the board the user runs from main (:4317 / :5317), so this branch's code and migrations would
-  run on real data. Use `pnpm sandbox`, which uses a throwaway data dir and free ports.
+  run on real data. Use `pnpm sandbox`, which uses a throwaway data dir and free ports; to try the
+  Electron shell, `pnpm sandbox --desktop`.
 
 ## Layout
 
@@ -33,6 +34,7 @@ Each app has its own `AGENTS.md` with the conventions for working in it.
 
 ```sh
 pnpm sandbox        # this checkout's board on free ports with seeded data; `pnpm sandbox stop` (.claude/skills/sandbox)
+pnpm sandbox --desktop   # the same, plus the Electron shell attached to it (stop closes it too)
 pnpm dev            # server :4317 + Vite :5317 (main checkout only, see Must)
 pnpm desktop        # pnpm dev + Electron window (main checkout only)
 pnpm typecheck      # quick check while iterating
@@ -70,7 +72,7 @@ and to this table.
 | Task templates: fields, placeholders, creating from one        | [docs/features/templates.md](docs/features/templates.md)                            |
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
-| Column collapse, panel sections, which links a card shows      | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
+| Column collapse, panel sections, card links, the settings page | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
 | PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
 | Creating tasks from Jira or GitHub issue URLs                  | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
 | The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |

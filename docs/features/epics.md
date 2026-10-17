@@ -24,6 +24,7 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
 | Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
 | An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
+| Reopening or unarchiving one of its tasks unarchives it | `unarchiveEpicFor` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -58,8 +59,15 @@ moves the epic to the end of its new column.
   lane) and re-derives it; tasks archived on their own earlier stay archived, and so do leftover tasks Auto-archive
   archived one at a time (the match is on the stamp, so it is best effort). `archiveFinishedEpic` uses the same helper.
 - `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
-  this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
-  and Auto-archive treats such a Done task as loose. There is no migration for these.
+  this (its Done tasks stayed unarchived and still point at it) can be archived without moving the epic, and
+  Auto-archive treats such a Done task as loose. There is no migration for these.
+- **Bringing a task back unarchives its epic.** Reopening a task in an archived epic (`move` out of Done) or
+  unarchiving it (`update`) unarchives the epic in the same write (`unarchiveEpicFor`), then `syncEpic` re-derives
+  its status from the tasks that are unarchived. Otherwise the open task would show loose while still saying
+  "in epic #N". The epic logs `unarchived` with `becauseTask` and `reopened`. Its other archived tasks stay archived
+  (unlike unarchiving the epic itself). Archiving that task again doesn't archive the epic with it: the epic stays
+  unarchived and, with no unarchived tasks left, drops to Backlog; archive it by hand if that isn't wanted. Creating a task in an archived epic, or moving one into it, is still refused
+  (`epicFor`: "unarchive it first"). Both paths go through the tasks service, so the UI, REST and MCP share the rule.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
@@ -103,8 +111,9 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 ### In the panel
 
 - An epic's panel shows **Tasks** where a task shows where it's up to (`EpicChildren.tsx`): the roll-up, then
-  each task by status with its progress, current step, attention and live T3 thread. **Show on board** sets
-  `?epic=`, **Add task** opens the palette with the epic preselected.
+  each task by status with its progress, current step, attention and live T3 thread. **Show on board** toggles
+  `?epic=`: it sets it (switching from another epic's filter), and while the board shows this epic it reads
+  "Showing on board", is pressed and clears it. **Add task** opens the palette with the epic preselected.
 - An **Autopilot** button in the top bar switches automations on or off for the epic's tasks
   ([Autopilot](autopilot.md#switches-and-scopes); the band's header has the same button).
 - The status in the top bar is read-only (`Epic · Backlog`), and Plan, Local review, Reopen and Close as… are
@@ -152,7 +161,7 @@ The prompt names harnesses only as examples, so the same text reads right in any
 
 #### T3 Code threads
 
-Starting threads with no one watching is off until the user turns on **Settings → T3 Code → Let agents start
+Starting threads with no one watching is off until the user turns on **Settings → Integrations → T3 Code → Let agents start
 threads** (`agentT3Threads`). Unlike the launch dialog, nobody sees the model or access before the agent starts,
 and messages land in threads as if the user had typed them.
 

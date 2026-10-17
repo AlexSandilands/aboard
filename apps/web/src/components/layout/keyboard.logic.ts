@@ -30,7 +30,7 @@ export function matchesShortcut(event: KeyEventLike, shortcut: string, isMac: bo
   return modPressed === parsed.mod && !otherPressed && event.shiftKey === parsed.shift && event.altKey === parsed.alt;
 }
 
-export type KeybindingCommand = "palette.open" | "idea.new" | "panel.close";
+export type KeybindingCommand = "palette.open" | "idea.new" | "settings.open" | "back";
 
 /** What a binding's `when` can look at. Built per key event from the stores and the event target. */
 export interface KeybindingContext {
@@ -38,10 +38,10 @@ export interface KeybindingContext {
   editableFocus: boolean;
   /** Focus is inside a menu, listbox or dialog, which handle their own keys. */
   popupFocus: boolean;
-  /** The palette or a settings dialog is open. */
+  /** The palette or a dialog is open. */
   overlayOpen: boolean;
-  /** The task detail panel is open. */
-  panelOpen: boolean;
+  /** Escape has somewhere to go back to: the task panel is open, or Settings is showing. */
+  canGoBack: boolean;
 }
 
 export interface Keybinding {
@@ -56,7 +56,8 @@ const noFocusClaim = (c: KeybindingContext) => !c.overlayOpen && !c.editableFocu
 export const DEFAULT_KEYBINDINGS: readonly Keybinding[] = [
   { key: "mod+k", command: "palette.open" },
   { key: "n", command: "idea.new", when: noFocusClaim },
-  { key: "escape", command: "panel.close", when: (c) => c.panelOpen && noFocusClaim(c) },
+  { key: "mod+,", command: "settings.open", when: (c) => !c.overlayOpen },
+  { key: "escape", command: "back", when: (c) => c.canGoBack && noFocusClaim(c) },
 ];
 
 /** Commands run synchronously. Others wait to see whether something nearer the focus claimed the key. */
