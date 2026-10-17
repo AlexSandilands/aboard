@@ -12,7 +12,14 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { WorktreeHeadError, type GithubActions, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
+import {
+  RunAbandonedError,
+  WorktreeHeadError,
+  type GithubActions,
+  type Runner,
+  type RunnerRequest,
+  type RunnerResult,
+} from "../types.ts";
 import { fixDedupeKey, fixPrompt, fixPrs, parseFixKey } from "./fixPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
@@ -436,6 +443,21 @@ describe("fix PRs: nudge or new session", () => {
     await pass();
     expect(requests[0]!.kind).toBeUndefined();
     expect(requests[0]!.workspace).toEqual({ branch: "feat/thing" });
+  });
+
+  it("tells the runner to stop waiting once the PR moved on, and skips the run instead of flagging it", async () => {
+    const { requests, setPr, pass, turnOn, failRunner, runs } = setup();
+    turnOn();
+    failRunner(new RunAbandonedError("it changed while waiting for T3 Code"));
+    setPr({ checks: "failing" });
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false });
+    const { stillWanted } = requests[0]!;
+    expect(stillWanted?.()).toBe(true);
+    setPr({ checks: "failing", headOid: SHA_B });
+    expect(stillWanted?.()).toBe(false);
+    setPr({ checks: "failing", headOid: SHA_A, state: "merged" });
+    expect(stillWanted?.()).toBe(false);
   });
 
   it("skips the attempt when the branch moved on before the agent started", async () => {

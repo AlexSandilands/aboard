@@ -10,7 +10,7 @@ import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { t3RunWorking } from "../threads.ts";
-import { defineAutomation, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
+import { defineAutomation, RunAbandonedError, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
 
 export { AUTOPILOT_START_PLANNED };
 
@@ -144,7 +144,8 @@ const failed = (reason: string, patch: Partial<ActionResult> = {}): ActionResult
  * (Default never starts), a plan, nothing unfinished blocking it. The engine adds the concurrency cap, quiet hours
  * and the daily caps. Tasks go in board order, and the engine takes as many as there is room for.
  *
- * The agent moves the task to In Progress itself. A run that fails, or leaves the task in Planned past the grace
+ * The agent moves the task to In Progress itself. A T3 Code that can't be reached is waited for (the runner holds the
+ * run for up to ten minutes). A run that fails, or leaves the task in Planned past the grace
  * period, is flagged on the task and notified; it is never retried, because the dedupe key holds the task's
  * `statusChangedAt`: moving it out and back into Planned is the way to try again.
  */
@@ -188,7 +189,6 @@ export const startPlanned = defineAutomation({
     const reason = notStartable(task);
     if (reason) return { status: "skipped", summary: `Skipped #${task.number}: ${reason}` };
 
-    const deadline = Date.now() + config.graceMinutes * 60_000;
     const prompt = [
       taskHandoffPrompt({ task, boardUrl, mode: "work", linkedThread: true }),
       unattendedNote(config.skill),
@@ -199,11 +199,23 @@ export const startPlanned = defineAutomation({
         run,
         label: `Start planned · #${task.number}`,
         prompt,
+        // A wait for T3 can take minutes: the task may have been started by hand, moved or archived meanwhile.
+        stillWanted: () => {
+          try {
+            return notStartable(services.tasks.summary(task.id)) === null;
+          } catch {
+            // Deleted meanwhile.
+            return false;
+          }
+        },
         tier: task.suggestedModel?.tier ?? null,
         options: config,
         ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
       });
     } catch (error) {
+      if (error instanceof RunAbandonedError) {
+        return { status: "skipped", summary: `Skipped #${task.number}: ${error.message}` };
+      }
       // A headless run only ends when the agent does: one that hit its budget or timeout did start.
       const begun = services.tasks.summary(task.id).status !== "planned";
       return begun
@@ -216,7 +228,8 @@ export const startPlanned = defineAutomation({
     }
 
     // A T3 thread is only up, and has the grace period to move the task; a headless agent is over, so it either
-    // moved the task or never will.
+    // moved the task or never will. The grace period starts once the thread is up: the runner may have waited for T3.
+    const deadline = Date.now() + config.graceMinutes * 60_000;
     const patch = patchOf(started);
     if (!(await leftPlanned(services, task.id, started.runner === "headless" ? Date.now() : deadline))) {
       return failed(

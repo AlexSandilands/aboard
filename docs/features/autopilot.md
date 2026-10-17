@@ -387,8 +387,8 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   thread or session itself, and the model line is left out, since the tier picks the model) plus an unattended note
   (no one to ask: block the step and stop) and, for a chosen skill, a line pointing at its `SKILL.md`. `tier` is the
   task's suggested tier. The agent moves the task to In Progress itself.
-- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the action
-  began. A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
+- **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the thread
+  started (the runner may first have waited up to ten minutes for T3, see [Runners](#runners)). A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
   the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
   error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
   finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
@@ -546,7 +546,18 @@ with that error.
 - **`kind: "start"`** (the default) begins a new session. The automation's `runner` option picks the runner:
   **Auto** (a T3 Code thread when T3 is detected and its live poll is ok, else headless), **T3 only** (fails
   when T3 isn't connected) or **Headless only**. Once Auto has asked T3 it never falls back to headless: the
-  thread may have started even when the reply was lost.
+  thread may have started even when the reply was lost. Before choosing, a status that isn't ready is refreshed
+  (`t3.test()`: discover and poll again), because the cached one is empty just after a restart.
+- **A T3 that can't be reached is waited for.** A T3 launch or nudge that fails because T3 isn't answering
+  (`isT3Unavailable`: not running yet, shell, socket or branch listing unreachable), and T3 only finding T3 not
+  detected, is retried every 15 seconds for up to ten minutes in all (`T3_HOLD_MS`, `T3_RETRY_MS`; the clock starts at the
+  first failure and is shared by the readiness check and the launch). Auto doesn't wait: a T3 that isn't ready after
+  a fresh look sends it headless, as before. T3 only waits while T3 isn't detected; a detected T3 whose shell isn't answering goes on to the launch, which waits if it is unreachable and fails if T3 refuses (an expired token). A request can pass `stillWanted`, asked after each wait: Start planned
+  uses it so a task started by hand, moved or archived meanwhile ends the run as skipped (no thread, no flag). The run stays `running` meanwhile:
+  no failed run, no attention flag. A retried launch keeps its command id, so T3 never starts two threads. Anything
+  else fails at once (no model ready, no token, project not in T3, a changed protocol), and so does a T3 that is
+  still unreachable when the ten minutes end. A board restart during the wait fails the run like any run a restart
+  strands.
 - **`label`** is what the run is, short: "Review PRs · PR #73 round 1", "Fix PRs · PR #73", "Start planned · #107",
   "<custom name> · #42", "Digest". Each automation supplies it, and the runner (`sessionName`) prefixes it with
   "Autopilot · " and uses it as the session link's label, `claude --name` and the T3 thread's title

@@ -139,6 +139,13 @@ threads are listed in the panel only ([board-layout.md](board-layout.md#links-on
 Whether T3 really has the project (by its id, or the same folder) is checked when the dialog opens. If it
 doesn't, the dialog says so and offers to copy the prompt instead.
 
+**Right after a restart.** The board looks for T3 when it starts and then every minute, and the first look can
+catch T3 mid-start. So anything that acts on T3 (launch options, a launch, the model catalog, posting into a
+thread) that finds it not detected looks again first (`ensureDetected` in `integrations/t3.ts`), and a launch whose
+shell request gets no answer looks again once in case T3 moved. Only then does it fail, with "T3 Code is not running"
+or the shell's error, tagged `details.t3 = "unreachable"` (`isT3Unavailable`) so a caller can tell a T3 that isn't
+there yet from one that refused. Autopilot waits on those ([Runners](autopilot.md#runners)).
+
 #### The launch dialog
 
 **New T3 Code thread…** opens a dialog modelled on T3's own new-thread screen:
