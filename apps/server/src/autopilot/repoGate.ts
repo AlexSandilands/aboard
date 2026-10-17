@@ -3,7 +3,7 @@ import type { RunGit } from "../integrations/backup.ts";
 
 // One `git fetch origin` at a time per repository (docs/features/autopilot.md#runners). Two fetches in one checkout
 // race for its ref locks and the loser fails, which is how parallel T3 launches lost their workspaces: each one's
-// worktree starts with a fetch. Autopilot's T3 launches hold the gate until T3 has fetched, and the board's own
+// worktree starts with a fetch. Autopilot's T3 launches hold the gate until T3 has fetched, and its headless worktrees'
 // fetches wait for it.
 
 export interface RepoGate {

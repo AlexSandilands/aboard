@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { epicBranchName } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
-import { createRepoGate, gateFetches } from "../autopilot/repoGate.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
@@ -139,14 +138,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
     });
   };
-  // One `git fetch` per repository at a time, across Autopilot's launches and the board's own fetches.
-  const gate = createRepoGate();
   const runner =
     overrides.autopilotRunner ??
     createAutopilotRunner({
       services: deps.services,
       t3,
-      gate,
       worktreesDir: deps.config.worktreesDir,
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
@@ -233,11 +229,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       }
       const branch = epicBranchName(epic);
       try {
-        await ensureEpicBranch(
-          gateFetches(overrides.autopilotGit ?? defaultRunGit, gate),
-          project.workspaceRoot,
-          branch,
-        );
+        await ensureEpicBranch(overrides.autopilotGit ?? defaultRunGit, project.workspaceRoot, branch);
       } catch (error) {
         throw new AppError("VALIDATION", `Couldn't make the epic's branch ${branch}: ${messageOf(error)}`);
       }

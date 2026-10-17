@@ -23,7 +23,7 @@ import {
 } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
-import { createRepoGate, gateFetches, type RepoGate } from "./repoGate.ts";
+import { createRepoGate, gateFetches } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
   RunAbandonedError,
@@ -108,8 +108,6 @@ export function createAutopilotRunner(deps: {
     T3Integration,
     "status" | "test" | "launchTaskThread" | "sendToThread" | "threadWorkspace" | "retryPreparation"
   >;
-  /** One `git fetch` per repository at a time: shared with the board's other fetches (epic branches). */
-  gate?: RepoGate;
   /** Where headless runs' worktrees go, under the board's data dir. */
   worktreesDir: string;
   /** How long a run waits for an unreachable T3 Code before failing, and how often it looks again. */
@@ -125,7 +123,9 @@ export function createAutopilotRunner(deps: {
   sessionLinked?: (sessionId: string) => void;
   log?: Logger;
 }): Runner {
-  const gate = deps.gate ?? createRepoGate();
+  // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
+  // branch, a launch from the dialog) doesn't queue behind them: a hold can last minutes.
+  const gate = createRepoGate();
   const runGit = gateFetches(deps.runGit ?? defaultRunGit, gate);
   const runAgent = deps.runAgent ?? runHeadlessAgent;
   const newSessionId = deps.newSessionId ?? randomUUID;

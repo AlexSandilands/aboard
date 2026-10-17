@@ -141,7 +141,7 @@ async function leftPlanned(
       link?.kind === "t3_thread" &&
       link.snapshot?.status === "failed" &&
       link.syncedAt !== null &&
-      Date.parse(link.syncedAt) >= thread!.since
+      Date.parse(link.syncedAt) > thread!.since
     ) {
       return "failed";
     }

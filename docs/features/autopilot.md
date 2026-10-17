@@ -652,9 +652,10 @@ so the model is the one the user mapped to the task's suggested tier. The thread
   engine doesn't await agent actions, so every launch of a pass would start together. So each launch holds the
   repository's gate (`autopilot/repoGate.ts`, keyed by the project folder) from the launch until T3's shell shows the
   thread's latest run past `preparing` (`threadWorkspace`, every 2 s), for up to three minutes (`T3_PREPARE_MS`;
-  then the gate is let go and the run carries on). The board's own fetches take the same gate (`gateFetches`): the
-  headless runner's worktree and `ensureEpicBranch`. Launches from the dialog and `start_task_thread` don't, and a
-  wait for an unreachable T3 lets the gate go meanwhile.
+  then the gate is let go and the run carries on), twice that when the preparation is retried. The headless runner's
+  worktree fetch takes the same gate (`gateFetches`). What the user asks for doesn't, since a hold can last minutes:
+  launches from the dialog and `start_task_thread`, and an epic's branch (`ensureEpicBranch`). A wait for an
+  unreachable T3 lets the gate go meanwhile.
 - **A failed preparation is retried once.** When the thread's run goes `failed` during that wait, the runner asks T3
   to prepare it again in the same thread (`retryPreparation`: T3's `prepared-run.retry` command, id
   `autopilot-<runId>-retry`), still holding the gate, so the link and thread stay. A second failure fails the run with
@@ -782,7 +783,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |
 | `apps/server/src/autopilot/runnerOptions.ts` | The runner options every agent automation shares |
 | `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
-| `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: T3 launches and the board's own fetches |
+| `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
