@@ -100,7 +100,7 @@ function ProjectPicker({
             <SelectValue />
           </span>
         </SelectTrigger>
-        <SelectPopup>
+        <SelectPopup alignItemWithTrigger={false}>
           {projects.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               <span className="flex min-w-0 items-center gap-2">
