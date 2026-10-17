@@ -246,6 +246,50 @@ rule editor take `?project=`; without it the page shows the project the board wa
   list (the `settingsEditorFromList` history state), it steps back in history, so the browser's Back doesn't
   repeat the page; opened from a link or a reload, it opens the list as a new entry.
 
+### Keyboard shortcuts
+
+The app-wide shortcuts are a registry in `packages/contracts/src/keybindings.ts`: each command (`palette.open`,
+`idea.new`, `settings.open`, `back`) has a title, a group, a default key and a default `when`. Shaped like T3
+Code's keybindings: a command, a key and a `when`, and when several match a key event the later one wins.
+
+- **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
+  `shift` and `alt`), then one key. The space and plus keys are `space` and `plus`. The match is exact: extra
+  modifiers don't match (`matchesShortcut` in `layout/keyboard.logic.ts`).
+- **`when`.** An expression over the context flags with `!`, `&&`, `||` and parentheses (`!` binds tightest, `||`
+  loosest); empty means always. The flags (`KEYBINDING_CONTEXT_KEYS`) are `editableFocus`, `popupFocus`,
+  `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack`; `AppShell` builds them per
+  key event (`overlayOpen` is the palette or the digest, as it always was; `dialogOpen` is any app dialog, via
+  `anyDialogOpen`). An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
+  hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.
+- **Overrides.** The setting `keybindings` holds only what the user changed, per command: `{ key?, when? }` (an empty
+  `when` means always). A command left out always follows the current default, so a default added or changed later
+  reaches everyone who didn't customise it. `PATCH /api/settings` replaces the whole map; loading drops entries for
+  commands that no longer exist or values that no longer parse. They are in `EXPORTED_SETTINGS`, so backups carry them.
+- **Dispatch.** `resolveKeybindings` merges defaults and overrides into `ResolvedKeybinding`s (a `when` that doesn't
+  parse falls back to the default); `resolveCommand` picks the command. `palette.open` is `immediate`, and so is any
+  command the user moved to a key with Ctrl/Cmd or Alt (browsers keep print, find and save there): it runs in the
+  keydown and prevents its default. The rest wait to see whether something nearer the focus claimed the key
+  (see the comment on `useGlobalKeybindings`). Keys are stored normalized (each modifier once, in the order mod,
+  shift, alt). The control recording a new key carries `data-recording-shortcut`,
+  and the shortcuts stand down for it.
+- **Conflicts.** `keybindingConflicts` flags two commands on the same key whose `when`s can both be true
+  (`whenOverlaps` tries every assignment of the flags the two use). The flags are treated as independent, so
+  `overlayOpen` and `paletteOpen` are not known to imply each other; it may flag a pair that can't really collide.
+- **Editor.** Settings → Board → Keybindings (`KeybindingsSection`): a row per command, grouped by the registry's
+  `group`, with a button that records the next key combination (Esc records too; clicking away cancels), a `When`
+  field that saves on blur and shows the parse error, a conflict note, a warning when a bare character would run the
+  command while typing in a field (`triggersWhileTyping`), and Reset / Reset all (`keybindings.logic.ts` keeps the
+  stored map free of values equal to the default; saves are built from the cache, which is patched at once, or
+  from the newest save while any is still in flight (an earlier reply must not rewind it), so edits in a row don't
+  lose each other). Rows have ids `board.keybindings.<command>`, which the
+  settings index generates from the registry.
+- **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
+  header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
+  Board (`PaletteItem.shortcut`). The desktop app has no menu accelerator for these, so there is nothing to keep in sync.
+
+To add a command: add it to `KeybindingCommand` and `DEFAULT_KEYBINDINGS`, run it in `useGlobalKeybindings`'s `run`
+(the `never` check fails until you do), and give it a test.
+
 ### Persistence
 
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
@@ -290,6 +334,9 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores, and `useSettingsNav` (scroll-spy, scroll requests, `boardReturn`) |
 | `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
+| `packages/contracts/src/keybindings.ts`               | The shortcut registry, `when` parser and evaluator, overrides schema, conflicts (tested) |
+| `apps/web/src/components/layout/keyboard.logic.ts`, `useKeybindings.ts` | Matching key events, recording and formatting shortcuts (tested), the resolved bindings hook |
+| `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Board → Keybindings, and the override edits (tested) |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |

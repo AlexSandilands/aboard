@@ -10,6 +10,8 @@ import {
   AUTOPILOT_START_PLANNED,
   AUTOPILOT_UNSTICK,
   BRAND,
+  DEFAULT_KEYBINDINGS,
+  KeybindingCommand,
   MODEL_TIERS,
   NOTIFICATION_KINDS,
 } from "@repo/contracts";
@@ -477,6 +479,14 @@ function generated(): Draft[] {
   return [
     ...NOTIFICATION_KINDS.map(({ kind, label, description }) =>
       draft(`board.notifications.kind-${kind}`, label, description, ["pop-up", "notification", "alert"]),
+    ),
+    ...KeybindingCommand.options.map((command) =>
+      draft(
+        `board.keybindings.${command}`,
+        DEFAULT_KEYBINDINGS[command].title,
+        `The shortcut for this, and when it applies. Default ${DEFAULT_KEYBINDINGS[command].key}.`,
+        ["keybinding", "shortcut", "hotkey", "key", "rebind", "when"],
+      ),
     ),
     draft(
       "tasks.models.tiers",

@@ -1,3 +1,5 @@
+export const IS_MAC = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
+
 /** True when a key event comes from somewhere the user is typing. */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -12,4 +14,9 @@ export function isInsidePopup(target: EventTarget | null): boolean {
   return (
     target.closest('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot$="-popup"]') !== null
   );
+}
+
+/** True on the control that is recording a new shortcut, which gets every key (the app's own shortcuts stand down). */
+export function isRecordingShortcut(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("[data-recording-shortcut]") !== null;
 }

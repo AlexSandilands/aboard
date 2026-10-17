@@ -252,6 +252,18 @@ interface DialogsState {
   closeImagePreview: () => void;
 }
 
+/** True while any of the app's dialogs is open (what the `dialogOpen` shortcut condition means). */
+export function anyDialogOpen(state: DialogsState): boolean {
+  return (
+    state.digestOpen ||
+    state.t3Launch !== null ||
+    state.mergePr !== null ||
+    state.sessionWarning !== null ||
+    state.templateDraft !== null ||
+    state.imagePreview !== null
+  );
+}
+
 export const useDialogs = create<DialogsState>()((set) => ({
   digestOpen: false,
   t3Launch: null,

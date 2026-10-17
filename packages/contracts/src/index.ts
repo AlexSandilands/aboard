@@ -22,6 +22,7 @@ export * from "./recurring.ts";
 export * from "./customAutomations.ts";
 export * from "./digest.ts";
 export * from "./notifications.ts";
+export * from "./keybindings.ts";
 export * from "./delivery.ts";
 export * from "./attachments.ts";
 export * from "./settingsAsk.ts";

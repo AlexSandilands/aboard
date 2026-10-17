@@ -91,6 +91,7 @@ function seed() {
     dryRun: false,
   });
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
+  s.settings.update({ keybindings: { back: { key: "q", when: "" } } });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
   return { ...h, s, project, a, b, idea };
@@ -153,6 +154,7 @@ describe("settings export", () => {
     db.prepare("INSERT INTO settings (key, value_json) VALUES ('someFutureSecret', '\"x\"')").run();
     const keys = s.backup.dump().settings.map((r) => r.key);
     expect(keys).toContain("jiraBaseUrl");
+    expect(keys).toContain("keybindings");
     expect(keys).not.toContain("t3Token");
     expect(keys).not.toContain("backupDir");
     expect(keys).not.toContain("someFutureSecret");
