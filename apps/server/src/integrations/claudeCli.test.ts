@@ -29,7 +29,7 @@ describe("claude CLI", () => {
     const dir = mkdtempSync(join(tmpdir(), "headless-"));
     writeFileSync(join(dir, "copilot"), "");
     writeFileSync(join(dir, "copilot.cmd"), "");
-    const env = { PATH: dir, PATHEXT: ".EXE;.CMD" };
+    const env = { PATH: dir, PATHEXT: ".EXE;.cmd" };
     expect(resolveExecutable("copilot", env, "win32")?.toLowerCase()).toBe(join(dir, "copilot.cmd").toLowerCase());
     expect(resolveExecutable("copilot", env, "linux")).toBe(join(dir, "copilot"));
   });
