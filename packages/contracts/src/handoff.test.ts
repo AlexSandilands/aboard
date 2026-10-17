@@ -53,6 +53,13 @@ describe("taskHandoffPrompt", () => {
     }
   });
 
+  it("asks a session to link itself under a name saying what it does", () => {
+    const work = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" });
+    expect(work).toContain(`link(agentSession: {harness, sessionId, cwd}, label: "Implementing #9")`);
+    const plan = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" });
+    expect(plan).toContain(`label: "Planning #9"`);
+  });
+
   it("asks a planning session to link itself too", () => {
     expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).toContain("link(t3Thread:");
   });

@@ -236,6 +236,22 @@ describe("agent session links", () => {
     });
   });
 
+  it("keeps the label a session was linked with, and takes a new one when it is linked again", () => {
+    const { s, task } = setup("in_progress", []);
+    const first = s.links.add(task.id, { ...session(), label: "Planning #7" }, "claude-code");
+    expect(first.label).toBe("Planning #7");
+    // Linked again without a label (the usual re-link): nothing changes.
+    s.links.add(task.id, session(), "claude-code");
+    expect(s.links.get(first.id).label).toBe("Planning #7");
+    const again = s.links.add(task.id, { ...session(), label: "Implementing #7" }, "claude-code");
+    expect(again.id).toBe(first.id);
+    expect(s.links.get(first.id).label).toBe("Implementing #7");
+    expect(s.tasks.detail(task.id).events.at(-1)).toMatchObject({
+      type: "link_updated",
+      payload: { label: "Implementing #7" },
+    });
+  });
+
   it("accepts a session the board started itself, in a worktree outside the project's folder", () => {
     // Autopilot's headless runs link their `claude -p` sessions this way (#85).
     const { s, task } = setup("in_progress", []);

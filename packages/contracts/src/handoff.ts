@@ -141,8 +141,9 @@ export function taskHandoffPrompt({
       ? "This thread is already linked to the task; don't link it again."
       : "Link the task to its Jira issue with link if it has one, and, if you're running in T3 Code, to this " +
           "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
-    "In Claude Code or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}), " +
-      "the id from $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID, so it can be reopened from the board.",
+    "In Claude Code or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
+      `label: "${mode === "plan" ? "Planning" : "Implementing"} #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID or ` +
+      "$COPILOT_AGENT_SESSION_ID, so it can be reopened from the board under that name (unless you're told the board linked it for you).",
   );
   return lines.join("\n");
 }

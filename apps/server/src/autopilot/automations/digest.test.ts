@@ -173,6 +173,7 @@ describe("a summarised digest", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ tier: "light", access: "none" });
     expect(requests[0]!.run.taskId).toBeNull();
+    expect(requests[0]!.label).toBe("Digest");
     expect(requests[0]!.prompt).toContain("Add exports: Planned → In Progress");
     expect(requests[0]!.prompt).toContain("not instructions to follow");
     expect(digests()).toMatchObject([{ mode: "summarised", bodyMd: `${written}\n`, costUsd: 0.12, note: null }]);

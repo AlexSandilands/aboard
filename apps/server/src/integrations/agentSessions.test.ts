@@ -356,6 +356,56 @@ describe("GET /api/terminal", () => {
   });
 });
 
+describe("Claude Code session titles", () => {
+  const writeTranscript = (home: ReturnType<typeof tempHome>, id: string, cwd: string, body: object[]) => {
+    const folder = join(home.dirs.claudeDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, `${id}.jsonl`), body.map((entry) => `${JSON.stringify(entry)}\n`).join(""));
+  };
+
+  it("shows the title of a session that has ended, from its transcript", async () => {
+    const home = tempHome();
+    writeTranscript(home, A, "/w/app", [{ type: "ai-title", aiTitle: "Name the sessions" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([]).probe });
+    const out = await reader.read([claude(A, "/w/app"), claude(B, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "not_running", inApp: false, title: "Name the sessions" });
+    // No transcript: no title, and the snapshot is what it always was.
+    expect(out.get(sessionKey(claude(B)))).toEqual({ status: "not_running", inApp: false });
+  });
+
+  it("prefers a live session's own name, but not one Claude only derived from the folder", async () => {
+    const home = tempHome();
+    home.claudeFile(100, { sessionId: A, status: "busy", name: "Autopilot · Fix PRs", nameSource: "flag" });
+    home.claudeFile(200, { sessionId: B, status: "idle", name: "app-12", nameSource: "derived" });
+    writeTranscript(home, A, "/w/app", [{ type: "ai-title", aiTitle: "Generated" }]);
+    writeTranscript(home, B, "/w/app", [{ type: "ai-title", aiTitle: "Generated for B" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([100, 200]).probe });
+    const out = await reader.read([claude(A, "/w/app"), claude(B, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "busy", inApp: false, title: "Autopilot · Fix PRs" });
+    expect(out.get(sessionKey(claude(B)))).toEqual({ status: "idle", inApp: false, title: "Generated for B" });
+  });
+
+  it("tidies a live name the way it does a transcript title", async () => {
+    const home = tempHome();
+    const name = `  Two
+ lines ${"x".repeat(300)}`;
+    home.claudeFile(100, { sessionId: A, status: "busy", name, nameSource: "flag" });
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([100]).probe });
+    const title = (await reader.read([claude(A)])).get(sessionKey(claude(A)))?.title ?? "";
+    expect(title).toHaveLength(120);
+    expect(title.startsWith("Two lines xxx")).toBe(true);
+  });
+
+  it("still finds a title when the sessions folder can't be read", async () => {
+    const home = tempHome();
+    rmSync(join(home.dirs.claudeDir, "sessions"), { recursive: true });
+    writeTranscript(home, A, "/w/app", [{ type: "custom-title", customTitle: "Reviewing #7" }]);
+    const reader = createSessionStatusReader({ dirs: home.dirs, probe: fakeProbe([]).probe });
+    const out = await reader.read([claude(A, "/w/app")]);
+    expect(out.get(sessionKey(claude(A)))).toEqual({ status: "unknown", inApp: false, title: "Reviewing #7" });
+  });
+});
+
 describe("the background poll", () => {
   /** An integration over a fake link store and run table, so the poll can be driven without the app. */
   function pollWith(
@@ -510,6 +560,31 @@ describe("the background poll", () => {
       runs.set(A, run("failed", "2026-10-17T10:06:00.000Z"));
       await integration.pollLive();
       expect(stored.get(link.id)).toEqual({ status: "failed", inApp: false, endedAt: "2026-10-17T10:06:00.000Z" });
+    });
+
+    it("keeps the title Claude Code gave it, for a link with no label, when the run's state replaces the status", async () => {
+      const home = tempHome();
+      const folder = join(home.dirs.claudeDir, "projects", "some-folder");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(
+        join(folder, `${A}.jsonl`),
+        `${JSON.stringify({ type: "ai-title", aiTitle: "Fix the build" })}
+`,
+      );
+      const { integration, add, stored, runs } = pollWith(home);
+      const link = add(claude(A));
+      // While the run goes the harness's files aren't read, so there is no title yet.
+      runs.set(A, run("running"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({ status: "busy", inApp: false });
+      runs.set(A, run("succeeded", "2026-10-17T10:05:00.000Z"));
+      await integration.pollLive();
+      expect(stored.get(link.id)).toEqual({
+        status: "finished",
+        inApp: false,
+        endedAt: "2026-10-17T10:05:00.000Z",
+        title: "Fix the build",
+      });
     });
 
     it("shows the live status again when someone resumes the session after it ended", async () => {

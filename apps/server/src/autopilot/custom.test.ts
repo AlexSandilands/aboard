@@ -536,6 +536,7 @@ describe("custom automations: actions", () => {
     await pass();
     expect(agentRuns).toHaveLength(1);
     const request = agentRuns[0]!;
+    expect(request.label).toBe(`Fix checks · #${t.number}`);
     expect(request.prompt).toContain("Use the fix-ci skill.");
     expect(request.prompt).toContain(`Fix #${t.number} Flaky test at https://github.com/o/r/pull/9 in /work/alpha`);
     expect(request.prompt).toContain("The suite fails on Windows.");

@@ -85,6 +85,8 @@ export interface AgentArgsInput {
   sessionId: string;
   /** As `--model` takes it; null keeps the CLI's default. */
   model: string | null;
+  /** The session's display name (`--name`), so it reads as something in `claude --resume` and Claude Code's UI. */
+  name?: string | null;
   defaultBranch: string | null;
   /** Allowed on top of the access's own list, e.g. `Bash(gh pr review *)` for a read-only reviewer. */
   tools?: readonly string[];
@@ -135,6 +137,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // Nothing to resume: a no-tools run has no worktree or card, so its transcript would only pile up.
     ...(none ? ["--no-session-persistence"] : []),
     ...(input.model ? ["--model", input.model] : []),
+    ...(input.name ? ["--name", input.name] : []),
   ];
 }
 

@@ -126,6 +126,7 @@ export async function produceDigest(input: ProduceDigestInput): Promise<Produced
         const skillText = config.skill.source === "builtin" ? undefined : readSkillBody(config.skill.path);
         const result = await input.runner.start({
           run: input.run,
+          label: "Digest",
           prompt: digestPrompt(plain, config.skill, skillText),
           tier: "light",
           options: config,

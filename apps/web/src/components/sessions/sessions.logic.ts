@@ -76,9 +76,14 @@ export function folderName(cwd: string): string {
   );
 }
 
-/** "Claude Code session in aboard". */
+/** What the session is called: the label it was linked with, else the title its harness keeps for it. */
+export function sessionName(link: SessionLink): string | null {
+  return link.label?.trim() || link.snapshot?.title?.trim() || null;
+}
+
+/** The session's name, or "Claude Code session in aboard" when it has none. */
 export function sessionTitle(link: SessionLink): string {
-  return link.label ?? `${AGENT_HARNESSES[link.ref.harness].label} session in ${folderName(link.ref.cwd)}`;
+  return sessionName(link) ?? `${AGENT_HARNESSES[link.ref.harness].label} session in ${folderName(link.ref.cwd)}`;
 }
 
 export interface SessionWarning {

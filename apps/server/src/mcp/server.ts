@@ -26,7 +26,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
 - End each session with add_note: a handover of what's done, what's left and the next action.
 - In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.
-- In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board.`;
+- In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}, label); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board. Give it a short label saying what this session does, such as "Implementing #107" or "Planning #107": it is the name the board shows (link again with a new label when the work changes). A subagent has the same session id as the session that started it, so only the main session links; a subagent must never link or relabel it.`;
 
 /** Generic HTTP client user agents that say nothing about which agent is calling. */
 const GENERIC_AGENTS =

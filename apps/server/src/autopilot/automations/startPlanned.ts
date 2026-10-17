@@ -197,6 +197,7 @@ export const startPlanned = defineAutomation({
     try {
       started = await runner.start({
         run,
+        label: `Start planned · #${task.number}`,
         prompt,
         tier: task.suggestedModel?.tier ?? null,
         options: config,

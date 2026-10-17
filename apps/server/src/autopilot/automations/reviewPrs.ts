@@ -386,6 +386,7 @@ export const reviewPrs = defineAutomation({
     try {
       const result = await runner.start({
         run,
+        label: `Review PRs · PR #${data.number} round ${data.round}`,
         prompt: reviewPrompt({
           task,
           pr: data,

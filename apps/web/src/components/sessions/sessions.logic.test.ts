@@ -2,6 +2,7 @@ import type { AgentSessionRef, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   folderName,
+  sessionName,
   sessionStatusPresentation,
   sessionTitle,
   sessionWarning,
@@ -30,6 +31,18 @@ describe("sessions", () => {
     expect(folderName("/")).toBe("/");
     expect(sessionTitle(link())).toBe("Claude Code session in aboard");
     expect(sessionTitle(link({ harness: "copilot-cli" }, "Autopilot run"))).toBe("Autopilot run");
+  });
+
+  it("names a session by its label, else by the title its harness keeps", () => {
+    const titled = (label: string | null, title: string | null): SessionLink => ({
+      ...link({}, label),
+      snapshot: { status: "idle", inApp: false, title },
+    });
+    expect(sessionName(titled("Implementing #7", "Fix the thing"))).toBe("Implementing #7");
+    expect(sessionName(titled(null, "Fix the thing"))).toBe("Fix the thing");
+    expect(sessionTitle(titled(null, "Fix the thing"))).toBe("Fix the thing");
+    expect(sessionName(titled("  ", null))).toBeNull();
+    expect(sessionName(link())).toBeNull();
   });
 
   it("shows status unknown until the first read", () => {

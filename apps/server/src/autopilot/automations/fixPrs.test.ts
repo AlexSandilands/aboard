@@ -182,6 +182,7 @@ describe("fix PRs: triggers", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ workspace: { branch: "feat/thing" }, expectHead: SHA_A });
     expect(requests[0]!.kind).toBeUndefined();
+    expect(requests[0]!.label).toBe("Fix PRs · PR #7");
     expect(requests[0]!.prompt).toContain("**Failing checks.**");
     expect(requests[0]!.prompt).toContain("gh pr checks https://github.com/acme/app/pull/7");
     expect(runs()[0]).toMatchObject({

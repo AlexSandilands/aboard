@@ -205,18 +205,24 @@ export function createLinksService(
                 .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
             : undefined);
         if (existing) {
-          // A session is one link however often it is linked, but an agent may correct the folder it gave: Claude
-          // finds a conversation to resume by its folder, so the newest one wins.
-          const before = parseJson<{ cwd?: string }>(existing.ref_json)?.cwd;
-          if (classified.kind === "agent_session" && before !== classified.ref.cwd) {
-            repos.links.setRef(existing.id, refJson(classified)!);
-            fx.log(task.id, actor, "link_updated", {
-              linkId: existing.id,
-              kind: existing.kind,
-              from: before,
-              to: classified.ref.cwd,
-            });
-            return toLink(repos.links.row(existing.id)!);
+          // A session is one link however often it is linked, but an agent may correct the folder it gave (Claude
+          // finds a conversation to resume by its folder) or rename the session as its work changes (planning, then
+          // implementing): the newest one wins.
+          if (classified.kind === "agent_session") {
+            const before = parseJson<{ cwd?: string }>(existing.ref_json)?.cwd;
+            const relabel = input.label && input.label !== existing.label ? input.label : null;
+            if (before !== classified.ref.cwd || relabel) {
+              if (before !== classified.ref.cwd) repos.links.setRef(existing.id, refJson(classified)!);
+              if (relabel) repos.links.setLabel(existing.id, relabel);
+              fx.log(task.id, actor, "link_updated", {
+                linkId: existing.id,
+                kind: existing.kind,
+                ...(before !== classified.ref.cwd ? { from: before, to: classified.ref.cwd } : {}),
+                ...(relabel ? { label: relabel } : {}),
+              });
+              fx.task(task.id);
+              return toLink(repos.links.row(existing.id)!);
+            }
           }
           return toLink(existing);
         }

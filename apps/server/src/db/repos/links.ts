@@ -104,6 +104,9 @@ export function createLinksRepo(sql: Sql) {
     setRef(id: string, refJson: string): void {
       sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
     },
+    setLabel(id: string, label: string | null): void {
+      sql.run("UPDATE task_links SET label = ? WHERE id = ?", label, id);
+    },
     setSnapshot(id: string, snapshotJson: string | null, syncedAt: string): void {
       sql.run("UPDATE task_links SET snapshot_json = ?, synced_at = ? WHERE id = ?", snapshotJson, syncedAt, id);
     },

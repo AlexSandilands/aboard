@@ -18,10 +18,23 @@ describe("headless agent", () => {
     expect(after(args, "--max-budget-usd")).toBe("3");
     expect(after(args, "--session-id")).toBe(SESSION);
     expect(after(args, "--model")).toBe("sonnet");
+    expect(args).not.toContain("--name");
     expect(args).not.toContain("--no-session-persistence");
     expect(args).not.toContain("--strict-mcp-config");
     expect(args).not.toContain("--json-schema");
     expect(args).toEqual(expect.arrayContaining(["Bash", "Edit", `mcp__${BRAND.id}`]));
+  });
+
+  it("names the session", () => {
+    const args = agentArgs({
+      access: "edit",
+      budgetUsd: 3,
+      sessionId: SESSION,
+      model: null,
+      name: "Autopilot · Fix PRs · PR #7",
+      defaultBranch: null,
+    });
+    expect(after(args, "--name")).toBe("Autopilot · Fix PRs · PR #7");
   });
 
   it("runs read-only with extra tools and a schema", () => {

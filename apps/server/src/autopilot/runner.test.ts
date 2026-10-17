@@ -104,7 +104,10 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
 
   it("runs headless in a new worktree, records the session and cost, and links the session", async () => {
     const { h, task, run, jobs, linked, start, patches } = setup();
-    const out = await start({ options: { runner: "auto", budgetUsd: 2, timeoutMinutes: 5, model: "haiku" } });
+    const out = await start({
+      label: "Fix PRs · PR #7",
+      options: { runner: "auto", budgetUsd: 2, timeoutMinutes: 5, model: "haiku" },
+    });
 
     const name = `${task.number}-${run.id.slice(0, 8)}`;
     const path = join(repo.worktrees, "app", name);
@@ -123,15 +126,20 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     expect(job.args[job.args.indexOf("--max-budget-usd") + 1]).toBe("2");
     expect(job.args[job.args.indexOf("--session-id") + 1]).toBe(SESSION);
     expect(job.args[job.args.indexOf("--model") + 1]).toBe("haiku");
+    expect(job.args[job.args.indexOf("--name") + 1]).toBe("Autopilot · Fix PRs · PR #7");
     expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     expect(job.prompt).toContain("Do the task");
+    expect(job.prompt).toContain("already linked this session to the task, so don't link it yourself");
     expect(job.prompt).toContain(`git push -u origin autopilot/${name}`);
     expect(job.prompt).toContain("never push to `main`");
     expect(git(path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(`autopilot/${name}`);
 
     const links = h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session");
     expect(links).toHaveLength(1);
-    expect(links[0]).toMatchObject({ label: "Autopilot session", ref: { harness: "claude-code", sessionId: SESSION } });
+    expect(links[0]).toMatchObject({
+      label: "Autopilot · Fix PRs · PR #7",
+      ref: { harness: "claude-code", sessionId: SESSION },
+    });
     // So the board reads its state at once, not at the next poll.
     expect(linked).toEqual([SESSION]);
   });
@@ -271,7 +279,10 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
   describe("runner choice", () => {
     it("Auto starts a T3 thread when T3 is connected, with a stable command id and lowered access", async () => {
       const { run, jobs, launches, start, patches } = setup({ t3: T3_UP });
-      const out = await start({ options: { runner: "auto", t3Access: "auto-accept-edits" } });
+      const out = await start({
+        label: "Start planned · #7",
+        options: { runner: "auto", t3Access: "auto-accept-edits" },
+      });
       expect(jobs).toHaveLength(0);
       expect(out.runner).toBe("t3");
       expect(out.threadUrl).toMatch(/thread-9/);
@@ -280,6 +291,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
         commandId: `autopilot-${run.id}`,
         work: true,
         maxRuntimeMode: "auto-accept-edits",
+        title: "Autopilot · Start planned · #7",
       });
       expect(launches[0]!.prompt).toContain("Do the task");
       expect(launches[0]).not.toHaveProperty("baseRef");

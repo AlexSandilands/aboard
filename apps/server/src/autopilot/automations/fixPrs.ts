@@ -460,6 +460,7 @@ export const fixPrs = defineAutomation({
     try {
       started = await runner.start({
         run,
+        label: `Fix PRs · PR #${data.number}`,
         prompt,
         tier: task.suggestedModel?.tier ?? null,
         options: config,
