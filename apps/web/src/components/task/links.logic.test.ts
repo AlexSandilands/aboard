@@ -12,9 +12,10 @@ import {
 
 const base = { taskId: "t", label: null, syncedAt: null, createdAt: "" };
 
-const thread = (id: string, snapshot: Partial<T3ThreadSnapshot> | null): TaskLink => ({
+const thread = (id: string, snapshot: Partial<T3ThreadSnapshot> | null, createdAt = ""): TaskLink => ({
   ...base,
   id,
+  createdAt,
   kind: "t3_thread",
   url: `t3code://threads/env/${id}`,
   ref: { environmentId: "env", threadId: id },
@@ -167,17 +168,17 @@ describe("groupLinks", () => {
   it("shows Claude Code sessions as rows when the task has no thread", () => {
     const groups = groupLinks([session("a"), session("b")]);
     expect(ids(groups.sessionRows)).toEqual(["a", "b"]);
-    expect(groups.folded).toEqual([]);
+    expect(groups.folded.size).toBe(0);
   });
 
   it("folds Claude Code sessions into the one thread's menu, newest first", () => {
     const groups = groupLinks([
-      session("old", { createdAt: "2026-01-01T00:00:00Z" }),
-      thread("t", null),
-      session("new", { createdAt: "2026-01-02T00:00:00Z" }),
+      session("old", { createdAt: "2026-01-02T00:00:00Z" }),
+      thread("t", null, "2026-01-01T00:00:00Z"),
+      session("new", { createdAt: "2026-01-03T00:00:00Z" }),
     ]);
     expect(ids(groups.sessionRows)).toEqual(["t"]);
-    expect(ids(groups.folded)).toEqual(["new", "old"]);
+    expect(ids(groups.folded.get("t") ?? [])).toEqual(["new", "old"]);
   });
 
   it("keeps Autopilot and Copilot CLI sessions as rows next to a thread", () => {
@@ -193,13 +194,70 @@ describe("groupLinks", () => {
       session("mine"),
     ]);
     expect(ids(groups.sessionRows).toSorted()).toEqual(["copilot", "done", "named", "t"]);
-    expect(ids(groups.folded)).toEqual(["mine"]);
+    expect(ids(groups.folded.get("t") ?? [])).toEqual(["mine"]);
   });
 
-  it("doesn't fold sessions when there are several threads, as it can't tell whose they are", () => {
-    const groups = groupLinks([thread("t1", null), thread("t2", null), session("s")]);
-    expect(ids(groups.sessionRows)).toEqual(["t1", "t2", "s"]);
-    expect(groups.folded).toEqual([]);
+  it("folds each session into the newest thread linked before it when there are several", () => {
+    const groups = groupLinks([
+      thread("t1", null, "2026-01-01T00:00:00Z"),
+      session("s1", { createdAt: "2026-01-01T00:00:01Z" }),
+      thread("t2", null, "2026-01-02T00:00:00Z"),
+      session("s2", { createdAt: "2026-01-02T00:00:01Z" }),
+      session("s3", { createdAt: "2026-01-02T00:00:02Z" }),
+    ]);
+    expect(ids(groups.sessionRows)).toEqual(["t1", "t2"]);
+    expect(ids(groups.folded.get("t1") ?? [])).toEqual(["s1"]);
+    expect(ids(groups.folded.get("t2") ?? [])).toEqual(["s3", "s2"]);
+  });
+
+  it("files a session linked after a later thread under that thread, even if it belongs to an older one", () => {
+    // Attribution is a heuristic on link time: nothing says which thread a session came from.
+    const groups = groupLinks([
+      thread("t1", null, "2026-01-01T00:00:00Z"),
+      session("s1", { createdAt: "2026-01-01T00:00:01Z" }),
+      thread("t2", null, "2026-01-02T00:00:00Z"),
+      session("resumed-t1", { createdAt: "2026-01-03T00:00:00Z" }),
+    ]);
+    expect(ids(groups.folded.get("t1") ?? [])).toEqual(["s1"]);
+    expect(ids(groups.folded.get("t2") ?? [])).toEqual(["resumed-t1"]);
+  });
+
+  it("folds a session linked at the same moment as its thread", () => {
+    const at = "2026-01-01T00:00:00Z";
+    const groups = groupLinks([thread("t", null, at), session("s", { createdAt: at })]);
+    expect(ids(groups.sessionRows)).toEqual(["t"]);
+    expect(ids(groups.folded.get("t") ?? [])).toEqual(["s"]);
+  });
+
+  it("folds a session linked before every thread into the oldest one", () => {
+    const groups = groupLinks([
+      session("early", { createdAt: "2026-01-01T00:00:00Z" }),
+      thread("t1", null, "2026-01-02T00:00:00Z"),
+      thread("t2", null, "2026-01-03T00:00:00Z"),
+    ]);
+    expect(ids(groups.sessionRows)).toEqual(["t1", "t2"]);
+    expect(ids(groups.folded.get("t1") ?? [])).toEqual(["early"]);
+  });
+
+  it("folds a session linked just before the only thread", () => {
+    const groups = groupLinks([
+      session("s", { createdAt: "2026-01-01T00:00:00Z" }),
+      thread("t", null, "2026-01-01T00:00:01Z"),
+    ]);
+    expect(ids(groups.sessionRows)).toEqual(["t"]);
+    expect(ids(groups.folded.get("t") ?? [])).toEqual(["s"]);
+  });
+
+  it("keeps Autopilot and Copilot CLI sessions as rows when there are several threads", () => {
+    const after = "2026-01-04T00:00:00Z";
+    const groups = groupLinks([
+      thread("t1", null, "2026-01-01T00:00:00Z"),
+      thread("t2", null, "2026-01-02T00:00:00Z"),
+      session("auto", { createdAt: after, label: "Autopilot · Review" }),
+      session("copilot", { createdAt: after, harness: "copilot-cli" }),
+    ]);
+    expect(ids(groups.sessionRows).toSorted()).toEqual(["auto", "copilot", "t1", "t2"]);
+    expect(groups.folded.size).toBe(0);
   });
 });
 

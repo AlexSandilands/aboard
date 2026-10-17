@@ -16,7 +16,7 @@ import { BRAND } from "./brand.ts";
 
 describe("PR review verdict", () => {
   it("builds the header from the product's name", () => {
-    expect(prReviewHeader()).toBe(`🤖 ${BRAND.name} Autopilot review`);
+    expect(prReviewHeader()).toBe(`📋 ${BRAND.name} Autopilot review`);
   });
 
   it("keys one review per link and head commit", () => {

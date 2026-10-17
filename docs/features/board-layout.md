@@ -130,10 +130,12 @@ starts collapsed.
   agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`) the first three show,
   and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is per panel visit, not
   stored).
-- **Folded sessions.** When the task has exactly one T3 thread, its Claude Code sessions leave the rows and sit in
-  the thread's ⌄ menu, one submenu each (open, fork, copy the resume command, copy the id, remove), as the thread
-  runs a Claude session underneath. Sessions don't say which thread they belong to, so with several threads
-  nothing folds. Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
+- **Folded sessions.** A Claude Code session leaves the rows and sits in a thread's ⌄ menu, one submenu each (open,
+  fork, copy the resume command, copy the id, remove), as the thread runs a Claude session underneath. Sessions don't
+  say which thread they belong to, but an agent links its thread and its session together, so a session goes to the
+  newest thread linked at or before it (by link creation time). A session linked before every thread goes to the
+  oldest one, so a task with a single thread folds all of its Claude sessions.
+  Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
   runner's "Autopilot ·" name) and Copilot CLI sessions always stay rows.
 
 #### The Links section
