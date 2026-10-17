@@ -111,8 +111,9 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 ### In the panel
 
 - An epic's panel shows **Tasks** where a task shows where it's up to (`EpicChildren.tsx`): the roll-up, then
-  each task by status with its progress, current step, attention and live T3 thread. **Show on board** sets
-  `?epic=`, **Add task** opens the palette with the epic preselected.
+  each task by status with its progress, current step, attention and live T3 thread. **Show on board** toggles
+  `?epic=`: it sets it (switching from another epic's filter), and while the board shows this epic it reads
+  "Showing on board", is pressed and clears it. **Add task** opens the palette with the epic preselected.
 - An **Autopilot** button in the top bar switches automations on or off for the epic's tasks
   ([Autopilot](autopilot.md#switches-and-scopes); the band's header has the same button).
 - The status in the top bar is read-only (`Epic · Backlog`), and Plan, Local review, Reopen and Close as… are
