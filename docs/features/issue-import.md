@@ -77,8 +77,9 @@ An issue that is an epic becomes one on the board, and its children become its t
   `sourceUrl`; only the import converts. A Jira epic with no children listed stays a task with a note too: an empty
   epic looks the same as one whose children couldn't be searched (a tools list in Settings without a search tool,
   a search tool by another name, a failed search), and an empty epic nobody notices is worse than a note.
-- **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseIssueSource` (a Jira key from
-  the model that isn't one is dropped and counted), then matched against the unarchived tasks in the project linked
+- **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseIssueSource` (a child that
+  isn't the same kind of issue as its epic is dropped and counted: a Jira epic's list comes from the model, and a
+  GitHub URL in it would be read with the user's `gh`), then matched against the unarchived tasks in the project linked
   to the same issue (Jira key, or GitHub host, repo and number):
   - none, or only archived ones: a new task in the epic with the child as its `sourceUrl`, created by `import`;
   - a loose task: it moves into the epic (`tasks.update(epicId)`), keeping its title and plan;

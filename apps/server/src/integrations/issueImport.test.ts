@@ -265,7 +265,9 @@ describe("importing an epic", () => {
     task.events.filter((e) => e.type === "note").map((e) => String(e.payload.text));
 
   it("turns a Jira epic into an epic whose children each import on their own", async () => {
-    const { s, create, run, jobs } = setup({ runImport: jiraEpic(["PROJ-8", "PROJ-9", "not a key", "PROJ-8"]) });
+    const { s, create, run, jobs } = setup({
+      runImport: jiraEpic(["PROJ-8", "PROJ-9", "not a key", "PROJ-8", "https://github.com/acme/app/issues/99"]),
+    });
     const epic = await run(create("PROJ-7").id);
     expect(epic).toMatchObject({ kind: "epic", title: "One-page checkout", status: "backlog" });
     expect(epic.links[0]).toMatchObject({ kind: "jira", ref: { key: "PROJ-7" } });
@@ -273,7 +275,8 @@ describe("importing an epic", () => {
     expect(sorted(epic.children.map((c) => c.title))).toEqual(["Do PROJ-8", "Do PROJ-9"]);
     expect(epic.children.every((c) => c.import?.status === "done" && c.parent?.id === epic.id)).toBe(true);
     expect(jobs.map((j) => (j.source.kind === "jira" ? j.source.key : null))).toEqual(["PROJ-7", "PROJ-8", "PROJ-9"]);
-    expect(notes(epic)).toEqual(["Skipped a child issue that wasn't a Jira key or issue URL."]);
+    // A GitHub URL in a Jira epic's list came from the model, not Jira, so it is dropped like a bad key.
+    expect(notes(epic)).toEqual(["Skipped 2 child issues that weren't a Jira issue."]);
     expect(s.tasks.summaries({ projectId: epic.projectId })).toHaveLength(3);
   });
 

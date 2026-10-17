@@ -83,7 +83,12 @@ export function createImportsService(
    * the board in the project (linked to the same issue, not archived) joins the epic rather than being created twice;
    * one in another epic is left there. Returns the tasks created, whose imports the caller starts.
    */
-  const fillEpic = (taskId: string, sourceLabel: string, epic: NonNullable<ImportResult["epic"]>): string[] => {
+  const fillEpic = (
+    taskId: string,
+    sourceLabel: string,
+    sourceKind: IssueSource["kind"],
+    epic: NonNullable<ImportResult["epic"]>,
+  ): string[] => {
     const tasks = deps.tasks();
     // An empty epic and one whose children couldn't be listed (no Jira search tool allowed, or a search that failed)
     // look the same, so it stays a task rather than becoming an empty epic nobody would notice.
@@ -114,9 +119,11 @@ export function createImportsService(
     let unreadable = 0;
     for (const child of epic.children) {
       if (seen.size >= IMPORT_CHILDREN_MAX) break;
-      // Jira children come from the model, so a key that isn't one is dropped rather than trusted.
+      // Jira children come from the model, which has just read text anyone could write: anything but a Jira issue
+      // (a GitHub URL, say, which would be read with the user's gh) is dropped rather than trusted. A child is always
+      // the same kind of issue as its epic.
       const source = parseIssueSource(child, settings);
-      if (!source) {
+      if (source?.kind !== sourceKind) {
         unreadable++;
         continue;
       }
@@ -154,7 +161,7 @@ export function createImportsService(
     }
     if (unreadable) {
       lines.push(
-        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} a Jira key or issue URL.`,
+        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${sourceKind === "jira" ? "a Jira issue" : "a GitHub issue"}.`,
       );
     }
     if (lines.length) tasks.addNote(taskId, lines.join("\n\n"), IMPORT_ACTOR);
@@ -200,7 +207,9 @@ export function createImportsService(
           },
           IMPORT_ACTOR,
         );
-        const childImports = result.epic ? fillEpic(taskId, source?.placeholder ?? record.sourceUrl, result.epic) : [];
+        const childImports = result.epic
+          ? fillEpic(taskId, source?.placeholder ?? record.sourceUrl, record.sourceKind, result.epic)
+          : [];
         repos.imports.update({ ...record, status: "done", error: null, updatedAt: nowIso() });
         fx.log(taskId, IMPORT_ACTOR, "imported", { source: record.sourceUrl });
         return { childImports };
