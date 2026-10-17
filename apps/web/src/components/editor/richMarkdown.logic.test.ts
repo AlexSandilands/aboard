@@ -1,7 +1,10 @@
+import { getSchema } from "@tiptap/core";
+import { Placeholder } from "@tiptap/extensions";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { EditorState } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
-import { richMarkdownSchema as schema } from "./richMarkdown.extensions";
+import { richMarkdownExtensions, richMarkdownSchema as schema } from "./richMarkdown.extensions";
 import {
   canRoundTrip,
   docToMarkdown,
@@ -10,6 +13,7 @@ import {
   markdownToSlice,
   parseAttachmentToken,
   selectionToMarkdown,
+  vscodePasteMode,
 } from "./richMarkdown.logic";
 
 const ID = "81a89b6b-21e4-4069-8ba9-b6245e069151";
@@ -284,11 +288,45 @@ describe("clipboard", () => {
     expect(blocks.content.firstChild?.type.name).toBe("bulletList");
   });
 
+  it("pastes into an editor whose schema is its own instance, not one built from another", () => {
+    // The editor adds Placeholder to the extensions, so its schema is not `richMarkdownSchema`.
+    const editorSchema = getSchema([...richMarkdownExtensions, Placeholder]);
+    expect(editorSchema).not.toBe(schema);
+    const state = EditorState.create({ doc: markdownToDoc(editorSchema, "") });
+
+    const pasted = state.apply(state.tr.replaceSelection(markdownToSlice(editorSchema, "one\ntwo\n\n- a\n- b")));
+    expect(pasted.doc.textContent).toContain("one");
+    expect(docToMarkdown(pasted.doc)).toBe("one\ntwo\n\n- a\n- b");
+
+    // The slice must come from the editor's schema: another instance's nodes can't be placed, so
+    // nothing is pasted (and nothing is reported), which was the bug.
+    const foreign = markdownToSlice(schema, "one\ntwo\n\n- a\n- b");
+    const dropped = state.apply(state.tr.replaceSelection(foreign));
+    expect(docToMarkdown(dropped.doc)).toBe("");
+  });
+
   it("copies list items with their markers", () => {
     const doc = markdownToDoc(schema, "- one\n- two");
     expect(selectionToMarkdown(doc, 0, doc.content.size)).toBe("- one\n- two");
     // Inside the second item's text only.
     expect(selectionToMarkdown(doc, 10, 13)).toBe("two");
+  });
+});
+
+describe("vscodePasteMode", () => {
+  it("reads the language VS Code reports", () => {
+    expect(vscodePasteMode('{"version":1,"mode":"markdown"}')).toBe("markdown");
+    expect(vscodePasteMode('{"mode":"typescript","multicursorText":null}')).toBe("typescript");
+  });
+
+  it("is null without a usable mode", () => {
+    expect(vscodePasteMode(undefined)).toBeNull();
+    expect(vscodePasteMode(null)).toBeNull();
+    expect(vscodePasteMode("")).toBeNull();
+    expect(vscodePasteMode("{not json")).toBeNull();
+    expect(vscodePasteMode("null")).toBeNull();
+    expect(vscodePasteMode('{"mode":3}')).toBeNull();
+    expect(vscodePasteMode('{"version":1}')).toBeNull();
   });
 });
 
