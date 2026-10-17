@@ -44,3 +44,6 @@ export function deliveryHintApplies(
   const related = open.some((c) => c.blockedBy.some((b) => ids.has(b.id)));
   return (open.length >= 2 && related) || open.filter((c) => c.status === "planned").length >= 3;
 }
+
+/** Autopilot's "Merge into epic branch": merges task PRs into an integration epic's branch and keeps its PR. */
+export const AUTOPILOT_MERGE_EPIC_PRS = "merge_epic_prs";

@@ -12,7 +12,14 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { WorktreeHeadError, type GithubActions, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
+import {
+  NO_GITHUB,
+  WorktreeHeadError,
+  type GithubActions,
+  type Runner,
+  type RunnerRequest,
+  type RunnerResult,
+} from "../types.ts";
 import { fixDedupeKey, fixPrompt, fixPrs, parseFixKey } from "./fixPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
@@ -78,6 +85,7 @@ function setup() {
     },
   };
   const github: GithubActions = {
+    ...NO_GITHUB,
     postReview: () => Promise.reject(new Error("not in these tests")),
     prHead: async () => live,
   };

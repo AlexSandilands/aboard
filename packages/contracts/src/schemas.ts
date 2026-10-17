@@ -210,6 +210,8 @@ export const PrSnapshot = z.object({
   reviewDecision: z.enum(["approved", "changes_requested", "review_required"]).nullable(),
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   headRef: z.string().nullable(),
+  /** The branch the PR merges into. Optional so snapshots stored before it was read still parse. */
+  baseRef: z.string().nullable().optional(),
   updatedAt: IsoDate.nullable(),
   // Optional so snapshots stored by the gh poller, before merging existed, still parse.
   /** The method auto-merge is set to merge with, or null when auto-merge is off. */

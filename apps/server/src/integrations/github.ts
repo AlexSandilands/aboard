@@ -11,6 +11,7 @@ import type {
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
+import { EPIC_BRANCH_PREFIX } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService, TasksService } from "../services/types.ts";
@@ -75,6 +76,7 @@ export const GraphqlPr = z.object({
   reviewDecision: z.string().nullish(),
   mergeable: z.string().nullish(),
   headRefName: z.string().nullish(),
+  baseRefName: z.string().nullish(),
   headRefOid: z.string().nullish(),
   isCrossRepository: z.boolean().nullish(),
   updatedAt: z.string().nullish(),
@@ -218,6 +220,7 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     reviewDecision,
     mergeable,
     headRef: pr.headRefName || null,
+    baseRef: pr.baseRefName || null,
     updatedAt: pr.updatedAt || null,
     autoMerge: pr.autoMergeRequest ? (asMergeMethod(pr.autoMergeRequest.mergeMethod) ?? "merge") : null,
     mergeMethods,
@@ -233,7 +236,7 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
-const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid isCrossRepository updatedAt
+const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName baseRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
       reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
       reviewThreads(last: 30) { nodes { isResolved comments(last: 5) { nodes {
@@ -342,6 +345,101 @@ export class StaleReviewError extends AppError {
   }
 }
 
+// ── Autopilot's merges and the epic's pull request ───────────────────────
+
+const MERGE_TARGET_QUERY = `query PullRequestMergeTarget($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef { name }
+    pullRequest(number: $number) { id state headRefOid baseRefName }
+  }
+}`;
+const MergeTarget = z.object({
+  repository: z.object({
+    defaultBranchRef: z.object({ name: z.string() }).nullish(),
+    pullRequest: z.object({ id: z.string(), state: z.string(), headRefOid: z.string(), baseRefName: z.string() }),
+  }),
+});
+
+const EPIC_PR_QUERY = `query EpicPullRequest($owner: String!, $name: String!, $head: String!) {
+  repository(owner: $owner, name: $name) {
+    id
+    defaultBranchRef { name }
+    pullRequests(headRefName: $head, states: [OPEN], first: 10) { nodes { number url baseRefName } }
+  }
+}`;
+const EpicPrData = z.object({
+  repository: z.object({
+    id: z.string(),
+    defaultBranchRef: z.object({ name: z.string() }).nullish(),
+    pullRequests: z.object({
+      nodes: z.array(z.object({ number: z.number(), url: z.string(), baseRefName: z.string() }).nullable()),
+    }),
+  }),
+});
+const CREATE_PR_MUTATION = `mutation CreatePullRequest($input: CreatePullRequestInput!) {
+  createPullRequest(input: $input) { pullRequest { number url } }
+}`;
+const CreatedPr = z.object({
+  createPullRequest: z.object({ pullRequest: z.object({ number: z.number(), url: z.string() }) }),
+});
+const PR_ID_QUERY = `query PullRequestId($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
+}`;
+const PrId = z.object({ repository: z.object({ pullRequest: z.object({ id: z.string() }) }) });
+const UPDATE_PR_BODY_MUTATION = `mutation UpdatePullRequestBody($input: UpdatePullRequestInput!) {
+  updatePullRequest(input: $input) { clientMutationId }
+}`;
+
+/** Autopilot was about to merge where it never may. Nothing was merged. */
+export class MergeTargetError extends AppError {
+  constructor(message: string) {
+    super("VALIDATION", message);
+    this.name = "MergeTargetError";
+  }
+}
+
+/**
+ * The guard on every merge Autopilot makes (docs/decisions/0008-autopilot-engine.md): only into the branch it was
+ * asked for, which must be an epic's integration branch, and never into the default branch. Checked against what
+ * GitHub says just before the merge, so a PR retargeted since the last poll is caught.
+ */
+export function checkAutopilotMergeTarget(target: {
+  base: string;
+  expectedBase: string;
+  defaultBranch: string | null;
+}): void {
+  if (target.defaultBranch === null) {
+    throw new MergeTargetError("Can't tell the repository's default branch, so Autopilot won't merge");
+  }
+  if (target.base === target.defaultBranch || target.expectedBase === target.defaultBranch) {
+    throw new MergeTargetError(`Autopilot never merges into the default branch (${target.defaultBranch})`);
+  }
+  if (!target.expectedBase.startsWith(EPIC_BRANCH_PREFIX)) {
+    throw new MergeTargetError(`Autopilot only merges into an epic's integration branch, not ${target.expectedBase}`);
+  }
+  if (target.base !== target.expectedBase) {
+    throw new MergeTargetError(`The PR now merges into ${target.base}, not the epic's branch ${target.expectedBase}`);
+  }
+}
+
+/** What Autopilot merges: a task's PR into its epic's integration branch, at the commit it checked. */
+export interface EpicMergeInput {
+  /** The epic's integration branch the PR must target. */
+  base: string;
+  /** The head commit every condition was checked at; the merge is refused if the PR moved past it. */
+  headOid: string;
+}
+
+/** The epic's draft PR into the default branch. */
+export interface EpicPrInput {
+  host: string;
+  repo: string;
+  /** The epic's integration branch. */
+  head: string;
+  title: string;
+  body: string;
+}
+
 /** States in which GitHub merges at once rather than waiting, as `gh pr merge --auto` treats them. */
 const IMMEDIATELY_MERGEABLE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
 
@@ -430,6 +528,16 @@ export interface GithubIntegration {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's head commit on GitHub now. Throws AppError. */
   prHead(ref: PrRef): Promise<string>;
+  /**
+   * Autopilot's merge of a task's PR into its epic's integration branch: a merge commit at `headOid`, once
+   * checkAutopilotMergeTarget passes on what GitHub says now. Then refreshes the link, which moves the task to Done.
+   * Throws MergeTargetError for a target it may never merge into, AppError for anything else GitHub refuses.
+   */
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  /** The open PR from the epic's branch into the default branch, opened as a draft when there is none. Never merged. */
+  ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
+  /** Replaces a PR's description. Throws AppError. */
+  setPrBody(ref: PrRef, body: string): Promise<void>;
   start(): void;
   stop(): void;
 }
@@ -732,6 +840,88 @@ export function createGithubIntegration(deps: {
         if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
         return parsed.data.repository.pullRequest.headRefOid;
       } catch (error) {
+        throw new AppError("VALIDATION", messageOf(error));
+      }
+    },
+    async mergeIntoEpicBranch(link, input) {
+      const notGithub = () => new AppError("VALIDATION", "Only a GitHub pull request can be merged");
+      if (link.kind !== "pr" || !link.ref) throw notGithub();
+      if (!isGithubPr(link, await ensureStatus())) throw notGithub();
+      await requireGh(link);
+      const [owner, name] = splitRepo(link.ref.repo);
+      const host = link.ref.host;
+      try {
+        const raw = await api.graphql(host, MERGE_TARGET_QUERY, { owner, name, number: link.ref.number });
+        const parsed = MergeTarget.safeParse(raw);
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        const { pullRequest: pr, defaultBranchRef } = parsed.data.repository;
+        checkAutopilotMergeTarget({
+          base: pr.baseRefName,
+          expectedBase: input.base,
+          defaultBranch: defaultBranchRef?.name ?? null,
+        });
+        if (pr.state.toUpperCase() !== "OPEN") throw new AppError("CONFLICT", `The PR is ${pr.state.toLowerCase()}`);
+        if (pr.headRefOid !== input.headOid) {
+          throw new AppError("CONFLICT", `The PR moved on to ${pr.headRefOid.slice(0, 7)} since it was checked`);
+        }
+        // A merge commit, never a squash or rebase: the epic's branch keeps each task's commits.
+        await api.graphql(host, MERGE_MUTATION, {
+          input: { pullRequestId: pr.id, mergeMethod: "MERGE", expectedHeadOid: pr.headRefOid },
+        });
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("VALIDATION", messageOf(error));
+      }
+      try {
+        await refreshOne(link);
+      } catch (error) {
+        logOnce(link.id, link.url, messageOf(error));
+      }
+    },
+    async ensureEpicPr(input) {
+      await requireSignedIn(input.host);
+      const [owner, name] = splitRepo(input.repo);
+      try {
+        const parsed = EpicPrData.safeParse(
+          await api.graphql(input.host, EPIC_PR_QUERY, { owner, name, head: input.head }),
+        );
+        if (!parsed.success) throw new Error("GitHub returned an unexpected repository shape");
+        const repository = parsed.data.repository;
+        const base = repository.defaultBranchRef?.name;
+        if (!base) throw new Error("Can't tell the repository's default branch");
+        if (base === input.head) throw new Error(`The epic's branch can't be the default branch (${base})`);
+        const open = repository.pullRequests.nodes.find((pr) => pr?.baseRefName === base);
+        if (open) return { number: open.number, url: open.url, created: false };
+        const created = CreatedPr.safeParse(
+          await api.graphql(input.host, CREATE_PR_MUTATION, {
+            input: {
+              repositoryId: repository.id,
+              baseRefName: base,
+              headRefName: input.head,
+              title: input.title,
+              body: input.body,
+              draft: true,
+            },
+          }),
+        );
+        if (!created.success) throw new Error("GitHub returned an unexpected PR shape");
+        return { ...created.data.createPullRequest.pullRequest, created: true };
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("VALIDATION", messageOf(error));
+      }
+    },
+    async setPrBody(ref, body) {
+      await requireSignedIn(ref.host);
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const parsed = PrId.safeParse(await api.graphql(ref.host, PR_ID_QUERY, { owner, name, number: ref.number }));
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        await api.graphql(ref.host, UPDATE_PR_BODY_MUTATION, {
+          input: { pullRequestId: parsed.data.repository.pullRequest.id, body },
+        });
+      } catch (error) {
+        if (error instanceof AppError) throw error;
         throw new AppError("VALIDATION", messageOf(error));
       }
     },

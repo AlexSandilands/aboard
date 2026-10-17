@@ -89,6 +89,25 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
         },
       };
     }
+    if (operation === "PullRequestMergeTarget") {
+      const { owner, name, number } = variables as { owner: string; name: string; number: number };
+      const key = `${owner}/${name}#${number}`;
+      const pr = prs.get(key);
+      if (!pr) return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a PullRequest" }] };
+      return {
+        data: {
+          repository: {
+            defaultBranchRef: { name: "main" },
+            pullRequest: {
+              id: `PR_${key}`,
+              state: pr.state,
+              headRefOid: pr.headRefOid,
+              baseRefName: pr.baseRefName ?? "main",
+            },
+          },
+        },
+      };
+    }
     const input = (variables.input ?? variables) as Record<string, unknown>;
     mutations.push({ operation, input });
     if (failNextMutation) {
@@ -165,6 +184,7 @@ export function fakePr(overrides: Partial<FakePr> = {}): FakePr {
     reviewDecision: "APPROVED",
     mergeable: "MERGEABLE",
     headRefName: "feat/poller",
+    baseRefName: "main",
     headRefOid: "head-1",
     updatedAt: "2026-10-01T10:00:00Z",
     autoMergeRequest: null,
