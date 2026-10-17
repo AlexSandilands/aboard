@@ -72,9 +72,13 @@ export function shortPrompt(
   platform: NodeJS.Platform,
 ): string {
   const verb = mode === "plan" ? "Let's plan" : mode === "orchestrate" ? "Let's run the epic" : "Let's work on";
+  // An epic's steps live only in its orchestrating prompt, which get_task doesn't carry.
+  const first =
+    mode === "orchestrate"
+      ? `call get_handoff_prompt(task: "${task.id}", mode: "orchestrate") on the ${BRAND.id} MCP server first and follow it.`
+      : `call get_task("${task.id}") on the ${BRAND.id} MCP server first.`;
   const text =
-    `${verb} #${task.number} from the ${BRAND.id} task board: ` +
-    `call get_task("${task.id}") on the ${BRAND.id} MCP server first. The board started this session and already ` +
+    `${verb} #${task.number} from the ${BRAND.id} task board: ${first} The board started this session and already ` +
     "linked it to the task; don't link it again.";
   const fitted = textArgument(text, platform);
   if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);

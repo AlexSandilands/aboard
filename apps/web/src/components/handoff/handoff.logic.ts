@@ -27,7 +27,7 @@ export function showHandoffActions(
  * can have several threads (a follow-up for conflicts, a review, …), so linked ones don't hide it. Whether T3 really has the project is only known once the dialog loads its options.
  */
 export function canStartT3Thread(
-  task: Pick<TaskSummary, "status" | "archivedAt">,
+  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
   settings: Pick<AppSettings, "t3TokenSet"> | undefined,

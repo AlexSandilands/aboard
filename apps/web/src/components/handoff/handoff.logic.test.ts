@@ -136,6 +136,11 @@ describe("visibility", () => {
     expect(showHandoffActions({ ...epic, archivedAt: "x" })).toBe(false);
   });
 
+  it("offers a new T3 Code thread on a finished epic, but not on a finished task", () => {
+    expect(canStartT3Thread({ ...task, status: "done", kind: "epic" }, project, t3, settings)).toBe(true);
+    expect(canStartT3Thread({ ...task, status: "done" }, project, t3, settings)).toBe(false);
+  });
+
   it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {
     expect(canStartT3Thread(task, project, t3, settings)).toBe(true);
     expect(canStartT3Thread(task, project, { detected: false }, settings)).toBe(false);

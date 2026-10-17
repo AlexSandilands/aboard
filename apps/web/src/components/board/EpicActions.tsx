@@ -20,11 +20,13 @@ export function EpicActions({ epic, className }: { epic: TaskSummary; className?
       t3,
       settings,
     );
-  const links = hasCardLinks(epic.links);
-  if (!links && !handoff) return null;
+  // Threads and sessions only: an epic's own PR (its delivery branch's) is merged by the user, not from its header.
+  const links = epic.links.filter((link) => link.kind !== "pr");
+  const hasLinks = hasCardLinks(links);
+  if (!hasLinks && !handoff) return null;
   return (
     <div className={cn("flex shrink-0 items-center gap-0.5", className)}>
-      {links ? <CardLinks taskId={epic.id} taskStatus={epic.status} links={epic.links} /> : null}
+      {hasLinks ? <CardLinks taskId={epic.id} taskStatus={epic.status} links={links} /> : null}
       {handoff ? <HandoffMenu task={epic} variant="card" canStartT3={startT3} /> : null}
     </div>
   );

@@ -25,7 +25,7 @@ var the agent reads with its shell:
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
 since Claude Code finds a conversation to resume by its folder. The `label` says what the session does
-("Implementing #107", "Planning #107"; see [Names](#names)); linking again with a
+("Implementing #107", "Planning #107", "Orchestrating #107" for an epic; see [Names](#names)); linking again with a
 different label renames the session (also logged as `link_updated`). The id must be a UUID and the folder an
 absolute path, with trailing separators dropped (`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
 `services.links.add` with the same input; their folder can be a worktree outside the project.
@@ -146,7 +146,7 @@ model for the task's tier, and whether sessions get a named window) and offers:
 3. opens it in the terminal setting's terminal. With Windows Terminal it goes to the window named for the task
    (`taskWindowName`, `<brand>-<task#>`): `wt -w <brand>-115 new-tab …` opens the window, or a tab of it when it is
    already open, whatever **Open in** says;
-4. links the session (label "Implementing #N" or "Planning #N", plus the window once the terminal has started), then
+4. links the session (label "Implementing #N", "Planning #N" or, for an epic, "Orchestrating #N", plus the window once the terminal has started), then
    reads its status. When the terminal won't start the result carries the command to run by hand; the session is
    linked all the same, since that command has its id and its prompt says the board linked it.
 
