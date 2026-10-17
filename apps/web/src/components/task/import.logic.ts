@@ -1,4 +1,4 @@
-import { parseIssueSource, type TaskImport } from "@repo/contracts";
+import { parseIssueSource, type TaskImport, type TaskKind } from "@repo/contracts";
 
 /** Where a task's import reads from: "Jira PROJ-1" or "GitHub acme/app#45". */
 export function importSourceLabel(sourceUrl: string): string {
@@ -21,4 +21,19 @@ export function importFailure(task: { import: TaskImport | null }): { title: str
     title: `Couldn't import ${importSourceLabel(failed.sourceUrl)}`,
     reason: failed.error ?? "The import failed.",
   };
+}
+
+/**
+ * An imported epic's tasks while some of them are still importing: how many have finished (or failed) of those created
+ * from an issue. Null for anything else, and once they all have.
+ */
+export function epicImportProgress(task: {
+  kind: TaskKind;
+  import: TaskImport | null;
+  children: ReadonlyArray<{ import: TaskImport | null }>;
+}): { done: number; total: number } | null {
+  if (task.kind !== "epic" || !task.import) return null;
+  const imported = task.children.filter((c) => c.import !== null);
+  const done = imported.filter((c) => c.import!.status !== "pending").length;
+  return done < imported.length ? { done, total: imported.length } : null;
 }

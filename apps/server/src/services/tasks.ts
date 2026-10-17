@@ -404,6 +404,34 @@ export function createTasksService(
       return service.detail(id);
     },
 
+    makeEpic(id, actor) {
+      return core.write((fx) => {
+        const task = record(id);
+        if (task.kind === "epic") return null;
+        // What a task can have and an epic can't. A task fresh from a paste has none of these.
+        const reason = task.parentId
+          ? "it is in an epic, and epics don't nest"
+          : repos.plans.phasesFor([id]).length > 0
+            ? "it has a plan"
+            : task.archivedAt !== null
+              ? "it is archived"
+              : task.resolution !== null
+                ? "it is closed"
+                : task.autopilot !== null
+                  ? "it has an Autopilot flag"
+                  : task.priority
+                    ? "it is a priority"
+                    : null;
+        if (reason) return reason;
+        repos.tasks.update({ ...task, kind: "epic", updatedAt: nowIso() });
+        fx.log(id, actor, "became_epic", {});
+        // The status now follows its tasks (none yet: Backlog).
+        syncEpic(id, actor, fx);
+        fx.task(id);
+        return null;
+      });
+    },
+
     update(id, input, actor) {
       core.write((fx) => {
         const current = record(id);

@@ -1,6 +1,6 @@
 import type { TaskImport } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
+import { epicImportProgress, importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
 
 const imp = (
   status: TaskImport["status"],
@@ -28,5 +28,29 @@ describe("import labels", () => {
     });
     expect(importFailure(imp("pending"))).toBeNull();
     expect(importFailure({ import: null })).toBeNull();
+  });
+});
+
+describe("epicImportProgress", () => {
+  const child = (status: TaskImport["status"] | null) => ({
+    import: status ? { status, error: null, sourceUrl: "PROJ-2" } : null,
+  });
+  const epic = (children: Array<{ import: TaskImport | null }>) => ({
+    kind: "epic" as const,
+    ...imp("done"),
+    children,
+  });
+
+  it("counts the epic's imported tasks that have finished, while some haven't", () => {
+    expect(epicImportProgress(epic([child("done"), child("failed"), child("pending"), child(null)]))).toEqual({
+      done: 2,
+      total: 3,
+    });
+  });
+
+  it("is null once they all have, for an epic nobody imported, and for a task", () => {
+    expect(epicImportProgress(epic([child("done"), child(null)]))).toBeNull();
+    expect(epicImportProgress({ ...epic([child("pending")]), import: null })).toBeNull();
+    expect(epicImportProgress({ ...epic([child("pending")]), kind: "task" })).toBeNull();
   });
 });

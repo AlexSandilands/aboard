@@ -1,6 +1,6 @@
 # Issue import
 
-Board task: #62. Verified against Claude Code 2.1.301 and gh 2.96 (October 2026).
+Board tasks: #62, #77 (epics). Verified against Claude Code 2.1.301 and gh 2.96 (October 2026).
 
 Pasting a Jira key or URL, or a GitHub issue URL, as a new task's title creates the task at once and fills
 in its title, description and labels in the background. The task is usable straight away; the details
@@ -47,7 +47,8 @@ combined with a plan.
 Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
 `--setting-sources user` (the project's and local settings files, with their allow rules, hooks and MCP servers,
 don't apply; the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as
-structured output (`{found, reason?, title, description, labels}`).
+structured output (`{found, reason?, title, description, labels, isEpic?, children?, childTotal?}`; the last three
+only for a Jira epic, see [Epics](#epics)).
 `found: false` is how the model reports an issue it couldn't read. The CLI path is the board reviewer's
 (`headlessReviewCli`).
 
@@ -57,6 +58,42 @@ Labels are normalised with `normalizeLabel`, the ones that don't survive are dro
 task's own, and the total is capped at 10. The prompt lists the labels already on the board so the model
 reuses them.
 
+### Epics
+
+An issue that is an epic becomes one on the board, and its children become its tasks.
+
+- **Finding out.** GitHub: after `gh issue view`, the board reads the issue's sub-issues with
+  `gh api --paginate repos/{o}/{r}/issues/{n}/sub_issues --jq '.[].html_url'` (`fetchSubIssues`); an issue with any
+  is an epic. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
+  child) isn't asked, since epics don't nest. Jira: the prompt asks the run, when the issue's
+  type is Epic or its hierarchy level is 1, to set `isEpic`, search with the JQL `parent = KEY` (falling back to
+  `"Epic Link" = KEY`, for company-managed projects on older Jira) and return up to 50 child keys in `children`
+  and the count in `childTotal`. It doesn't read the children.
+- **Converting.** `ImportsService.complete` applies the result as usual, then `fillEpic` (same write) turns the
+  task into an epic with `tasks.makeEpic`, which logs `became_epic` and re-derives its status from its tasks. It
+  refuses a task that has a plan, is in an epic, is archived or closed, or has an Autopilot flag or priority (none of
+  which an epic can have, and all of which the user may have set while the import ran): the import still completes,
+  and a note on the task says it is an epic that wasn't imported as one. `tasks.create` still refuses an epic with a
+  `sourceUrl`; only the import converts. A Jira epic with no children listed stays a task with a note too: an empty
+  epic looks the same as one whose children couldn't be searched (a tools list in Settings without a search tool,
+  a search tool by another name, a failed search), and an empty epic nobody notices is worse than a note.
+- **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseIssueSource` (a child that
+  isn't the same kind of issue as its epic is dropped and counted: a Jira epic's list comes from the model, and a
+  GitHub URL in it would be read with the user's `gh`), then matched against the unarchived tasks in the project linked
+  to the same issue (Jira key, or GitHub host, repo and number):
+  - none, or only archived ones: a new task in the epic with the child as its `sourceUrl`, created by `import`;
+  - a loose task: it moves into the epic (`tasks.update(epicId)`), keeping its title and plan;
+  - a task already in another epic, or an epic: it stays put, and the epic's note names it.
+- **Their imports.** `complete` returns the new tasks (`childImports`), and the job queues them behind whatever is
+  waiting, three at a time like any import. A child that fails is a failed import on that task; the epic stays. A
+  child that has sub-issues of its own is already in an epic, so it stays a task (epics don't nest).
+- **The note.** One note by `import` on the epic says what didn't simply become a new task: children that moved in,
+  ones left in another epic, skipped keys, and the total when the issue has more than 50.
+
+The panel's import callout shows "Importing the epic's tasks: 12 of 30" while any child import is pending
+(`epicImportProgress`). The board needs nothing new: the epic's `task.upserted` carries `kind: "epic"`, so the card
+becomes a band, and each child's upsert puts it in the band.
+
 ### Which Jira tools are allowed
 
 Claude Code's allow rules take a glob only after a literal `mcp__<server>__` prefix (a `*` in the server
@@ -64,7 +101,9 @@ part is skipped), so "any read-only Jira tool on any server" can't be written. T
 
 - If **Settings → Tasks → New tasks → Jira tools** lists rules, those are allowed as written.
 - Otherwise it runs `claude mcp list`, takes the connected servers and allows `get_jira_issue`,
-  `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the servers we know of.
+  `getJiraIssue` and `jira_get_issue` on each, the single-issue reads of the servers we know of, and their JQL
+  searches `search_jira`, `searchJiraIssuesUsingJql` and `jira_search`, which find an epic's children. None of
+  these names looks like a write.
   A rule for a tool a server lacks does nothing. The list takes seconds, so imports that start together share
   one, and it is kept for five minutes (not when it came back empty).
 - With no connected server the import fails with "No Jira tool available" rather than running a model that
@@ -134,6 +173,11 @@ cache; nothing polls an issue, so a restored `issue` link shows no open/closed b
 - **GitHub through `gh`, Jira through the user's MCP.** The board already depends on `gh` and holds no Jira
   credentials, so the only way to read a Jira issue is the Jira access the user's Claude Code already has.
 - **A rewrite never overwrites the user.** `complete` only fills what is still the placeholder or empty.
+- **An epic is detected, not chosen.** Pasting an epic gives an epic with no extra step; a task the user has
+  already shaped (a plan, an epic, a flag) is left a task, with a note.
+- **Children are full imports.** Each child gets its own run and its own title, summary and labels, through the same
+  queue, rather than a list of bare keys the user has to fill in.
+- **No duplicates.** A child already on the board in the project joins the epic instead of being created again.
 
 ## Alternatives considered
 
@@ -143,19 +187,21 @@ cache; nothing polls an issue, so a restored `issue` link shows no open/closed b
 | Jira REST with a stored API token              | The board would hold a credential, and Jira Cloud and Server differ in auth          |
 | `mcp__*__get_jira_issue` as one allow rule     | Claude Code skips an allow rule with a glob in the server part                       |
 | Poll imported issues' state                    | Out of scope; the snapshot is a record of what was imported                          |
+| One Jira run that also summarises every child  | One long run per epic, and a child's failure would fail them all                     |
+| Import all of an epic's children, however many | A runaway epic would queue hundreds of runs; 50 covers real epics, the note says more |
 
 ## Code map
 
 | File                                         | What it does                                                          |
 | -------------------------------------------- | --------------------------------------------------------------------- |
 | `packages/contracts/src/links.ts`            | `parseIssueSource`, the `issue` link classification                   |
-| `apps/server/src/services/imports.ts`        | Import state: begin, claim, complete, fail, retry                     |
-| `apps/server/src/services/tasks.ts`          | `create` with `sourceUrl`                                             |
+| `apps/server/src/services/imports.ts`        | Import state: begin, claim, complete, fail, retry; `fillEpic`         |
+| `apps/server/src/services/tasks.ts`          | `create` with `sourceUrl`; `makeEpic`                                 |
 | `apps/server/src/integrations/issueImport.ts`| The background job                                                    |
 | `apps/server/src/integrations/headlessImport.ts` | Prompt, `claude` arguments, output, finding Jira tools            |
 | `apps/server/src/integrations/claudeCli.ts`  | Running `claude -p` and reading its result, shared with the reviewer  |
-| `apps/server/src/integrations/github.ts`     | `fetchIssue`                                                          |
+| `apps/server/src/integrations/github.ts`     | `fetchIssue`, `fetchSubIssues`                                        |
 | `apps/server/src/db/migrations/008_issue_imports.sql` | `task_imports`, and `issue` in `task_links`'s kinds          |
 | `apps/web/src/components/command/palette.logic.ts` | `issueImportRow`                                                |
-| `apps/web/src/components/task/ImportCallout.tsx`   | Pending and failed states in the panel                          |
+| `apps/web/src/components/task/ImportCallout.tsx`   | Pending and failed states in the panel; an epic's progress      |
 | `apps/web/src/components/settings/IssueImportSection.tsx` | The settings                                             |
