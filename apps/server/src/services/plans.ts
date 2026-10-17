@@ -45,10 +45,7 @@ export function withSuggestedModel(
   if (input === undefined) return task;
   const next = toSuggestedModel(input);
   if (sameSuggestedModel(task.suggestedModel, next)) return task;
-  fx.log(task.id, actor, "suggested_model_changed", {
-    tier: next?.tier ?? null,
-    reason: next?.reason ?? null,
-  });
+  fx.log(task.id, actor, "suggested_model_changed", { tier: next?.tier ?? null, reason: next?.reason ?? null });
   return { ...task, suggestedModel: next };
 }
 
@@ -72,10 +69,7 @@ export interface PlansModule {
 /** Plan phases and steps, including the plan gate. */
 export function createPlans(
   core: Core,
-  deps: {
-    task: (id: string) => TaskRecord;
-    detail: (id: string) => ReturnType<PlansService["setPlan"]>;
-  },
+  deps: { task: (id: string) => TaskRecord; detail: (id: string) => ReturnType<PlansService["setPlan"]> },
 ): PlansModule {
   const { repos } = core;
 
@@ -177,12 +171,7 @@ export function createPlans(
     plan.phases.forEach((phaseInput, pi) => {
       const existingPhase = phaseInput.id ? oldPhases.get(phaseInput.id) : undefined;
       const phase: PhaseRecord = existingPhase
-        ? {
-            ...existingPhase,
-            title: phaseInput.title,
-            position: phaseKeys[pi]!,
-            updatedAt: now,
-          }
+        ? { ...existingPhase, title: phaseInput.title, position: phaseKeys[pi]!, updatedAt: now }
         : {
             id: randomUUID(),
             taskId: task.id,
@@ -227,10 +216,7 @@ export function createPlans(
       steps: stepCount,
       ...(deleted.length > 0 ? { deleted: deleted.map((d) => `${d.label} ${d.title}`) } : {}),
     });
-    const withContext = {
-      ...task,
-      planContext: plan.context !== undefined ? plan.context : task.planContext,
-    };
+    const withContext = { ...task, planContext: plan.context !== undefined ? plan.context : task.planContext };
     touchTask(withSuggestedModel(withContext, plan.suggestedModel, actor, fx), now);
   };
 
@@ -276,10 +262,7 @@ export function createPlans(
           return found.id;
         };
 
-        const renames = phaseEdits.map((edit) => ({
-          phaseId: resolvePhase(edit.phase),
-          title: edit.title,
-        }));
+        const renames = phaseEdits.map((edit) => ({ phaseId: resolvePhase(edit.phase), title: edit.title }));
         const edits = stepEdits.map((edit) => {
           const { step, move, ...patch } = edit;
           const stepId = resolveIn(plan, taskId, step);
@@ -336,16 +319,8 @@ export function createPlans(
         };
         repos.plans.insertPhase(phase);
         touchTask(task, now);
-        fx.log(taskId, actor, "phase_added", {
-          phaseId: phase.id,
-          title: phase.title,
-        });
-        return {
-          id: phase.id,
-          title: phase.title,
-          position: phase.position,
-          steps: [],
-        };
+        fx.log(taskId, actor, "phase_added", { phaseId: phase.id, title: phase.title });
+        return { id: phase.id, title: phase.title, position: phase.position, steps: [] };
       });
     },
 
@@ -353,17 +328,10 @@ export function createPlans(
       return core.write((fx) => {
         const phase = phaseOrThrow(phaseId);
         const now = nowIso();
-        const updated = {
-          ...phase,
-          title: requireTitle(patch.title),
-          updatedAt: now,
-        };
+        const updated = { ...phase, title: requireTitle(patch.title), updatedAt: now };
         repos.plans.updatePhase(updated);
         touchTask(deps.task(phase.taskId), now);
-        fx.log(phase.taskId, actor, "phase_updated", {
-          phaseId,
-          title: updated.title,
-        });
+        fx.log(phase.taskId, actor, "phase_updated", { phaseId, title: updated.title });
         return phasesOf(phase.taskId).find((p) => p.id === phaseId)!;
       });
     },
@@ -375,10 +343,7 @@ export function createPlans(
         gate(task, repos.plans.countSteps(task.id) - repos.plans.stepsInPhase(phaseId).length);
         repos.plans.deletePhase(phaseId);
         touchTask(task, nowIso());
-        fx.log(task.id, actor, "phase_deleted", {
-          phaseId,
-          title: phase.title,
-        });
+        fx.log(task.id, actor, "phase_deleted", { phaseId, title: phase.title });
       });
     },
 
@@ -400,10 +365,7 @@ export function createPlans(
           afterId = step.id;
         }
         touchTask(task, now);
-        fx.log(task.id, actor, "steps_added", {
-          phaseId,
-          count: created.length,
-        });
+        fx.log(task.id, actor, "steps_added", { phaseId, count: created.length });
         return created.map(toPlanStep);
       });
     },
@@ -437,12 +399,7 @@ export function createPlans(
         }
         const siblings = repos.plans.stepsInPhase(phaseId).filter((s) => s.id !== stepId);
         const now = nowIso();
-        const moved = {
-          ...step,
-          phaseId,
-          position: positionAmong(siblings, to),
-          updatedAt: now,
-        };
+        const moved = { ...step, phaseId, position: positionAmong(siblings, to), updatedAt: now };
         repos.plans.updateStep(moved);
         touchTask(deps.task(step.taskId), now);
         fx.log(step.taskId, actor, "step_moved", { stepId, title: step.title });
