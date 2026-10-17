@@ -526,6 +526,17 @@ describe("failures and attention", () => {
       expect(kinds()).not.toContain("autopilot");
     });
 
+    it("clears the flag when the task is closed in the same millisecond the run failed", async () => {
+      const { s, engine, task, started } = setup();
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      started[0]!.reject(new Error("no runner today"));
+      await engine.idle();
+
+      s.tasks.close(task.id, { resolution: "wont_do" }, "user");
+      expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+    });
+
     it("keeps a flag raised in the same millisecond as the task's last status change", async () => {
       const { s, engine, task, started } = setup();
       s.tasks.move(task.id, { status: "in_progress" }, "user");

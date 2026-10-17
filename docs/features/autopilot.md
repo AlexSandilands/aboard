@@ -126,7 +126,8 @@ real run of the same automation on the task succeeds.
 
 "After" is decided by stored times, so a status change never ties with a flag: `statusChangeTime` in
 `services/tasks.ts` stores a time a millisecond past the task's latest flagged run when the move would otherwise
-land in the same millisecond. A flag raised in the same millisecond _after_ a move still stands.
+land in the same millisecond. A flag raised after a move stands, except in the rare case the move had to step
+past an earlier flag in that very millisecond.
 
 ### The per-task flag
 
