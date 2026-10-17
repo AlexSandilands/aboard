@@ -296,9 +296,9 @@ as comments only.
   chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the
   PR's text untrusted, and says nothing is recorded on the board.
 - **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
-  `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot review`
+  `fyi`). `renderReview` builds one review from it: the summary under `📋 <displayName> Autopilot review`
   (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
-  inline comments starting with `🤖 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
+  inline comments starting with `📋 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
   with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or request
   changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses with
   `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
