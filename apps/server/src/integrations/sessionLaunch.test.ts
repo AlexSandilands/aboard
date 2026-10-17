@@ -67,7 +67,7 @@ function appWith(
         ...input,
       },
     });
-    return { status: res.status, body: (await res.json()) as StartSessionResult & { error: unknown } };
+    return { status: res.status, body: (await res.json()) as StartSessionResult };
   };
   const sessionLinks = () =>
     s.tasks
@@ -184,6 +184,15 @@ describe("starting a session from the board", () => {
     expect(body).toMatchObject({ launched: false, linkId: null });
     expect(body.error).toMatch(/ENOENT/);
     expect(body.command).toContain("claude --session-id");
+    expect(app.sessionLinks()).toHaveLength(0);
+  });
+
+  it("refuses before making a worktree when there is no terminal to open", async () => {
+    const app = appWith({ host: { platform: "linux", which: () => null, readFile: () => null } });
+    const { status, body } = await app.start({ workspace: { mode: "new_worktree", baseRef: "main" } });
+    expect(status).toBe(400);
+    // The project folder isn't a repository, so reaching git would have failed with another message.
+    expect((body as unknown as { error: { message: string } }).error.message).toMatch(/^No terminal to open/);
     expect(app.sessionLinks()).toHaveLength(0);
   });
 

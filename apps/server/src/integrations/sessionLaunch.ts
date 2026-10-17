@@ -182,6 +182,16 @@ export function createSessionLaunch(deps: {
         throw new AppError("VALIDATION", `${harness.label} isn't installed: set its path in Settings → Integrations`);
       }
 
+      // The configured path when one is set; the bare name otherwise, so the terminal's own PATH finds it.
+      const exe = configuredCli(settings, input.harness);
+      // Checked before any worktree is made, so a terminal that can't run leaves nothing behind.
+      const resolved = terminal(settings, h);
+      if (!("launch" in resolved)) throw new AppError("VALIDATION", `No terminal to open: ${resolved.error}`);
+      // cmd reads a quoted first word as the whole line's quotes and strips them, breaking the rest.
+      if (resolved.shell === "cmd" && /\s/.test(exe)) {
+        throw new AppError("VALIDATION", `Command Prompt can't start a CLI whose path has spaces (${exe})`);
+      }
+
       const sessionId = randomUUID();
       let cwd = root;
       let branch: string | null = null;
@@ -203,14 +213,11 @@ export function createSessionLaunch(deps: {
       }
 
       const label = sessionLabel(input.mode, task.number);
-      // The configured path when one is set; the bare name otherwise, so the terminal's own PATH finds it.
-      const exe = configuredCli(settings, input.harness);
       const argvFor = (prompt: string) => {
         const argv = newSessionArgv({ harness: input.harness, sessionId, model: input.model, name: label, prompt });
         return [exe, ...argv.slice(1)];
       };
-      const resolved = terminal(settings, h);
-      const window = "launch" in resolved && resolved.focus ? taskWindowName(task.number) : undefined;
+      const window = resolved.focus ? taskWindowName(task.number) : undefined;
 
       // The prompt as it can go on this command line, else a short one built from the task alone (the web app copies
       // the full prompt to the clipboard instead).
@@ -219,33 +226,27 @@ export function createSessionLaunch(deps: {
       let shortReason = "error" in fitted ? `The prompt couldn't go on the command line: ${fitted.error}.` : null;
       let argv = argvFor("value" in fitted ? fitted.value : short());
       let spec: LaunchSpec | null = null;
-      let launchError: string | null = "launch" in resolved ? null : resolved.error;
-      if ("launch" in resolved) {
-        try {
-          // cmd reads a quoted first word as the whole line's quotes and strips them, breaking the rest.
-          if (resolved.shell === "cmd" && /\s/.test(exe)) {
-            throw new Error(`Command Prompt can't start a CLI whose path has spaces (${exe})`);
-          }
+      let launchError: string | null = null;
+      try {
+        spec = resolved.launch(argv, cwd, window ? { window } : {});
+        if (!fitsCommandLine(spec, h.platform) && !shortReason) {
+          shortReason = "The prompt is too long for the command line.";
+          argv = argvFor(short());
           spec = resolved.launch(argv, cwd, window ? { window } : {});
-          if (!fitsCommandLine(spec, h.platform) && !shortReason) {
-            shortReason = "The prompt is too long for the command line.";
-            argv = argvFor(short());
-            spec = resolved.launch(argv, cwd, window ? { window } : {});
-          }
-        } catch (error) {
-          spec = null;
-          launchError = messageOf(error);
         }
+      } catch (error) {
+        // A folder this terminal can't be given safely: the command can still be run by hand.
+        spec = null;
+        launchError = messageOf(error);
       }
-      const shell = "launch" in resolved ? resolved.shell : h.platform === "win32" ? "cmd" : "bash";
       const result = {
-        command: copyCommand(shell, argv, cwd),
+        command: copyCommand(resolved.shell, argv, cwd),
         cwd,
         branch,
         shortPrompt: shortReason ? argv.at(-1)! : null,
         shortReason,
       };
-      if (!spec || !("launch" in resolved)) return { ...result, launched: false, error: launchError, linkId: null };
+      if (!spec) return { ...result, launched: false, error: launchError, linkId: null };
 
       try {
         await deps.spawn(spec);

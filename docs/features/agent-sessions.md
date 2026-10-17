@@ -161,7 +161,9 @@ terminal with no named windows (the setting changed), the link forgets the windo
 where the setting says. Bringing the window back shows its first tab: Windows Terminal can't focus a tab by what runs
 in it, so with several sessions in the window the one asked for may be on another tab.
 
-A worktree made for a session that then couldn't open stays: the returned command runs in it.
+The terminal setting is resolved first, so one that can't run here is refused (400) before any worktree is made. A
+worktree made for a session whose terminal then didn't start stays, since the returned command runs in it, and the
+dialog closes so starting again doesn't quietly make a second one.
 
 ### Names
 

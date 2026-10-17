@@ -150,7 +150,7 @@ function Composer({
             const toastId = toastManager.add({
               type: "error",
               title: "Couldn't open a terminal",
-              description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead.`,
+              description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in the new worktree on ${result.branch}` : ""}.`,
               actionProps: {
                 children: "Copy command",
                 onClick: () => {
@@ -159,6 +159,8 @@ function Composer({
                 },
               },
             });
+            // Closed, so starting again doesn't quietly make a second worktree beside the one the command uses.
+            onDone();
             return;
           }
           const announce = (copied: boolean) => {
