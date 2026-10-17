@@ -169,6 +169,20 @@ export function createTasksService(
     }
   };
 
+  /**
+   * Unarchives `task`'s epic when it is archived, as the task comes back to open work (reopened out of Done, or
+   * unarchived): left archived, the epic would hide while its task shows loose and still says "in epic #N". The
+   * epic's other archived tasks stay archived. Call after saving the task and before syncing the epic, which then
+   * re-derives the status from the tasks that are back.
+   */
+  const unarchiveEpicFor = (task: TaskRecord, reopened: boolean, actor: string, fx: Effects): void => {
+    const epic = task.parentId ? repos.tasks.get(task.parentId) : undefined;
+    if (!epic || epic.archivedAt === null) return;
+    const restored = { ...epic, archivedAt: null, updatedAt: nowIso() };
+    repos.tasks.update({ ...restored, position: endOfLane(restored) });
+    fx.log(epic.id, actor, "unarchived", { becauseTask: task.number, reopened });
+  };
+
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
   const logEpicChange = (
     task: TaskRecord,
@@ -464,6 +478,10 @@ export function createTasksService(
             syncEpic(id, actor, fx);
           }
         }
+        // A task joining an archived epic is refused (epicFor), so an archived one here is the epic it was already in.
+        if (archivedChanged && next.archivedAt === null && current.kind !== "epic") {
+          unarchiveEpicFor(next, false, actor, fx);
+        }
         if (current.parentId && (current.parentId !== next.parentId || archivedChanged)) {
           syncEpic(current.parentId, actor, fx);
         }
@@ -524,6 +542,10 @@ export function createTasksService(
           // Still in Review (not completed by a merged PR just now): with auto-review on, a reviewer is due.
           if (status === "review" && record(id).status === "review" && deps.reviews().effectiveAutoReview(id)) {
             deps.reviews().openRoundIn(id, { trigger: "move", actor }, fx);
+          }
+          // Leaving Done inside an archived epic is a reopen: the epic comes back with it.
+          if (current.status === "done" && current.archivedAt === null) {
+            unarchiveEpicFor(current, true, actor, fx);
           }
           if (current.parentId) syncEpic(current.parentId, actor, fx);
         } else fx.task(id);

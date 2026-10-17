@@ -129,6 +129,12 @@ describe("describeEvent", () => {
     expect(describeEvent(event("archived"), ctx).text).toBe("archived this");
     expect(describeEvent(event("archived", { withEpic: 12 }), ctx).text).toBe("archived this with epic #12");
     expect(describeEvent(event("unarchived", { withEpic: 12 }), ctx).text).toBe("unarchived this with epic #12");
+    expect(describeEvent(event("unarchived", { becauseTask: 7, reopened: true }), ctx).text).toBe(
+      "unarchived this because #7 was reopened",
+    );
+    expect(describeEvent(event("unarchived", { becauseTask: 7, reopened: false }), ctx).text).toBe(
+      "unarchived this because #7 was unarchived",
+    );
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",
     );

@@ -316,19 +316,67 @@ describe("epics", () => {
     expect(s.tasks.update(epic.id, { archived: false }, "user").status).toBe("backlog");
   });
 
-  it("doesn't re-derive an archived epic when a leftover task of it is archived or reopened", () => {
+  it("doesn't re-derive an archived epic when a leftover task of it is archived", () => {
+    const { s, db, epic, child } = setup();
+    const a = child("A");
+    s.tasks.move(a.id, { status: "done" }, "user");
+    // What an epic archived before tasks went with it looks like: the task is unarchived, still pointing at the epic.
+    db.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?").run(new Date().toISOString(), epic.id);
+    s.tasks.update(a.id, { archived: true }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", archivedAt: expect.any(String) });
+  });
+
+  it("unarchives an archived epic when a leftover Done task of it is reopened, and re-derives it", () => {
+    const { s, db, epic, child } = setup();
+    const [a, early] = [child("A"), child("Early")];
+    for (const t of [a, early]) s.tasks.move(t.id, { status: "done" }, "user");
+    s.tasks.update(early.id, { archived: true }, "user");
+    db.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?").run(new Date().toISOString(), epic.id);
+
+    s.tasks.move(a.id, { status: "planned" }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "planned", archivedAt: null });
+    expect(s.tasks.summary(early.id).archivedAt).not.toBeNull();
+    expect(s.tasks.detail(epic.id).events.find((e) => e.type === "unarchived")).toMatchObject({
+      payload: { becauseTask: a.number, reopened: true },
+    });
+  });
+
+  it("unarchives an archived epic when a task archived with it is unarchived, leaving the others archived", () => {
     const { s, epic, child } = setup();
+    const [a, b] = [child("A"), child("B")];
+    for (const t of [a, b]) s.tasks.move(t.id, { status: "done" }, "user");
+    s.tasks.update(epic.id, { archived: true }, "user");
+
+    s.tasks.update(a.id, { archived: false }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", archivedAt: null });
+    expect(s.tasks.summary(a.id).archivedAt).toBeNull();
+    expect(s.tasks.summary(b.id).archivedAt).not.toBeNull();
+    expect(s.tasks.summary(epic.id).rollup).toMatchObject({ total: 1, done: 1 });
+    expect(s.tasks.detail(epic.id).events.find((e) => e.type === "unarchived")).toMatchObject({
+      payload: { becauseTask: a.number, reopened: false },
+    });
+    // Reopening it afterwards moves the epic like any other.
+    s.tasks.move(a.id, { status: "in_progress" }, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("in_progress");
+  });
+
+  it("still refuses to create a task in, or move one into, an archived epic", () => {
+    const { s, project, epic, child } = setup();
     const a = child("A");
     s.tasks.move(a.id, { status: "done" }, "user");
     s.tasks.update(epic.id, { archived: true }, "user");
-    // What an epic archived before tasks went with it looks like: the task is back, still pointing at the epic.
-    s.tasks.update(a.id, { archived: false }, "user");
-    expect(s.tasks.summary(epic.id).status).toBe("done");
-    s.tasks.update(a.id, { archived: true }, "user");
-    expect(s.tasks.summary(epic.id).status).toBe("done");
-    s.tasks.update(a.id, { archived: false }, "user");
-    s.tasks.move(a.id, { status: "planned" }, "user");
-    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", archivedAt: expect.any(String) });
+    const loose = s.tasks.create({ projectId: project.id, title: "Loose", plan: plan("a") });
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "New", epicId: epic.id, plan: plan("a") }),
+      "VALIDATION",
+      /archived; unarchive it first/,
+    );
+    expectCode(
+      () => s.tasks.update(loose.id, { epicId: epic.id }, "user"),
+      "VALIDATION",
+      /archived; unarchive it first/,
+    );
+    expect(s.tasks.summary(loose.id).parent).toBeNull();
   });
 
   it("republishes its tasks when an epic is renamed, so their cards show the new title", () => {

@@ -24,6 +24,7 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
 | Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
 | An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
+| Reopening or unarchiving one of its tasks unarchives it | `unarchiveEpicFor` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -58,8 +59,14 @@ moves the epic to the end of its new column.
   lane) and re-derives it; tasks archived on their own earlier stay archived, and so do leftover tasks Auto-archive
   archived one at a time (the match is on the stamp, so it is best effort). `archiveFinishedEpic` uses the same helper.
 - `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
-  this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
-  and Auto-archive treats such a Done task as loose. There is no migration for these.
+  this (its Done tasks stayed unarchived and still point at it) can be archived without moving the epic, and
+  Auto-archive treats such a Done task as loose. There is no migration for these.
+- **Bringing a task back unarchives its epic.** Reopening a task in an archived epic (`move` out of Done) or
+  unarchiving it (`update`) unarchives the epic in the same write (`unarchiveEpicFor`), then `syncEpic` re-derives
+  its status from the tasks that are unarchived. Otherwise the open task would show loose while still saying
+  "in epic #N". The epic logs `unarchived` with `becauseTask` and `reopened`. Its other archived tasks stay archived
+  (unlike unarchiving the epic itself). Creating a task in an archived epic, or moving one into it, is still refused
+  (`epicFor`: "unarchive it first"). Both paths go through the tasks service, so the UI, REST and MCP share the rule.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
