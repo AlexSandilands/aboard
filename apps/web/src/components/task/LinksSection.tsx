@@ -39,13 +39,25 @@ import {
   sessionName,
   isSettledSession,
   sessionStatusPresentation,
+  sessionTitle,
   type SessionLink,
 } from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { openHref, t3LinkTargets } from "~/lib/t3Links";
@@ -61,12 +73,15 @@ import {
   isActiveThread,
   ISSUE_STATE,
   isWebUrl,
+  groupLinks,
   jiraHref,
-  orderLinks,
+  previewRows,
+  SESSION_PREVIEW_COUNT,
   threadDetails,
   threadModelsDiffer,
   threadStatusPresentation,
   unrecognisedLinkHint,
+  type PlainLink,
 } from "./links.logic";
 import {
   PANEL_ICON_CLASS,
@@ -121,11 +136,13 @@ export function LinksSection({ task }: { task: TaskDetail }) {
     removeLink(linkId, { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) }) });
   };
 
-  const links = orderLinks(task.links);
-  const threads = links.filter((link) => link.kind === "t3_thread");
+  const [showAllSessions, setShowAllSessions] = useState(false);
+  const { sessionRows, folded, links } = groupLinks(task.links);
+  const threads = sessionRows.filter((row) => row.kind === "t3_thread");
   // One thread keeps the compact row; several get details so they can be told apart.
   const multiThread =
     threads.length > 1 ? { firstId: threads[0]!.id, showModel: threadModelsDiffer(threads) } : undefined;
+  const { shown, hidden } = previewRows(sessionRows, showAllSessions);
 
   return (
     <TaskSection
@@ -142,20 +159,57 @@ export function LinksSection({ task }: { task: TaskDetail }) {
       }
     >
       <div className="flex flex-col gap-0.5">
+        {/* The headings only appear once there is something to tell apart: a task with no sessions reads as before. */}
+        {sessionRows.length > 0 ? (
+          <>
+            <GroupHeading>Sessions</GroupHeading>
+            {shown.map((row) =>
+              row.kind === "t3_thread" ? (
+                <T3ThreadRow
+                  key={row.id}
+                  taskId={task.id}
+                  link={row}
+                  t3={t3}
+                  settings={settings}
+                  multiThread={multiThread}
+                  sessions={folded}
+                  onRemove={() => remove(row.id)}
+                  onRemoveSession={remove}
+                />
+              ) : (
+                <SessionRow key={row.id} taskId={task.id} link={row} onRemove={() => remove(row.id)} />
+              ),
+            )}
+            {hidden > 0 || (showAllSessions && sessionRows.length > SESSION_PREVIEW_COUNT) ? (
+              <PanelControl
+                part="meta"
+                tone="muted"
+                className="ms-2 self-start"
+                aria-expanded={showAllSessions}
+                onClick={() => setShowAllSessions(!showAllSessions)}
+              >
+                {showAllSessions ? "Show fewer" : `Show ${hidden} more`}
+              </PanelControl>
+            ) : null}
+            <GroupHeading className="mt-1.5">Links</GroupHeading>
+          </>
+        ) : null}
         {links.map((link) => (
-          <LinkRow
-            key={link.id}
-            task={task}
-            link={link}
-            t3={t3}
-            settings={settings}
-            multiThread={multiThread}
-            onRemove={() => remove(link.id)}
-          />
+          <LinkRow key={link.id} task={task} link={link} settings={settings} onRemove={() => remove(link.id)} />
         ))}
         <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} t3={t3} />
       </div>
     </TaskSection>
+  );
+}
+
+/** A small heading with a rule, to split the section into groups without another collapse. */
+export function GroupHeading({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-2 px-2.5 pt-0.5 pb-0.5", className)}>
+      <span className="text-2xs font-medium text-muted-foreground">{children}</span>
+      <span aria-hidden className="h-px flex-1 bg-border/60" />
+    </div>
   );
 }
 
@@ -167,27 +221,19 @@ interface MultiThread {
 function LinkRow({
   task,
   link,
-  t3,
   settings,
-  multiThread,
   onRemove,
 }: {
   task: TaskDetail;
-  link: TaskLink;
-  t3: T3IntegrationStatus;
+  link: PlainLink;
   settings: AppSettings | undefined;
-  multiThread: MultiThread | undefined;
   onRemove: () => void;
 }) {
   switch (link.kind) {
-    case "t3_thread":
-      return <T3ThreadRow link={link} t3={t3} settings={settings} multiThread={multiThread} onRemove={onRemove} />;
     case "pr":
       return <PullRequestRow task={task} link={link} onRemove={onRemove} />;
     case "issue":
       return <IssueRow link={link} onRemove={onRemove} />;
-    case "agent_session":
-      return <SessionRow taskId={task.id} link={link} onRemove={onRemove} />;
     case "jira": {
       const href = jiraHref(link, settings?.jiraBaseUrl);
       return (
@@ -287,18 +333,26 @@ function RemoveItem({ onRemove }: { onRemove: () => void }) {
 }
 
 function T3ThreadRow({
+  taskId,
   link,
   t3,
   settings,
   multiThread,
+  sessions,
   onRemove,
+  onRemoveSession,
 }: {
+  taskId: string;
   link: Extract<TaskLink, { kind: "t3_thread" }>;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
   multiThread: MultiThread | undefined;
+  /** The Claude Code sessions folded into this thread's menu. */
+  sessions: ReadonlyArray<SessionLink>;
   onRemove: () => void;
+  onRemoveSession: (linkId: string) => void;
 }) {
+  const { open } = useSessionActions(taskId);
   const targets = t3LinkTargets(link.ref, t3, settings);
   const snapshot = link.snapshot;
   const status = snapshot ? threadStatusPresentation(snapshot.status) : null;
@@ -373,10 +427,56 @@ function T3ThreadRow({
             <CopyIcon />
             Copy thread id
           </MenuItem>
+          {sessions.length > 0 ? (
+            <>
+              <MenuSeparator />
+              <MenuGroup>
+                <MenuGroupLabel>Claude Code sessions</MenuGroupLabel>
+                {sessions.map((session) => (
+                  <FoldedSession
+                    key={session.id}
+                    link={session}
+                    onOpen={(mode) => open(session, mode)}
+                    onRemove={() => onRemoveSession(session.id)}
+                  />
+                ))}
+              </MenuGroup>
+            </>
+          ) : null}
           <RemoveItem onRemove={onRemove} />
         </MenuPopup>
       </Menu>
     </PanelSplitGroup>
+  );
+}
+
+/** A session that belongs to the thread above it: a submenu of what a session row offers. */
+function FoldedSession({
+  link,
+  onOpen,
+  onRemove,
+}: {
+  link: SessionLink;
+  onOpen: (mode: "resume" | "fork") => void;
+  onRemove: () => void;
+}) {
+  const status = sessionStatusPresentation(link.snapshot);
+  return (
+    <MenuSub>
+      <MenuSubTrigger>
+        <HarnessIcon harness={link.ref.harness} />
+        <span className="min-w-0 max-w-56 truncate">{sessionTitle(link)}</span>
+        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", status.dotClass)} />
+      </MenuSubTrigger>
+      <MenuSubPopup>
+        <SessionMenuItems link={link} onOpen={onOpen} />
+        <MenuItem onClick={() => copyToClipboard(link.ref.sessionId, "session id")}>
+          <CopyIcon />
+          Copy session id
+        </MenuItem>
+        <RemoveItem onRemove={onRemove} />
+      </MenuSubPopup>
+    </MenuSub>
   );
 }
 

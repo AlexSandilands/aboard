@@ -134,8 +134,8 @@ be read is left out rather than guessed.
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
 the command. A task with a T3 thread shows no session chips, since the thread runs a Claude session
-underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status; a chip's tooltip shows the
-name.
+underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, under its Sessions
+heading ([board-layout](board-layout.md#the-links-section)); a chip's tooltip shows the name.
 
 Copilot CLI support is unit-tested only.
 

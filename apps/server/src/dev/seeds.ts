@@ -402,6 +402,52 @@ const threads: Scenario = (s, opts) => {
     AGENT,
   );
   s.links.setSnapshot(inT3Session.id, { status: "busy", inApp: true });
+
+  // Tasks with many sessions, for the panel's Sessions and Links groups: without a T3 thread every session is a
+  // row; beside one, its Claude Code sessions fold into the thread's menu and Autopilot's stay rows.
+  let manyN = 100;
+  const manySession = (taskId: string, label: string | null, snapshot: AgentSessionSnapshot) => {
+    const sessionId = `00000000-0000-4000-8000-${String(manyN++).padStart(12, "0")}`;
+    const link = s.links.add(
+      taskId,
+      { agentSession: { harness: "claude-code", sessionId, cwd: sessionCwd }, ...(label ? { label } : {}) },
+      AGENT,
+    );
+    s.links.setSnapshot(link.id, snapshot);
+  };
+  const manyLinks = [
+    "SHOP-31",
+    "https://example.com/spec",
+    "https://github.com/acme/shop/issues/9",
+    "https://github.com/acme/shop/pull/31",
+  ];
+  const manyEnded = new Date(Date.now() - 3 * 3_600_000).toISOString();
+  const noThread = addTask(s, project.id, {
+    title: "Many sessions, no T3 thread",
+    status: "in_progress",
+    links: manyLinks,
+  });
+  manySession(noThread, "Implementing the cart", { status: "busy", inApp: false });
+  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
+  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, null, { status: "not_running", inApp: false });
+  const withThread = addTask(s, project.id, {
+    title: "Many sessions beside a T3 thread",
+    status: "in_progress",
+    links: ["t3code://threads/sandbox-env/thread-many-sessions", ...manyLinks],
+  });
+  s.links.setSnapshot(s.tasks.detail(withThread).links.find((l) => l.kind === "t3_thread")!.id, {
+    title: "Build the cart",
+    status: "working",
+    lastActivityAt: now,
+    model: "claude-opus",
+    branch: "feat/cart",
+  });
+  manySession(withThread, "Planning the cart", { status: "not_running", inApp: false });
+  manySession(withThread, "Implementing the cart", { status: "busy", inApp: true });
+  manySession(withThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(withThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
 };
 
 /**

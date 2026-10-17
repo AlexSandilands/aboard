@@ -1,6 +1,14 @@
 import { classifyLink, type T3ThreadSnapshot, type TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { describeLinkInput, orderLinks, threadDetails, threadModelsDiffer, unrecognisedLinkHint } from "./links.logic";
+import {
+  describeLinkInput,
+  groupLinks,
+  orderLinks,
+  previewRows,
+  threadDetails,
+  threadModelsDiffer,
+  unrecognisedLinkHint,
+} from "./links.logic";
 
 const base = { taskId: "t", label: null, syncedAt: null, createdAt: "" };
 
@@ -14,6 +22,39 @@ const thread = (id: string, snapshot: Partial<T3ThreadSnapshot> | null): TaskLin
 });
 
 const url = (id: string): TaskLink => ({ ...base, id, kind: "url", url: `https://example.com/${id}` });
+
+const pr = (id: string): TaskLink => ({
+  ...base,
+  id,
+  kind: "pr",
+  url: `https://github.com/o/r/pull/${id}`,
+  ref: null,
+  snapshot: null,
+});
+const issue = (id: string): TaskLink => ({
+  ...base,
+  id,
+  kind: "issue",
+  url: `https://github.com/o/r/issues/${id}`,
+  ref: { host: "github.com", repo: "o/r", number: 1 },
+  snapshot: null,
+});
+const jira = (id: string): TaskLink => ({ ...base, id, kind: "jira", url: id, ref: { key: id } });
+
+const SESSION_ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
+const session = (
+  id: string,
+  opts: { createdAt?: string; harness?: "claude-code" | "copilot-cli"; label?: string | null } = {},
+): TaskLink => ({
+  ...base,
+  id,
+  kind: "agent_session",
+  url: `agent-session://${id}`,
+  label: opts.label ?? null,
+  createdAt: opts.createdAt ?? "",
+  ref: { harness: opts.harness ?? "claude-code", sessionId: SESSION_ID, cwd: "/work/code" },
+  snapshot: null,
+});
 
 const ids = (links: TaskLink[]) => links.map((link) => link.id);
 
@@ -98,5 +139,82 @@ describe("adding a pasted T3 thread id", () => {
     expect(unrecognisedLinkHint(id, { detected: false })).toContain("T3 Code isn't running");
     expect(unrecognisedLinkHint(id, { detected: true })).toContain("Not recognised");
     expect(unrecognisedLinkHint("nonsense", { detected: false })).toContain("Not recognised");
+  });
+});
+
+describe("groupLinks", () => {
+  it("orders the Links group PRs, issues, Jira, then URLs, each in its own order", () => {
+    const links = [url("u1"), jira("J-1"), issue("i1"), pr("p1"), url("u2"), pr("p2")];
+    expect(ids(groupLinks(links).links)).toEqual(["p1", "p2", "i1", "J-1", "u1", "u2"]);
+  });
+
+  it("keeps threads and sessions out of the Links group", () => {
+    const groups = groupLinks([pr("p"), thread("t", null), session("s", { harness: "copilot-cli" })]);
+    expect(ids(groups.links)).toEqual(["p"]);
+    expect(ids(groups.sessionRows)).toEqual(["t", "s"]);
+  });
+
+  it("puts threads first in attention order, then sessions newest first", () => {
+    const groups = groupLinks([
+      session("old", { createdAt: "2026-01-01T00:00:00Z", harness: "copilot-cli" }),
+      thread("done", { status: "done" }),
+      session("new", { createdAt: "2026-01-02T00:00:00Z", harness: "copilot-cli" }),
+      thread("input", { status: "input" }),
+    ]);
+    expect(groups.sessionRows.map((row) => row.id)).toEqual(["input", "done", "new", "old"]);
+  });
+
+  it("shows Claude Code sessions as rows when the task has no thread", () => {
+    const groups = groupLinks([session("a"), session("b")]);
+    expect(ids(groups.sessionRows)).toEqual(["a", "b"]);
+    expect(groups.folded).toEqual([]);
+  });
+
+  it("folds Claude Code sessions into the one thread's menu, newest first", () => {
+    const groups = groupLinks([
+      session("old", { createdAt: "2026-01-01T00:00:00Z" }),
+      thread("t", null),
+      session("new", { createdAt: "2026-01-02T00:00:00Z" }),
+    ]);
+    expect(ids(groups.sessionRows)).toEqual(["t"]);
+    expect(ids(groups.folded)).toEqual(["new", "old"]);
+  });
+
+  it("keeps Autopilot and Copilot CLI sessions as rows next to a thread", () => {
+    const finished: TaskLink = {
+      ...session("done"),
+      snapshot: { status: "finished", inApp: false },
+    } as TaskLink;
+    const groups = groupLinks([
+      thread("t", null),
+      finished,
+      session("named", { label: "Autopilot · Review" }),
+      session("copilot", { harness: "copilot-cli" }),
+      session("mine"),
+    ]);
+    expect(ids(groups.sessionRows).toSorted()).toEqual(["copilot", "done", "named", "t"]);
+    expect(ids(groups.folded)).toEqual(["mine"]);
+  });
+
+  it("doesn't fold sessions when there are several threads, as it can't tell whose they are", () => {
+    const groups = groupLinks([thread("t1", null), thread("t2", null), session("s")]);
+    expect(ids(groups.sessionRows)).toEqual(["t1", "t2", "s"]);
+    expect(groups.folded).toEqual([]);
+  });
+});
+
+describe("previewRows", () => {
+  const rows = ["a", "b", "c", "d", "e"];
+
+  it("shows everything up to three rows", () => {
+    expect(previewRows(rows.slice(0, 3), false)).toEqual({ shown: ["a", "b", "c"], hidden: 0 });
+  });
+
+  it("shows the first three and counts the rest", () => {
+    expect(previewRows(rows, false)).toEqual({ shown: ["a", "b", "c"], hidden: 2 });
+  });
+
+  it("shows everything once expanded", () => {
+    expect(previewRows(rows, true)).toEqual({ shown: rows, hidden: 0 });
   });
 });
