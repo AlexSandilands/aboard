@@ -21,17 +21,15 @@ import {
   SettingsIcon,
   SunMoonIcon,
 } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useImagePaste } from "~/components/attachments/useImagePaste";
-import { insertAtSelection, replaceFirst } from "~/lib/attachments.logic";
+import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
+import { MarkdownInput, type MarkdownKey, useMarkdownInput } from "~/components/editor/MarkdownInput";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { followTemplate, prefillFrom, templatesFor, templateRequest } from "~/components/templates/templates.logic";
 import { Button } from "~/components/ui/button";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "~/components/ui/command";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
@@ -129,7 +127,7 @@ function intentKey(intent: PaletteIntent): number {
 const isMac = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
 const MOD_LABEL = isMac ? "⌘" : "Ctrl";
 
-function isPrimaryModifier(event: KeyboardEvent<HTMLElement>): boolean {
+function isPrimaryModifier(event: Pick<KeyboardEvent<HTMLElement>, "ctrlKey" | "metaKey">): boolean {
   return isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 }
 
@@ -275,26 +273,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const view = stack.at(-1) ?? { kind: "root" };
   const [query, setQuery] = useState(() => initialQueryFor(view));
   const [description, setDescription] = useState("");
-  // The text as of now, for an image that lands after the next keystroke.
-  const descriptionRef = useRef(description);
-  useEffect(() => {
-    descriptionRef.current = description;
-  }, [description]);
   // An image pasted here has no task yet; creating the task claims the ones its description refers to.
-  const imagePaste = useImagePaste({
-    taskId: null,
-    insert: (placeholder, at) => {
-      const { text, caret } = insertAtSelection(descriptionRef.current, at.start, at.end, placeholder);
-      descriptionRef.current = text;
-      setDescription(text);
-      return caret;
-    },
-    replace: (placeholder, replacement) => {
-      const text = replaceFirst(descriptionRef.current, placeholder, replacement);
-      descriptionRef.current = text;
-      setDescription(text);
-    },
-  });
+  const descriptionInput = useMarkdownInput({ taskId: null, value: description, onChange: setDescription });
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selectedImports, setSelectedImports] = useState<ReadonlySet<string>>(() => new Set());
@@ -420,7 +400,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (view.kind !== "title") return;
     const title = query.trim();
     // An image still uploading is a placeholder in the description, and the task would be created with it.
-    if (!title || createTask.isPending || imagePaste.uploading) return;
+    if (!title || createTask.isPending || descriptionInput.uploading) return;
     const { flow, projectId, epicId } = view;
     const issue = issueImportRow(title, flow);
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
@@ -883,10 +863,10 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   }
 
   /** In the description, Enter is a newline; Mod+Enter submits (Shift adds another task). */
-  function handleDescriptionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key !== "Enter" || isComposing(event) || !isPrimaryModifier(event)) return;
-    claimKey(event);
-    submitTitle(event.shiftKey);
+  function handleDescriptionKey(key: MarkdownKey): void {
+    if (key.key !== "Enter" || !isPrimaryModifier(key)) return;
+    key.claim();
+    submitTitle(key.shiftKey);
   }
 
   // ── View chrome ────────────────────────────────────────────────────────
@@ -1039,24 +1019,21 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                   </SelectPopup>
                 </Select>
               ) : null}
-              <Textarea
-                size="sm"
-                aria-label="Description (optional)"
+              <MarkdownInput
+                input={descriptionInput.input}
+                ariaLabel="Description (optional)"
                 placeholder={`Description (optional) · Tab to focus · ${MOD_LABEL}+Enter to create`}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                onKeyDown={handleDescriptionKeyDown}
-                {...imagePaste.handlers}
+                onKey={handleDescriptionKey}
               />
-              {imagePaste.uploading || imagePaste.error ? (
+              {descriptionInput.uploading || descriptionInput.error ? (
                 <p
-                  role={imagePaste.error ? "alert" : undefined}
-                  className={`px-1 text-2xs ${imagePaste.error ? "text-destructive-foreground" : "text-muted-foreground"}`}
+                  role={descriptionInput.error ? "alert" : undefined}
+                  className={`px-1 text-2xs ${descriptionInput.error ? "text-destructive-foreground" : "text-muted-foreground"}`}
                 >
-                  {imagePaste.uploading ? "Uploading image…" : imagePaste.error}
+                  {descriptionInput.uploading ? "Uploading image…" : descriptionInput.error}
                 </p>
               ) : null}
-              <AttachmentThumbs text={description} />
+              {descriptionInput.mode === "plain" ? <AttachmentThumbs text={description} /> : null}
             </div>
           )}
         </>

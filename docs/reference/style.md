@@ -80,6 +80,7 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 | Settings-style grouped card | `W/components/settings/SettingsGroup.tsx`, `settingsLayout.tsx` |
 | Plan step icons/colours, segmented progress | `W/components/chat/ComposerTasksBadge.tsx` (`TaskSegments`) |
 | Activity log lines | `W/components/chat/WorkLog.tsx` |
+| Rich Markdown editor (`components/editor/`) | `W/components/ComposerPromptEditorTiptap.tsx`, `W/composer-rich-text-doc.ts`, `W/composer-rich-text.ts`, `C:\Code\t3code\docs\internals\composer-editors.md` |
 | Plan card look | `W/components/chat/ProposedPlanCard.tsx` |
 | PR state icons/colours | `W/components/pullRequest/pullRequestIcons.tsx`, `PullRequestRow.tsx` |
 | Status colour semantics | `resolveThreadStatusPill` in `W/components/Sidebar.logic.ts` ~1179 |

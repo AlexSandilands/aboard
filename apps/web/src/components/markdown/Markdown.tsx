@@ -1,11 +1,10 @@
 import { type ComponentProps, createContext, memo, useContext, useMemo } from "react";
 import { attachmentIdOf } from "@repo/contracts";
-import { ImageIcon } from "lucide-react";
 import ReactMarkdown, { defaultUrlTransform, type Components, type ExtraProps, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { AttachmentPill } from "~/components/attachments/AttachmentPill";
 import { cn } from "~/lib/utils";
-import { useDialogs } from "~/state/ui";
 import { remarkTaskRefs, taskRefNumber } from "./taskRefs.logic";
 
 type Plugins = NonNullable<Options["remarkPlugins"]>;
@@ -45,21 +44,9 @@ function MarkdownLink({ node: _node, children, href, ...props }: ComponentProps<
 
 /** A pasted image (`![name](attachment:id)`) is a pill in the text; its thumbnail is shown below the text. */
 function MarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<"img"> & ExtraProps) {
-  const openPreview = useDialogs((s) => s.openImagePreview);
   const id = attachmentIdOf(typeof src === "string" ? src : undefined);
   if (!id) return <img src={src} alt={alt} {...props} />;
-  const name = alt || "image";
-  return (
-    <button
-      type="button"
-      title={`Preview ${name}`}
-      onClick={() => openPreview({ id, filename: name })}
-      className="mx-0.5 inline-flex max-w-48 cursor-zoom-in items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-px align-baseline text-xs text-foreground/85 outline-none hover:border-ring focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ImageIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="truncate">{name}</span>
-    </button>
-  );
+  return <AttachmentPill id={id} name={alt || "image"} />;
 }
 
 /** react-markdown drops URLs with a scheme it doesn't know, and `attachment:` is how a pasted image is written. */

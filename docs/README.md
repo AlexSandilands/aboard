@@ -70,6 +70,7 @@ files under each app.
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges
+- [Rich Markdown editor](features/rich-editor.md): editing descriptions and notes as rich text, stored as exact Markdown
 - [Pasted images](features/attachments.md): images in a task's text, shrunk in the browser, stored on disk, listed for agents
 - [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
