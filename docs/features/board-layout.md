@@ -11,7 +11,8 @@ on the server. It also covers the settings page, which takes the board's place.
 
 A lane stacks its epic bands above its loose cards; how bands are laid out is in [epics.md](epics.md#on-the-board).
 A finished epic has no band: it is one card in the lane's Done cell, so it counts as one card for the column
-counts and the collapsed preview below.
+counts and the collapsed preview below. Bands and that card share a frame that tells epics from task cards, and
+the task card's thread and session chips and start button ([epics.md](epics.md#on-the-board)).
 
 ### The priority lane
 

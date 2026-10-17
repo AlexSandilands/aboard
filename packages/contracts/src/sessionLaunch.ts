@@ -59,8 +59,8 @@ export type SessionLaunchOptions = z.infer<typeof SessionLaunchOptions>;
 
 export const StartSessionInput = z.object({
   harness: AgentHarness,
-  /** Picks the session's label: "Planning #N" or "Implementing #N". */
-  mode: z.enum(["work", "plan"]),
+  /** Picks the session's label: "Planning #N", "Implementing #N" or, for an epic, "Orchestrating #N". */
+  mode: z.enum(["work", "plan", "orchestrate"]),
   prompt: z.string().trim().min(1).max(100_000),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
@@ -100,8 +100,8 @@ export const taskWindowName = (taskNumber: number): string => `${BRAND.id.replac
 export const isTaskWindowName = (name: string): boolean => name.length <= 80 && /^[A-Za-z][\w-]*-\d+$/.test(name);
 
 /** "Implementing #115" / "Planning #115": the label the board links a session it started with. */
-export const sessionLabel = (mode: "work" | "plan", taskNumber: number): string =>
-  `${mode === "plan" ? "Planning" : "Implementing"} #${taskNumber}`;
+export const sessionLabel = (mode: StartSessionInput["mode"], taskNumber: number): string =>
+  `${mode === "plan" ? "Planning" : mode === "orchestrate" ? "Orchestrating" : "Implementing"} #${taskNumber}`;
 
 /**
  * The CLI's argv for a new session: its model and id, a name to find it by, and the first prompt as one argument.

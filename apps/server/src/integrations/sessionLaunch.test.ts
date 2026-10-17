@@ -160,6 +160,13 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()[0]!.window).toBeUndefined();
   });
 
+  it("points an epic's short prompt at its orchestrating prompt", () => {
+    const text = shortPrompt("orchestrate", { id: "epic-1", number: 7 }, "linux");
+    expect(text).toContain("Let's run the epic #7");
+    expect(text).toContain('get_handoff_prompt(task: "epic-1", mode: "orchestrate")');
+    expect(shortPrompt("work", { id: "t-1", number: 8 }, "linux")).toContain('get_task("t-1")');
+  });
+
   it("falls back to a short prompt when the prompt can't go on a Windows command line", async () => {
     const app = appWith();
     const { body } = await app.start({ prompt: "Use %PATH% here" });
@@ -207,10 +214,11 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()).toHaveLength(0);
   });
 
-  it("refuses a CLI that isn't installed, a bad model and an epic", async () => {
+  it("refuses a CLI that isn't installed, a bad model and a mode that doesn't fit", async () => {
     const app = appWith({ copilot: false });
     expect((await app.start({ harness: "copilot-cli" })).status).toBe(400);
     expect((await app.start({ model: "opus; calc" })).status).toBe(400);
+    expect((await app.start({ mode: "orchestrate" })).status).toBe(400);
     const epic = app.services.tasks.create({ projectId: app.task.projectId, title: "Epic", kind: "epic" });
     const res = await app.request(`/api/tasks/${epic.id}/sessions`, {
       method: "POST",
@@ -218,6 +226,25 @@ describe("starting a session from the board", () => {
     });
     expect(res.status).toBe(400);
     expect(app.spawned).toHaveLength(0);
+  });
+
+  it("starts an epic's orchestrating session and links it to the epic", async () => {
+    const app = appWith();
+    const epic = app.services.tasks.create({ projectId: app.task.projectId, title: "Epic", kind: "epic" });
+    const res = await app.request(`/api/tasks/${epic.id}/sessions`, {
+      method: "POST",
+      json: {
+        harness: "claude-code",
+        mode: "orchestrate",
+        prompt: "Run it",
+        model: null,
+        workspace: { mode: "current" },
+      },
+    });
+    expect(res.status).toBe(201);
+    const links = app.services.tasks.summary(epic.id).links;
+    expect(links).toMatchObject([{ kind: "agent_session", label: `Orchestrating #${epic.number}` }]);
+    expect(app.spawned).toHaveLength(1);
   });
 
   it("lists which CLIs are installed", async () => {

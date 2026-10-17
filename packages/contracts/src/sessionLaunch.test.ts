@@ -28,6 +28,7 @@ describe("new session argv", () => {
   it("labels sessions by mode", () => {
     expect(sessionLabel("work", 4)).toBe("Implementing #4");
     expect(sessionLabel("plan", 4)).toBe("Planning #4");
+    expect(sessionLabel("orchestrate", 4)).toBe("Orchestrating #4");
   });
 });
 

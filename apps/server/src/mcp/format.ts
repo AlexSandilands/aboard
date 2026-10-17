@@ -319,16 +319,14 @@ export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness 
         "from t3_environment_read and t3_thread_configuration",
     );
   }
-  // An epic is coordinated, not worked on, so no session belongs to it.
   const needsSession =
-    sessionHarness &&
-    task.kind !== "epic" &&
-    !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness);
+    sessionHarness && !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness);
   if (needsSession) {
     const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
+    const example = task.kind === "epic" ? "Orchestrating" : "Implementing";
     hints.push(
-      `Your session: if you are the one working on this task, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
-        'cwd: <your working directory>}, label: "<what this session does, e.g. Implementing #N>"), so the user can see it running ' +
+      `Your session: if you are the one working on this ${task.kind === "epic" ? "epic" : "task"}, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
+        `cwd: <your working directory>}, label: "<what this session does, e.g. ${example} #N>"), so the user can see it running ` +
         "and reopen it in a terminal from the board",
     );
   }

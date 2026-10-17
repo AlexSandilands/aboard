@@ -5,13 +5,22 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardContext } from "./BoardContext";
+import { EpicActions } from "./EpicActions";
 import { EpicRollupBar } from "./EpicRollupBar";
+import {
+  EPIC_ACCENT_BAR,
+  EPIC_ACCENT_CLASS,
+  EPIC_FRAME_CLASS,
+  EPIC_HEADER_CLASS,
+  epicAccentStyle,
+} from "./epicStyle.logic";
 import { ArchiveButton } from "./TaskCard";
 
 /**
  * A finished epic in the Done column: the band's header as one card, so a run of finished epics doesn't push
  * the rest of Done down. Its tasks are inside, folded until the chevron opens them. It can't be dragged (an
- * epic has no status of its own), and has no Autopilot button, since a finished epic has nothing to run.
+ * epic has no status of its own), and has no Autopilot button, since a finished epic has nothing to run. Its
+ * threads, sessions and start button are the band header's.
  */
 export const EpicCard = memo(function EpicCard({
   epic,
@@ -43,8 +52,11 @@ export const EpicCard = memo(function EpicCard({
     <section
       aria-label={`Epic #${epic.number} ${epic.title}`}
       data-epic-card={epic.id}
+      style={EPIC_ACCENT_BAR ? epicAccentStyle(epic.title) : undefined}
       className={cn(
-        "w-full rounded-xl border border-border/60 bg-muted/25",
+        "w-full",
+        EPIC_FRAME_CLASS,
+        EPIC_ACCENT_BAR && EPIC_ACCENT_CLASS,
         selected && "border-primary/50 ring-1 ring-primary/30",
         epic.archivedAt && "opacity-60",
       )}
@@ -52,7 +64,7 @@ export const EpicCard = memo(function EpicCard({
       <div
         // The marker the dependency lines look for: they end on the header, not the whole card with its tasks.
         data-task-card={epic.id}
-        className="flex items-center gap-1 py-2 ps-1 pe-2.5"
+        className={cn("flex items-center gap-1 py-2 ps-1 pe-2.5", EPIC_HEADER_CLASS, !open && "rounded-b-xl")}
       >
         <Button
           variant="ghost-muted"
@@ -87,6 +99,7 @@ export const EpicCard = memo(function EpicCard({
             </span>
           </span>
         </button>
+        <EpicActions epic={epic} />
         {epic.archivedAt ? null : <ArchiveButton task={epic} />}
       </div>
       {open ? (

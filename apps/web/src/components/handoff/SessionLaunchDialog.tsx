@@ -113,8 +113,15 @@ function Composer({
   options: SessionLaunchOptions;
   onDone: () => void;
 }) {
+  // An epic's session orchestrates its tasks, which carry the plans, so it has no "Plan with me".
+  const epic = task.kind === "epic";
   const promptFor = (plan: boolean) =>
-    taskHandoffPrompt({ task, boardUrl: window.location.origin, mode: plan ? "plan" : "work", linkedSession: true });
+    taskHandoffPrompt({
+      task,
+      boardUrl: window.location.origin,
+      mode: epic ? "orchestrate" : plan ? "plan" : "work",
+      linkedSession: true,
+    });
   const [plan, setPlan] = useState(defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
@@ -143,7 +150,14 @@ function Composer({
   const submit = () => {
     if (blocker || !workspace || !prompt.trim() || start.isPending) return;
     start.mutate(
-      { taskId: task.id, harness, mode: plan ? "plan" : "work", prompt, model: model.trim() || null, workspace },
+      {
+        taskId: task.id,
+        harness,
+        mode: epic ? "orchestrate" : plan ? "plan" : "work",
+        prompt,
+        model: model.trim() || null,
+        workspace,
+      },
       {
         onSuccess: (result) => {
           if (!result.launched) {
@@ -230,14 +244,16 @@ function Composer({
             value={model}
             onChange={(event) => setModel(event.target.value)}
           />
-          <ComposerControl
-            aria-pressed={plan}
-            onClick={togglePlan}
-            title="The agent shapes the plan with you before any code is written"
-          >
-            <LightbulbIcon />
-            <span>Plan with me</span>
-          </ComposerControl>
+          {epic ? null : (
+            <ComposerControl
+              aria-pressed={plan}
+              onClick={togglePlan}
+              title="The agent shapes the plan with you before any code is written"
+            >
+              <LightbulbIcon />
+              <span>Plan with me</span>
+            </ComposerControl>
+          )}
           <button
             type="submit"
             aria-label="Start session"
