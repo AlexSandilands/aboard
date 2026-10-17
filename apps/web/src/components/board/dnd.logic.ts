@@ -20,6 +20,14 @@ export function canDropIn(task: Pick<DropTask, "rowId" | "projectId" | "epicId">
   return task.rowId === PRIORITY_ROW_ID && (rowId === task.projectId || rowId === task.epicId);
 }
 
+/**
+ * The row a card dragged out of the priority lane returns to, among the rows the board draws: its epic's band when the
+ * lane has one, else its project's loose cards. The board draws it whole while the card is dragged.
+ */
+export function homeRowId(task: Pick<DropTask, "projectId" | "epicId">, bandIds: ReadonlyArray<string>): string {
+  return task.epicId !== null && bandIds.includes(task.epicId) ? task.epicId : task.projectId;
+}
+
 /** What a draggable card or a droppable cell carries in its dnd-kit `data`. */
 export interface DragData {
   type: "task" | "cell";

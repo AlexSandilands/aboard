@@ -55,6 +55,7 @@ import { dropAnimation } from "./cardMotion";
 import {
   canDropIn,
   cellDroppableId,
+  homeRowId,
   computeDrop,
   landsPastPreview,
   parseCellKey,
@@ -180,7 +181,6 @@ function BoardSkeleton() {
   );
 }
 
-/** Screen-reader text for where a dragged card is: its column and slot, or why it can't go there. */
 /** A card as the drop rules see it, given the row it shows in. */
 const dropTask = (task: TaskSummary, rowId: string) => ({
   id: task.id,
@@ -190,6 +190,7 @@ const dropTask = (task: TaskSummary, rowId: string) => ({
   epicId: task.parent?.id ?? null,
 });
 
+/** Screen-reader text for where a dragged card is: its column and slot, or why it can't go there. */
 function describeOver(
   activeId: UniqueIdentifier,
   over: Over | null,
@@ -396,9 +397,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     const result = computeDrop({ task, target, cellTaskIds: cellTasks.map((t) => t.id), overTaskId });
     if (result.kind === "invalid") return;
     if (result.kind === "noop" && !result.clearPriority) return;
-    // A card dropped on its own project leaves the priority lane. The card is patched at once, as a move is, so it
-    // doesn't wait in the lane for the server's event; a refetch undoes it if the update fails.
-    if (result.clearPriority) {
+    // A card dropped on its own project leaves the priority lane. With a move, that waits until the move has landed,
+    // so a refused move (a plan is required, say) leaves the card in the lane. The card is patched at once, as a move
+    // is, so it doesn't wait for the server's event; a refetch undoes it if the update fails.
+    const clearPriority = () => {
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) =>
         current
           ? { ...current, tasks: current.tasks.map((t) => (t.id === task.id ? { ...t, priority: false } : t)) }
@@ -408,7 +410,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         { id: task.id, priority: false },
         { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.board }) },
       );
-      if (result.kind === "noop") return;
+    };
+    if (result.kind === "noop") {
+      clearPriority();
+      return;
     }
     if (result.kind !== "move") return;
     // Once the drag ends, a card that landed past a collapsed cell's preview (say, below its last shown
@@ -431,6 +436,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     moveTask.mutate(
       { id: task.id, status: result.status, beforeId: result.beforeId, afterId: result.afterId },
       {
+        onSuccess: () => {
+          if (result.clearPriority) clearPriority();
+        },
         onError: (error) => {
           if (!isPlanRequired(error)) return;
           const toastId = toastManager.add({
@@ -577,6 +585,14 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                   bands={lane.bands}
                   draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
                   draggingRowId={activeTask?.projectId === lane.project.id ? activeRowId : null}
+                  homeRowId={
+                    activeTask?.projectId === lane.project.id && activeRowId === PRIORITY_ROW_ID
+                      ? homeRowId(
+                          dropTask(activeTask, PRIORITY_ROW_ID),
+                          lane.bands.map((band) => band.id),
+                        )
+                      : null
+                  }
                   overCell={overHere}
                   onToggleCollapsed={handleToggleCollapsed}
                 />

@@ -4,6 +4,7 @@ import type { Lane } from "./board.logic";
 import {
   canDropIn,
   computeDrop,
+  homeRowId,
   landsPastPreview,
   parseCellKey,
   placementAfterDrop,
@@ -72,6 +73,14 @@ describe("computeDrop from the priority lane", () => {
       cellTaskIds: [],
     });
     expect(computeDrop(input)).toEqual({ kind: "move", status: "done", clearPriority: true });
+  });
+});
+
+describe("homeRowId", () => {
+  it("is the epic's band when the lane draws one, else the project's loose row", () => {
+    expect(homeRowId({ projectId: "p", epicId: "e" }, ["e", "f"])).toBe("e");
+    expect(homeRowId({ projectId: "p", epicId: "e" }, ["f"])).toBe("p");
+    expect(homeRowId({ projectId: "p", epicId: null }, ["e"])).toBe("p");
   });
 });
 

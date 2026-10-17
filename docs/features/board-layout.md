@@ -34,8 +34,9 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 - **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which
   changes its status. It takes no place in the column: positions only mean something inside one project's lane, and
   the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is
-  placed there like any card and **stops being priority** (`PATCH priority: false`, applied to the cache at once, with
-  the move after it). Other lanes refuse it. Cards from project lanes can't be dragged into the lane; use the star.
+  placed there like any card and **stops being priority** (`PATCH priority: false`, sent once the move has landed so a
+  refused move leaves the card in the lane, and applied to the cache at once). While the card is dragged its project's
+  row, or its epic's band when the lane has one (`homeRowId`), is drawn in full so there is a place to drop it. Other lanes refuse it. Cards from project lanes can't be dragged into the lane; use the star.
 - **Dependency lines** work across the lane as anywhere; a related card that isn't shown gets its stub toward the lane
   as above the first project.
 - **Autopilot** starts priority tasks first ([autopilot.md](autopilot.md#automations)).
@@ -43,7 +44,8 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 ### In progress, all projects
 
 The filter menu's **In progress, all projects** (`inProgressOnly` in `board-view`) shows only In Progress cards,
-across every project: it ignores a project scope while it is on (the scope returns when it is turned off). Epic
+across every project: it ignores a project scope while it is on (the scope returns when it is turned off, and choosing a project in the
+sidebar turns it off). Epic
 bands keep only their In Progress tasks, and the priority lane holds its In Progress ones.
 
 ### Collapsing columns
