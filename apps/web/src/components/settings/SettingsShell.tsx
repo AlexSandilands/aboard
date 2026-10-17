@@ -399,12 +399,15 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
           hashDone.current = true;
           if (nonce !== null) handledScroll = Math.max(handledScroll, nonce);
         };
+        // Already at the top of the view (or the scroll can't go further): no scroll, so no `scrollend` either.
+        const moves = Math.abs(element.getBoundingClientRect().top - area.getBoundingClientRect().top) > 2;
         element.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
         // A smooth jump is flashed once it lands, so the mark isn't spent while the row is still travelling.
+        // A target that isn't rendered lands on a larger part of the page, which isn't worth marking.
         const flash = () => {
-          if (target?.highlight && !fromHash) flashElement(element);
+          if (target?.highlight && !fromHash && element.id === id) flashElement(element);
         };
-        if (smooth) cancelFlash = afterScroll(area, flash);
+        if (smooth && moves) cancelFlash = afterScroll(area, flash);
         else flash();
         if (sectionOf(id)) useSettingsNav.getState().setActiveSection(sectionOf(id)!.id);
         // A page that just opened is still loading what sits above and below the target, so it stays pinned until
