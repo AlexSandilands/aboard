@@ -1,4 +1,4 @@
-import type { PlanSkillRef, TaskSummary } from "@repo/contracts";
+import { planTaskProblem, type PlanSkillRef, type TaskSummary } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import type { Services } from "./types.ts";
 
@@ -7,12 +7,7 @@ import type { Services } from "./types.ts";
 
 /** Why a task can't be planned in a bulk session, or null when it can. */
 export function planningProblem(task: TaskSummary, projectId: string): string | null {
-  if (task.projectId !== projectId) return `#${task.number} is in another project`;
-  if (task.kind === "epic") return `#${task.number} is an epic: plan its tasks instead`;
-  if (task.archivedAt) return `#${task.number} is archived`;
-  if (task.status === "done") return `#${task.number} is done`;
-  if (task.status !== "backlog" && task.progress.total > 0) return `#${task.number} already has a plan`;
-  return null;
+  return task.projectId === projectId ? planTaskProblem(task) : `#${task.number} is in another project`;
 }
 
 /**

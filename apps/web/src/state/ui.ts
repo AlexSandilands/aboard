@@ -9,6 +9,7 @@ import {
 import { create } from "zustand";
 import type { BoardSearch } from "~/router";
 import { persist } from "zustand/middleware";
+import { togglePicked } from "~/components/board/boardSelection.logic";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
 import { DEFAULT_COLLAPSE, migrateBoardView } from "./boardView.logic";
 import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
@@ -72,6 +73,22 @@ export const useBoardView = create<BoardViewState>()(
     },
   ),
 );
+
+/** Cards picked with Ctrl/⌘-click to plan together. Not persisted: a pick is for the moment. */
+interface BoardPickState {
+  picked: string[];
+  togglePicked: (taskId: string) => void;
+  clearPicked: () => void;
+}
+
+export const useBoardPick = create<BoardPickState>()((set) => ({
+  picked: [],
+  togglePicked: (taskId) => set((s) => ({ picked: togglePicked(s.picked, taskId) })),
+  clearPicked: () => set((s) => (s.picked.length ? { picked: [] } : s)),
+}));
+
+/** Where a bulk planning session starts: a T3 Code thread, a CLI in a terminal, or a prompt on the clipboard. */
+export type PlanTarget = { kind: "t3" } | { kind: "session"; harness: AgentHarness } | { kind: "copy" };
 
 /** Persisted look-and-feel choices that live in the browser rather than server settings. */
 interface AppearanceState {
@@ -193,9 +210,18 @@ interface DialogsState {
    * What the open "Start in T3 Code" dialog starts a thread for: a task (with `fixLinkId`, to fix that PR link: "Fix in →"),
    * or a project's Suggest epics.
    */
-  t3Launch: { kind: "task"; taskId: string; fixLinkId?: string } | { kind: "project"; projectId: string } | null;
+  t3Launch:
+    | { kind: "task"; taskId: string; fixLinkId?: string }
+    | { kind: "project"; projectId: string }
+    /** A thread that plans several of the project's tasks, linked to each. */
+    | { kind: "plan"; projectId: string; taskIds: string[] }
+    | null;
   /** The open "New Claude Code / Copilot session" dialog: the task and the CLI it starts, and the PR link it fixes. */
   sessionLaunch: { taskId: string; harness: AgentHarness; fixLinkId?: string } | null;
+  /** "Plan tasks…": the picker of the project's tasks to plan, and where the session starts once they are picked. */
+  planPicker: { projectId: string; target: PlanTarget } | null;
+  /** The new CLI session that plans the picked tasks. */
+  planSession: { projectId: string; taskIds: string[]; harness: AgentHarness } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
   mergePr: { taskId: string; linkId: string } | null;
   /** Agent session the server wouldn't reopen because it is running, with the status it read. */
@@ -207,6 +233,11 @@ interface DialogsState {
   closeViewDialog: () => void;
   openT3Launch: (taskId: string, fixLinkId?: string) => void;
   openProjectT3Launch: (projectId: string) => void;
+  openPlanT3Launch: (projectId: string, taskIds: string[]) => void;
+  openPlanPicker: (projectId: string, target: PlanTarget) => void;
+  closePlanPicker: () => void;
+  openPlanSession: (projectId: string, taskIds: string[], harness: AgentHarness) => void;
+  closePlanSession: () => void;
   closeT3Launch: () => void;
   openSessionLaunch: (taskId: string, harness: AgentHarness, fixLinkId?: string) => void;
   closeSessionLaunch: () => void;
@@ -230,6 +261,8 @@ export function anyDialogOpen(state: DialogsState): boolean {
     state.digestOpen ||
     state.viewDialog !== null ||
     state.t3Launch !== null ||
+    state.planPicker !== null ||
+    state.planSession !== null ||
     state.mergePr !== null ||
     state.sessionWarning !== null ||
     state.templateDraft !== null ||
@@ -242,6 +275,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   viewDialog: null,
   t3Launch: null,
   sessionLaunch: null,
+  planPicker: null,
+  planSession: null,
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
@@ -251,6 +286,11 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeViewDialog: () => set({ viewDialog: null }),
   openT3Launch: (taskId, fixLinkId) => set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}) } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
+  openPlanT3Launch: (projectId, taskIds) => set({ t3Launch: { kind: "plan", projectId, taskIds } }),
+  openPlanPicker: (projectId, target) => set({ planPicker: { projectId, target } }),
+  closePlanPicker: () => set({ planPicker: null }),
+  openPlanSession: (projectId, taskIds, harness) => set({ planSession: { projectId, taskIds, harness } }),
+  closePlanSession: () => set({ planSession: null }),
   closeT3Launch: () => set({ t3Launch: null }),
   openSessionLaunch: (taskId, harness, fixLinkId) =>
     set({ sessionLaunch: { taskId, harness, ...(fixLinkId ? { fixLinkId } : {}) } }),

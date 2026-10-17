@@ -19,6 +19,7 @@ import {
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
 import { ModelTiersSection } from "../ModelTiersSection";
+import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
@@ -93,6 +94,9 @@ function TasksContent() {
       <SettingsSubsection id="tasks.new-tasks">
         <TemplatesSection />
         <WithSettings>{(settings) => <IssueImportSection settings={settings} />}</WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="tasks.planning">
+        <WithSettings>{(settings) => <PlanSkillSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="tasks.review">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>

@@ -6,6 +6,7 @@ import {
   type AgentHarness,
   type PrFixInfo,
   type SessionLaunchOptions,
+  type StartSessionResult,
   type TaskSummary,
 } from "@repo/contracts";
 import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
@@ -142,6 +143,57 @@ function SessionLaunch({
   );
 }
 
+/**
+ * Toasts what starting a session did. A terminal that didn't open offers the command to run by hand; a CLI that got
+ * the short prompt gets the full one on the clipboard (or a button to copy it, when the clipboard refuses).
+ */
+export function announceSession(
+  result: StartSessionResult,
+  { harness, prompt, taskNumbers }: { harness: AgentHarness; prompt: string; taskNumbers: readonly number[] },
+) {
+  if (!result.launched) {
+    const toastId = toastManager.add({
+      type: "error",
+      title: "Couldn't open a terminal",
+      description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in the new worktree on ${result.branch}` : ""}.`,
+      actionProps: {
+        children: "Copy command",
+        onClick: () => {
+          toastManager.close(toastId);
+          copyToClipboard(result.command, "command");
+        },
+      },
+    });
+    return;
+  }
+  const announce = (copied: boolean) => {
+    const toastId = toastManager.add({
+      type: "success",
+      title: `Started ${harnessLabel(harness)}`,
+      description: [result.shortReason, startedDescription(result, taskNumbers, copied)].filter(Boolean).join(" "),
+      // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
+      ...(result.shortPrompt && !copied
+        ? {
+            actionProps: {
+              children: "Copy prompt",
+              onClick: () => {
+                toastManager.close(toastId);
+                copyToClipboard(prompt, "prompt");
+              },
+            },
+          }
+        : {}),
+    });
+  };
+  // The CLI got a short pointer to the task; the full prompt goes on the clipboard to paste into it.
+  if (result.shortPrompt) {
+    navigator.clipboard.writeText(prompt).then(
+      () => announce(true),
+      () => announce(false),
+    );
+  } else announce(false);
+}
+
 function Composer({
   task,
   harness,
@@ -212,51 +264,9 @@ function Composer({
       },
       {
         onSuccess: (result) => {
-          if (!result.launched) {
-            const toastId = toastManager.add({
-              type: "error",
-              title: "Couldn't open a terminal",
-              description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in the new worktree on ${result.branch}` : ""}.`,
-              actionProps: {
-                children: "Copy command",
-                onClick: () => {
-                  toastManager.close(toastId);
-                  copyToClipboard(result.command, "command");
-                },
-              },
-            });
-            // Closed, so starting again doesn't quietly make a second worktree beside the one the command uses.
-            onDone();
-            return;
-          }
-          const announce = (copied: boolean) => {
-            const toastId = toastManager.add({
-              type: "success",
-              title: `Started ${harnessLabel(harness)}`,
-              description: [result.shortReason, startedDescription(result, task.number, copied)]
-                .filter(Boolean)
-                .join(" "),
-              // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
-              ...(result.shortPrompt && !copied
-                ? {
-                    actionProps: {
-                      children: "Copy prompt",
-                      onClick: () => {
-                        toastManager.close(toastId);
-                        copyToClipboard(prompt, "prompt");
-                      },
-                    },
-                  }
-                : {}),
-            });
-          };
-          // The CLI got a short pointer to the task; the full prompt goes on the clipboard to paste into it.
-          if (result.shortPrompt) {
-            navigator.clipboard.writeText(prompt).then(
-              () => announce(true),
-              () => announce(false),
-            );
-          } else announce(false);
+          announceSession(result, { harness, prompt, taskNumbers: [task.number] });
+          // Closed even when the terminal didn't open, so starting again doesn't quietly make a second worktree
+          // beside the one the command uses.
           onDone();
         },
         onError: (error) =>

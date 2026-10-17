@@ -2,12 +2,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
 import { ArchiveIcon, LockIcon, StarIcon } from "lucide-react";
-import { memo, useCallback, useRef, type KeyboardEvent } from "react";
+import { memo, useCallback, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
+import { useBoardPick } from "~/state/ui";
 import { importPendingLabel } from "~/components/task/import.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
 import { Spinner } from "~/components/ui/spinner";
@@ -16,6 +17,7 @@ import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, jiraKeys, PRIORITY_ROW_ID, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
+import { canPickTask, isPickClick } from "./boardSelection.logic";
 import { blockedLabel } from "./dependencies.logic";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
@@ -246,7 +248,10 @@ function ResolutionChip({ task }: { task: TaskSummary }) {
   );
 }
 
-/** A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. */
+/**
+ * A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. Ctrl/⌘-click picks it
+ * to plan with others (see boardSelection.logic) instead.
+ */
 export const SortableTaskCard = memo(function SortableTaskCard({
   task,
   rowId,
@@ -274,10 +279,19 @@ export const SortableTaskCard = memo(function SortableTaskCard({
     [setNodeRef],
   );
   useCardFlip(task.id, nodeRef, `${task.status}:${task.position}`);
+  const picked = useBoardPick((s) => s.picked.includes(task.id));
+  const pickable = canPickTask(task);
 
   const open = () => {
     if (suppressClickRef.current) return;
+    useBoardPick.getState().clearPicked();
     openTask(task.id);
+  };
+
+  const onClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!isPickClick(event)) return open();
+    event.preventDefault();
+    if (pickable) useBoardPick.getState().togglePicked(task.id);
   };
 
   return (
@@ -286,10 +300,14 @@ export const SortableTaskCard = memo(function SortableTaskCard({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
       {...listeners}
+      // A Ctrl/⌘-press picks the card, so it never starts a drag.
+      onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+        if (!isPickClick(event)) listeners?.onPointerDown?.(event);
+      }}
       // Restates dnd-kit's defaults so the card's semantics are visible statically.
       role="button"
       tabIndex={0}
-      aria-label={`#${task.number} ${task.title}`}
+      aria-label={`#${task.number} ${task.title}${picked ? " (picked to plan)" : ""}`}
       aria-current={selected || undefined}
       data-task-card={task.id}
       className={cn(
@@ -298,8 +316,10 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
         "[contain-intrinsic-size:auto_84px] [content-visibility:auto] motion-reduce:transition-none!",
         isDragging && "opacity-40",
+        // Inside the card: content-visibility clips anything drawn outside it.
+        picked && "bg-primary/8 ring-2 ring-primary/70 ring-inset",
       )}
-      onClick={open}
+      onClick={onClick}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         listeners?.onKeyDown?.(event);
         if (event.defaultPrevented || event.key !== "Enter" || event.target !== event.currentTarget) return;

@@ -27,6 +27,8 @@ import type {
   ResumeMode,
   ResumeResult,
   ReviewFinding,
+  StartPlanningSessionInput,
+  StartPlanningThreadInput,
   StartSessionInput,
   StartSessionResult,
   StartT3ThreadInput,
@@ -373,6 +375,20 @@ export const useStartProjectT3Thread = (opts?: MutationOpts) =>
   useApiMutation(
     ({ projectId, ...input }: StartT3ThreadInput & { projectId: string }) =>
       api<T3ThreadRef>(`/api/projects/${enc(projectId)}/t3-thread`, { body: input }),
+    opts,
+  );
+/** Starts a T3 Code thread that plans several of a project's tasks; its links arrive over SSE. */
+export const useStartPlanningThread = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ projectId, ...input }: StartPlanningThreadInput & { projectId: string }) =>
+      api<TaskLink[]>(`/api/projects/${enc(projectId)}/plan-thread`, { body: input }),
+    opts,
+  );
+/** Starts a CLI session that plans several of a project's tasks, in its checkout; its links arrive over SSE. */
+export const useStartPlanningSession = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ projectId, ...input }: StartPlanningSessionInput & { projectId: string }) =>
+      api<StartSessionResult>(`/api/projects/${enc(projectId)}/plan-session`, { body: input }),
     opts,
   );
 /** Starts a Claude Code or Copilot CLI session on a task in a terminal; the link arrives over SSE. */

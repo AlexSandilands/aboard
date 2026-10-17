@@ -1,7 +1,10 @@
 import {
   clampRuntimeMode,
   defaultHandoffMode,
+  planningSessionLabel,
+  planTasksPrompt,
   suggestEpicsPrompt,
+  taskNumberList,
   taskHandoffPrompt,
   type PrFixInfo,
   type Project,
@@ -23,7 +26,7 @@ import { toastManager } from "~/components/ui/toast";
 import { ApiError } from "~/lib/api";
 import { openHref, t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
-import { useStartProjectT3Thread, useStartT3Thread } from "~/state/mutations";
+import { useStartPlanningThread, useStartProjectT3Thread, useStartT3Thread } from "~/state/mutations";
 import { useBoard, usePrFix, useProjectT3LaunchOptions, useSettings, useT3LaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
@@ -31,6 +34,7 @@ import {
   findModel,
   initialWorkspaceChoice,
   launchModelSelection,
+  planSkillOf,
   selectionAfterPlanToggle,
   toLaunchWorkspace,
   type WorkspaceChoice,
@@ -38,7 +42,10 @@ import {
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AccessPicker, ComposerControl, ModelPicker, RefPicker, TraitsPicker, WorkspaceMenu } from "./T3LaunchPickers";
 
-/** What the dialog starts a thread for: a task, which the thread is linked to, or a project's Suggest epics. */
+/**
+ * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
+ * for several of a project's tasks, which the thread is linked to each of.
+ */
 interface LaunchSubject {
   /** Shown under the dialog's title. */
   label: string;
@@ -54,6 +61,8 @@ interface LaunchSubject {
   integrationBranch?: string | null;
   /** A PR's branch the thread works on ("Fix in →"): the worktree starts from it, and the dialog says when it doesn't. */
   fixBranch?: string | null;
+  /** Starts in the project's checkout whatever T3's default: planning writes no code. */
+  checkout?: boolean;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -77,7 +86,10 @@ export function T3LaunchDialog() {
   const close = useDialogs((s) => s.closeT3Launch);
   const board = useBoard().data;
   const task = target?.kind === "task" ? board?.tasks.find((t) => t.id === target.taskId) : undefined;
-  const project = target?.kind === "project" ? board?.projects.find((p) => p.id === target.projectId) : undefined;
+  const project =
+    target?.kind === "project" || target?.kind === "plan"
+      ? board?.projects.find((p) => p.id === target.projectId)
+      : undefined;
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
       <DialogPopup className="max-w-2xl">
@@ -89,7 +101,12 @@ export function T3LaunchDialog() {
             onDone={close}
           />
         ) : null}
-        {project ? <ProjectLaunch key={project.id} project={project} onDone={close} /> : null}
+        {project && target?.kind === "project" ? (
+          <ProjectLaunch key={project.id} project={project} onDone={close} />
+        ) : null}
+        {project && target?.kind === "plan" ? (
+          <PlanLaunch key={project.id} project={project} taskIds={target.taskIds} onDone={close} />
+        ) : null}
       </DialogPopup>
     </Dialog>
   );
@@ -193,6 +210,48 @@ function ProjectLaunch({ project, onDone }: { project: Project; onDone: () => vo
   return <LaunchContent subject={subject} options={options} starter={starter} onDone={onDone} />;
 }
 
+function PlanLaunch({ project, taskIds, onDone }: { project: Project; taskIds: string[]; onDone: () => void }) {
+  const options = useProjectT3LaunchOptions(project.id);
+  const settings = useSettings().data;
+  const boardTasks = useBoard().data?.tasks;
+  const mutation = useStartPlanningThread({ silent: true });
+  // Read once: the prompt names these tasks, whatever happens to the board while the dialog is open.
+  const [tasks] = useState(() => taskIds.flatMap((id) => boardTasks?.find((t) => t.id === id) ?? []));
+  const promptFor = (linked: boolean) =>
+    planTasksPrompt({
+      project,
+      tasks,
+      skill: planSkillOf(project, settings),
+      boardUrl: window.location.origin,
+      linked,
+    });
+  const subject: LaunchSubject = {
+    label: `${planningSessionLabel(tasks)} · ${project.title}`,
+    promptFor: () => promptFor(true),
+    planToggle: false,
+    initialPlan: true,
+    successDescription: `${taskNumberList(tasks)} ${tasks.length === 1 ? "is" : "are"} linked to the new thread.`,
+    copyPrompt: () => copyToClipboard(promptFor(false), "planning prompt"),
+    offerOpen: true,
+    checkout: true,
+  };
+  const starter: Starter = {
+    isPending: mutation.isPending,
+    start: (input, { onSuccess, onError }) =>
+      mutation.mutate(
+        { projectId: project.id, taskIds: tasks.map((t) => t.id), ...input },
+        {
+          onSuccess: (links) => {
+            const link = links[0];
+            onSuccess(link?.kind === "t3_thread" ? link.ref : null);
+          },
+          onError,
+        },
+      ),
+  };
+  return <LaunchContent subject={subject} options={options} starter={starter} onDone={onDone} />;
+}
+
 function LaunchContent({
   subject,
   options,
@@ -268,6 +327,7 @@ function Composer({
   const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
   const [choice, setChoice] = useState<WorkspaceChoice>(() => {
+    if (subject.checkout) return { mode: "current", ref: null };
     const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
     // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
     return subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"

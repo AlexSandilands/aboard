@@ -10,7 +10,7 @@ import {
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, LightbulbIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import { ClipboardCopyIcon, LightbulbIcon, ListTodoIcon, SparklesIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -18,8 +18,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
-import { useAgentClis, useSettings } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
+import { useAgentClis, useBoard, useSettings } from "~/state/queries";
+import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
+import { pickedAmong, plannableTasks } from "~/components/board/boardSelection.logic";
 
 type Variant = "card" | "panel";
 
@@ -83,6 +84,61 @@ export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; ca
         <MenuItem onClick={() => copySuggestEpicsPrompt(project)}>
           <ClipboardCopyIcon />
           Copy prompt to suggest epics
+        </MenuItem>
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+/**
+ * The lane header's "Plan tasks…": one session that walks the user through a plan for each of several of the
+ * project's tasks, in a new T3 Code thread, a CLI session or a prompt to paste. Each opens the picker of the tasks
+ * (PlanTasksDialog), with the cards Ctrl/⌘-clicked in this lane ticked; their count shows on the button.
+ */
+export function PlanTasksMenu({ project, canStartT3 }: { project: Project; canStartT3: boolean }) {
+  const pickedIds = useBoardPick((s) => s.picked);
+  const tasks = useBoard().data?.tasks;
+  const picked = pickedIds.length ? pickedAmong(pickedIds, plannableTasks(tasks ?? [], project.id)).length : 0;
+  const sessionClis = (useAgentClis().data ?? []).filter((c) => c.available);
+  const open = (target: PlanTarget) => useDialogs.getState().openPlanPicker(project.id, target);
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger
+              render={
+                <Button
+                  variant="ghost-muted"
+                  size={picked ? "xs" : "icon-xs"}
+                  aria-label={`Plan tasks in ${project.title}${picked ? ` (${picked} picked)` : ""}`}
+                />
+              }
+            />
+          }
+        >
+          <ListTodoIcon />
+          {picked ? <span className="tabular-nums">{picked}</span> : null}
+        </TooltipTrigger>
+        <TooltipPopup>Plan tasks… (Ctrl/⌘-click cards to pick them)</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="start">
+        {canStartT3 ? (
+          <MenuItem onClick={() => open({ kind: "t3" })}>
+            <T3Icon className="size-4.5 sm:size-4" />
+            Plan in a new T3 Code thread…
+          </MenuItem>
+        ) : null}
+        {sessionClis.map(({ harness }) => (
+          <MenuItem key={harness} onClick={() => open({ kind: "session", harness })}>
+            <HarnessIcon harness={harness} />
+            Plan in a new {AGENT_HARNESSES[harness].label} session…
+          </MenuItem>
+        ))}
+        {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
+        <MenuItem onClick={() => open({ kind: "copy" })}>
+          <ClipboardCopyIcon />
+          Copy planning prompt…
         </MenuItem>
       </MenuPopup>
     </Menu>

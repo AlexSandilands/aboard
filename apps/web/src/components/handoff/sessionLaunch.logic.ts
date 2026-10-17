@@ -1,6 +1,7 @@
 import {
   AGENT_HARNESSES,
   CliModel,
+  taskNumberList,
   type AgentHarness,
   type SessionLaunchOptions,
   type SessionWorkspace,
@@ -56,7 +57,8 @@ export function modelError(model: string): string | null {
  */
 export function startedDescription(
   result: Pick<StartSessionResult, "branch" | "shortPrompt">,
-  taskNumber: number,
+  /** The tasks the session is linked to: one, or several for a planning session. */
+  taskNumbers: readonly number[],
   copied: boolean,
 ): string {
   const where = result.branch ? ` It runs in a new worktree on ${result.branch}.` : "";
@@ -65,7 +67,8 @@ export function startedDescription(
     : copied
       ? " The full prompt is on your clipboard: paste it into the session."
       : " Copy the full prompt and paste it into the session.";
-  return `#${taskNumber} is linked to the new session.${where}${short}`;
+  const linked = `${taskNumberList(taskNumbers.map((number) => ({ number })))} ${taskNumbers.length === 1 ? "is" : "are"}`;
+  return `${linked} linked to the new session.${where}${short}`;
 }
 
 export const harnessLabel = (harness: AgentHarness): string => AGENT_HARNESSES[harness].label;

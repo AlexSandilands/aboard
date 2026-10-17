@@ -140,6 +140,20 @@ export const planTasksShortPrompt = (tasks: ReadonlyArray<Pick<TaskSummary, "num
   `[${tasks.map((task) => `"#${task.number}"`).join(", ")}], mode: "plan") on the ${BRAND.id} MCP server first and ` +
   "follow it. The board started this session and already linked it to every task; don't link it again.";
 
+/**
+ * Why a task can't go into a bulk planning session, or null when it can: open tasks still in Backlog or without a
+ * plan, never an epic (its tasks carry the plans).
+ */
+export function planTaskProblem(
+  task: Pick<TaskSummary, "number" | "kind" | "archivedAt" | "status" | "progress">,
+): string | null {
+  if (task.kind === "epic") return `#${task.number} is an epic: plan its tasks instead`;
+  if (task.archivedAt) return `#${task.number} is archived`;
+  if (task.status === "done") return `#${task.number} is done`;
+  if (task.status !== "backlog" && task.progress.total > 0) return `#${task.number} already has a plan`;
+  return null;
+}
+
 /** The most tasks one planning session takes. */
 export const MAX_PLAN_TASKS = 50;
 

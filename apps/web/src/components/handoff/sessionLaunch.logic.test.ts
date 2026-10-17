@@ -42,13 +42,18 @@ describe("new session dialog", () => {
   });
 
   it("says where the session runs and where the full prompt went", () => {
-    expect(startedDescription({ branch: null, shortPrompt: null }, 3, false)).toBe("#3 is linked to the new session.");
-    expect(startedDescription({ branch: "aboard/3-abc", shortPrompt: "Let's work on #3" }, 3, true)).toBe(
+    expect(startedDescription({ branch: null, shortPrompt: null }, [3], false)).toBe(
+      "#3 is linked to the new session.",
+    );
+    expect(startedDescription({ branch: "aboard/3-abc", shortPrompt: "Let's work on #3" }, [3], true)).toBe(
       "#3 is linked to the new session. It runs in a new worktree on aboard/3-abc. The full prompt is on your clipboard: paste it into the session.",
     );
     // The clipboard refused it: the toast's Copy prompt button is the way to it.
-    expect(startedDescription({ branch: null, shortPrompt: "Let's work on #3" }, 3, false)).toBe(
+    expect(startedDescription({ branch: null, shortPrompt: "Let's work on #3" }, [3], false)).toBe(
       "#3 is linked to the new session. Copy the full prompt and paste it into the session.",
+    );
+    expect(startedDescription({ branch: null, shortPrompt: null }, [3, 4, 7], false)).toBe(
+      "#3, #4 and #7 are linked to the new session.",
     );
   });
 });
