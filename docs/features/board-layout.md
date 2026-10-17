@@ -36,7 +36,8 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
   the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is
   placed there like any card and **stops being priority** (`PATCH priority: false`, sent once the move has landed so a
   refused move leaves the card in the lane, and applied to the cache at once). While the card is dragged its project's
-  row, or its epic's band when the lane has one (`homeRowId`), is drawn in full so there is a place to drop it. Other lanes refuse it. Cards from project lanes can't be dragged into the lane; use the star.
+  row, or its epic's band when the lane has one (`homeRowId`), is drawn in full so there is a place to drop it, unless its lane is collapsed, filtered out or not the scoped project, when
+  the star is the way out. Other lanes refuse it. Cards from project lanes can't be dragged into the lane; use the star.
 - **Dependency lines** work across the lane as anywhere; a related card that isn't shown gets its stub toward the lane
   as above the first project.
 - **Autopilot** starts priority tasks first ([autopilot.md](autopilot.md#automations)).
