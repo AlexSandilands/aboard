@@ -62,7 +62,11 @@ export const EpicBand = memo(function EpicBand({
         epic.archivedAt && "opacity-60",
       )}
     >
-      <header className={cn("col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2", narrow ? "py-1" : "h-8")}>
+      <header
+        // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
+        data-task-card={epic.id}
+        className={cn("col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2", narrow ? "py-1" : "h-8")}
+      >
         <Button
           variant="ghost-muted"
           size="icon-xs"

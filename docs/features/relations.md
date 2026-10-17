@@ -62,9 +62,10 @@ tasks still on the board, skipping any that would now make a cycle ([backup](bac
   task. The work prompt adds that line for a blocked task; the epic's orchestrator prompt leaves blocked tasks
   out of the first wave.
 
-An epic can block and be blocked (it shows in `get_task`, the panel and other cards' lists), but its band has
-no lock and takes no part in the lines: hovering a band draws nothing, and a card related to an epic gets a
-stub toward the epic's column as if it were hidden.
+An epic can block and be blocked (it shows in `get_task`, the panel and other cards' lists). Its band has no
+lock, but it takes part in the lines: an open epic's band header (collapsed or not) and a Done epic's card
+header carry the `data-task-card` marker the overlay measures, so hovering one draws its lines and a related
+card gets a line to it, not a stub.
 
 Starting blocked tasks automatically is the autopilot's job and reads `blocked`; nothing here starts a task.
 
