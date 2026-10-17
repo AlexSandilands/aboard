@@ -9,9 +9,13 @@ stored on the board and written into the text as a pill; agents get its file pat
 
 - **Where:** every Markdown editor on a task (description, plan context, step notes) and the description box of
   the new-task palette. Paste (Ctrl/⌘+V) or drop image files onto the text box.
-- **In the text:** a token, `![name](attachment:<id>)`. The editor is a plain textarea, so it shows the token;
-  everywhere the text is rendered it is a small pill with the name, and thumbnails of the images the text refers
-  to sit under it (and under the editor). A click on either opens the image in a preview dialog.
+- **In the text:** a token, `![name](attachment:<id>)`. The editor ([rich-editor.md](rich-editor.md)) shows it as
+  the same small pill with the name as rendered text does. Thumbnails of the images the text refers to sit under
+  rendered text, and under the editor only when it falls back to a plain textarea (which shows the token). A click
+  on either opens the image in a preview dialog.
+- **While it uploads:** the rich editor shows an "Uploading image…" pill (a node that writes no Markdown), swapped
+  for the attachment pill when the upload is done. The swap stays out of the undo history, so one undo takes the
+  image out. The textarea shows an `[uploading image N…]` placeholder instead. A failed upload removes either.
 - **Shrinking in the browser** (`apps/web/src/lib/attachments.ts`, rules in `attachments.logic.ts`): an image
   over 2560px on its long side is scaled down to that, and one over 1 MB (or of a type the board doesn't store,
   such as BMP) is re-encoded as WebP at quality 0.85, with a canvas. GIFs, which may be animated, and small
@@ -55,5 +59,5 @@ A row whose ids aren't ids is never turned into a path. See [backup.md](backup.m
 | `apps/server/src/db/migrations/024_task_attachments.sql` | The table                                                 |
 | `apps/server/src/services/backup/files.ts`           | Copying images into and out of a backup folder                |
 | `apps/web/src/lib/attachments.ts`, `.logic.ts`       | Shrinking before upload                                       |
-| `apps/web/src/components/attachments/`               | Paste hook, thumbnails, preview dialog                        |
-| `apps/web/src/components/markdown/Markdown.tsx`      | The pill                                                      |
+| `apps/web/src/components/attachments/`               | Paste hook, pill, thumbnails, preview dialog                  |
+| `apps/web/src/components/editor/`                    | The editor's attachment and upload nodes                      |

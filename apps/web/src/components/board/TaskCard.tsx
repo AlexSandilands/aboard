@@ -224,7 +224,7 @@ export function ArchiveButton({ task }: { task: TaskSummary }) {
 
 /** Muted "Done by #4" / "Duplicate of #4" / "Won't do" on closed cards; the number opens the delivering task. */
 function ResolutionChip({ task }: { task: TaskSummary }) {
-  const { openTask } = useBoardContext();
+  const { revealTask } = useBoardContext();
   const label = resolutionLabel(task);
   if (!label) return null;
   const by = task.resolvedBy;
@@ -238,7 +238,7 @@ function ResolutionChip({ task }: { task: TaskSummary }) {
       {...linkHandlers}
       onClick={(event) => {
         event.stopPropagation();
-        openTask(by.id);
+        revealTask(by.id);
       }}
     >
       <span className="truncate">{label}</span>

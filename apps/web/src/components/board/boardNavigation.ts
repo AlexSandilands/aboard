@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
-import { useSettingsNav } from "~/state/ui";
+import { useReveal, useSettingsNav } from "~/state/ui";
 import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type FilterState } from "./boardFilters.logic";
 
 /**
@@ -39,10 +39,23 @@ export function useSetLabelFilter() {
   );
 }
 
+/**
+ * Opens a task in the panel and scrolls the board to its card (when the setting is on). A click on the card itself
+ * passes `reveal: false`: the card is already under the pointer.
+ */
 export function useOpenTask() {
   const navigate = useNavigate();
   return useCallback(
-    (taskId: string) => navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) }),
+    (taskId: string, options?: { reveal?: boolean }) => {
+      const opened = navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) });
+      // After the navigation, so the board has the task selected (which keeps its card in a collapsed column) by then.
+      if (options?.reveal !== false)
+        void opened.then(
+          () => useReveal.getState().requestReveal(taskId),
+          () => {}, // the caller sees the failure
+        );
+      return opened;
+    },
     [navigate],
   );
 }

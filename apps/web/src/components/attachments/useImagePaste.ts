@@ -6,8 +6,8 @@ import { imageFiles } from "~/lib/attachments.logic";
 import { uploadAttachment } from "~/lib/api";
 
 /**
- * Paste and drop of images into a textarea: each is shrunk (see prepareImage) and uploaded. A placeholder goes into
- * the text at the cursor at once (`insert` receives it and the position, and returns where the cursor ends up, so the
+ * Paste and drop of images into a textarea or the rich editor (see MarkdownInput): each is shrunk (see prepareImage)
+ * and uploaded. A placeholder goes into the text at the cursor at once (`insert` receives it and the position, and returns where the cursor ends up, so the
  * next image goes after it); when the upload is done `replace` swaps it, wherever typing has moved it to, for the
  * Markdown token (`![name](attachment:id)`), or removes it if the upload failed. `onSettled` runs when the last
  * upload in flight is done, whether it worked or not.
@@ -67,6 +67,8 @@ export function useImagePaste({
   return {
     error,
     uploading: uploading > 0,
+    /** Adds images from somewhere other than the textarea (the rich editor), at `from`. */
+    add,
     /** Spread onto the textarea. */
     handlers: {
       onPaste(event: ClipboardEvent<HTMLTextAreaElement>) {

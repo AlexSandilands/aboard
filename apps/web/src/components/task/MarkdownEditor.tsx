@@ -1,9 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
-import { useImagePaste } from "~/components/attachments/useImagePaste";
-import { Textarea } from "~/components/ui/textarea";
-import { insertAtSelection, replaceFirst } from "~/lib/attachments.logic";
+import { MarkdownInput, useMarkdownInput } from "~/components/editor/MarkdownInput";
 
 const SAVE_HINT =
   typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
@@ -11,7 +9,7 @@ const SAVE_HINT =
     : "Ctrl+Enter to save · Esc to cancel";
 
 /**
- * Markdown textarea that saves on blur or Ctrl/⌘+Enter and cancels on Esc.
+ * Markdown editor (see MarkdownInput) that saves on blur or Ctrl/⌘+Enter and cancels on Esc.
  * `onSave` receives the trimmed text, or null when it was cleared.
  * Images pasted or dropped into it are attached to `taskId` and written into the text as a token.
  */
@@ -45,14 +43,10 @@ export function MarkdownEditor({
     const next = draftRef.current.trim();
     onSave(next.length > 0 ? next : null);
   }, [onSave]);
-  const paste = useImagePaste({
+  const markdown = useMarkdownInput({
     taskId,
-    insert: (marker, at) => {
-      const { text, caret } = insertAtSelection(draftRef.current, at.start, at.end, marker);
-      setText(text);
-      return caret;
-    },
-    replace: (marker, replacement) => setText(replaceFirst(draftRef.current, marker, replacement)),
+    value: draft,
+    onChange: setText,
     // Leaving the box mid-upload would save before the image's token is in the text; it saves once they land.
     onSettled: () => {
       if (blurredWhileUploading.current) save();
@@ -60,43 +54,37 @@ export function MarkdownEditor({
   });
   return (
     <div className="flex flex-col gap-1">
-      <Textarea
+      <MarkdownInput
+        input={markdown.input}
         autoFocus
-        aria-label={ariaLabel}
-        size="sm"
-        value={draft}
+        ariaLabel={ariaLabel}
         placeholder={placeholder}
-        onChange={(event) => setText(event.currentTarget.value)}
-        onFocus={(event) => {
+        onFocus={() => {
           blurredWhileUploading.current = false;
-          const end = event.currentTarget.value.length;
-          event.currentTarget.setSelectionRange(end, end);
         }}
         onBlur={() => {
-          if (paste.uploading) blurredWhileUploading.current = true;
+          if (markdown.uploading) blurredWhileUploading.current = true;
           else save();
         }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-            event.preventDefault();
-            if (paste.uploading) blurredWhileUploading.current = true;
+        onKey={(key) => {
+          if (key.key === "Enter" && (key.ctrlKey || key.metaKey)) {
+            key.claim();
+            if (markdown.uploading) blurredWhileUploading.current = true;
             else save();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
+          } else if (key.key === "Escape") {
+            key.claim();
             settled.current = true;
             onCancel();
           }
         }}
-        {...paste.handlers}
       />
-      <AttachmentThumbs text={draft} />
+      {markdown.mode === "plain" ? <AttachmentThumbs text={draft} /> : null}
       <span className="flex items-baseline justify-between gap-2 text-2xs text-muted-foreground">
         <span
-          className={paste.error ? "text-destructive-foreground" : undefined}
-          role={paste.error ? "alert" : undefined}
+          className={markdown.error ? "text-destructive-foreground" : undefined}
+          role={markdown.error ? "alert" : undefined}
         >
-          {paste.uploading ? "Uploading image…" : (paste.error ?? "Paste or drop an image to attach it")}
+          {markdown.uploading ? "Uploading image…" : (markdown.error ?? "Paste or drop an image to attach it")}
         </span>
         <span className="shrink-0">{SAVE_HINT}</span>
       </span>
