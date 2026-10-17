@@ -67,6 +67,7 @@ export function MarkdownEditor({
         placeholder={placeholder}
         onChange={(event) => setText(event.currentTarget.value)}
         onFocus={(event) => {
+          blurredWhileUploading.current = false;
           const end = event.currentTarget.value.length;
           event.currentTarget.setSelectionRange(end, end);
         }}

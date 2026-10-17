@@ -11,7 +11,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { ATTACHMENT_EXTENSIONS, BoardDump, TASK_BUNDLE_TABLES, type BackupRow, type TaskBundle } from "@repo/contracts";
+import {
+  attachmentExtension,
+  BoardDump,
+  isAttachmentPathId,
+  TASK_BUNDLE_TABLES,
+  type BackupRow,
+  type TaskBundle,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 
 // The folder form of a dump, laid out for git: one file per task, sharded by the month it was created so old
@@ -61,8 +68,8 @@ export const taskFilePath = (task: BackupRow): string =>
  * ids (a backup is untrusted input, and these become path segments).
  */
 export const attachmentRelPath = (row: BackupRow): string | null =>
-  [row.task_id, row.id].every((id) => typeof id === "string" && /^[0-9a-f-]{36}$/.test(id))
-    ? `${String(row.task_id)}/${String(row.id)}.${ATTACHMENT_EXTENSIONS[String(row.mime)] ?? "bin"}`
+  [row.task_id, row.id].every(isAttachmentPathId)
+    ? `${String(row.task_id)}/${String(row.id)}.${attachmentExtension(String(row.mime)) ?? "bin"}`
     : null;
 
 /** The dump as folder files: relative path (with "/") to contents. */
@@ -124,8 +131,8 @@ export interface WriteResult {
 
 /**
  * Writes the dump into `dir`, touching only files whose contents changed, and removes task and event files the
- * dump no longer has (a deleted task's file goes, so git history shows when). Anything else in `dir` (.git, a
- * README) is left alone.
+ * dump no longer has (a deleted task's file goes, so git history shows when), likewise images of tasks that are gone
+ * from its `attachments/<id>/<id>.<ext>`. Anything else in `dir` (.git, a README) is left alone.
  */
 export function writeDumpDir(
   dir: string,
@@ -164,8 +171,10 @@ export function writeDumpDir(
       copyFileSync(from, to);
       written.push(`${ATTACHMENTS_DIR}/${rel}`);
     }
+    // Only files in our own layout: the folder is a git repo that may hold other things of its own.
+    const ours = /^attachments\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.[a-z0-9]+$/;
     const stale = filesUnder(dir, ATTACHMENTS_DIR, "").filter(
-      (path) => !wanted.has(path.slice(ATTACHMENTS_DIR.length + 1)),
+      (path) => ours.test(path) && !wanted.has(path.slice(ATTACHMENTS_DIR.length + 1)),
     );
     for (const path of stale) rmSync(join(dir, path));
     removed.push(...stale);

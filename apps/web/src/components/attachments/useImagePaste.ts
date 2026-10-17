@@ -35,7 +35,8 @@ export function useImagePaste({
           const blob = await prepareImage(file);
           const name = file.name || "image";
           const attachment = await uploadAttachment(blob, name, taskId);
-          insert(attachmentToken(attachment.id, name.replace(/\.[a-z0-9]+$/i, "")), at);
+          const next = insert(attachmentToken(attachment.id, name.replace(/\.[a-z0-9]+$/i, "")), at);
+          at = { start: next, end: next };
         } catch (e) {
           setError(e instanceof ImageRejected || e instanceof Error ? e.message : "The image couldn't be added.");
         } finally {

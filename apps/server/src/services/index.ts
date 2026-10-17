@@ -53,7 +53,10 @@ export function createServices(deps: ServiceDeps): Services {
   const notifications = createNotificationsService(core);
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
   let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
-  const projects = createProjectsService(core, { onUnarchived: (id) => restartRecurring?.([id]) });
+  const projects = createProjectsService(core, {
+    onUnarchived: (id) => restartRecurring?.([id]),
+    onTasksDeleted: (ids) => ids.forEach((id) => attachments.removeFilesOf(id)),
+  });
   const labels = createLabelsService(core);
   const templates = createTemplatesService(core, { projects });
 

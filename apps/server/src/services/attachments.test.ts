@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { attachmentToken, BRAND, MAX_ATTACHMENT_BYTES } from "@repo/contracts";
@@ -117,6 +117,49 @@ describe("attachment files", () => {
     db.prepare("UPDATE task_attachments SET created_at = '2020-01-01T00:00:00.000Z'").run();
     services.attachments.sweep();
     expect(() => services.attachments.get(stray.id)).toThrow(/not found/);
+  });
+});
+
+describe("attachments whose rows can't be trusted", () => {
+  it("never become a path: a restored row with odd ids or type is not served, listed or deleted through", async () => {
+    const { upload, task, services, db, request } = setup();
+    const created = (await (await upload(task.id)).json()) as { id: string };
+    // What a crafted backup could leave in the table: a type that is an Object.prototype key, and a path-like id.
+    db.prepare("UPDATE task_attachments SET mime = 'constructor' WHERE id = ?").run(created.id);
+    expect((await request(`/api/attachments/${created.id}`)).status).toBe(404);
+    expect(services.attachments.forTask(task.id)).toEqual([]);
+    db.prepare(
+      "INSERT INTO task_attachments (id, task_id, filename, mime, size, created_at) VALUES (?, ?, 'x', 'image/png', 1, '2026-01-01T00:00:00.000Z')",
+    ).run("../../escape", task.id);
+    expect(services.attachments.forTask(task.id)).toEqual([]);
+    // Deleting by something that isn't a task id removes nothing (a real one is a UUID, never "..").
+    await upload(task.id);
+    const [first] = services.attachments.forTask(task.id);
+    const folder = join(dirname(dirname(first!.path)), "not-an-id");
+    mkdirSync(folder);
+    services.attachments.removeFilesOf("not-an-id");
+    expect(existsSync(folder)).toBe(true);
+  });
+});
+
+describe("attachment cleanup", () => {
+  it("deleting a project deletes its tasks' images", async () => {
+    const { upload, task, project, services } = setup();
+    await upload(task.id);
+    const [stored] = services.attachments.forTask(task.id);
+    services.projects.delete(project.id);
+    expect(existsSync(stored!.path)).toBe(false);
+  });
+
+  it("a backup folder keeps files of its own under attachments/", async () => {
+    const { upload, task, services } = setup();
+    await upload(task.id);
+    const [stored] = services.attachments.forTask(task.id);
+    const dir = tempDir();
+    mkdirSync(join(dir, "attachments"), { recursive: true });
+    writeFileSync(join(dir, "attachments", "notes.txt"), "mine");
+    writeDumpDir(dir, services.backup.dump(), attachmentsDirOf(stored!.path));
+    expect(readFileSync(join(dir, "attachments", "notes.txt"), "utf8")).toBe("mine");
   });
 });
 

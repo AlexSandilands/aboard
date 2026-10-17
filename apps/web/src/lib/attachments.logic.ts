@@ -1,4 +1,4 @@
-import { ATTACHMENT_EXTENSIONS, ATTACHMENT_MAX_DIMENSION, MAX_ATTACHMENT_BYTES, formatBytes } from "@repo/contracts";
+import { ATTACHMENT_MAX_DIMENSION, MAX_ATTACHMENT_BYTES, attachmentExtension, formatBytes } from "@repo/contracts";
 
 /** Images at or under this size, and within the dimension cap, are uploaded as they are. */
 export const KEEP_BELOW_BYTES = 1024 * 1024;
@@ -33,7 +33,7 @@ const rejectOversize = (size: number): ImagePlan => ({
  * converted the same way.
  */
 export function planImage(image: { type: string; size: number; width: number; height: number }): ImagePlan {
-  const supported = image.type in ATTACHMENT_EXTENSIONS;
+  const supported = attachmentExtension(image.type) !== undefined;
   if (image.type === "image/gif")
     return image.size > MAX_ATTACHMENT_BYTES ? rejectOversize(image.size) : { kind: "keep" };
   const fitted = fitWithin(image.width, image.height);
@@ -53,7 +53,7 @@ export function pickUpload(args: {
   resized: boolean;
 }): { use: "original" | "encoded"; size: number } | { use: "none"; reason: string } {
   const keepOriginal =
-    args.originalType in ATTACHMENT_EXTENSIONS && !args.resized && args.encodedSize >= args.originalSize;
+    attachmentExtension(args.originalType) !== undefined && !args.resized && args.encodedSize >= args.originalSize;
   const size = keepOriginal ? args.originalSize : args.encodedSize;
   if (size > MAX_ATTACHMENT_BYTES) return { use: "none", reason: rejectOversizeReason(size) };
   return { use: keepOriginal ? "original" : "encoded", size };

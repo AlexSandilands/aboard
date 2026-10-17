@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ATTACHMENT_EXTENSIONS, attachmentIdsIn, MAX_ATTACHMENT_BYTES, type TaskAttachment } from "@repo/contracts";
+import {
+  attachmentExtension,
+  attachmentIdsIn,
+  isAttachmentPathId,
+  MAX_ATTACHMENT_BYTES,
+  type TaskAttachment,
+} from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
@@ -10,6 +16,8 @@ import type { Core } from "./core.ts";
 const PENDING_DIR = "_pending";
 /** How long an image no task claimed is kept. */
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+/** The cleanup also runs on an upload when this long has passed since the last one. */
+const SWEEP_EVERY_MS = 60 * 60 * 1000;
 
 export interface UploadInput {
   /** The task it belongs to; null for the new-task box, whose task is created later (see `claim`). */
@@ -54,8 +62,16 @@ export function matchesMime(mime: string, b: Uint8Array): boolean {
 
 export function createAttachmentsService(core: Core, dir: string): AttachmentsService {
   const { repos } = core;
-  const pathOf = (a: TaskAttachment): string =>
-    join(dir, a.taskId ?? PENDING_DIR, `${a.id}.${ATTACHMENT_EXTENSIONS[a.mime] ?? "bin"}`);
+  /**
+   * Where the image's file is; null when the row doesn't describe one. Rows a restored backup brought are
+   * untrusted: ids and type become path segments, so anything but a UUID and a known type is refused.
+   */
+  const pathOf = (a: TaskAttachment): string | null => {
+    const ext = attachmentExtension(a.mime);
+    if (!ext || !isAttachmentPathId(a.id) || (a.taskId !== null && !isAttachmentPathId(a.taskId))) return null;
+    return join(dir, a.taskId ?? PENDING_DIR, `${a.id}.${ext}`);
+  };
+  let lastSweep = 0;
 
   const get = (id: string): TaskAttachment => {
     const attachment = repos.attachments.get(id);
@@ -65,7 +81,9 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
 
   return {
     upload({ taskId, filename, mime, bytes }) {
-      if (!ATTACHMENT_EXTENSIONS[mime]) {
+      // Images nobody claimed, and folders of tasks that are gone, are cleaned up now and then, not only at startup.
+      if (Date.now() - lastSweep > SWEEP_EVERY_MS) this.sweep();
+      if (!attachmentExtension(mime)) {
         throw new AppError("VALIDATION", `Only PNG, JPEG, GIF and WebP images can be attached, not ${mime || "this"}`);
       }
       if (bytes.length === 0) throw new AppError("VALIDATION", "The image is empty");
@@ -83,7 +101,7 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
           size: bytes.length,
           createdAt: nowIso(),
         };
-        const path = pathOf(attachment);
+        const path = pathOf(attachment)!;
         mkdirSync(join(path, ".."), { recursive: true });
         writeFileSync(path, bytes);
         try {
@@ -102,11 +120,15 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
     read(id) {
       const attachment = get(id);
       const path = pathOf(attachment);
-      if (!existsSync(path)) throw notFound("Attachment file", id);
+      if (!path || !existsSync(path)) throw notFound("Attachment file", id);
       return { attachment, bytes: readFileSync(path) };
     },
 
-    forTask: (taskId) => repos.attachments.forTask(taskId).map((a) => ({ ...a, path: pathOf(a) })),
+    forTask: (taskId) =>
+      repos.attachments.forTask(taskId).flatMap((a) => {
+        const path = pathOf(a);
+        return path ? [{ ...a, path }] : [];
+      }),
 
     claim(taskId, text) {
       for (const id of attachmentIdsIn(text)) {
@@ -114,20 +136,25 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
         if (!attachment || attachment.taskId !== null) continue;
         const from = pathOf(attachment);
         const to = pathOf({ ...attachment, taskId });
-        mkdirSync(join(to, ".."), { recursive: true });
-        if (existsSync(from)) renameSync(from, to);
+        if (from && to) {
+          mkdirSync(join(to, ".."), { recursive: true });
+          if (existsSync(from)) renameSync(from, to);
+        }
         repos.attachments.setTask(id, taskId);
       }
     },
 
     removeFilesOf(taskId) {
+      if (!isAttachmentPathId(taskId)) return;
       rmSync(join(dir, taskId), { recursive: true, force: true });
     },
 
     sweep() {
+      lastSweep = Date.now();
       const cutoff = new Date(core.now().getTime() - PENDING_TTL_MS).toISOString();
       for (const attachment of repos.attachments.orphansBefore(cutoff)) {
-        rmSync(pathOf(attachment), { force: true });
+        const path = pathOf(attachment);
+        if (path) rmSync(path, { force: true });
         repos.attachments.delete(attachment.id);
       }
       if (!existsSync(dir)) return;

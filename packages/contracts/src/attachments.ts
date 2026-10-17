@@ -54,3 +54,11 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** Whether `value` can be a task or attachment id (a UUID). They become path segments, and a backup is untrusted. */
+export const isAttachmentPathId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
+
+/** The file extension an image of this type is stored with; undefined for any other type. */
+export const attachmentExtension = (mime: string): string | undefined =>
+  Object.hasOwn(ATTACHMENT_EXTENSIONS, mime) ? ATTACHMENT_EXTENSIONS[mime] : undefined;

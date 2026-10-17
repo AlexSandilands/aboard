@@ -1,4 +1,4 @@
-import { MAX_ATTACHMENT_BYTES } from "@repo/contracts";
+import { attachmentExtension, MAX_ATTACHMENT_BYTES } from "@repo/contracts";
 import { pickUpload, planImage, REENCODE_QUALITY, REENCODE_TYPE } from "./attachments.logic";
 
 /** What went wrong with an image, in words for the person who pasted it. */
@@ -30,7 +30,9 @@ export async function prepareImage(file: File): Promise<Blob> {
     canvas.height = plan.height;
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, plan.width, plan.height);
     const encoded = await toBlob(canvas, REENCODE_TYPE, REENCODE_QUALITY);
-    if (!encoded || encoded.type !== REENCODE_TYPE) throw new ImageRejected("That image can't be converted.");
+    // A browser that can't encode WebP (Safari) hands back a PNG, which the board stores just as well.
+    if (!encoded || attachmentExtension(encoded.type) === undefined)
+      throw new ImageRejected("That image can't be converted.");
     const pick = pickUpload({
       originalType: file.type,
       originalSize: file.size,

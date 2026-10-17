@@ -1,9 +1,10 @@
 import { MAX_ATTACHMENT_BYTES, attachmentUrl } from "@repo/contracts";
 import type { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
 import { AppError } from "../../errors.ts";
-import { handle, idParam, parseQuery } from "../respond.ts";
+import { errorResponse, handle, idParam, parseQuery } from "../respond.ts";
 
 const UploadQuery = z.object({
   /** Omitted for an image pasted into the new-task box, whose task doesn't exist yet. */
@@ -15,12 +16,14 @@ const UploadQuery = z.object({
 export function registerAttachmentRoutes(app: Hono, { services }: AppContext): void {
   app.post(
     "/api/attachments",
+    // Stops reading a body that runs past the cap, whatever its headers say; the service checks the size again.
+    bodyLimit({
+      maxSize: MAX_ATTACHMENT_BYTES,
+      onError: (c) =>
+        errorResponse(c, new AppError("VALIDATION", `The image is over ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`)),
+    }),
     handle(async (c) => {
       const { taskId, filename } = parseQuery(c, UploadQuery);
-      // Refused before the body is read; the service checks the real size again.
-      if (Number(c.req.header("content-length") ?? 0) > MAX_ATTACHMENT_BYTES) {
-        throw new AppError("VALIDATION", `The image is over ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`);
-      }
       const bytes = new Uint8Array(await c.req.arrayBuffer());
       const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
       const attachment = services.attachments.upload({
