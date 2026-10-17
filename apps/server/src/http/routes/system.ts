@@ -9,6 +9,7 @@ import {
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
+import { manualFix } from "../../autopilot/automations/fixPrs.ts";
 import { browseDirectory } from "../../fs.ts";
 import { actorOf, handle, noContent, parseBody, parseQuery, idParam } from "../respond.ts";
 
@@ -46,6 +47,10 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     }),
   );
 
+  app.get(
+    "/api/links/:id/fix",
+    handle((c) => c.json(manualFix(services, idParam(c)))),
+  );
   app.get(
     "/api/links/:id/resume-command",
     handle((c) => {

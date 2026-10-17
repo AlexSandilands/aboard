@@ -1,18 +1,30 @@
-import { prMergeAction, type PrSnapshot, type T3ThreadStatus, type TaskLink, type TaskStatus } from "@repo/contracts";
+import {
+  prMergeAction,
+  type PrRowSlot,
+  type PrSnapshot,
+  type T3ThreadStatus,
+  type TaskLink,
+  type TaskSummary,
+} from "@repo/contracts";
 import {
   GitMergeIcon,
   GitPullRequestArrowIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   Link2Icon,
+  TriangleAlertIcon,
+  WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { SyntheticEvent } from "react";
+import { FixInMenuItems, usePrSlot } from "~/components/handoff/FixPrMenu";
+import { PR_AUTOPILOT_LABEL } from "~/components/handoff/fixPr.logic";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { HarnessIcon, SessionMenuItems, T3Icon } from "~/components/sessions/SessionParts";
 import { sessionStatusPresentation, sessionTitle, type SessionLink } from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
-import { Menu, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
@@ -56,44 +68,29 @@ export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
 }
 
 /**
- * Card line 4: PR chips (with a merge button when one is offered), "Open in T3 Code" buttons for active threads and
- * agent sessions, whose menu opens them in a terminal.
+ * Card line 4: PR chips (with the one action the PR offers: merge, fix in a session, or Autopilot's state), "Open in T3
+ * Code" buttons for active threads and agent sessions, whose menu opens them in a terminal.
  */
-export function CardLinks({
-  taskId,
-  taskStatus,
-  links,
-}: {
-  taskId: string;
-  taskStatus: TaskStatus;
-  links: ReadonlyArray<TaskLink>;
-}) {
+export function CardLinks({ task }: { task: TaskSummary }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
-      {cardLinks(links).map((link) =>
+      {cardLinks(task.links).map((link) =>
         link.kind === "pr" ? (
-          <PrChip key={link.id} taskId={taskId} taskStatus={taskStatus} link={link} />
+          <PrChip key={link.id} task={task} link={link} />
         ) : link.kind === "t3_thread" ? (
           <ThreadButton key={link.id} link={link} />
         ) : link.kind === "agent_session" ? (
-          <SessionChip key={link.id} taskId={taskId} link={link} />
+          <SessionChip key={link.id} taskId={task.id} link={link} />
         ) : null,
       )}
     </div>
   );
 }
 
-function PrChip({
-  taskId,
-  taskStatus,
-  link,
-}: {
-  taskId: string;
-  taskStatus: TaskStatus;
-  link: Extract<TaskLink, { kind: "pr" }>;
-}) {
+function PrChip({ task, link }: { task: TaskSummary; link: Extract<TaskLink, { kind: "pr" }> }) {
   const snapshot = link.snapshot;
-  const mergeAction = prMergeAction(taskStatus, snapshot);
+  const mergeAction = prMergeAction(task.status, snapshot);
+  const slot = usePrSlot(task, link);
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const Icon = state?.Icon ?? Link2Icon;
   const checks = snapshot && snapshot.checks !== "none" ? CHECKS[snapshot.checks] : null;
@@ -118,12 +115,77 @@ function PrChip({
       </TooltipPopup>
     </Tooltip>
   );
-  if (mergeAction !== "merge" && mergeAction !== "auto") return chip;
+  const { primary } = slot;
+  if (!primary) return chip;
   return (
     <>
       {chip}
-      <MergeChip taskId={taskId} linkId={link.id} label={mergeButtonLabel(mergeAction)} />
+      {primary.kind === "merge" ? (
+        <MergeChip taskId={task.id} linkId={link.id} label={mergeButtonLabel(primary.action)} />
+      ) : (
+        <FixChip task={task} link={link} slot={slot} />
+      )}
     </>
+  );
+}
+
+/** "Fix in →" on a card, or Autopilot's state with Fix in → in its menu; the menu also holds the Merge that gave way. */
+function FixChip({
+  task,
+  link,
+  slot,
+}: {
+  task: TaskSummary;
+  link: Extract<TaskLink, { kind: "pr" }>;
+  slot: PrRowSlot;
+}) {
+  const openMergePr = useDialogs((s) => s.openMergePr);
+  const autopilot = slot.primary?.kind === "autopilot" ? slot.primary.state : null;
+  const label = autopilot ? `${PR_AUTOPILOT_LABEL[autopilot]}: fix it in a session instead` : "Fix in a session";
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={label}
+                  className={cn(
+                    chipClassName,
+                    "data-popup-open:bg-accent",
+                    !autopilot && "text-primary hover:text-primary",
+                  )}
+                  {...linkHandlers}
+                />
+              }
+            />
+          }
+        >
+          {autopilot === "fixing" ? (
+            <Spinner size="xs" aria-hidden role="presentation" />
+          ) : autopilot === "gave_up" ? (
+            <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning" />
+          ) : (
+            <WrenchIcon aria-hidden className="size-3.5 shrink-0" />
+          )}
+        </TooltipTrigger>
+        <TooltipPopup>{label}</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="start" {...linkHandlers}>
+        <FixInMenuItems task={task} link={link} />
+        {slot.menu.merge ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onClick={() => openMergePr(task.id, link.id)}>
+              <GitMergeIcon />
+              {mergeButtonLabel(slot.menu.merge)}
+            </MenuItem>
+          </>
+        ) : null}
+      </MenuPopup>
+    </Menu>
   );
 }
 

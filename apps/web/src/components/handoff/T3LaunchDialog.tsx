@@ -3,6 +3,7 @@ import {
   defaultHandoffMode,
   suggestEpicsPrompt,
   taskHandoffPrompt,
+  type PrFixInfo,
   type Project,
   type StartT3ThreadInput,
   type T3LaunchOptions,
@@ -13,6 +14,7 @@ import {
 } from "@repo/contracts";
 import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
 import { useState } from "react";
+import { copyToClipboard } from "~/components/task/InlineInput";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -22,7 +24,7 @@ import { ApiError } from "~/lib/api";
 import { openHref, t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
 import { useStartProjectT3Thread, useStartT3Thread } from "~/state/mutations";
-import { useBoard, useProjectT3LaunchOptions, useSettings, useT3LaunchOptions } from "~/state/queries";
+import { useBoard, usePrFix, useProjectT3LaunchOptions, useSettings, useT3LaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   keepsCommandId,
@@ -50,6 +52,8 @@ interface LaunchSubject {
   offerOpen: boolean;
   /** An integration epic's branch, which the task's worktree starts from by default. */
   integrationBranch?: string | null;
+  /** A PR's branch the thread works on ("Fix in →"): the worktree starts from it, and the dialog says when it doesn't. */
+  fixBranch?: string | null;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -64,8 +68,9 @@ interface Starter {
 type LaunchOptionsQuery = ReturnType<typeof useT3LaunchOptions>;
 
 /**
- * "Start in T3 Code": a new-thread composer for a task (useDialogs().openT3Launch) or for a project's
- * Suggest epics (openProjectT3Launch).
+ * "Start in T3 Code": a new-thread composer for a task (useDialogs().openT3Launch; with a `fixLinkId`, "Fix in →" on a
+ * PR: Fix PRs' prompt for its problems, in a worktree from its branch) or for a project's Suggest epics
+ * (openProjectT3Launch).
  */
 export function T3LaunchDialog() {
   const target = useDialogs((s) => s.t3Launch);
@@ -76,36 +81,88 @@ export function T3LaunchDialog() {
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
       <DialogPopup className="max-w-2xl">
-        {task ? <TaskLaunch key={task.id} task={task} onDone={close} /> : null}
+        {task && target?.kind === "task" ? (
+          <TaskLaunch
+            key={`${task.id}:${target.fixLinkId ?? ""}`}
+            task={task}
+            fixLinkId={target.fixLinkId ?? null}
+            onDone={close}
+          />
+        ) : null}
         {project ? <ProjectLaunch key={project.id} project={project} onDone={close} /> : null}
       </DialogPopup>
     </Dialog>
   );
 }
 
-function TaskLaunch({ task, onDone }: { task: TaskSummary; onDone: () => void }) {
+function TaskLaunch({ task, fixLinkId, onDone }: { task: TaskSummary; fixLinkId: string | null; onDone: () => void }) {
+  const fix = usePrFix(fixLinkId);
+  if (!fixLinkId) return <TaskLaunchContent task={task} fix={null} onDone={onDone} />;
+  if (fix.data) return <TaskLaunchContent task={task} fix={fix.data} onDone={onDone} />;
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Fix the PR in T3 Code</DialogTitle>
+        <DialogDescription>
+          #{task.number} {task.title}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="px-6 pb-6">
+        {fix.isError ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
+            <p className="flex items-start gap-2">
+              <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+              <span>{fix.error.message}</span>
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => void fix.refetch()}>
+                Retry
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Skeleton shape="card" className="h-40 w-full" />
+        )}
+      </div>
+    </>
+  );
+}
+
+function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFixInfo | null; onDone: () => void }) {
   const options = useT3LaunchOptions(task.id);
   const modelTiers = useSettings().data?.modelTiers;
   const mutation = useStartT3Thread({ silent: true });
   // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me".
   const epic = task.kind === "epic";
-  const subject: LaunchSubject = {
-    label: `#${task.number} ${task.title}`,
-    promptFor: (plan) =>
-      taskHandoffPrompt({
-        task,
-        boardUrl: window.location.origin,
-        mode: epic ? "orchestrate" : plan ? "plan" : "work",
-        linkedThread: true,
-      }),
-    planToggle: !epic,
-    // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
-    initialPlan: defaultHandoffMode(task) === "plan",
-    successDescription: `#${task.number} is linked to the new thread.`,
-    copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
-    offerOpen: false,
-    integrationBranch: epic ? null : task.integrationBranch,
-  };
+  const subject: LaunchSubject = fix
+    ? {
+        label: `Fix PR #${fix.number} · #${task.number} ${task.title}`,
+        promptFor: () => fix.prompt,
+        planToggle: false,
+        initialPlan: false,
+        successDescription: `#${task.number} is linked to the new thread, which works on ${fix.branch}.`,
+        copyPrompt: () => copyToClipboard(fix.prompt, "fix prompt"),
+        offerOpen: false,
+        integrationBranch: fix.branch,
+        fixBranch: fix.branch,
+      }
+    : {
+        label: `#${task.number} ${task.title}`,
+        promptFor: (plan) =>
+          taskHandoffPrompt({
+            task,
+            boardUrl: window.location.origin,
+            mode: epic ? "orchestrate" : plan ? "plan" : "work",
+            linkedThread: true,
+          }),
+        planToggle: !epic,
+        // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
+        initialPlan: defaultHandoffMode(task) === "plan",
+        successDescription: `#${task.number} is linked to the new thread.`,
+        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
+        offerOpen: false,
+        integrationBranch: epic ? null : task.integrationBranch,
+      };
   const starter: Starter = {
     isPending: mutation.isPending,
     start: (input, { onSuccess, onError }) =>
@@ -150,7 +207,7 @@ function LaunchContent({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Start in T3 Code</DialogTitle>
+        <DialogTitle>{subject.fixBranch ? "Fix the PR in T3 Code" : "Start in T3 Code"}</DialogTitle>
         <DialogDescription>{subject.label}</DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
@@ -210,9 +267,13 @@ function Composer({
   const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
   const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
-  const [choice, setChoice] = useState<WorkspaceChoice>(() =>
-    initialWorkspaceChoice(options, subject.integrationBranch ?? null),
-  );
+  const [choice, setChoice] = useState<WorkspaceChoice>(() => {
+    const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
+    // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
+    return subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
+      ? { mode: "new_worktree", ref: null }
+      : initial;
+  });
   const [commandId, setCommandId] = useState(() => crypto.randomUUID());
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
@@ -220,7 +281,14 @@ function Composer({
   const workspace = toLaunchWorkspace(options, choice);
   const model = findModel(options, selection);
   const blocker =
-    !selection || !model?.provider.ready ? "Choose an available model" : !workspace ? "Choose a branch" : null;
+    !selection || !model?.provider.ready
+      ? "Choose an available model"
+      : !workspace
+        ? "Choose a branch"
+        : subject.fixBranch && workspace.mode !== "new_worktree"
+          ? // The prompt has the agent fast-forward its branch to the PR's: that must never move one of yours.
+            "Fix the PR in a new worktree, not in your checkout"
+          : null;
 
   const changeSelection = (next: T3ModelSelection | null) => {
     setSelection(next);
@@ -317,8 +385,33 @@ function Composer({
         <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
         <RefPicker options={options} choice={choice} onChange={setChoice} />
       </div>
+      {subject.fixBranch ? (
+        <FixBranchNote
+          branch={subject.fixBranch}
+          startsFrom={workspace?.mode === "new_worktree" ? workspace.baseRef : null}
+        />
+      ) : null}
       {options.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
+  );
+}
+
+/**
+ * Says the thread works on a PR's branch, and warns when its worktree doesn't start from it (T3 listed no such ref, or
+ * another was chosen): the prompt then has the agent fetch and fast-forward, and the push is refused if it can't.
+ */
+function FixBranchNote({ branch, startsFrom }: { branch: string; startsFrom: string | null }) {
+  const onBranch = startsFrom === branch || startsFrom === `origin/${branch}`;
+  return (
+    <p className="mt-2 px-1 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">Works on the PR's branch {branch}</span>
+      {onBranch ? " · the worktree starts from it." : null}
+      {onBranch ? null : (
+        <span className="block text-warning">
+          The worktree doesn't start from it: pick origin/{branch} as the branch, or the agent has to fetch it first.
+        </span>
+      )}
+    </p>
   );
 }
 

@@ -30,10 +30,14 @@ export type AgentCliStatus = z.infer<typeof AgentCliStatus>;
 export const AgentClis = z.array(AgentCliStatus);
 export type AgentClis = z.infer<typeof AgentClis>;
 
-/** Where a new session runs: a new worktree branched from `baseRef`, or the project's own checkout. */
+/**
+ * Where a new session runs: a new worktree branched from `baseRef`, a new worktree on a pull request's own `branch`
+ * (origin's copy; the session pushes back to it), or the project's own checkout.
+ */
 export const SessionWorkspace = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("current") }),
   z.object({ mode: z.literal("new_worktree"), baseRef: z.string().trim().min(1) }),
+  z.object({ mode: z.literal("pr_branch"), branch: z.string().trim().min(1) }),
 ]);
 export type SessionWorkspace = z.infer<typeof SessionWorkspace>;
 
@@ -59,8 +63,8 @@ export type SessionLaunchOptions = z.infer<typeof SessionLaunchOptions>;
 
 export const StartSessionInput = z.object({
   harness: AgentHarness,
-  /** Picks the session's label: "Planning #N", "Implementing #N" or, for an epic, "Orchestrating #N". */
-  mode: z.enum(["work", "plan", "orchestrate"]),
+  /** Picks the session's label: "Planning #N", "Implementing #N", "Fixing the PR of #N" or, for an epic, "Orchestrating #N". */
+  mode: z.enum(["work", "plan", "orchestrate", "fix"]),
   prompt: z.string().trim().min(1).max(100_000),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
@@ -101,7 +105,9 @@ export const isTaskWindowName = (name: string): boolean => name.length <= 80 && 
 
 /** "Implementing #115" / "Planning #115": the label the board links a session it started with. */
 export const sessionLabel = (mode: StartSessionInput["mode"], taskNumber: number): string =>
-  `${mode === "plan" ? "Planning" : mode === "orchestrate" ? "Orchestrating" : "Implementing"} #${taskNumber}`;
+  mode === "fix"
+    ? `Fixing the PR of #${taskNumber}`
+    : `${mode === "plan" ? "Planning" : mode === "orchestrate" ? "Orchestrating" : "Implementing"} #${taskNumber}`;
 
 /**
  * The CLI's argv for a new session: its model and id, a name to find it by, and the first prompt as one argument.
