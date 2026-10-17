@@ -100,6 +100,21 @@ tasks first. Turn the lane off in Settings → Board → Appearance; priority ta
 
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
 
+## Filters and saved views
+
+The filter button in the board's top bar narrows the board by status, model tier, Autopilot flag, epic and labels
+(each "any of" what you pick), and by switches for needs attention, has a PR, blocked, priority and archived. The
+search box in the sidebar filters by title, `#number`, Jira key or label. While anything is filtered, a pill beside the
+title says so, and its ✕ clears every filter.
+
+Every filter is part of the page's address, so you can bookmark or share a filtered board, and the browser's Back
+button undoes a filter.
+
+To keep a set of filters, choose **Save view…** in the filter menu (or the command palette) and name it. Saved views
+list under **Views** in the sidebar: click one to apply it, hover to rename or delete it. The command palette and the
+filter menu switch views too. Views are saved on the server, so they follow you to another browser, and they are
+included in backups.
+
 ## Handing a task to an agent
 
 Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent

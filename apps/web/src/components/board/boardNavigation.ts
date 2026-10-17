@@ -1,8 +1,10 @@
+import type { BoardFilterParams } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
-import { useBoardView, useSettingsNav } from "~/state/ui";
+import { useSettingsNav } from "~/state/ui";
+import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type FilterState } from "./boardFilters.logic";
 
 /**
  * The board search a navigation to "/" builds on: the current one on the board, else the board as it was when
@@ -67,14 +69,76 @@ export function useSetEpicFilter() {
   );
 }
 
+/** The search's filter params (the project scope included), as one value that only changes when they do. */
+export function useBoardFilterParams(): BoardFilterParams {
+  const key = useSearch({
+    strict: false,
+    select: (search) => JSON.stringify(FILTER_PARAM_KEYS.map((name) => search[name])),
+  });
+  return useMemo(() => {
+    const values = JSON.parse(key) as unknown[];
+    return Object.fromEntries(FILTER_PARAM_KEYS.map((name, i) => [name, values[i] ?? undefined]));
+  }, [key]);
+}
+
+/** The board's filters, read from the URL. */
+export function useBoardFilters(): FilterState {
+  const params = useBoardFilterParams();
+  return useMemo(() => readFilters(params), [params]);
+}
+
+/** Changes some filters and leaves the rest, the project scope and the open task as they are. */
+export function useSetBoardFilters() {
+  const navigate = useNavigate();
+  return useCallback(
+    (patch: Partial<FilterState>, options?: { replace?: boolean }) =>
+      navigate({
+        to: "/",
+        replace: options?.replace,
+        search: (prev) => {
+          const base = boardSearchFrom(prev);
+          return { ...base, ...filterParams({ ...readFilters(base), ...patch }, base.project) };
+        },
+      }),
+    [navigate],
+  );
+}
+
+/** Turns every filter off. The project scope stays: it has its own control in the header. */
+export function useResetFilters() {
+  const navigate = useNavigate();
+  return useCallback(
+    () => navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), ...clearedParams() }) }),
+    [navigate],
+  );
+}
+
+/** Replaces the board's filters, the project scope included, with a saved view's. The open task stays. */
+export function useApplyFilterParams() {
+  const navigate = useNavigate();
+  return useCallback(
+    (params: BoardFilterParams) =>
+      navigate({
+        to: "/",
+        search: (prev) => ({ ...boardSearchFrom(prev), ...clearedParams(), project: undefined, ...params }),
+      }),
+    [navigate],
+  );
+}
+
 export function useSetProjectFilter() {
   const navigate = useNavigate();
   return useCallback(
-    (projectId: string | null) => {
-      // The in-progress filter looks across every project, so choosing one ends it.
-      if (projectId) useBoardView.getState().setInProgressOnly(false);
-      return navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: projectId ?? undefined }) });
-    },
+    (projectId: string | null) =>
+      navigate({
+        to: "/",
+        // The in-progress filter looks across every project, so choosing one ends it.
+        search: (prev) => ({
+          ...boardSearchFrom(prev),
+          project: projectId ?? undefined,
+          ...(projectId ? { inprogress: undefined } : {}),
+        }),
+      }),
     [navigate],
   );
 }

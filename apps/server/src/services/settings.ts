@@ -7,6 +7,7 @@ import {
   type ModelTiers,
   type ModelTierSetting,
   type NotificationSettings,
+  type SavedViews,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
@@ -37,6 +38,7 @@ const DEFAULTS: StoredSettings = {
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  savedViews: [],
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -69,6 +71,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "issueImportJiraTools",
     "modelTiers",
     "notifications",
+    "savedViews",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -117,6 +120,10 @@ export function loadSettings(repos: Repos): StoredSettings {
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
   };
 }
+
+/** The views with the first of each id kept, so a repeated id can't make two rows act as one. */
+const uniqueViews = (views: SavedViews): SavedViews =>
+  views.filter((view, index) => views.findIndex((v) => v.id === view.id) === index);
 
 /** App settings stored as key/value JSON. The T3 token never leaves the server. */
 export function createSettingsService(core: Core): SettingsService {
@@ -175,6 +182,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
+        if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
         if (input.notifications !== undefined) {
           const current = load().notifications;
           repos.settings.set("notifications", {

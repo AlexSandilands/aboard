@@ -194,6 +194,29 @@ describe("REST", () => {
     expect(await status.json()).toMatchObject({ t3: { detected: false }, github: { available: false } });
   });
 
+  it("stores saved views as one list, drops a repeated id and rejects bad names", async () => {
+    const h = await setup();
+    const view = (id: string, name: string) => ({ id, name, filters: { status: "review", attention: true } });
+    const saved = await h.request("/api/settings", {
+      method: "PATCH",
+      json: { savedViews: [view("a", " Review queue "), view("a", "Again"), view("b", "Other")] },
+    });
+    expect(saved.status).toBe(200);
+    expect(((await saved.json()) as { savedViews: unknown[] }).savedViews).toEqual([
+      view("a", "Review queue"),
+      view("b", "Other"),
+    ]);
+    const read = await h.request("/api/settings");
+    expect(await read.json()).toMatchObject({ savedViews: [{ id: "a" }, { id: "b" }] });
+
+    expect(
+      await errorCode(await h.request("/api/settings", { method: "PATCH", json: { savedViews: [view("c", " ")] } })),
+    ).toBe("VALIDATION");
+    // A patch that leaves them out keeps them.
+    await h.request("/api/settings", { method: "PATCH", json: { githubPolling: false } });
+    expect(await (await h.request("/api/settings")).json()).toMatchObject({ savedViews: [{ id: "a" }, { id: "b" }] });
+  });
+
   it("validates T3 thread launches and explains when T3 Code isn't available", async () => {
     const h = await setup();
     const bad = await h.request(`/api/tasks/${h.task.id}/t3-thread`, { method: "POST", json: { prompt: "" } });

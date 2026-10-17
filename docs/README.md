@@ -62,6 +62,7 @@ files under each app.
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
 - [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards, the settings page
+- [Board filters and saved views](features/saved-views.md): filters as URL params, matching, named views kept on the server
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
 - [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread

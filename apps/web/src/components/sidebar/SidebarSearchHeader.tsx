@@ -9,7 +9,7 @@ import {
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import {
@@ -22,15 +22,19 @@ import {
   ComboboxTrigger,
 } from "~/components/ui/combobox";
 import { SidebarInput } from "~/components/ui/sidebar";
-import { useBoardView, usePalette } from "~/state/ui";
+import { usePalette } from "~/state/ui";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { useProjectFilter, useSetProjectFilter } from "~/components/board/boardNavigation";
+import {
+  useBoardFilters,
+  useProjectFilter,
+  useSetBoardFilters,
+  useSetProjectFilter,
+} from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
 
 /** Search field plus the segmented project-filter / add-project / new-task buttons. */
 export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Project> }) {
-  const search = useBoardView((s) => s.search);
-  const setSearch = useBoardView((s) => s.setSearch);
+  const [search, setSearch] = useSearchText();
   const searchFieldRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const projectFilter = useProjectFilter();
@@ -96,6 +100,35 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
       </div>
     </div>
   );
+}
+
+/**
+ * The board's `?q=` as a text field's value. The field keeps its own text so typing never waits for the URL, and
+ * takes the URL's only when it changes for some other reason (a saved view, a reset, Back).
+ */
+function useSearchText(): [string, (value: string) => void] {
+  const text = useBoardFilters().text;
+  const setFilters = useSetBoardFilters();
+  const [draft, setDraft] = useState(text);
+  // What this field has put in the URL and the URL hasn't shown yet, oldest first.
+  const sent = useRef<string[]>([]);
+  useEffect(() => {
+    const at = sent.current.indexOf(text);
+    if (at >= 0) {
+      sent.current = sent.current.slice(at + 1);
+      return;
+    }
+    sent.current = [];
+    setDraft(text);
+  }, [text]);
+  return [
+    draft,
+    (value) => {
+      setDraft(value);
+      sent.current.push(value.trim());
+      void setFilters({ text: value.trim() }, { replace: true });
+    },
+  ];
 }
 
 interface ScopeItem {

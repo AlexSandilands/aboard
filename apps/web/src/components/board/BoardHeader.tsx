@@ -1,10 +1,10 @@
-import type { Project } from "@repo/contracts";
+import { TASK_STATUSES, type Project } from "@repo/contracts";
 import { useMemo } from "react";
 import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { DigestButton } from "~/components/digest/DigestButton";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
-import { GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { BookmarkIcon, GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { NotificationsBell } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
@@ -16,21 +16,42 @@ import {
   MenuGroupLabel,
   MenuItem,
   MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
   MenuTrigger,
 } from "~/components/ui/menu";
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useBoard } from "~/state/queries";
-import { useBoardView, usePalette } from "~/state/ui";
+import { useDialogs, usePalette } from "~/state/ui";
+import { useSavedViews } from "~/state/views";
+import { activeView, canAddView } from "~/components/views/views.logic";
 import {
+  useApplyFilterParams,
+  useBoardFilterParams,
+  useBoardFilters,
   useEpicFilter,
   useLabelFilter,
+  useResetFilters,
   useSelectedTaskId,
+  useSetBoardFilters,
   useSetEpicFilter,
   useSetLabelFilter,
   useSetProjectFilter,
 } from "./boardNavigation";
+import {
+  activeFilterCount,
+  AUTOPILOT_CHOICES,
+  isEmptyView,
+  TIER_CHOICES,
+  toggleChoice,
+  type AutopilotChoice,
+  type TierChoice,
+} from "./boardFilters.logic";
 import { cn } from "~/lib/utils";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -38,17 +59,11 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 /** The board's top bar (52px; 40px under the desktop title bar): title or scoped project, filters, and the palette hint. */
 export function BoardHeader({ scopedProject }: { scopedProject: Project | null }) {
   const { isMobile, open } = useSidebar();
-  const attentionOnly = useBoardView((s) => s.attentionOnly);
-  const setAttentionOnly = useBoardView((s) => s.setAttentionOnly);
-  const hasPrOnly = useBoardView((s) => s.hasPrOnly);
-  const setHasPrOnly = useBoardView((s) => s.setHasPrOnly);
-  const showArchived = useBoardView((s) => s.showArchived);
-  const setShowArchived = useBoardView((s) => s.setShowArchived);
-  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
-  const setInProgressOnly = useBoardView((s) => s.setInProgressOnly);
+  const filters = useBoardFilters();
+  const setFilters = useSetBoardFilters();
   const selectedLabels = useLabelFilter();
   const setLabelFilter = useSetLabelFilter();
-  const filtered = attentionOnly || hasPrOnly || showArchived || inProgressOnly || selectedLabels.length > 0;
+  const filtered = activeFilterCount(filters) > 0;
   const setProjectFilter = useSetProjectFilter();
   // With the task panel closed this header reaches the window's right edge and the native controls.
   const atRightEdge = useSelectedTaskId() === null;
@@ -84,6 +99,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       ) : (
         <h1 className="text-sm font-medium">Board</h1>
       )}
+      <FiltersActive />
       <ActiveEpicFilter />
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
@@ -108,24 +124,48 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
           <MenuPopup align="end">
             <MenuGroup>
               <MenuGroupLabel>Show</MenuGroupLabel>
-              <MenuCheckboxItem checked={inProgressOnly} onCheckedChange={setInProgressOnly}>
+              <MenuCheckboxItem
+                checked={filters.inProgress}
+                onCheckedChange={(inProgress) => void setFilters({ inProgress })}
+              >
                 In progress, all projects
               </MenuCheckboxItem>
-              <MenuCheckboxItem checked={attentionOnly} onCheckedChange={setAttentionOnly}>
+              <MenuCheckboxItem
+                checked={filters.attention}
+                onCheckedChange={(attention) => void setFilters({ attention })}
+              >
                 Needs attention only
               </MenuCheckboxItem>
-              <MenuCheckboxItem checked={hasPrOnly} onCheckedChange={setHasPrOnly}>
+              <MenuCheckboxItem checked={filters.hasPr} onCheckedChange={(hasPr) => void setFilters({ hasPr })}>
                 Has PR
               </MenuCheckboxItem>
-              <MenuCheckboxItem checked={showArchived} onCheckedChange={setShowArchived}>
+              <MenuCheckboxItem checked={filters.blocked} onCheckedChange={(blocked) => void setFilters({ blocked })}>
+                Blocked
+              </MenuCheckboxItem>
+              <MenuCheckboxItem
+                checked={filters.priority}
+                onCheckedChange={(priority) => void setFilters({ priority })}
+              >
+                Priority
+              </MenuCheckboxItem>
+              <MenuCheckboxItem
+                checked={filters.archived}
+                onCheckedChange={(archived) => void setFilters({ archived })}
+              >
                 Show archived
               </MenuCheckboxItem>
             </MenuGroup>
+            <MenuSeparator />
+            <StatusFilterMenu />
+            <TierFilterMenu />
+            <AutopilotFilterMenu />
+            <EpicFilterMenu />
             <LabelFilterGroup
               scopedProjectId={scopedProject?.id ?? null}
               selected={selectedLabels}
               onChange={(labels) => void setLabelFilter(labels)}
             />
+            <ViewsMenuGroup />
           </MenuPopup>
         </Menu>
         <Button variant="outline" size="xs" onClick={() => usePalette.getState().openPalette()}>
@@ -138,6 +178,183 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
         </Button>
       </div>
     </header>
+  );
+}
+
+/** A submenu of checkboxes for one list filter (status, tier, Autopilot flag), with how many are chosen. */
+function ChoiceFilterMenu<T extends string>({
+  title,
+  choices,
+  chosen,
+  onChange,
+}: {
+  title: string;
+  choices: ReadonlyArray<{ value: T; label: string }>;
+  chosen: ReadonlyArray<T>;
+  onChange: (chosen: T[]) => void;
+}) {
+  const values = choices.map((choice) => choice.value);
+  return (
+    <MenuSub>
+      <MenuSubTrigger>
+        {title}
+        {chosen.length ? (
+          <span className="ms-auto pe-1 text-xs tabular-nums text-muted-foreground">{chosen.length}</span>
+        ) : null}
+      </MenuSubTrigger>
+      <MenuSubPopup>
+        <MenuGroup>
+          {choices.map(({ value, label }) => (
+            <MenuCheckboxItem
+              key={value}
+              checked={chosen.includes(value)}
+              closeOnClick={false}
+              onCheckedChange={() => onChange(toggleChoice(chosen, value, values))}
+            >
+              {label}
+            </MenuCheckboxItem>
+          ))}
+          {chosen.length ? <MenuItem onClick={() => onChange([])}>Clear {title.toLowerCase()}</MenuItem> : null}
+        </MenuGroup>
+      </MenuSubPopup>
+    </MenuSub>
+  );
+}
+
+function StatusFilterMenu() {
+  const { statuses } = useBoardFilters();
+  const setFilters = useSetBoardFilters();
+  return (
+    <ChoiceFilterMenu
+      title="Status"
+      choices={TASK_STATUSES}
+      chosen={statuses}
+      onChange={(next) => void setFilters({ statuses: next })}
+    />
+  );
+}
+
+function TierFilterMenu() {
+  const { tiers } = useBoardFilters();
+  const setFilters = useSetBoardFilters();
+  return (
+    <ChoiceFilterMenu<TierChoice>
+      title="Model tier"
+      choices={TIER_CHOICES}
+      chosen={tiers}
+      onChange={(next) => void setFilters({ tiers: next })}
+    />
+  );
+}
+
+function AutopilotFilterMenu() {
+  const { autopilot } = useBoardFilters();
+  const setFilters = useSetBoardFilters();
+  return (
+    <ChoiceFilterMenu<AutopilotChoice>
+      title="Autopilot flag"
+      choices={AUTOPILOT_CHOICES}
+      chosen={autopilot}
+      onChange={(next) => void setFilters({ autopilot: next })}
+    />
+  );
+}
+
+/** Which epic's band to show: one at a time, as `?epic=` always was. */
+function EpicFilterMenu() {
+  const tasks = useBoard().data?.tasks;
+  const epicId = useEpicFilter();
+  const setEpicFilter = useSetEpicFilter();
+  const epics = useMemo(() => (tasks ?? []).filter((t) => t.kind === "epic"), [tasks]);
+  if (epics.length === 0) return null;
+  return (
+    <MenuSub>
+      <MenuSubTrigger>Epic</MenuSubTrigger>
+      <MenuSubPopup>
+        <MenuRadioGroup value={epicId ?? ""} onValueChange={(value) => void setEpicFilter(value || null)}>
+          <MenuRadioItem value="">Any epic</MenuRadioItem>
+          {epics.map((epic) => (
+            <MenuRadioItem key={epic.id} value={epic.id}>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+                <span className="max-w-64 min-w-0 truncate">{epic.title}</span>
+              </span>
+            </MenuRadioItem>
+          ))}
+        </MenuRadioGroup>
+      </MenuSubPopup>
+    </MenuSub>
+  );
+}
+
+/** Switch to a saved view, save the current filters as one, or reset them. */
+function ViewsMenuGroup() {
+  const views = useSavedViews();
+  const params = useBoardFilterParams();
+  const filters = useBoardFilters();
+  const apply = useApplyFilterParams();
+  const reset = useResetFilters();
+  const active = activeView(views, params);
+  return (
+    <>
+      <MenuSeparator />
+      {views.length > 0 ? (
+        <MenuSub>
+          <MenuSubTrigger>Views</MenuSubTrigger>
+          <MenuSubPopup>
+            <MenuRadioGroup
+              value={active?.id ?? ""}
+              onValueChange={(id) => {
+                const view = views.find((v) => v.id === id);
+                if (view) void apply(view.filters);
+              }}
+            >
+              {views.map((view) => (
+                <MenuRadioItem key={view.id} value={view.id}>
+                  {view.name}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuSubPopup>
+        </MenuSub>
+      ) : null}
+      <MenuItem
+        disabled={isEmptyView(params) || !canAddView(views)}
+        onClick={() => useDialogs.getState().openViewDialog({ kind: "save" })}
+      >
+        Save view…
+      </MenuItem>
+      {activeFilterCount(filters) > 0 ? <MenuItem onClick={() => void reset()}>Reset filters</MenuItem> : null}
+    </>
+  );
+}
+
+/** "Filters active": how many filters are on (or the saved view they match), with a one-click reset. */
+function FiltersActive() {
+  const filters = useBoardFilters();
+  const params = useBoardFilterParams();
+  const views = useSavedViews();
+  const reset = useResetFilters();
+  const count = activeFilterCount(filters);
+  if (count === 0) return null;
+  const view = activeView(views, params);
+  return (
+    <span
+      role="status"
+      className="inline-flex h-6 max-w-64 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/8 ps-1.5 pe-0.5 text-xs text-foreground/80"
+    >
+      {view ? (
+        <BookmarkIcon aria-hidden className="size-3.5 shrink-0 text-primary" />
+      ) : (
+        <ListFilterIcon aria-hidden className="size-3.5 shrink-0 text-primary" />
+      )}
+      <span className="min-w-0 truncate">
+        {view ? view.name : `${count} ${count === 1 ? "filter" : "filters"} active`}
+      </span>
+      <Button variant="ghost-muted" size="icon-micro" aria-label="Reset filters" onClick={() => void reset()}>
+        <XIcon />
+      </Button>
+    </span>
   );
 }
 

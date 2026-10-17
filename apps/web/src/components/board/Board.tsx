@@ -50,7 +50,7 @@ import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
 import { PriorityLane } from "./PriorityLane";
-import { useEpicFilter, useLabelFilter, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
+import { useBoardFilters, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
 import { dropAnimation } from "./cardMotion";
 import {
   canDropIn,
@@ -124,7 +124,7 @@ export function Board() {
     useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
   }, [boardTasks]);
   // In-progress-only looks across every project, so a project scope waits (it comes back when the filter is off).
-  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
+  const inProgressOnly = useBoardFilters().inProgress;
   const scopedProject = inProgressOnly ? null : (boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null);
 
   return (
@@ -218,14 +218,9 @@ function describeOver(
 
 function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: string | null }) {
   const queryClient = useQueryClient();
-  const search = useBoardView((s) => s.search);
-  const attentionOnly = useBoardView((s) => s.attentionOnly);
-  const hasPrOnly = useBoardView((s) => s.hasPrOnly);
-  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
+  const filters = useBoardFilters();
   const priorityLane = useBoardView((s) => s.showPriorityLane);
-  const labels = useLabelFilter();
-  const epicId = useEpicFilter();
-  const showArchived = useBoardView((s) => s.showArchived);
+  const showArchived = filters.archived;
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
   const collapsedColumns = useBoardView((s) => s.collapsedColumns);
@@ -242,21 +237,20 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     () =>
       buildLanes(
         board,
-        { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels, epicId, inProgressOnly, priorityLane },
+        {
+          projectId: projectFilter,
+          search: filters.text,
+          attentionOnly: filters.attention,
+          hasPrOnly: filters.hasPr,
+          labels: filters.labels,
+          epicId: filters.epicId,
+          inProgressOnly: filters.inProgress,
+          priorityLane,
+          taskFilters: filters,
+        },
         archivedTasks,
       ),
-    [
-      board,
-      projectFilter,
-      search,
-      attentionOnly,
-      hasPrOnly,
-      labels,
-      epicId,
-      inProgressOnly,
-      priorityLane,
-      archivedTasks,
-    ],
+    [board, projectFilter, filters, priorityLane, archivedTasks],
   );
   // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
   const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });

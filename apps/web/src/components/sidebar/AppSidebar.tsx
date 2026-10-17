@@ -6,8 +6,9 @@ import { ProjectsSection } from "./ProjectsSection";
 import { SidebarBrandRow } from "./SidebarBrandRow";
 import { SidebarFooterMenu } from "./SidebarFooterMenu";
 import { SidebarSearchHeader } from "./SidebarSearchHeader";
+import { ViewsSection } from "./ViewsSection";
 
-/** Sidebar contents: brand row, search header, "Needs attention", "Projects" and the footer menu. */
+/** Sidebar contents: brand row, search header, "Needs attention", saved views, "Projects" and the footer menu. */
 export function AppSidebar() {
   const board = useBoard().data;
   return (
@@ -24,6 +25,7 @@ export function AppSidebar() {
         {board ? (
           <>
             <AttentionSection tasks={board.tasks} projects={board.projects} />
+            <ViewsSection />
             <ProjectsSection board={board} />
           </>
         ) : (

@@ -6,6 +6,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+import { BoardFilterParams } from "@repo/contracts";
 import { z } from "zod";
 import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
@@ -19,14 +20,11 @@ import { SettingsShell } from "./components/settings/SettingsShell.tsx";
 import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
 
 /**
- * Board search params: `task` opens the detail panel, `project` scopes the board, `labels` (comma-separated)
- * filters it, and `epic` shows only that epic's band.
+ * Board search params: `task` opens the detail panel, and the rest are the board's filters (`BoardFilterParams`:
+ * the project scope, the epic, labels, status, text and so on), which a saved view holds too.
  */
-export const BoardSearch = z.object({
-  task: z.string().optional(),
-  project: z.string().optional(),
-  labels: z.string().optional(),
-  epic: z.string().optional(),
+export const BoardSearch = BoardFilterParams.extend({
+  task: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
 });
 export type BoardSearch = z.infer<typeof BoardSearch>;
 

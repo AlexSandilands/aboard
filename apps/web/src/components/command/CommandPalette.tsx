@@ -3,10 +3,12 @@ import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
+  BookmarkIcon,
   CheckIcon,
   CornerLeftUpIcon,
   FolderGit2Icon,
   FolderIcon,
+  FilterXIcon,
   FolderPlusIcon,
   GroupIcon,
   ImportIcon,
@@ -37,10 +39,18 @@ import { ApiError } from "~/lib/api";
 import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
 import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
-import { type PaletteIntent, useBoardView, useDialogs, usePalette, usePanel } from "~/state/ui";
+import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { boardSearchFrom } from "~/components/board/boardNavigation";
+import {
+  boardSearchFrom,
+  useApplyFilterParams,
+  useBoardFilterParams,
+  useResetFilters,
+} from "~/components/board/boardNavigation";
+import { activeFilterCount, isEmptyView, readFilters } from "~/components/board/boardFilters.logic";
+import { activeView, canAddView } from "~/components/views/views.logic";
+import { useSavedViews } from "~/state/views";
 import { PaletteContent } from "./PaletteContent";
 import {
   enabledItemValues,
@@ -232,6 +242,10 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const setDigestOpen = useDialogs((s) => s.setDigestOpen);
   const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
+  const savedViews = useSavedViews();
+  const filterParams = useBoardFilterParams();
+  const applyFilterParams = useApplyFilterParams();
+  const resetFilters = useResetFilters();
 
   const board = useBoard();
   const projects = useMemo(
@@ -509,8 +523,10 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       run: () => {
         closePalette();
         // The in-progress filter looks across every project, so jumping to one ends it.
-        useBoardView.getState().setInProgressOnly(false);
-        void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: project.id }) });
+        void navigate({
+          to: "/",
+          search: (prev) => ({ ...boardSearchFrom(prev), project: project.id, inprogress: undefined }),
+        });
       },
     };
   }
@@ -588,6 +604,34 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
               generateDigest();
             },
           },
+          ...(activeFilterCount(readFilters(filterParams)) > 0
+            ? [
+                {
+                  value: "action:reset-filters",
+                  title: "Reset filters",
+                  searchTerms: ["clear", "filter", "view", "all"],
+                  icon: <FilterXIcon className={ITEM_ICON_CLASS} />,
+                  run: () => {
+                    closePalette();
+                    void resetFilters();
+                  },
+                } satisfies PaletteItem,
+              ]
+            : []),
+          ...(!isEmptyView(filterParams) && canAddView(savedViews)
+            ? [
+                {
+                  value: "action:save-view",
+                  title: "Save view…",
+                  searchTerms: ["filters", "bookmark", "current", "name"],
+                  icon: <BookmarkIcon className={ITEM_ICON_CLASS} />,
+                  run: () => {
+                    closePalette();
+                    useDialogs.getState().openViewDialog({ kind: "save" });
+                  },
+                } satisfies PaletteItem,
+              ]
+            : []),
           {
             value: "action:toggle-theme",
             title: "Toggle theme",
@@ -610,6 +654,21 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             })),
         ];
         const groups: PaletteGroup[] = [{ value: "actions", label: "Actions", items: filterItems(actions, query) }];
+        const current = activeView(savedViews, filterParams);
+        const viewItems = savedViews.map((saved): PaletteItem => ({
+          value: `view:${saved.id}`,
+          title: saved.name,
+          searchTerms: ["view", "saved", "filters"],
+          icon: <BookmarkIcon className={ITEM_ICON_CLASS} />,
+          ...(saved.id === current?.id
+            ? { trailing: <CheckIcon className="ms-auto size-4 shrink-0 text-primary" /> }
+            : {}),
+          run: () => {
+            closePalette();
+            void applyFilterParams(saved.filters);
+          },
+        }));
+        if (viewItems.length > 0) groups.push({ value: "views", label: "Views", items: filterItems(viewItems, query) });
         if (query.trim()) {
           groups.push({ value: "tasks", label: "Tasks", items: filterItems(tasks.map(taskItem), query).slice(0, 8) });
           groups.push({

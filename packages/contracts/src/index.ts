@@ -25,3 +25,4 @@ export * from "./notifications.ts";
 export * from "./delivery.ts";
 export * from "./attachments.ts";
 export * from "./settingsAsk.ts";
+export * from "./savedViews.ts";

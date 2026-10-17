@@ -5,6 +5,7 @@ import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
 import { SessionWarningDialog } from "~/components/sessions/SessionWarningDialog";
 import { TemplateDraftDialog } from "~/components/templates/TemplateDraftDialog";
+import { ViewDialog } from "~/components/views/ViewDialog";
 
 /** App-level dialogs driven by useDialogs(). Mounted once at the root. */
 export function AppDialogs() {
@@ -17,6 +18,7 @@ export function AppDialogs() {
       <SessionWarningDialog />
       <TemplateDraftDialog />
       <ImagePreviewDialog />
+      <ViewDialog />
     </>
   );
 }

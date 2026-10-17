@@ -6,6 +6,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+import { hasTaskOwnFilters, matchesTaskOwnFilters, type TaskOwnFilters } from "./boardFilters.logic";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** A collapsed column shows only the first few cards of each lane until it is expanded. */
@@ -152,6 +153,8 @@ export interface BoardFilters {
   epicId?: string | null;
   /** Only In Progress cards. */
   inProgressOnly?: boolean;
+  /** Status, tier, Autopilot flag, blocked and priority: each looks at the card itself, never at its epic. */
+  taskFilters?: TaskOwnFilters;
   /** Priority tasks gather in a lane above the projects instead of showing in their own. */
   priorityLane?: boolean;
 }
@@ -222,8 +225,12 @@ export function buildLanes(
     filters.hasPrOnly ||
     filters.labels.length > 0 ||
     filters.inProgressOnly === true ||
-    epicFilter !== null;
-  const statusOk = (task: TaskSummary) => !filters.inProgressOnly || task.status === "in_progress";
+    epicFilter !== null ||
+    (filters.taskFilters !== undefined && hasTaskOwnFilters(filters.taskFilters));
+  // An epic with no matching children shows on these too, so a status filter can't leave empty bands behind.
+  const statusOk = (task: TaskSummary) =>
+    (!filters.inProgressOnly || task.status === "in_progress") &&
+    (!filters.taskFilters || matchesTaskOwnFilters(task, filters.taskFilters));
   const inPriorityLane = (task: TaskSummary) => filters.priorityLane === true && isInPriorityLane(task);
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
