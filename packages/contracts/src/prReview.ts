@@ -14,10 +14,10 @@ export const AUTOPILOT_REVIEW_PRS = "review_prs";
 export const AUTOPILOT_FIX_PRS = "fix_prs";
 
 /** The first line of the review's summary, and so how a reader tells Autopilot's review from the user's own. */
-export const prReviewHeader = (): string => `🤖 ${BRAND.name} Autopilot review`;
+export const prReviewHeader = (): string => `📋 ${BRAND.name} Autopilot review`;
 
 /** The short mark at the start of each inline comment. */
-export const prReviewMarker = (): string => `🤖 ${BRAND.name} Autopilot`;
+export const prReviewMarker = (): string => `📋 ${BRAND.name} Autopilot`;
 
 /** The dedupe key of the review of one PR link at one head commit. */
 export const prReviewDedupeKey = (linkId: string, headOid: string): string => `review:pr:${linkId}:${headOid}`;

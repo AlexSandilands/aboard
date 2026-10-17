@@ -607,7 +607,7 @@ describe("review PRs: the review on GitHub", () => {
     expect(post).toMatchObject({ host: "github.com", repo: "acme/app", number: 7 });
     expect(post!.input.reviewedSha).toBe(SHA_A);
     expect(post!.input.body.startsWith(prReviewHeader())).toBe(true);
-    expect(post!.input.body).toContain(`🤖 ${BRAND.name} Autopilot review`);
+    expect(post!.input.body).toContain(`📋 ${BRAND.name} Autopilot review`);
     expect(post!.input.body).toContain("Looks reasonable.");
     expect(post!.input.body).toContain("### FYI (no action needed)");
     expect(post!.input.body).toContain("Rename x");
