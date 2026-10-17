@@ -29,7 +29,8 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
   const set = useSetEpicDelivery(epic.id);
   const board = useBoard();
   const started = startedEpicTasks((board.data?.tasks ?? []).filter((t) => t.parent?.id === epic.id));
-  const value: EpicDelivery = epic.integrationBranch ? "integration" : "main";
+  // Nothing is pressed until someone chooses, so choosing main is saved too (and agents stop asking).
+  const value: EpicDelivery | null = epic.integrationBranch ? "integration" : epic.delivery;
   const locked = value === "integration" && started.length > 0;
   return (
     <div className="flex flex-col gap-1.5">
@@ -37,7 +38,7 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
       <ToggleGroup
         aria-label={`Delivery of epic #${epic.number}`}
         disabled={set.isPending || locked}
-        value={[value]}
+        value={value ? [value] : []}
         onValueChange={(next) => {
           const delivery = next[0];
           if ((delivery === "main" || delivery === "integration") && delivery !== value) set.mutate(delivery);
@@ -50,7 +51,9 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
         ))}
       </ToggleGroup>
       <p className="text-2xs text-muted-foreground">
-        {set.isPending && value === "main" ? `Making ${epicBranchName(epic)} on origin…` : deliveryDescription(epic)}
+        {set.isPending && set.variables === "integration"
+          ? `Making ${epicBranchName(epic)} on origin…`
+          : deliveryDescription(epic)}
       </p>
       {locked ? (
         <p className="text-2xs text-muted-foreground">

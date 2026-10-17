@@ -5,7 +5,7 @@ import {
   type PrReviewRunOutput,
   type PrSnapshot,
 } from "@repo/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkAutopilotMergeTarget,
   MergeTargetError,
@@ -16,7 +16,7 @@ import { AppError } from "../../errors.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { NO_GITHUB, NO_RUNNER, type GithubActions } from "../types.ts";
-import { epicPrBody, mergeEpicPrs } from "./mergeEpicPrs.ts";
+import { epicPrBody, MERGE_ATTEMPTS, mergeEpicPrs, NO_CHECKS_WAIT_MS } from "./mergeEpicPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it", status: "done" as const }] }] };
@@ -40,6 +40,7 @@ const snapshot = (over: Partial<PrSnapshot> = {}): PrSnapshot => ({
 const engines: AutopilotEngine[] = [];
 afterEach(() => {
   for (const engine of engines.splice(0)) engine.stop();
+  vi.useRealTimers();
 });
 
 function setup() {
@@ -47,6 +48,7 @@ function setup() {
   const opened: EpicPrInput[] = [];
   const bodies: Array<{ number: number; body: string }> = [];
   let mergeError: Error | null = null;
+  let openError: Error | null = null;
   const h = createTestHarness({ integrations: { automations: [reviewPrs, mergeEpicPrs] } });
   const s = h.services;
   const github: GithubActions = {
@@ -59,6 +61,7 @@ function setup() {
     },
     ensureEpicPr: async (input) => {
       opened.push(input);
+      if (openError) throw openError;
       return { number: 90, url: "https://github.com/acme/app/pull/90", created: true };
     },
     setPrBody: async (ref, body) => {
@@ -143,6 +146,7 @@ function setup() {
     opened,
     bodies,
     failMerge: (e: Error | null) => (mergeError = e),
+    failOpen: (e: Error | null) => (openError = e),
   };
 }
 
@@ -179,7 +183,15 @@ describe("merge into epic branch", () => {
       await pass();
       expect(merges).toHaveLength(0);
     }
+    setPr({ reviewDecision: "changes_requested" });
+    await pass();
+    expect(merges).toHaveLength(0);
+    // No checks reported yet: GitHub says none for a moment after a push, so it waits that out.
+    vi.useFakeTimers({ toFake: ["Date"] });
     setPr({ checks: "none" });
+    await pass();
+    expect(merges).toHaveLength(0);
+    vi.setSystemTime(Date.now() + NO_CHECKS_WAIT_MS);
     await pass();
     expect(merges).toHaveLength(1);
   });
@@ -231,6 +243,28 @@ describe("merge into epic branch", () => {
     expect(s.notifications.list().items.some((n) => n.kind === "autopilot_failed")).toBe(true);
   });
 
+  it("tries a head again after a failure that may pass, then asks the user", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "Base branch was modified. Review and try the merge again."));
+    toReview();
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false, output: { retry: true } });
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    await pass();
+    await pass();
+    await pass();
+    expect(merges).toHaveLength(MERGE_ATTEMPTS);
+    expect(runs()[0]).toMatchObject({ needsAttention: true });
+    expect(runs()[0]!.summary).toMatch(/^Ready to merge into the epic branch/);
+    // A new head starts over.
+    failMerge(null);
+    setPr({ headOid: SHA_B });
+    await pass();
+    expect(merges.at(-1)!.input.headOid).toBe(SHA_B);
+  });
+
   it("never merges a task of an epic delivered to main", async () => {
     const { s, epic, setPr, toReview, pass, turnOn, merges } = setup();
     s.tasks.setDelivery(epic.id, "main", null, "user");
@@ -264,6 +298,37 @@ describe("merge into epic branch", () => {
     expect(bodies[0]!.body).toContain("#3 Next");
     await pass();
     expect(bodies).toHaveLength(1); // same body, same key
+  });
+});
+
+describe("the epic's PR when opening it fails", () => {
+  it("tries again after the next merge", async () => {
+    const { s, project, epic, setPr, toReview, pass, turnOn, opened, failOpen } = setup();
+    turnOn();
+    failOpen(new AppError("VALIDATION", "GitHub is unavailable"));
+    toReview();
+    setPr();
+    await pass(); // merges
+    await pass(); // tries to open the epic PR, and fails
+    expect(opened).toHaveLength(1);
+    await pass();
+    expect(opened).toHaveLength(1);
+    failOpen(null);
+    const next = s.tasks.create({
+      projectId: project.id,
+      title: "Next",
+      plan,
+      epicId: epic.id,
+      links: [{ value: "https://github.com/acme/app/pull/8" }],
+    });
+    s.tasks.update(next.id, { autoReview: false }, "user");
+    s.tasks.move(next.id, { status: "review" }, "agent");
+    const link = s.tasks.summary(next.id).links.find((l) => l.kind === "pr")!;
+    s.links.setSnapshot(link.id, snapshot({ headOid: SHA_B }));
+    await pass(); // merges the second
+    await pass(); // opens the epic PR
+    expect(opened).toHaveLength(2);
+    expect(s.tasks.summary(epic.id).links.some((l) => l.kind === "pr")).toBe(true);
   });
 });
 

@@ -11,11 +11,13 @@ import {
   reviewIsInProgress,
   TASK_STATUSES,
   type AutopilotRun,
+  type PrChanges,
   type PrRef,
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
+import { AppError } from "../../errors.ts";
 import { MergeTargetError, messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
@@ -30,7 +32,46 @@ interface MergeData {
   headOid: string;
   branch: string;
   number: number;
+  /** Which try at this head this is, from 1. */
+  attempt: number;
 }
+
+/** Tries per PR head when a merge fails for a reason that may pass (a race, a network error), before asking the user. */
+export const MERGE_ATTEMPTS = 3;
+
+/**
+ * How long a head must have gone without any check reporting before "no checks" counts as green. GitHub reports none
+ * for the first moments after a push, before the workflows register.
+ */
+export const NO_CHECKS_WAIT_MS = 10 * 60_000;
+
+/** When the board first saw the PR at its current head: the head's move, else the link's creation. */
+const headSeenSince = (link: PrLink, changes: PrChanges | undefined): number =>
+  Date.parse(changes?.newHead ?? link.createdAt);
+
+/** Earlier merge runs of this PR head; a retry only follows ones that ended without settling anything. */
+function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: string) {
+  const key = `merge:${linkId}:${headOid}`;
+  const ofHead = runs.filter(
+    (r) =>
+      r.automation === AUTOPILOT_MERGE_EPIC_PRS &&
+      !r.dryRun &&
+      (r.dedupeKey === key || r.dedupeKey.startsWith(`${key}:`)),
+  );
+  return {
+    key,
+    count: ofHead.length,
+    // Running, merged, flagged or refused: nothing more to try at this head.
+    settled: ofHead.some((r) => !(r.status === "skipped" && r.output?.retry === true)),
+  };
+}
+
+/**
+ * Failures another try may get past: a race with another merge into the branch or a push, GitHub still working out
+ * mergeability, the network. Anything else (branch rules wanting an approval, permissions) goes to the user at once.
+ */
+const PASSING_FAILURE =
+  /base branch was modified|head branch was modified|not mergeable|try again|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\b5\d\d\b/i;
 
 interface EpicPrData {
   kind: "open_pr" | "update_pr";
@@ -41,6 +82,9 @@ interface EpicPrData {
   linkId: string | null;
   body: string;
 }
+
+/** On a skipped merge run: it settled nothing, so the head may be tried again. */
+const RETRY = { retry: true };
 
 const isPrLink = (link: TaskLink): link is PrLink => link.kind === "pr" && link.ref !== null;
 
@@ -63,8 +107,9 @@ const reviewPrsOn = (services: Services, task: TaskSummary): boolean => {
  * - the task is In Review and its PR is open (not a draft), into the branch, at `headOid`;
  * - its local review loop is over: no round pending, running or stalled, no blocking or major finding open;
  * - Review PRs, when it is on for the task, reviewed this head and found nothing at or above the fix threshold;
- * - no review or fix of the task's PRs is running;
- * - its checks pass (or it has none) and GitHub says it merges cleanly.
+ * - no review or fix of the task's PRs is running, and no reviewer requested changes on GitHub;
+ * - its checks pass, or none has reported for NO_CHECKS_WAIT_MS since the head was first seen (GitHub reports none
+ *   for a moment after a push), and GitHub says it merges cleanly.
  */
 export function notMergeable(
   services: Services,
@@ -72,6 +117,7 @@ export function notMergeable(
   link: PrLink,
   branch: string,
   runs: readonly AutopilotRun[],
+  timing: { now: number; headSince: number },
 ): string | null {
   const snapshot = link.snapshot;
   if (task.kind === "epic" || task.archivedAt !== null) return "it isn't an open task";
@@ -100,7 +146,11 @@ export function notMergeable(
     if (verdict.actionable > 0)
       return `Review PRs found ${verdict.actionable} point(s) at or above ${verdict.threshold}`;
   }
+  if (snapshot.reviewDecision === "changes_requested") return `a reviewer requested changes on PR #${link.ref.number}`;
   if (snapshot.checks !== "passing" && snapshot.checks !== "none") return `its checks are ${snapshot.checks}`;
+  if (snapshot.checks === "none" && !(timing.now - timing.headSince >= NO_CHECKS_WAIT_MS)) {
+    return `no checks have reported on PR #${link.ref.number} yet`;
+  }
   if (snapshot.mergeable !== "mergeable") {
     return snapshot.mergeable === "conflicting"
       ? `PR #${link.ref.number} conflicts with ${branch}`
@@ -197,7 +247,7 @@ export const mergeEpicPrs = defineAutomation({
   schema: z.object({}),
   fields: [],
   defaults: {},
-  check: ({ services, projects }) =>
+  check: ({ services, projects, now }) =>
     projects.flatMap(({ project }): Candidate[] => {
       const tasks = services.tasks.summaries({ projectId: project.id });
       return tasks.flatMap((epic): Candidate[] => {
@@ -206,20 +256,25 @@ export const mergeEpicPrs = defineAutomation({
         const children = tasks.filter((t) => t.parent?.id === epic.id);
         const runs = new Map(children.map((c) => [c.id, services.autopilot.runsForTask(c.id, 200)]));
         const runsOf = (id: string) => runs.get(id) ?? [];
+        const changes = services.links.prChanges(children.flatMap((c) => prsInto(c, branch).map((l) => l.id)));
 
         const merges = children.flatMap((task) =>
           prsInto(task, branch).flatMap((link): Candidate[] => {
-            if (notMergeable(services, task, link, branch, runsOf(task.id)) !== null) return [];
+            const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
+            if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
+            const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
+            if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
             const data: MergeData = {
               kind: "merge",
               linkId: link.id,
               headOid: link.snapshot!.headOid!,
               branch,
               number: link.ref.number,
+              attempt: earlier.count + 1,
             };
             return [
               {
-                dedupeKey: `merge:${link.id}:${data.headOid}`,
+                dedupeKey: data.attempt === 1 ? earlier.key : `${earlier.key}:${data.attempt}`,
                 summary: `merge PR #${link.ref.number} of #${task.number} into ${branch}`,
                 taskId: task.id,
                 data,
@@ -252,7 +307,8 @@ export const mergeEpicPrs = defineAutomation({
               data,
             }
           : {
-              dedupeKey: `epic-pr:${epic.id}:${branch}`,
+              // With the merged count, so a failed attempt is tried again after the next merge.
+              dedupeKey: `epic-pr:${epic.id}:${branch}:${merged.length}`,
               summary: `open a draft PR from ${branch} for epic #${epic.number}`,
               taskId: epic.id,
               data,
@@ -273,8 +329,14 @@ export const mergeEpicPrs = defineAutomation({
       if (link.snapshot?.headOid !== data.headOid) {
         return { status: "skipped", summary: `PR #${data.number} moved on before the merge` };
       }
-      const reason = notMergeable(services, task, link, data.branch, services.autopilot.runsForTask(task.id, 200));
-      if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}` };
+      const timing = {
+        now: Date.now(),
+        headSince: headSeenSince(link, services.links.prChanges([link.id]).get(link.id)),
+      };
+      const runs = services.autopilot.runsForTask(task.id, 200);
+      const reason = notMergeable(services, task, link, data.branch, runs, timing);
+      // Something changed since the check; the next pass looks again.
+      if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RETRY };
       try {
         await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid });
       } catch (error) {
@@ -285,10 +347,20 @@ export const mergeEpicPrs = defineAutomation({
             needsAttention: true,
           };
         }
-        // Branch rules wanting an approval, a race with a push: the user can still merge it by hand.
+        const message = messageOf(error);
+        // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
+        const passing = (error instanceof AppError && error.code === "CONFLICT") || PASSING_FAILURE.test(message);
+        if (passing && data.attempt < MERGE_ATTEMPTS) {
+          return {
+            status: "skipped",
+            summary: `Couldn't merge PR #${data.number} yet (try ${data.attempt} of ${MERGE_ATTEMPTS}): ${message}`,
+            output: RETRY,
+          };
+        }
+        // Branch rules wanting an approval, or tries used up: the user can still merge it by hand.
         return {
           status: "skipped",
-          summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${messageOf(error)}). Merge it yourself.`,
+          summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${message}). Merge it yourself.`,
           needsAttention: true,
         };
       }
