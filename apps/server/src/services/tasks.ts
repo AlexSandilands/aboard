@@ -283,13 +283,16 @@ export function createTasksService(
             ? {
                 ...(template.planContext ? { context: template.planContext } : {}),
                 ...(template.suggestedTier ? { suggestedModel: { tier: template.suggestedTier } } : {}),
-                phases: template.phases.map((phase) => ({
-                  title: phase.title,
-                  steps: phase.steps.map((step) => ({
-                    title: step.title,
-                    ...(step.notes ? { notes: step.notes } : {}),
+                // A stored template may predate the empty-phase filter; a plan can't hold a phase with no steps.
+                phases: template.phases
+                  .filter((phase) => phase.steps.length > 0)
+                  .map((phase) => ({
+                    title: phase.title,
+                    steps: phase.steps.map((step) => ({
+                      title: step.title,
+                      ...(step.notes ? { notes: step.notes } : {}),
+                    })),
                   })),
-                })),
               }
             : undefined);
         const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
