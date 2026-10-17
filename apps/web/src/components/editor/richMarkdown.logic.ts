@@ -502,7 +502,13 @@ export function docToMarkdown(doc: ProseMirrorNode): string {
           const previous = blocks[index - 1]!.type.name;
           if (previous === "blockquote" || LIST_NAMES.has(previous)) lines.push("");
         }
-        lines.push(serializeInline(block));
+        const text = serializeInline(block);
+        // A line of only "=" or "-" under text would underline it as a heading.
+        const prior = blocks[index - 1];
+        if (prior?.type.name === "paragraph" && prior.content.size > 0 && /^ {0,3}(=+|-+)[ \t]*$/.test(text)) {
+          lines.push("");
+        }
+        lines.push(text);
         return;
       case "heading": {
         const level = typeof block.attrs.level === "number" ? block.attrs.level : 1;

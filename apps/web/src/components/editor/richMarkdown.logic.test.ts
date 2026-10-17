@@ -248,6 +248,10 @@ describe("docToMarkdown after edits", () => {
     const rule = (source: string) => schema.nodes.horizontalRule!.create({ source });
     expect(docToMarkdown(doc(text, rule("---")))).toBe("text\n\n---");
     expect(docToMarkdown(doc(text, rule("***")))).toBe("text\n***");
+    // The same for a line of text that is only dashes or equals signs.
+    const line = (value: string) => schema.nodes.paragraph!.create(null, schema.text(value));
+    expect(docToMarkdown(doc(text, line("--")))).toBe("text\n\n--");
+    expect(docToMarkdown(doc(text, line("===")))).toBe("text\n\n===");
   });
 
   it("writes an upload still in progress as nothing", () => {
