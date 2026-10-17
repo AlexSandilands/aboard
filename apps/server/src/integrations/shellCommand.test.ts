@@ -2,6 +2,7 @@ import { brandEnv } from "@repo/contracts";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
+import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { runShellCommand, shellEnvironment, shellInvocation } from "./shellCommand.ts";
 
 // A real shell: PowerShell on Windows, /bin/sh elsewhere. node is on PATH wherever the tests run, and a script in
@@ -11,8 +12,8 @@ const TITLE = brandEnv("TASK_TITLE");
 /** Prints the title variable the way the guide says to read it on this platform. */
 const echoTitle = process.platform === "win32" ? `Write-Output $env:${TITLE}` : `printf '%s\\n' "$${TITLE}"`;
 
-// A real shell: PowerShell can take many seconds to start on a busy Windows runner.
-describe("runShellCommand", { timeout: 30_000 }, () => {
+// A real shell: PowerShell can take many seconds to start on a busy Windows machine.
+describe("runShellCommand", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   it("runs in the folder with the values as environment variables", async () => {
     // The long name: a Windows temp dir can be a short 8.3 name (RUNNER~1), which the child reports in full.
     const dir = realpathSync.native(tmpdir());

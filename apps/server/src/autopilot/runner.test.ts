@@ -7,6 +7,7 @@ import type { AgentJob } from "../integrations/headlessAgent.ts";
 import type { T3Integration, TaskThreadInput } from "../integrations/t3.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
+import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { createAutopilotRunner, tierModel } from "./runner.ts";
 import { WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
 
@@ -25,13 +26,13 @@ const T3_DOWN: T3IntegrationStatus = { ...T3_UP, detected: false, origin: null, 
 
 const result = (fields: Record<string, unknown>) => JSON.stringify({ type: "result", subtype: "success", ...fields });
 
-// Real git processes are slow on the Windows CI runner.
-describe("Autopilot runner", { timeout: 30_000 }, () => {
+// Real git processes are slow on a loaded Windows machine.
+describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   let repo: ReturnType<typeof createGitFixture>;
-  // Building the fixture runs several git processes, which can outlast the default hook timeout on Windows.
+  // The first fixture in a file builds the template repositories, a dozen git processes.
   beforeEach(() => {
     repo = createGitFixture();
-  }, 30_000);
+  }, PROCESS_TEST_TIMEOUT);
   afterEach(() => repo.cleanup());
 
   function setup(opts: { t3?: T3IntegrationStatus; agent?: (job: AgentJob) => Promise<string> } = {}) {

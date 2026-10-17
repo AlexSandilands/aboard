@@ -14,16 +14,17 @@ An epic is a `tasks` row with `kind = 'epic'`; its tasks point at it with `paren
 ([ADR 0007](../decisions/0007-epic-is-a-task-kind.md)). So it has a `#N`, a description, labels, links (such
 as the T3 thread coordinating it), notes and activity like any task. What differs:
 
-| Rule                                                                                        | Enforced in                                                            |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| No plan: `set_plan`, adding a phase and creating one with a plan are refused                | `noPlanOnEpic` in `services/plans.ts`, `create` in `services/tasks.ts` |
-| No status of its own: `move` refuses a status change (reordering within the column is fine) | `move` in `services/tasks.ts`                                          |
-| Can't be closed, reviewed, or moved to Done by its PRs merging                              | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone`              |
-| Epics don't nest                                                                            | `create` / `update` in `services/tasks.ts`                             |
-| A task and its epic share a project                                                         | `epicFor` in `services/tasks.ts`                                       |
-| Can't be archived (so can't be deleted) while it has open tasks                             | `update` in `services/tasks.ts`                                        |
-| Archiving it archives its Done tasks too; unarchiving brings those back                     | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts`          |
-| An archived epic is never re-derived                                                        | `syncEpicStatus` in `services/tasks.ts`                                |
+| Rule                                 | Enforced in                                                    |
+| ------------------------------------ | -------------------------------------------------------------- |
+| No plan: `set_plan`, adding a phase and creating one with a plan are refused | `noPlanOnEpic` in `services/plans.ts`, `create` in `services/tasks.ts` |
+| No status of its own: `move` refuses a status change (reordering within the column is fine) | `move` in `services/tasks.ts` |
+| Can't be closed, reviewed, or moved to Done by its PRs merging | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone` |
+| Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
+| A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
+| Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
+| Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
+| An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
+| Reopening or unarchiving one of its tasks unarchives it | `unarchiveEpicFor` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -58,8 +59,15 @@ moves the epic to the end of its new column.
   lane) and re-derives it; tasks archived on their own earlier stay archived, and so do leftover tasks Auto-archive
   archived one at a time (the match is on the stamp, so it is best effort). `archiveFinishedEpic` uses the same helper.
 - `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
-  this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
-  and Auto-archive treats such a Done task as loose. There is no migration for these.
+  this (its Done tasks stayed unarchived and still point at it) can be archived without moving the epic, and
+  Auto-archive treats such a Done task as loose. There is no migration for these.
+- **Bringing a task back unarchives its epic.** Reopening a task in an archived epic (`move` out of Done) or
+  unarchiving it (`update`) unarchives the epic in the same write (`unarchiveEpicFor`), then `syncEpic` re-derives
+  its status from the tasks that are unarchived. Otherwise the open task would show loose while still saying
+  "in epic #N". The epic logs `unarchived` with `becauseTask` and `reopened`. Its other archived tasks stay archived
+  (unlike unarchiving the epic itself). Archiving that task again doesn't archive the epic with it: the epic stays
+  unarchived and, with no unarchived tasks left, drops to Backlog; archive it by hand if that isn't wanted. Creating a task in an archived epic, or moving one into it, is still refused
+  (`epicFor`: "unarchive it first"). Both paths go through the tasks service, so the UI, REST and MCP share the rule.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
@@ -176,7 +184,6 @@ ready, is only found out at launch. If it can:
     checkout.
 
   The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
-
 - Both tools work only on a task in an epic; other tasks are started from the board. `baseRef` must look like
   a branch name (no leading `-`, `..`, spaces or the characters git refuses).
 - The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
@@ -261,29 +268,29 @@ launch has no suggested model and returns the thread instead of a link.
 
 ## Alternatives considered
 
-| Option                                    | Why not chosen                                                                                                                                              |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A separate `epics` table                  | Duplicates numbering, links, notes, labels and activity, which an epic needs as much as a task does                                                         |
-| Epics as a label                          | No roll-up, no description or links of its own, and nothing stops a task carrying two                                                                       |
-| An epic as an ordinary card in its column | Its tasks would be scattered around it; the band shows them together (a finished epic is the exception: it is a card in Done, with its tasks folded inside) |
-| Nested epics                              | Not needed for a feature-sized grouping, and every rule above would need a recursive version                                                                |
+| Option                                       | Why not chosen                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| A separate `epics` table                     | Duplicates numbering, links, notes, labels and activity, which an epic needs as much as a task does  |
+| Epics as a label                             | No roll-up, no description or links of its own, and nothing stops a task carrying two                |
+| An epic as an ordinary card in its column    | Its tasks would be scattered around it; the band shows them together (a finished epic is the exception: it is a card in Done, with its tasks folded inside) |
+| Nested epics                                 | Not needed for a feature-sized grouping, and every rule above would need a recursive version         |
 
 ## Code map
 
-| File                                                                       | What it does                                                                   |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `apps/server/src/db/migrations/009_epics.sql`                              | `kind` and `parent_id` on `tasks`                                              |
-| `apps/server/src/services/tasks.ts`                                        | `epicFor`, `syncEpic`, joining and leaving, the epic rules                     |
-| `apps/server/src/services/summaries.ts`                                    | `parent` and `rollup` on summaries                                             |
-| `packages/contracts/src/derive.ts`                                         | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`                   |
-| `apps/web/src/components/board/board.logic.ts`                             | Bands, rows, the `?epic=` filter (tested)                                      |
-| `apps/web/src/components/board/EpicBand.tsx`                               | The band and its Autopilot button                                              |
-| `apps/web/src/components/board/EpicRollupBar.tsx`                          | The roll-up bar, shared by the band, the card and the panel                    |
-| `apps/web/src/components/board/EpicCard.tsx`                               | The finished epic's card in Done, with its folded tasks                        |
-| `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts`           | The epic's Tasks card; the Epic menu's options (tested)                        |
-| `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`                      | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt`         |
-| `packages/contracts/src/handoff.ts`                                        | The orchestrating prompt and the subagent work prompt                          |
+| File                                                   | What it does                                                          |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `apps/server/src/db/migrations/009_epics.sql`          | `kind` and `parent_id` on `tasks`                                     |
+| `apps/server/src/services/tasks.ts`                    | `epicFor`, `syncEpic`, joining and leaving, the epic rules            |
+| `apps/server/src/services/summaries.ts`                | `parent` and `rollup` on summaries                                    |
+| `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |
+| `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
+| `apps/web/src/components/board/EpicBand.tsx`           | The band and its Autopilot button                                     |
+| `apps/web/src/components/board/EpicRollupBar.tsx`      | The roll-up bar, shared by the band, the card and the panel           |
+| `apps/web/src/components/board/EpicCard.tsx`           | The finished epic's card in Done, with its folded tasks               |
+| `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
+| `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
+| `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |
 | `apps/web/src/components/handoff/HandoffActions.tsx`, `T3LaunchDialog.tsx` | Suggest epics in the lane header; the dialog launching for a task or a project |
-| `apps/server/src/mcp/tools/threads.ts`                                     | `start_task_thread`, `message_task_thread`                                     |
-| `apps/server/src/integrations/t3Launch.ts`                                 | `autoLaunchSettings`: a launch without the dialog                              |
-| `apps/server/src/mcp/format.ts`                                            | `renderEpicChildren`, epic lines and events                                    |
+| `apps/server/src/mcp/tools/threads.ts`                  | `start_task_thread`, `message_task_thread`                            |
+| `apps/server/src/integrations/t3Launch.ts`              | `autoLaunchSettings`: a launch without the dialog                      |
+| `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events                           |
