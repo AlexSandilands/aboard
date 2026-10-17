@@ -161,13 +161,34 @@ function Composer({
             });
             return;
           }
+          const announce = (copied: boolean) => {
+            const toastId = toastManager.add({
+              type: "success",
+              title: `Started ${harnessLabel(harness)}`,
+              description: [result.shortReason, startedDescription(result, task.number, copied)]
+                .filter(Boolean)
+                .join(" "),
+              // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
+              ...(result.shortPrompt && !copied
+                ? {
+                    actionProps: {
+                      children: "Copy prompt",
+                      onClick: () => {
+                        toastManager.close(toastId);
+                        copyToClipboard(prompt, "prompt");
+                      },
+                    },
+                  }
+                : {}),
+            });
+          };
           // The CLI got a short pointer to the task; the full prompt goes on the clipboard to paste into it.
-          if (result.shortPrompt) void navigator.clipboard.writeText(prompt).catch(() => undefined);
-          toastManager.add({
-            type: "success",
-            title: `Started ${harnessLabel(harness)}`,
-            description: [result.shortReason, startedDescription(result, task.number)].filter(Boolean).join(" "),
-          });
+          if (result.shortPrompt) {
+            navigator.clipboard.writeText(prompt).then(
+              () => announce(true),
+              () => announce(false),
+            );
+          } else announce(false);
           onDone();
         },
         onError: (error) =>

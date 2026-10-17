@@ -39,13 +39,21 @@ export function modelError(model: string): string | null {
   return CliModel.safeParse(model).success ? null : "A model name has only letters, digits and . : @ / [ ] -";
 }
 
-/** The success toast for a started session: what was linked, and where it runs. */
+/**
+ * The success toast for a started session: what was linked, where it runs, and, when the CLI got the short prompt,
+ * where the full one is (`copied`: the clipboard took it).
+ */
 export function startedDescription(
   result: Pick<StartSessionResult, "branch" | "shortPrompt">,
   taskNumber: number,
+  copied: boolean,
 ): string {
   const where = result.branch ? ` It runs in a new worktree on ${result.branch}.` : "";
-  const short = result.shortPrompt ? " The full prompt is on your clipboard: paste it into the session." : "";
+  const short = !result.shortPrompt
+    ? ""
+    : copied
+      ? " The full prompt is on your clipboard: paste it into the session."
+      : " Copy the full prompt and paste it into the session.";
   return `#${taskNumber} is linked to the new session.${where}${short}`;
 }
 

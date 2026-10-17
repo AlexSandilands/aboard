@@ -278,6 +278,23 @@ describe("resuming a session", () => {
     expect(app.services.links.get(l.id)).toMatchObject({ window: "aboard-1", ref: { cwd: "C:\\Other" } });
   });
 
+  it("resumes a stopped board-started session into its window, and forgets the window when it opens elsewhere", async () => {
+    const app = appWith();
+    const l = app.services.links.add(app.task.id, { agentSession: claude(A, app.home.root) }, "board", {
+      window: "aboard-1",
+    });
+    expect((await app.post(l.id, {})).status).toBe(200);
+    expect(app.spawned[0]!.args.slice(0, 3)).toEqual(["-w", "aboard-1", "new-tab"]);
+    // A fork is a new session: it opens where the setting says, and the link keeps its window.
+    expect((await app.post(l.id, { mode: "fork" })).status).toBe(200);
+    expect(app.spawned[1]!.args.slice(0, 2)).toEqual(["-w", "0"]);
+    expect(app.services.links.get(l.id)).toMatchObject({ window: "aboard-1" });
+
+    app.services.settings.update({ terminal: { kind: "cmd" } });
+    expect((await app.post(l.id, {})).status).toBe(200);
+    expect(app.services.links.get(l.id)).not.toHaveProperty("window");
+  });
+
   it("still asks about a board-started session when the terminal can't bring windows back", async () => {
     const app = appWith({ alive: [100] });
     app.services.settings.update({ terminal: { kind: "cmd" } });

@@ -262,6 +262,17 @@ export function createLinksService(
 
     prChanges: (linkIds) => repos.links.prChanges(linkIds),
 
+    setWindow(linkId, window) {
+      core.write((fx) => {
+        const row = rowOrThrow(linkId);
+        if (row.kind !== "agent_session") throw new AppError("VALIDATION", "Only agent sessions have a window");
+        const { window: before, ...ref } = parseJson<{ window?: string }>(row.ref_json) ?? {};
+        if ((before ?? null) === window) return;
+        repos.links.setRef(linkId, JSON.stringify(window ? { ...ref, window } : ref));
+        fx.task(row.task_id);
+      });
+    },
+
     setSnapshot(linkId, snapshot) {
       core.write((fx) => {
         const row = rowOrThrow(linkId);

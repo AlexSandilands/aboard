@@ -249,6 +249,8 @@ export interface LinksService {
    *   completes the task instead when it later enters Review.
    */
   setSnapshot(linkId: string, snapshot: LinkSnapshot | null): void;
+  /** Records or forgets the named window a board-started session runs in (see AddLinkOptions). */
+  setWindow(linkId: string, window: string | null): void;
   /** When each pull request fact began on these links (see nextPrChanges); links with none are left out. */
   prChanges(linkIds: readonly string[]): Map<string, PrChanges>;
 }

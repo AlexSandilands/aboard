@@ -155,7 +155,13 @@ custom cmd template, and the CLI received the prompt unchanged. A Windows Termin
 agent's session that built this; it relies on the same quoting the resume command's `bash -c` script does.
 
 The window name is stored beside the session's ref in `ref_json` and returned as the link's `window`. Only the board
-sets it (`AddLinkOptions`); an agent linking the same session again, from another folder, keeps it.
+sets it (`AddLinkOptions`, `links.setWindow`); an agent linking the same session again, from another folder, keeps
+it. **Open in terminal** resumes such a session into its window again, so the window keeps holding it; resumed in a
+terminal with no named windows (the setting changed), the link forgets the window. A fork is a new session and opens
+where the setting says. Bringing the window back shows its first tab: Windows Terminal can't focus a tab by what runs
+in it, so with several sessions in the window the one asked for may be on another tab.
+
+A worktree made for a session that then couldn't open stays: the returned command runs in it.
 
 ### Names
 
