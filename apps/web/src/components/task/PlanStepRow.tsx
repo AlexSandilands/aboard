@@ -12,7 +12,7 @@ import {
 import { useState } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
-import { useTaskLinks } from "~/components/markdown/useTaskLinks";
+import { usePanelTaskLinks } from "./PanelTaskLinks";
 import { Badge } from "~/components/ui/badge";
 import { InlineButton } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -64,7 +64,7 @@ export function PlanStepRow({
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const taskLinks = useTaskLinks();
+  const taskLinks = usePanelTaskLinks();
   const hasNotes = !!step.notes?.trim();
 
   const setStatus = (status: StepStatus) => {

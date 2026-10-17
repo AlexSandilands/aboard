@@ -1,7 +1,7 @@
 import type { Project, TaskStatus, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { EpicBand, Lane, LaneCells } from "./board.logic";
-import { advanceReveal, REVEAL_EXPIRY_MS, revealScrollTarget, revealStep } from "./reveal.logic";
+import { advanceReveal, REVEAL_EXPIRY_MS, revealProgressFor, revealScrollTarget, revealStep } from "./reveal.logic";
 
 const project = (id: string, collapsed = false): Project => ({
   id,
@@ -192,5 +192,21 @@ describe("advanceReveal", () => {
       },
     });
     expect(looked).toBe(false);
+  });
+});
+
+describe("revealProgressFor", () => {
+  it("keeps the progress of the same request, so an expansion isn't repeated", () => {
+    const first = revealProgressFor(null, 1);
+    first.expanded.add("p");
+    expect(revealProgressFor(first, 1)).toBe(first);
+  });
+
+  it("starts fresh for a new request, even for the same task", () => {
+    const first = revealProgressFor(null, 1);
+    first.expanded.add("p");
+    const next = revealProgressFor(first, 2);
+    expect(next).not.toBe(first);
+    expect(next).toEqual({ nonce: 2, expanded: new Set() });
   });
 });

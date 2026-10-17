@@ -68,7 +68,7 @@ import {
   type OverCell,
 } from "./dnd.logic";
 import { DependencyLines } from "./DependencyLines";
-import { advanceReveal } from "./reveal.logic";
+import { advanceReveal, revealProgressFor, type RevealProgress } from "./reveal.logic";
 import { revealCard } from "./revealCard";
 import { TaskCardOverlay } from "./TaskCard";
 
@@ -504,12 +504,11 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const columnHeaderRef = useRef<HTMLDivElement>(null);
   const reveal = useReveal((s) => s.request);
   const collapsedEpics = useBoardView((s) => s.collapsedEpics);
-  const revealExpanded = useRef<{ nonce: number; ids: Set<string> } | null>(null);
+  const revealExpanded = useRef<RevealProgress | null>(null);
   useEffect(() => {
     if (!reveal) return;
-    if (revealExpanded.current?.nonce !== reveal.nonce)
-      revealExpanded.current = { nonce: reveal.nonce, ids: new Set() };
-    const { ids } = revealExpanded.current;
+    revealExpanded.current = revealProgressFor(revealExpanded.current, reveal.nonce);
+    const ids = revealExpanded.current.expanded;
     const cardSelector = `[data-task-card="${CSS.escape(reveal.taskId)}"]`;
     const action = advanceReveal({
       taskId: reveal.taskId,
