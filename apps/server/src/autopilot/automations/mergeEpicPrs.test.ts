@@ -265,6 +265,42 @@ describe("merge into epic branch", () => {
     expect(merges.at(-1)!.input.headOid).toBe(SHA_B);
   });
 
+  it("doesn't count a re-check that found a reason to wait as a try", async () => {
+    const { s, task, runs, merges, toReview, setPr } = setup();
+    toReview();
+    setPr();
+    const ctx = {
+      services: s,
+      engine: s.autopilot.engine(),
+      now: new Date(),
+      board: null,
+      projects: [{ project: s.projects.get(task.projectId), config: {} }],
+    };
+    for (let i = 0; i < MERGE_ATTEMPTS + 1; i++) {
+      const [candidate] = await mergeEpicPrs.check(ctx);
+      expect(candidate?.data).toMatchObject({ attempt: 1 });
+      const run = s.autopilot.record({ automation: AUTOPILOT_MERGE_EPIC_PRS, candidate: candidate!, dryRun: false })!;
+      s.autopilot.start(run.id);
+      // Checks start failing between the check and the merge.
+      setPr({ checks: "failing" });
+      const result = await mergeEpicPrs.act(candidate!, {
+        services: s,
+        runner: NO_RUNNER,
+        github: NO_GITHUB,
+        engine: s.autopilot.engine(),
+        boardUrl: "http://x",
+        config: {},
+        run,
+        actor: "autopilot",
+        update: () => {},
+      });
+      s.autopilot.finish(run.id, result);
+      setPr();
+    }
+    expect(merges).toHaveLength(0);
+    expect(runs().some((r) => r.needsAttention)).toBe(false);
+  });
+
   it("never merges a task of an epic delivered to main", async () => {
     const { s, epic, setPr, toReview, pass, turnOn, merges } = setup();
     s.tasks.setDelivery(epic.id, "main", null, "user");

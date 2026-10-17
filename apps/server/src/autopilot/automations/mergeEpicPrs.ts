@@ -60,7 +60,9 @@ function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: strin
   );
   return {
     key,
-    count: ofHead.length,
+    runs: ofHead.length,
+    // Tries that reached GitHub; a re-check that found a reason to wait doesn't use one up.
+    count: ofHead.filter((r) => r.output?.recheck !== true).length,
     // Running, merged, flagged or refused: nothing more to try at this head.
     settled: ofHead.some((r) => !(r.status === "skipped" && r.output?.retry === true)),
   };
@@ -85,6 +87,8 @@ interface EpicPrData {
 
 /** On a skipped merge run: it settled nothing, so the head may be tried again. */
 const RETRY = { retry: true };
+/** A skip from the re-check before the merge: nothing was tried, so it doesn't count as a try. */
+const RECHECK = { retry: true, recheck: true };
 
 const isPrLink = (link: TaskLink): link is PrLink => link.kind === "pr" && link.ref !== null;
 
@@ -274,7 +278,7 @@ export const mergeEpicPrs = defineAutomation({
             };
             return [
               {
-                dedupeKey: data.attempt === 1 ? earlier.key : `${earlier.key}:${data.attempt}`,
+                dedupeKey: earlier.runs === 0 ? earlier.key : `${earlier.key}:${earlier.runs + 1}`,
                 summary: `merge PR #${link.ref.number} of #${task.number} into ${branch}`,
                 taskId: task.id,
                 data,
@@ -336,7 +340,7 @@ export const mergeEpicPrs = defineAutomation({
       const runs = services.autopilot.runsForTask(task.id, 200);
       const reason = notMergeable(services, task, link, data.branch, runs, timing);
       // Something changed since the check; the next pass looks again.
-      if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RETRY };
+      if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
       try {
         await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid });
       } catch (error) {
