@@ -41,6 +41,15 @@ export type ReviewSkillRef = z.infer<typeof ReviewSkillRef>;
 
 export const BUILTIN_REVIEW_SKILL_NAME = "aboard-review";
 
+/** A skill bulk-planning sessions follow, the same shape as a review skill. `builtin` is the board's own. */
+export const PlanSkillRef = ReviewSkillRef;
+export type PlanSkillRef = ReviewSkillRef;
+
+export const BUILTIN_PLAN_SKILL_NAME = "aboard-plan";
+
+export const planSkillName = (skill: PlanSkillRef): string =>
+  skill.source === "builtin" ? BUILTIN_PLAN_SKILL_NAME : skill.name;
+
 /** Actor the board's own headless reviewer records rounds as. */
 export const BOARD_REVIEWER = "board reviewer";
 

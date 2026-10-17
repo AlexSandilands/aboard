@@ -1,4 +1,4 @@
-import type { Project, ProjectIcon, ReviewSkillRef } from "@repo/contracts";
+import type { PlanSkillRef, Project, ProjectIcon, ReviewSkillRef } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import type { Sql } from "./sql.ts";
 
@@ -10,6 +10,7 @@ interface ProjectRow {
   icon_json: string | null;
   t3_project_id: string | null;
   review_skill_json: string | null;
+  plan_skill_json: string | null;
   position: string;
   collapsed: number;
   archived_at: string | null;
@@ -25,6 +26,7 @@ const toProject = (r: ProjectRow): Project => ({
   icon: parseJson<ProjectIcon>(r.icon_json),
   t3ProjectId: r.t3_project_id,
   reviewSkill: parseJson<ReviewSkillRef>(r.review_skill_json),
+  planSkill: parseJson<PlanSkillRef>(r.plan_skill_json),
   position: r.position,
   collapsed: r.collapsed !== 0,
   archivedAt: r.archived_at,
@@ -40,6 +42,7 @@ const toRow = (p: Project): ProjectRow => ({
   icon_json: p.icon ? JSON.stringify(p.icon) : null,
   t3_project_id: p.t3ProjectId,
   review_skill_json: p.reviewSkill ? JSON.stringify(p.reviewSkill) : null,
+  plan_skill_json: p.planSkill ? JSON.stringify(p.planSkill) : null,
   position: p.position,
   collapsed: p.collapsed ? 1 : 0,
   archived_at: p.archivedAt,

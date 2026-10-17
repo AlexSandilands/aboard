@@ -8,19 +8,24 @@ import {
   handoffModeError,
   isAbsolutePath,
   newSessionArgv,
+  planningSessionLabel,
+  planTasksShortPrompt,
   sessionLabel,
+  StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
   tierCliModel,
   type AgentCliStatus,
   type AppSettings,
   type SessionLaunchOptions,
+  type StartPlanningSessionInput,
   type StartSessionInput,
   type StartSessionResult,
   type TaskSummary,
 } from "@repo/contracts";
 import { createWorktree, defaultBranchOf } from "../autopilot/worktrees.ts";
 import { AppError } from "../errors.ts";
+import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import type { RunGit } from "./backup.ts";
 import { resolveExecutable } from "./claudeCli.ts";
@@ -55,6 +60,8 @@ export interface SessionLaunchIntegration {
    * isn't an error: the result carries the command to run by hand, and nothing is linked.
    */
   start(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
+  /** The same for a session that plans several of a project's tasks: in the project's checkout, linked to each. */
+  startPlanning(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
 }
 
 type SessionServices = Pick<Services, "tasks" | "projects" | "links" | "settings">;
@@ -161,12 +168,16 @@ export function createSessionLaunch(deps: {
     }
   };
 
-  /** The task and the folder its project lives in, which every launch starts from. */
+  /** The folder a project lives in, which every launch starts from, or null when it has none on this machine. */
+  const projectRoot = (projectId: string): string | null => {
+    const root = deps.services().projects.get(projectId).workspaceRoot;
+    return root && isAbsolutePath(root) && isDirectory(root) ? root : null;
+  };
+
+  /** The task and the folder its project lives in. */
   const subject = (taskId: string) => {
-    const s = deps.services();
-    const task = s.tasks.summary(taskId);
-    const root = s.projects.get(task.projectId).workspaceRoot;
-    return { task, root: root && isAbsolutePath(root) && isDirectory(root) ? root : null };
+    const task = deps.services().tasks.summary(taskId);
+    return { task, root: projectRoot(task.projectId) };
   };
 
   /** Local branches, then origin's (without origin/HEAD). Empty when the folder isn't a repository. */
@@ -179,6 +190,115 @@ export function createSessionLaunch(deps: {
     );
     const names = refs.code === 0 ? refs.stdout.split("\n").map((l) => l.trim()) : [];
     return { isRepo: true, branches: names.filter((n) => n && n !== "origin" && n !== "origin/HEAD") };
+  };
+
+  /** The harness's CLI and a terminal to open it in, or why a session can't start. */
+  const prepare = (harnessId: AgentHarness) => {
+    const settings = deps.services().settings.get();
+    const h = deps.host();
+    const cli = cliStatus(settings, harnessId, h);
+    if (!cli.available) {
+      throw new AppError(
+        "VALIDATION",
+        `${AGENT_HARNESSES[harnessId].label} isn't installed: set its path in Settings → Integrations`,
+      );
+    }
+
+    // The configured path when one is set; the bare name otherwise, so the terminal's own PATH finds it.
+    const exe = configuredCli(settings, harnessId);
+    // Checked before any worktree is made, so a terminal that can't run leaves nothing behind.
+    const resolved = terminal(settings, h);
+    if (!("launch" in resolved)) throw new AppError("VALIDATION", `No terminal to open: ${resolved.error}`);
+    // cmd reads a quoted first word as the whole line's quotes and strips them, breaking the rest.
+    if (resolved.shell === "cmd" && /\s/.test(exe)) {
+      throw new AppError("VALIDATION", `Command Prompt can't start a CLI whose path has spaces (${exe})`);
+    }
+    return { harness: harnessId, h, exe, resolved };
+  };
+
+  /** Opens the CLI in a terminal and links the session to each of `taskIds`. */
+  const launch = async (
+    { harness, h, exe, resolved }: ReturnType<typeof prepare>,
+    session: {
+      sessionId: string;
+      model: string | null;
+      prompt: string;
+      cwd: string;
+      branch: string | null;
+      label: string;
+      /** The task whose named window the session opens in. */
+      windowTask: number;
+      /** A pointer to the work that any command line takes, for when the prompt doesn't fit. */
+      short: (platform: NodeJS.Platform) => string;
+      taskIds: readonly string[];
+      actor: string;
+    },
+  ): Promise<StartSessionResult> => {
+    const { sessionId, cwd, label } = session;
+    const argvFor = (prompt: string) => {
+      const argv = newSessionArgv({ harness, sessionId, model: session.model, name: label, prompt });
+      return [exe, ...argv.slice(1)];
+    };
+    const window = resolved.focus ? taskWindowName(session.windowTask) : undefined;
+
+    // The prompt as it can go on this command line, else a short one built from the task alone (the web app copies
+    // the full prompt to the clipboard instead).
+    const fitted = textArgument(session.prompt, h.platform);
+    const short = () => session.short(h.platform);
+    let shortReason = "error" in fitted ? `The prompt couldn't go on the command line: ${fitted.error}.` : null;
+    let argv = argvFor("value" in fitted ? fitted.value : short());
+    let spec: LaunchSpec | null = null;
+    let launchError: string | null = null;
+    try {
+      spec = resolved.launch(argv, cwd, window ? { window } : {});
+      if (!fitsCommandLine(spec, h.platform) && !shortReason) {
+        shortReason = "The prompt is too long for the command line.";
+        argv = argvFor(short());
+        spec = resolved.launch(argv, cwd, window ? { window } : {});
+      }
+    } catch (error) {
+      // A folder this terminal can't be given safely: the command can still be run by hand.
+      spec = null;
+      launchError = messageOf(error);
+    }
+    const result = {
+      command: copyCommand(resolved.shell, argv, cwd),
+      cwd,
+      branch: session.branch,
+      shortPrompt: shortReason ? argv.at(-1)! : null,
+      shortReason,
+    };
+    // Linked whether or not the terminal starts: the prompt tells the agent the board linked it, and the command
+    // to run by hand carries the same session id. Only a launched session has a window to bring back.
+    const link = (opened: boolean) => {
+      const ids = session.taskIds.map((taskId) => {
+        const added = deps
+          .services()
+          .links.add(
+            taskId,
+            { agentSession: { harness, sessionId, cwd }, label },
+            session.actor,
+            opened && window ? { window } : {},
+          );
+        deps.linked?.(added.id);
+        return added.id;
+      });
+      return ids[0]!;
+    };
+    if (!spec) return { ...result, launched: false, error: launchError, linkId: link(false) };
+
+    try {
+      await deps.spawn(spec);
+    } catch (error) {
+      log.warn(`[sessions] couldn't start ${displayLaunch(spec, h.platform)}: ${messageOf(error)}`);
+      return {
+        ...result,
+        launched: false,
+        error: `Couldn't start ${resolved.label}: ${messageOf(error)}`,
+        linkId: link(false),
+      };
+    }
+    return { ...result, launched: true, error: null, linkId: link(true) };
   };
 
   return {
@@ -220,23 +340,7 @@ export function createSessionLaunch(deps: {
       const modeError = handoffModeError(task, input.mode === "fix" ? "work" : input.mode);
       if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
-      const settings = deps.services().settings.get();
-      const h = deps.host();
-      const harness = AGENT_HARNESSES[input.harness];
-      const cli = cliStatus(settings, input.harness, h);
-      if (!cli.available) {
-        throw new AppError("VALIDATION", `${harness.label} isn't installed: set its path in Settings → Integrations`);
-      }
-
-      // The configured path when one is set; the bare name otherwise, so the terminal's own PATH finds it.
-      const exe = configuredCli(settings, input.harness);
-      // Checked before any worktree is made, so a terminal that can't run leaves nothing behind.
-      const resolved = terminal(settings, h);
-      if (!("launch" in resolved)) throw new AppError("VALIDATION", `No terminal to open: ${resolved.error}`);
-      // cmd reads a quoted first word as the whole line's quotes and strips them, breaking the rest.
-      if (resolved.shell === "cmd" && /\s/.test(exe)) {
-        throw new AppError("VALIDATION", `Command Prompt can't start a CLI whose path has spaces (${exe})`);
-      }
+      const ready = prepare(input.harness);
 
       const sessionId = randomUUID();
       let cwd = root;
@@ -270,69 +374,45 @@ export function createSessionLaunch(deps: {
         }
       }
 
-      const label = sessionLabel(input.mode, task.number);
-      const argvFor = (prompt: string) => {
-        const argv = newSessionArgv({ harness: input.harness, sessionId, model: input.model, name: label, prompt });
-        return [exe, ...argv.slice(1)];
-      };
-      const window = resolved.focus ? taskWindowName(task.number) : undefined;
-
-      // The prompt as it can go on this command line, else a short one built from the task alone (the web app copies
-      // the full prompt to the clipboard instead).
-      const fitted = textArgument(input.prompt, h.platform);
-      const short = () =>
-        shortPrompt(input.mode, task, h.platform, workspace.mode === "pr_branch" ? workspace.branch : undefined);
-      let shortReason = "error" in fitted ? `The prompt couldn't go on the command line: ${fitted.error}.` : null;
-      let argv = argvFor("value" in fitted ? fitted.value : short());
-      let spec: LaunchSpec | null = null;
-      let launchError: string | null = null;
-      try {
-        spec = resolved.launch(argv, cwd, window ? { window } : {});
-        if (!fitsCommandLine(spec, h.platform) && !shortReason) {
-          shortReason = "The prompt is too long for the command line.";
-          argv = argvFor(short());
-          spec = resolved.launch(argv, cwd, window ? { window } : {});
-        }
-      } catch (error) {
-        // A folder this terminal can't be given safely: the command can still be run by hand.
-        spec = null;
-        launchError = messageOf(error);
-      }
-      const result = {
-        command: copyCommand(resolved.shell, argv, cwd),
+      return launch(ready, {
+        sessionId,
+        model: input.model,
+        prompt: input.prompt,
         cwd,
         branch,
-        shortPrompt: shortReason ? argv.at(-1)! : null,
-        shortReason,
-      };
-      // Linked whether or not the terminal starts: the prompt tells the agent the board linked it, and the command
-      // to run by hand carries the same session id. Only a launched session has a window to bring back.
-      const link = (opened: boolean) => {
-        const added = deps
-          .services()
-          .links.add(
-            task.id,
-            { agentSession: { harness: input.harness, sessionId, cwd }, label },
-            actor,
-            opened && window ? { window } : {},
-          );
-        deps.linked?.(added.id);
-        return added.id;
-      };
-      if (!spec) return { ...result, launched: false, error: launchError, linkId: link(false) };
+        label: sessionLabel(input.mode, task.number),
+        windowTask: task.number,
+        short: (platform) =>
+          shortPrompt(input.mode, task, platform, workspace.mode === "pr_branch" ? workspace.branch : undefined),
+        taskIds: [task.id],
+        actor,
+      });
+    },
 
-      try {
-        await deps.spawn(spec);
-      } catch (error) {
-        log.warn(`[sessions] couldn't start ${displayLaunch(spec, h.platform)}: ${messageOf(error)}`);
-        return {
-          ...result,
-          launched: false,
-          error: `Couldn't start ${resolved.label}: ${messageOf(error)}`,
-          linkId: link(false),
-        };
-      }
-      return { ...result, launched: true, error: null, linkId: link(true) };
+    async startPlanning(projectId, rawInput, actor) {
+      const input = StartPlanningSessionInputSchema.parse(rawInput);
+      // Checked before anything starts, so a list with a task that can't be planned starts nothing.
+      const tasks = tasksToPlan(deps.services(), projectId, input.taskIds);
+      const root = projectRoot(projectId);
+      if (!root) throw new AppError("VALIDATION", "The project has no folder to start a session in");
+      const ready = prepare(input.harness);
+      // Planning writes no code, so it runs in the project's own checkout.
+      return launch(ready, {
+        sessionId: randomUUID(),
+        model: input.model,
+        prompt: input.prompt,
+        cwd: root,
+        branch: null,
+        label: planningSessionLabel(tasks),
+        windowTask: tasks[0]!.number,
+        short: (platform) => {
+          const fitted = textArgument(planTasksShortPrompt(tasks), platform);
+          if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);
+          return fitted.value;
+        },
+        taskIds: tasks.map((task) => task.id),
+        actor,
+      });
     },
   };
 }

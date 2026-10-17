@@ -95,6 +95,7 @@ export function createProjectsService(
           icon: input.icon ?? null,
           t3ProjectId: input.t3ProjectId ?? null,
           reviewSkill: null,
+          planSkill: null,
           position: generateKeyBetween(repos.projects.lastPosition(), null),
           collapsed: false,
           archivedAt: null,
@@ -119,6 +120,7 @@ export function createProjectsService(
         }
         if (input.icon !== undefined) next.icon = input.icon;
         if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
+        if (input.planSkill !== undefined) next.planSkill = input.planSkill;
         if (input.collapsed !== undefined) next.collapsed = input.collapsed;
         if (input.archived !== undefined)
           next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;

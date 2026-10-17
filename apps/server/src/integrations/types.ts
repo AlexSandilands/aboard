@@ -14,6 +14,8 @@ import type {
   ResumeResult,
   ResumeSessionInput,
   SessionLaunchOptions,
+  StartPlanningSessionInput,
+  StartPlanningThreadInput,
   StartSessionInput,
   StartSessionResult,
   SettingsAskStatus,
@@ -70,6 +72,8 @@ export interface Integrations {
   startT3Thread(taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink>;
   /** Starts a T3 Code thread about a whole project; nothing is linked, so it returns the thread. */
   startT3ProjectThread(projectId: string, input: StartT3ThreadInput, title: string): Promise<T3ThreadRef>;
+  /** Starts a T3 Code thread that plans several of a project's tasks, and links it to each of them. */
+  startT3PlanningThread(projectId: string, input: StartPlanningThreadInput, actor: string): Promise<TaskLink[]>;
   /** Starts a T3 Code thread for a task without the dialog (see autoLaunchSettings) and links it. */
   launchT3TaskThread(taskId: string, input: TaskThreadInput, actor: string): Promise<TaskThreadLaunch>;
   /** Posts a message into a task's linked T3 Code thread, as if the user had typed it. */
@@ -90,6 +94,8 @@ export interface Integrations {
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
   /** Starts a new Claude Code or Copilot CLI session on a task in a terminal and links it. */
   startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
+  /** Starts a session that plans several of a project's tasks, in its checkout, and links it to each of them. */
+  startPlanningSession(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
   /** Whether the settings "Ask" can run: the Claude Code CLI is found. */
   settingsAskStatus(): SettingsAskStatus;
   /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */

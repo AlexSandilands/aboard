@@ -1,4 +1,4 @@
-import { BUILTIN_REVIEW_SKILL_BODY } from "@repo/contracts";
+import { BUILTIN_PLAN_SKILL_BODY, BUILTIN_REVIEW_SKILL_BODY } from "@repo/contracts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,5 +42,11 @@ describe("skills", () => {
     const file = readFileSync(new URL("../../../skills/aboard-review/SKILL.md", import.meta.url), "utf8");
     const body = file.replace(/\r\n/g, "\n").replace(/^---\n[\s\S]*?\n---\n\n/, "");
     expect(body).toBe(BUILTIN_REVIEW_SKILL_BODY);
+  });
+
+  it("keeps skills/aboard-plan/SKILL.md identical to the built-in body", () => {
+    const file = readFileSync(new URL("../../../skills/aboard-plan/SKILL.md", import.meta.url), "utf8");
+    const body = file.replace(/\r\n/g, "\n").replace(/^---\n[\s\S]*?\n---\n\n/, "");
+    expect(body).toBe(BUILTIN_PLAN_SKILL_BODY);
   });
 });

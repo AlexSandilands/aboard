@@ -6,7 +6,7 @@ import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting 
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
-import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
+import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 import { SavedViews } from "./savedViews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -133,6 +133,8 @@ export const Project = z.object({
   t3ProjectId: z.string().nullable(),
   /** Overrides the global review skill for this project's tasks; null inherits it. */
   reviewSkill: ReviewSkillRef.nullable(),
+  /** Overrides the global planning skill for this project's bulk-planning sessions; null inherits it. */
+  planSkill: PlanSkillRef.nullable(),
   position: z.string(),
   collapsed: z.boolean(),
   archivedAt: IsoDate.nullable(),
@@ -572,6 +574,7 @@ export const UpdateProjectInput = z.object({
   collapsed: z.boolean().optional(),
   archived: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.nullable().optional(),
+  planSkill: PlanSkillRef.nullable().optional(),
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
@@ -712,6 +715,8 @@ export const AppSettings = z
     autoReview: z.boolean(),
     /** The skill reviewers follow, unless the task's project overrides it. */
     reviewSkill: ReviewSkillRef,
+    /** The skill bulk-planning sessions follow, unless the project overrides it. */
+    planSkill: PlanSkillRef,
     reviewMaxRounds: z.number().int().min(1).max(10),
     /** Let the board run a headless reviewer when no agent picks a round up. */
     headlessReviewEnabled: z.boolean(),
@@ -754,6 +759,7 @@ export const UpdateSettingsInput = z.object({
   agentT3Threads: z.boolean().optional(),
   autoReview: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.optional(),
+  planSkill: PlanSkillRef.optional(),
   reviewMaxRounds: z.number().int().min(1).max(10).optional(),
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),

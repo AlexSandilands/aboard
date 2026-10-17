@@ -1,8 +1,14 @@
-import { CreateProjectInput, StartT3ThreadInput, UpdateProjectInput } from "@repo/contracts";
+import {
+  CreateProjectInput,
+  StartPlanningSessionInput,
+  StartPlanningThreadInput,
+  StartT3ThreadInput,
+  UpdateProjectInput,
+} from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
-import { handle, noContent, parseBody, parseQuery, queryFlag, idParam } from "../respond.ts";
+import { actorOf, handle, noContent, parseBody, parseQuery, queryFlag, idParam } from "../respond.ts";
 
 /** /api/projects */
 export function registerProjectRoutes(app: Hono, { services, integrations }: AppContext): void {
@@ -40,13 +46,29 @@ export function registerProjectRoutes(app: Hono, { services, integrations }: App
     "/api/projects/:id/t3-launch-options",
     handle(async (c) => c.json(await integrations.t3ProjectLaunchOptions(services.projects.get(idParam(c)).id))),
   );
-  // The only project-level hand-off is Suggest epics, so the thread is named for it.
+  // Suggest epics; a planning thread has its own route, as it is linked to the tasks it plans.
   app.post(
     "/api/projects/:id/t3-thread",
     handle(async (c) => {
       const project = services.projects.get(idParam(c));
       const input = await parseBody(c, StartT3ThreadInput);
       return c.json(await integrations.startT3ProjectThread(project.id, input, `Suggest epics: ${project.title}`), 201);
+    }),
+  );
+  app.post(
+    "/api/projects/:id/plan-thread",
+    handle(async (c) => {
+      const project = services.projects.get(idParam(c));
+      const input = await parseBody(c, StartPlanningThreadInput);
+      return c.json(await integrations.startT3PlanningThread(project.id, input, actorOf(c)), 201);
+    }),
+  );
+  app.post(
+    "/api/projects/:id/plan-session",
+    handle(async (c) => {
+      const project = services.projects.get(idParam(c));
+      const input = await parseBody(c, StartPlanningSessionInput);
+      return c.json(await integrations.startPlanningSession(project.id, input, actorOf(c)), 201);
     }),
   );
 }

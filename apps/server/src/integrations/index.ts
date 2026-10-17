@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { epicBranchName } from "@repo/contracts";
+import { epicBranchName, planningSessionLabel } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
@@ -9,6 +9,7 @@ import type { Automation, Runner } from "../autopilot/types.ts";
 import type { RunShell } from "./shellCommand.ts";
 import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
+import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
@@ -172,7 +173,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   let started = false;
 
-  return {
+  const integrations: Integrations = {
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
     prHostHoldsTasks: (host) => github.holdsTasks(host),
@@ -242,6 +243,17 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),
     startT3ProjectThread: (projectId, input, title) => t3.startProjectThread(projectId, input, title),
+    async startT3PlanningThread(projectId, { taskIds, ...input }, actor) {
+      const s = deps.services();
+      // Checked before the launch, so a list with a task that can't be planned starts nothing.
+      const tasks = tasksToPlan(s, projectId, taskIds);
+      const title = `${planningSessionLabel(tasks)}: ${s.projects.get(projectId).title}`;
+      // Through the object, so tests can stand in for T3 Code here.
+      const thread = await integrations.startT3ProjectThread(projectId, input, title);
+      const links = tasks.map((task) => s.links.add(task.id, { t3Thread: thread }, actor));
+      void t3.pollLive();
+      return links;
+    },
     launchT3TaskThread: (taskId, input, actor) => t3.launchTaskThread(taskId, input, actor),
     messageT3Thread: (link, text) => t3.sendToThread(link, text, randomUUID()),
     async resolveLinkInput(input) {
@@ -258,9 +270,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     agentClis: () => sessionLaunch.clis(),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
+    startPlanningSession: (projectId, input, actor) => sessionLaunch.startPlanning(projectId, input, actor),
     generateDigest: () => digests.generate(),
     digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };
+  return integrations;
 }

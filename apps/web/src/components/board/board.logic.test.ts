@@ -26,6 +26,7 @@ function project(id: string): Project {
     icon: null,
     t3ProjectId: null,
     reviewSkill: null,
+    planSkill: null,
     position: id,
     collapsed: false,
     archivedAt: null,

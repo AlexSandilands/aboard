@@ -2,6 +2,9 @@ import { z } from "zod";
 import {
   defaultHandoffMode,
   handoffModeError,
+  MAX_PLAN_TASKS,
+  planningSessionLabel,
+  planTasksPrompt,
   suggestedModelLine,
   taskHandoffPrompt,
   TaskStatusInput,
@@ -11,6 +14,7 @@ import {
   type TaskDetail,
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
+import { planSkillFor, tasksToPlan } from "../../services/planning.ts";
 import {
   projectLabel,
   renderEpicChildren,
@@ -303,9 +307,17 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         "Use it when orchestrating an epic: pass subagent: true for the prompt to give a subagent you start (it " +
         "reports back instead of asking the user or running its own review loop; the task needs a plan first), or leave it off for a prompt the " +
         "user pastes into a new session. mode defaults to work for a subagent, else to the task's suggested one: " +
-        "plan for tasks in Backlog or without a plan, work otherwise, orchestrate for an epic.",
+        "plan for tasks in Backlog or without a plan, work otherwise, orchestrate for an epic. " +
+        'To plan several tasks of one project in one session, pass tasks (["#3", "#4"]) instead of task: the result ' +
+        "is the planning prompt that walks the user through a plan for each.",
       inputSchema: {
-        task: taskField,
+        task: taskField.optional(),
+        tasks: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(MAX_PLAN_TASKS)
+          .optional()
+          .describe('Several tasks of one project to plan together: "#42", "42" or uuids. Plan mode only.'),
         mode: z
           .enum(["work", "plan", "orchestrate"])
           .optional()
@@ -316,6 +328,25 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
     },
     (args) =>
       run(() => {
+        if (args.tasks) {
+          if (args.task) throw new AppError("VALIDATION", "Pass task or tasks, not both");
+          if ((args.mode && args.mode !== "plan") || args.subagent) {
+            throw new AppError("VALIDATION", "Several tasks get only a planning prompt: mode plan, not for a subagent");
+          }
+          const projectId = services.tasks.summary(services.tasks.resolveId(args.tasks[0]!)).projectId;
+          const tasks = tasksToPlan(services, projectId, args.tasks);
+          const prompt = planTasksPrompt({
+            project: services.projects.get(projectId),
+            tasks,
+            skill: planSkillFor(services, projectId),
+            boardUrl: boardUrl(ctx),
+          });
+          return textResult(`Plan prompt for ${planningSessionLabel(tasks).replace(/^Planning /, "")}. Pass it on as it is:
+---
+${prompt}
+---`);
+        }
+        if (!args.task) throw new AppError("VALIDATION", "Pass task, or tasks to plan several at once");
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
         const subagent = args.subagent ?? false;
         // A subagent only ever gets a work prompt; its orchestrator plans the task first.
