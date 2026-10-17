@@ -367,7 +367,8 @@ to fix a pull request linked to a task.
   via: "nudge" | "t3" | "headless" }`.
 - **By hand.** The PR row's **Fix in →** starts the same kind of fix for the user ([GitHub PRs](github-prs.md#fixing-a-pr-by-hand)),
   with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
-  for the task. Those sessions aren't runs: they don't count against the attempts or the caps.
+  for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
+  (it may start an attempt of its own on the branch while one is at work).
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
   attempt that wasn't skipped. When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
   per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts

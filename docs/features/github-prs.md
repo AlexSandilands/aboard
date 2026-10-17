@@ -131,8 +131,10 @@ or draft PR in the base repository (`isCrossRepository` is false) with a `headRe
 
 No Fix in → on a Done task (Autopilot skips them too), an epic (its sessions start from its tasks) or a link with no
 repository and number. **Fix PRs on for the task** is its resolution at the task's epic, project or board
-(`useAutopilotScope`, `useAutopilotEpicScope`), read only while the PR has a problem. **Running** is a run in flight on
-the task for `fix_prs`; **gave up** is the task's Needs attention reason `fixGaveUpPrefix(n)`. The board can't tell
+(`useAutopilotScope`, `useAutopilotEpicScope`), read only while the PR has a problem. **Running** is a `fix_prs` run for
+this link (`fixRunKeyPrefix`, from the task's runs) that is queued or running, or that handed the fix to a T3 thread, a
+new one or a nudge into the task's own, which is still working: those runs end at once, so `t3RunWorking` (shared with
+Fix PRs, in `packages/contracts/src/runThreads.ts`) reads the thread. **Gave up** is the task's Needs attention reason `fixGaveUpPrefix(n)`. The board can't tell
 "Autopilot is about to fix it" from "Autopilot has done all it will" without redoing the automation's check in the
 browser, so in those states Fix in → stays the primary action.
 
@@ -153,6 +155,9 @@ each opening its launch dialog with `fixLinkId` set (`useDialogs().openT3Launch(
 - **CLI sessions** use the workspace `{mode: "pr_branch", branch}` ([agent sessions](agent-sessions.md#starting-a-session)):
   a worktree on origin's copy of the PR's branch, like Fix PRs' headless runs. The dialog has no "where" choice and needs a
   git repository. The session is labelled "Fixing the PR of #N" and linked to the task.
+- **Fix PRs doesn't know about these sessions.** Its check defers only to its own runs and to the T3 threads they started
+  (`t3RunWorking`). If a session you started pushes and the checks fail again at the new head while Fix PRs is on, it may
+  start an attempt of its own on the same branch. Turn Fix PRs off for the task, or Pause all, while you work by hand.
 - **T3 threads** start in a new worktree from `origin/<branch>` (the dialog's initial choice, as for an integration epic's
   branch); the dialog warns when T3 lists no such ref or another is chosen, and the prompt has the agent fetch and
   fast-forward the branch when its worktree lacks the PR's head commit. The thread is linked to the task.

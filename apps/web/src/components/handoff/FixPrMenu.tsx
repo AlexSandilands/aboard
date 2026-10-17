@@ -18,17 +18,20 @@ import { api } from "~/lib/api";
 import {
   useAgentClis,
   useAutopilotEpicScope,
+  useAutopilotRuns,
   useAutopilotScope,
   useBoard,
   useSettings,
-  useTaskActiveRun,
 } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { canStartT3Thread } from "./handoff.logic";
 import { prAutopilotState } from "./fixPr.logic";
 
 type PrLink = Extract<TaskLink, { kind: "pr" }>;
-type SlotTask = Pick<TaskSummary, "id" | "kind" | "status" | "archivedAt" | "projectId" | "parent" | "attention">;
+type SlotTask = Pick<
+  TaskSummary,
+  "id" | "kind" | "status" | "archivedAt" | "projectId" | "parent" | "attention" | "links"
+>;
 
 /**
  * The one action slot of a PR link's row, on the panel and on the card (`prRowSlot`): Merge, Fix in →, or what Autopilot's
@@ -39,12 +42,16 @@ export function usePrSlot(task: SlotTask, link: PrLink): PrRowSlot {
   const needsFix = canFix && task.status !== "done" && prProblems(link.snapshot).length > 0;
   const project = useAutopilotScope(task.projectId, needsFix);
   const epic = useAutopilotEpicScope(task.projectId, task.parent?.id ?? "", needsFix && !!task.parent);
-  const activeRun = useTaskActiveRun(task.id);
   const entry = (epic.data ?? project.data)?.find((e) => e.automation === AUTOPILOT_FIX_PRS);
-  const autopilot = needsFix
+  const fixOn = needsFix && (entry?.enabled ?? false);
+  // Fix PRs' runs say whether it is at work on this PR; only read while it is on and the PR has a problem.
+  const runs = useAutopilotRuns(fixOn ? { taskId: task.id } : null).data;
+  const autopilot = fixOn
     ? prAutopilotState({
-        fixOn: entry?.enabled ?? false,
-        activeRun,
+        fixOn,
+        runs,
+        task,
+        linkId: link.id,
         attention: task.attention,
         prNumber: link.ref?.number,
       })

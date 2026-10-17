@@ -23,6 +23,7 @@ import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
 import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
+import { copyFixPrompt } from "./FixPrMenu";
 import { copyHandoffPrompt } from "./HandoffActions";
 import { ComposerControl } from "./T3LaunchPickers";
 import {
@@ -117,8 +118,9 @@ function SessionLaunch({
                 size="sm"
                 variant="ghost"
                 onClick={() =>
-                  fix.data
-                    ? copyToClipboard(fix.data.prompt, "fix prompt")
+                  // A fix copies the fix prompt (read again, and its error shown), never the task's work prompt.
+                  fixLinkId
+                    ? void copyFixPrompt(fixLinkId)
                     : copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)
                 }
               >

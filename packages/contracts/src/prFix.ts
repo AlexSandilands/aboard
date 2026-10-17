@@ -28,6 +28,9 @@ export type PrAutopilotState = "fixing" | "gave_up";
 /** The start of the Needs attention message and run summary when Fix PRs gave up on PR #`number`. */
 export const fixGaveUpPrefix = (number: number): string => `Autopilot gave up on PR #${number}:`;
 
+/** The start of the dedupe key of every Fix PRs run on the PR link `linkId` (`fix:pr:<link>:<head>:<triggers>`). */
+export const fixRunKeyPrefix = (linkId: string): string => `fix:pr:${linkId}:`;
+
 /** The merge buttons: `armed` is a badge and a menu item of its own, not a slot. */
 export type PrMergeButton = Exclude<PrMergeAction, "armed">;
 

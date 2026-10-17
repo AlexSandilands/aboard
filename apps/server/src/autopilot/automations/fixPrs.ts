@@ -9,6 +9,7 @@ import {
   isReviewOfLink,
   prReviewMarker,
   fixGaveUpPrefix,
+  fixRunKeyPrefix,
   prProblems,
   prReviewOutput,
   type AutopilotField,
@@ -16,6 +17,7 @@ import {
   type PrFixInfo,
   type PrReviewRunOutput,
   type PrSnapshot,
+  t3RunWorking,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
@@ -23,7 +25,7 @@ import { AppError } from "../../errors.ts";
 import { latestThread } from "../../integrations/reviewFallbacks.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import { t3RunWorking, threadSeen } from "../threads.ts";
+import { threadSeen } from "../threads.ts";
 import {
   RunAbandonedError,
   WorktreeHeadError,
@@ -82,11 +84,11 @@ interface GaveUpData {
  * attempts' triggers are read back from it, so a failed run (which leaves no output) still counts what it was given.
  */
 export const fixDedupeKey = (linkId: string, headOid: string, triggers: readonly { key: string }[]): string =>
-  `fix:pr:${linkId}:${headOid}:${triggers.map((t) => t.key).join("+")}`;
+  `${fixRunKeyPrefix(linkId)}${headOid}:${triggers.map((t) => t.key).join("+")}`;
 
 /** The head commit and trigger keys of a fix attempt on the link, or null when the key is another link's or not one. */
 export function parseFixKey(dedupeKey: string, linkId: string): { headOid: string; triggers: string[] } | null {
-  const prefix = `fix:pr:${linkId}:`;
+  const prefix = fixRunKeyPrefix(linkId);
   if (!dedupeKey.startsWith(prefix)) return null;
   const [headOid, triggers = ""] = dedupeKey.slice(prefix.length).split(":");
   return headOid ? { headOid, triggers: triggers.split("+").filter(Boolean) } : null;
