@@ -78,6 +78,9 @@ interface AppearanceState {
   /** Art behind the sidebar brand row. Stored values are re-validated by resolveStageBanner. */
   banner: StageBannerChoice;
   setBanner: (banner: StageBannerChoice) => void;
+  /** Opening a task from outside the board (search, a link, a notification) scrolls the board to its card. */
+  scrollToTask: boolean;
+  setScrollToTask: (value: boolean) => void;
 }
 
 export const useAppearance = create<AppearanceState>()(
@@ -85,10 +88,30 @@ export const useAppearance = create<AppearanceState>()(
     (set) => ({
       banner: DEFAULT_STAGE_BANNER,
       setBanner: (banner) => set({ banner }),
+      scrollToTask: true,
+      setScrollToTask: (scrollToTask) => set({ scrollToTask }),
     }),
-    { name: storageKey("appearance"), partialize: ({ banner }) => ({ banner }) },
+    { name: storageKey("appearance"), partialize: ({ banner, scrollToTask }) => ({ banner, scrollToTask }) },
   ),
 );
+
+/**
+ * A request to bring a task's card into view on the board, made when a task is opened from outside the board. The
+ * board acts on it once it can show the card. `nonce` repeats a reveal of the same task; `at` lets a request nobody
+ * could fulfil expire rather than fire on some later board. Not persisted.
+ */
+interface RevealState {
+  request: { taskId: string; nonce: number; at: number } | null;
+  requestReveal: (taskId: string) => void;
+}
+
+export const useReveal = create<RevealState>()((set) => ({
+  request: null,
+  requestReveal: (taskId) => {
+    if (!useAppearance.getState().scrollToTask) return;
+    set((s) => ({ request: { taskId, nonce: (s.request?.nonce ?? 0) + 1, at: Date.now() } }));
+  },
+}));
 
 /** Persisted task panel preferences. */
 interface TaskPanelPrefsState {

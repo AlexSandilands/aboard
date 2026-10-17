@@ -71,6 +71,26 @@ collapsed.
 State is `collapsedColumns` (per status) plus `cellOverrides` (keyed by `cellKey(projectId, status)`).
 An override equal to its column's setting is pruned, so any override present means the project differs.
 
+### Revealing a task
+
+Opening a task from anywhere but a board card scrolls the board to its card. `useOpenTask` (`boardNavigation.ts`) sets a
+reveal request in `useReveal` (`state/ui.ts`: `{ taskId, nonce, at }`, not persisted) once the navigation has landed;
+`reveal: false` opts out, which the board's own card clicks do (`BoardContext.openTask`; `revealTask` is for a link on a
+card that leads to another task). The request is made only when the `scrollToTask` appearance setting (browser-local,
+on by default) is on.
+
+`BoardContent` acts on the request as the board changes, one step at a time (`revealStep` in `reveal.logic.ts`):
+expand the project lane or folded epic band hiding the card (each once per request), wait for the task to be the open
+one (which keeps its card in a collapsed column), then `revealCard` scrolls the board's scroll box to it. A card in no
+lane (filtered out, archived) ends the request: the panel opens, nothing scrolls, the filters stay. A request nobody
+fulfils expires after `REVEAL_EXPIRY_MS`.
+
+`revealScrollTarget` centres the card on each axis it isn't fully visible on, allowing for the sticky column header, and
+leaves the other axis. The scroll is smooth (instant under `prefers-reduced-motion`), followed by one correction once it
+settles (off-screen cards are laid out at an estimated height, and the panel may still be docking) and a fading ring on
+the card, drawn with the Web Animations API because React would drop a class on re-render. `#N` in the panel's Markdown
+links through `useTaskLinks` and the same path.
+
 ### Task panel sections
 
 The panel's sections are Labels, Sessions, Links, Local review, Autopilot, Plan, Details (description and plan context
@@ -326,6 +346,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
+| `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |
 | `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |

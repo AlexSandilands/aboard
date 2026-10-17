@@ -117,6 +117,14 @@ tasks first. Turn the lane off in Settings → Board → Appearance; priority ta
 
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
 
+## Finding a task on the board
+
+Open a task from search, the Needs attention list, a notification, a relation, an epic's tasks or a `#42` in a task's
+text, and the board slides to its card and flashes it. A folded project or epic opens first. A card the filters hide is
+not shown: the panel opens and your filters stay as they are. Clicking a card on the board never moves it. Turn the
+sliding off in Settings → Board → Appearance (**Scroll to a task when opening it**); with reduced motion on in your
+system, the board jumps instead.
+
 ## Filters and saved views
 
 The filter button in the board's top bar narrows the board by status, model tier, Autopilot flag, epic and labels

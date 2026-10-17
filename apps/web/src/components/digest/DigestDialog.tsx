@@ -1,7 +1,7 @@
 import { ChevronLeftIcon, ChevronRightIcon, NewspaperIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useOpenTask } from "~/components/board/boardNavigation";
-import { Markdown, type TaskLinks } from "~/components/markdown/Markdown";
+import { Markdown } from "~/components/markdown/Markdown";
+import { useTaskLinks } from "~/components/markdown/useTaskLinks";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -18,7 +18,6 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { useDigests, useDigestWriting, useGenerateDigest, useMarkDigestRead } from "~/state/digests";
-import { useBoard } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   digestFacts,
@@ -27,7 +26,6 @@ import {
   formatDigestPeriod,
   neighbourDigest,
   pickDigest,
-  taskIdsByNumber,
 } from "./digest.logic";
 
 /** The Autopilot digest: the newest one by default, older ones a step away. Driven by useDialogs().digestOpen. */
@@ -47,8 +45,6 @@ function DigestContent({ onClose }: { onClose: () => void }) {
   const writing = useDigestWriting();
   const generate = useGenerateDigest();
   const { mutate: markRead } = useMarkDigestRead();
-  const tasks = useBoard().data?.tasks;
-  const openTask = useOpenTask();
   // Null follows the newest, so a digest that arrives while the panel is open is the one shown.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const items = useMemo(() => digests.data?.items ?? [], [digests.data]);
@@ -62,18 +58,7 @@ function DigestContent({ onClose }: { onClose: () => void }) {
     markRead(shown.id);
   }, [shown, markRead]);
 
-  const taskLinks = useMemo<TaskLinks>(() => {
-    const ids = taskIdsByNumber(tasks ?? []);
-    return {
-      isKnown: (number) => ids.has(number),
-      onOpen: (number) => {
-        const id = ids.get(number);
-        if (!id) return;
-        onClose();
-        void openTask(id);
-      },
-    };
-  }, [tasks, openTask, onClose]);
+  const taskLinks = useTaskLinks(onClose);
 
   const busy = writing || generate.isPending;
   const older = neighbourDigest(items, shown?.id, "older");

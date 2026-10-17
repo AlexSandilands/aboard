@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 
 import { Markdown } from "~/components/markdown/Markdown";
+import { useTaskLinks } from "~/components/markdown/useTaskLinks";
 import { Badge } from "~/components/ui/badge";
 import { InlineButton } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -63,6 +64,7 @@ export function PlanStepRow({
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const taskLinks = useTaskLinks();
   const hasNotes = !!step.notes?.trim();
 
   const setStatus = (status: StepStatus) => {
@@ -180,7 +182,9 @@ export function PlanStepRow({
                 <div className="flex flex-col items-start gap-1">
                   {hasNotes ? (
                     <>
-                      <Markdown size="xs">{step.notes!}</Markdown>
+                      <Markdown size="xs" taskLinks={taskLinks}>
+                        {step.notes!}
+                      </Markdown>
                       <AttachmentThumbs text={step.notes} />
                     </>
                   ) : (
