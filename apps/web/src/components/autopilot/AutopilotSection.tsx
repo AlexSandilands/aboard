@@ -15,8 +15,21 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
   const runs = useAutopilotRuns({ taskId: task.id }).data;
   const automations = useAutopilotOverview().data?.automations ?? [];
   if (!runs?.length) return null;
+  // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
+  const shown = runs.find((run) => run.needsAttention) ?? runs[0]!;
   return (
-    <TaskSection title="Autopilot">
+    <TaskSection
+      title="Autopilot"
+      summary={
+        <Badge
+          variant={runStatusVariant(shown.status)}
+          size="sm"
+          title={automationTitle(automations, shown.automation)}
+        >
+          {runStatusLabel(shown)}
+        </Badge>
+      }
+    >
       <ul className="flex flex-col gap-1 px-1.5">
         {runs.map((run) => (
           <RunRow key={run.id} run={run} title={automationTitle(automations, run.automation)} />

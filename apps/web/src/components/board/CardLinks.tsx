@@ -1,7 +1,9 @@
 import {
   prMergeAction,
+  type AppSettings,
   type PrRowSlot,
   type PrSnapshot,
+  type T3IntegrationStatus,
   type T3ThreadStatus,
   type TaskLink,
   type TaskSummary,
@@ -72,13 +74,14 @@ export function hasCardLinks(links: ReadonlyArray<TaskLink>): boolean {
  * Code" buttons for active threads and agent sessions, whose menu opens them in a terminal.
  */
 export function CardLinks({ task }: { task: TaskSummary }) {
+  const { t3, settings } = useBoardContext();
   return (
     <div className="flex min-w-0 items-center gap-1">
       {cardLinks(task.links).map((link) =>
         link.kind === "pr" ? (
           <PrChip key={link.id} task={task} link={link} />
         ) : link.kind === "t3_thread" ? (
-          <ThreadButton key={link.id} link={link} />
+          <ThreadButton key={link.id} link={link} t3={t3} settings={settings} />
         ) : link.kind === "agent_session" ? (
           <SessionChip key={link.id} taskId={task.id} link={link} />
         ) : null,
@@ -88,14 +91,36 @@ export function CardLinks({ task }: { task: TaskSummary }) {
 }
 
 function PrChip({ task, link }: { task: TaskSummary; link: Extract<TaskLink, { kind: "pr" }> }) {
-  const snapshot = link.snapshot;
-  const mergeAction = prMergeAction(task.status, snapshot);
   const slot = usePrSlot(task, link);
+  const chip = <PrStatusChip link={link} mergeAction={prMergeAction(task.status, link.snapshot)} />;
+  const { primary } = slot;
+  if (!primary) return chip;
+  return (
+    <>
+      {chip}
+      {primary.kind === "merge" ? (
+        <MergeChip taskId={task.id} linkId={link.id} label={mergeButtonLabel(primary.action)} />
+      ) : (
+        <FixChip task={task} link={link} slot={slot} />
+      )}
+    </>
+  );
+}
+
+/** A PR's number with its state's icon colour and a checks dot, linking to it. */
+export function PrStatusChip({
+  link,
+  mergeAction,
+}: {
+  link: Extract<TaskLink, { kind: "pr" }>;
+  mergeAction?: ReturnType<typeof prMergeAction>;
+}) {
+  const snapshot = link.snapshot;
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const Icon = state?.Icon ?? Link2Icon;
   const checks = snapshot && snapshot.checks !== "none" ? CHECKS[snapshot.checks] : null;
   const number = link.ref?.number;
-  const chip = (
+  return (
     <Tooltip>
       <TooltipTrigger
         render={<a href={link.url} target="_blank" rel="noreferrer" className={chipClassName} {...linkHandlers} />}
@@ -114,18 +139,6 @@ function PrChip({ task, link }: { task: TaskSummary; link: Extract<TaskLink, { k
         </span>
       </TooltipPopup>
     </Tooltip>
-  );
-  const { primary } = slot;
-  if (!primary) return chip;
-  return (
-    <>
-      {chip}
-      {primary.kind === "merge" ? (
-        <MergeChip taskId={task.id} linkId={link.id} label={mergeButtonLabel(primary.action)} />
-      ) : (
-        <FixChip task={task} link={link} slot={slot} />
-      )}
-    </>
   );
 }
 
@@ -214,8 +227,16 @@ function MergeChip({ taskId, linkId, label }: { taskId: string; linkId: string; 
   );
 }
 
-function ThreadButton({ link }: { link: Extract<TaskLink, { kind: "t3_thread" }> }) {
-  const { t3, settings } = useBoardContext();
+/** "Open in T3 Code" for a thread. Takes the integration and settings, as the task panel is outside the board's context. */
+export function ThreadButton({
+  link,
+  t3,
+  settings,
+}: {
+  link: Extract<TaskLink, { kind: "t3_thread" }>;
+  t3: T3IntegrationStatus;
+  settings: AppSettings | undefined;
+}) {
   const target = t3LinkTargets(link.ref, t3, settings).primary;
   const status = link.snapshot ? THREAD_STATUS[link.snapshot.status] : null;
   return (
@@ -236,7 +257,7 @@ function ThreadButton({ link }: { link: Extract<TaskLink, { kind: "t3_thread" }>
   );
 }
 
-function SessionChip({ taskId, link }: { taskId: string; link: SessionLink }) {
+export function SessionChip({ taskId, link }: { taskId: string; link: SessionLink }) {
   const { open } = useSessionActions(taskId);
   const status = sessionStatusPresentation(link.snapshot);
   return (

@@ -5,6 +5,7 @@ import { Markdown } from "~/components/markdown/Markdown";
 import { copyToClipboard, InlineInput } from "~/components/task/InlineInput";
 import { PanelControl, ROW_HOVER_ACTION_CLASS } from "~/components/task/PanelControl";
 import { TaskSection } from "~/components/task/TaskSection";
+import { ReviewBadge } from "./ReviewBadge";
 import { Badge } from "~/components/ui/badge";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toastManager } from "~/components/ui/toast";
@@ -43,6 +44,7 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
   return (
     <TaskSection
       title="Local review"
+      summary={task.review && <ReviewBadge summary={task.review} />}
       actions={
         <>
           <Select

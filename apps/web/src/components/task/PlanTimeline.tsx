@@ -35,6 +35,7 @@ import {
 import type { PlanEditorMode } from "./PlanEditor";
 import { PlanPhaseGroup } from "./PlanPhaseGroup";
 import { PlanStepDragPreview } from "./PlanStepRow";
+import { PlanSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 import type { PlanActions } from "./usePlanActions";
 
@@ -54,6 +55,7 @@ export function PlanTimeline({
   return (
     <TaskSection
       title="Plan"
+      summary={hasPhases && task.progress.total > 0 && <PlanSummary task={task} />}
       actions={
         hasPhases ? (
           <>

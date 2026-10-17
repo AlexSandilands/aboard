@@ -52,6 +52,7 @@ import {
   PanelSplitGroup,
   PanelSplitSeparator,
 } from "./PanelControl";
+import { SessionsSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
 /** The task's T3 threads and agent sessions, in a section of their own so Links stays PRs, issues, Jira keys and URLs. */
@@ -69,7 +70,12 @@ export function SessionsSection({ task }: { task: TaskDetail }) {
   const { shown, hidden } = previewRows(sessionRows, showAll);
 
   return (
-    <TaskSection title="Sessions">
+    <TaskSection
+      title="Sessions"
+      summary={
+        sessionRows.length > 0 && <SessionsSummary rows={sessionRows} taskId={task.id} t3={t3} settings={settings} />
+      }
+    >
       <div className="flex flex-col gap-0.5">
         {sessionRows.length === 0 ? (
           <p className="px-2.5 py-1 text-xs text-muted-foreground">No coding sessions yet</p>

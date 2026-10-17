@@ -12,6 +12,7 @@ import { cn } from "~/lib/utils";
 import { useUpdateTask } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
 import { PanelControl } from "./PanelControl";
+import { RelationsSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<
@@ -31,7 +32,10 @@ export function RelationsSection({ task }: { task: TaskDetail }) {
   const openTask = useOpenTask();
   // Archived tasks aren't on the board, but a relation to one still stands and can be removed.
   return (
-    <TaskSection title="Relations">
+    <TaskSection
+      title="Relations"
+      summary={(task.blockedBy.length > 0 || task.blocks.length > 0) && <RelationsSummary task={task} />}
+    >
       <div className="flex flex-col gap-2 px-1.5">
         <RelationGroup
           title="Blocked by"
