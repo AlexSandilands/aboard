@@ -9,6 +9,17 @@ describe("new session dialog", () => {
     expect(initialWhere({ isRepo: false, defaultBaseRef: null })).toEqual({ mode: "current" });
   });
 
+  it("starts a task of an integration epic from its epic's branch, origin's copy first", () => {
+    const repo = { isRepo: true, defaultBaseRef: "main", branches: ["main", "epic/x", "origin/epic/x"] };
+    expect(initialWhere(repo, "epic/x")).toEqual({ mode: "new_worktree", baseRef: "origin/epic/x" });
+    expect(initialWhere({ ...repo, branches: ["main", "epic/x"] }, "epic/x")).toEqual({
+      mode: "new_worktree",
+      baseRef: "epic/x",
+    });
+    // A branch that isn't there yet falls back to the default.
+    expect(initialWhere(repo, "epic/gone")).toEqual({ mode: "new_worktree", baseRef: "main" });
+  });
+
   it("needs a branch before a worktree can be made", () => {
     expect(toSessionWorkspace({ mode: "new_worktree", baseRef: null })).toBeNull();
     expect(toSessionWorkspace({ mode: "new_worktree", baseRef: "origin/x" })).toEqual({

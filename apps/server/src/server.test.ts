@@ -28,6 +28,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     userHome: "/nonexistent",
     sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
     worktreesDir: join(homeDir, "worktrees"),
+    attachmentsDir: join(homeDir, "attachments"),
     ...overrides,
   };
 }

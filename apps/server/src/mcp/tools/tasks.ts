@@ -16,6 +16,7 @@ import {
   autopilotField,
   autopilotValue,
   blockedByField,
+  deliveryField,
   epicField,
   findProject,
   hasProjectRef,
@@ -84,7 +85,7 @@ function templateFor(
  * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
  * add_note.
  */
-export const registerTaskTools: ToolRegistrar = (server, { services, actor }) => {
+export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor }) => {
   server.registerTool(
     "add_to_backlog",
     {
@@ -214,7 +215,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "columns its tasks are in. An epic has no plan and no column of its own: its tasks carry the plans, and its " +
         "status follows them (the furthest-back open task sets it; Done once they all are). Pass tasks to put " +
         'existing tasks in it now; add new ones later with create_task or add_to_backlog (epic: "#N"). Epics don\'t ' +
-        "nest. Link the T3 thread that will coordinate it with t3Thread.",
+        "nest. Link the T3 thread that will coordinate it with t3Thread. Pass delivery only once the user has chosen " +
+        "how its tasks are delivered (pull requests to main, or an integration branch).",
       inputSchema: {
         title: z.string().min(1).describe("Short name for the feature."),
         description: z.string().optional().describe("Markdown: the goal, scope and how the tasks fit together."),
@@ -226,11 +228,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         links: linksField,
         labels: labelsField.optional(),
         t3Thread: t3ThreadField.optional(),
+        delivery: deliveryField.optional(),
         actor: actorField,
       },
     },
     (args) =>
-      run(() => {
+      run(async () => {
         requireProjectRef(args);
         const project = services.projects.resolve(projectRef(args), { autoCreate: true });
         // Check every task first, so a bad reference doesn't leave a half-filled epic behind.
@@ -263,7 +266,17 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           actor(args.actor),
         );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        return taskResult(services, epic.id, `Created epic #${epic.number} in ${project.title}${added}.`);
+        const headline = `Created epic #${epic.number} in ${project.title}${added}.`;
+        if (args.delivery) {
+          try {
+            await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));
+          } catch (error) {
+            // The epic exists either way; say why its delivery didn't change rather than fail the whole call.
+            const why = error instanceof AppError ? error.message : String(error);
+            return taskResult(services, epic.id, `${headline} Its delivery wasn't set: ${why}`, { deliveryHint: true });
+          }
+        }
+        return taskResult(services, epic.id, headline, { deliveryHint: true });
       }),
   );
 
@@ -360,7 +373,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +
-        "that must be Done before this one (it is blocked while any blocker isn't Done). " +
+        "that must be Done before this one (it is blocked while any blocker isn't Done). On an epic, delivery sets how " +
+        "its tasks are delivered; set it only once the user has chosen. " +
         "For plan steps use set_plan/update_plan/add_steps/update_step; for status use move_task.",
       inputSchema: {
         task: taskField,
@@ -394,12 +408,16 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
         removeBlockedBy: blockedByField.optional().describe("Blockers to remove; one that isn't a blocker is ignored."),
+        delivery: deliveryField.optional().describe(`Epics only. ${deliveryField.description}`),
         actor: actorField,
       },
     },
     (args) =>
-      run(() => {
+      run(async () => {
         const id = services.tasks.resolveId(args.task);
+        if (args.delivery !== undefined && services.tasks.summary(id).kind !== "epic") {
+          throw new AppError("VALIDATION", "delivery is set on an epic, not on a task: pass the epic.");
+        }
         const moveRef = { projectId: args.moveToProjectId, workspacePath: args.moveToWorkspacePath };
         const projectId = hasProjectRef(moveRef)
           ? services.projects.resolve(projectRef(moveRef), { autoCreate: false }).id
@@ -422,6 +440,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
           },
           actor(args.actor),
         );
+        // After the other fields, so a refused switch (git, or tasks already started) leaves them saved and says why.
+        if (args.delivery !== undefined) await ctx.integrations.setEpicDelivery(id, args.delivery, actor(args.actor));
         return taskResult(services, task.id, `Updated #${task.number}.`);
       }),
   );

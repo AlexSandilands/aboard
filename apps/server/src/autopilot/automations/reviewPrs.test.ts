@@ -13,7 +13,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { StaleReviewError, type PostReviewInput } from "../../integrations/github.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { WorktreeHeadError, type GithubActions, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
+import {
+  NO_GITHUB,
+  WorktreeHeadError,
+  type GithubActions,
+  type Runner,
+  type RunnerRequest,
+  type RunnerResult,
+} from "../types.ts";
 import { earlierReviews, renderReview, reviewHandoff, reviewPrs, reviewTools } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -78,6 +85,7 @@ function setup() {
     },
   };
   const github: GithubActions = {
+    ...NO_GITHUB,
     postReview: async (ref, input) => {
       posts.push({ ...ref, input });
       if (postError) throw new Error(postError);
@@ -567,6 +575,7 @@ describe("review PRs: the agent", () => {
       services: s,
       runner: { start: () => Promise.reject(new Error("must not run")) },
       github: {
+        ...NO_GITHUB,
         postReview: () => Promise.reject(new Error("must not post")),
         prHead: () => Promise.reject(new Error("must not read")),
       },

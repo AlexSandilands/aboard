@@ -4,6 +4,7 @@ import type {
   BoardSnapshot,
   CreateProjectInput,
   CreateTaskInput,
+  EpicDelivery,
   CreateTemplateInput,
   IssueSnapshot,
   LinkInput,
@@ -40,6 +41,7 @@ import type {
 } from "@repo/contracts";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { AttachmentsService } from "./attachments.ts";
 import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { CustomAutomationsService } from "./customAutomations.ts";
@@ -66,6 +68,7 @@ export interface Services {
   reviews: ReviewsService;
   labels: LabelsService;
   imports: ImportsService;
+  attachments: AttachmentsService;
   backup: BackupService;
   templates: TemplatesService;
   autopilot: AutopilotService;
@@ -129,6 +132,12 @@ export interface TasksService {
   /** Creates an epic and puts the given tasks in it, all or nothing. */
   createEpic(input: Omit<CreateTaskInput, "kind" | "epicId" | "plan">, taskIds: string[], actor: string): TaskDetail;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
+  /**
+   * Sets an epic's delivery. `integration` needs the branch, which the caller has already created on origin (see
+   * Integrations.setEpicDelivery). Going back to `main` is refused once one of the epic's tasks has started, since its
+   * branch and pull request already target the integration branch.
+   */
+  setDelivery(id: string, delivery: EpicDelivery, branch: string | null, actor: string): TaskDetail;
   /**
    * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.
    * Moving a closed task out of Done clears its resolution. `because` adds fields to the status_changed event

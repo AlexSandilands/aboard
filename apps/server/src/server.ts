@@ -43,6 +43,7 @@ export async function startServer(config: Config): Promise<RunningServer> {
   runtime.port = typeof address === "object" && address ? address.port : runtime.port;
   // Runs a previous process left going can't be finished; flag them whether or not Autopilot runs now.
   ctx.services.autopilot.recover();
+  ctx.services.attachments.sweep();
   if (runtime.pollers) ctx.integrations.start();
   ctx.integrations.resumeImports();
   const url = `http://${runtime.host}:${runtime.port}`;

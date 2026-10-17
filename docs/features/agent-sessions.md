@@ -130,7 +130,8 @@ model for the task's tier, and whether sessions get a named window) and offers:
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line;
 - a model, filled in from **Session models** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
-- **New worktree** from a branch (the default branch first), or **This checkout**.
+- **New worktree** from a branch, or **This checkout**. The branch starts on the task's integration branch when its
+  epic delivers through one (origin's copy first, as the T3 dialog does), else the default branch.
 
 `POST /api/tasks/:id/sessions` then:
 

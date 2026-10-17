@@ -10,9 +10,20 @@ import {
 /** Where the dialog will start the session: a new worktree from a branch, or the project's checkout. */
 export type SessionWhere = { mode: "new_worktree"; baseRef: string | null } | { mode: "current" };
 
-/** A new worktree from the default branch when the folder is a repository, else the checkout itself. */
-export function initialWhere(options: Pick<SessionLaunchOptions, "isRepo" | "defaultBaseRef">): SessionWhere {
-  return options.isRepo ? { mode: "new_worktree", baseRef: options.defaultBaseRef } : { mode: "current" };
+/**
+ * A new worktree when the folder is a repository, else the checkout itself. The worktree starts from the task's
+ * integration branch when its epic has one (origin's copy first, as the T3 dialog does), else the default branch.
+ */
+export function initialWhere(
+  options: Pick<SessionLaunchOptions, "isRepo" | "defaultBaseRef"> & Partial<Pick<SessionLaunchOptions, "branches">>,
+  integrationBranch: string | null = null,
+): SessionWhere {
+  if (!options.isRepo) return { mode: "current" };
+  const branches = options.branches ?? [];
+  const epicRef = integrationBranch
+    ? (branches.find((b) => b === `origin/${integrationBranch}`) ?? branches.find((b) => b === integrationBranch))
+    : undefined;
+  return { mode: "new_worktree", baseRef: epicRef ?? options.defaultBaseRef };
 }
 
 /** The workspace to send, or null while a worktree has no branch to start from. */

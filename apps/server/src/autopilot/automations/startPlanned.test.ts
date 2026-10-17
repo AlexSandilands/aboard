@@ -2,7 +2,7 @@ import type { AutopilotRun } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { NO_GITHUB, type Runner, type RunnerRequest } from "../types.ts";
+import { NO_GITHUB, RunAbandonedError, type Runner, type RunnerRequest } from "../types.ts";
 import { AUTOPILOT_START_PLANNED, START_POLL_MS, startPlanned } from "./startPlanned.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -18,6 +18,8 @@ interface Behaviour {
   onStart?: (request: RunnerRequest, taskId: string) => void;
   /** The runner rejects with this once the agent has done its thing. */
   fail?: string;
+  /** The runner gave up waiting for T3 Code because its `stillWanted` said no. */
+  abandon?: boolean;
   /** Which runner it is, and so what it records: a thread, or a worktree and a session. */
   headless?: boolean;
 }
@@ -32,6 +34,13 @@ function setup(opts: { now?: () => Date; behaviour?: Behaviour } = {}) {
     start: (request, update = () => {}) => {
       requests.push(request);
       const taskId = request.run.taskId!;
+      if (behaviour.abandon) {
+        // A task started by hand while the runner waited for T3 Code.
+        s.tasks.move(taskId, { status: "in_progress" }, "user");
+        return request.stillWanted?.() === false
+          ? Promise.reject(new RunAbandonedError("it changed while waiting for T3 Code"))
+          : Promise.reject(new Error("stillWanted should say no once the task moved"));
+      }
       const patch = behaviour.headless
         ? ({ runner: "headless", worktreePath: "/wt/1", sessionId: "s-1" } as const)
         : behaviour.fail
@@ -165,6 +174,25 @@ describe("start planned tasks: eligibility", () => {
     thread(c.id, "idle");
     await pass();
     expect(requests.map((r) => r.run.taskId)).toEqual([c.id, a.id, b.id]);
+  });
+});
+
+describe("start planned tasks: waiting for T3 Code", () => {
+  it("tells the runner to stop waiting once the task isn't startable, and then skips the run instead of flagging it", async () => {
+    const { task, pass, runs, requests, behaviour, turnOn } = setup();
+    behaviour.abandon = true;
+    const t = task("Started by hand");
+    turnOn();
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs()).toMatchObject([
+      {
+        taskId: t.id,
+        status: "skipped",
+        needsAttention: false,
+        summary: `Skipped #${t.number}: it changed while waiting for T3 Code`,
+      },
+    ]);
   });
 });
 
@@ -549,6 +577,17 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
     await pass();
     expect(requests[0]?.workspace).toEqual({ baseRef: "feat/autopilot" });
     expect(requests[0]?.prompt).toContain('read the skill "implement" at /home/u/.claude/skills/implement/SKILL.md');
+  });
+
+  it("starts a task of an integration epic from the epic's branch, whatever Start from says", async () => {
+    const { s, task, pass, requests, turnOn } = setup();
+    const t = task("Flagged");
+    const epic = s.tasks.createEpic({ projectId: t.projectId, title: "Checkout" }, [t.id], "user");
+    s.tasks.setDelivery(epic.id, "integration", "epic/9-checkout", "user");
+    turnOn({ baseRef: "feat/autopilot" });
+    await pass();
+    expect(requests[0]?.workspace).toEqual({ prBase: "epic/9-checkout" });
+    expect(requests[0]?.prompt).toContain("gh pr create --base epic/9-checkout");
   });
 });
 

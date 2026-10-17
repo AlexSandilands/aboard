@@ -6,6 +6,7 @@ import {
   parseIssueSource,
   renderTemplateText,
   resolutionNeedsTask,
+  startedEpicTasks,
   templateHasPlan,
   type PlanInput,
   type TaskDetail,
@@ -19,6 +20,7 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
+import type { AttachmentsService } from "./attachments.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
@@ -87,6 +89,7 @@ export function createTasksService(
     imports: () => ImportsModule;
     templates: TemplatesService;
     relations: () => RelationsModule;
+    attachments: AttachmentsService;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -341,6 +344,8 @@ export function createTasksService(
           autopilot: input.autopilot ?? null,
           suggestedModel: null,
           templateId: template?.id ?? null,
+          delivery: null,
+          integrationBranch: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
@@ -363,6 +368,8 @@ export function createTasksService(
         }
         for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
+        // Images pasted into the new-task box were uploaded before the task existed.
+        deps.attachments.claim(task.id, description);
         return task.id;
       });
       return service.detail(id);
@@ -498,6 +505,37 @@ export function createTasksService(
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);
+      });
+      return service.detail(id);
+    },
+
+    setDelivery(id, delivery, branch, actor) {
+      core.write((fx) => {
+        const current = record(id);
+        if (current.kind !== "epic")
+          throw new AppError("VALIDATION", `#${current.number} isn't an epic; only epics have a delivery`);
+        if (delivery === "integration" && !branch) {
+          throw new AppError("VALIDATION", "Integration delivery needs its branch");
+        }
+        const nextBranch = delivery === "integration" ? branch : null;
+        if (current.delivery === delivery && current.integrationBranch === nextBranch) return;
+        if (current.delivery === "integration" && delivery === "main") {
+          const children = assembleSummaries(repos, repos.tasks.childrenOf([id])).values();
+          const started = startedEpicTasks([...children].map((c) => c.summary));
+          if (started.length > 0) {
+            throw new AppError(
+              "VALIDATION",
+              `Epic #${current.number} can't go back to pull requests to main: ` +
+                `${started.map((c) => `#${c.number}`).join(", ")} already started from ${current.integrationBranch}, ` +
+                "and their branches and pull requests target it. Finish the epic through its integration branch.",
+            );
+          }
+        }
+        repos.tasks.update({ ...current, delivery, integrationBranch: nextBranch, updatedAt: nowIso() });
+        fx.log(id, actor, "delivery_changed", { delivery, branch: nextBranch });
+        fx.task(id);
+        // Its tasks' summaries carry the branch they start from.
+        for (const child of repos.tasks.childrenOf([id])) fx.task(child.id);
       });
       return service.detail(id);
     },
@@ -651,6 +689,8 @@ export function createTasksService(
           syncEpic(task.parentId, actor, fx);
         }
       });
+      // After the commit: a delete that rolled back keeps its images.
+      deps.attachments.removeFilesOf(id);
     },
   };
 

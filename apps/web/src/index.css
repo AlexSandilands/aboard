@@ -302,6 +302,29 @@
   }
 }
 
+/* A setting picked in settings search: a ring that fades out after the jump lands on it. */
+.settings-flash {
+  animation: settings-flash 1.6s ease-out;
+}
+
+@keyframes settings-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 2px var(--color-ring);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+/* No fade: the ring just stays until the class is removed. */
+@media (prefers-reduced-motion: reduce) {
+  .settings-flash {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--color-ring);
+  }
+}
+
 @keyframes autopilot-sweep {
   to {
     --autopilot-angle: 360deg;

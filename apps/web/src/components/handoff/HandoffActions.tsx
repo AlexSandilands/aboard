@@ -32,7 +32,8 @@ const cardHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 
 /** `modelTiers` names the task's suggested model in a work prompt; without it the line shows the bare tier. */
 export function copyHandoffPrompt(
-  task: Pick<TaskSummary, "id" | "number" | "title" | "suggestedModel">,
+  task: Pick<TaskSummary, "id" | "number" | "title" | "suggestedModel"> &
+    Partial<Pick<TaskSummary, "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>,
   mode: HandoffMode,
   modelTiers: ModelTiers | undefined,
 ) {

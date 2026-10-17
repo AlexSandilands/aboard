@@ -237,3 +237,44 @@ describe("suggestEpicsPrompt", () => {
     expect(prompt).not.toContain("set_plan(");
   });
 });
+
+describe("integration branch delivery in the prompts", () => {
+  const inEpic = {
+    ...task,
+    kind: "task" as const,
+    parent: { id: "e", number: 4, title: "Checkout" },
+    integrationBranch: "epic/4-checkout",
+  };
+
+  it("tells work sessions and subagents to branch from the epic's branch and open their PR against it", () => {
+    for (const prompt of [
+      taskHandoffPrompt({ task: inEpic, boardUrl: "http://x", mode: "work" }),
+      taskHandoffPrompt({ task: inEpic, boardUrl: "http://x", mode: "work", subagent: true }),
+    ]) {
+      expect(prompt).toContain("epic #4, which is delivered through the integration branch `epic/4-checkout`");
+      expect(prompt).toContain("gh pr create --base epic/4-checkout");
+      expect(prompt).toContain("don't merge it yourself");
+    }
+    expect(taskHandoffPrompt({ task: inEpic, boardUrl: "http://x", mode: "plan" })).not.toContain("epic/4-checkout");
+    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" })).not.toContain("integration branch");
+  });
+
+  it("tells the orchestrator about the branch, or to ask about delivery when nobody chose one", () => {
+    const epic = { ...task, kind: "epic" as const };
+    const branch = taskHandoffPrompt({
+      task: { ...epic, delivery: "integration", integrationBranch: "epic/9-hand" },
+      boardUrl: "http://x",
+      mode: "orchestrate",
+    });
+    expect(branch).toContain("This epic is delivered through the integration branch `epic/9-hand`");
+    expect(branch).not.toContain("delivery isn't chosen");
+    const unchosen = taskHandoffPrompt({
+      task: { ...epic, delivery: null },
+      boardUrl: "http://x",
+      mode: "orchestrate",
+    });
+    expect(unchosen).toContain("If epic_overview says the epic's delivery isn't chosen, ask me");
+    const main = taskHandoffPrompt({ task: { ...epic, delivery: "main" }, boardUrl: "http://x", mode: "orchestrate" });
+    expect(main).not.toContain("integration branch");
+  });
+});

@@ -10,6 +10,7 @@ import { Separator } from "~/components/ui/separator";
 import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
+import { EpicDeliveryButton } from "./EpicDelivery";
 import { importPendingLabel } from "./import.logic";
 import { resolutionLabel } from "./resolution.logic";
 import { SectionsMenu } from "./SectionsMenu";
@@ -123,6 +124,7 @@ export function TaskPanelHeader({
             Archive
           </Button>
         ) : null}
+        {task.kind === "epic" ? <EpicDeliveryButton epic={task} /> : null}
         {task.kind === "epic" ? <AutopilotEpicButton epic={task} /> : null}
         <SectionsMenu />
       </div>

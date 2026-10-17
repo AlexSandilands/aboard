@@ -5,6 +5,7 @@ import {
   LinkInput,
   MoveTaskInput,
   PlanInput,
+  SetDeliveryInput,
   StartSessionInput,
   StartT3ThreadInput,
   TaskStatusInput,
@@ -69,6 +70,14 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
     handle((c) => {
       services.tasks.delete(taskId(c), actorOf(c));
       return noContent(c);
+    }),
+  );
+  app.put(
+    "/api/tasks/:id/delivery",
+    handle(async (c) => {
+      const id = taskId(c);
+      const input = await parseBody(c, SetDeliveryInput);
+      return c.json(await integrations.setEpicDelivery(id, input.delivery, actorOf(c)));
     }),
   );
   app.get(

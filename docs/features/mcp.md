@@ -45,7 +45,8 @@ changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-f
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
-epic's orchestrator can start its tasks. See [epics.md](epics.md).
+epic's orchestrator can start its tasks. `create_epic` and `update_task` (epics only) take `delivery: "main" |
+"integration"`; switching to integration makes the epic's branch on origin first. See [epics.md](epics.md#delivery).
 
 `add_to_backlog` and `create_task` take `template` (a name or id; `list_templates` shows them) and then need no
 title, or, for `create_task`, no plan, when the template supplies one. Agents can't create or edit templates. See
@@ -81,7 +82,8 @@ text when both are present.
   (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link`, `add_note` and
   `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
-  review round is waiting.
+  review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
+  can open a screenshot as a file ([attachments.md](attachments.md)).
 - `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
   the board open the next round (under the limit), and the result says so and points to `start_review` for its
   brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.
@@ -111,6 +113,10 @@ text when both are present.
   no suggested model, asking the agent to set one with `update_task`. Unlike labels it needs no approval, and
   `get_task` leaves it out so implementing agents aren't nagged. The task render shows
   `Suggested model: deep (reason)` once set.
+- **Epic delivery not chosen** appears in `create_epic`, in `set_plan` and `create_task` results for a task in
+  the epic, and in `epic_overview`, while `deliveryHintApplies` holds for the epic (no delivery chosen, and its
+  open tasks block each other or three or more are Planned). It explains both deliveries in a sentence each and tells
+  the agent to ask the user, then `update_task(epic, delivery)`; never to choose unasked (`deliveryHint`).
 - **Autopilot flag not set** appears in `set_plan` and `create_task` results for a backlog or planned task
   with a plan, when Start planned tasks resolves On for its project and the flag is still Default. It tells the
   agent to ask the user, then `update_task(autopilot)`, and never to set it unasked. Epics, started and closed

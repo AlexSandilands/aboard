@@ -10,7 +10,7 @@ export type HandoffMode = "work" | "plan" | "orchestrate";
 
 export interface HandoffPromptInput {
   task: Pick<TaskSummary, "id" | "number" | "title"> &
-    Partial<Pick<TaskSummary, "suggestedModel" | "kind" | "blocked">>;
+    Partial<Pick<TaskSummary, "suggestedModel" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
@@ -93,6 +93,22 @@ export function suggestedModelLine(
 }
 
 /**
+ * For a task in an epic delivered through an integration branch: where its work starts and where its pull request
+ * goes. Null for every other task.
+ */
+export function integrationBranchLine(task: HandoffPromptInput["task"]): string | null {
+  const branch = task.kind === "epic" ? null : task.integrationBranch;
+  if (!branch) return null;
+  const epic = task.parent ? `epic #${task.parent.number}` : "its epic";
+  return (
+    `This task is in ${epic}, which is delivered through the integration branch \`${branch}\`: branch from ` +
+    `\`origin/${branch}\` (not the default branch) and open your pull request against \`${branch}\` ` +
+    `(\`gh pr create --base ${branch}\`). Autopilot merges it there once its review is finished and its checks pass; ` +
+    "don't merge it yourself."
+  );
+}
+
+/**
  * Prompt that hands a task to an agent session (pasted into any harness, or sent as a T3 thread's first
  * message). It points at the task instead of copying it, so the agent reads the live plan and notes.
  */
@@ -135,6 +151,8 @@ export function taskHandoffPrompt({
               ]
             : []),
         ];
+  const branch = mode === "work" ? integrationBranchLine(task) : null;
+  if (branch) lines.push("", branch);
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
   const model = mode === "work" && !linkedThread && !linkedSession ? suggestedModelLine(task, modelTiers) : null;
   if (model) lines.push("", model);
@@ -171,12 +189,27 @@ function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): str
     "",
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server first: it has the description, plan, current step and latest handover notes.`,
     `Then follow the ${BRAND.id} skill: pick up from the current step, keep steps current with update_step (mark each in_progress when you start it and done the moment it finishes, never all at the end of a phase) and work in the git worktree or branch you were given.`,
+    ...[integrationBranchLine(task)].filter((line): line is string => line !== null),
     "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back. Don't set the task's Autopilot flag: that is the user's call.",
     "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
     "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",
     "",
     "Link the task to its Jira issue with link if it has one. Don't link a T3 thread: you run inside the orchestrator's session.",
   ].join("\n");
+}
+
+/** What the orchestrator is told about the epic's delivery: the branch its tasks use, or the question to ask. */
+function orchestrateDeliveryLines(task: HandoffPromptInput["task"]): string[] {
+  const branch = task.integrationBranch;
+  if (branch) {
+    return [
+      `   This epic is delivered through the integration branch \`${branch}\`: each task starts from it and opens its pull request against it, and Autopilot merges the pull request there once its review is finished and its checks pass. start_task_thread starts from it by itself; give subagents worktrees from \`origin/${branch}\`. A task blocked by another starts once that one is Done, which is when its pull request merged into the branch. I merge the epic's own pull request into the default branch.`,
+    ];
+  }
+  if (task.delivery) return [];
+  return [
+    "   If epic_overview says the epic's delivery isn't chosen, ask me before starting anything whether to deliver it through pull requests to main or an integration branch (it explains both), and set it with update_task only once I've answered.",
+  ];
 }
 
 /**
@@ -193,6 +226,7 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     `1. Call ${overview} on the ${BRAND.id} MCP server: it lists the epic's tasks with their status, plan progress, current step and sessions. get_task("${task.id}") adds the epic's description.`,
     "2. Tasks without a plan (in Backlog): read each with get_task and explore the code, then draft a plan for each. Show me the drafts together, and once I approve save each with set_plan (with suggestedModel) and move_task it to planned. Don't start a task before its plan is approved.",
     '3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them, and tasks that are blocked (epic_overview shows "blocked by #N"): start those once what blocks them is Done. Tell me the order before starting anything.',
+    ...orchestrateDeliveryLines(task),
     "4. Start each task by the first route that works here:",
     "   - T3 Code threads, if epic_overview says T3 Code is available: start_task_thread(task) for each. Each gets its own worktree (pass baseRef when a task builds on another's branch), runs its own review loop, and its live status shows in epic_overview.",
     "   - Subagents, if you can start them (Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent): one per task, with get_handoff_prompt(task, subagent: true) as its prompt. Start it on the model of the task's suggested tier if you can choose one. Give each its own git worktree and branch when they run in parallel (your harness's worktree isolation, or git worktree add), otherwise run them one at a time.",

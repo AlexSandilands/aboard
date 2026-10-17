@@ -23,6 +23,8 @@ export interface WorktreeRequest {
   readOnly?: boolean | undefined;
   /** The new branch's prefix: Autopilot's by default; sessions the user starts from the board use their own. */
   branchPrefix?: string | undefined;
+  /** Start from origin's copy of `baseRef` when there is one: a branch others merge into, such as an epic's. */
+  baseFromOrigin?: boolean | undefined;
 }
 
 export interface Worktree {
@@ -113,7 +115,10 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
     }
     pushTo = req.branch;
   } else if (req.baseRef) {
-    start = req.baseRef;
+    start =
+      req.baseFromOrigin && hasOrigin && (await refExists(runGit, checkout, `refs/remotes/origin/${req.baseRef}`))
+        ? `origin/${req.baseRef}`
+        : req.baseRef;
   } else if (defaultBranch) {
     start =
       hasOrigin && (await refExists(runGit, checkout, `refs/remotes/origin/${defaultBranch}`))

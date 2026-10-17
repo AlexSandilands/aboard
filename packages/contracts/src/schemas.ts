@@ -43,6 +43,14 @@ export const resolutionNeedsTask = (resolution: TaskResolution): boolean => reso
 export const TaskKind = z.enum(["task", "epic"]);
 export type TaskKind = z.infer<typeof TaskKind>;
 
+/**
+ * How an epic's tasks are delivered. `main`: each task opens a pull request to the default branch, which the user
+ * merges. `integration`: the epic has a branch of its own; its tasks start from it and open their pull requests
+ * against it, Autopilot merges those there, and the user merges the epic's pull request into the default branch.
+ */
+export const EpicDelivery = z.enum(["main", "integration"]);
+export type EpicDelivery = z.infer<typeof EpicDelivery>;
+
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
@@ -202,6 +210,8 @@ export const PrSnapshot = z.object({
   reviewDecision: z.enum(["approved", "changes_requested", "review_required"]).nullable(),
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   headRef: z.string().nullable(),
+  /** The branch the PR merges into. Optional so snapshots stored before it was read still parse. */
+  baseRef: z.string().nullable().optional(),
   updatedAt: IsoDate.nullable(),
   // Optional so snapshots stored by the gh poller, before merging existed, still parse.
   /** The method auto-merge is set to merge with, or null when auto-merge is off. */
@@ -440,6 +450,13 @@ export const TaskSummary = z.object({
   autoReview: z.boolean().nullable(),
   /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
   autopilot: z.boolean().nullable(),
+  /** An epic's delivery; null for a task, and for an epic nobody chose one for yet (which delivers to main). */
+  delivery: EpicDelivery.nullable(),
+  /**
+   * The integration branch: an epic's own while it uses integration delivery, and for a task in such an epic the same
+   * branch, which the task starts from and opens its pull request against. Null otherwise.
+   */
+  integrationBranch: z.string().nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */
@@ -636,6 +653,9 @@ export const UpdateTaskInput = z.object({
   removeBlockedBy: z.array(z.string().trim().min(1)).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
+
+export const SetDeliveryInput = z.object({ delivery: EpicDelivery });
+export type SetDeliveryInput = z.infer<typeof SetDeliveryInput>;
 
 export const MoveTaskInput = z.object({
   status: TaskStatusInput.optional(),

@@ -12,7 +12,15 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { WorktreeHeadError, type GithubActions, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
+import {
+  NO_GITHUB,
+  RunAbandonedError,
+  WorktreeHeadError,
+  type GithubActions,
+  type Runner,
+  type RunnerRequest,
+  type RunnerResult,
+} from "../types.ts";
 import { fixDedupeKey, fixPrompt, fixPrs, parseFixKey } from "./fixPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
@@ -78,6 +86,7 @@ function setup() {
     },
   };
   const github: GithubActions = {
+    ...NO_GITHUB,
     postReview: () => Promise.reject(new Error("not in these tests")),
     prHead: async () => live,
   };
@@ -438,6 +447,21 @@ describe("fix PRs: nudge or new session", () => {
     expect(requests[0]!.workspace).toEqual({ branch: "feat/thing" });
   });
 
+  it("tells the runner to stop waiting once the PR moved on, and skips the run instead of flagging it", async () => {
+    const { requests, setPr, pass, turnOn, failRunner, runs } = setup();
+    turnOn();
+    failRunner(new RunAbandonedError("it changed while waiting for T3 Code"));
+    setPr({ checks: "failing" });
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false });
+    const { stillWanted } = requests[0]!;
+    expect(stillWanted?.()).toBe(true);
+    setPr({ checks: "failing", headOid: SHA_B });
+    expect(stillWanted?.()).toBe(false);
+    setPr({ checks: "failing", headOid: SHA_A, state: "merged" });
+    expect(stillWanted?.()).toBe(false);
+  });
+
   it("skips the attempt when the branch moved on before the agent started", async () => {
     const { requests, setPr, pass, turnOn, failRunner, runs, setLive } = setup();
     turnOn();
@@ -562,5 +586,43 @@ describe("fixPrompt", () => {
       skill: { source: "global", name: "fixer", path: "/nowhere/fixer/SKILL.md" },
     });
     expect(prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
+  });
+});
+
+describe("fix PRs: an integration epic's own PR", () => {
+  it("fixes only its conflicts with the default branch, in a session of its own on the epic's branch", async () => {
+    const { s, project, requests, pass, turnOn } = setup();
+    turnOn();
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [], "user");
+    const pr = () => s.tasks.summary(epic.id).links.find((l) => l.kind === "pr")!;
+    s.links.add(epic.id, { value: "https://github.com/acme/app/pull/90" }, "autopilot");
+    s.links.add(epic.id, { value: "t3code://threads/env/orchestrator" }, "agent");
+    s.links.setSnapshot(s.tasks.summary(epic.id).links.find((l) => l.kind === "t3_thread")!.id, {
+      title: "Orchestrating",
+      status: "idle",
+      settled: false,
+    });
+    const epicPr = (over: Partial<PrSnapshot> = {}) =>
+      s.links.setSnapshot(
+        pr().id,
+        snapshot({ state: "draft", headRef: "epic/1-checkout", baseRef: "main", headOid: SHA_C, ...over }),
+      );
+    // Delivered to main: its PRs are none of Fix PRs' business.
+    epicPr({ mergeable: "conflicting" });
+    await pass();
+    expect(requests).toHaveLength(0);
+
+    s.tasks.setDelivery(epic.id, "integration", "epic/1-checkout", "user");
+    epicPr({ checks: "failing", mergeable: "mergeable" });
+    await pass();
+    expect(requests).toHaveLength(0); // failing checks aren't fixed on the epic's PR
+    epicPr({ checks: "failing", mergeable: "conflicting" });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ workspace: { branch: "epic/1-checkout" }, expectHead: SHA_C });
+    expect(requests[0]!.kind).toBeUndefined();
+    expect(requests[0]!.prompt).toContain("**Merge conflicts**");
+    expect(requests[0]!.prompt).not.toContain("**Failing checks.**");
+    expect(requests[0]!.prompt).toContain("never merge the pull request");
   });
 });

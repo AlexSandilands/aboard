@@ -11,6 +11,14 @@ A backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leav
 with a few concrete steps. The task panel shows exactly which step a task is on, and the card shows its
 progress.
 
+## Pasting images
+
+Paste (or drag) a screenshot into a task's description, plan context or a step's notes, or into the description box
+when you create a task. It shows in the text as a small pill with thumbnails under it; click either to see the image
+large. Big images are shrunk in your browser first, and anything still over 5 MB is refused. Agents that read the task
+(`get_task`) get the image's file path, so they can open a screenshot of the bug. The images are part of
+the board's backups, and are deleted with the task.
+
 ## Closing, archiving and deleting
 
 - **Closing without doing it:** a task that another task already delivered, a duplicate, or one you no
@@ -87,6 +95,10 @@ flag tasks but never change Autopilot's own settings.
 Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent
 (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. With [T3 Code](t3-code.md) paired,
 **New T3 Code thread…** starts a thread for the task directly.
+
+A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
+[Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
+says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
 
 When Claude Code or Copilot CLI is installed (on your PATH, or at the path set in **Settings → Integrations**),
 **New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt

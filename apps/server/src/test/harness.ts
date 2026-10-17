@@ -1,3 +1,4 @@
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../app.ts";
@@ -20,6 +21,7 @@ const NO_PROCESSES: IntegrationOverrides = {
 export function createTestHarness(
   overrides: {
     webPort?: number;
+    token?: string;
     sessionDirs?: SessionDirs;
     worktreesDir?: string;
     integrations?: IntegrationOverrides;
@@ -38,6 +40,7 @@ export function createTestHarness(
       sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
       // An in-memory database has no folder to put worktrees next to.
       worktreesDir: join(tmpdir(), `${BRAND.id}-test-worktrees`),
+      attachmentsDir: mkdtempSync(join(tmpdir(), `${BRAND.id}-test-attachments-`)),
       ...config,
     },
     { ...NO_PROCESSES, ...integrations },

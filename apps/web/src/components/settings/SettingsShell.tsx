@@ -27,6 +27,8 @@ import {
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import { useSettingsNav } from "~/state/ui";
+import { SettingsSearch } from "./SettingsSearch";
+import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
   activeSectionId,
   isSettingsGroup,
@@ -79,7 +81,8 @@ export function useSettingsBack(): () => unknown {
 
 /**
  * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
- * of it. The section in view is highlighted. On narrow windows this is the off-canvas sheet, which closes on a pick.
+ * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow
+ * windows this is the off-canvas sheet, which closes on a pick.
  */
 export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
@@ -100,47 +103,60 @@ export function SettingsSidebar() {
     });
   };
 
+  const openResult = (entry: SettingsIndexEntry) => {
+    if (isMobile) setOpenMobile(false);
+    useSettingsNav.getState().setActiveSection(entry.sectionId);
+    openSettings(entry.id, {
+      project: entry.group === "project" ? project : undefined,
+      replace: entry.group === current && !inEditor,
+      // A sub-section is a whole stretch of the page: scrolling to it says enough.
+      highlight: entry.kind !== "section",
+    });
+  };
+
   return (
     <>
       <SidebarBrandRow />
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {SETTINGS_GROUPS.map((group) => {
-              const Icon = GROUP_ICONS[group.id];
-              const here = group.id === current;
-              return (
-                <SidebarMenuItem key={group.id}>
-                  <SidebarMenuButton
-                    isActive={here && (inEditor || active === null)}
-                    aria-current={here ? "page" : undefined}
-                    onClick={() => go(group.id, group.id)}
-                  >
-                    <Icon />
-                    <span className="truncate">{group.label}</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub className="mt-0.5 mb-1.5">
-                    {group.sections.map((section) => (
-                      <SidebarMenuSubItem key={section.id}>
-                        <SidebarMenuSubButton
-                          // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
-                          render={<button type="button" />}
-                          size="sm"
-                          className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
-                          isActive={here && !inEditor && active === section.id}
-                          onClick={() => go(section.id, group.id)}
-                        >
-                          <span>{section.label}</span>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
+      <SettingsSearch onOpen={openResult}>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              {SETTINGS_GROUPS.map((group) => {
+                const Icon = GROUP_ICONS[group.id];
+                const here = group.id === current;
+                return (
+                  <SidebarMenuItem key={group.id}>
+                    <SidebarMenuButton
+                      isActive={here && (inEditor || active === null)}
+                      aria-current={here ? "page" : undefined}
+                      onClick={() => go(group.id, group.id)}
+                    >
+                      <Icon />
+                      <span className="truncate">{group.label}</span>
+                    </SidebarMenuButton>
+                    <SidebarMenuSub className="mt-0.5 mb-1.5">
+                      {group.sections.map((section) => (
+                        <SidebarMenuSubItem key={section.id}>
+                          <SidebarMenuSubButton
+                            // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
+                            render={<button type="button" />}
+                            size="sm"
+                            className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
+                            isActive={here && !inEditor && active === section.id}
+                            onClick={() => go(section.id, group.id)}
+                          >
+                            <span>{section.label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </SettingsSearch>
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -251,6 +267,59 @@ function pinInView(area: HTMLElement, element: HTMLElement, onSettled: () => voi
 }
 const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
+/** Frames (about 60 a second) to wait for a target to render, and for one in a page that is already loaded. */
+const MAX_TRIES = 120;
+const JUMP_TRIES = 20;
+
+/** How long a picked setting stays marked; the animation in `index.css` fades it over this time. */
+const FLASH_MS = 1600;
+
+const flashTimers = new WeakMap<HTMLElement, number>();
+
+/** Marks `element` for a moment so the eye finds it after a jump (`.settings-flash`, see `index.css`). */
+function flashElement(element: HTMLElement) {
+  window.clearTimeout(flashTimers.get(element));
+  element.classList.remove("settings-flash");
+  // Reading a layout property restarts the animation when the same element is picked again.
+  void element.offsetWidth;
+  element.classList.add("settings-flash");
+  flashTimers.set(
+    element,
+    window.setTimeout(() => element.classList.remove("settings-flash"), FLASH_MS),
+  );
+}
+
+/** Runs `fn` once a smooth scroll in `area` has come to rest, or after a moment where `scrollend` isn't fired. */
+function afterScroll(area: HTMLElement, fn: () => void): () => void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    area.removeEventListener("scrollend", run);
+    fn();
+  };
+  const timer = setTimeout(run, 900);
+  area.addEventListener("scrollend", run);
+  return () => {
+    done = true;
+    clearTimeout(timer);
+    area.removeEventListener("scrollend", run);
+  };
+}
+
+/**
+ * The element for a target id, or when it isn't rendered (a row that only shows in some states: the issue import's
+ * model with import off) the nearest one that is, by dropping trailing `.segment`s: the card, then the sub-section.
+ */
+function nearestRendered(id: string): HTMLElement | null {
+  for (let end = id.length; end > 0; end = id.lastIndexOf(".", end - 1)) {
+    const element = document.getElementById(id.slice(0, end));
+    if (element) return element;
+  }
+  return null;
+}
+
 // The scroll request last brought into view, so a page mounting later doesn't replay it. A request is only handled
 // once a page finds its target: the page being left sees it first, and the page being opened must still act on it.
 let handledScroll = 0;
@@ -322,17 +391,32 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
     }
     const jump = !fromHash && target !== null && target.at >= openedAt;
     const smooth = jump && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A hash is never a jump, so it always gets the full wait.
+    const limit = jump ? JUMP_TRIES : MAX_TRIES;
     let tries = 0;
     let frame = 0;
     let unpin = () => {};
+    let cancelFlash = () => {};
     const attempt = () => {
-      const element = document.getElementById(id);
+      // Once the wait is up, a search pick settles for the nearest part of the page that is there. A jump within a
+      // loaded page needn't wait for content to load, so it gives up sooner. A URL hash gets no fallback.
+      const last = !fromHash && tries >= limit - 1;
+      const element = last ? nearestRendered(id) : document.getElementById(id);
       if (element && area.contains(element)) {
         const handled = () => {
           hashDone.current = true;
           if (nonce !== null) handledScroll = Math.max(handledScroll, nonce);
         };
+        // Already at the top of the view (or the scroll can't go further): no scroll, so no `scrollend` either.
+        const moves = Math.abs(element.getBoundingClientRect().top - area.getBoundingClientRect().top) > 2;
         element.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+        // A smooth jump is flashed once it lands, so the mark isn't spent while the row is still travelling.
+        // A target that isn't rendered lands on a larger part of the page, which isn't worth marking.
+        const flash = () => {
+          if (target?.highlight && !fromHash && element.id === id) flashElement(element);
+        };
+        if (smooth && moves) cancelFlash = afterScroll(area, flash);
+        else flash();
         if (sectionOf(id)) useSettingsNav.getState().setActiveSection(sectionOf(id)!.id);
         // A page that just opened is still loading what sits above and below the target, so it stays pinned until
         // that settles, and only then counts as handled: if this effect is cleaned up first (a remount), the next
@@ -343,12 +427,13 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
         return;
       }
       // Give loading content about two seconds to render the target.
-      if (++tries < 120) frame = requestAnimationFrame(attempt);
+      if (++tries < limit) frame = requestAnimationFrame(attempt);
     };
     attempt();
     return () => {
       cancelAnimationFrame(frame);
       unpin();
+      cancelFlash();
     };
   }, [target, openedAt]);
 

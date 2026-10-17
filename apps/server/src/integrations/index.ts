@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { epicBranchName } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
+import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
 import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
@@ -23,9 +25,13 @@ import type { OpenSocket } from "./t3Rpc.ts";
 import { spawnTerminal, systemTerminalHost, type SpawnTerminal, type TerminalHost } from "./terminal.ts";
 import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
+import { AppError } from "../errors.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "port" | "webPort"> &
+  config: Pick<
+    Config,
+    "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
+  > &
     Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -94,6 +100,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   const backup = createBackupIntegration({
     services: deps.services,
+    attachmentsDir: deps.config.attachmentsDir,
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
@@ -197,6 +204,29 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     async mergePr(linkId, input) {
       await github.merge(deps.services().links.get(linkId), input);
+    },
+    async setEpicDelivery(epicId, delivery, actor) {
+      const s = deps.services();
+      const epic = s.tasks.summary(epicId);
+      if (epic.kind !== "epic")
+        throw new AppError("VALIDATION", `#${epic.number} isn't an epic; only epics have a delivery`);
+      if (delivery === "main") return s.tasks.setDelivery(epicId, "main", null, actor);
+      // Already on it: nothing to make. A branch kept from an earlier switch is used again.
+      if (epic.delivery === "integration" && epic.integrationBranch) return s.tasks.detail(epicId);
+      const project = s.projects.get(epic.projectId);
+      if (!project.workspaceRoot) {
+        throw new AppError(
+          "VALIDATION",
+          `${project.title} has no workspace folder, so there is no repository to make the epic's branch in`,
+        );
+      }
+      const branch = epicBranchName(epic);
+      try {
+        await ensureEpicBranch(overrides.autopilotGit ?? defaultRunGit, project.workspaceRoot, branch);
+      } catch (error) {
+        throw new AppError("VALIDATION", `Couldn't make the epic's branch ${branch}: ${messageOf(error)}`);
+      }
+      return s.tasks.setDelivery(epicId, "integration", branch, actor);
     },
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),

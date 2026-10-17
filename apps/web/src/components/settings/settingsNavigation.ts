@@ -9,14 +9,15 @@ export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
  * (`"autopilot.engine.quiet-hours"`). `project` picks the project page's project. The anchor goes in the URL hash
- * and is scrolled to once it renders, which the router can't do for content still loading.
+ * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
+ * once it is in view.
  */
 export function useOpenSettings() {
   const navigate = useNavigate();
   return useCallback(
-    (target = "board", options: { project?: string; replace?: boolean } = {}) => {
+    (target = "board", options: { project?: string; replace?: boolean; highlight?: boolean } = {}) => {
       const parsed = parseSettingsTarget(target) ?? { group: "board" as const, anchor: null };
-      useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group);
+      useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group, options.highlight);
       void navigate({
         to: "/settings/$group",
         params: { group: parsed.group },

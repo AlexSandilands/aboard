@@ -118,7 +118,7 @@ function Composer({
   const [plan, setPlan] = useState(defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
-  const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options));
+  const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
   const start = useStartSession({ silent: true });
   const cli = options.clis.find((c) => c.harness === harness);
 
