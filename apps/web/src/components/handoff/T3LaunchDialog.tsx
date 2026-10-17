@@ -267,9 +267,13 @@ function Composer({
   const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
   const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
-  const [choice, setChoice] = useState<WorkspaceChoice>(() =>
-    initialWorkspaceChoice(options, subject.integrationBranch ?? null),
-  );
+  const [choice, setChoice] = useState<WorkspaceChoice>(() => {
+    const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
+    // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
+    return subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
+      ? { mode: "new_worktree", ref: null }
+      : initial;
+  });
   const [commandId, setCommandId] = useState(() => crypto.randomUUID());
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
@@ -277,7 +281,14 @@ function Composer({
   const workspace = toLaunchWorkspace(options, choice);
   const model = findModel(options, selection);
   const blocker =
-    !selection || !model?.provider.ready ? "Choose an available model" : !workspace ? "Choose a branch" : null;
+    !selection || !model?.provider.ready
+      ? "Choose an available model"
+      : !workspace
+        ? "Choose a branch"
+        : subject.fixBranch && workspace.mode !== "new_worktree"
+          ? // The prompt has the agent fast-forward its branch to the PR's: that must never move one of yours.
+            "Fix the PR in a new worktree, not in your checkout"
+          : null;
 
   const changeSelection = (next: T3ModelSelection | null) => {
     setSelection(next);

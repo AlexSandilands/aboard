@@ -159,8 +159,9 @@ each opening its launch dialog with `fixLinkId` set (`useDialogs().openT3Launch(
   (`t3RunWorking`). If a session you started pushes and the checks fail again at the new head while Fix PRs is on, it may
   start an attempt of its own on the same branch. Turn Fix PRs off for the task, or Pause all, while you work by hand.
 - **T3 threads** start in a new worktree from `origin/<branch>` (the dialog's initial choice, as for an integration epic's
-  branch); the dialog warns when T3 lists no such ref or another is chosen, and the prompt has the agent fetch and
-  fast-forward the branch when its worktree lacks the PR's head commit. The thread is linked to the task.
+  branch). The dialog never starts a fix in your checkout or an existing worktree (the launch is blocked), since the
+  prompt has the agent fast-forward its branch to the PR's when the worktree lacks the head commit. It warns when T3 lists
+  no ref for the PR's branch (the worktree then starts from the default branch). The thread is linked to the task.
 
 ### Finishing on merge
 
