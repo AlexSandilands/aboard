@@ -74,7 +74,12 @@ export function SessionsSection({ task }: { task: TaskDetail }) {
       title="Sessions"
       summary={
         sessionRows.length > 0 && (
-          <SessionsSummary rows={[...sessionRows, ...folded]} taskId={task.id} t3={t3} settings={settings} />
+          <SessionsSummary
+            rows={[...sessionRows, ...[...folded.values()].flat()]}
+            taskId={task.id}
+            t3={t3}
+            settings={settings}
+          />
         )
       }
     >
