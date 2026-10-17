@@ -82,6 +82,17 @@ export function resolveAutopilot(
   return { enabled, source, config };
 }
 
+const AUTOPILOT_LABELLED_PREFIX = "Autopilot · ";
+const AUTOPILOT_UNLABELLED_NAME = "Autopilot session";
+
+/** What an Autopilot session is called: the run's label behind "Autopilot · ", or just "Autopilot session". */
+export const autopilotSessionName = (label: string | undefined): string =>
+  label?.trim() ? `${AUTOPILOT_LABELLED_PREFIX}${label.trim()}` : AUTOPILOT_UNLABELLED_NAME;
+
+/** Whether a name is one `autopilotSessionName` made: how the panel tells a session Autopilot is still running. */
+export const isAutopilotSessionName = (name: string | null | undefined): boolean =>
+  !!name && (name === AUTOPILOT_UNLABELLED_NAME || name.startsWith(AUTOPILOT_LABELLED_PREFIX));
+
 /** "Inherit (On from board)": how the UI labels an inherit switch. */
 export function describeInherited(resolved: Pick<ResolvedAutopilot, "enabled" | "source">): string {
   const state = resolved.enabled ? "On" : "Off";

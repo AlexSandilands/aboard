@@ -1,6 +1,7 @@
 import {
   AGENT_HARNESSES,
   canFork,
+  isAutopilotSessionName,
   type AgentSessionSnapshot,
   type AgentSessionStatus,
   type TaskLink,
@@ -65,6 +66,13 @@ export function sessionStatusPresentation(snapshot: AgentSessionSnapshot | null)
 /** Not running now: stopped, or an Autopilot run that has ended. */
 export const isSettledSession = (snapshot: AgentSessionSnapshot | null): boolean =>
   snapshot?.status === "not_running" || snapshot?.status === "finished" || snapshot?.status === "failed";
+
+/**
+ * A session Autopilot ran. Its snapshot comes from the run (finished, failed) once it ends, and while it works the
+ * run names it with `autopilotSessionName`, which the runner and this share.
+ */
+export const isAutopilotSession = (link: SessionLink): boolean =>
+  link.snapshot?.status === "finished" || link.snapshot?.status === "failed" || isAutopilotSessionName(link.label);
 
 /** The last folder of a path, for a compact row; the full path goes in its tooltip. */
 export function folderName(cwd: string): string {

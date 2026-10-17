@@ -63,6 +63,22 @@ The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: statu
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
 
+#### The Links section
+
+The Links section has two groups, each a small heading with a rule (`GroupHeading`, not another collapse). They
+show only when the task has sessions; without any, the section is the plain list it was.
+
+- **Sessions** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first
+  (`orderLinks`), then its agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`)
+  the first three show, and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is
+  per panel visit, not stored).
+- **Folded sessions.** When the task has exactly one T3 thread, its Claude Code sessions leave the rows and sit in
+  the thread's ⌄ menu, one submenu each (open, fork, copy the resume command, copy the id, remove), as the thread
+  runs a Claude session underneath. Sessions don't say which thread they belong to, so with several threads
+  nothing folds. Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
+  runner's "Autopilot ·" name) and Copilot CLI sessions always stay rows.
+- **Links**: PRs, then issues, Jira keys and other URLs, each kind in link order.
+
 ### Autopilot on the board
 
 Four things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
@@ -75,7 +91,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
   even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
   each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
-  "Recurring tasks…" link opens the project's settings at that section.
+  "Recurring tasks…" link opens the project's settings at that section. The chosen **On** is the app's info blue
+  (`ModeSwitch`), and an Inherit that resolves to On shows its note in the same blue.
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
@@ -155,6 +172,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
 | `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
+| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx` | The Links section's groups, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores                                             |

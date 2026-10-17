@@ -25,7 +25,7 @@ export function SessionWarningDialog() {
   const link = task?.links.find((l): l is SessionLink => l.id === target?.linkId && l.kind === "agent_session");
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
-      <DialogPopup showCloseButton={false} className="max-w-md">
+      <DialogPopup showCloseButton={false} className="max-w-lg">
         {target && task && link ? <WarningContent taskId={task.id} link={link} onDone={close} /> : null}
       </DialogPopup>
     </Dialog>
@@ -51,7 +51,8 @@ function WarningContent({ taskId, link, onDone }: { taskId: string; link: Sessio
         <DialogDescription>{sessionTitle(link)}</DialogDescription>
       </DialogHeader>
       <DialogPanel className="text-sm text-muted-foreground">{warning.body}</DialogPanel>
-      <DialogFooter>
+      {/* Four buttons are wider than a row of the footer; right-aligned, the overflow would spill out of its left padding. */}
+      <DialogFooter className="sm:flex-wrap">
         <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
         {threadHref ? (
           <Button variant="outline" render={<a href={threadHref} aria-label="Open T3 thread" onClick={onDone} />}>

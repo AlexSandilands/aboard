@@ -1,5 +1,6 @@
 import { AUTOPILOT_RECURRING, type AutopilotScopeEntry } from "@repo/contracts";
 import { PopoverClose } from "~/components/ui/popover";
+import { cn } from "~/lib/utils";
 import type { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
@@ -63,7 +64,13 @@ export function ScopePopover({
                   disabled={set.isPending}
                   onChange={(mode) => set.mutate({ automation: automation.key, mode })}
                 />
-                <span className="min-w-0 truncate text-2xs text-muted-foreground" title="What Inherit resolves to">
+                <span
+                  className={cn(
+                    "min-w-0 truncate text-2xs",
+                    entry.mode === "inherit" && parent?.enabled ? "text-info-foreground" : "text-muted-foreground",
+                  )}
+                  title="What Inherit resolves to"
+                >
                   {inheritLabel(parent)}
                 </span>
               </div>

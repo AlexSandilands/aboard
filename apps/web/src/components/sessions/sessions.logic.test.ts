@@ -2,6 +2,7 @@ import type { AgentSessionRef, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   folderName,
+  isAutopilotSession,
   sessionName,
   sessionStatusPresentation,
   sessionTitle,
@@ -43,6 +44,15 @@ describe("sessions", () => {
     expect(sessionTitle(titled(null, "Fix the thing"))).toBe("Fix the thing");
     expect(sessionName(titled("  ", null))).toBeNull();
     expect(sessionName(link())).toBeNull();
+  });
+
+  it("tells an Autopilot session by its run's status or its name", () => {
+    expect(isAutopilotSession(link())).toBe(false);
+    expect(isAutopilotSession(link({}, "Implementing #7"))).toBe(false);
+    expect(isAutopilotSession(link({}, "Autopilot · Review #7"))).toBe(true);
+    expect(isAutopilotSession(link({}, "Autopilot session"))).toBe(true);
+    expect(isAutopilotSession({ ...link(), snapshot: { status: "failed", inApp: false } })).toBe(true);
+    expect(isAutopilotSession({ ...link(), snapshot: { status: "idle", inApp: false } })).toBe(false);
   });
 
   it("shows status unknown until the first read", () => {

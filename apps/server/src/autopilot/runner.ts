@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AUTOPILOT_ACTOR, BRAND, type ModelTier, type ModelTiers, type TaskSummary } from "@repo/contracts";
+import {
+  AUTOPILOT_ACTOR,
+  autopilotSessionName,
+  BRAND,
+  type ModelTier,
+  type ModelTiers,
+  type TaskSummary,
+} from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "../integrations/headlessAgent.ts";
@@ -19,10 +26,6 @@ import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "
 
 /** The T3 command id of a run's launch or nudge: T3 de-duplicates by it, so a retry never starts a second thread. */
 export const runCommandId = (runId: string) => `autopilot-${runId}`;
-
-/** What an Autopilot session is called: the run's label behind "Autopilot · ", or just "Autopilot session". */
-export const sessionName = (label: string | undefined): string =>
-  label?.trim() ? `Autopilot · ${label.trim()}` : "Autopilot session";
 
 /** A tier's T3 model, when it is a Claude model `claude --model` can take; null otherwise. */
 export function tierModel(tiers: ModelTiers, tier: ModelTier | null): string | null {
@@ -107,7 +110,7 @@ export function createAutopilotRunner(deps: {
       {
         prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch)}`,
         commandId: runCommandId(request.run.id),
-        ...(request.label ? { title: sessionName(request.label) } : {}),
+        ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
         work: true,
         // A pull request's branch is on origin, and origin's copy is the one to build on.
         ...(branch
@@ -174,7 +177,10 @@ export function createAutopilotRunner(deps: {
       // So the card offers "Open in terminal" to resume the session in its worktree.
       s.links.add(
         task.id,
-        { agentSession: { harness: "claude-code", sessionId, cwd: worktree.path }, label: sessionName(request.label) },
+        {
+          agentSession: { harness: "claude-code", sessionId, cwd: worktree.path },
+          label: autopilotSessionName(request.label),
+        },
         AUTOPILOT_ACTOR,
       );
       deps.sessionLinked?.(sessionId);
@@ -194,7 +200,7 @@ export function createAutopilotRunner(deps: {
         budgetUsd: options.budgetUsd,
         sessionId,
         model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
-        name: sessionName(request.label),
+        name: autopilotSessionName(request.label),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
         ...(request.untrustedInput ? { untrusted: true } : {}),
@@ -234,7 +240,7 @@ export function createAutopilotRunner(deps: {
           budgetUsd: options.budgetUsd,
           sessionId,
           model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
-          name: sessionName(request.label),
+          name: autopilotSessionName(request.label),
           defaultBranch: null,
           ...(request.tools ? { tools: request.tools } : {}),
           ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),

@@ -98,6 +98,18 @@ describe("seed scenarios", () => {
     expect(withThread?.links.map((l) => l.kind).sort()).toEqual(["agent_session", "t3_thread"]);
   });
 
+  it("threads has tasks with many sessions, with and without a T3 thread", () => {
+    const { details } = seeded("threads");
+    const kinds = (title: string) =>
+      details.find((t) => t.title === title)?.links.filter((l) => l.kind === "agent_session").length;
+    expect(kinds("Many sessions, no T3 thread")).toBe(5);
+    expect(kinds("Many sessions beside a T3 thread")).toBe(4);
+    const thread = details
+      .find((t) => t.title === "Many sessions beside a T3 thread")
+      ?.links.find((l) => l.kind === "t3_thread");
+    expect(thread?.kind === "t3_thread" && thread.snapshot?.title).toBe("Build the cart");
+  });
+
   it("threads offers every merge control on Review PRs", () => {
     const { details } = seeded("threads");
     const actions = details.flatMap((t) =>
