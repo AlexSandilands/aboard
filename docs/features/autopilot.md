@@ -124,6 +124,10 @@ A flagged run puts an `autopilot` attention reason on its task, with the run's e
 write: `autopilotRuns.attentionFor` stops reporting it once the task changes status after the run, or a later
 real run of the same automation on the task succeeds.
 
+"After" is decided by stored times, so a status change never ties with a flag: `statusChangeTime` in
+`services/tasks.ts` stores a time a millisecond past the task's latest flagged run when the move would otherwise
+land in the same millisecond. A flag raised in the same millisecond _after_ a move still stands.
+
 ### The per-task flag
 
 `tasks.autopilot` is a nullable integer like `auto_review`: null is **Default**, 1 is **On** and 0 is **Off**.

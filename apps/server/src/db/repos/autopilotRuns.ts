@@ -179,6 +179,15 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )?.total ?? 0
       );
     },
+    /** When the task's latest run flagged needs_attention was last written, if it has one. */
+    latestFlaggedAt(taskId: string): string | null {
+      return (
+        sql.get<{ at: string | null }>(
+          "SELECT MAX(updated_at) AS at FROM autopilot_runs WHERE task_id = ? AND needs_attention = 1",
+          taskId,
+        )?.at ?? null
+      );
+    },
     /**
      * Per task, the message of its latest run flagged needs_attention, while it stands: no real run of the same
      * automation on the task has succeeded since, and the task hasn't changed status since.

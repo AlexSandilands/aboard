@@ -1,5 +1,5 @@
 import type { AutopilotRun, PlanInput } from "@repo/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createTestHarness } from "../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
@@ -506,6 +506,36 @@ describe("failures and attention", () => {
 
     s.tasks.move(task.id, { status: "in_progress" }, "user");
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+  });
+
+  describe("on a frozen clock", () => {
+    // Fast runners finish a failure and a move inside one millisecond; the order must still tell them apart.
+    beforeEach(() => void vi.useFakeTimers({ toFake: ["Date"] }));
+    afterEach(() => void vi.useRealTimers());
+
+    it("clears the flag when the task moves in the same millisecond the run failed", async () => {
+      const { s, engine, task, started } = setup();
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      started[0]!.reject(new Error("no runner today"));
+      await engine.idle();
+      const kinds = () => s.tasks.summary(task.id).attention.map((a) => a.kind);
+      expect(kinds()).toContain("autopilot");
+
+      s.tasks.move(task.id, { status: "in_progress" }, "user");
+      expect(kinds()).not.toContain("autopilot");
+    });
+
+    it("keeps a flag raised in the same millisecond as the task's last status change", async () => {
+      const { s, engine, task, started } = setup();
+      s.tasks.move(task.id, { status: "in_progress" }, "user");
+      s.tasks.move(task.id, { status: "planned" }, "user");
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      started[0]!.reject(new Error("no runner today"));
+      await engine.idle();
+      expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("autopilot");
+    });
   });
 
   it("clears the flag when a later run of the same automation succeeds, not another automation's", async () => {

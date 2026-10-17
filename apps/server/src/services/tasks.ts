@@ -55,6 +55,16 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
 }
 
 /**
+ * The time to store as a task's `statusChangedAt`: `now`, or a millisecond past its latest Autopilot flag when that
+ * is not earlier. A flag stands only until the task changes status, and the two are told apart by their times, so a
+ * run that fails and a move in the same millisecond must not tie (the flag would outlive the move).
+ */
+function statusChangeTime(repos: Repos, taskId: string, now: string): string {
+  const flagged = repos.autopilotRuns.latestFlaggedAt(taskId);
+  return flagged !== null && flagged >= now ? new Date(Date.parse(flagged) + 1).toISOString() : now;
+}
+
+/**
  * Re-derives an epic's status from its children (see deriveEpicStatus) and marks its card changed, since the
  * roll-up may have moved. Call inside the write after any change to a child's status, epic, project or archive
  * state. A no-op for an id that isn't an epic.
@@ -72,7 +82,13 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   if (status === epic.status) return;
   const now = nowIso();
   const lane = repos.tasks.lane(epic.projectId, status).filter((t) => t.id !== epic.id);
-  repos.tasks.update({ ...epic, status, position: positionAmong(lane, {}), updatedAt: now, statusChangedAt: now });
+  repos.tasks.update({
+    ...epic,
+    status,
+    position: positionAmong(lane, {}),
+    updatedAt: now,
+    statusChangedAt: statusChangeTime(repos, epicId, now),
+  });
   fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
 }
 
@@ -567,7 +583,7 @@ export function createTasksService(
           status,
           position: positionAmong(lane, input),
           updatedAt: now,
-          statusChangedAt: statusChanged ? now : current.statusChangedAt,
+          statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           ...(reopened ? { resolution: null, resolvedByTaskId: null } : {}),
         });
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
@@ -609,7 +625,7 @@ export function createTasksService(
           status: "done",
           position: statusChanged ? endOfLane({ ...current, status: "done" }) : current.position,
           updatedAt: now,
-          statusChangedAt: statusChanged ? now : current.statusChangedAt,
+          statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           resolution: input.resolution,
           resolvedByTaskId: by?.id ?? null,
         });
