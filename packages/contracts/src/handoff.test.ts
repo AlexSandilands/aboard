@@ -146,6 +146,14 @@ describe("orchestrate prompt", () => {
     expect(linked).toContain("already linked to the epic");
     expect(linked).not.toContain("t3Thread");
   });
+
+  it("has the orchestrator link its own Claude Code or Copilot session, unless the board started it", () => {
+    expect(prompt).toContain('label: "Orchestrating #7"');
+    const started = taskHandoffPrompt({ task: epic, boardUrl: "http://x", mode: "orchestrate", linkedSession: true });
+    expect(started).toContain("The board started this session and already linked it to the epic");
+    expect(started).not.toContain("agentSession");
+    expect(started).not.toContain("t3Thread");
+  });
 });
 
 describe("handoffModeError", () => {

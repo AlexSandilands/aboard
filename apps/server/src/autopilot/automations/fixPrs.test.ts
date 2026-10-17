@@ -642,6 +642,29 @@ describe("manualFix: Fix in → on a PR", () => {
     expect(manualFix(s, linkId()).prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
   });
 
+  it("quotes the branch name wherever the agent is told to run it", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ checks: "failing", headRef: "fix/a;touch x'y" });
+    const { prompt } = manualFix(s, linkId());
+    expect(prompt).toContain(String.raw`git push origin 'HEAD:fix/a;touch x'\''y'`);
+    expect(prompt).toContain(String.raw`git merge --ff-only 'origin/fix/a;touch x'\''y'`);
+  });
+
+  it("answers 400 for a link that isn't a PR, a PR not read yet, and one with nothing to fix", async () => {
+    const { request, s, task, setPr, linkId } = setup();
+    const url = s.links.add(task.id, { value: "https://example.com/docs" }, "agent");
+    const unread = s.links.add(task.id, { value: "https://github.com/acme/app/pull/8" }, "agent");
+    const fixOf = (id: string) => request(`/api/links/${id}/fix`);
+    expect((await fixOf(url.id)).status).toBe(400);
+    expect((await fixOf(unread.id)).status).toBe(400);
+    setPr({ checks: "passing" });
+    const none = await fixOf(linkId());
+    expect(none.status).toBe(400);
+    expect(await none.json()).toMatchObject({ error: { message: expect.stringContaining("nothing to fix") } });
+    setPr({ checks: "failing", state: "closed" });
+    expect((await fixOf(linkId())).status).toBe(400);
+  });
+
   it("is served at GET /api/links/:id/fix", async () => {
     const { request, setPr, linkId } = setup();
     setPr({ checks: "failing" });

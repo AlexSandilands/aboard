@@ -12,7 +12,6 @@ import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   Link2Icon,
-  MessagesSquareIcon,
   TriangleAlertIcon,
   WrenchIcon,
   type LucideIcon,
@@ -21,7 +20,7 @@ import type { SyntheticEvent } from "react";
 import { FixInMenuItems, usePrSlot } from "~/components/handoff/FixPrMenu";
 import { PR_AUTOPILOT_LABEL } from "~/components/handoff/fixPr.logic";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
-import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
+import { HarnessIcon, SessionMenuItems, T3Icon } from "~/components/sessions/SessionParts";
 import { sessionStatusPresentation, sessionTitle, type SessionLink } from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -224,7 +223,7 @@ function ThreadButton({ link }: { link: Extract<TaskLink, { kind: "t3_thread" }>
       <TooltipTrigger
         render={<a href={target.href} aria-label={target.label} className={chipClassName} {...linkHandlers} />}
       >
-        <MessagesSquareIcon aria-hidden className="size-3.5 shrink-0" />
+        <T3Icon />
         {status ? <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", status.dot)} /> : null}
       </TooltipTrigger>
       <TooltipPopup>

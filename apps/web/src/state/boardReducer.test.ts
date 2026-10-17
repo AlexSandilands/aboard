@@ -32,6 +32,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     lastNote: null,
     autoReview: null,
     autopilot: null,
+    priority: false,
     delivery: null,
     integrationBranch: null,
     review: null,

@@ -9,7 +9,15 @@ import { laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band } from "./b
 import { BoardCell } from "./BoardCell";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
+import { EpicActions } from "./EpicActions";
 import { EpicRollupBar } from "./EpicRollupBar";
+import {
+  EPIC_ACCENT_BAR,
+  EPIC_ACCENT_CLASS,
+  EPIC_FRAME_CLASS,
+  EPIC_HEADER_CLASS,
+  epicAccentStyle,
+} from "./epicStyle.logic";
 
 /**
  * An epic's row in its lane: a header, then a cell for each column its children are in, laid on the lane's
@@ -45,7 +53,11 @@ export const EpicBand = memo(function EpicBand({
     byStatus: { backlog: 0, planned: 0, in_progress: 0, review: 0, done: 0 },
   };
   const [start, end] = expanded ? [0, STATUS_ORDER.length - 1] : [band.start, band.end];
-  const style: CSSProperties = { gridRow: row, gridColumn: `${start + 1} / ${end + 2}` };
+  const style: CSSProperties = {
+    gridRow: row,
+    gridColumn: `${start + 1} / ${end + 2}`,
+    ...(EPIC_ACCENT_BAR ? epicAccentStyle(epic.title) : {}),
+  };
   const columns = STATUS_ORDER.slice(start, end + 1);
   const toggleRow = laneHasCollapsibleCell(band.cells);
   const selected = selectedTaskId === epic.id;
@@ -57,7 +69,9 @@ export const EpicBand = memo(function EpicBand({
       aria-label={`Epic #${epic.number} ${epic.title}`}
       style={style}
       className={cn(
-        "grid grid-cols-subgrid rounded-xl border border-border/60 bg-muted/25",
+        "grid grid-cols-subgrid",
+        EPIC_FRAME_CLASS,
+        EPIC_ACCENT_BAR && EPIC_ACCENT_CLASS,
         selected && "border-primary/50 ring-1 ring-primary/30",
         epic.archivedAt && "opacity-60",
       )}
@@ -65,7 +79,12 @@ export const EpicBand = memo(function EpicBand({
       <header
         // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
         data-task-card={epic.id}
-        className={cn("col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2", narrow ? "py-1" : "h-8")}
+        className={cn(
+          "col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2",
+          EPIC_HEADER_CLASS,
+          collapsed && "rounded-b-xl",
+          narrow ? "py-1" : "h-8",
+        )}
       >
         <Button
           variant="ghost-muted"
@@ -99,6 +118,7 @@ export const EpicBand = memo(function EpicBand({
             </span>
           </span>
         </button>
+        <EpicActions epic={epic} className={cn(narrow && "self-start")} />
         <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
       </header>
       {collapsed

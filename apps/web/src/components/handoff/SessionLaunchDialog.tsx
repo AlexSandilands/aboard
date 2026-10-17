@@ -156,13 +156,15 @@ function Composer({
   fix: PrFixInfo | null;
   onDone: () => void;
 }) {
+  // An epic's session orchestrates its tasks, which carry the plans, so it has no "Plan with me".
+  const epic = task.kind === "epic";
   const promptFor = (plan: boolean) =>
     fix
       ? fix.prompt
       : taskHandoffPrompt({
           task,
           boardUrl: window.location.origin,
-          mode: plan ? "plan" : "work",
+          mode: epic ? "orchestrate" : plan ? "plan" : "work",
           linkedSession: true,
         });
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
@@ -203,7 +205,7 @@ function Composer({
       {
         taskId: task.id,
         harness,
-        mode: fix ? "fix" : plan ? "plan" : "work",
+        mode: fix ? "fix" : epic ? "orchestrate" : plan ? "plan" : "work",
         prompt,
         model: model.trim() || null,
         workspace,
@@ -294,7 +296,7 @@ function Composer({
             value={model}
             onChange={(event) => setModel(event.target.value)}
           />
-          {fix ? null : (
+          {fix || epic ? null : (
             <ComposerControl
               aria-pressed={plan}
               onClick={togglePlan}

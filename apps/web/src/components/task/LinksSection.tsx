@@ -19,7 +19,6 @@ import {
   GitMergeIcon,
   GitPullRequestArrowIcon,
   GlobeIcon,
-  MessagesSquareIcon,
   PlusIcon,
   RefreshCwIcon,
   SquareTerminalIcon,
@@ -27,13 +26,13 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
   WrenchIcon,
-  type LucideIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, type FC, type ReactNode } from "react";
 
 import { FixInMenuItems, usePrSlot } from "~/components/handoff/FixPrMenu";
 import { PR_AUTOPILOT_LABEL, PR_AUTOPILOT_TITLE } from "~/components/handoff/fixPr.logic";
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
+import { T3Icon } from "~/components/sessions/SessionParts";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
@@ -90,10 +89,10 @@ const PR_STATE: Record<"open" | "draft" | "closed" | "merged", { label: string; 
   merged: { label: "Merged", tone: "text-violet-600 dark:text-violet-300/90" },
 };
 
-export const LINK_KIND_ICON: Record<TaskLink["kind"], LucideIcon> = {
+export const LINK_KIND_ICON: Record<TaskLink["kind"], FC<{ className?: string }>> = {
   pr: GitPullRequestArrowIcon,
   jira: TicketIcon,
-  t3_thread: MessagesSquareIcon,
+  t3_thread: T3Icon,
   issue: CircleDotIcon,
   agent_session: SquareTerminalIcon,
   url: GlobeIcon,

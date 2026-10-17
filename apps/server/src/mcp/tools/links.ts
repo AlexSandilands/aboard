@@ -18,7 +18,7 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         "t3_environment_read and t3_thread_configuration) whenever you start or resume a task, so the user can " +
         "jump back to your thread. In Claude Code or Copilot CLI (inside T3 Code too), also pass `agentSession` " +
         "with your own session when you start or resume a task: the board shows whether it is running and can " +
-        'reopen it in a terminal. Give a session a `label` saying what it does ("Implementing #107", "Planning #107"): ' +
+        'reopen it in a terminal. Give a session a `label` saying what it does ("Implementing #107", "Planning #107", or "Orchestrating #107" for an epic you run): ' +
         "the board shows it as the session's name, and linking the same session again with a new label renames it. A " +
         "subagent shares its parent's session id, so only the main session links; a subagent must not. Pass one of value, t3Thread or agentSession per call.",
       inputSchema: {
@@ -47,7 +47,9 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         label: z
           .string()
           .optional()
-          .describe('Display label. For agentSession, what this session does: "Implementing #107", "Planning #107".'),
+          .describe(
+            'Display label. For agentSession, what this session does: "Implementing #107", "Planning #107", or "Orchestrating #107" for an epic.',
+          ),
         actor: actorField,
       },
     },

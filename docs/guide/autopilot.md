@@ -103,8 +103,8 @@ board, then flag the tasks you want it to take: **Autopilot: On** in the task pa
 Default or Off is never started.
 
 A task is picked up when it's in **Planned**, flagged On, has a plan and nothing unfinished blocks it, and the
-limits below leave room. Tasks go in the order they sit in the Planned column, so drag the one you want first to
-the top.
+limits below leave room. [Priority](using-the-board.md#priority) tasks go first, then the rest in the order they sit
+in the Planned column, so drag the one you want first to the top.
 
 The agent gets the same prompt as the **Copy prompt** hand-off in work mode, plus a note that nobody is watching:
 if it needs an answer it marks the step blocked and stops. It runs on the model you mapped to the task's

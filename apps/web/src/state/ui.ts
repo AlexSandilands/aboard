@@ -27,6 +27,10 @@ interface BoardViewState extends CollapseState {
   attentionOnly: boolean;
   hasPrOnly: boolean;
   showArchived: boolean;
+  /** Only In Progress cards, from every project whatever the project scope. */
+  inProgressOnly: boolean;
+  /** Priority tasks gather in a lane above the projects. Off, they stay in their own lanes. */
+  showPriorityLane: boolean;
   /** Epic bands folded to their header, by epic id. */
   collapsedEpics: Record<string, true>;
   /** Free-text card filter from the sidebar search. Not persisted. */
@@ -34,6 +38,8 @@ interface BoardViewState extends CollapseState {
   setAttentionOnly: (value: boolean) => void;
   setHasPrOnly: (value: boolean) => void;
   setShowArchived: (value: boolean) => void;
+  setInProgressOnly: (value: boolean) => void;
+  setShowPriorityLane: (value: boolean) => void;
   /** `mixed`: some shown project differs from the column, so the header collapses them all. */
   toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
   /** `rowId`: a project id for its loose cards, or an epic id for its band. */
@@ -50,12 +56,16 @@ export const useBoardView = create<BoardViewState>()(
       attentionOnly: false,
       hasPrOnly: false,
       showArchived: false,
+      inProgressOnly: false,
+      showPriorityLane: true,
       collapsedEpics: {},
       ...DEFAULT_COLLAPSE,
       search: "",
       setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
       setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
       setShowArchived: (showArchived) => set({ showArchived }),
+      setInProgressOnly: (inProgressOnly) => set({ inProgressOnly }),
+      setShowPriorityLane: (showPriorityLane) => set({ showPriorityLane }),
       toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
       toggleCellCollapsed: (rowId, status) => set((s) => toggleCell(s, rowId, status)),
       toggleEpicCollapsed: (epicId) =>
@@ -75,10 +85,21 @@ export const useBoardView = create<BoardViewState>()(
       name: storageKey("board-view"),
       version: 2,
       migrate: migrateBoardView,
-      partialize: ({ attentionOnly, hasPrOnly, showArchived, collapsedEpics, collapsedColumns, cellOverrides }) => ({
+      partialize: ({
         attentionOnly,
         hasPrOnly,
         showArchived,
+        inProgressOnly,
+        showPriorityLane,
+        collapsedEpics,
+        collapsedColumns,
+        cellOverrides,
+      }) => ({
+        attentionOnly,
+        hasPrOnly,
+        showArchived,
+        inProgressOnly,
+        showPriorityLane,
         collapsedEpics,
         collapsedColumns,
         cellOverrides,

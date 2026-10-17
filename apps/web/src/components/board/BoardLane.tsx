@@ -38,6 +38,7 @@ export const BoardLane = memo(function BoardLane({
   selectedTaskId,
   draggingTaskId,
   draggingRowId,
+  homeRowId,
   overCell,
   onToggleCollapsed,
 }: {
@@ -50,6 +51,8 @@ export const BoardLane = memo(function BoardLane({
   draggingTaskId: string | null;
   /** The row of the card being dragged, when it belongs to this lane: its band covers every column. */
   draggingRowId: string | null;
+  /** The row a card dragged out of the priority lane goes back to: always drawn in full, so the drop has a target. */
+  homeRowId: string | null;
   /** The cell currently hovered by a dragged card, if it is in this lane. */
   overCell: OverCell | null;
   onToggleCollapsed: (project: Project) => void;
@@ -126,14 +129,17 @@ export const BoardLane = memo(function BoardLane({
               band={band}
               projectId={project.id}
               row={index + 1}
-              expanded={draggingRowId === band.id}
+              expanded={draggingRowId === band.id || homeRowId === band.id}
               selectedTaskId={selectedTaskId}
               draggingTaskId={draggingRowId === band.id ? draggingTaskId : null}
               overCell={overCell?.rowId === band.id ? overCell : null}
             />
           ))}
           {/* Under bands, an empty loose row would only add a stray Add task; the header's + covers it. */}
-          {bands.length > 0 && STATUS_ORDER.every((status) => cells[status].length === 0) && !overLoose
+          {bands.length > 0 &&
+          STATUS_ORDER.every((status) => cells[status].length === 0) &&
+          !overLoose &&
+          homeRowId !== project.id
             ? null
             : STATUS_ORDER.map((status) => (
                 <BoardCell

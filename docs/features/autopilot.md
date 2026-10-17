@@ -425,7 +425,8 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
 - **Eligible** (`notStartable` is the rule; the action re-checks it, so a flag turned off between the check and the
   action skips the run): not an epic or archived, in Planned, `task.autopilot === true` (Default and Off never
   start), a plan (`progress.total > 0`) and not `blocked` by unfinished tasks. The caps and quiet hours are the
-  engine's. Candidates go in board position per project, and the engine starts as many as the cap leaves room for.
+  engine's. Candidates go priority tasks first (the priority flag, see [board-layout.md](board-layout.md#the-priority-lane)),
+  then by project (in the board's order) and board position, and the engine starts as many as the cap leaves room for.
 - **Dedupe** `start:<taskId>:<statusChangedAt>`: once per entry into Planned, so moving a task out and back in is the
   way to try again.
 - **Action**: `ctx.runner.start` with `taskHandoffPrompt` in work mode (`linkedThread: true`: the board links the

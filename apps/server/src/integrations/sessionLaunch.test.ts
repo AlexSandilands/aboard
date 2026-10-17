@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
-import { shortPrompt } from "./sessionLaunch.ts";
+import { remoteRepo, shortPrompt } from "./sessionLaunch.ts";
 import { cmdQuote, shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const WT_SETTINGS = JSON.stringify({
@@ -160,6 +160,13 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()[0]!.window).toBeUndefined();
   });
 
+  it("points an epic's short prompt at its orchestrating prompt", () => {
+    const text = shortPrompt("orchestrate", { id: "epic-1", number: 7 }, "linux");
+    expect(text).toContain("Let's run the epic #7");
+    expect(text).toContain('get_handoff_prompt(task: "epic-1", mode: "orchestrate")');
+    expect(shortPrompt("work", { id: "t-1", number: 8 }, "linux")).toContain('get_task("t-1")');
+  });
+
   it("falls back to a short prompt when the prompt can't go on a Windows command line", async () => {
     const app = appWith();
     const { body } = await app.start({ prompt: "Use %PATH% here" });
@@ -207,10 +214,11 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()).toHaveLength(0);
   });
 
-  it("refuses a CLI that isn't installed, a bad model and an epic", async () => {
+  it("refuses a CLI that isn't installed, a bad model and a mode that doesn't fit", async () => {
     const app = appWith({ copilot: false });
     expect((await app.start({ harness: "copilot-cli" })).status).toBe(400);
     expect((await app.start({ model: "opus; calc" })).status).toBe(400);
+    expect((await app.start({ mode: "orchestrate" })).status).toBe(400);
     const epic = app.services.tasks.create({ projectId: app.task.projectId, title: "Epic", kind: "epic" });
     const res = await app.request(`/api/tasks/${epic.id}/sessions`, {
       method: "POST",
@@ -218,6 +226,25 @@ describe("starting a session from the board", () => {
     });
     expect(res.status).toBe(400);
     expect(app.spawned).toHaveLength(0);
+  });
+
+  it("starts an epic's orchestrating session and links it to the epic", async () => {
+    const app = appWith();
+    const epic = app.services.tasks.create({ projectId: app.task.projectId, title: "Epic", kind: "epic" });
+    const res = await app.request(`/api/tasks/${epic.id}/sessions`, {
+      method: "POST",
+      json: {
+        harness: "claude-code",
+        mode: "orchestrate",
+        prompt: "Run it",
+        model: null,
+        workspace: { mode: "current" },
+      },
+    });
+    expect(res.status).toBe(201);
+    const links = app.services.tasks.summary(epic.id).links;
+    expect(links).toMatchObject([{ kind: "agent_session", label: `Orchestrating #${epic.number}` }]);
+    expect(app.spawned).toHaveLength(1);
   });
 
   it("lists which CLIs are installed", async () => {
@@ -318,6 +345,13 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
       expect(body.cwd.startsWith(join(repo.worktrees, "sessions"))).toBe(true);
       expect(app.sessionLinks()[0]).toMatchObject({ label: "Fixing the PR of #1", ref: { cwd: body.cwd } });
 
+      // A PR in another repository than origin's isn't one of this checkout's branches, whatever it is called here.
+      // (Refused before any worktree is made, so nothing reaches the network.)
+      const originUrl = git(repo.checkout, "remote", "get-url", "origin");
+      git(repo.checkout, "remote", "set-url", "origin", "https://github.com/acme/other.git");
+      expect((await app.start(fix)).status).toBe(400);
+      git(repo.checkout, "remote", "set-url", "origin", originUrl);
+
       // A branch the task's PRs don't have, a merged PR and the default branch are refused.
       expect((await app.start({ ...fix, workspace: { mode: "pr_branch", branch: "other" } })).status).toBe(400);
       app.services.links.setSnapshot(added.id, prSnapshot({ state: "merged" }));
@@ -328,6 +362,20 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
     } finally {
       repo.cleanup();
     }
+  });
+});
+
+describe("remoteRepo", () => {
+  it("reads the host and repository of the URL forms git remotes use", () => {
+    const want = { host: "github.com", repo: "acme/app" };
+    expect(remoteRepo("https://github.com/acme/app.git")).toEqual(want);
+    expect(remoteRepo("https://user:token@GitHub.com/Acme/App/")).toEqual(want);
+    expect(remoteRepo("git@github.com:acme/app.git")).toEqual(want);
+    expect(remoteRepo("ssh://git@github.com:22/acme/app")).toEqual(want);
+    expect(remoteRepo("https://github.example.io/acme/app")).toEqual({ host: "github.example.io", repo: "acme/app" });
+    // A local path names no repository to compare with.
+    expect(remoteRepo(String.raw`C:\Users\me\origin.git`)).toBeNull();
+    expect(remoteRepo("/srv/git/app.git")).toBeNull();
   });
 });
 

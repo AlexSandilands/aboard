@@ -5,6 +5,7 @@ import {
   AGENT_HARNESSES,
   AgentHarness,
   BRAND,
+  handoffModeError,
   isAbsolutePath,
   newSessionArgv,
   sessionLabel,
@@ -73,12 +74,18 @@ export function shortPrompt(
   /** The pull request's branch, for a fix. */
   branch?: string,
 ): string {
+  const verb = mode === "plan" ? "Let's plan" : mode === "orchestrate" ? "Let's run the epic" : "Let's work on";
+  // An epic's steps live only in its orchestrating prompt, which get_task doesn't carry.
+  const first =
+    mode === "orchestrate"
+      ? `call get_handoff_prompt(task: "${task.id}", mode: "orchestrate") on the ${BRAND.id} MCP server first and follow it.`
+      : `call get_task("${task.id}") on the ${BRAND.id} MCP server first.`;
   const text =
     (mode === "fix"
       ? `Let's fix the pull request on branch ${branch ?? "(see the task)"} of #${task.number}`
-      : `${mode === "plan" ? "Let's plan" : "Let's work on"} #${task.number}`) +
-    ` from the ${BRAND.id} task board: call get_task("${task.id}") on the ${BRAND.id} MCP server first. The board ` +
-    "started this session and already linked it to the task; don't link it again." +
+      : `${verb} #${task.number}`) +
+    ` from the ${BRAND.id} task board: ${first} The board started this session and already ` +
+    "linked it to the task; don't link it again." +
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
       : "");
@@ -87,13 +94,29 @@ export function shortPrompt(
   return fitted.value;
 }
 
-/** The head branches of the task's open or draft pull requests in this repository: the ones a fix may push to. */
-const prBranches = (task: TaskSummary): string[] =>
+/**
+ * The host and repository an `origin` URL names (`https://github.com/acme/app.git`, `git@github.com:acme/app`),
+ * lower-cased, or null for anything else (a local path): then there is nothing to compare a PR's repository with.
+ */
+export function remoteRepo(url: string): { host: string; repo: string } | null {
+  const match =
+    /^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i.exec(url) ??
+    /^[^@/\s]+@([^:/\s]+):(.+?)(?:\.git)?\/?$/.exec(url);
+  return match ? { host: match[1]!.toLowerCase(), repo: match[2]!.toLowerCase() } : null;
+}
+
+/**
+ * The head branches of the task's open or draft pull requests in this repository: the ones a fix may push to. A PR in
+ * another repository than `origin`'s (when that can be told) has its own branches, whatever they are called here.
+ */
+const prBranches = (task: TaskSummary, origin: { host: string; repo: string } | null): string[] =>
   task.links.flatMap((link) =>
     link.kind === "pr" &&
     (link.snapshot?.state === "open" || link.snapshot?.state === "draft") &&
     !link.snapshot.isCrossRepository &&
-    link.snapshot.headRef
+    link.snapshot.headRef &&
+    (!origin ||
+      (link.ref && link.ref.host.toLowerCase() === origin.host && link.ref.repo.toLowerCase() === origin.repo))
       ? [link.snapshot.headRef]
       : [],
   );
@@ -142,7 +165,6 @@ export function createSessionLaunch(deps: {
   const subject = (taskId: string) => {
     const s = deps.services();
     const task = s.tasks.summary(taskId);
-    if (task.kind === "epic") throw new AppError("VALIDATION", "An epic's sessions start from its tasks");
     const root = s.projects.get(task.projectId).workspaceRoot;
     return { task, root: root && isAbsolutePath(root) && isDirectory(root) ? root : null };
   };
@@ -194,6 +216,9 @@ export function createSessionLaunch(deps: {
     async start(taskId, rawInput, actor) {
       const input = StartSessionInputSchema.parse(rawInput);
       const { task, root } = subject(taskId);
+      // An epic's session orchestrates its tasks; a task's does its own work.
+      const modeError = handoffModeError(task, input.mode === "fix" ? "work" : input.mode);
+      if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const settings = deps.services().settings.get();
       const h = deps.host();
@@ -217,8 +242,15 @@ export function createSessionLaunch(deps: {
       let cwd = root;
       let branch: string | null = null;
       const { workspace } = input;
-      if (workspace.mode === "pr_branch" && !prBranches(task).includes(workspace.branch)) {
-        throw new AppError("VALIDATION", `#${task.number} has no open pull request on ${workspace.branch}`);
+      if (workspace.mode === "pr_branch") {
+        const originUrl = await deps.runGit(["remote", "get-url", "origin"], root).catch(() => null);
+        const origin = originUrl?.code === 0 ? remoteRepo(originUrl.stdout.trim()) : null;
+        if (!prBranches(task, origin).includes(workspace.branch)) {
+          throw new AppError(
+            "VALIDATION",
+            `#${task.number} has no open pull request on ${workspace.branch}${origin ? ` in ${origin.repo}` : ""}`,
+          );
+        }
       }
       if (workspace.mode !== "current") {
         try {

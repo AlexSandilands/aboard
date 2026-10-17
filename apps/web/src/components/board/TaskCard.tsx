@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@repo/contracts";
-import { ArchiveIcon, LockIcon } from "lucide-react";
+import { ArchiveIcon, LockIcon, StarIcon } from "lucide-react";
 import { memo, useCallback, useRef, type KeyboardEvent } from "react";
 import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
 import { Badge } from "~/components/ui/badge";
@@ -14,13 +14,14 @@ import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
-import { ATTENTION_LABELS, jiraKeys, topAttention } from "./board.logic";
+import { ATTENTION_LABELS, jiraKeys, PRIORITY_ROW_ID, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
 import { blockedLabel } from "./dependencies.logic";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { LabelChip } from "~/components/labels/LabelChip";
+import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
 import { useCardFlip } from "./cardMotion";
 import type { DragData } from "./dnd.logic";
@@ -41,16 +42,20 @@ export function taskCardClassName(task: TaskSummary, selected: boolean) {
 export const TaskCardContent = memo(function TaskCardContent({
   task,
   archivable = false,
+  showProject = false,
 }: {
   task: TaskSummary;
-  /** Shows the quick Archive button on Done cards. Off for the drag overlay. */
+  /** Shows the quick Archive button on Done cards and the priority star. Off for the drag overlay. */
   archivable?: boolean;
+  /** Names the card's project: in the priority lane, where cards of every project mix. */
+  showProject?: boolean;
 }) {
   const attention = topAttention(task.attention);
   const blocked = blockedLabel(task);
   const fetching = importPendingLabel(task);
   const jiraKey = jiraKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
+  const project = showProject ? projects.find((p) => p.id === task.projectId) : undefined;
   const handoff = showHandoffActions(task);
   const startT3 =
     handoff &&
@@ -68,6 +73,15 @@ export const TaskCardContent = memo(function TaskCardContent({
           <Badge variant="outline" size="sm">
             {jiraKey}
           </Badge>
+        ) : null}
+        {project ? (
+          <span
+            title={project.title}
+            className="flex min-w-0 max-w-28 shrink items-center gap-1 rounded-md border border-border/60 px-1 text-2xs text-muted-foreground"
+          >
+            <ProjectFavicon title={project.title} icon={project.icon} className="size-3 shrink-0" />
+            <span className="truncate">{project.title}</span>
+          </span>
         ) : null}
         <ResolutionChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
@@ -101,6 +115,7 @@ export const TaskCardContent = memo(function TaskCardContent({
         >
           {formatElapsedDurationLabel(task.updatedAt)}
         </span>
+        {archivable && task.kind !== "epic" && !task.archivedAt ? <PriorityButton task={task} /> : null}
         {archivable && task.status === "done" && !task.archivedAt ? <ArchiveButton task={task} /> : null}
       </div>
       <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
@@ -138,6 +153,44 @@ function CardLabels({ labels }: { labels: ReadonlyArray<string> }) {
         </span>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The priority star: filled on a priority card, and on hover or focus a way to set it on any card. Must not open the
+ * panel or start a drag, like the card's links.
+ */
+function PriorityButton({ task }: { task: TaskSummary }) {
+  const { mutate: updateTask, isPending } = useUpdateTask();
+  const label = task.priority ? `Remove priority from #${task.number}` : `Mark #${task.number} as priority`;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className={cn(
+              "-my-1 size-6 shrink-0",
+              task.priority
+                ? "text-warning"
+                : "text-muted-foreground opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100",
+            )}
+            aria-label={label}
+            aria-pressed={task.priority}
+            disabled={isPending}
+            {...linkHandlers}
+            onClick={(event) => {
+              event.stopPropagation();
+              updateTask({ id: task.id, priority: !task.priority });
+            }}
+          />
+        }
+      >
+        <StarIcon className={cn(task.priority && "fill-current")} />
+      </TooltipTrigger>
+      <TooltipPopup>{task.priority ? "Remove priority" : "Mark as priority"}</TooltipPopup>
+    </Tooltip>
   );
 }
 
@@ -241,6 +294,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
       data-task-card={task.id}
       className={cn(
         taskCardClassName(task, selected),
+        "group/card",
         // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
         "[contain-intrinsic-size:auto_84px] [content-visibility:auto] motion-reduce:transition-none!",
         isDragging && "opacity-40",
@@ -253,7 +307,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         open();
       }}
     >
-      <TaskCardContent task={task} archivable />
+      <TaskCardContent task={task} archivable showProject={rowId === PRIORITY_ROW_ID} />
     </div>
   );
 });
@@ -262,7 +316,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
  * What the DragOverlay renders while a card is lifted: it rises (scale and shadow) on pickup and
  * settles back while the drop animation lands it (`is-dropping`, see cardMotion).
  */
-export function TaskCardOverlay({ task }: { task: TaskSummary }) {
+export function TaskCardOverlay({ task, showProject = false }: { task: TaskSummary; showProject?: boolean }) {
   // dnd-kit measures the overlay's first child to aim the drop, so the lift scale sits one level
   // deeper where it can't skew the landing spot.
   return (
@@ -274,7 +328,7 @@ export function TaskCardOverlay({ task }: { task: TaskSummary }) {
           "in-[.is-dropping]:scale-100 in-[.is-dropping]:shadow-sm",
         )}
       >
-        <TaskCardContent task={task} />
+        <TaskCardContent task={task} showProject={showProject} />
       </div>
     </div>
   );

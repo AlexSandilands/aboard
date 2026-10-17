@@ -159,17 +159,25 @@ export const startPlanned = defineAutomation({
   fields: FIELDS,
   defaults: DEFAULTS,
   check: ({ services, projects, engine, now }) => {
-    const candidates = projects.flatMap(({ project }): Candidate[] =>
-      services.tasks
-        .summaries({ projectId: project.id, status: "planned" })
-        .filter((task) => notStartable(task) === null)
-        .sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0))
-        .map((task) => ({
-          dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
-          summary: `start #${task.number} "${task.title}"`,
-          taskId: task.id,
-        })),
-    );
+    // Priority tasks first, whatever their project; then project order, then board position.
+    const candidates = projects
+      .flatMap(({ project }, projectIndex) =>
+        services.tasks
+          .summaries({ projectId: project.id, status: "planned" })
+          .filter((task) => notStartable(task) === null)
+          .map((task) => ({ task, projectIndex })),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.task.priority) - Number(a.task.priority) ||
+          a.projectIndex - b.projectIndex ||
+          (a.task.position < b.task.position ? -1 : a.task.position > b.task.position ? 1 : 0),
+      )
+      .map(({ task }): Candidate => ({
+        dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
+        summary: `start #${task.number} "${task.title}"`,
+        taskId: task.id,
+      }));
     // A dry run only previews, whatever is working.
     if (engine.dryRun) return candidates;
     // Tasks that already had their attempt (failed, or still starting) are the engine's to skip: they mustn't use up

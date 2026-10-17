@@ -101,11 +101,12 @@ describe("agent sessions over MCP", () => {
     expect(after).not.toContain("Your session:");
   });
 
-  it("doesn't ask for a session on an epic", async () => {
+  it("asks for the session that orchestrates an epic, with its own label", async () => {
     const { h, client, task } = await setup();
     const epic = h.services.tasks.create({ projectId: task.projectId, title: "Feature", kind: "epic" });
     const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${epic.number}` } }));
-    expect(detail).not.toContain("Your session:");
+    expect(detail).toContain("Your session: if you are the one working on this epic");
+    expect(detail).toContain("e.g. Orchestrating #N");
   });
 
   it("doesn't ask other clients", async () => {
