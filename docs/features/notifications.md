@@ -57,7 +57,7 @@ are read, or removed with their task. See [live sync](live-sync.md).
 
 Opening a task's panel, by any route, marks that task's unread notifications read (`AppLayout`, via
 `POST /api/notifications/read`), so the bell, badge and favicon clear without a visit to the inbox. Board-wide
-notifications (no task) stay until read in the bell.
+notifications (no task) stay until read in the bell. Only opening clears: one that arrives while the task's panel is already open stays unread until it is read in the bell or the panel is opened again.
 
 The web app's `useBoardEvents` puts a created notification into the inbox query and calls
 `deliverNotification` (`apps/web/src/components/notifications/delivery.ts`), which asks `deliveryTarget`
