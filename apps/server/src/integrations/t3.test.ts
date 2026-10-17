@@ -784,9 +784,45 @@ describe("T3 thread launch", () => {
       expect(t3.status().detected).toBe(true);
     });
 
-    it("waits for the first discovery when a launch comes before it finished", async () => {
-      const { t3 } = setup(optionsReply);
+    it("a launch that comes while the first discovery is still going sees T3", async () => {
+      const inner = t3Fetch();
+      const slow: FetchFn = async (url, init) => {
+        if (url.endsWith("/.well-known/t3/environment")) await new Promise((resolve) => setTimeout(resolve, 20));
+        return inner(url, init);
+      };
+      const { t3 } = setup(optionsReply, "tok", slow);
+      void t3.discover();
       expect((await t3.launchOptions("task-1")).t3ProjectId).toBe("t3-p1");
+    });
+
+    it("tags the model catalog and posting into a thread too, after looking again", async () => {
+      const { t3 } = setup(optionsReply, "tok", flaky("/.well-known/t3/environment", 99));
+      expect(isT3Unavailable(await t3.modelCatalog().catch((e) => e))).toBe(true);
+      const link = threadLink("l1", "th-wt") as ThreadLink;
+      expect(isT3Unavailable(await t3.sendToThread(link, "x", "c").catch((e) => e))).toBe(true);
+      const retried = setup(
+        (frame) => (frame.tag === "server.getConfig" ? success(frame.id, SERVER_CONFIG) : undefined),
+        "tok",
+        flaky("/.well-known/t3/environment", 1),
+      );
+      await retried.t3.discover();
+      expect((await retried.t3.modelCatalog()).providers).toHaveLength(1);
+    });
+
+    it("tags a branch listing that lost the connection as unavailable, but not one T3 answered oddly", async () => {
+      const ref: { emit?: (type: string) => void } = {};
+      const dropped = setup((frame) => {
+        if (frame.tag === "server.getConfig") return success(frame.id, SERVER_CONFIG);
+        queueMicrotask(() => ref.emit?.("close"));
+        return undefined;
+      });
+      ref.emit = dropped.socket.emit;
+      const error = await dropped.t3
+        .launchTaskThread("task-1", { prompt: "x", commandId: "c", work: true }, "o")
+        .catch((e) => e);
+      expect(error.message).toContain("couldn't list the project's branches");
+      expect(isT3Unavailable(error)).toBe(true);
+      expect(dropped.added).toEqual([]);
     });
 
     it("looks again when the shell can't be reached, in case T3 moved", async () => {

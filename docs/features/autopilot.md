@@ -548,8 +548,11 @@ with that error.
   thread may have started even when the reply was lost. Before choosing, a status that isn't ready is refreshed
   (`t3.test()`: discover and poll again), because the cached one is empty just after a restart.
 - **A T3 that can't be reached is waited for.** A T3 launch or nudge that fails because T3 isn't answering
-  (`isT3Unavailable`: not running yet, shell or socket unreachable), and T3 only finding T3 not detected, is
-  retried every 15 seconds for up to ten minutes (`T3_HOLD_MS`, `T3_RETRY_MS`). The run stays `running` meanwhile:
+  (`isT3Unavailable`: not running yet, shell, socket or branch listing unreachable), and T3 only finding T3 not
+  detected, is retried every 15 seconds for up to ten minutes in all (`T3_HOLD_MS`, `T3_RETRY_MS`; the clock starts at the
+  first failure and is shared by the readiness check and the launch). Auto doesn't wait: a T3 that isn't ready after
+  a fresh look sends it headless, as before. A request can pass `stillWanted`, asked after each wait: Start planned
+  uses it so a task started by hand, moved or archived meanwhile ends the run as skipped (no thread, no flag). The run stays `running` meanwhile:
   no failed run, no attention flag. A retried launch keeps its command id, so T3 never starts two threads. Anything
   else fails at once (no model ready, no token, project not in T3, a changed protocol), and so does a T3 that is
   still unreachable when the ten minutes end. A board restart during the wait fails the run like any run a restart

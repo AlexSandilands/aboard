@@ -10,7 +10,7 @@ import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { t3RunWorking } from "../threads.ts";
-import { defineAutomation, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
+import { defineAutomation, RunAbandonedError, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
 
 export { AUTOPILOT_START_PLANNED };
 
@@ -199,11 +199,16 @@ export const startPlanned = defineAutomation({
         run,
         label: `Start planned · #${task.number}`,
         prompt,
+        // A wait for T3 can take minutes: the task may have been started by hand, moved or archived meanwhile.
+        stillWanted: () => notStartable(services.tasks.summary(task.id)) === null,
         tier: task.suggestedModel?.tier ?? null,
         options: config,
         ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
       });
     } catch (error) {
+      if (error instanceof RunAbandonedError) {
+        return { status: "skipped", summary: `Skipped #${task.number}: ${error.message}` };
+      }
       // A headless run only ends when the agent does: one that hit its budget or timeout did start.
       const begun = services.tasks.summary(task.id).status !== "planned";
       return begun

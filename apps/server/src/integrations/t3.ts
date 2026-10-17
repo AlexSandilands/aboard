@@ -552,29 +552,27 @@ export function createT3Integration(deps: {
     if (!discovery.detected) await discover();
   };
 
-  /** Whether the last shell request got no answer from T3, as opposed to a refusal. */
-  let shellUnreachable = false;
-
-  /** Fetches the shell, recording live status. Null when unavailable. */
-  const loadShell = async (): Promise<ShellSnapshot | null> => {
+  /** Fetches the shell, recording live status. `unreachable`: T3 gave no answer at all, as opposed to a refusal. */
+  const fetchLive = async (): Promise<{ shell: ShellSnapshot | null; unreachable: boolean }> => {
     const bearer = token();
-    shellUnreachable = false;
     if (!bearer || !discovery.detected || !discovery.origin) {
       commit({});
-      return null;
+      return { shell: null, unreachable: false };
     }
     try {
       const shell = await fetchShell(discovery.origin, bearer, fetchFn);
       commit({ live: { liveStatus: "ok", error: null } });
-      return shell;
+      return { shell, unreachable: false };
     } catch (error) {
-      shellUnreachable = error instanceof ShellError && error.unreachable;
       const message = messageOf(error);
       if (live.error !== message) log.warn(`[t3] live status: ${message}`);
       commit({ live: { liveStatus: "error", error: message } });
-      return null;
+      return { shell: null, unreachable: error instanceof ShellError && error.unreachable };
     }
   };
+
+  /** The live shell, recording live status. Null when unavailable. */
+  const loadShell = async (): Promise<ShellSnapshot | null> => (await fetchLive()).shell;
 
   const applyShell = (shell: ShellSnapshot, links: ReadonlyArray<ThreadLink>) => {
     const threads = new Map<string, ShellThread>();
@@ -620,16 +618,16 @@ export function createT3Integration(deps: {
     if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
     const task = "taskId" in target ? deps.services().tasks.summary(target.taskId) : null;
     const project = deps.services().projects.get("projectId" in target ? target.projectId : task!.projectId);
-    let shell = await loadShell();
-    if (!shell && shellUnreachable) {
+    let { shell, unreachable } = await fetchLive();
+    if (!shell && unreachable) {
       // The T3 found earlier may have restarted on another port since: look again before giving up.
       await discover();
-      shell = discovery.detected ? await loadShell() : null;
+      if (discovery.detected) ({ shell, unreachable } = await fetchLive());
     }
     const { origin, environmentId } = discovery;
     if (!shell || !origin || !environmentId) {
       const reason = discovery.detected ? (live.error ?? "T3 Code is unavailable") : "T3 Code is not running";
-      throw discovery.detected && !shellUnreachable ? new AppError("VALIDATION", reason) : t3Unavailable(reason);
+      throw discovery.detected && !unreachable ? new AppError("VALIDATION", reason) : t3Unavailable(reason);
     }
     const t3Project = resolveT3Project(project, shell);
     if (!t3Project) throw new AppError("VALIDATION", `${project.title} isn't a project in T3 Code`);
@@ -658,15 +656,19 @@ export function createT3Integration(deps: {
   /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
   const loadLaunchOptions = async (
     target: { taskId: string } | { projectId: string },
-  ): Promise<{ options: T3LaunchOptions; refsListed: boolean }> => {
+  ): Promise<{ options: T3LaunchOptions; refsListed: boolean; refsUnreachable: boolean }> => {
     const ctx = await launchContext(target);
     return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
       const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
       // Refs are optional: a folder that isn't a git repo (or a failed listing) just offers the current checkout.
+      let refsUnreachable = false;
       const refs = await rpc
         .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
         .then((value) => WireRefs.safeParse(value).data ?? null)
-        .catch(() => null);
+        .catch((error: unknown) => {
+          refsUnreachable = error instanceof T3RpcError && error.kind === "unreachable";
+          return null;
+        });
       const options = buildLaunchOptions({
         config,
         refs,
@@ -675,7 +677,7 @@ export function createT3Integration(deps: {
         suggestedModel: ctx.task?.suggestedModel ?? null,
         modelTiers: deps.services().settings.get().modelTiers,
       });
-      return { options, refsListed: refs !== null };
+      return { options, refsListed: refs !== null, refsUnreachable };
     });
   };
 
@@ -750,13 +752,12 @@ export function createT3Integration(deps: {
     { prompt, commandId, title, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
-    const { options, refsListed } = await loadLaunchOptions({ taskId });
+    const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId });
     // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
     if (!refsListed) {
-      throw new AppError(
-        "VALIDATION",
-        "T3 Code couldn't list the project's branches, so the thread can't get its own worktree",
-      );
+      const reason = "T3 Code couldn't list the project's branches, so the thread can't get its own worktree";
+      // A dropped connection is T3 still coming up; a refusal or an odd answer is not.
+      throw refsUnreachable ? t3Unavailable(reason) : new AppError("VALIDATION", reason);
     }
     const auto = autoLaunchSettings(options, choice);
     if (!auto.ok) throw new AppError("VALIDATION", auto.reason);

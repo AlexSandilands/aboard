@@ -8,7 +8,7 @@ import { t3Unavailable, type T3Integration, type TaskThreadInput } from "../inte
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { createAutopilotRunner, tierModel } from "./runner.ts";
-import { WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
+import { RunAbandonedError, WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const plan = { phases: [{ title: "Build", steps: [{ title: "a" }] }] };
@@ -41,6 +41,8 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       t3AfterLook?: T3IntegrationStatus;
       /** Fails the first launches, in order. */
       launchFailures?: Error[];
+      /** Fails the first posts into a thread, in order. */
+      nudgeFailures?: Error[];
       holdMs?: number;
       agent?: (job: AgentJob) => Promise<string>;
     } = {},
@@ -54,6 +56,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const linked: string[] = [];
     const looks: number[] = [];
     const failures = [...(opts.launchFailures ?? [])];
+    const nudgeFailures = [...(opts.nudgeFailures ?? [])];
     const t3: Pick<T3Integration, "status" | "test" | "launchTaskThread" | "sendToThread"> = {
       status: () => opts.t3 ?? T3_DOWN,
       test: async () => {
@@ -75,6 +78,8 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       },
       sendToThread: async (_link, text, commandId) => {
         sent.push({ text, commandId });
+        const failure = nudgeFailures.shift();
+        if (failure) throw failure;
       },
     };
     const runner = createAutopilotRunner({
@@ -383,6 +388,49 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
         await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code is not running");
         expect(launches.length).toBeGreaterThan(1);
         expect(launches.length).toBeLessThan(50);
+      });
+
+      it("waits for T3 before a nudge too, with the same command id", async () => {
+        const { h, task, run, sent, start } = setup({
+          t3: T3_UP,
+          holdMs: 10_000,
+          nudgeFailures: [t3Unavailable("T3 Code is not running")],
+        });
+        h.services.links.add(task.id, { t3Thread: { environmentId: "env-1", threadId: "thread-1" } }, "x");
+        await start({ kind: "nudge", prompt: "Continue" });
+        expect(sent).toEqual([
+          { text: "Continue", commandId: `autopilot-${run.id}` },
+          { text: "Continue", commandId: `autopilot-${run.id}` },
+        ]);
+      });
+
+      it("stops waiting, without another launch, once the request is no longer wanted", async () => {
+        const { start, launches } = setup({
+          t3: T3_UP,
+          holdMs: 10_000,
+          launchFailures: [t3Unavailable("T3 Code is not running"), t3Unavailable("T3 Code is not running")],
+        });
+        // Asked after each wait: wanted the first time, not the second.
+        let asks = 0;
+        await expect(start({ options: { runner: "t3" }, stillWanted: () => ++asks < 2 })).rejects.toBeInstanceOf(
+          RunAbandonedError,
+        );
+        expect(launches).toHaveLength(2);
+      });
+
+      it("shares one wait between looking for T3 and launching", async () => {
+        const failures = Array.from({ length: 100 }, () => t3Unavailable("T3 Code is not running"));
+        const { t3, start, launches } = setup({ t3: T3_DOWN, holdMs: 60, launchFailures: failures });
+        let calls = 0;
+        // T3 shows up after most of the wait is gone, then drops again.
+        t3.test = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return ++calls < 2 ? T3_DOWN : T3_UP;
+        };
+        const started = Date.now();
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code is not running");
+        expect(Date.now() - started).toBeLessThan(250);
+        expect(launches.length).toBeLessThan(15);
       });
 
       it("fails at once on a real launch error", async () => {
