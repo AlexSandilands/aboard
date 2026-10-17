@@ -14,9 +14,16 @@ import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "../integrations/headlessAgent.ts";
 import { latestThread } from "../integrations/reviewFallbacks.ts";
-import { isT3Unavailable, t3Unavailable, type T3Integration } from "../integrations/t3.ts";
+import {
+  isT3Unavailable,
+  t3Unavailable,
+  type T3Integration,
+  type ThreadLink,
+  type ThreadWorkspace,
+} from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
+import { createRepoGate, gateFetches } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
   RunAbandonedError,
@@ -47,6 +54,14 @@ const t3Ready = (status: ReturnType<T3Integration["status"]>) => status.detected
 export const T3_HOLD_MS = 10 * 60_000;
 /** How often a held run looks at T3 Code again. */
 export const T3_RETRY_MS = 15_000;
+
+/**
+ * How long a T3 launch holds its repository's gate while T3 prepares the thread's workspace (its worktree starts with
+ * a `git fetch`). Past it the gate is released and the run goes on as if the workspace were ready.
+ */
+export const T3_PREPARE_MS = 3 * 60_000;
+/** How often a launch looks at whether T3 has prepared the workspace. */
+export const T3_PREPARE_POLL_MS = 2_000;
 
 /** The wait for T3 Code of one start: when it ends, set by the first failure. */
 interface Hold {
@@ -89,12 +104,18 @@ export function t3WorkspaceNote(branch: string | null, defaultBranch: string | n
 
 export function createAutopilotRunner(deps: {
   services: () => Services;
-  t3: Pick<T3Integration, "status" | "test" | "launchTaskThread" | "sendToThread">;
+  t3: Pick<
+    T3Integration,
+    "status" | "test" | "launchTaskThread" | "sendToThread" | "threadWorkspace" | "retryPreparation"
+  >;
   /** Where headless runs' worktrees go, under the board's data dir. */
   worktreesDir: string;
   /** How long a run waits for an unreachable T3 Code before failing, and how often it looks again. */
   t3HoldMs?: number;
   t3RetryMs?: number;
+  /** How long a launch holds the gate while T3 prepares the workspace, and how often it looks. */
+  t3PrepareMs?: number;
+  t3PreparePollMs?: number;
   runGit?: RunGit;
   runAgent?: RunAgent;
   newSessionId?: () => string;
@@ -102,13 +123,18 @@ export function createAutopilotRunner(deps: {
   sessionLinked?: (sessionId: string) => void;
   log?: Logger;
 }): Runner {
-  const runGit = deps.runGit ?? defaultRunGit;
+  // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
+  // branch, a launch from the dialog) doesn't queue behind them: a hold can last minutes.
+  const gate = createRepoGate();
+  const runGit = gateFetches(deps.runGit ?? defaultRunGit, gate);
   const runAgent = deps.runAgent ?? runHeadlessAgent;
   const newSessionId = deps.newSessionId ?? randomUUID;
   const log = deps.log ?? console;
 
   const holdMs = deps.t3HoldMs ?? T3_HOLD_MS;
   const retryMs = deps.t3RetryMs ?? T3_RETRY_MS;
+  const prepareMs = deps.t3PrepareMs ?? T3_PREPARE_MS;
+  const preparePollMs = deps.t3PreparePollMs ?? T3_PREPARE_POLL_MS;
 
   const taskOf = (taskId: string): TaskSummary => deps.services().tasks.summary(taskId);
 
@@ -145,6 +171,55 @@ export function createAutopilotRunner(deps: {
     return { runner: "t3", threadUrl: thread.url, result: null } satisfies RunnerResult;
   };
 
+  /**
+   * Waits while T3 prepares a new thread's workspace: the thread once it has a run that is past "preparing", or what
+   * was last seen (null when T3 couldn't say) when the wait ran out. After a retry, `before` is the failure that was
+   * retried: T3's shell may still show it for a moment, so a failure counts only once the thread has changed since.
+   */
+  const prepared = async (link: ThreadLink, before?: ThreadWorkspace): Promise<ThreadWorkspace | null> => {
+    const deadline = Date.now() + prepareMs;
+    let moved = false;
+    let last: ThreadWorkspace | null = null;
+    for (;;) {
+      const workspace = await deps.t3.threadWorkspace(link).catch(() => null);
+      if (workspace) last = workspace;
+      if (workspace && before) {
+        moved ||=
+          workspace.runStatus !== "failed" ||
+          workspace.updatedAt !== before.updatedAt ||
+          workspace.lastError !== before.lastError;
+      }
+      // No run yet: T3 hasn't started preparing, let alone fetched.
+      const ready = workspace && workspace.latestRunId !== null && workspace.runStatus !== "preparing";
+      if (ready && (!before || moved)) return workspace;
+      if (Date.now() + preparePollMs > deadline) return last;
+      await sleep(preparePollMs);
+    }
+  };
+
+  /**
+   * Waits for T3 to prepare the thread's workspace. One that failed (a fetch that lost the race with a fetch the gate
+   * doesn't see, say) is prepared again once, in the same thread; a second failure fails the run.
+   */
+  const settle = async (link: ThreadLink, runId: string): Promise<void> => {
+    const first = await prepared(link);
+    if (first?.runStatus !== "failed") return;
+    const why = (workspace: ThreadWorkspace) => workspace.lastError ?? "its thread failed";
+    if (!first.latestRunId) throw new Error(`T3 Code couldn't start the thread: ${why(first)}`);
+    log.warn(`[autopilot] preparing the T3 workspace again: ${why(first)}`);
+    try {
+      await deps.t3.retryPreparation(link, first.latestRunId, `${runCommandId(runId)}-retry`);
+    } catch (error) {
+      if (isT3Unavailable(error)) throw error;
+      // T3 only prepares again a run whose preparation failed: this thread failed for another reason.
+      throw new Error(`T3 Code couldn't start the thread: ${why(first)}`, { cause: error });
+    }
+    const second = await prepared(link, first);
+    if (second?.runStatus === "failed") {
+      throw new Error(`T3 Code couldn't prepare the thread's workspace: ${why(second)}`);
+    }
+  };
+
   /** The default branch, and a refusal when the run was asked to work on it. */
   const checkBranch = async (repo: string | null, branch: string | null | undefined) => {
     const defaultBranch = repo ? await defaultBranchOf(runGit, repo).catch(() => null) : null;
@@ -165,31 +240,41 @@ export function createAutopilotRunner(deps: {
     const prBase = branch ? null : (request.workspace?.prBase ?? null);
     const project = deps.services().projects.get(task.projectId);
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
+    const launchThread = () =>
+      deps.t3.launchTaskThread(
+        task.id,
+        {
+          prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
+          commandId: runCommandId(request.run.id),
+          ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
+          work: true,
+          // A pull request's branch is on origin, and origin's copy is the one to build on.
+          ...(branch
+            ? { baseRef: branch, startFromOrigin: true }
+            : prBase
+              ? { baseRef: prBase, startFromOrigin: true }
+              : request.workspace?.baseRef
+                ? { baseRef: request.workspace.baseRef }
+                : {}),
+          ...(options.t3Access !== "default" ? { maxRuntimeMode: options.t3Access } : {}),
+        },
+        AUTOPILOT_ACTOR,
+      );
+    // T3 answers the launch at once and makes the worktree afterwards, starting with a `git fetch` in the project's
+    // checkout. Launches in one pass would fetch side by side and all but one fail, so each holds the repository's gate
+    // until T3 is past preparing its workspace.
+    const launchAndSettle = async () => {
+      const launch = await launchThread();
+      update({ runner: "t3", threadUrl: launch.link.url });
+      if (launch.link.kind === "t3_thread") await settle(launch.link, request.run.id);
+      return launch;
+    };
+    const repo = project.workspaceRoot;
     const launch = await whileUnavailable(
-      () =>
-        deps.t3.launchTaskThread(
-          task.id,
-          {
-            prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
-            commandId: runCommandId(request.run.id),
-            ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
-            work: true,
-            // A pull request's branch is on origin, and origin's copy is the one to build on.
-            ...(branch
-              ? { baseRef: branch, startFromOrigin: true }
-              : prBase
-                ? { baseRef: prBase, startFromOrigin: true }
-                : request.workspace?.baseRef
-                  ? { baseRef: request.workspace.baseRef }
-                  : {}),
-            ...(options.t3Access !== "default" ? { maxRuntimeMode: options.t3Access } : {}),
-          },
-          AUTOPILOT_ACTOR,
-        ),
+      () => (repo ? gate.run(repo, launchAndSettle) : launchAndSettle()),
       hold,
       request.stillWanted,
     );
-    update({ runner: "t3", threadUrl: launch.link.url });
     return { runner: "t3", threadUrl: launch.link.url, result: null };
   };
 

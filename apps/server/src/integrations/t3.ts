@@ -69,6 +69,7 @@ export const ShellThread = z.object({
   pendingRuntimeRequest: z.object({ kind: z.string() }).loose().nullish(),
   pendingBackgroundTasks: z.array(z.object({ kind: z.string() }).loose()).optional(),
   lastErrorClass: z.string().nullish(),
+  lastError: z.string().nullish().catch(null),
   branch: z.string().nullish(),
   worktreePath: z.string().nullish(),
   updatedAt: z.string().nullish(),
@@ -434,10 +435,21 @@ export interface TaskThreadLaunch extends AutoLaunchSettings {
   suggestionUnavailable: string | null;
 }
 
-/** Where a thread works: its worktree (null for the project's own checkout) and branch. */
+/** Where a thread works: its worktree (null for the project's own checkout, or one not made yet) and branch. */
 export interface ThreadWorkspace {
   worktreePath: string | null;
   branch: string | null;
+  /**
+   * The run's status as T3 has it, read like `mapThreadStatus` does (the active run's, else the latest run's):
+   * "preparing" while the workspace is set up, then "starting", "running", "failed", …
+   */
+  runStatus: string;
+  /** Null until T3 has made the thread's first run. */
+  latestRunId: string | null;
+  /** Why the latest run failed, e.g. "Workspace preparation failed during provision worktree: …". */
+  lastError: string | null;
+  /** When T3 last changed the thread, to tell a fresh failure from one read before a retry. */
+  updatedAt: string | null;
 }
 
 export interface ResolvedThread {
@@ -472,6 +484,11 @@ export interface T3Integration {
   sendToThread(link: ThreadLink, text: string, commandId: string): Promise<void>;
   /** The thread's workspace from the live shell; null when T3 can't say. */
   threadWorkspace(link: ThreadLink): Promise<ThreadWorkspace | null>;
+  /**
+   * Asks T3 to prepare the workspace of a run whose preparation failed (a worktree fetch that collided, say) again, in
+   * the same thread. `commandId` de-duplicates retries. T3 refuses a run that failed for any other reason.
+   */
+  retryPreparation(link: ThreadLink, runId: string, commandId: string): Promise<void>;
   /**
    * Turns a bare thread id (as T3's "Copy thread ID" gives) or a browser URL of this T3 into a thread ref in the
    * detected environment, checking the thread exists. Null when the value is neither. Throws when T3 is connected
@@ -806,7 +823,29 @@ export function createT3Integration(deps: {
     const thread = [...(shell?.threads ?? []), ...(shell?.archivedThreads ?? [])].find(
       (t) => t.id === link.ref.threadId,
     );
-    return thread ? { worktreePath: thread.worktreePath ?? null, branch: thread.branch ?? null } : null;
+    return thread
+      ? {
+          worktreePath: thread.worktreePath ?? null,
+          branch: thread.branch ?? null,
+          runStatus: thread.activityRunStatus ?? thread.status,
+          latestRunId: thread.latestRunId ?? null,
+          lastError: thread.lastError ?? null,
+          updatedAt: thread.updatedAt ?? null,
+        }
+      : null;
+  };
+
+  const retryPreparation = async (link: ThreadLink, runId: string, commandId: string): Promise<void> => {
+    const { origin, bearer } = await threadAccess(link);
+    await withRpc(origin, bearer, (rpc) =>
+      rpc.request("orchestration.dispatchCommand", {
+        type: "prepared-run.retry",
+        commandId,
+        threadId: link.ref.threadId,
+        runId,
+      }),
+    );
+    void pollLive();
   };
 
   const resolveThread = async (value: string): Promise<ResolvedThread | null> => {
@@ -879,6 +918,7 @@ export function createT3Integration(deps: {
     launchTaskThread,
     sendToThread,
     threadWorkspace,
+    retryPreparation,
     resolveThread,
     async importProjects(ids) {
       const wanted = new Set(ids);

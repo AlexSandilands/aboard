@@ -570,6 +570,50 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
     expect(s.tasks.summary(t.id).attention.map((a) => a.kind)).toContain("autopilot");
   });
 
+  it("fails at once when the live poll sees the run's thread failed, without waiting out the grace period", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    const { s, task, engine, runs, turnOn, behaviour } = setup();
+    const t = task("Flagged");
+    behaviour.onStart = () => {};
+    turnOn({ graceMinutes: 15 });
+    const pass = engine.pass();
+    await vi.advanceTimersByTimeAsync(0);
+    await pass;
+    await vi.advanceTimersByTimeAsync(START_POLL_MS);
+    const link = s.tasks.detail(t.id).links.find((l) => l.kind === "t3_thread")!;
+    s.links.setSnapshot(link.id, { title: "Autopilot", status: "failed" });
+    await vi.advanceTimersByTimeAsync(START_POLL_MS);
+    await engine.idle();
+    expect(runs()).toMatchObject([
+      {
+        status: "failed",
+        needsAttention: true,
+        error: `Autopilot couldn't start this task: its T3 Code thread failed before moving #${t.number} out of Planned`,
+      },
+    ]);
+  });
+
+  it("doesn't count a failed snapshot from before the runner returned: the runner prepared the thread again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    const { s, task, engine, runs, turnOn, behaviour } = setup();
+    const t = task("Flagged");
+    // The live poll saw the first preparation fail; the runner's retry worked, and the poll hasn't looked since.
+    behaviour.onStart = (_request, taskId) => {
+      const link = s.tasks.detail(taskId).links.find((l) => l.kind === "t3_thread")!;
+      s.links.setSnapshot(link.id, { title: "Autopilot", status: "failed" });
+    };
+    turnOn();
+    const pass = engine.pass();
+    await vi.advanceTimersByTimeAsync(1);
+    await pass;
+    await vi.advanceTimersByTimeAsync(START_POLL_MS * 2);
+    expect(runs()).toMatchObject([{ status: "running" }]);
+    s.tasks.move(t.id, { status: "in_progress" }, "agent");
+    await vi.advanceTimersByTimeAsync(START_POLL_MS);
+    await engine.idle();
+    expect(runs()).toMatchObject([{ status: "succeeded", needsAttention: false }]);
+  });
+
   it("succeeds when the agent moves the task during the grace period", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
     const { s, task, engine, runs, turnOn, behaviour } = setup();
