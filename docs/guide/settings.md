@@ -33,7 +33,7 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | Appearance (theme, sidebar banner), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
+| **Board**        | Appearance (theme, sidebar banner, priority lane), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Review](local-review.md), Models (model tiers) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
@@ -41,8 +41,10 @@ and a click tries again.
 
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
   when it isn't set up or the board can't tell (Copilot and Codex are set up on their side).
-- The Claude Code CLI the board runs for the board reviewer and issue import is set under
-  **Integrations → Claude Code**, with **Test** to check it.
+- The Claude Code CLI the board runs for the board reviewer, issue import and new Claude Code sessions is set under
+  **Integrations → Claude Code**, with **Test** to check it. **Integrations → GitHub Copilot** has the Copilot CLI
+  new Copilot sessions start. Each has **Session models**: the model a new session starts on for each suggested
+  tier (empty leaves the CLI's default).
 - On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it
   shows what it does and its settings.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.

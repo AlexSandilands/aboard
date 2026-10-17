@@ -15,6 +15,7 @@ import {
   PlusIcon,
   RotateCcwIcon,
   SquareCheckIcon,
+  StarIcon,
   Trash2Icon,
   FilePlus2Icon,
   XIcon,
@@ -186,6 +187,12 @@ export function TaskActions({
                 </MenuItem>
               </MenuSubPopup>
             </MenuSub>
+          )}
+          {task.kind === "epic" || archived ? null : (
+            <MenuItem onClick={() => updateTask({ id: task.id, priority: !task.priority })}>
+              <StarIcon className={cn(task.priority && "fill-current")} />
+              {task.priority ? "Remove priority" : "Mark as priority"}
+            </MenuItem>
           )}
           {item("reopen")}
           {task.kind === "epic" ? null : (

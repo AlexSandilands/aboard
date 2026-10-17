@@ -16,6 +16,8 @@ export interface HandoffPromptInput {
   mode: HandoffMode;
   /** The session was started by the board and is already linked to the task. */
   linkedThread?: boolean;
+  /** A Claude Code or Copilot CLI session the board started and linked to the task (see sessionLaunch.ts). */
+  linkedSession?: boolean;
   /** Names the task's suggested tier in a copied work prompt; without it the line shows the bare tier. */
   modelTiers?: ModelTiers;
   /**
@@ -115,12 +117,13 @@ export function taskHandoffPrompt({
   boardUrl,
   mode,
   linkedThread = false,
+  linkedSession = false,
   modelTiers,
   subagent = false,
 }: HandoffPromptInput): string {
   const ref = `#${task.number} "${task.title}"`;
   const getTask = `Call get_task("${task.id}") on the ${BRAND.id} MCP server`;
-  if (mode === "orchestrate") return orchestratePrompt(task, boardUrl, linkedThread);
+  if (mode === "orchestrate") return orchestratePrompt(task, boardUrl, { linkedThread, linkedSession });
   if (subagent) return subagentPrompt(task, boardUrl);
   const lines =
     mode === "plan"
@@ -151,8 +154,16 @@ export function taskHandoffPrompt({
   const branch = mode === "work" ? integrationBranchLine(task) : null;
   if (branch) lines.push("", branch);
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
-  const model = mode === "work" && !linkedThread ? suggestedModelLine(task, modelTiers) : null;
+  const model = mode === "work" && !linkedThread && !linkedSession ? suggestedModelLine(task, modelTiers) : null;
   if (model) lines.push("", model);
+  if (linkedSession) {
+    lines.push(
+      "",
+      "The board started this session and already linked it to the task; don't link it again. Link the task to its " +
+        "Jira issue with link if it has one.",
+    );
+    return lines.join("\n");
+  }
   lines.push(
     "",
     linkedThread
@@ -205,7 +216,11 @@ function orchestrateDeliveryLines(task: HandoffPromptInput["task"]): string[] {
  * The epic prompt: start the epic's tasks in other sessions, by the first route the harness supports, and see them
  * through. Harnesses are named only as examples, so it reads right in any of them.
  */
-function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, linkedThread: boolean): string {
+function orchestratePrompt(
+  task: HandoffPromptInput["task"],
+  boardUrl: string,
+  linked: { linkedThread: boolean; linkedSession: boolean },
+): string {
   const ref = `#${task.number}`;
   const overview = `epic_overview("${task.id}")`;
   return [
@@ -224,9 +239,16 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it. First read the task with get_task: if its latest round was already submitted (the board's own reviewer can take a round nobody picked up) and left blocking or major findings open, start with the fixes below. Otherwise call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent working in the task's worktree; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. When the implementer has resolved the last blocking or major finding the board opens the next round itself: call start_review(task) for its brief and give it to a new reviewer. When the loop ends, have the implementer open the pull request and link it. If start_review says the round is already being reviewed, the board's own reviewer has it: check back with get_task. T3 threads and sessions I started run their own review loop.",
     `7. Don't set_plan, move or review the epic itself: its status follows its tasks. Finish with add_note on ${ref}: which tasks started by which route, where each is, and what's left.`,
     "",
-    linkedThread
-      ? "This thread is already linked to the epic; don't link it again."
-      : `If you're running in T3 Code, link this thread to ${ref} with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.`,
+    ...(linked.linkedSession
+      ? ["The board started this session and already linked it to the epic; don't link it again."]
+      : linked.linkedThread
+        ? ["This thread is already linked to the epic; don't link it again."]
+        : [
+            `If you're running in T3 Code, link this thread to ${ref} with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.`,
+            "In Claude Code or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
+              `label: "Orchestrating ${ref}"), the id from $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID, so it can be ` +
+              "reopened from the board under that name (unless you're told the board linked it for you).",
+          ]),
   ].join("\n");
 }
 

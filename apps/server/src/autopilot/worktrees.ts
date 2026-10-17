@@ -21,13 +21,15 @@ export interface WorktreeRequest {
   branch?: string | null | undefined;
   /** The agent can't push (a reviewer), so reading the default branch is harmless. */
   readOnly?: boolean | undefined;
+  /** The new branch's prefix: Autopilot's by default; sessions the user starts from the board use their own. */
+  branchPrefix?: string | undefined;
   /** Start from origin's copy of `baseRef` when there is one: a branch others merge into, such as an epic's. */
   baseFromOrigin?: boolean | undefined;
 }
 
 export interface Worktree {
   path: string;
-  /** The local branch the worktree has checked out, always a new `autopilot/…` one. */
+  /** The local branch the worktree has checked out, always a new `autopilot/…` one (or `branchPrefix`'s). */
   branch: string;
   /** The branch on origin the work goes to: `branch` itself, or the existing branch asked for. */
   pushTo: string;
@@ -127,7 +129,7 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   }
 
   const name = `${req.taskNumber}-${req.runId.slice(0, 8)}`;
-  const branch = `${AUTOPILOT_BRANCH_PREFIX}${name}`;
+  const branch = `${req.branchPrefix ?? AUTOPILOT_BRANCH_PREFIX}${name}`;
   const path = join(resolve(req.root), safeName(basename(checkout)), name);
   const realPath = canonicalPath(path);
   const realCheckout = canonicalPath(checkout);

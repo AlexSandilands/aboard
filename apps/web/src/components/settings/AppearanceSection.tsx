@@ -7,10 +7,11 @@ import {
   type StageBannerId,
   resolveStageBanner,
 } from "~/components/stage/stageBanner.logic";
+import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { type Theme, useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
-import { useAppearance } from "~/state/ui";
+import { useAppearance, useBoardView } from "~/state/ui";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 /** Theme and the sidebar banner, both kept in this browser. */
@@ -47,7 +48,21 @@ export function AppearanceSection() {
         }
       />
       <BannerRow />
+      <PriorityLaneRow />
     </SettingsSection>
+  );
+}
+
+function PriorityLaneRow() {
+  const show = useBoardView((s) => s.showPriorityLane);
+  const setShow = useBoardView((s) => s.setShowPriorityLane);
+  return (
+    <SettingsRow
+      id="board.appearance.priority-lane"
+      title="Priority lane"
+      description="Gathers the tasks marked as priority, from every project, in a lane above the projects. Off, they stay in their own lanes."
+      control={<Switch checked={show} onCheckedChange={setShow} aria-label="Priority lane" />}
+    />
   );
 }
 

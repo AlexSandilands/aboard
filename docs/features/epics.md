@@ -85,8 +85,9 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
   `subgrid`, so its cards line up with the loose cards below.
-- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. Its Autopilot
-  button, at the end, sets what Autopilot does for the epic's tasks. It
+- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. Its threads and
+  sessions and the start button (`EpicActions.tsx`, the links line of a task card: the same `CardLinks` and
+  `HandoffMenu`) come next, then the Autopilot button, which sets what Autopilot does for the epic's tasks. It
   folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the
   roll-up moves under the title.
 - Drag and drop is per **row**: a project's loose cards, or one band (`Row` in `board.logic.ts`; the drag
@@ -99,7 +100,8 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - **A finished epic is a card, not a band.** Once an epic is Done, its band would sit above everything in Done and
   several of them would push the column down. So it drops into the lane's Done cell as one card (`EpicCard.tsx`),
   ordered with the other Done cards by when it finished (its `statusChangedAt`, which `syncEpic` sets). The card is
-  the band's header in card form: icon, `#N`, title, roll-up bar, `done/total` and the quick Archive button.
+  the band's header in card form: icon, `#N`, title, roll-up bar, `done/total`, its threads, sessions and start button
+  (`EpicActions`) and the quick Archive button.
   Clicking it opens the epic's panel. The chevron unfolds its tasks inside the card (folded by default; opening
   one of them from elsewhere unfolds it). Those tasks are in `Lane.epicChildren`, not in the lane's cells, so
   they don't also show loose. The card has no Autopilot button (nothing is left to run; the panel keeps it) and
@@ -122,7 +124,11 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
   open epic in its project, out of its epic, or into a new one.
 - **New epic…** is in the command palette and the lane header, next to **Suggest epics** (below).
 - The hand-off menu offers the epic's one prompt, the orchestrating prompt: **Copy prompt to start its tasks**,
-  and **New T3 Code thread…** without **Plan with me** (see [Orchestrating](#orchestrating-an-epic)).
+  **New T3 Code thread…** and **New Claude Code / Copilot CLI session…**, the last two without **Plan with me** (see
+  [Orchestrating](#orchestrating-an-epic)). The same menu is on the band header and the Done card, and it stays on a
+  finished epic. The epic's **Sessions** section lists what was started, and the band and card show the same chips
+  as a task card, so a click goes back to the orchestrating session. `get_task` asks an agent running on an epic
+  to link its own session, labelled "Orchestrating #N".
 
 ### Over MCP
 
@@ -306,6 +312,12 @@ launch has no suggested model and returns the thread instead of a link.
 - **The board makes the branch, on origin.** Agents and T3 threads start from origin's copy, and Autopilot merges
   on GitHub, so a branch only in the user's checkout would help nobody; making it at the switch means a git
   problem shows up then, not when the first task starts.
+- **A frame, not a colour.** An epic's band and Done card are told apart from task cards by shape (a 2px border at
+  `foreground/14`, a larger radius, a faint fill on the header like a folder tab: `epicStyle.logic.ts`), not by a
+  colour, since a coloured border would be read as the selection state (blue). A selected card inside a band keeps its
+  blue border and fill against the neutral frame. A thin left accent bar in a colour hashed from the epic's title
+  (`epicAccentHue`, skipping 195–285°) is built behind `EPIC_ACCENT_BAR`, off until the user has judged it; it has no
+  per-epic override yet, which would need storing.
 - **No dragging across a band's edge (yet).** A drop at a band's edge is easy to make by accident and would
   silently change the task's epic; the panel's Epic menu makes that change on purpose.
 
@@ -328,6 +340,7 @@ launch has no suggested model and returns the thread instead of a link.
 | `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |
 | `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
 | `apps/web/src/components/board/EpicBand.tsx`           | The band and its Autopilot button                                     |
+| `apps/web/src/components/board/EpicActions.tsx`, `epicStyle.logic.ts` | The band header's and Done card's sessions and start button; the frame, header fill and accent bar (tested) |
 | `apps/web/src/components/board/EpicRollupBar.tsx`      | The roll-up bar, shared by the band, the card and the panel           |
 | `apps/web/src/components/board/EpicCard.tsx`           | The finished epic's card in Done, with its folded tasks               |
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |

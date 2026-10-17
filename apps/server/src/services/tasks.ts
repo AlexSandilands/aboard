@@ -37,6 +37,7 @@ import type {
 
 const DETAIL_EVENT_LIMIT = 100;
 const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
+const EPIC_PRIORITY_MESSAGE = "An epic has no card to put in the priority lane; mark its tasks instead";
 
 /** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
@@ -268,6 +269,7 @@ export function createTasksService(
         }
         if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
         if (kind === "epic" && input.autopilot != null) throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
+        if (kind === "epic" && input.priority) throw new AppError("VALIDATION", EPIC_PRIORITY_MESSAGE);
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
         }
@@ -358,6 +360,7 @@ export function createTasksService(
           resolvedByTaskId: null,
           autoReview: null,
           autopilot: input.autopilot ?? null,
+          priority: input.priority ?? false,
           suggestedModel: null,
           templateId: template?.id ?? null,
           delivery: null,
@@ -433,6 +436,11 @@ export function createTasksService(
         if (input.autopilot !== undefined && input.autopilot !== current.autopilot) {
           next.autopilot = input.autopilot;
           changed.push("autopilot");
+        }
+        if (current.kind === "epic" && input.priority) throw new AppError("VALIDATION", EPIC_PRIORITY_MESSAGE);
+        if (input.priority !== undefined && input.priority !== current.priority) {
+          next.priority = input.priority;
+          changed.push("priority");
         }
         const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
         if (movedProject) {

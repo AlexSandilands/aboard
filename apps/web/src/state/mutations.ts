@@ -27,6 +27,8 @@ import type {
   ResumeMode,
   ResumeResult,
   ReviewFinding,
+  StartSessionInput,
+  StartSessionResult,
   StartT3ThreadInput,
   StepPatch,
   T3ThreadRef,
@@ -371,6 +373,13 @@ export const useStartProjectT3Thread = (opts?: MutationOpts) =>
   useApiMutation(
     ({ projectId, ...input }: StartT3ThreadInput & { projectId: string }) =>
       api<T3ThreadRef>(`/api/projects/${enc(projectId)}/t3-thread`, { body: input }),
+    opts,
+  );
+/** Starts a Claude Code or Copilot CLI session on a task in a terminal; the link arrives over SSE. */
+export const useStartSession = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ taskId, ...input }: StartSessionInput & { taskId: string }) =>
+      api<StartSessionResult>(`/api/tasks/${enc(taskId)}/sessions`, { body: input }),
     opts,
   );
 export const useRemoveLink = (opts?: MutationOpts) =>

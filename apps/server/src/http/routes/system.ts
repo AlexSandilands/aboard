@@ -61,6 +61,10 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     "/api/terminal",
     handle((c) => c.json(integrations.terminalInfo())),
   );
+  app.get(
+    "/api/agent-clis",
+    handle((c) => c.json(integrations.agentClis())),
+  );
 
   app.get(
     "/api/settings",

@@ -19,10 +19,11 @@ import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
+import { createSessionLaunch } from "./sessionLaunch.ts";
 import { createSettingsAsker } from "./settingsAsk.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
-import type { SpawnTerminal, TerminalHost } from "./terminal.ts";
+import { spawnTerminal, systemTerminalHost, type SpawnTerminal, type TerminalHost } from "./terminal.ts";
 import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 import { AppError } from "../errors.ts";
@@ -116,6 +117,19 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
     ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const sessionLaunch = createSessionLaunch({
+    services: deps.services,
+    host: overrides.terminalHost ?? systemTerminalHost,
+    spawn: overrides.spawnTerminal ?? spawnTerminal,
+    runGit: overrides.autopilotGit ?? defaultRunGit,
+    worktreesDir: deps.config.worktreesDir,
+    linked: (linkId) => {
+      sessions.refresh(deps.services().links.get(linkId)).catch((error: unknown) => {
+        (overrides.log ?? console).warn(`[sessions] couldn't refresh ${linkId}: ${messageOf(error)}`);
+      });
+    },
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.
@@ -241,6 +255,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
+    agentClis: () => sessionLaunch.clis(),
+    sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
+    startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
     generateDigest: () => digests.generate(),
     digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),

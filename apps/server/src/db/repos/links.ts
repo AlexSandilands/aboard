@@ -60,13 +60,21 @@ export function toLink(r: LinkRow): TaskLink {
         ref: parseJson<IssueRef>(r.ref_json) ?? { host: "", repo: "", number: 0 },
         snapshot: parseJson<IssueSnapshot>(r.snapshot_json),
       };
-    case "agent_session":
+    case "agent_session": {
+      // The window a board-started session opened in is stored beside the ref, not in it: agents write refs.
+      const { window, ...ref } = parseJson<AgentSessionRef & { window?: string }>(r.ref_json) ?? {
+        harness: "claude-code",
+        sessionId: "",
+        cwd: "",
+      };
       return {
         ...base,
         kind: "agent_session",
-        ref: parseJson<AgentSessionRef>(r.ref_json) ?? { harness: "claude-code", sessionId: "", cwd: "" },
+        ref,
         snapshot: parseJson<AgentSessionSnapshot>(r.snapshot_json),
+        ...(window ? { window } : {}),
       };
+    }
     case "url":
       return { ...base, kind: "url" };
   }

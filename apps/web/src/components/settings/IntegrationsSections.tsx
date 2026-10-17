@@ -1,5 +1,7 @@
 import {
   BRAND,
+  MODEL_TIERS,
+  type AgentHarness,
   type AppSettings,
   type ConnectT3Result,
   type IntegrationsStatus,
@@ -16,7 +18,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
 import { useTestReviewCli, useUpdateSettings } from "~/state/mutations";
-import { queryKeys } from "~/state/queries";
+import { queryKeys, useAgentClis } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { claudeCodeDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
 import { CommandSnippet, SettingsRow, SettingsSection, StatusDot } from "./settingsLayout";
@@ -332,6 +334,7 @@ export function JiraSection({ settings }: { settings: AppSettings }) {
 export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
   const url = mcpUrl();
   const updateSettings = useUpdateSettings();
+  const queryClient = useQueryClient();
   const testCli = useTestReviewCli();
   const check = testCli.data;
   return (
@@ -361,7 +364,7 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.claude-code.cli-path"
         title="Claude Code CLI"
-        description="What the board runs headless for the board reviewer and issue import. Leave empty to use claude from your PATH."
+        description="What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH."
         status={
           check ? (
             check.ok ? (
@@ -387,7 +390,10 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
               value={settings.headlessReviewCli ?? ""}
               onSave={(next) => {
                 testCli.reset();
-                updateSettings.mutate({ headlessReviewCli: next.trim() || null });
+                updateSettings.mutate(
+                  { headlessReviewCli: next.trim() || null },
+                  { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis }) },
+                );
               }}
             />
             <Button size="sm" variant="outline" disabled={testCli.isPending} onClick={() => testCli.mutate(undefined)}>
@@ -396,13 +402,66 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
           </>
         }
       />
+      <SessionModelsRow settings={settings} harness="claude-code" section="claude-code" placeholder="e.g. sonnet" />
     </SettingsSection>
   );
 }
 
-/** GitHub Copilot: the MCP server for the CLI and for VS Code. */
-export function CopilotSection() {
+/**
+ * The `--model` a new session from the hand-off menu starts on, per suggested tier. The launch dialog fills it in;
+ * blank leaves the CLI's own default.
+ */
+function SessionModelsRow({
+  settings,
+  harness,
+  section,
+  placeholder,
+}: {
+  settings: AppSettings;
+  harness: AgentHarness;
+  section: string;
+  placeholder: string;
+}) {
+  const updateSettings = useUpdateSettings();
+  return (
+    <SettingsRow
+      id={`integrations.${section}.session-models`}
+      title="Session models"
+      description="The model a new session from a task's hand-off menu starts on, by the task's suggested tier. Leave empty for the CLI's default."
+    >
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {MODEL_TIERS.map(({ value: tier, label }) => {
+          const current = settings.modelTiers[tier];
+          return (
+            <label key={tier} className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <span className="w-16 shrink-0">{label}</span>
+              <BlurInput
+                size="sm"
+                aria-label={`${label} tier session model`}
+                placeholder={placeholder}
+                value={current.cli?.[harness] ?? ""}
+                onSave={(next) =>
+                  // Only this tier is sent, so quick edits to two tiers can't overwrite each other.
+                  updateSettings.mutate({
+                    modelTiers: { [tier]: { ...current, cli: { ...current.cli, [harness]: next.trim() || null } } },
+                  })
+                }
+              />
+            </label>
+          );
+        })}
+      </div>
+    </SettingsRow>
+  );
+}
+
+/** GitHub Copilot: the MCP server for the CLI and for VS Code, and the CLI new Copilot sessions open. */
+export function CopilotSection({ settings }: { settings: AppSettings }) {
   const url = mcpUrl();
+  const updateSettings = useUpdateSettings();
+  const queryClient = useQueryClient();
+  const clis = useAgentClis().data;
+  const copilot = clis?.find((c) => c.harness === "copilot-cli");
   return (
     <SettingsSection id="integrations.copilot.status" title="GitHub Copilot" status={<Dot dot={SNIPPET_DOT} />}>
       <SettingsRow
@@ -423,6 +482,39 @@ export function CopilotSection() {
           <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
         </div>
       </SettingsRow>
+      <SettingsRow
+        id="integrations.copilot.cli-path"
+        title="Copilot CLI path"
+        description="What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH."
+        status={
+          copilot ? (
+            copilot.available ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Badge variant="success">Found</Badge>
+                <span className="font-mono">{copilot.path}</span>
+              </span>
+            ) : (
+              <Badge variant="warning">Not found</Badge>
+            )
+          ) : null
+        }
+        control={
+          <BlurInput
+            aria-label="Copilot CLI path"
+            size="sm"
+            className="sm:w-56"
+            placeholder="copilot"
+            value={settings.copilotCli ?? ""}
+            onSave={(next) =>
+              updateSettings.mutate(
+                { copilotCli: next.trim() || null },
+                { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis }) },
+              )
+            }
+          />
+        }
+      />
+      <SessionModelsRow settings={settings} harness="copilot-cli" section="copilot" placeholder="e.g. gpt-5.4" />
     </SettingsSection>
   );
 }

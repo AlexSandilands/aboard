@@ -25,7 +25,31 @@ export interface EpicBand {
   end: number;
 }
 
+/**
+ * The priority lane's row id. It is a lane above every project that holds the priority tasks of all of them, so
+ * it can't be a project's id; the cards in it keep their own project and can only change column there.
+ */
+export const PRIORITY_ROW_ID = "priority";
+
+/** Stands in for the priority lane's project, so lanes keep one shape. Only its id and title are used. */
+export const PRIORITY_PROJECT: Project = {
+  id: PRIORITY_ROW_ID,
+  title: "Priority",
+  workspaceRoot: null,
+  workspaceKey: null,
+  icon: null,
+  t3ProjectId: null,
+  reviewSkill: null,
+  position: "",
+  collapsed: false,
+  archivedAt: null,
+  createdAt: "",
+  updatedAt: "",
+};
+
 export interface Lane {
+  /** True for the priority lane: `project` is PRIORITY_PROJECT, `cells` span every project and there are no bands. */
+  priority?: true;
   project: Project;
   /** Epic bands (epics not yet Done), stacked above the loose cards in the epics' Backlog order. */
   bands: ReadonlyArray<EpicBand>;
@@ -107,6 +131,14 @@ export function laneHasCollapsibleCell(cells: LaneCells): boolean {
   return STATUS_ORDER.some((status) => cells[status].length > COLUMN_PREVIEW_COUNT);
 }
 
+/**
+ * Whether a task belongs in the priority lane, when the lane is on: a priority task that isn't an epic, archived or
+ * Done. Finished work goes back to its project, so the lane only holds what is still open.
+ */
+export function isInPriorityLane(task: TaskSummary): boolean {
+  return task.priority && task.kind !== "epic" && !task.archivedAt && task.status !== "done";
+}
+
 export interface BoardFilters {
   /** `?project=` id; unknown ids are ignored. */
   projectId: string | null;
@@ -118,6 +150,10 @@ export interface BoardFilters {
   labels: ReadonlyArray<string>;
   /** `?epic=` id: only that epic's band; unknown ids are ignored. */
   epicId?: string | null;
+  /** Only In Progress cards. */
+  inProgressOnly?: boolean;
+  /** Priority tasks gather in a lane above the projects instead of showing in their own. */
+  priorityLane?: boolean;
 }
 
 function hasPr(task: TaskSummary): boolean {
@@ -166,6 +202,9 @@ function sortCells(cells: Record<TaskStatus, TaskSummary[]>): Record<TaskStatus,
  * that match (all of them when the epic itself matches), and lanes without a match are dropped so results
  * are easy to scan. `archived` tasks (Show archived) join their lanes; the snapshot's copy wins if a task
  * is in both.
+ *
+ * With `priorityLane`, the board's open priority tasks (not archived, not epics, not Done) leave their projects for a lane in
+ * front of them, whatever project is scoped to. The card filters still apply to them.
  */
 export function buildLanes(
   board: BoardSnapshot,
@@ -182,7 +221,10 @@ export function buildLanes(
     filters.attentionOnly ||
     filters.hasPrOnly ||
     filters.labels.length > 0 ||
+    filters.inProgressOnly === true ||
     epicFilter !== null;
+  const statusOk = (task: TaskSummary) => !filters.inProgressOnly || task.status === "in_progress";
+  const inPriorityLane = (task: TaskSummary) => filters.priorityLane === true && isInPriorityLane(task);
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
     (!filters.hasPrOnly || hasPr(task)) &&
@@ -197,8 +239,22 @@ export function buildLanes(
   }
   const bandCells = new Map<string, Record<TaskStatus, TaskSummary[]>>();
   const looseCells = new Map<string, Record<TaskStatus, TaskSummary[]>>();
+  const allEpics = new Map(tasks.filter((t) => t.kind === "epic").map((t) => [t.id, t]));
+  const priorityCells = emptyCells();
+  let priorityCount = 0;
+  const projectOrder = new Map(board.projects.map((p, index) => [p.id, index]));
   for (const task of tasks) {
-    if (task.kind === "epic" || (scoped && task.projectId !== scoped)) continue;
+    if (task.kind === "epic" || !statusOk(task)) continue;
+    if (inPriorityLane(task)) {
+      // An epic's filter and its card filters look at the epic the task is in, which may be in another project.
+      const epic = task.parent ? allEpics.get(task.parent.id) : undefined;
+      if (epicFilter && task.parent?.id !== epicFilter) continue;
+      if (!matches(task) && !(epic && matches(epic))) continue;
+      priorityCells[task.status].push(task);
+      priorityCount++;
+      continue;
+    }
+    if (scoped && task.projectId !== scoped) continue;
     const epic = task.parent ? epics.get(task.parent.id) : undefined;
     if (epicFilter && !epic) continue;
     if (!matches(task) && !(epic && matches(epic))) continue;
@@ -214,7 +270,8 @@ export function buildLanes(
   for (const epic of [...epics.values()].sort((a, b) => a.number - b.number)) {
     const cells = bandCells.get(epic.id);
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
-    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic))) continue;
+    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && statusOk(epic)))
+      continue;
     const resolved = sortCells(cells ?? emptyCells());
     // A finished epic would stack above everything in Done, so it is one card there instead. Filtered to
     // (`?epic=`), it keeps its band: the filter is for looking at its tasks.
@@ -233,6 +290,15 @@ export function buildLanes(
   }
 
   const lanes: Lane[] = [];
+  if (priorityCount > 0) {
+    // Cards from different projects have no common order of their own: by project, then position.
+    const rank = (task: TaskSummary) => projectOrder.get(task.projectId) ?? 0;
+    for (const status of STATUS_ORDER) {
+      const cells = priorityCells[status];
+      cells.sort(status === "done" ? byRecentStatusChange : (a, b) => rank(a) - rank(b) || byPosition(a, b));
+    }
+    lanes.push({ priority: true, project: PRIORITY_PROJECT, bands: [], cells: priorityCells, epicChildren: {} });
+  }
   for (const project of board.projects) {
     if (scoped && project.id !== scoped) continue;
     const cells = looseCells.get(project.id);
@@ -311,7 +377,7 @@ export function reuseUnchangedLanes(previous: ReadonlyArray<Lane>, next: Lane[])
     if (cells === old.cells && sameBands && epicChildren === old.epicChildren && old.project === lane.project) {
       return old;
     }
-    return { project: lane.project, cells, bands: sameBands ? old.bands : bands, epicChildren };
+    return { ...lane, cells, bands: sameBands ? old.bands : bands, epicChildren };
   });
 }
 

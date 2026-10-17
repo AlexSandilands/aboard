@@ -29,7 +29,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import { isPlanRequired, useMoveTask, useUpdateProject } from "~/state/mutations";
+import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { useBoardView, usePalette, usePanel } from "~/state/ui";
 import {
@@ -38,6 +38,7 @@ import {
   columnCounts,
   findRow,
   laneRows,
+  PRIORITY_ROW_ID,
   reuseUnchangedLanes,
   rowIndex,
   STATUS_ORDER,
@@ -48,10 +49,13 @@ import { isCellCollapsed, isColumnMixed } from "./columnCollapse.logic";
 import { BoardContext, type BoardContextValue } from "./BoardContext";
 import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
+import { PriorityLane } from "./PriorityLane";
 import { useEpicFilter, useLabelFilter, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
 import { dropAnimation } from "./cardMotion";
 import {
+  canDropIn,
   cellDroppableId,
+  homeRowId,
   computeDrop,
   landsPastPreview,
   parseCellKey,
@@ -119,7 +123,9 @@ export function Board() {
     if (!boardTasks) return;
     useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
   }, [boardTasks]);
-  const scopedProject = boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null;
+  // In-progress-only looks across every project, so a project scope waits (it comes back when the filter is off).
+  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
+  const scopedProject = inProgressOnly ? null : (boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -175,6 +181,15 @@ function BoardSkeleton() {
   );
 }
 
+/** A card as the drop rules see it, given the row it shows in. */
+const dropTask = (task: TaskSummary, rowId: string) => ({
+  id: task.id,
+  rowId,
+  status: task.status,
+  projectId: task.projectId,
+  epicId: task.parent?.id ?? null,
+});
+
 /** Screen-reader text for where a dragged card is: its column and slot, or why it can't go there. */
 function describeOver(
   activeId: UniqueIdentifier,
@@ -189,7 +204,12 @@ function describeOver(
   // A card's sortable container follows the drag preview; its own status doesn't.
   const target = parseCellKey(data?.sortable?.containerId) ?? readDragData(data);
   if (!task || !over || !target) return undefined;
-  if (target.rowId !== rowOf(task.id)) return "Can't move there. Change a task's project or epic in its panel.";
+  const row = rowOf(task.id);
+  if (!row || !canDropIn(dropTask(task, row), target.rowId)) {
+    return "Can't move there. Change a task's project or epic in its panel.";
+  }
+  if (target.rowId !== row)
+    return `Over ${STATUS_LABEL[target.status]} in its own project; dropping it there ends its priority.`;
   const column = STATUS_LABEL[target.status];
   if (target.status === "done") return `Over ${column}; it goes on top.`;
   const sortable = data?.sortable;
@@ -201,6 +221,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const search = useBoardView((s) => s.search);
   const attentionOnly = useBoardView((s) => s.attentionOnly);
   const hasPrOnly = useBoardView((s) => s.hasPrOnly);
+  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
+  const priorityLane = useBoardView((s) => s.showPriorityLane);
   const labels = useLabelFilter();
   const epicId = useEpicFilter();
   const showArchived = useBoardView((s) => s.showArchived);
@@ -214,11 +236,27 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const settings = useSettings().data;
   const moveTask = useMoveTask();
   const updateProject = useUpdateProject();
+  const updateTask = useUpdateTask();
 
   const builtLanes = useMemo(
     () =>
-      buildLanes(board, { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels, epicId }, archivedTasks),
-    [board, projectFilter, search, attentionOnly, hasPrOnly, labels, epicId, archivedTasks],
+      buildLanes(
+        board,
+        { projectId: projectFilter, search, attentionOnly, hasPrOnly, labels, epicId, inProgressOnly, priorityLane },
+        archivedTasks,
+      ),
+    [
+      board,
+      projectFilter,
+      search,
+      attentionOnly,
+      hasPrOnly,
+      labels,
+      epicId,
+      inProgressOnly,
+      priorityLane,
+      archivedTasks,
+    ],
   );
   // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
   const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });
@@ -279,7 +317,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const activeTask = activeId ? (tasksById.get(activeId) ?? null) : null;
   const activeRowId = activeTask ? (rows.get(activeTask.id) ?? null) : null;
   /** A card as the drag logic sees it: in its row rather than just its project. */
-  const inRow = (task: TaskSummary) => ({ ...task, rowId: rows.get(task.id) ?? task.projectId });
+  const inRow = (task: TaskSummary) => dropTask(task, rows.get(task.id) ?? task.projectId);
 
   /** A cell's cards and the ones it renders, as BoardCell works them out; drops anchor on the latter. */
   const renderedCell = (source: ReadonlyArray<Lane>, at: { rowId: string; status: TaskStatus }, draggedId: string) => {
@@ -313,7 +351,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     setOverCell((current) => {
       // The card's own cell needs no highlight.
       if (target.rowId === task.rowId && target.status === task.status) return null;
-      const invalid = target.rowId !== task.rowId;
+      const invalid = !canDropIn(task, target.rowId);
       if (current && current.rowId === target.rowId && current.status === target.status && current.invalid === invalid)
         return current;
       return { rowId: target.rowId, status: target.status, invalid };
@@ -357,6 +395,26 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     const cellTasks = shown.visible.filter((t) => !t.archivedAt);
     const overTaskId = cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
     const result = computeDrop({ task, target, cellTaskIds: cellTasks.map((t) => t.id), overTaskId });
+    if (result.kind === "invalid") return;
+    if (result.kind === "noop" && !result.clearPriority) return;
+    // A card dropped on its own project leaves the priority lane. With a move, that waits until the move has landed,
+    // so a refused move (a plan is required, say) leaves the card in the lane. The card is patched at once, as a move
+    // is, so it doesn't wait for the server's event; a refetch undoes it if the update fails.
+    const clearPriority = () => {
+      queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) =>
+        current
+          ? { ...current, tasks: current.tasks.map((t) => (t.id === task.id ? { ...t, priority: false } : t)) }
+          : current,
+      );
+      updateTask.mutate(
+        { id: task.id, priority: false },
+        { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.board }) },
+      );
+    };
+    if (result.kind === "noop") {
+      clearPriority();
+      return;
+    }
     if (result.kind !== "move") return;
     // Once the drag ends, a card that landed past a collapsed cell's preview (say, below its last shown
     // card) would vanish, so show the whole cell instead. Archived cards take preview slots too.
@@ -364,17 +422,23 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     if (shown.collapsed && landsPastPreview(result, task.id, before, COLUMN_PREVIEW_COUNT)) {
       useBoardView.getState().toggleCellCollapsed(target.rowId, target.status);
     }
-    setPlacement(
-      placementAfterDrop(
-        task,
-        shown.cell.map((t) => t.id),
-        result,
-      ),
-    );
-    setSettlingFrom(lanes);
+    // Leaving the priority lane, the card shows where it lands once the cache has it, which isn't this row.
+    if (!result.clearPriority) {
+      setPlacement(
+        placementAfterDrop(
+          task,
+          shown.cell.map((t) => t.id),
+          result,
+        ),
+      );
+      setSettlingFrom(lanes);
+    }
     moveTask.mutate(
       { id: task.id, status: result.status, beforeId: result.beforeId, afterId: result.afterId },
       {
+        onSuccess: () => {
+          if (result.clearPriority) clearPriority();
+        },
         onError: (error) => {
           if (!isPlanRequired(error)) return;
           const toastId = toastManager.add({
@@ -498,22 +562,44 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             autoScroll={autoScroll}
             accessibility={{ announcements }}
           >
-            {shownLanes.map((lane) => (
-              <BoardLane
-                key={lane.project.id}
-                project={lane.project}
-                cells={lane.cells}
-                epicChildren={lane.epicChildren}
-                selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
-                bands={lane.bands}
-                draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
-                draggingRowId={activeTask?.projectId === lane.project.id ? activeRowId : null}
-                overCell={overCell && laneRows(lane).some((row) => row.id === overCell.rowId) ? overCell : null}
-                onToggleCollapsed={handleToggleCollapsed}
-              />
-            ))}
+            {shownLanes.map((lane) => {
+              const overHere = overCell && laneRows(lane).some((row) => row.id === overCell.rowId) ? overCell : null;
+              if (lane.priority) {
+                return (
+                  <PriorityLane
+                    key={lane.project.id}
+                    cells={lane.cells}
+                    selectedTaskId={selectedTaskId}
+                    draggingTaskId={activeRowId === PRIORITY_ROW_ID ? (activeTask?.id ?? null) : null}
+                    overCell={overHere}
+                  />
+                );
+              }
+              return (
+                <BoardLane
+                  key={lane.project.id}
+                  project={lane.project}
+                  cells={lane.cells}
+                  epicChildren={lane.epicChildren}
+                  selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
+                  bands={lane.bands}
+                  draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
+                  draggingRowId={activeTask?.projectId === lane.project.id ? activeRowId : null}
+                  homeRowId={
+                    activeTask?.projectId === lane.project.id && activeRowId === PRIORITY_ROW_ID
+                      ? homeRowId(
+                          dropTask(activeTask, PRIORITY_ROW_ID),
+                          lane.bands.map((band) => band.id),
+                        )
+                      : null
+                  }
+                  overCell={overHere}
+                  onToggleCollapsed={handleToggleCollapsed}
+                />
+              );
+            })}
             <DragOverlay dropAnimation={dropAnimation()}>
-              {activeTask ? <TaskCardOverlay task={activeTask} /> : null}
+              {activeTask ? <TaskCardOverlay task={activeTask} showProject={activeRowId === PRIORITY_ROW_ID} /> : null}
             </DragOverlay>
           </DndContext>
           {lanes.length === 0 ? (
@@ -525,6 +611,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             containerRef={contentRef}
             tasks={lineTasks}
             projects={board.projects}
+            priorityLane={lanes.some((lane) => lane.priority)}
             selectedTaskId={selectedTaskId}
             suspended={activeId !== null}
           />

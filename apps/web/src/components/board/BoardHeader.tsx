@@ -44,9 +44,11 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const setHasPrOnly = useBoardView((s) => s.setHasPrOnly);
   const showArchived = useBoardView((s) => s.showArchived);
   const setShowArchived = useBoardView((s) => s.setShowArchived);
+  const inProgressOnly = useBoardView((s) => s.inProgressOnly);
+  const setInProgressOnly = useBoardView((s) => s.setInProgressOnly);
   const selectedLabels = useLabelFilter();
   const setLabelFilter = useSetLabelFilter();
-  const filtered = attentionOnly || hasPrOnly || showArchived || selectedLabels.length > 0;
+  const filtered = attentionOnly || hasPrOnly || showArchived || inProgressOnly || selectedLabels.length > 0;
   const setProjectFilter = useSetProjectFilter();
   // With the task panel closed this header reaches the window's right edge and the native controls.
   const atRightEdge = useSelectedTaskId() === null;
@@ -106,6 +108,9 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
           <MenuPopup align="end">
             <MenuGroup>
               <MenuGroupLabel>Show</MenuGroupLabel>
+              <MenuCheckboxItem checked={inProgressOnly} onCheckedChange={setInProgressOnly}>
+                In progress, all projects
+              </MenuCheckboxItem>
               <MenuCheckboxItem checked={attentionOnly} onCheckedChange={setAttentionOnly}>
                 Needs attention only
               </MenuCheckboxItem>

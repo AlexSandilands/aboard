@@ -1,5 +1,32 @@
 import type { TaskStatus, TaskSummary } from "@repo/contracts";
-import { findRow, replaceRowCells, STATUS_ORDER, type Lane } from "./board.logic";
+import { findRow, PRIORITY_ROW_ID, replaceRowCells, STATUS_ORDER, type Lane } from "./board.logic";
+
+/** The card as the drop rules see it: where it shows, and where it belongs. */
+export interface DropTask {
+  id: string;
+  rowId: string;
+  status: TaskStatus;
+  projectId: string;
+  /** The epic it is in, whose band it shows in outside the priority lane. */
+  epicId: string | null;
+}
+
+/**
+ * Whether a card may be dropped in a row. Cards stay in their row, except that one from the priority lane may go to
+ * its own project's row, or its epic's band, which takes it out of the lane.
+ */
+export function canDropIn(task: Pick<DropTask, "rowId" | "projectId" | "epicId">, rowId: string): boolean {
+  if (rowId === task.rowId) return true;
+  return task.rowId === PRIORITY_ROW_ID && (rowId === task.projectId || rowId === task.epicId);
+}
+
+/**
+ * The row a card dragged out of the priority lane returns to, among the rows the board draws: its epic's band when the
+ * lane has one, else its project's loose cards. The board draws it whole while the card is dragged.
+ */
+export function homeRowId(task: Pick<DropTask, "projectId" | "epicId">, bandIds: ReadonlyArray<string>): string {
+  return task.epicId !== null && bandIds.includes(task.epicId) ? task.epicId : task.projectId;
+}
 
 /** What a draggable card or a droppable cell carries in its dnd-kit `data`. */
 export interface DragData {
@@ -117,11 +144,12 @@ export function placementAfterDrop(
 
 export type DropResult =
   | { kind: "invalid" }
-  | { kind: "noop" }
-  | { kind: "move"; status: TaskStatus; beforeId?: string; afterId?: string };
+  /** `clearPriority`: the card left the priority lane for its project, so it stops being priority even if it stays put. */
+  | { kind: "noop"; clearPriority?: true }
+  | { kind: "move"; status: TaskStatus; beforeId?: string; afterId?: string; clearPriority?: true };
 
 export interface DropInput {
-  task: { id: string; rowId: string; status: TaskStatus };
+  task: DropTask;
   target: { rowId: string; status: TaskStatus };
   /**
    * Ids of the target cell as the user saw them at the drop, in order: the drag preview, so a card
@@ -137,10 +165,20 @@ export interface DropInput {
  * hovered card's slot (sortable semantics) in the order the user saw, or stays where the preview
  * put it when dropped on the cell. Done is ordered by completion time, so a card moved there needs
  * no neighbours and reordering inside Done does nothing.
+ *
+ * The priority lane mixes projects, and positions only mean something inside one, so a card there changes column
+ * without a place in it. Dropped on its own project it is placed there like any card, and stops being priority.
  */
 export function computeDrop(input: DropInput): DropResult {
   const { task, target, cellTaskIds, overTaskId } = input;
-  if (target.rowId !== task.rowId) return { kind: "invalid" };
+  if (!canDropIn(task, target.rowId)) return { kind: "invalid" };
+  if (task.rowId === PRIORITY_ROW_ID) {
+    if (target.rowId === PRIORITY_ROW_ID) {
+      return target.status === task.status ? { kind: "noop" } : { kind: "move", status: target.status };
+    }
+    const placed = computeDrop({ task: { ...task, rowId: target.rowId }, target, cellTaskIds, overTaskId });
+    return placed.kind === "invalid" ? placed : { ...placed, clearPriority: true };
+  }
 
   const ordered = cellTaskIds.includes(task.id) ? [...cellTaskIds] : [...cellTaskIds, task.id];
   const from = ordered.indexOf(task.id);

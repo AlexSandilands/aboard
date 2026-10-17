@@ -19,7 +19,13 @@ const NO_PROCESSES: IntegrationOverrides = {
 };
 
 export function createTestHarness(
-  overrides: { webPort?: number; token?: string; sessionDirs?: SessionDirs; integrations?: IntegrationOverrides } = {},
+  overrides: {
+    webPort?: number;
+    token?: string;
+    sessionDirs?: SessionDirs;
+    worktreesDir?: string;
+    integrations?: IntegrationOverrides;
+  } = {},
 ) {
   const { integrations, ...config } = overrides;
   const ctx = createContext(

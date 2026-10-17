@@ -1,4 +1,5 @@
 import {
+  AGENT_HARNESSES,
   BRAND,
   defaultHandoffMode,
   suggestEpicsPrompt,
@@ -9,14 +10,15 @@ import {
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, LightbulbIcon, MessageSquarePlusIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import { ClipboardCopyIcon, LightbulbIcon, SparklesIcon, TerminalIcon } from "lucide-react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
-import { useSettings } from "~/state/queries";
+import { useAgentClis, useSettings } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 
 type Variant = "card" | "panel";
@@ -74,7 +76,7 @@ export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; ca
       <MenuPopup align="start">
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openProjectT3Launch(project.id)}>
-            <MessageSquarePlusIcon />
+            <T3Icon className="size-4.5 sm:size-4" />
             Suggest epics in a new T3 Code thread…
           </MenuItem>
         ) : null}
@@ -93,8 +95,9 @@ export function copyTaskReference(task: Pick<TaskSummary, "id" | "number" | "tit
 }
 
 /**
- * Hands a task to an agent: starts a T3 Code thread (when `canStartT3`, see canStartT3Thread) or copies a
- * ready-to-paste prompt for any harness (Claude Code, Copilot, …).
+ * Hands a task to an agent: starts a T3 Code thread (when `canStartT3`, see canStartT3Thread), a Claude Code or
+ * Copilot CLI session in a terminal (when the CLI is installed; an epic's orchestrates its tasks), or
+ * copies a ready-to-paste prompt for any harness.
  */
 export function HandoffMenu({
   task,
@@ -107,6 +110,8 @@ export function HandoffMenu({
 }) {
   const suggested = defaultHandoffMode(task);
   const modelTiers = useSettings().data?.modelTiers;
+  const clis = useAgentClis().data ?? [];
+  const sessionClis = clis.filter((c) => c.available);
   return (
     <Menu>
       <Tooltip>
@@ -129,14 +134,18 @@ export function HandoffMenu({
       </Tooltip>
       <MenuPopup align={variant === "card" ? "start" : "end"} {...cardHandlers}>
         {canStartT3 ? (
-          <>
-            <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
-              <MessageSquarePlusIcon />
-              New T3 Code thread…
-            </MenuItem>
-            <MenuSeparator />
-          </>
+          <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
+            <T3Icon className="size-4.5 sm:size-4" />
+            New T3 Code thread…
+          </MenuItem>
         ) : null}
+        {sessionClis.map(({ harness }) => (
+          <MenuItem key={harness} onClick={() => useDialogs.getState().openSessionLaunch(task.id, harness)}>
+            <HarnessIcon harness={harness} />
+            New {AGENT_HARNESSES[harness].label} session…
+          </MenuItem>
+        ))}
+        {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
         {suggested === "orchestrate" ? (
           // An epic has one prompt: the one that starts its tasks.
           <MenuItem onClick={() => copyHandoffPrompt(task, "orchestrate", modelTiers)}>

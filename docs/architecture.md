@@ -109,7 +109,7 @@ ORM.
 | Table             | Holds                                                                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
-| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
+| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `priority` ([board-layout](features/board-layout.md#the-priority-lane)), `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
@@ -155,8 +155,9 @@ on independent timers:
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
 - **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of
-  linked Claude Code and Copilot CLI sessions from their own files; and opening one in a terminal on
-  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)). See
+  linked Claude Code and Copilot CLI sessions from their own files; opening one in a terminal on
+  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)); and starting a new one with the user's
+  prompt ([ADR 0010](decisions/0010-board-starts-new-sessions.md)). See
   [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).

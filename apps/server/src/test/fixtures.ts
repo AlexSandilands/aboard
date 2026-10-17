@@ -17,6 +17,7 @@ export const defaultSettings: AppSettings = {
   headlessReviewEnabled: false,
   agentT3Threads: false,
   headlessReviewCli: null,
+  copilotCli: null,
   headlessReviewBudgetUsd: 2,
   issueImportEnabled: true,
   issueImportModel: "haiku",

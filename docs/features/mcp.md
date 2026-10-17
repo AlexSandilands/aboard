@@ -41,6 +41,10 @@ implementing the task. `set_plan` keeps the current one when it's omitted; `upda
 Autopilot flag (stored as null, 1 or 0). Agents may set it, but only after the user has said so, and no tool
 changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-flag).
 
+`add_to_backlog`, `create_task` and `update_task` take `priority: true | false`, which puts the task in the board's
+priority lane and makes Autopilot start it first ([board-layout.md](board-layout.md#the-priority-lane)). Agents set it
+only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
+
 `add_to_backlog`, `create_task` and `update_task` take `epic: "#N"` (`update_task` takes `null` to take the
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns

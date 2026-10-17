@@ -2,7 +2,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
-import { useSettingsNav } from "~/state/ui";
+import { useBoardView, useSettingsNav } from "~/state/ui";
 
 /**
  * The board search a navigation to "/" builds on: the current one on the board, else the board as it was when
@@ -70,8 +70,11 @@ export function useSetEpicFilter() {
 export function useSetProjectFilter() {
   const navigate = useNavigate();
   return useCallback(
-    (projectId: string | null) =>
-      navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: projectId ?? undefined }) }),
+    (projectId: string | null) => {
+      // The in-progress filter looks across every project, so choosing one ends it.
+      if (projectId) useBoardView.getState().setInProgressOnly(false);
+      return navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: projectId ?? undefined }) });
+    },
     [navigate],
   );
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentHarness } from "./agentSessions.ts";
 import { T3ModelSelection } from "./t3Launch.ts";
 
 // A task suggests a tier rather than a model, so planning agents never need to know any harness's model
@@ -42,12 +43,20 @@ export const SuggestedModelInput = z.object({
 });
 export type SuggestedModelInput = z.infer<typeof SuggestedModelInput>;
 
-/** What one tier means for this user: free text for any harness, plus an optional T3 Code model. */
+/**
+ * What one tier means for this user: free text for any harness, plus optional models for T3 Code and for the CLIs
+ * the board starts sessions in.
+ */
 export const ModelTierSetting = z.object({
   /** e.g. "Sonnet 5.5, medium effort"; shown in copied prompts. */
   description: z.string().nullable(),
   /** The label is captured when saved, so prompts can name the model without asking T3. */
   t3: z.object({ selection: T3ModelSelection, label: z.string() }).nullable(),
+  /**
+   * The `--model` a new Claude Code or Copilot CLI session runs on for this tier. Optional: settings saved before
+   * it existed have none. Checked as a CliModel when saved (sessionLaunch.ts imports this file).
+   */
+  cli: z.partialRecord(AgentHarness, z.string().nullable()).optional(),
 });
 export type ModelTierSetting = z.infer<typeof ModelTierSetting>;
 

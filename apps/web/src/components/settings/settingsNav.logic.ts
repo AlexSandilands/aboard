@@ -57,8 +57,8 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     label: "Integrations",
     sections: [
       section("integrations.t3-code", "T3 Code", ["pairing", "threads", "connection"]),
-      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli"]),
-      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli"]),
+      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli", "session", "model"]),
+      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session", "model"]),
       section("integrations.codex", "Codex", ["mcp"]),
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
       section("integrations.jira", "Jira", ["base url"]),

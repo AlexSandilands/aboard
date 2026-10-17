@@ -1,13 +1,16 @@
 import {
+  CliModel,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
   type ModelTiers,
+  type ModelTierSetting,
   type NotificationSettings,
   sanitizeKeybindingOverrides,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
+import { AppError } from "../errors.ts";
 import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
 import type { SettingsService } from "./types.ts";
@@ -25,6 +28,7 @@ const DEFAULTS: StoredSettings = {
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
   headlessReviewEnabled: false,
   headlessReviewCli: null,
+  copilotCli: null,
   headlessReviewBudgetUsd: 2,
   issueImportEnabled: true,
   issueImportModel: "haiku",
@@ -59,6 +63,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "reviewMaxRounds",
     "headlessReviewEnabled",
     "headlessReviewCli",
+    "copilotCli",
     "headlessReviewBudgetUsd",
     "issueImportEnabled",
     "issueImportModel",
@@ -70,14 +75,30 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
+/**
+ * A tier's CLI models with blanks dropped. Each goes on a command line as `--model`, so one that isn't a CliModel is
+ * refused.
+ */
+function cliModels(cli: ModelTierSetting["cli"]): ModelTierSetting["cli"] {
+  if (!cli) return undefined;
+  const entries = Object.entries(cli).flatMap(([harness, model]) => {
+    const value = model?.trim();
+    if (!value) return [];
+    if (!CliModel.safeParse(value).success) throw new AppError("VALIDATION", `Not a model name: ${value}`);
+    return [[harness, value] as const];
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 /** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
 const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): ModelTiers => ({
   ...current,
   ...Object.fromEntries(
-    Object.entries(input).map(([tier, setting]) => [
-      tier,
-      { ...setting, description: setting.description?.trim() || null },
-    ]),
+    Object.entries(input).map(([tier, setting]) => {
+      const { cli: _cli, ...rest } = setting;
+      const cli = cliModels(setting.cli);
+      return [tier, { ...rest, description: setting.description?.trim() || null, ...(cli ? { cli } : {}) }];
+    }),
   ),
 });
 
@@ -136,6 +157,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewCli !== undefined) {
           repos.settings.set("headlessReviewCli", blankToNull(input.headlessReviewCli));
         }
+        if (input.copilotCli !== undefined) repos.settings.set("copilotCli", blankToNull(input.copilotCli));
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }

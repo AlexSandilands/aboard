@@ -90,6 +90,16 @@ starts tasks you flag On, so Default never starts one. When Start planned tasks 
 project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
 flag tasks but never change Autopilot's own settings.
 
+## Priority
+
+Star a task on its card (the star shows when you hover it), or choose **Mark as priority** in the panel's More menu, and
+it moves to a **Priority** lane at the top of the board, above every project, whatever you are filtering. The lane
+shows priority tasks from all projects in their usual columns, each with its project's name; drag a card between
+columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
+tasks first. Turn the lane off in Settings → Board → Appearance; priority tasks then stay in their own lanes.
+
+To see only what is in progress, tick **In progress, all projects** in the filter menu.
+
 ## Handing a task to an agent
 
 Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste prompt for any agent
@@ -99,6 +109,16 @@ Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste pro
 A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
 [Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
+
+When Claude Code or Copilot CLI is installed (on your PATH, or at the path set in **Settings → Integrations**),
+**New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt
+already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
+suggested tier, see **Session models** under each CLI in Settings) and choose where it runs: a new git worktree
+from a branch you pick (the default), or the project's own folder. The board links the session to the task straight
+away. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
+opening a session that is still running brings that window back to the front. On Windows a prompt with a `%` in it,
+or longer than about 8,000 characters, can't go on the command line: the session starts with a short pointer to the
+task instead, and the full prompt is on your clipboard to paste.
 
 ## Your layout
 

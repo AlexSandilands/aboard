@@ -37,7 +37,7 @@ import { ApiError } from "~/lib/api";
 import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
 import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
-import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
+import { type PaletteIntent, useBoardView, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
@@ -511,6 +511,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       icon: projectIcon(project),
       run: () => {
         closePalette();
+        // The in-progress filter looks across every project, so jumping to one ends it.
+        useBoardView.getState().setInProgressOnly(false);
         void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: project.id }) });
       },
     };
