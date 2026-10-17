@@ -5,6 +5,7 @@ import { migrate, migrationNames, openDatabase, transaction, type Db } from "../
 import { AppError } from "../../errors.ts";
 import { EXPORTED_SETTINGS } from "../settings.ts";
 import { dumpBoard } from "./dump.ts";
+import { copyAttachmentFiles } from "./files.ts";
 
 /** Restore order: parents before children (foreign keys are deferred anyway, but this reads as the schema does). */
 const TABLES = [
@@ -40,6 +41,7 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   plan_phases: dump.tasks.flatMap((b) => b.plan_phases),
   plan_steps: dump.tasks.flatMap((b) => b.plan_steps),
   task_links: dump.tasks.flatMap((b) => b.task_links),
+  task_attachments: dump.tasks.flatMap((b) => b.task_attachments),
   task_labels: dump.tasks.flatMap((b) => b.task_labels),
   task_reviews: dump.tasks.flatMap((b) => b.task_reviews),
   review_findings: dump.tasks.flatMap((b) => b.review_findings),
@@ -181,6 +183,14 @@ export interface RestoreResult {
   schemaVersion: string;
   /** Where the database the restore replaced was moved to, if there was one. */
   previousDb: string | null;
+  /** Pasted images copied back, and those the backup has rows for but no file (a single-file dump has none). */
+  attachments: { copied: number; missing: number };
+}
+
+export interface RestoreOptions {
+  force?: boolean;
+  /** The backup folder the dump was read from, and the data dir's attachments folder to copy its images into. */
+  attachments?: { from: string | null; to: string };
 }
 
 /**
@@ -189,7 +199,7 @@ export interface RestoreResult {
  * it (`.before-restore-<time>`). Refuses to replace a board unless `force` is set. The caller makes sure no server
  * has the database open.
  */
-export function restoreBoard(dbPath: string, dump: BoardDump, options: { force?: boolean } = {}): RestoreResult {
+export function restoreBoard(dbPath: string, dump: BoardDump, options: RestoreOptions = {}): RestoreResult {
   checkManifest(dump);
   const exists = existsSync(dbPath);
   if (exists && !options.force && hasBoard(dbPath)) {
@@ -224,5 +234,12 @@ export function restoreBoard(dbPath: string, dump: BoardDump, options: { force?:
   }
   renameSync(tmpPath, dbPath);
   removeTmp();
-  return { counts: dump.manifest.counts, schemaVersion: dump.manifest.schemaVersion, previousDb };
+  const attachments = options.attachments
+    ? copyAttachmentFiles(
+        dump.tasks.flatMap((b) => b.task_attachments),
+        options.attachments.from,
+        options.attachments.to,
+      )
+    : { copied: 0, missing: 0 };
+  return { counts: dump.manifest.counts, schemaVersion: dump.manifest.schemaVersion, previousDb, attachments };
 }

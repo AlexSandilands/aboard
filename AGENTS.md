@@ -81,6 +81,7 @@ and to this table.
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
 | Notifications: the inbox, pop-ups, badges, their producers     | [docs/features/notifications.md](docs/features/notifications.md)                    |
 | Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
+| Pasted images: upload, storage, the pill, backups              | [docs/features/attachments.md](docs/features/attachments.md)                        |
 | Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |

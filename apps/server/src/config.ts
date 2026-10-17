@@ -25,6 +25,8 @@ export interface Config {
   sessionDirs: SessionDirs;
   /** Where Autopilot's headless runs get their git worktrees. */
   worktreesDir: string;
+  /** Where pasted images are stored, one folder per task. */
+  attachmentsDir: string;
 }
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
@@ -53,6 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     pollers: env[brandEnv("POLLERS")] !== "0",
     userHome: homedir(),
     worktreesDir: join(homeDir, "worktrees"),
+    attachmentsDir: join(homeDir, "attachments"),
     sessionDirs: {
       claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
       copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),

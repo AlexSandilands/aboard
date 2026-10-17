@@ -79,6 +79,8 @@ export interface BackupIntegration {
  */
 export function createBackupIntegration(deps: {
   services: () => Services;
+  /** Where pasted images are stored; the dump copies them next to its JSON. */
+  attachmentsDir: string;
   runGit?: RunGit;
   log?: Logger;
   now?: () => Date;
@@ -211,7 +213,7 @@ export function createBackupIntegration(deps: {
       if (!dir) throw new AppError("VALIDATION", "Choose a backup folder first");
       await prepareRepo(dir, settings.backupRemote);
       pullError = settings.backupRemote ? await pull(dir) : null;
-      writeDumpDir(dir, deps.services().backup.dump());
+      writeDumpDir(dir, deps.services().backup.dump(), deps.attachmentsDir);
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
       if (changes.length > 0) await commit(dir, commitMessage(changes));

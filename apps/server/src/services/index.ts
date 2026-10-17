@@ -7,6 +7,7 @@ import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
 import { createAutopilotService } from "./autopilot.ts";
+import { createAttachmentsService } from "./attachments.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
@@ -37,6 +38,8 @@ export interface ServiceDeps {
   automations?: readonly Automation[];
   /** Runs custom automations' shell commands; tests swap in a fake. */
   runShell?: RunShell;
+  /** Where pasted images are stored: `<data dir>/attachments`; tests use a temp folder. */
+  attachmentsDir: string;
   /** The clock for notifications (retention, quiet hours); tests swap in their own. */
   now?: () => Date;
 }
@@ -44,12 +47,16 @@ export interface ServiceDeps {
 /** Builds the service layer over one database. */
 export function createServices(deps: ServiceDeps): Services {
   const core = createCore({ ...deps, repos: createRepos(deps.db) });
+  const attachments = createAttachmentsService(core, deps.attachmentsDir);
   const builtIn = deps.automations ?? AUTOMATIONS;
   const settings = createSettingsService(core);
   const notifications = createNotificationsService(core);
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
   let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
-  const projects = createProjectsService(core, { onUnarchived: (id) => restartRecurring?.([id]) });
+  const projects = createProjectsService(core, {
+    onUnarchived: (id) => restartRecurring?.([id]),
+    onTasksDeleted: (ids) => ids.forEach((id) => attachments.removeFilesOf(id)),
+  });
   const labels = createLabelsService(core);
   const templates = createTemplatesService(core, { projects });
 
@@ -68,6 +75,7 @@ export function createServices(deps: ServiceDeps): Services {
     imports: () => imports!,
     templates,
     relations: () => relations!,
+    attachments,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service });
@@ -98,7 +106,8 @@ export function createServices(deps: ServiceDeps): Services {
     reviews,
     labels: labels.service,
     imports: imports.service,
-    backup: createBackupService(core),
+    attachments,
+    backup: createBackupService(core, deps.attachmentsDir),
     templates,
     notifications,
     autopilot: createAutopilotService(core, {

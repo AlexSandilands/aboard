@@ -3,6 +3,7 @@ import { AppError } from "../../errors.ts";
 import type { Core } from "../core.ts";
 import { syncEpicStatus } from "../tasks.ts";
 import { dumpBoard } from "./dump.ts";
+import { copyAttachmentFiles } from "./files.ts";
 import { insertRows, upgradeDump } from "./restore.ts";
 
 export interface RestoreTaskResult {
@@ -18,14 +19,23 @@ export interface BackupService {
    * Puts one task from a backup back on the live board: its plan, links, labels, reviews and history. Refuses if
    * the task is still on the board unless `force`, which replaces it. Its project must be on the board.
    */
-  restoreTask(dump: BoardDump, number: number, options: { force?: boolean; actor: string }): RestoreTaskResult;
+  restoreTask(
+    dump: BoardDump,
+    number: number,
+    options: {
+      force?: boolean;
+      actor: string;
+      /** The backup folder the dump came from; the task's pasted images are copied from its `attachments/`. */
+      attachmentsFrom?: string | null;
+    },
+  ): RestoreTaskResult;
 }
 
-export function createBackupService(core: Core): BackupService {
+export function createBackupService(core: Core, attachmentsDir: string): BackupService {
   const { db, repos } = core;
   return {
     dump: () => dumpBoard(db),
-    restoreTask(dump, number, { force = false, actor }) {
+    restoreTask(dump, number, { force = false, actor, attachmentsFrom = null }) {
       // Before the write: upgrading an older dump runs its own transaction on a scratch database.
       const current = upgradeDump(dump);
       const bundle = current.tasks.find((b) => b.task.number === number);
@@ -94,6 +104,7 @@ export function createBackupService(core: Core): BackupService {
         // A restored epic, or the epic a task came back into, takes its status from its tasks as they are now.
         syncEpicStatus(repos, taskId, actor, fx);
         if (task.parent_id) syncEpicStatus(repos, String(task.parent_id), actor, fx);
+        copyAttachmentFiles(bundle.task_attachments, attachmentsFrom, attachmentsDir);
         return { taskId, number: Number(task.number) };
       });
     },

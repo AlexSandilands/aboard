@@ -19,6 +19,7 @@ import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
+import type { AttachmentsService } from "./attachments.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
@@ -87,6 +88,7 @@ export function createTasksService(
     imports: () => ImportsModule;
     templates: TemplatesService;
     relations: () => RelationsModule;
+    attachments: AttachmentsService;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -363,6 +365,8 @@ export function createTasksService(
         }
         for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
         linkTitleKeys(task.id, task.title, actor);
+        // Images pasted into the new-task box were uploaded before the task existed.
+        deps.attachments.claim(task.id, description);
         return task.id;
       });
       return service.detail(id);
@@ -651,6 +655,8 @@ export function createTasksService(
           syncEpic(task.parentId, actor, fx);
         }
       });
+      // After the commit: a delete that rolled back keeps its images.
+      deps.attachments.removeFilesOf(id);
     },
   };
 

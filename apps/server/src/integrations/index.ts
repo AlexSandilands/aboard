@@ -24,7 +24,10 @@ import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "port" | "webPort"> &
+  config: Pick<
+    Config,
+    "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
+  > &
     Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -93,6 +96,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   const backup = createBackupIntegration({
     services: deps.services,
+    attachmentsDir: deps.config.attachmentsDir,
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });

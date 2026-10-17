@@ -33,7 +33,7 @@ export function repositoryRootOf(path: string): string {
 /** Projects: lanes on the board, optionally bound to a workspace folder. */
 export function createProjectsService(
   core: Core,
-  hooks: { onUnarchived?: (projectId: string) => void } = {},
+  hooks: { onUnarchived?: (projectId: string) => void; onTasksDeleted?: (taskIds: readonly string[]) => void } = {},
 ): ProjectsService {
   const { repos } = core;
 
@@ -152,7 +152,7 @@ export function createProjectsService(
     },
 
     delete(id) {
-      core.write((fx) => {
+      const deleted = core.write((fx) => {
         get(id);
         const taskIds = repos.tasks.idsForProject(id);
         for (const taskId of taskIds) fx.taskDeleted(taskId);
@@ -168,7 +168,10 @@ export function createProjectsService(
         }
         repos.projects.delete(id);
         fx.projectDeleted(id);
+        return taskIds;
       });
+      // After the commit: a delete that rolled back keeps its images.
+      hooks.onTasksDeleted?.(deleted);
     },
   };
   return service;

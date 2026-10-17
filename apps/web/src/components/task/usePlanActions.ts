@@ -46,6 +46,8 @@ export function usePlanActions(taskId: string) {
     const onError = () => void queryClient.invalidateQueries({ queryKey: key });
 
     return {
+      /** The task the plan is on, for what is attached to it (pasted images). */
+      taskId,
       setStepStatus(stepId: string, status: StepStatus) {
         patch((d) => patchStep(d, stepId, { status }));
         mutateUpdateStep({ stepId, status }, { onError });
