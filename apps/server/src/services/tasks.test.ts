@@ -418,6 +418,28 @@ describe("events", () => {
   });
 });
 
+describe("priority", () => {
+  it("starts off, is set on create, and logs a change once", () => {
+    const { s, project } = setup();
+    const plain = s.tasks.create({ projectId: project.id, title: "Plain" });
+    expect(plain.priority).toBe(false);
+    expect(s.tasks.create({ projectId: project.id, title: "Urgent", priority: true }).priority).toBe(true);
+
+    expect(s.tasks.update(plain.id, { priority: true }, "user").priority).toBe(true);
+    const again = s.tasks.update(plain.id, { priority: true }, "user");
+    expect(again.events.filter((e) => e.type === "updated").map((e) => e.payload)).toEqual([{ fields: ["priority"] }]);
+    expect(s.tasks.update(plain.id, { priority: false }, "user").priority).toBe(false);
+  });
+
+  it("is refused on epics, which have no card in the lane", () => {
+    const { s, project } = setup();
+    expectCode(() => s.tasks.create({ projectId: project.id, title: "E", kind: "epic", priority: true }), "VALIDATION");
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { priority: true }, "user"), "VALIDATION");
+    expect(s.tasks.update(epic.id, { priority: false }, "user").priority).toBe(false);
+  });
+});
+
 describe("autopilot flag", () => {
   it("starts as Default, is set on create, and logs a change once", () => {
     const { s, project } = setup();

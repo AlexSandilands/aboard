@@ -448,6 +448,8 @@ export const TaskSummary = z.object({
   autoReview: z.boolean().nullable(),
   /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
   autopilot: z.boolean().nullable(),
+  /** True shows the task in the priority lane above every project; always false for an epic. */
+  priority: z.boolean(),
   /** An epic's delivery; null for a task, and for an epic nobody chose one for yet (which delivers to main). */
   delivery: EpicDelivery.nullable(),
   /**
@@ -599,6 +601,8 @@ export const CreateTaskInput = z
     labels: z.array(z.string()).optional(),
     /** The Autopilot flag: null or omitted is Default. */
     autopilot: z.boolean().nullable().optional(),
+    /** True puts the task in the priority lane. Defaults to false. */
+    priority: z.boolean().optional(),
     /** Tasks that block this one (uuid, "#42" or "42"). */
     blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
@@ -639,6 +643,8 @@ export const UpdateTaskInput = z.object({
   autoReview: z.boolean().nullable().optional(),
   /** null is Default: Start planned tasks never starts the task. */
   autopilot: z.boolean().nullable().optional(),
+  /** True puts the task in the priority lane above every project; false takes it out. */
+  priority: z.boolean().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
   /** null clears it. */
