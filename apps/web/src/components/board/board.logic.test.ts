@@ -477,6 +477,15 @@ describe("buildLanes: the priority lane", () => {
     expect(none.some((l) => l.priority)).toBe(false);
   });
 
+  it("leaves a Done priority task in its project, and brings it back to the lane when reopened", () => {
+    const done = task("f", { projectId: "p", priority: true, status: "done" });
+    const lanes = buildLanes(board([done]), withLane);
+    expect(lanes.map((l) => l.project.id)).toEqual(["p", "q"]);
+    expect(lanes[0]!.cells.done.map((t) => t.id)).toEqual(["f"]);
+    const reopened = buildLanes(board([{ ...done, status: "planned" }]), withLane);
+    expect(reopened[0]!.priority).toBe(true);
+  });
+
   it("keeps archived priority tasks in their project", () => {
     const lanes = buildLanes(board(tasks), withLane, [tasks[3]!]);
     expect(lanes[0]!.cells.backlog).toEqual([]);

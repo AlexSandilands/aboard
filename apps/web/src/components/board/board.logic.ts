@@ -195,7 +195,7 @@ function sortCells(cells: Record<TaskStatus, TaskSummary[]>): Record<TaskStatus,
  * are easy to scan. `archived` tasks (Show archived) join their lanes; the snapshot's copy wins if a task
  * is in both.
  *
- * With `priorityLane`, the board's priority tasks (not archived, not epics) leave their projects for a lane in
+ * With `priorityLane`, the board's open priority tasks (not archived, not epics, not Done) leave their projects for a lane in
  * front of them, whatever project is scoped to. The card filters still apply to them.
  */
 export function buildLanes(
@@ -217,7 +217,12 @@ export function buildLanes(
     epicFilter !== null;
   const statusOk = (task: TaskSummary) => !filters.inProgressOnly || task.status === "in_progress";
   const inPriorityLane = (task: TaskSummary) =>
-    filters.priorityLane === true && task.priority && task.kind !== "epic" && !task.archivedAt;
+    filters.priorityLane === true &&
+    task.priority &&
+    task.kind !== "epic" &&
+    !task.archivedAt &&
+    // Finished work goes back to its project, so the lane only holds what is still open.
+    task.status !== "done";
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
     (!filters.hasPrOnly || hasPr(task)) &&

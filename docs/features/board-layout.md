@@ -19,7 +19,7 @@ A task can be marked **priority** (`tasks.priority`, 0 or 1; epics can't be). Th
 every project in a lane above the project lanes (`PriorityLane`, a `Lane` with `priority: true` whose project is the
 stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). `buildLanes` does the gathering.
 
-- **Membership.** Non-epic, non-archived priority tasks. They **move** into the lane: they aren't in their project's
+- **Membership.** Non-epic, non-archived priority tasks that aren't Done. A task that reaches Done goes back to its project's lane (it keeps the flag, so reopening it returns it to the lane), so the lane only holds open work and its Done column stays empty. They **move** into the lane: they aren't in their project's
   lane or its epic's band while it shows. An archived priority task (Show archived) stays in its project. The lane
   has no bands: a card of an epic shows the epic on the card as it does anywhere, and the epic's band loses it.
 - **Filters.** A project scope (`?project=`) doesn't hide the lane, since it is for the tasks you want whatever you
@@ -27,8 +27,8 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
   to its cards like any other. A lane with no cards isn't built.
 - **Off.** Settings → Board → Appearance → **Priority lane** (`showPriorityLane` in `board-view`, on by default).
   Off, priority tasks sit in their own lanes as any task.
-- **Cards** name their project in a small chip. Order is by project (the board's order), then position; Done is
-  newest first. The cells count in the column headers like any lane's.
+- **Cards** name their project in a small chip. Order is by project (the board's order), then position.
+  The cells count in the column headers like any lane's.
 - **Setting it.** The star on a card (shown on hover, filled while set), **Mark as priority** in the panel's More menu,
   and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
 - **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which

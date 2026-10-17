@@ -95,7 +95,7 @@ flag tasks but never change Autopilot's own settings.
 Star a task on its card (the star shows when you hover it), or choose **Mark as priority** in the panel's More menu, and
 it moves to a **Priority** lane at the top of the board, above every project, whatever you are filtering. The lane
 shows priority tasks from all projects in their usual columns, each with its project's name; drag a card between
-columns there to change its status, or onto its own project's lane to take it off the lane. Autopilot starts priority
+columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
 tasks first. Turn the lane off in Settings → Board → Appearance; priority tasks then stay in their own lanes.
 
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
