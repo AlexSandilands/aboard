@@ -213,6 +213,29 @@ describe("docToMarkdown after edits", () => {
     expect(docToMarkdown(doc(paragraph))).toBe("**a** b");
   });
 
+  it("keeps a line typed after a list or quote out of it", () => {
+    const list = schema.nodes.bulletList!.create(null, [item("a", { marker: "-" })]);
+    const quote = schema.nodes.blockquote!.create(null, schema.nodes.paragraph!.create(null, schema.text("q")));
+    const after = () => schema.nodes.paragraph!.create(null, schema.text("after"));
+    expect(docToMarkdown(doc(list, after()))).toBe("- a\n\nafter");
+    expect(docToMarkdown(doc(quote, after()))).toBe("> q\n\nafter");
+    // Written without the blank line, the text reads as a continuation, so it opens as plain text.
+    expect(canRoundTrip(schema, "- a\nafter")).toBe(false);
+    expect(canRoundTrip(schema, "> q\nafter")).toBe(false);
+    expect(canRoundTrip(schema, "- a\n\nafter")).toBe(true);
+  });
+
+  it("keeps a list that can't start straight after text apart from it", () => {
+    const text = () => schema.nodes.paragraph!.create(null, schema.text("text"));
+    const ordered = schema.nodes.orderedList!.create({ start: 2 }, [item("b", { marker: "2." })]);
+    const empty = schema.nodes.bulletList!.create(null, [item("", { marker: "-" })]);
+    expect(docToMarkdown(doc(text(), ordered))).toBe("text\n\n2. b");
+    expect(docToMarkdown(doc(text(), empty))).toBe("text\n\n-");
+    // A bullet with text, or "1.", can.
+    expect(canRoundTrip(schema, "Steps:\n- a\n\nThen:\n1. b")).toBe(true);
+    expect(canRoundTrip(schema, "text\n2. b")).toBe(false);
+  });
+
   it("writes an upload still in progress as nothing", () => {
     const paragraph = schema.nodes.paragraph!.create(null, [
       schema.text("a"),

@@ -1005,6 +1005,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                 <Select
                   items={templateItems}
                   value={templateId ?? "none"}
+                  // A template replaces the description, which would drop an image still uploading into it.
+                  disabled={descriptionInput.uploading}
                   onValueChange={(value) => pickTemplate(value === "none" ? null : value)}
                 >
                   <SelectTrigger size="sm" aria-label="Template" icon={<LayoutTemplateIcon className="size-3.5" />}>

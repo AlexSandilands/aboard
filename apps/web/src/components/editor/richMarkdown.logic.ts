@@ -489,6 +489,12 @@ export function docToMarkdown(doc: ProseMirrorNode): string {
         if (index === blocks.length - 1 && index > 0 && block.content.size === 0) {
           if (blocks[index - 1]!.type.name === "horizontalRule") return;
         }
+        // A line straight after a list or quote would read as part of its last item or line (a lazy
+        // continuation), so a blank line keeps it apart; text written that way opens in the textarea.
+        if (block.content.size > 0 && index > 0) {
+          const previous = blocks[index - 1]!.type.name;
+          if (previous === "blockquote" || LIST_NAMES.has(previous)) lines.push("");
+        }
         lines.push(serializeInline(block));
         return;
       case "heading": {
@@ -508,7 +514,15 @@ export function docToMarkdown(doc: ProseMirrorNode): string {
         lines.push(str(block.attrs.source) || "---");
         return;
       default:
-        if (LIST_NAMES.has(block.type.name)) lines.push(...serializeList(block, null));
+        if (LIST_NAMES.has(block.type.name)) {
+          const list = serializeList(block, null);
+          // Straight after a line of text, only an item with text, marked with a bullet or "1.", starts a list;
+          // any other reads as more of that text (or "-" alone as a heading underline).
+          const previous = index > 0 ? blocks[index - 1]! : null;
+          const interrupts = /^[ \t]*([-*+]|1[.)])[ \t]+\S/.test(list[0]!);
+          if (previous?.type.name === "paragraph" && previous.content.size > 0 && !interrupts) lines.push("");
+          lines.push(...list);
+        }
     }
   });
   return lines.join("\n");

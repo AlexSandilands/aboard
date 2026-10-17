@@ -41,7 +41,9 @@ lines, nothing nests in a heading. TipTap's chords that would nest blocks anyway
 
 - nothing in it the line model would show as something it isn't: tables, HTML or comments, setext headings,
   reference links, indented code or continuation lines, and blocks nested in quotes or list items;
-- building the document and writing it back gives the same text. CRLF counts as LF (an editor left untouched
+- building the document and writing it back gives the same text. The serializer puts a blank line between a
+  list or quote and a line after it (else the line reads as part of the last item), so text with a line straight
+  after a list or quote falls back too. CRLF counts as LF (an editor left untouched
   never sends a change, so the stored text keeps its CRLF); a lone `\r` falls back.
 
 Other text opens in the textarea, with "Editing as plain Markdown" under it and the image thumbnails below. The
