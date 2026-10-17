@@ -13,6 +13,17 @@ The issue stays linked to the task. If the import fails, the card shows a warnin
 and has a **Retry** button. The task is usable meanwhile; the failed import only means its title is still the
 issue key.
 
+## Epics
+
+If the issue is a Jira epic, or a GitHub issue with sub-issues, the task becomes an epic (a band grouping tasks on the board) and each
+child issue becomes a task in it, which imports on its own. The epic's panel shows how many of them have
+finished. A child that is already a task in the same project (linked to the same issue) moves into the epic
+instead of being created twice; one that is already in another epic stays there, and the epic's notes say so.
+An epic brings in at most 50 tasks; its notes say when the issue has more.
+
+The task stays a task, with a note saying why, if it can't be an epic by the time the import finishes: you gave
+it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
+
 ## What you need
 
 - **GitHub issues** need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`). The board
@@ -29,8 +40,9 @@ unless you set another), on a small model (Haiku by default).
 ## Settings
 
 **Settings → Tasks → New tasks** (Issue import) has the switch, the model, the most one import may spend, and the Jira tools it
-may call. By default the board looks for the common one-issue read tools (`get_jira_issue`, `getJiraIssue`,
-`jira_get_issue`) on every connected MCP server. If your Jira server names its read tool differently, list
-it there as `mcp__<server>__<tool>`.
+may call. By default the board looks for the common read tools on every connected MCP server: one issue
+(`get_jira_issue`, `getJiraIssue`, `jira_get_issue`) and a JQL search (`search_jira`,
+`searchJiraIssuesUsingJql`, `jira_search`), which finds an epic's children. If your Jira server names them
+differently, list them there as `mcp__<server>__<tool>`; without a search tool, an epic imports as a single task.
 
 How it works: [docs/features/issue-import.md](../features/issue-import.md).

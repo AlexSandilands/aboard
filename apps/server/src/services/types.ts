@@ -131,6 +131,11 @@ export interface TasksService {
   create(input: CreateTaskInput): TaskDetail;
   /** Creates an epic and puts the given tasks in it, all or nothing. */
   createEpic(input: Omit<CreateTaskInput, "kind" | "epicId" | "plan">, taskIds: string[], actor: string): TaskDetail;
+  /**
+   * Turns a task into an epic, for an import that found one. Returns why it can't (it is in an epic, has a plan, is
+   * archived, closed, flagged for Autopilot or a priority), or null once it is an epic (or already was one).
+   */
+  makeEpic(id: string, actor: string): string | null;
   update(id: string, input: UpdateTaskInput, actor: string): TaskDetail;
   /**
    * Sets an epic's delivery. `integration` needs the branch, which the caller has already created on origin (see
@@ -333,6 +338,18 @@ export interface ImportResult {
   description: string | null;
   /** Raw label suggestions; normalised, deduped and capped when applied. */
   labels: string[];
+  /**
+   * Set when the issue is an epic (a Jira epic, a GitHub issue with sub-issues): the task becomes an epic and its
+   * children become tasks in it. `children` are their Jira keys or issue URLs, at most IMPORT_CHILDREN_MAX of them;
+   * `total` is how many the issue has.
+   */
+  epic?: { children: string[]; total: number };
+}
+
+/** What completing an import set off. */
+export interface ImportCompletion {
+  /** Tasks created for the epic's children, each with its own pending import to start. */
+  childImports: string[];
 }
 
 /** The background fill-in of tasks created from a Jira or GitHub issue (see CreateTaskInput.sourceUrl). */
@@ -344,9 +361,10 @@ export interface ImportsService {
   claim(taskId: string): ImportRecord | null;
   /**
    * Applies the result and marks the import done. The title is replaced only while it is still the placeholder and
-   * the description only while empty, so edits made during the fetch stand; labels are added to the task's.
+   * the description only while empty, so edits made during the fetch stand; labels are added to the task's. An
+   * epic's result turns the task into an epic and fills it with its children (see ImportResult.epic).
    */
-  complete(taskId: string, result: ImportResult): void;
+  complete(taskId: string, result: ImportResult): ImportCompletion;
   /** Marks the import failed with the reason; the card shows it as a warning. */
   fail(taskId: string, error: string): void;
   /**

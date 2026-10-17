@@ -37,7 +37,10 @@ export interface IssueImporter {
  */
 export function createIssueImporter(deps: {
   services: () => Services;
-  github: { fetchIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails> };
+  github: {
+    fetchIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails>;
+    fetchSubIssues(ref: { host: string; repo: string; number: number }): Promise<string[]>;
+  };
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   log?: Logger;
@@ -71,11 +74,18 @@ export function createIssueImporter(deps: {
     const issue = await deps.github.fetchIssue(source.ref);
     const link = issueLink(record.taskId);
     if (link) s.links.setSnapshot(link.id, { state: issue.state, title: issue.title });
+    // An issue with sub-issues is GitHub's epic. Without them (or when they can't be read) it is a plain task.
+    const subIssues = await deps.github.fetchSubIssues(source.ref).catch((error: unknown) => {
+      log.warn(`[import] ${record.sourceUrl}: couldn't read its sub-issues: ${messageOf(error)}`);
+      return [];
+    });
+    const epic = subIssues.length > 0 ? { epic: { children: subIssues, total: subIssues.length } } : {};
 
     const raw = (): ImportResult => ({
       title: issue.title,
       description: issue.body.trim() ? issue.body.trim().slice(0, RAW_BODY_MAX) : null,
       labels: issue.labels,
+      ...epic,
     });
     const settings = s.settings.get();
     if (!settings.issueImportEnabled) return raw();
@@ -98,7 +108,7 @@ export function createIssueImporter(deps: {
         jiraTools: [],
         denyTools: [],
       });
-      return { title: outcome.title, description: outcome.description, labels: outcome.labels };
+      return { title: outcome.title, description: outcome.description, labels: outcome.labels, ...epic };
     } catch (error) {
       log.warn(`[import] ${record.sourceUrl}: summarising failed, using the issue as written: ${messageOf(error)}`);
       return raw();
@@ -158,7 +168,12 @@ export function createIssueImporter(deps: {
       jiraTools,
       denyTools: writeToolDenyRules(servers, jiraTools),
     });
-    return { title: outcome.title, description: outcome.description, labels: outcome.labels };
+    return {
+      title: outcome.title,
+      description: outcome.description,
+      labels: outcome.labels,
+      ...(outcome.epic ? { epic: outcome.epic } : {}),
+    };
   };
 
   const runOne = async (taskId: string): Promise<void> => {
@@ -170,7 +185,9 @@ export function createIssueImporter(deps: {
       if (record.attempts > MAX_IMPORT_ATTEMPTS) {
         throw new Error(`Gave up after ${MAX_IMPORT_ATTEMPTS} attempts; use Retry to try again`);
       }
-      s.imports.complete(taskId, await (record.sourceKind === "jira" ? importJira(record) : importGithub(record)));
+      const result = await (record.sourceKind === "jira" ? importJira(record) : importGithub(record));
+      // An epic's children each run their own import, through the same queue.
+      for (const child of s.imports.complete(taskId, result).childImports) enqueue(child);
     } catch (error) {
       log.warn(`[import] ${record.sourceUrl}: ${messageOf(error)}`);
       try {
