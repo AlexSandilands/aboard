@@ -1,3 +1,4 @@
+import { ImagePreviewDialog } from "~/components/attachments/ImagePreviewDialog";
 import { DigestDialog } from "~/components/digest/DigestDialog";
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
@@ -17,6 +18,7 @@ export function AppDialogs() {
       <MergePrDialog />
       <SessionWarningDialog />
       <TemplateDraftDialog />
+      <ImagePreviewDialog />
     </>
   );
 }

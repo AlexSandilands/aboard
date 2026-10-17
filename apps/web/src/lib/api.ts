@@ -1,4 +1,4 @@
-import { storageKey, type ApiErrorBody, type ApiErrorCode } from "@repo/contracts";
+import { attachmentUrl, storageKey, type ApiErrorBody, type ApiErrorCode, type TaskAttachment } from "@repo/contracts";
 
 export class ApiError extends Error {
   constructor(
@@ -34,6 +34,34 @@ function authToken(): string | null {
 export function eventsUrl(): string {
   const token = authToken();
   return token ? `/events?token=${encodeURIComponent(token)}` : "/events";
+}
+
+/** Where an `<img>` loads an attachment from; it can't send a header, so the token rides in the query. */
+export function attachmentSrc(id: string): string {
+  const token = authToken();
+  return token ? `${attachmentUrl(id)}?token=${encodeURIComponent(token)}` : attachmentUrl(id);
+}
+
+/** Uploads an image (the body is the file itself). `taskId` is null in the new-task box, whose task isn't created yet. */
+export async function uploadAttachment(file: Blob, filename: string, taskId: string | null): Promise<TaskAttachment> {
+  const token = authToken();
+  const query = new URLSearchParams({ filename, ...(taskId ? { taskId } : {}) });
+  const res = await fetch(`/api/attachments?${query}`, {
+    method: "POST",
+    headers: { "content-type": file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const json = (await res.json().catch(() => null)) as unknown;
+  if (!res.ok) {
+    const err = (json as ApiErrorBody | null)?.error;
+    throw new ApiError(
+      err?.code ?? "INTERNAL",
+      err?.message ?? `Upload failed (${res.status})`,
+      res.status,
+      err?.details,
+    );
+  }
+  return json as TaskAttachment;
 }
 
 /** JSON fetch against the server. Throws ApiError with the server's error code. */

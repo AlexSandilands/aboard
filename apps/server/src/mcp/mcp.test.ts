@@ -126,6 +126,7 @@ describe("MCP endpoint", () => {
     expect(detail).toContain("Add dark mode");
     expect(detail).toContain("1.1 [x] Add theme tokens");
     expect(detail).toContain("Use CSS variables.");
+    expect(detail).not.toContain("Images");
     expect(detail).toContain("acme/app#12");
     expect(detail).toContain("claude-code: note: Handover: toggle wiring next.");
     expect(detail).toContain('step "Add theme tokens" todo -> done');
@@ -149,6 +150,22 @@ describe("MCP endpoint", () => {
     expect(linked.isError).toBeFalsy();
     expect(text(linked)).toContain("Warning: Linked without checking the thread exists");
     expect(h.services.tasks.detail(task.id).links).toMatchObject([{ kind: "t3_thread", ref: { threadId } }]);
+  });
+
+  it("get_task lists the task's pasted images with their absolute paths", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:\\Fake\\proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "Fix the layout" });
+    const image = h.services.attachments.upload({
+      taskId: task.id,
+      filename: "bug.png",
+      mime: "image/png",
+      bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]),
+    });
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
+    const [stored] = h.services.attachments.forTask(task.id);
+    expect(stored!.id).toBe(image.id);
+    expect(detail).toContain("Images");
+    expect(detail).toContain(`- ${stored!.path} (bug.png, 7 B)`);
   });
 
   it("puts the full detail in the text and sends no structuredContent", async () => {

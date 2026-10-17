@@ -224,7 +224,8 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         "The 'where was I' call. Full task detail: description, plan context, every phase/step with its status " +
         "and id (1.2 [x] ...), the current step, links with live PR/thread state, and recent activity including " +
         "handover notes. ALWAYS call this before resuming work on an existing task, then act on any 'Missing links' " +
-        "it lists (the Jira issue, your T3 thread).",
+        "it lists (the Jira issue, your T3 thread). Images the user pasted into the text (a screenshot of a bug) " +
+        "are listed under 'Images' with their absolute file paths: open them with your file tools.",
       inputSchema: {
         task: taskField,
         events: z
@@ -245,6 +246,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           labelsInUse: services.labels.usage(),
           sessionHarness: harnessOfClient(client()),
           progress: { now: Date.now() },
+          images: services.attachments.forTask(task.id),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));

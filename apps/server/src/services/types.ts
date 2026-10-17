@@ -40,6 +40,7 @@ import type {
 } from "@repo/contracts";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { AttachmentsService } from "./attachments.ts";
 import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { CustomAutomationsService } from "./customAutomations.ts";
@@ -66,6 +67,7 @@ export interface Services {
   reviews: ReviewsService;
   labels: LabelsService;
   imports: ImportsService;
+  attachments: AttachmentsService;
   backup: BackupService;
   templates: TemplatesService;
   autopilot: AutopilotService;

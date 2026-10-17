@@ -19,6 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { InlineInput } from "./InlineInput";
+import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { cycleStepStatus, railSegmentTone, STEP_STATUS_LABELS, type RailTone } from "./plan.logic";
 import { STEP_TITLE_TONE, StepStatusGlyph } from "./StepVisuals";
@@ -162,6 +163,7 @@ export function PlanStepRow({
             <div className="pb-2">
               {editingNotes ? (
                 <MarkdownEditor
+                  taskId={actions.taskId}
                   ariaLabel={`Notes for ${step.title}`}
                   value={step.notes ?? ""}
                   placeholder="Notes, decisions, gotchas… (markdown)"
@@ -177,7 +179,10 @@ export function PlanStepRow({
               ) : (
                 <div className="flex flex-col items-start gap-1">
                   {hasNotes ? (
-                    <Markdown size="xs">{step.notes!}</Markdown>
+                    <>
+                      <Markdown size="xs">{step.notes!}</Markdown>
+                      <AttachmentThumbs text={step.notes} />
+                    </>
                   ) : (
                     <span className="text-xs text-muted-foreground/70">No notes yet.</span>
                   )}

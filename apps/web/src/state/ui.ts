@@ -226,6 +226,10 @@ interface DialogsState {
   templateDraft: CreateTemplateInput | null;
   openTemplateDraft: (draft: CreateTemplateInput) => void;
   closeTemplateDraft: () => void;
+  /** The pasted image open in the preview. */
+  imagePreview: { id: string; filename: string } | null;
+  openImagePreview: (image: { id: string; filename: string }) => void;
+  closeImagePreview: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
@@ -237,6 +241,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
+  imagePreview: null,
   openProjectSettings: (projectSettingsId, section) =>
     set({ projectSettingsId, projectSettingsSection: section ?? null }),
   closeProjectSettings: () => set({ projectSettingsId: null, projectSettingsSection: null }),
@@ -251,6 +256,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeSessionWarning: () => set({ sessionWarning: null }),
   openTemplateDraft: (templateDraft) => set({ templateDraft }),
   closeTemplateDraft: () => set({ templateDraft: null }),
+  openImagePreview: (imagePreview) => set({ imagePreview }),
+  closeImagePreview: () => set({ imagePreview: null }),
 }));
 
 /** The merge method last picked per repo (`host/owner/repo`), offered first next time. */
