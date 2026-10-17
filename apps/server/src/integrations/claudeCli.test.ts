@@ -25,6 +25,14 @@ describe("claude CLI", () => {
     expect(resolveExecutable("missing", env, "win32")).toBeNull();
     expect(resolveExecutable(join(dir, "bin", "claude"), env, "win32")).not.toBeNull();
   });
+  it("prefers a Windows shim over the extensionless script beside it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "headless-"));
+    writeFileSync(join(dir, "copilot"), "");
+    writeFileSync(join(dir, "copilot.cmd"), "");
+    const env = { PATH: dir, PATHEXT: ".EXE;.cmd" };
+    expect(resolveExecutable("copilot", env, "win32")?.toLowerCase()).toBe(join(dir, "copilot.cmd").toLowerCase());
+    expect(resolveExecutable("copilot", env, "linux")).toBe(join(dir, "copilot"));
+  });
   // Only meaningful on Windows, where cmd.exe parses the line; the escaping is what makes it round-trip.
   it.runIf(process.platform === "win32")("runs a .cmd shim in a folder with spaces, arguments intact", async () => {
     const dir = join(mkdtempSync(join(tmpdir(), "headless-")), "Program Files", "claude cli");

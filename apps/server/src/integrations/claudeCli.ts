@@ -18,7 +18,9 @@ export function resolveExecutable(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string | null {
-  const exts = platform === "win32" ? ["", ...(env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";").filter(Boolean)] : [""];
+  // On Windows an extension is tried before the bare name: npm puts an extensionless shell script beside its
+  // `.cmd` shim, and only the shim can be spawned.
+  const exts = platform === "win32" ? [...(env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";").filter(Boolean), ""] : [""];
   const candidates = (base: string) => exts.map((ext) => base + ext);
   if (isAbsolute(command) || command.includes("/") || command.includes("\\")) {
     return candidates(command).find((c) => existsSync(c)) ?? null;
@@ -59,7 +61,7 @@ interface RunResult {
 function run(
   exe: string,
   args: string[],
-  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv },
+  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv; label?: string },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
@@ -77,7 +79,7 @@ function run(
     let stderr = "";
     const timer = setTimeout(() => {
       killTree(child);
-      reject(new Error(`Claude Code didn't finish within ${formatDuration(opts.timeoutMs)}`));
+      reject(new Error(`${opts.label ?? "Claude Code"} didn't finish within ${formatDuration(opts.timeoutMs)}`));
     }, opts.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
@@ -199,10 +201,15 @@ export async function claudeOutput(
   return result.stdout;
 }
 
-/** `claude --version`, for the settings' Test button. */
+/** `<exe> --version` for any CLI (Claude Code, Copilot): the first line it prints. Throws when it can't run. */
+export async function executableVersion(exe: string, label?: string): Promise<string> {
+  const result = await run(exe, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS, ...(label ? { label } : {}) });
+  if (result.code !== 0) throw new Error(result.stderr.trim() || `exited with code ${result.code}`);
+  return result.stdout.trim().split(/\r?\n/)[0] ?? "";
+}
+
+/** `claude --version`: the resolved path and the version. Throws when it isn't found or won't run. */
 export async function claudeCliVersion(cli: string | null): Promise<{ path: string; version: string }> {
   const path = cliPath(cli);
-  const result = await run(path, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS });
-  if (result.code !== 0) throw new Error(result.stderr.trim() || `exited with code ${result.code}`);
-  return { path, version: result.stdout.trim() };
+  return { path, version: await executableVersion(path) };
 }

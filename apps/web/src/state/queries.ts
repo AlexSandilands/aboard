@@ -1,5 +1,6 @@
 import type {
   AgentClis,
+  AgentIntegrations,
   AppSettings,
   AutopilotOverview,
   AutopilotActiveRun,
@@ -60,6 +61,7 @@ export const queryKeys = {
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
   agentClis: ["agentClis"] as const,
+  agentIntegrations: ["agentIntegrations"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
   prFix: (linkId: string) => ["prFix", linkId] as const,
   templates: ["templates"] as const,
@@ -238,6 +240,18 @@ export function useAgentClis() {
   return useQuery({
     queryKey: queryKeys.agentClis,
     queryFn: ({ signal }) => api<AgentClis>("/api/agent-clis", { signal }),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Whether each harness's CLI runs and has the board's MCP registered, for the settings pills. The server runs the CLIs
+ * and caches the answer for a minute; Re-check asks it again.
+ */
+export function useAgentIntegrations() {
+  return useQuery({
+    queryKey: queryKeys.agentIntegrations,
+    queryFn: ({ signal }) => api<AgentIntegrations>("/api/agent-integrations", { signal }),
     staleTime: 60_000,
   });
 }

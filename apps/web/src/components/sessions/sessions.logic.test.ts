@@ -2,6 +2,7 @@ import type { AgentSessionRef, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   folderName,
+  harnessAvailable,
   isAutopilotSession,
   sessionName,
   sessionStatusPresentation,
@@ -83,5 +84,25 @@ describe("sessions", () => {
     );
     expect(w).toMatchObject({ canFork: false, offerThread: false });
     expect(w.body).not.toMatch(/Fork/);
+  });
+});
+
+describe("harnessAvailable", () => {
+  const clis = [
+    { harness: "claude-code", available: true, path: "/bin/claude" },
+    { harness: "copilot-cli", available: false, path: null },
+  ] as const;
+
+  it("follows the harness's CLI", () => {
+    expect(harnessAvailable(clis, "claude-code")).toBe(true);
+    expect(harnessAvailable(clis, "copilot-cli")).toBe(false);
+  });
+
+  it("offers the items until the CLIs are known", () => {
+    expect(harnessAvailable(undefined, "copilot-cli")).toBe(true);
+  });
+
+  it("hides them for a harness the server doesn't list", () => {
+    expect(harnessAvailable([], "claude-code")).toBe(false);
   });
 });

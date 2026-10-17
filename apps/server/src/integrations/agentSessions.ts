@@ -8,6 +8,7 @@ import {
   isRunningSession,
   ResumeSessionInput as ResumeSessionInputSchema,
   resumeArgv,
+  type AgentHarness,
   type AgentSessionSnapshot,
   type AgentSessionStatus,
   type AutopilotRun,
@@ -423,8 +424,20 @@ export function createAgentSessionsIntegration(deps: {
     }
   };
 
+  /** The CLI path set in Settings for a harness, else null: then the bare name is left for the terminal's PATH. */
+  const configuredCli = (harness: AgentHarness): string | null => {
+    const settings = deps.services().settings.get();
+    return (harness === "claude-code" ? settings.headlessReviewCli : settings.copilotCli)?.trim() || null;
+  };
+
+  /** The resume argv with the CLI the user configured, so a CLI that isn't on PATH still starts (as a new session does). */
+  const argvFor = (ref: AgentSessionRef, mode: ResumeMode): string[] => {
+    const [cli, ...args] = resumeArgv(ref, mode);
+    return [configuredCli(ref.harness) ?? cli!, ...args];
+  };
+
   const copyFor = (resolved: ResolvedTerminal | null, h: TerminalHost, ref: AgentSessionRef, mode: ResumeMode) =>
-    copyCommand(resolved?.shell ?? defaultShell(h.platform), resumeArgv(ref, mode), ref.cwd);
+    copyCommand(resolved?.shell ?? defaultShell(h.platform), argvFor(ref, mode), ref.cwd);
 
   /** Brings a board-started session's window to the front. False when that couldn't be done, so the caller asks. */
   const focusWindow = async (resolved: ResolvedTerminal, window: string, cwd: string, h: TerminalHost) => {
@@ -473,12 +486,17 @@ export function createAgentSessionsIntegration(deps: {
         throw new AppError("CONFLICT", "The session is still running", snapshot);
       }
       if (!resolved) return { launched: false, command, error };
+      const exe = argvFor(ref, mode)[0]!;
+      // cmd reads a quoted first word as the whole line's quotes and strips them, breaking the rest.
+      if (resolved.shell === "cmd" && /\s/.test(exe)) {
+        return { launched: false, command, error: `Command Prompt can't start a CLI whose path has spaces (${exe})` };
+      }
       // A board-started session resumes into its task's window, so bringing that window back keeps finding it. A
       // fork is a new session, opened wherever the setting says.
       const window = mode === "resume" && link.window && resolved.focus ? link.window : undefined;
       let spec: LaunchSpec;
       try {
-        spec = resolved.launch(resumeArgv(ref, mode), ref.cwd, window ? { window } : {});
+        spec = resolved.launch(argvFor(ref, mode), ref.cwd, window ? { window } : {});
       } catch (launchError) {
         // A folder this terminal can't be given safely: the user can still run the command by hand.
         return { launched: false, command, error: messageOf(launchError) };

@@ -2,6 +2,8 @@ import {
   AGENT_HARNESSES,
   canFork,
   isAutopilotSessionName,
+  type AgentCliStatus,
+  type AgentHarness,
   type AgentSessionSnapshot,
   type AgentSessionStatus,
   type TaskLink,
@@ -9,6 +11,13 @@ import {
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 
 export type SessionLink = Extract<TaskLink, { kind: "agent_session" }>;
+
+/**
+ * Whether a session's CLI can be started here, so its open, resume and fork items are worth offering. True while the
+ * CLIs haven't been looked up yet, so a menu doesn't lose items for a moment on every load.
+ */
+export const harnessAvailable = (clis: readonly AgentCliStatus[] | undefined, harness: AgentHarness): boolean =>
+  !clis || (clis.find((cli) => cli.harness === harness)?.available ?? false);
 
 export interface SessionStatusPresentation {
   label: string;
