@@ -1,6 +1,6 @@
-import type { GithubStatus, T3IntegrationStatus, TerminalInfo } from "@repo/contracts";
+import type { AgentIntegrationStatus, GithubStatus, T3IntegrationStatus, TerminalInfo } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { claudeCodeDot, githubDot, jiraDot, t3Dot, terminalDot } from "./integrations.logic";
+import { agentDot, githubDot, jiraDot, t3Dot, terminalDot } from "./integrations.logic";
 
 const t3 = (patch: Partial<T3IntegrationStatus> = {}): T3IntegrationStatus => ({
   detected: true,
@@ -11,6 +11,15 @@ const t3 = (patch: Partial<T3IntegrationStatus> = {}): T3IntegrationStatus => ({
   error: null,
   ...patch,
 });
+
+const agent = (
+  patch: { cli?: Partial<AgentIntegrationStatus["cli"]>; mcp?: Partial<AgentIntegrationStatus["mcp"]> } = {},
+) =>
+  ({
+    harness: "claude-code",
+    cli: { found: true, path: "/bin/claude", version: "2.0.0", error: null, ...patch.cli },
+    mcp: { registered: true, connected: true, scope: "user", name: "aboard", detail: "Connected", ...patch.mcp },
+  }) satisfies AgentIntegrationStatus;
 
 const gh = (patch: Partial<GithubStatus> = {}): GithubStatus => ({
   available: true,
@@ -32,10 +41,24 @@ describe("integration dots", () => {
     expect(t3Dot(t3(), true).tone).toBe("success");
   });
 
-  it("Claude Code follows the CLI test", () => {
-    expect(claudeCodeDot(undefined).tone).toBe("muted");
-    expect(claudeCodeDot({ ok: true, path: "claude", version: "2" }).tone).toBe("success");
-    expect(claudeCodeDot({ ok: false, error: "not found" }).tone).toBe("warning");
+  it("a CLI harness is green only when its CLI runs and the board's MCP is registered", () => {
+    expect(agentDot("Claude Code", undefined)).toEqual({ tone: "muted", label: "Checking" });
+    expect(agentDot("Claude Code", agent())).toEqual({ tone: "success", label: "Ready" });
+    expect(agentDot("Claude Code", agent({ cli: { found: false, error: "claude isn't on PATH" } }))).toEqual({
+      tone: "warning",
+      label: "Claude Code CLI not working: claude isn't on PATH",
+    });
+    expect(agentDot("Claude Code", agent({ mcp: { registered: false, connected: null } }))).toEqual({
+      tone: "warning",
+      label: "MCP server not registered",
+    });
+  });
+
+  it("an MCP server the harness can't confirm, or reports as down, doesn't turn a ready CLI amber", () => {
+    expect(agentDot("Copilot", agent({ mcp: { connected: null } })).tone).toBe("success");
+    const down = agentDot("Copilot", agent({ mcp: { connected: false } }));
+    expect(down.tone).toBe("success");
+    expect(down.label).toContain("not connected");
   });
 
   it("GitHub warns when gh is missing, signed out, or a host has expired", () => {

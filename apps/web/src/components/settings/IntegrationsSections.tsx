@@ -2,6 +2,7 @@ import {
   BRAND,
   MODEL_TIERS,
   type AgentHarness,
+  type AgentIntegrationStatus,
   type AppSettings,
   type ConnectT3Result,
   type IntegrationsStatus,
@@ -17,10 +18,10 @@ import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
-import { useTestReviewCli, useUpdateSettings } from "~/state/mutations";
-import { queryKeys, useAgentClis } from "~/state/queries";
+import { useRecheckAgentIntegrations, useUpdateSettings } from "~/state/mutations";
+import { queryKeys, useAgentIntegrations } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { claudeCodeDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
+import { agentDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
 import { CommandSnippet, SettingsRow, SettingsSection, StatusDot } from "./settingsLayout";
 
 const Dot = ({ dot }: { dot: IntegrationDot }) => <StatusDot tone={dot.tone} label={dot.label} />;
@@ -327,6 +328,45 @@ export function JiraSection({ settings }: { settings: AppSettings }) {
   );
 }
 
+/** What the CLI check found, beside a CLI's row. */
+function CliStatus({ cli }: { cli: AgentIntegrationStatus["cli"] | undefined }) {
+  if (!cli) return null;
+  return cli.found ? (
+    <span className="inline-flex items-center gap-1.5">
+      <Badge variant="success">Found</Badge>
+      {cli.version} · <span className="font-mono">{cli.path}</span>
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5">
+      <Badge variant="warning">Not working</Badge>
+      {cli.error}
+    </span>
+  );
+}
+
+/** What the MCP check found: registered under which name and scope, and whether the harness says it connects. */
+function McpStatus({ mcp }: { mcp: AgentIntegrationStatus["mcp"] | undefined }) {
+  if (!mcp) return null;
+  if (!mcp.registered) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Badge variant="warning">Not registered</Badge>
+        {mcp.detail}
+      </span>
+    );
+  }
+  const where = [mcp.name, mcp.scope && `${mcp.scope} scope`].filter(Boolean).join(", ");
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Badge variant={mcp.connected === false ? "warning" : "success"}>
+        {mcp.connected === false ? "Not connected" : "Registered"}
+      </Badge>
+      {where}
+      {mcp.connected === false && mcp.detail ? ` · ${mcp.detail}` : null}
+    </span>
+  );
+}
+
 /**
  * Claude Code: register the MCP server, install the skill, and the CLI the board runs headless (the board reviewer
  * and issue import).
@@ -335,18 +375,19 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
   const url = mcpUrl();
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
-  const testCli = useTestReviewCli();
-  const check = testCli.data;
+  const recheck = useRecheckAgentIntegrations();
+  const claude = useAgentIntegrations().data?.harnesses.find((h) => h.harness === "claude-code");
   return (
     <SettingsSection
       id="integrations.claude-code.status"
       title="Claude Code"
-      status={<Dot dot={claudeCodeDot(check)} />}
+      status={<Dot dot={agentDot("Claude Code", claude)} />}
     >
       <SettingsRow
         id="integrations.claude-code.mcp"
         title="MCP server"
         description={`Register the ${BRAND.id} MCP server.`}
+        status={<McpStatus mcp={claude?.mcp} />}
       >
         <div className="mt-2">
           <CommandSnippet command={`claude mcp add --scope user --transport http ${BRAND.id} ${url}`} />
@@ -365,21 +406,7 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
         id="integrations.claude-code.cli-path"
         title="Claude Code CLI"
         description="What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH."
-        status={
-          check ? (
-            check.ok ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Badge variant="success">Found</Badge>
-                {check.version} · <span className="font-mono">{check.path}</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5">
-                <Badge variant="warning">Not working</Badge>
-                {check.error}
-              </span>
-            )
-          ) : null
-        }
+        status={<CliStatus cli={claude?.cli} />}
         control={
           <>
             <BlurInput
@@ -388,16 +415,20 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
               className="sm:w-56"
               placeholder="claude"
               value={settings.headlessReviewCli ?? ""}
-              onSave={(next) => {
-                testCli.reset();
+              onSave={(next) =>
                 updateSettings.mutate(
                   { headlessReviewCli: next.trim() || null },
-                  { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis }) },
-                );
-              }}
+                  {
+                    onSuccess: () => {
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis });
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentIntegrations });
+                    },
+                  },
+                )
+              }
             />
-            <Button size="sm" variant="outline" disabled={testCli.isPending} onClick={() => testCli.mutate(undefined)}>
-              Test
+            <Button size="sm" variant="outline" disabled={recheck.isPending} onClick={() => recheck.mutate()}>
+              Re-check
             </Button>
           </>
         }
@@ -460,14 +491,19 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
   const url = mcpUrl();
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
-  const clis = useAgentClis().data;
-  const copilot = clis?.find((c) => c.harness === "copilot-cli");
+  const recheck = useRecheckAgentIntegrations();
+  const copilot = useAgentIntegrations().data?.harnesses.find((h) => h.harness === "copilot-cli");
   return (
-    <SettingsSection id="integrations.copilot.status" title="GitHub Copilot" status={<Dot dot={SNIPPET_DOT} />}>
+    <SettingsSection
+      id="integrations.copilot.status"
+      title="GitHub Copilot"
+      status={<Dot dot={agentDot("Copilot", copilot)} />}
+    >
       <SettingsRow
         id="integrations.copilot.cli"
         title="Copilot CLI"
         description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
+        status={<McpStatus mcp={copilot?.mcp} />}
       >
         <div className="mt-2">
           <CommandSnippet command={`copilot mcp add --transport http ${BRAND.id} ${url}`} />
@@ -486,32 +522,31 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
         id="integrations.copilot.cli-path"
         title="Copilot CLI path"
         description="What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH."
-        status={
-          copilot ? (
-            copilot.available ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Badge variant="success">Found</Badge>
-                <span className="font-mono">{copilot.path}</span>
-              </span>
-            ) : (
-              <Badge variant="warning">Not found</Badge>
-            )
-          ) : null
-        }
+        status={<CliStatus cli={copilot?.cli} />}
         control={
-          <BlurInput
-            aria-label="Copilot CLI path"
-            size="sm"
-            className="sm:w-56"
-            placeholder="copilot"
-            value={settings.copilotCli ?? ""}
-            onSave={(next) =>
-              updateSettings.mutate(
-                { copilotCli: next.trim() || null },
-                { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis }) },
-              )
-            }
-          />
+          <>
+            <BlurInput
+              aria-label="Copilot CLI path"
+              size="sm"
+              className="sm:w-56"
+              placeholder="copilot"
+              value={settings.copilotCli ?? ""}
+              onSave={(next) =>
+                updateSettings.mutate(
+                  { copilotCli: next.trim() || null },
+                  {
+                    onSuccess: () => {
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis });
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentIntegrations });
+                    },
+                  },
+                )
+              }
+            />
+            <Button size="sm" variant="outline" disabled={recheck.isPending} onClick={() => recheck.mutate()}>
+              Re-check
+            </Button>
+          </>
         }
       />
       <SessionModelsRow settings={settings} harness="copilot-cli" section="copilot" placeholder="e.g. gpt-5.4" />

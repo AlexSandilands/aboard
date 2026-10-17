@@ -40,11 +40,18 @@ and a click tries again.
 | **Project**      | General (name, icon, folder), Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
-  when it isn't set up or the board can't tell (Copilot and Codex are set up on their side).
-- The Claude Code CLI the board runs for the board reviewer, issue import and new Claude Code sessions is set under
-  **Integrations → Claude Code**, with **Test** to check it. **Integrations → GitHub Copilot** has the Copilot CLI
-  new Copilot sessions start. Each has **Session models**: the model a new session starts on for each suggested
-  tier (empty leaves the CLI's default).
+  when it isn't set up or the board can't tell (Codex is set up on its side, so its dot stays grey).
+- Claude Code and GitHub Copilot are green only when their CLI runs (`--version`) and the board's MCP server is
+  registered with them. The board finds the server by its address (`localhost` and `127.0.0.1` count as the same,
+  the port must match), so it doesn't matter what you named it. Hover the dot for the reason when it's amber.
+  The rows beside it show the CLI's version and path and where the MCP server was found; **Re-check** runs it all
+  again (the board remembers an answer for a minute).
+- The Claude Code CLI the board runs for the board reviewer, issue import and Claude Code sessions is set under
+  **Integrations → Claude Code**. **Integrations → GitHub Copilot** has the Copilot CLI Copilot sessions start.
+  Each has **Session models**: the model a new session starts on for each suggested tier (empty leaves the CLI's
+  default).
+- A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
+  the copy commands.
 - On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it
   shows what it does and its settings.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.

@@ -118,6 +118,27 @@ example session.
 The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md) and, for new
 sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 
+### Integration status
+
+Settings → Integrations → Claude Code and GitHub Copilot show whether the harness is usable, from
+`GET /api/agent-integrations` (`createAgentIntegrations` in `integrations/agentIntegrations.ts`, `?refresh=1` skips
+its one-minute cache; Re-check sends it). Per harness it returns:
+
+- `cli`: the configured path (else the name on PATH) resolved, and whether `--version` ran.
+- `mcp`: whether an entry with the board's MCP URL exists, its name and scope, and whether the harness says it
+  connects (`connected` is null when it can't tell).
+
+The entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
+the port and path, and ignores a trailing slash and the query (which may carry a token). Claude Code is asked with
+`claude mcp list` (and `mcp get` for the scope), run from the home folder; if that fails or times out the user config
+`~/.claude.json` is read instead. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
+`$COPILOT_HOME/mcp-config.json`) is read. Config files are only read for server names and `url` strings, never
+headers or env, and no URL or token is put in the result.
+
+The dot is green when the CLI runs and the MCP entry exists; `connected: false` only adds a note, because a harness
+can report a server as down while it would connect when a session starts. `GET /api/agent-clis` is separate and only
+says whether the executable exists; the hand-off menus and a session's open and fork items use it.
+
 ### Starting a session
 
 The hand-off menu on a card and in the panel offers **New Claude Code session…** and **New Copilot CLI session…**
@@ -201,7 +222,9 @@ be read is left out rather than guessed.
 ### On the card and in the panel
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
-the command. A task with a T3 thread shows no session chips, since the thread runs a Claude session
+the command. Open and fork are left out (and the panel row's click is disabled) when `GET /api/agent-clis` doesn't
+find that harness's CLI; the copy commands stay. Resuming or forking runs the CLI path set in Settings, as a new
+session does, and the copied command carries it too. A task with a T3 thread shows no session chips, since the thread runs a Claude session
 underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, in the panel's
 Sessions section ([board-layout](board-layout.md#the-sessions-section)); a chip's tooltip shows the name.
 
@@ -236,8 +259,9 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
 | `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session |
+| `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
-| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis` |
+| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
