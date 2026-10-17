@@ -1,6 +1,7 @@
 # 0009 The board may start a terminal, from a stored link only
 
-Status: Accepted
+Status: Accepted; extended by [0010](0010-board-starts-new-sessions.md), which lets the user start new sessions with a
+prompt and lets the board bring back a window it named
 
 ## Context
 

@@ -42,7 +42,8 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
   throw new AppError("VALIDATION", `"${value}" does not look like a ${input.kind} link`);
 }
 
-const refJson = (c: ClassifiedLink): string | null => {
+/** A session's window is stored beside its ref (see toLink), so relinking it keeps the window. */
+const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
   switch (c.kind) {
     case "pr":
       return c.ref ? JSON.stringify(c.ref) : null;
@@ -50,8 +51,9 @@ const refJson = (c: ClassifiedLink): string | null => {
       return JSON.stringify({ key: c.key });
     case "t3_thread":
     case "issue":
-    case "agent_session":
       return JSON.stringify(c.ref);
+    case "agent_session":
+      return JSON.stringify(window ? { ...c.ref, window } : c.ref);
     case "url":
       return null;
   }
@@ -192,7 +194,7 @@ export function createLinksService(
   const service: LinksService = {
     threadsLinked: (taskId) => repos.events.linksAdded(taskId, "t3_thread"),
 
-    add(taskId, input, actor) {
+    add(taskId, input, actor, opts = {}) {
       return core.write((fx) => {
         const task = deps.task(taskId);
         const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
@@ -209,10 +211,13 @@ export function createLinksService(
           // finds a conversation to resume by its folder) or rename the session as its work changes (planning, then
           // implementing): the newest one wins.
           if (classified.kind === "agent_session") {
-            const before = parseJson<{ cwd?: string }>(existing.ref_json)?.cwd;
+            const stored = parseJson<{ cwd?: string; window?: string }>(existing.ref_json);
+            const before = stored?.cwd;
             const relabel = input.label && input.label !== existing.label ? input.label : null;
             if (before !== classified.ref.cwd || relabel) {
-              if (before !== classified.ref.cwd) repos.links.setRef(existing.id, refJson(classified)!);
+              if (before !== classified.ref.cwd) {
+                repos.links.setRef(existing.id, refJson(classified, opts.window ?? stored?.window)!);
+              }
               if (relabel) repos.links.setLabel(existing.id, relabel);
               fx.log(task.id, actor, "link_updated", {
                 linkId: existing.id,
@@ -232,7 +237,7 @@ export function createLinksService(
           kind: classified.kind,
           url: classified.url,
           label: input.label ?? null,
-          ref_json: refJson(classified),
+          ref_json: refJson(classified, opts.window),
           snapshot_json: null,
           synced_at: null,
           created_at: nowIso(),
@@ -256,6 +261,17 @@ export function createLinksService(
     listByKind: (kind): TaskLink[] => repos.links.byKindActive(kind).map(toLink),
 
     prChanges: (linkIds) => repos.links.prChanges(linkIds),
+
+    setWindow(linkId, window) {
+      core.write((fx) => {
+        const row = rowOrThrow(linkId);
+        if (row.kind !== "agent_session") throw new AppError("VALIDATION", "Only agent sessions have a window");
+        const { window: before, ...ref } = parseJson<{ window?: string }>(row.ref_json) ?? {};
+        if ((before ?? null) === window) return;
+        repos.links.setRef(linkId, JSON.stringify(window ? { ...ref, window } : ref));
+        fx.task(row.task_id);
+      });
+    },
 
     setSnapshot(linkId, snapshot) {
       core.write((fx) => {

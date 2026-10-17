@@ -276,7 +276,7 @@ export const SESSION_POLL_TIMEOUT_MS = 30_000;
 const EXAMPLE_SESSION_ID = "00000000-0000-4000-8000-000000000000";
 
 export interface AgentSessionServices {
-  links: Pick<LinksService, "listByKind" | "setSnapshot" | "get">;
+  links: Pick<LinksService, "listByKind" | "setSnapshot" | "get" | "setWindow">;
   settings: Pick<SettingsService, "get">;
   autopilot: Pick<AutopilotService, "runForSession">;
 }
@@ -426,6 +426,17 @@ export function createAgentSessionsIntegration(deps: {
   const copyFor = (resolved: ResolvedTerminal | null, h: TerminalHost, ref: AgentSessionRef, mode: ResumeMode) =>
     copyCommand(resolved?.shell ?? defaultShell(h.platform), resumeArgv(ref, mode), ref.cwd);
 
+  /** Brings a board-started session's window to the front. False when that couldn't be done, so the caller asks. */
+  const focusWindow = async (resolved: ResolvedTerminal, window: string, cwd: string, h: TerminalHost) => {
+    try {
+      await spawnFn(resolved.focus!(window, cwd));
+      return true;
+    } catch (focusError) {
+      log.warn(`[sessions] couldn't bring back the window ${window} on ${h.platform}: ${messageOf(focusError)}`);
+      return false;
+    }
+  };
+
   return {
     pollLive,
 
@@ -452,21 +463,30 @@ export function createAgentSessionsIntegration(deps: {
       if (!isDirectory(ref.cwd)) throw new AppError("VALIDATION", `The session's folder no longer exists: ${ref.cwd}`);
       // Check now rather than trust the last poll: opening a running session twice makes two writers on one history.
       const snapshot = (await store([link])).get(sessionKey(ref));
-      if (mode === "resume" && !force && isRunningSession(snapshot?.status)) {
-        throw new AppError("CONFLICT", "The session is still running", snapshot);
-      }
       const { resolved, error, host: h } = terminal();
       const command = copyFor(resolved, h, ref, mode);
+      if (mode === "resume" && !force && isRunningSession(snapshot?.status)) {
+        // A session the board started in a named window is still there: bring that window back instead of asking.
+        if (link.window && resolved?.focus && (await focusWindow(resolved, link.window, ref.cwd, h))) {
+          return { launched: true, focused: true, command, error: null };
+        }
+        throw new AppError("CONFLICT", "The session is still running", snapshot);
+      }
       if (!resolved) return { launched: false, command, error };
+      // A board-started session resumes into its task's window, so bringing that window back keeps finding it. A
+      // fork is a new session, opened wherever the setting says.
+      const window = mode === "resume" && link.window && resolved.focus ? link.window : undefined;
       let spec: LaunchSpec;
       try {
-        spec = resolved.launch(resumeArgv(ref, mode), ref.cwd);
+        spec = resolved.launch(resumeArgv(ref, mode), ref.cwd, window ? { window } : {});
       } catch (launchError) {
         // A folder this terminal can't be given safely: the user can still run the command by hand.
         return { launched: false, command, error: messageOf(launchError) };
       }
       try {
         await spawnFn(spec);
+        // Resumed in a terminal that has no named window: the old window no longer holds the session.
+        if (mode === "resume" && link.window && !window) deps.services().links.setWindow(link.id, null);
         return { launched: true, command, error: null };
       } catch (spawnError) {
         log.warn(`[sessions] couldn't start ${displayLaunch(spec, h.platform)}: ${messageOf(spawnError)}`);

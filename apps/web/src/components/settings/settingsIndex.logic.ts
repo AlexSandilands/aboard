@@ -324,8 +324,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "integrations.claude-code.cli-path",
     "Claude Code CLI",
-    "What the board runs headless for the board reviewer and issue import. Leave empty to use claude from your PATH.",
-    ["claude path", "executable", "binary", "headless"],
+    "What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
+    ["claude path", "executable", "binary", "headless", "session"],
+  ),
+  draft(
+    "integrations.claude-code.session-models",
+    "Claude Code session models",
+    "The model a new Claude Code session from a task's hand-off menu starts on, by the task's suggested tier.",
+    ["model tier", "light", "standard", "deep", "--model", "new session"],
   ),
   // Integrations › GitHub Copilot, Codex
   draft("integrations.copilot.cli", "Copilot CLI", `${MCP} In ~/.copilot/mcp-config.json.`, [
@@ -339,6 +345,18 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Copilot in VS Code",
     "Add the MCP server to your VS Code user profile, or to .vscode/mcp.json.",
     ["github copilot", "mcp.json", "editor", "servers"],
+  ),
+  draft(
+    "integrations.copilot.cli-path",
+    "Copilot CLI path",
+    "What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH.",
+    ["github copilot", "executable", "binary", "session"],
+  ),
+  draft(
+    "integrations.copilot.session-models",
+    "Copilot session models",
+    "The model a new Copilot CLI session from a task's hand-off menu starts on, by the task's suggested tier.",
+    ["github copilot", "model tier", "light", "standard", "deep", "--model", "new session"],
   ),
   draft("integrations.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
   // Integrations › GitHub, Jira

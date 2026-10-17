@@ -83,6 +83,8 @@ files under each app.
 - [0006 GitHub through its GraphQL API, with the token `gh` holds](decisions/0006-github-graphql-via-gh-token.md)
 - [0007 An epic is a task with kind 'epic'](decisions/0007-epic-is-a-task-kind.md)
 - [0008 Autopilot is a deterministic rule engine inside the server](decisions/0008-autopilot-engine.md)
+- [0009 The board may start a terminal, from a stored link only](decisions/0009-board-starts-local-processes.md)
+- [0010 The board may start a new agent session with the user's prompt](decisions/0010-board-starts-new-sessions.md)
 
 ### Reference
 

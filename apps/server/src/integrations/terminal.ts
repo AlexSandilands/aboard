@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import type { TerminalOpenIn, TerminalSetting, TerminalShell, WindowsTerminalProfile } from "@repo/contracts";
+import {
+  isTaskWindowName,
+  type TerminalOpenIn,
+  type TerminalSetting,
+  type TerminalShell,
+  type WindowsTerminalProfile,
+} from "@repo/contracts";
 
 // Opening a command in a new terminal window, per platform and per shell. Everything here is pure except the
 // `TerminalHost` it is given, so the argv for every shell is unit-tested (see docs/decisions/0009-board-starts-local-processes.md).
@@ -30,9 +36,12 @@ export interface LaunchSpec {
 export const shQuote = (value: string): string =>
   /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 
-/** PowerShell: single quotes are literal, with `'` doubled. `@` and `,` mean something there, so they are quoted. */
+/**
+ * PowerShell: single quotes are literal, with `'` doubled. PowerShell also reads the typographic single quotes
+ * (‘ ’ ‚ ‛) as quotes, so they are doubled too. `@` and `,` mean something there, so they are quoted.
+ */
 export const psQuote = (value: string): string =>
-  /^[\w%+=:./\\-]+$/.test(value) ? value : `'${value.replace(/'/g, "''")}'`;
+  /^[\w%+=:./\\-]+$/.test(value) ? value : `'${value.replace(/['‘-‛]/g, "$&$&")}'`;
 
 /**
  * cmd.exe: double quotes. A Windows path can't contain `"`, and the only values quoted here are paths, so a value
@@ -59,7 +68,9 @@ export function shellArgs(shell: TerminalShell, command: readonly string[]): str
     case "sh":
       return ["-c", `${command.map(shQuote).join(" ")}; exec "\${SHELL:-sh}"`];
     case "cmd":
-      // The resume command is a CLI name, flags and a UUID, so its tokens need no quoting for cmd.
+      // A resume command is a CLI name, flags and a UUID, which need no quoting for cmd. Free text (a new
+      // session's prompt) has been through textArgument, so it has whitespace and no `"` or `%`: Windows Terminal
+      // and consoleLaunch put it in quotes, where cmd reads nothing into it.
       return ["/k", ...command];
     case "powershell":
     case "pwsh":
@@ -74,11 +85,49 @@ export function copyCommand(shell: TerminalShell, command: readonly string[], cw
     case "sh":
       return `cd ${shQuote(cwd)} && ${command.map(shQuote).join(" ")}`;
     case "cmd":
-      return `cd /d ${cmdQuote(cwd)} && ${command.join(" ")}`;
+      return `cd /d ${cmdQuote(cwd)} && ${command.map(cmdQuote).join(" ")}`;
     case "powershell":
     case "pwsh":
       return `Set-Location -LiteralPath ${psQuote(cwd)}; ${command.map(psQuote).join(" ")}`;
   }
+}
+
+// ── Free text on a command line ──────────────────────────────────────────
+
+/** cmd.exe takes command lines of up to 8,191 characters; this leaves room for what wraps the command. */
+const MAX_WINDOWS_COMMAND_LINE = 8000;
+const MAX_POSIX_COMMAND_LINE = 100_000;
+
+/**
+ * Free text (a new session's first prompt) as it can go on a command line here as one argument, or why it can't.
+ * POSIX shells take anything in single quotes. On Windows the text crosses Windows Terminal, which wraps an argument
+ * containing spaces in quotes without escaping quotes inside it, and often cmd.exe (a console window, a custom
+ * command, an npm `.cmd` shim), which has no escape inside quotes and expands %NAME% even there. So there line breaks
+ * become spaces, `"` becomes `'`, a trailing backslash (which would escape the closing quote) is followed by a space,
+ * the text always contains a space (so it is always quoted), and a `%` is refused. Control characters are dropped
+ * everywhere.
+ */
+export function textArgument(text: string, platform: NodeJS.Platform): { value: string } | { error: string } {
+  // oxlint-disable-next-line no-control-regex -- control characters are what this removes
+  const clean = text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+  if (platform !== "win32") return { value: clean };
+  if (clean.includes("%")) return { error: "it contains %, which Windows command lines can't pass safely" };
+  let value = clean
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\t/g, " ")
+    .replaceAll('"', "'");
+  if (value.endsWith("\\")) value += " ";
+  if (!/\s/.test(value)) value += " ";
+  return { value };
+}
+
+/** Whether a launch fits on this platform's command line; a longer one must be shortened. */
+export function fitsCommandLine(spec: LaunchSpec, platform: NodeJS.Platform): boolean {
+  const length = [spec.file, ...spec.args].reduce((sum, arg) => sum + arg.length + 3, 0);
+  return length <= (platform === "win32" ? MAX_WINDOWS_COMMAND_LINE : MAX_POSIX_COMMAND_LINE);
 }
 
 // ── Windows Terminal ─────────────────────────────────────────────────────
@@ -223,21 +272,33 @@ export function readWtSettings(host: Pick<TerminalHost, "env" | "readFile">): Wt
  */
 const wtEscape = (arg: string): string => arg.replace(/;/g, "\\;");
 
+/** Where a Windows Terminal tab opens: the setting's choice, or a window of that name (a task's, see taskWindowName). */
+export type WtTarget = TerminalOpenIn | { name: string };
+
+/** wt's `-w` value for a target. A name is checked again here, as it reaches wt's command line. */
+function wtWindow(target: WtTarget): string {
+  if (target === "tab") return "0";
+  if (target === "window") return "new";
+  if (!isTaskWindowName(target.name)) throw new TerminalUnavailable(`Not a window name: ${target.name}`);
+  return target.name;
+}
+
 /**
- * A Windows Terminal tab on `profile`, running the command in the profile's shell: in a window of its own, or in the
- * most recently used one (`-w 0`, which Windows Terminal turns into a new window when none is open).
+ * A Windows Terminal tab on `profile`, running the command in the profile's shell: in a window of its own, in the
+ * most recently used one (`-w 0`, which Windows Terminal turns into a new window when none is open), or in the
+ * window of that name (made when there is none).
  */
 export function wtLaunch(
   wt: string,
   profile: WtProfile,
   command: readonly string[],
   cwd: string,
-  openIn: TerminalOpenIn = "tab",
+  openIn: WtTarget = "tab",
 ): LaunchSpec {
   // A profile whose shell we can't drive (WSL, Azure Cloud Shell) keeps its look but runs cmd.
   const shell = profile.shell ?? "cmd";
   const exe = profile.shell ? (profile.exe ?? `${shell}.exe`) : "cmd.exe";
-  const window = openIn === "tab" ? "0" : "new";
+  const window = wtWindow(openIn);
   return {
     file: wt,
     args: ["-w", window, "new-tab", "-p", profile.guid, "-d", cwd, exe, ...shellArgs(shell, command)].map(wtEscape),
@@ -246,15 +307,24 @@ export function wtLaunch(
 }
 
 /**
+ * Brings the window of that name to the front, on its first tab. Only for a window the board named, and only while
+ * a session is known to run in it: for a name with no window, Windows Terminal would open a new one.
+ */
+export function wtFocus(wt: string, name: string, cwd: string): LaunchSpec {
+  return { file: wt, args: ["-w", wtWindow({ name }), "focus-tab", "-t", "0"], cwd };
+}
+
+/**
  * A new console window via cmd's `start`, which the window inherits `cwd` from, so no path is on the command line.
- * cmd.exe's own quoting applies, hence verbatim arguments; every token is a CLI name, flag or UUID.
+ * cmd.exe's own quoting applies, hence verbatim arguments. Every token is a CLI name, flag or UUID, or free text
+ * that went through textArgument (no `"` or `%`), so cmdQuote can quote it.
  */
 export function consoleLaunch(shell: "cmd" | "powershell", command: readonly string[], cwd: string): LaunchSpec {
   const inner =
     shell === "cmd"
       ? ["cmd.exe", ...shellArgs("cmd", command)]
       : ["powershell.exe", ...shellArgs("powershell", command)];
-  const line = inner.map((a) => (/[\s;]/.test(a) ? `"${a}"` : a)).join(" ");
+  const line = inner.map(cmdQuote).join(" ");
   return { file: "cmd.exe", args: ["/d", "/s", "/c", `"start "" ${line}"`], cwd, verbatim: true };
 }
 
@@ -262,8 +332,13 @@ export function consoleLaunch(shell: "cmd" | "powershell", command: readonly str
 
 /** How a setting runs here: the process to start, the shell the session lands in, and a printable form. */
 export interface ResolvedTerminal {
-  /** Builds the process for a command in a folder. */
-  launch(command: readonly string[], cwd: string): LaunchSpec;
+  /**
+   * Builds the process for a command in a folder. `window` names the Windows Terminal window to open it in (made when
+   * there is none); other terminals ignore it.
+   */
+  launch(command: readonly string[], cwd: string, opts?: { window?: string }): LaunchSpec;
+  /** Windows Terminal only: brings the window of that name to the front (see wtFocus). */
+  focus?: (window: string, cwd: string) => LaunchSpec;
   /** The shell the command runs in, for the copy command. */
   shell: TerminalShell;
   label: string;
@@ -377,7 +452,9 @@ export function resolveTerminal(
  */
 function wtTerminal(profile: WtProfile, openIn: TerminalOpenIn): ResolvedTerminal {
   return {
-    launch: (command, cwd) => wtLaunch("wt.exe", profile, command, cwd, openIn),
+    launch: (command, cwd, opts) =>
+      wtLaunch("wt.exe", profile, command, cwd, opts?.window ? { name: opts.window } : openIn),
+    focus: (window, cwd) => wtFocus("wt.exe", window, cwd),
     shell: profile.shell ?? "cmd",
     label: `Windows Terminal (${profile.name})`,
   };
@@ -385,7 +462,7 @@ function wtTerminal(profile: WtProfile, openIn: TerminalOpenIn): ResolvedTermina
 
 /**
  * A user-written command line, run by the platform shell: cmd.exe on Windows, sh elsewhere. {cwd} is quoted for that
- * shell; {command} is the resume command, whose tokens need no quoting.
+ * shell; {command} is the command, each token quoted the same way (free text has been through textArgument).
  */
 export function customTerminal(template: string, host: Pick<TerminalHost, "platform">): ResolvedTerminal {
   const windows = host.platform === "win32";
@@ -398,7 +475,7 @@ export function customTerminal(template: string, host: Pick<TerminalHost, "platf
         throw new TerminalUnavailable(`Can't pass a folder containing % to cmd: ${cwd}`);
       const line = template
         .replaceAll("{cwd}", windows ? cmdQuote(cwd) : shQuote(cwd))
-        .replaceAll("{command}", command.join(" "));
+        .replaceAll("{command}", command.map(windows ? cmdQuote : shQuote).join(" "));
       return windows
         ? { file: "cmd.exe", args: ["/d", "/s", "/c", `"${line}"`], cwd, verbatim: true }
         : { file: "/bin/sh", args: ["-c", line], cwd };

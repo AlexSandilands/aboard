@@ -5,6 +5,7 @@ import {
   copyCommand,
   customTerminal,
   displayLaunch,
+  fitsCommandLine,
   profileShell,
   psQuote,
   readWtSettings,
@@ -12,6 +13,8 @@ import {
   shellArgs,
   shQuote,
   stripJsonc,
+  textArgument,
+  wtFocus,
   wtLaunch,
   type ResolvedTerminal,
   type TerminalHost,
@@ -41,6 +44,8 @@ describe("quoting", () => {
     ["@splat", "'@splat'"],
     ["a,b", "'a,b'"],
     [`--resume=${ID}`, `--resume=${ID}`],
+    // PowerShell ends a single-quoted string at a typographic quote too.
+    ["it’s ‘done’", "'it’’s ‘‘done’’'"],
   ])("PowerShell %j → %s", (value, expected) => expect(psQuote(value)).toBe(expected));
 
   it("cmd quotes paths with spaces and refuses a double quote", () => {
@@ -306,5 +311,90 @@ describe("resolveTerminal", () => {
   it("won't hand cmd a folder containing %, which it would expand", () => {
     const t = customTerminal("wezterm start --cwd {cwd} -- {command}", { platform: "win32" });
     expect(() => t.launch(RESUME, "C:\\100%PATH%x")).toThrow(/containing %/);
+  });
+});
+
+// A new session's prompt is free text. These argvs were also run for real on Windows 11 (cmd and Windows PowerShell
+// 5.1 console windows, a custom cmd template), and the CLI received the prompt as one argument, unchanged.
+describe("free text on a command line", () => {
+  const PROMPT = `Work on #1 "now": it's ‘done’ (a & b | c > d ^ e) $env:PATH; \`x\` back\\slash`;
+  const NEW = (prompt: string) => ["claude", "--session-id", ID, "--name", "Implementing #1", prompt];
+
+  it("keeps POSIX text as written, dropping only control characters", () => {
+    expect(textArgument(`a\r\nb\u0007 "c" 100%`, "linux")).toEqual({ value: 'a\nb "c" 100%' });
+  });
+
+  it("makes Windows text one quotable line: no line breaks or double quotes, a space before the closing quote", () => {
+    expect(textArgument('Step 1.\r\n\r\n  Step "2".\tdone\\', "win32")).toEqual({ value: "Step 1. Step '2'. done\\ " });
+    // Always a space, so Windows Terminal and cmd always put it in quotes.
+    expect(textArgument("a&b", "win32")).toEqual({ value: "a&b " });
+  });
+
+  it("refuses a % on Windows, which cmd would expand even in quotes", () => {
+    expect(textArgument("50% done", "win32")).toEqual({ error: expect.stringMatching(/contains %/) });
+  });
+
+  it("passes the prompt to each shell as one argument", () => {
+    const value = (textArgument(PROMPT, "win32") as { value: string }).value;
+    expect(value).toBe(`Work on #1 'now': it's ‘done’ (a & b | c > d ^ e) $env:PATH; \`x\` back\\slash`);
+    // cmd: Windows Terminal quotes the argument (it has spaces); nothing inside needs escaping there.
+    expect(shellArgs("cmd", NEW(value)).at(-1)).toBe(value);
+    expect(shellArgs("powershell", NEW(value))[2]).toBe(
+      `claude --session-id ${ID} --name 'Implementing #1' 'Work on #1 ''now'': it''s ‘‘done’’ (a & b | c > d ^ e) $env:PATH; \`x\` back\\slash'`,
+    );
+    expect(consoleLaunch("cmd", NEW(value), "C:\\x").args[3]).toBe(
+      `"start "" cmd.exe /k claude --session-id ${ID} --name "Implementing #1" "${value}""`,
+    );
+    const custom = customTerminal("wezterm start -- {command}", { platform: "win32" }).launch(NEW(value), "C:\\x");
+    expect(custom.args[3]).toBe(`"wezterm start -- claude --session-id ${ID} --name "Implementing #1" "${value}""`);
+    expect(shellArgs("bash", NEW(PROMPT))[3]).toBe(
+      `claude --session-id ${ID} --name 'Implementing #1' ${shQuote(PROMPT)}; exec bash`,
+    );
+  });
+
+  it("tells when a launch is too long for the platform's command line", () => {
+    const profile: WtProfile = { guid: "{p}", name: "cmd", shell: "cmd", exe: "cmd.exe" };
+    expect(fitsCommandLine(wtLaunch("wt.exe", profile, NEW("x ".repeat(3000)), "C:\\x"), "win32")).toBe(true);
+    expect(fitsCommandLine(wtLaunch("wt.exe", profile, NEW("x ".repeat(4000)), "C:\\x"), "win32")).toBe(false);
+    expect(fitsCommandLine({ file: "sh", args: ["x ".repeat(4000)], cwd: "/" }, "linux")).toBe(true);
+  });
+});
+
+describe("a task's named window", () => {
+  const cmd: WtProfile = { guid: "{c}", name: "cmd", shell: "cmd", exe: "cmd.exe" };
+
+  it("opens the session as a tab of the window named for the task, and brings that window back", () => {
+    expect(wtLaunch("wt.exe", cmd, RESUME, "C:\\x", { name: "aboard-7" }).args.slice(0, 3)).toEqual([
+      "-w",
+      "aboard-7",
+      "new-tab",
+    ]);
+    expect(wtFocus("wt.exe", "aboard-7", "C:\\x")).toEqual({
+      file: "wt.exe",
+      args: ["-w", "aboard-7", "focus-tab", "-t", "0"],
+      cwd: "C:\\x",
+    });
+  });
+
+  it("refuses a window name the board didn't make", () => {
+    expect(() => wtFocus("wt.exe", "x new-tab calc", "C:\\x")).toThrow(/Not a window name/);
+    expect(() => wtLaunch("wt.exe", cmd, RESUME, "C:\\x", { name: "-w;0" })).toThrow(/Not a window name/);
+  });
+
+  it("is only offered by Windows Terminal, which ignores the setting's tab or window for it", () => {
+    const host: TerminalHost = {
+      platform: "win32",
+      env: { LOCALAPPDATA: "C:\\Local" },
+      readFile: (p) =>
+        p.includes("Microsoft.WindowsTerminal_")
+          ? JSON.stringify({ profiles: [{ guid: "{c}", name: "cmd", commandline: "cmd.exe" }] })
+          : null,
+      which: (name) => (name === "wt.exe" ? "C:\\wt.exe" : null),
+    };
+    const wt = resolveTerminal({ kind: "auto" }, host, "window");
+    expect(wt.focus).toBeDefined();
+    expect(wt.launch(RESUME, "C:\\x", { window: "aboard-7" }).args[1]).toBe("aboard-7");
+    expect(wt.launch(RESUME, "C:\\x").args[1]).toBe("new");
+    expect(resolveTerminal({ kind: "cmd" }, host).focus).toBeUndefined();
   });
 });

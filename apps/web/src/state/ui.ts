@@ -1,5 +1,6 @@
 import {
   storageKey,
+  type AgentHarness,
   type AgentSessionSnapshot,
   type CreateTemplateInput,
   type MergeMethod,
@@ -204,6 +205,8 @@ interface DialogsState {
   digestOpen: boolean;
   /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
   t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
+  /** The open "New Claude Code / Copilot session" dialog: the task and the CLI it starts. */
+  sessionLaunch: { taskId: string; harness: AgentHarness } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
   mergePr: { taskId: string; linkId: string } | null;
   /** Agent session the server wouldn't reopen because it is running, with the status it read. */
@@ -212,6 +215,8 @@ interface DialogsState {
   openT3Launch: (taskId: string) => void;
   openProjectT3Launch: (projectId: string) => void;
   closeT3Launch: () => void;
+  openSessionLaunch: (taskId: string, harness: AgentHarness) => void;
+  closeSessionLaunch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
   openSessionWarning: (warning: NonNullable<DialogsState["sessionWarning"]>) => void;
@@ -229,6 +234,7 @@ interface DialogsState {
 export const useDialogs = create<DialogsState>()((set) => ({
   digestOpen: false,
   t3Launch: null,
+  sessionLaunch: null,
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
@@ -237,6 +243,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   closeT3Launch: () => set({ t3Launch: null }),
+  openSessionLaunch: (taskId, harness) => set({ sessionLaunch: { taskId, harness } }),
+  closeSessionLaunch: () => set({ sessionLaunch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),
   openSessionWarning: (sessionWarning) => set({ sessionWarning }),
