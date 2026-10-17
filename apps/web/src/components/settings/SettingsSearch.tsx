@@ -83,6 +83,7 @@ export function SettingsSearch({
               setActive(0);
             }}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return;
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 setActive((current) => moveResult(current, event.key === "ArrowDown" ? 1 : -1, results.length));

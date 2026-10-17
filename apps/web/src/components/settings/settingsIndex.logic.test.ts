@@ -94,7 +94,7 @@ describe("settingsIndex", () => {
 describe("settingsLocation", () => {
   it("names the group and sub-section a setting is in", () => {
     const row = entries.find((entry) => entry.id === "autopilot.engine.quiet-hours")!;
-    expect(settingsLocation(row)).toBe("Autopilot › Autopilot");
+    expect(settingsLocation(row)).toBe("Autopilot");
     const integration = entries.find((entry) => entry.id === "integrations.claude-code.cli-path")!;
     expect(settingsLocation(integration)).toBe("Integrations › Claude Code");
   });

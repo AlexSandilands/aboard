@@ -131,6 +131,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["backup", "commit", "repo", "restore"],
   ),
   draft("board.data.backup-folder", "Backup folder", "The git repo the board is written into.", [
+    "folder",
     "backup",
     "directory",
     "path",
@@ -146,7 +147,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "board.data.backup-interval",
     "Backup interval",
     "How often to check for changes. A run with nothing new makes no commit.",
-    ["backup", "every", "frequency", "schedule"],
+    ["every", "backup", "frequency", "schedule"],
   ),
   draft("board.data.backup-last", "Last backup", "When the board was last backed up, or the error if it failed.", [
     "backup",
@@ -182,7 +183,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "tasks.new-tasks.import-model",
     "Import model",
     "Passed to claude --model: an alias such as haiku, or a full model name.",
-    ["issue import", "haiku", "claude model"],
+    ["model", "issue import", "haiku", "claude model"],
   ),
   draft(
     "tasks.new-tasks.import-budget",
@@ -213,7 +214,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "tasks.review.rounds",
     "Review rounds",
     "The agent stops after this many rounds; open blocking or major findings then flag the card.",
-    ["local review", "limit", "findings", "max rounds"],
+    ["rounds", "local review", "limit", "findings", "max rounds"],
   ),
   draft(
     "tasks.review.board-reviewer",
@@ -231,13 +232,13 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "autopilot.engine.pause-all",
     "Pause all",
-    "Stops every new Autopilot run, whatever the switches say. Runs already going finish.",
+    "Stops every new Autopilot run, whatever the switches say. Runs already going finish. A backup restore never lifts it.",
     ["stop", "halt", "disable", "kill switch"],
   ),
   draft(
     "autopilot.engine.dry-run",
     "Dry run",
-    "Records what each automation would do as a skipped run and does nothing.",
+    "Records what each automation would do as a skipped run and does nothing. Turn it on to watch a new automation before trusting it.",
     ["simulate", "test", "watch", "skipped"],
   ),
   draft(
@@ -255,13 +256,13 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "autopilot.engine.daily-spend-cap",
     "Daily spend cap",
-    "No more agent runs start once today's runs have cost this much.",
+    "No more agent runs start once today's runs have cost this much. Leave empty for no cap.",
     ["budget", "limit", "cost", "dollars", "money"],
   ),
   draft(
     "autopilot.engine.quiet-hours",
     "Quiet hours",
-    "No agent runs start in this window (local time, and it may cross midnight).",
+    "No agent runs start in this window (local time, and it may cross midnight). Automations that only change the board still run.",
     ["night", "schedule", "time window", "sleep", "off hours"],
   ),
   draft(
@@ -369,20 +370,20 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "integrations.terminal.open-in",
     "Windows Terminal: open in",
-    "A new tab in the window you used last, or always a new window.",
-    ["tab", "window", "windows terminal"],
+    "Windows Terminal only: a new tab in the window you used last (a new window if none is open), or always a new window. Command Prompt, PowerShell and custom commands always open as their command says.",
+    ["open in", "tab", "window", "windows terminal"],
   ),
   draft(
     "integrations.terminal.command",
     "Terminal command",
     "One command line, run by cmd on Windows and sh elsewhere. {cwd} and {command} are filled in.",
-    ["custom terminal", "placeholder", "shell"],
+    ["command", "custom terminal", "placeholder", "shell"],
   ),
   draft(
     "integrations.terminal.preview",
     "Terminal preview",
     "What opening a session runs, for an example session in your home folder.",
-    ["command line", "example", "runs"],
+    ["runs", "command line", "example"],
   ),
   // Project
   draft("project.general.name", "Project name", "Shown on the lane header and in the sidebar.", [
@@ -391,6 +392,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "lane",
   ]),
   draft("project.general.icon", "Project icon", "A custom icon, or automatic from the project name.", [
+    "icon",
     "favicon",
     "image",
     "logo",
@@ -532,5 +534,7 @@ const kindRank = (entry: SettingsIndexEntry) => (entry.kind === "section" ? 0 : 
 
 /** "Group › Sub-section": where an entry is, as shown under its title. */
 export function settingsLocation(entry: SettingsIndexEntry): string {
-  return entry.kind === "section" ? entry.groupLabel : `${entry.groupLabel} › ${entry.sectionLabel}`;
+  // A sub-section named like its group (Autopilot's own) adds nothing.
+  if (entry.kind === "section" || entry.sectionLabel === entry.groupLabel) return entry.groupLabel;
+  return `${entry.groupLabel} › ${entry.sectionLabel}`;
 }

@@ -177,7 +177,11 @@ rule editor take `?project=`; without it the page shows the project the board wa
   field: title (exact, prefix, word start, contains), keyword, group or sub-section name, description. `/` and
   Ctrl/Cmd+F focus the box (`isSearchShortcut`). A pick calls `useOpenSettings` with `highlight`, which
   `requestScroll` carries to `SettingsScroller`; it scrolls, `FoldedSettingsSection` opens when the id is its own or
-  under it, and `flashElement` adds `.settings-flash` for 1.6 s. Picking a sub-section only scrolls.
+  under it, and `flashElement` adds `.settings-flash` for 1.6 s, once a smooth jump has landed (`afterScroll`). Picking a
+  sub-section only scrolls. A row that isn't rendered (the issue import's model with import off) falls back, after
+  the two-second wait, to the nearest id that is, dropping trailing segments (`nearestRendered`). The index's titles
+  may be more specific than the rendered label ("Backup interval" for "Every"); the rendered label goes in its
+  keywords.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.

@@ -269,13 +269,50 @@ const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as 
 /** How long a picked setting stays marked; the animation in `index.css` fades it over this time. */
 const FLASH_MS = 1600;
 
+const flashTimers = new WeakMap<HTMLElement, number>();
+
 /** Marks `element` for a moment so the eye finds it after a jump (`.settings-flash`, see `index.css`). */
 function flashElement(element: HTMLElement) {
+  window.clearTimeout(flashTimers.get(element));
   element.classList.remove("settings-flash");
   // Reading a layout property restarts the animation when the same element is picked again.
   void element.offsetWidth;
   element.classList.add("settings-flash");
-  window.setTimeout(() => element.classList.remove("settings-flash"), FLASH_MS);
+  flashTimers.set(
+    element,
+    window.setTimeout(() => element.classList.remove("settings-flash"), FLASH_MS),
+  );
+}
+
+/** Runs `fn` once a smooth scroll in `area` has come to rest, or after a moment where `scrollend` isn't fired. */
+function afterScroll(area: HTMLElement, fn: () => void): () => void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    area.removeEventListener("scrollend", run);
+    fn();
+  };
+  const timer = setTimeout(run, 900);
+  area.addEventListener("scrollend", run);
+  return () => {
+    done = true;
+    clearTimeout(timer);
+    area.removeEventListener("scrollend", run);
+  };
+}
+
+/**
+ * The element for a target id, or when it isn't rendered (a row that only shows in some states: the issue import's
+ * model with import off) the nearest one that is, by dropping trailing `.segment`s: the card, then the sub-section.
+ */
+function nearestRendered(id: string): HTMLElement | null {
+  for (let end = id.length; end > 0; end = id.lastIndexOf(".", end - 1)) {
+    const element = document.getElementById(id.slice(0, end));
+    if (element) return element;
+  }
+  return null;
 }
 
 // The scroll request last brought into view, so a page mounting later doesn't replay it. A request is only handled
@@ -352,15 +389,23 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
     let tries = 0;
     let frame = 0;
     let unpin = () => {};
+    let cancelFlash = () => {};
     const attempt = () => {
-      const element = document.getElementById(id);
+      // Once the wait is up, settle for the nearest part of the page that is there.
+      const last = tries >= 119;
+      const element = last ? nearestRendered(id) : document.getElementById(id);
       if (element && area.contains(element)) {
         const handled = () => {
           hashDone.current = true;
           if (nonce !== null) handledScroll = Math.max(handledScroll, nonce);
         };
         element.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
-        if (target?.highlight && !fromHash) flashElement(element);
+        // A smooth jump is flashed once it lands, so the mark isn't spent while the row is still travelling.
+        const flash = () => {
+          if (target?.highlight && !fromHash) flashElement(element);
+        };
+        if (smooth) cancelFlash = afterScroll(area, flash);
+        else flash();
         if (sectionOf(id)) useSettingsNav.getState().setActiveSection(sectionOf(id)!.id);
         // A page that just opened is still loading what sits above and below the target, so it stays pinned until
         // that settles, and only then counts as handled: if this effect is cleaned up first (a remount), the next
@@ -377,6 +422,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
     return () => {
       cancelAnimationFrame(frame);
       unpin();
+      cancelFlash();
     };
   }, [target, openedAt]);
 

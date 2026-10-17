@@ -10,12 +10,13 @@ board as you left it. On a narrow window the list is behind the menu button in t
 
 ## Finding a setting
 
-The box above the list searches every setting. Press **/** or **Ctrl/Cmd F** to jump to it from anywhere on the
-page, then type: the results take the list's place, each with the page and section it is in beneath its name.
+The box above the list searches every setting. Press **/** or **Ctrl/Cmd F** to jump to it while the list is showing
+(on a narrow window, open the list first), then type: the results take the list's place, each with the page and section it is in beneath its name.
 It matches names first, then other names people know a setting by ("dark mode", "Copilot", "budget") and its
 description, and every word you type has to match. **↑ ↓** move through the results, **Enter** opens one, and
 **Esc** clears the box. Opening a result goes to its page, opens the folded section it is in (one automation under
-Autopilot, say), scrolls to it and marks it for a moment.
+Autopilot, say), scrolls to it and marks it for a moment. A setting that only shows in some states (the issue import's model while
+import is off) lands on the part of the page that does.
 
 ## The pages
 
