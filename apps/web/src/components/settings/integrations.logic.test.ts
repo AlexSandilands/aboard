@@ -57,6 +57,9 @@ describe("integration dots", () => {
 
   it("an MCP server the harness can't confirm, or reports as down, doesn't turn a ready CLI amber", () => {
     expect(agentDot("Copilot", agent({ mcp: { connected: null } })).tone).toBe("success");
+    // A project-only registration is amber: it is missing in every other folder.
+    expect(agentDot("Claude Code", agent({ mcp: { scope: "local", connected: null } })).tone).toBe("warning");
+    expect(agentDot("Claude Code", agent({ mcp: { scope: "local", connected: true } })).tone).toBe("success");
     const down = agentDot("Copilot", agent({ mcp: { connected: false } }));
     expect(down.tone).toBe("success");
     expect(down.label).toContain("not connected");

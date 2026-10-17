@@ -136,7 +136,8 @@ project (local scope), so `~/.claude.json` is also read for those (reported as l
 `$COPILOT_HOME/mcp-config.json`) is read. Config files are only read for server names and `url` strings, never
 headers or env, and no URL or token is put in the result.
 
-The dot is green when the CLI runs and the MCP entry exists; `connected: false` only adds a note, because a harness
+The dot is green when the CLI runs and the MCP entry exists (a project-only entry, local scope that the CLI can't
+confirm, is amber: it is missing in other folders; a refresh while a check is running joins it); `connected: false` only adds a note, because a harness
 can report a server as down while it would connect when a session starts. `GET /api/agent-clis` is separate and only
 says whether the executable exists; the hand-off menus and a session's open and fork items use it.
 

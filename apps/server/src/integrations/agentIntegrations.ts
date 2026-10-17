@@ -305,6 +305,8 @@ export function createAgentIntegrations(deps: {
     key: string;
     at: number;
     result: Promise<AgentIntegrations>;
+    /** Still running: a refresh joins it rather than starting another `claude mcp list`. */
+    pending: boolean;
   } | null = null;
 
   return {
@@ -312,9 +314,14 @@ export function createAgentIntegrations(deps: {
       const settings = deps.services().settings.get();
       const boardUrl = deps.mcpUrl();
       const key = JSON.stringify([settings.headlessReviewCli, settings.copilotCli, boardUrl]);
-      if (!refresh && cached && cached.key === key && now() - cached.at < CACHE_MS) return cached.result;
+      if (cached?.key === key && (cached.pending || (!refresh && now() - cached.at < CACHE_MS))) return cached.result;
       const result = compute(settings, boardUrl);
-      cached = { key, at: now(), result };
+      const entry = { key, at: now(), result, pending: true };
+      cached = entry;
+      const settle = () => {
+        entry.pending = false;
+      };
+      result.then(settle, settle);
       // A check that threw isn't worth keeping for a minute.
       result.catch(() => {
         if (cached?.result === result) cached = null;

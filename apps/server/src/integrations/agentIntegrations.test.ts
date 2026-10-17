@@ -299,6 +299,29 @@ describe("agent integrations: Copilot CLI", () => {
   });
 });
 
+describe("agent integrations: refresh", () => {
+  it("joins a check that is still running instead of starting another", async () => {
+    let release: (() => void) | undefined;
+    const claudeMcp = vi.fn<(exe: string, args: string[]) => Promise<string>>((_exe, args) =>
+      args[1] === "get"
+        ? Promise.resolve("tasks:\n  Scope: User config\n")
+        : new Promise((resolve) => (release = () => resolve(LIST))),
+    );
+    const { svc } = service({ claudeMcp });
+    const first = svc.status(true);
+    const second = svc.status(true);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    release?.();
+    await Promise.all([first, second]);
+    // One `mcp list` (and its `mcp get`) for both calls, then a refresh after it settled runs again.
+    const lists = () => claudeMcp.mock.calls.filter(([, args]) => args[1] === "list").length;
+    expect(lists()).toBe(1);
+    claudeMcp.mockImplementation((_exe, args) => Promise.resolve(args[1] === "get" ? "" : LIST));
+    await svc.status(true);
+    expect(lists()).toBe(2);
+  });
+});
+
 describe("agent integrations: cache", () => {
   it("reuses an answer for a minute, until refreshed or a CLI path changes", async () => {
     let time = 0;

@@ -35,6 +35,10 @@ export function agentDot(
     return dot("warning", `${name} CLI not working${status.cli.error ? `: ${status.cli.error}` : ""}`);
   }
   if (!status.mcp.registered) return dot("warning", "MCP server not registered");
+  // Added for one project only: `claude mcp list` can't confirm it, and it isn't there in other folders.
+  if (status.mcp.scope === "local" && status.mcp.connected === null) {
+    return dot("warning", "MCP server is registered for one project only: add it with --scope user");
+  }
   if (status.mcp.connected === false) {
     return dot("success", `Ready, but ${name} reports the MCP server as not connected`);
   }
