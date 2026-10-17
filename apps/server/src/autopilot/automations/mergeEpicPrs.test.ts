@@ -244,6 +244,8 @@ describe("merge into epic branch", () => {
   });
 
   it("tries a head again after a failure that may pass, then asks the user", async () => {
+    // A stopped clock: every run is made in the same millisecond, so the order of runs can't lean on their times.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-17T08:00:00.000Z") });
     const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
     turnOn();
     failMerge(new AppError("VALIDATION", "Base branch was modified. Review and try the merge again."));

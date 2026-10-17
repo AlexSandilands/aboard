@@ -296,9 +296,9 @@ as comments only.
   chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the
   PR's text untrusted, and says nothing is recorded on the board.
 - **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
-  `fyi`). `renderReview` builds one review from it: the summary under `🤖 <displayName> Autopilot review`
+  `fyi`). `renderReview` builds one review from it: the summary under `📋 <displayName> Autopilot review`
   (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
-  inline comments starting with `🤖 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
+  inline comments starting with `📋 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
   with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or request
   changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses with
   `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
@@ -435,7 +435,9 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   task's suggested tier. The agent moves the task to In Progress itself.
 - **Failure**: a runner error, or the task still in Planned when the grace period ends, counted from when the thread
   started (the runner may first have waited up to ten minutes for T3, see [Runners](#runners)). A T3 run returns once the thread has started, so the action then waits out the rest of the grace period for
-  the agent to move the task; a headless run returns when the agent is done, so it is checked once, at once. A runner
+  the agent to move the task, unless the live poll sees its thread `failed` first: that ends the run at once ("its T3
+  Code thread failed before moving #N out of Planned"; only a snapshot taken after the runner returned counts). A
+  headless run returns when the agent is done, so it is checked once, at once. A runner
   error after the agent moved the task (a headless budget or timeout) reads "Autopilot's agent stopped before
   finishing" instead. The run fails with "Autopilot couldn't start this task: …" and `needsAttention`, so the task is flagged
   and the engine notifies. Nothing retries it. The flag clears itself when the task changes status
@@ -644,6 +646,23 @@ Every agent automation spreads the shared runner options into its config (`autop
 so the model is the one the user mapped to the task's suggested tier. The thread gets a new T3 worktree; for a
 `branch` it starts from origin's copy of it. The prompt ends with a note on where to push and the safety rules.
 
+- **One launch per repository at a time.** T3 answers the launch at once and prepares the workspace afterwards,
+  starting with a `git fetch` in the project's checkout. Fetches side by side in one checkout race for its ref locks
+  and all but one fail ("Workspace preparation failed during provision worktree: … git fetch origin failed"), and the
+  engine doesn't await agent actions, so every launch of a pass would start together. So each launch holds the
+  repository's gate (`autopilot/repoGate.ts`, keyed by the project folder) from the launch until T3's shell shows the
+  thread with a run that is past `preparing` (`threadWorkspace`, every 2 s), for up to three minutes (`T3_PREPARE_MS`;
+  then the gate is let go and the run carries on), twice that when the preparation is retried. The headless runner's
+  worktree fetch takes the same gate (`gateFetches`). What the user asks for doesn't, since a hold can last minutes:
+  launches from the dialog and `start_task_thread`, and an epic's branch (`ensureEpicBranch`). A wait for an
+  unreachable T3 lets the gate go meanwhile.
+- **A failed preparation is retried once.** When the thread's run goes `failed` during that wait, the runner asks T3
+  to prepare it again in the same thread (`retryPreparation`: T3's `prepared-run.retry` command, id
+  `autopilot-<runId>-retry`), still holding the gate, so the link and thread stay. The shell may still show the old
+  failure for a moment, so a failure counts only once the thread has changed since the retry. A second failure fails the run with
+  "T3 Code couldn't prepare the thread's workspace: <T3's error>". T3 refuses the retry for a run that failed for
+  another reason, which fails the run with "T3 Code couldn't start the thread: …".
+
 **Headless.** `claude -p` in a worktree of its own (`autopilot/worktrees.ts`):
 
 1. `git worktree add --no-track -b autopilot/<task#>-<run8> <data dir>/worktrees/<repo>/<task#>-<run8> <start>`,
@@ -765,6 +784,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |
 | `apps/server/src/autopilot/runnerOptions.ts` | The runner options every agent automation shares |
 | `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
+| `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
 | `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |

@@ -213,7 +213,7 @@ export function epicPrBody(
   return [
     `Epic #${epic.number} "${epic.title}", delivered through the integration branch \`${branch}\`.`,
     "",
-    `🤖 ${BRAND.name} Autopilot merges each task's pull request into \`${branch}\` once its reviews are finished and its checks pass, and keeps this description current. It never merges this pull request: that is yours, once you're happy with the whole epic.`,
+    `📋 ${BRAND.name} Autopilot merges each task's pull request into \`${branch}\` once its reviews are finished and its checks pass, and keeps this description current. It never merges this pull request: that is yours, once you're happy with the whole epic.`,
     "",
     `## Tasks (${done} of ${counted.length} done)`,
     "",
