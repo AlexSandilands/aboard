@@ -210,6 +210,18 @@ describe("groupLinks", () => {
     expect(ids(groups.folded.get("t2") ?? [])).toEqual(["s3", "s2"]);
   });
 
+  it("files a session linked after a later thread under that thread, even if it belongs to an older one", () => {
+    // Attribution is a heuristic on link time: nothing says which thread a session came from.
+    const groups = groupLinks([
+      thread("t1", null, "2026-01-01T00:00:00Z"),
+      session("s1", { createdAt: "2026-01-01T00:00:01Z" }),
+      thread("t2", null, "2026-01-02T00:00:00Z"),
+      session("resumed-t1", { createdAt: "2026-01-03T00:00:00Z" }),
+    ]);
+    expect(ids(groups.folded.get("t1") ?? [])).toEqual(["s1"]);
+    expect(ids(groups.folded.get("t2") ?? [])).toEqual(["resumed-t1"]);
+  });
+
   it("folds a session linked at the same moment as its thread", () => {
     const at = "2026-01-01T00:00:00Z";
     const groups = groupLinks([thread("t", null, at), session("s", { createdAt: at })]);
