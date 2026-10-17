@@ -130,7 +130,8 @@ model for the task's tier, and whether sessions get a named window) and offers:
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line;
 - a model, filled in from **Session models** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
-- **New worktree** from a branch, or **This checkout**. The branch starts on the task's integration branch when its
+- **New worktree** from a branch, or **This checkout**. (A fix from a PR's **Fix in →** has neither choice: it runs in a
+  new worktree on the PR's own branch, below.) The branch starts on the task's integration branch when its
   epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch
   (the local one when origin has none), as Autopilot's worktrees start from it.
 
@@ -164,6 +165,13 @@ it. **Open in terminal** resumes such a session into its window again, so the wi
 terminal with no named windows (the setting changed), the link forgets the window. A fork is a new session and opens
 where the setting says. Bringing the window back shows its first tab: Windows Terminal can't focus a tab by what runs
 in it, so with several sessions in the window the one asked for may be on another tab.
+
+**Fixing a PR.** `workspace: {mode: "pr_branch", branch}` with `mode: "fix"` is **Fix in →** on a PR link
+([GitHub PRs](github-prs.md#fixing-a-pr-by-hand)). The server refuses a branch that isn't the head of an open or draft PR of
+the task (not from a fork); then `createWorktree` is given `branch` instead of `baseRef`, which makes a new local
+`<brand>/<task#>-<id8>` branch at origin's copy of the PR's branch that tracks nothing, and refuses the default branch
+(the prompt tells the agent to push with `git push origin HEAD:<branch>`). The session is labelled "Fixing the PR of #N"
+(`sessionLabel`), and the short prompt (`shortPrompt`) names the branch and repeats the safety rules.
 
 The terminal setting is resolved first, so one that can't run here is refused (400) before any worktree is made. A
 worktree made for a session whose terminal then didn't start stays, since the returned command runs in it, and the

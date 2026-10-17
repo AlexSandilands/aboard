@@ -16,6 +16,7 @@ import {
   type SessionLaunchOptions,
   type StartSessionInput,
   type StartSessionResult,
+  type TaskSummary,
 } from "@repo/contracts";
 import { createWorktree, defaultBranchOf } from "../autopilot/worktrees.ts";
 import { AppError } from "../errors.ts";
@@ -69,15 +70,33 @@ export function shortPrompt(
   mode: StartSessionInput["mode"],
   task: { id: string; number: number },
   platform: NodeJS.Platform,
+  /** The pull request's branch, for a fix. */
+  branch?: string,
 ): string {
   const text =
-    `${mode === "plan" ? "Let's plan" : "Let's work on"} #${task.number} from the ${BRAND.id} task board: ` +
-    `call get_task("${task.id}") on the ${BRAND.id} MCP server first. The board started this session and already ` +
-    "linked it to the task; don't link it again.";
+    (mode === "fix"
+      ? `Let's fix the pull request on branch ${branch ?? "(see the task)"} of #${task.number}`
+      : `${mode === "plan" ? "Let's plan" : "Let's work on"} #${task.number}`) +
+    ` from the ${BRAND.id} task board: call get_task("${task.id}") on the ${BRAND.id} MCP server first. The board ` +
+    "started this session and already linked it to the task; don't link it again." +
+    (mode === "fix"
+      ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
+      : "");
   const fitted = textArgument(text, platform);
   if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);
   return fitted.value;
 }
+
+/** The head branches of the task's open or draft pull requests in this repository: the ones a fix may push to. */
+const prBranches = (task: TaskSummary): string[] =>
+  task.links.flatMap((link) =>
+    link.kind === "pr" &&
+    (link.snapshot?.state === "open" || link.snapshot?.state === "draft") &&
+    !link.snapshot.isCrossRepository &&
+    link.snapshot.headRef
+      ? [link.snapshot.headRef]
+      : [],
+  );
 
 function isDirectory(path: string): boolean {
   try {
@@ -197,14 +216,19 @@ export function createSessionLaunch(deps: {
       const sessionId = randomUUID();
       let cwd = root;
       let branch: string | null = null;
-      if (input.workspace.mode === "new_worktree") {
+      const { workspace } = input;
+      if (workspace.mode === "pr_branch" && !prBranches(task).includes(workspace.branch)) {
+        throw new AppError("VALIDATION", `#${task.number} has no open pull request on ${workspace.branch}`);
+      }
+      if (workspace.mode !== "current") {
         try {
+          // A pull request's branch is on origin, and origin's copy is the one to build on; the session pushes back to it.
           const worktree = await createWorktree(deps.runGit, {
             repo: root,
             root: join(deps.worktreesDir, "sessions"),
             taskNumber: task.number,
             runId: sessionId,
-            baseRef: input.workspace.baseRef,
+            ...(workspace.mode === "pr_branch" ? { branch: workspace.branch } : { baseRef: workspace.baseRef }),
             branchPrefix: SESSION_BRANCH_PREFIX,
           });
           cwd = worktree.path;
@@ -224,7 +248,8 @@ export function createSessionLaunch(deps: {
       // The prompt as it can go on this command line, else a short one built from the task alone (the web app copies
       // the full prompt to the clipboard instead).
       const fitted = textArgument(input.prompt, h.platform);
-      const short = () => shortPrompt(input.mode, task, h.platform);
+      const short = () =>
+        shortPrompt(input.mode, task, h.platform, workspace.mode === "pr_branch" ? workspace.branch : undefined);
       let shortReason = "error" in fitted ? `The prompt couldn't go on the command line: ${fitted.error}.` : null;
       let argv = argvFor("value" in fitted ? fitted.value : short());
       let spec: LaunchSpec | null = null;

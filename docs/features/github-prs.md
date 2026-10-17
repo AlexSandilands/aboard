@@ -96,7 +96,8 @@ order as T3 Code's PR panel. Only a task in **Review** whose PR the account can 
 4. checks not passing, and the repo allows auto-merge: **Enable auto-merge**;
 5. otherwise: **Merge**.
 
-The panel's PR row shows the button; the card shows a merge icon next to the PR chip. Both open
+The panel's PR row shows the button; the card shows a merge icon next to the PR chip. While the PR has something to fix
+the slot is Fix in → instead, and Merge is in the row's menu ([below](#fixing-a-pr-by-hand)). Both open
 `MergePrDialog`, where the method can be changed. It offers the method last picked for the repo
 (`useMergeMethods`, in local storage), else squash, merge, rebase, whichever the repo allows.
 
@@ -114,6 +115,47 @@ The panel's PR row shows the button; the card shows a merge icon next to the PR 
 - Then the link is refreshed. A merged PR then finishes the task the usual way (below).
 
 Merging is UI only: there's no MCP tool for it.
+
+### Fixing a PR by hand
+
+Board task: #78. The PR row has one action slot (`prRowSlot` in `packages/contracts/src/prFix.ts`), in the panel and on
+the card. `prProblems(snapshot)` says what is wrong: failing checks, a conflict, changes requested; and only for an open
+or draft PR in the base repository (`isCrossRepository` is false) with a `headRef` and `headOid`, as Fix PRs does.
+
+| The PR has                                  | The slot (panel row; card chip)          | In the row's ⌄ menu (the card chip's menu)   |
+| ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
+| nothing to fix                              | Merge, as above (`prMergeAction`)        |                                              |
+| a problem                                   | **Fix in →** (a menu: the targets below) | the Merge or Enable auto-merge that gave way |
+| a problem, Fix PRs on for the task, running | **Autopilot is fixing**                  | Fix in →, and that Merge                     |
+| a problem, Fix PRs on for the task, gave up | **Autopilot gave up**                    | Fix in →, and that Merge                     |
+
+No Fix in → on a Done task (Autopilot skips them too), an epic (its sessions start from its tasks) or a link with no
+repository and number. **Fix PRs on for the task** is its resolution at the task's epic, project or board
+(`useAutopilotScope`, `useAutopilotEpicScope`), read only while the PR has a problem. **Running** is a run in flight on
+the task for `fix_prs`; **gave up** is the task's Needs attention reason `fixGaveUpPrefix(n)`. The board can't tell
+"Autopilot is about to fix it" from "Autopilot has done all it will" without redoing the automation's check in the
+browser, so in those states Fix in → stays the primary action.
+
+**Fix in →** offers **T3 Code thread…** (as in the hand-off menu), **Claude Code session…** and **Copilot CLI session…**,
+each opening its launch dialog with `fixLinkId` set (`useDialogs().openT3Launch(taskId, fixLinkId)`,
+`openSessionLaunch(taskId, harness, fixLinkId)`), and **Copy fix prompt**. The dialogs read `GET /api/links/:id/fix`:
+
+- `manualFix` (`autopilot/automations/fixPrs.ts`) builds Fix PRs' prompt (`fixPrompt` with `manual: true`) for every
+  problem the PR has now, whoever raised it and whether or not Autopilot has tried it. Review comments and Autopilot's
+  own review aren't listed: the user points the agent at those. Changes requested read the newest trusted review, or tell
+  the agent to find it with `gh pr view --comments` when there is none. The scope's **Fix skill** is followed, as for
+  Autopilot's attempts. The response also carries the PR's `branch`, `headOid`, `number` and `problems`. It is a 400 for a
+  PR with nothing to fix, as `prProblems` says.
+- The prompt differs from Autopilot's for a user who is watching: no "Autopilot sent you" or attempt count, the agent may
+  ask instead of stopping, replies carry no Autopilot marker (the reply file is `fix-reply.md`), the agent is told the
+  board linked the session, and the push is `git push origin HEAD:<branch>` since the worktree's own branch is a new one.
+  The safety rules are the same: never force-push, never push to the default branch, never merge, conflicts by merge.
+- **CLI sessions** use the workspace `{mode: "pr_branch", branch}` ([agent sessions](agent-sessions.md#starting-a-session)):
+  a worktree on origin's copy of the PR's branch, like Fix PRs' headless runs. The dialog has no "where" choice and needs a
+  git repository. The session is labelled "Fixing the PR of #N" and linked to the task.
+- **T3 threads** start in a new worktree from `origin/<branch>` (the dialog's initial choice, as for an integration epic's
+  branch); the dialog warns when T3 lists no such ref or another is chosen, and the prompt has the agent fetch and
+  fast-forward the branch when its worktree lacks the PR's head commit. The thread is linked to the task.
 
 ### Finishing on merge
 
@@ -154,4 +196,8 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | `packages/contracts/src/derive.ts`                       | `deriveAttention`                                               |
 | `apps/web/src/components/board/CardLinks.tsx`, `task/LinksSection.tsx` | PR chips and merge controls on the card and in the panel |
 | `apps/web/src/components/merge/MergePrDialog.tsx`        | The merge dialog                                                |
+| `packages/contracts/src/prFix.ts`                        | `prProblems`, `prRowSlot`, `PrFixInfo`                          |
+| `apps/web/src/components/handoff/FixPrMenu.tsx`          | The slot hook (`usePrSlot`) and the Fix in → menu items         |
+| `apps/web/src/components/handoff/fixPr.logic.ts`         | `prAutopilotState`: Fix PRs' state for the slot                 |
+| `apps/server/src/autopilot/automations/fixPrs.ts`        | `manualFix` and `fixPrompt`, which Fix PRs and Fix in → share   |
 | `apps/web/src/components/settings/IntegrationsSections.tsx` | The GitHub section in Settings → Integrations                |

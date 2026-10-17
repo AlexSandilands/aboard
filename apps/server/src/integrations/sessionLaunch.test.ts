@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type StartSessionResult, type TaskLink } from "@repo/contracts";
+import { BRAND, type PrSnapshot, type StartSessionResult, type TaskLink } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -283,5 +283,59 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
     } finally {
       repo.cleanup();
     }
+  });
+
+  it("works on a pull request's own branch to fix it, and only on a branch the task's open PR has", async () => {
+    const repo = createGitFixture();
+    try {
+      const app = appWith({ repo: repo.checkout, worktrees: repo.worktrees });
+      const prSnapshot = (over: Partial<PrSnapshot> = {}): PrSnapshot => ({
+        state: "open",
+        title: "Add the feature",
+        checks: "failing",
+        reviewDecision: null,
+        mergeable: "mergeable",
+        headRef: "feature",
+        updatedAt: null,
+        headOid: git(repo.checkout, "rev-parse", "origin/feature"),
+        ...over,
+      });
+      const fix = { mode: "fix", workspace: { mode: "pr_branch", branch: "feature" } };
+
+      // No PR on the task: nothing to push to, so nothing is made.
+      const none = await app.start(fix);
+      expect(none.status).toBe(400);
+      expect(app.sessionLinks()).toEqual([]);
+
+      const added = app.services.links.add(app.task.id, { value: "https://github.com/acme/app/pull/7" }, "agent");
+      app.services.links.setSnapshot(added.id, prSnapshot());
+      const { status, body } = await app.start(fix);
+      expect(status).toBe(201);
+      expect(body.launched).toBe(true);
+      // Origin's copy of the PR's branch, on a local branch of its own that tracks nothing, so a bare push can't land on it.
+      expect(git(body.cwd, "rev-parse", "HEAD")).toBe(git(repo.checkout, "rev-parse", "origin/feature"));
+      expect(body.branch).toMatch(new RegExp(`^${BRAND.id}/1-[0-9a-f]{8}$`));
+      expect(body.cwd.startsWith(join(repo.worktrees, "sessions"))).toBe(true);
+      expect(app.sessionLinks()[0]).toMatchObject({ label: "Fixing the PR of #1", ref: { cwd: body.cwd } });
+
+      // A branch the task's PRs don't have, a merged PR and the default branch are refused.
+      expect((await app.start({ ...fix, workspace: { mode: "pr_branch", branch: "other" } })).status).toBe(400);
+      app.services.links.setSnapshot(added.id, prSnapshot({ state: "merged" }));
+      expect((await app.start(fix)).status).toBe(400);
+      app.services.links.setSnapshot(added.id, prSnapshot({ headRef: "main" }));
+      const onDefault = await app.start({ ...fix, workspace: { mode: "pr_branch", branch: "main" } });
+      expect(onDefault.status).toBe(400);
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
+describe("shortPrompt for a fix", () => {
+  it("names the PR's branch and keeps the safety rules", () => {
+    const text = shortPrompt("fix", { id: "t-1", number: 78 }, "linux", "feat/x");
+    expect(text).toContain("fix the pull request on branch feat/x of #78");
+    expect(text).toContain(`get_task("t-1")`);
+    expect(text).toContain("Never force-push, never push to the default branch and never merge");
   });
 });

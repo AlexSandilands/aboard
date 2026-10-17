@@ -35,7 +35,9 @@ the board's backups, and are deleted with the task.
 A task can link to:
 
 - **GitHub PRs**, on github.com or GitHub Enterprise, with their live state (checks, review, conflicts)
-  and a **Merge** button once the task is in Review, through the account the `gh` CLI is signed in with.
+  and a **Merge** button once the task is in Review, through the account the `gh` CLI is signed in with. When
+  checks fail, the PR conflicts or changes are requested, **Fix in** takes the button's place (see
+  [Fixing a PR](#fixing-a-pr)).
 - **GitHub issues**, with their state when imported (see [Importing issues](importing-issues.md)).
 - **Jira issues.** Keys in a task's title are linked automatically.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
@@ -54,6 +56,21 @@ the thread's ⌄ menu instead of rows of their own.
 Failing checks, requested changes and blocked steps show up under **Needs attention** in the sidebar.
 Agents are told which Jira issue, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
+
+## Fixing a PR
+
+When a PR on a task has failing checks, a merge conflict or a review requesting changes, its row (in the task panel, and
+on the card as a wrench) offers **Fix in** instead of **Merge**: pick **T3 Code thread…**, **Claude Code session…** or
+**Copilot CLI session…**, or **Copy fix prompt** for any other agent. The usual launch dialog opens with the prompt
+filled in with what is wrong and how to read it (the failed run's log, the review), ready to edit. The session works on
+the PR's own branch: a Claude Code or Copilot CLI session in a new worktree on it (never your checkout), a T3 thread in a
+new worktree that starts from it. It is told to push its commits to the PR's branch, to fix conflicts with a merge rather
+than a rebase, and never to force-push, push to the default branch or merge. The session is linked to the task like any
+other. While something needs fixing, **Merge** moves into the row's ⌄ menu.
+
+With [Fix PRs](autopilot.md#fix-prs) on for the task, the row shows **Autopilot is fixing** while it works on the PR, and
+**Autopilot gave up** once it has used its attempts; **Fix in** is in the ⌄ menu then, so you can still step in. PRs from
+forks, merged and closed PRs and tasks in Done have no **Fix in**, as Autopilot skips them too.
 
 ## Labels
 

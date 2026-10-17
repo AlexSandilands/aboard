@@ -365,6 +365,9 @@ to fix a pull request linked to a task.
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
   is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
   via: "nudge" | "t3" | "headless" }`.
+- **By hand.** The PR row's **Fix in →** starts the same kind of fix for the user ([GitHub PRs](github-prs.md#fixing-a-pr-by-hand)),
+  with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
+  for the task. Those sessions aren't runs: they don't count against the attempts or the caps.
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
   attempt that wasn't skipped. When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
   per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts

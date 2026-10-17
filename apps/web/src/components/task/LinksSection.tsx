@@ -12,6 +12,7 @@ import {
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotIcon,
+  ChevronDownIcon,
   CircleXIcon,
   CopyIcon,
   EllipsisIcon,
@@ -25,15 +26,27 @@ import {
   TicketIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { FixInMenuItems, usePrSlot } from "~/components/handoff/FixPrMenu";
+import { PR_AUTOPILOT_LABEL, PR_AUTOPILOT_TITLE } from "~/components/handoff/fixPr.logic";
 import { copyTaskReference } from "~/components/handoff/HandoffActions";
 import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -261,20 +274,14 @@ function PullRequestRow({
   const openMergePr = useDialogs((s) => s.openMergePr);
   const snapshot = link.snapshot;
   const mergeAction = prMergeAction(task.status, snapshot);
+  const slot = usePrSlot(task, link);
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const title = snapshot?.title ?? link.label ?? (link.ref ? link.ref.repo : (hostnameOf(link.url) ?? link.url));
   return (
     <RowWithMenu
       href={link.url}
       title={state ? `${state.label} pull request · ${link.url}` : link.url}
-      action={
-        mergeAction === "merge" || mergeAction === "auto" ? (
-          <PanelControl part="meta" tone="primary" onClick={() => openMergePr(task.id, link.id)}>
-            <GitMergeIcon className="size-3.5" />
-            {mergeButtonLabel(mergeAction)}
-          </PanelControl>
-        ) : null
-      }
+      action={<PrSlotAction task={task} link={link} slot={slot} />}
       menu={
         <>
           {link.ref ? (
@@ -282,6 +289,23 @@ function PullRequestRow({
               <RefreshCwIcon />
               Refresh
             </MenuItem>
+          ) : null}
+          {slot.menu.merge ? (
+            <MenuItem onClick={() => openMergePr(task.id, link.id)}>
+              <GitMergeIcon />
+              {mergeButtonLabel(slot.menu.merge)}
+            </MenuItem>
+          ) : null}
+          {slot.menu.fix ? (
+            <MenuSub>
+              <MenuSubTrigger>
+                <WrenchIcon />
+                Fix in
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <FixInMenuItems task={task} link={link} />
+              </MenuSubPopup>
+            </MenuSub>
           ) : null}
           {mergeAction === "armed" ? (
             <MenuItem disabled={disabling} onClick={() => mergePr({ linkId: link.id, action: "disable_auto" })}>
@@ -336,6 +360,57 @@ function PullRequestRow({
       ) : null}
     </RowWithMenu>
   );
+}
+
+/** The PR row's one action slot: Merge, Fix in →, or what Autopilot's Fix PRs is doing (`prRowSlot`). */
+function PrSlotAction({
+  task,
+  link,
+  slot,
+}: {
+  task: TaskDetail;
+  link: Extract<TaskLink, { kind: "pr" }>;
+  slot: ReturnType<typeof usePrSlot>;
+}) {
+  const openMergePr = useDialogs((s) => s.openMergePr);
+  const { primary } = slot;
+  switch (primary?.kind) {
+    case "merge":
+      return (
+        <PanelControl part="meta" tone="primary" onClick={() => openMergePr(task.id, link.id)}>
+          <GitMergeIcon className="size-3.5" />
+          {mergeButtonLabel(primary.action)}
+        </PanelControl>
+      );
+    case "fix":
+      return (
+        <Menu>
+          <MenuTrigger
+            render={<PanelControl part="meta" tone="primary" title="Start a session to fix this pull request" />}
+          >
+            <WrenchIcon className="size-3.5" />
+            Fix in
+            <ChevronDownIcon className="size-3" />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <FixInMenuItems task={task} link={link} />
+          </MenuPopup>
+        </Menu>
+      );
+    case "autopilot":
+      return (
+        <Badge
+          variant={primary.state === "fixing" ? "info" : "warning"}
+          size="sm"
+          className="me-1 shrink-0"
+          title={PR_AUTOPILOT_TITLE[primary.state]}
+        >
+          {PR_AUTOPILOT_LABEL[primary.state]}
+        </Badge>
+      );
+    default:
+      return null;
+  }
 }
 
 function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" }>; onRemove: () => void }) {

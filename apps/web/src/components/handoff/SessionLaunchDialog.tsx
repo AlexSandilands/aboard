@@ -4,6 +4,7 @@ import {
   taskWindowName,
   defaultHandoffMode,
   type AgentHarness,
+  type PrFixInfo,
   type SessionLaunchOptions,
   type TaskSummary,
 } from "@repo/contracts";
@@ -20,7 +21,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
-import { useBoard, useSettings, useSessionLaunchOptions } from "~/state/queries";
+import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { copyHandoffPrompt } from "./HandoffActions";
 import { ComposerControl } from "./T3LaunchPickers";
@@ -41,7 +42,8 @@ const WHERE_ITEMS = [
 
 /**
  * "New Claude Code / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI opens
- * in a terminal with the prompt and the board links the session (useDialogs().openSessionLaunch).
+ * in a terminal with the prompt and the board links the session (useDialogs().openSessionLaunch). With a `fixLinkId`
+ * ("Fix in →" on a PR) the prompt is Fix PRs' for the PR's problems and the session works on the PR's own branch.
  */
 export function SessionLaunchDialog() {
   const target = useDialogs((s) => s.sessionLaunch);
@@ -51,51 +53,87 @@ export function SessionLaunchDialog() {
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
       <DialogPopup className="max-w-2xl">
         {task && target ? (
-          <SessionLaunch key={`${task.id}:${target.harness}`} task={task} harness={target.harness} onDone={close} />
+          <SessionLaunch
+            key={`${task.id}:${target.harness}:${target.fixLinkId ?? ""}`}
+            task={task}
+            harness={target.harness}
+            fixLinkId={target.fixLinkId ?? null}
+            onDone={close}
+          />
         ) : null}
       </DialogPopup>
     </Dialog>
   );
 }
 
-function SessionLaunch({ task, harness, onDone }: { task: TaskSummary; harness: AgentHarness; onDone: () => void }) {
+function SessionLaunch({
+  task,
+  harness,
+  fixLinkId,
+  onDone,
+}: {
+  task: TaskSummary;
+  harness: AgentHarness;
+  fixLinkId: string | null;
+  onDone: () => void;
+}) {
   const options = useSessionLaunchOptions(task.id);
+  const fix = usePrFix(fixLinkId);
   const modelTiers = useSettings().data?.modelTiers;
+  const pending = options.isPending || (!!fixLinkId && fix.isPending);
+  const error = options.error ?? (fixLinkId ? fix.error : null);
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <HarnessIcon harness={harness} className="size-4" />
-          New {harnessLabel(harness)} session
+          {fixLinkId ? `Fix the PR in ${harnessLabel(harness)}` : `New ${harnessLabel(harness)} session`}
         </DialogTitle>
         <DialogDescription>
           #{task.number} {task.title}
         </DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
-        {options.isPending ? (
+        {pending ? (
           <Skeleton shape="card" className="h-40 w-full" />
-        ) : options.isError ? (
+        ) : error || !options.data ? (
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
             <p className="flex items-start gap-2">
               <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-              <span>{options.error.message}</span>
+              <span>{error?.message ?? "Couldn't read the launch options"}</span>
             </p>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => void options.refetch()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void options.refetch();
+                  if (fixLinkId) void fix.refetch();
+                }}
+              >
                 Retry
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)}
+                onClick={() =>
+                  fix.data
+                    ? copyToClipboard(fix.data.prompt, "fix prompt")
+                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)
+                }
               >
                 Copy prompt instead
               </Button>
             </div>
           </div>
         ) : (
-          <Composer task={task} harness={harness} options={options.data} onDone={onDone} />
+          <Composer
+            task={task}
+            harness={harness}
+            options={options.data}
+            fix={fixLinkId ? (fix.data ?? null) : null}
+            onDone={onDone}
+          />
         )}
       </div>
     </>
@@ -106,30 +144,47 @@ function Composer({
   task,
   harness,
   options,
+  fix,
   onDone,
 }: {
   task: TaskSummary;
   harness: AgentHarness;
   options: SessionLaunchOptions;
+  /** Set to fix a PR: its prompt and branch, which the session works on. */
+  fix: PrFixInfo | null;
   onDone: () => void;
 }) {
   const promptFor = (plan: boolean) =>
-    taskHandoffPrompt({ task, boardUrl: window.location.origin, mode: plan ? "plan" : "work", linkedSession: true });
-  const [plan, setPlan] = useState(defaultHandoffMode(task) === "plan");
+    fix
+      ? fix.prompt
+      : taskHandoffPrompt({
+          task,
+          boardUrl: window.location.origin,
+          mode: plan ? "plan" : "work",
+          linkedSession: true,
+        });
+  const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
   const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
   const start = useStartSession({ silent: true });
   const cli = options.clis.find((c) => c.harness === harness);
 
-  const workspace = toSessionWorkspace(where);
+  // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
+  const workspace = fix
+    ? options.isRepo
+      ? { mode: "pr_branch" as const, branch: fix.branch }
+      : null
+    : toSessionWorkspace(where);
   const badModel = modelError(model);
   const blocker = !cli?.available
     ? `${harnessLabel(harness)} isn't installed`
     : !options.workspaceRoot
       ? "The project has no folder"
       : !workspace
-        ? "Choose a branch"
+        ? fix
+          ? "The project's folder isn't a git repository"
+          : "Choose a branch"
         : badModel;
 
   const togglePlan = () => {
@@ -143,7 +198,14 @@ function Composer({
   const submit = () => {
     if (blocker || !workspace || !prompt.trim() || start.isPending) return;
     start.mutate(
-      { taskId: task.id, harness, mode: plan ? "plan" : "work", prompt, model: model.trim() || null, workspace },
+      {
+        taskId: task.id,
+        harness,
+        mode: fix ? "fix" : plan ? "plan" : "work",
+        prompt,
+        model: model.trim() || null,
+        workspace,
+      },
       {
         onSuccess: (result) => {
           if (!result.launched) {
@@ -230,14 +292,16 @@ function Composer({
             value={model}
             onChange={(event) => setModel(event.target.value)}
           />
-          <ComposerControl
-            aria-pressed={plan}
-            onClick={togglePlan}
-            title="The agent shapes the plan with you before any code is written"
-          >
-            <LightbulbIcon />
-            <span>Plan with me</span>
-          </ComposerControl>
+          {fix ? null : (
+            <ComposerControl
+              aria-pressed={plan}
+              onClick={togglePlan}
+              title="The agent shapes the plan with you before any code is written"
+            >
+              <LightbulbIcon />
+              <span>Plan with me</span>
+            </ComposerControl>
+          )}
           <button
             type="submit"
             aria-label="Start session"
@@ -252,48 +316,56 @@ function Composer({
         </div>
       </div>
       <div className="-mt-3 flex items-center justify-between gap-2 rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
-        <Select
-          items={WHERE_ITEMS}
-          value={where.mode}
-          disabled={!options.isRepo}
-          onValueChange={(value) =>
-            setWhere(
-              value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
-            )
-          }
-        >
-          <SelectTrigger size="sm" variant="ghost" aria-label="Where to run" className="w-auto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectPopup>
-            {WHERE_ITEMS.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectPopup>
-        </Select>
-        {where.mode === "new_worktree" ? (
-          <Select
-            items={options.branches.map((b) => ({ value: b, label: b }))}
-            value={where.baseRef}
-            onValueChange={(value) => setWhere({ mode: "new_worktree", baseRef: value })}
-          >
-            <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
-              <SelectValue placeholder="Choose a branch" />
-            </SelectTrigger>
-            <SelectPopup>
-              {options.branches.map((branch) => (
-                <SelectItem key={branch} value={branch}>
-                  {branch}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        ) : (
-          <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
-            {options.workspaceRoot ?? "No project folder"}
+        {fix ? (
+          <span className="truncate px-2 py-1 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
+            New worktree on the PR's branch <span className="font-mono text-foreground/80">{fix.branch}</span>
           </span>
+        ) : (
+          <>
+            <Select
+              items={WHERE_ITEMS}
+              value={where.mode}
+              disabled={!options.isRepo}
+              onValueChange={(value) =>
+                setWhere(
+                  value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
+                )
+              }
+            >
+              <SelectTrigger size="sm" variant="ghost" aria-label="Where to run" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                {WHERE_ITEMS.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+            {where.mode === "new_worktree" ? (
+              <Select
+                items={options.branches.map((b) => ({ value: b, label: b }))}
+                value={where.baseRef}
+                onValueChange={(value) => setWhere({ mode: "new_worktree", baseRef: value })}
+              >
+                <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
+                  <SelectValue placeholder="Choose a branch" />
+                </SelectTrigger>
+                <SelectPopup>
+                  {options.branches.map((branch) => (
+                    <SelectItem key={branch} value={branch}>
+                      {branch}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            ) : (
+              <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
+                {options.workspaceRoot ?? "No project folder"}
+              </span>
+            )}
+          </>
         )}
       </div>
       <p className="mt-2 px-1 text-xs text-muted-foreground">

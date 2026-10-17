@@ -73,6 +73,8 @@ the PR's branch and replies on the threads it addressed, starting each reply wit
   card says "Autopilot gave up" under Needs attention and you get a notification.
 - It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch
   isn't on `origin`.
+- To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
+  the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
 - Its settings: the five switches, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
   ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
 
