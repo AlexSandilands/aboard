@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
 import type { T3Integration, TaskThreadInput } from "../integrations/t3.ts";
-import { createGitFixture, disposeGitFixtureTemplate, git } from "../test/gitRepo.ts";
+import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { createAutopilotRunner, tierModel } from "./runner.ts";
@@ -25,8 +25,6 @@ const T3_UP: T3IntegrationStatus = {
 const T3_DOWN: T3IntegrationStatus = { ...T3_UP, detected: false, origin: null, liveStatus: "off" };
 
 const result = (fields: Record<string, unknown>) => JSON.stringify({ type: "result", subtype: "success", ...fields });
-
-afterAll(disposeGitFixtureTemplate);
 
 // Real git processes are slow on a loaded Windows machine.
 describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {

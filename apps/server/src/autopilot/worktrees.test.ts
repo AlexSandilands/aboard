@@ -1,14 +1,12 @@
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultRunGit } from "../integrations/backup.ts";
-import { createGitFixture, disposeGitFixtureTemplate, git } from "../test/gitRepo.ts";
+import { createGitFixture, git } from "../test/gitRepo.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { canonicalPath, createWorktree, isInside, removeWorktree } from "./worktrees.ts";
 
 const RUN_ID = "abcdef12-3456-4789-8abc-def012345678";
-
-afterAll(disposeGitFixtureTemplate);
 
 // Real git processes are slow on a loaded Windows machine.
 describe("Autopilot worktrees", { timeout: PROCESS_TEST_TIMEOUT }, () => {

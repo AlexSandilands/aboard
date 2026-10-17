@@ -1,8 +1,8 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultRunGit } from "../integrations/backup.ts";
-import { createGitFixture, disposeGitFixtureTemplate } from "../test/gitRepo.ts";
+import { createGitFixture } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { createWorktreeCleanup } from "./cleanup.ts";
@@ -10,8 +10,6 @@ import { createWorktree } from "./worktrees.ts";
 
 const DAY = 24 * 60 * 60_000;
 const plan = { phases: [{ title: "Build", steps: [{ title: "a" }] }] };
-
-afterAll(disposeGitFixtureTemplate);
 
 // Real git processes are slow on a loaded Windows machine.
 describe("Autopilot worktree cleanup", { timeout: PROCESS_TEST_TIMEOUT }, () => {
