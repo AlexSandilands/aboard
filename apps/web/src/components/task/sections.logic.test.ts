@@ -39,6 +39,8 @@ const relation = (number: number, status: TaskRelation["status"]): TaskRelation 
   archived: false,
 });
 const link = { id: "l", kind: "url", url: "https://example.com" } as TaskLink;
+const thread = { id: "t", kind: "t3_thread" } as TaskLink;
+const session = { id: "s", kind: "agent_session" } as TaskLink;
 const round = (statuses: Array<"open" | "fixed">) =>
   ({ findings: statuses.map((status) => ({ status })) }) as unknown as TaskReview;
 const summary = (state: TaskReviewSummary["state"]): TaskReviewSummary => ({
@@ -60,6 +62,7 @@ describe("normalizeSectionLayout", () => {
       "plan",
       "activity",
       "labels",
+      "sessions",
       "links",
       "relations",
       "review",
@@ -75,6 +78,37 @@ describe("normalizeSectionLayout", () => {
     });
     expect(layout.hidden).toEqual(["labels", "review"]);
     expect(layout.collapsed).toEqual({ plan: true, links: false });
+  });
+
+  it("places Sessions before Links in a layout saved without it, keeping the user's order", () => {
+    const saved = ["plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
+    expect(normalizeSectionLayout({ order: saved }).order).toEqual([
+      "plan",
+      "labels",
+      "sessions",
+      "links",
+      "relations",
+      "review",
+      "autopilot",
+      "details",
+      "activity",
+    ]);
+  });
+
+  it("keeps Sessions where the user put it once it is saved", () => {
+    const order = ["sessions", "plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
+    expect(normalizeSectionLayout({ order }).order).toEqual(order);
+  });
+
+  it("hides Sessions with Links in a layout saved before Sessions existed", () => {
+    const order = ["labels", "links", "relations", "review", "autopilot", "plan", "details", "activity"];
+    expect(normalizeSectionLayout({ order, hidden: ["links", "review"] }).hidden).toEqual([
+      "sessions",
+      "links",
+      "review",
+    ]);
+    // Once saved with Sessions, showing it again sticks.
+    expect(normalizeSectionLayout({ order: ["sessions", ...order], hidden: ["links"] }).hidden).toEqual(["links"]);
   });
 
   it("survives garbage", () => {
@@ -93,6 +127,7 @@ describe("collapsedByDefault", () => {
   it("collapses empty sections and always the activity log", () => {
     const empty = task();
     expect(SECTION_IDS.filter((id) => collapsedByDefault(id, empty))).toEqual([
+      "sessions",
       "links",
       "relations",
       "review",
@@ -109,7 +144,14 @@ describe("collapsedByDefault", () => {
       reviews: [round([])],
       planContext: "Why",
     });
-    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["autopilot", "activity"]);
+    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["sessions", "autopilot", "activity"]);
+  });
+
+  it("opens Sessions and Links by their own kind of link", () => {
+    expect(collapsedByDefault("sessions", task({ links: [thread] }))).toBe(false);
+    expect(collapsedByDefault("links", task({ links: [thread, session] }))).toBe(true);
+    expect(collapsedByDefault("sessions", task({ links: [link] }))).toBe(true);
+    expect(collapsedByDefault("links", task({ links: [session, link] }))).toBe(false);
   });
 
   it("opens Autopilot only when a run needs attention", () => {
@@ -151,9 +193,20 @@ describe("summarizeSection", () => {
     expect(summarizeSection("labels", task({ labels: ["bug", "ui"] }))).toBe("bug, ui");
   });
 
+  it("sessions, with a thread problem", () => {
+    expect(summarizeSection("sessions", task({ links: [link] }))).toBe("None");
+    expect(summarizeSection("sessions", task({ links: [thread, session, link] }))).toBe("2");
+    const attention = [
+      { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },
+      { kind: "thread_needs_input", severity: "warning", message: "Needs input" },
+    ] as SectionTask["attention"];
+    expect(summarizeSection("sessions", task({ links: [thread, link], attention }))).toBe("1 · Needs input");
+  });
+
   it("links, with the first link problem", () => {
     expect(summarizeSection("links", task())).toBe("None");
-    expect(summarizeSection("links", task({ links: [link, link] }))).toBe("2");
+    expect(summarizeSection("links", task({ links: [thread] }))).toBe("None");
+    expect(summarizeSection("links", task({ links: [link, link, thread] }))).toBe("2");
     const attention = [
       { kind: "blocked_step", severity: "warning", message: "Step blocked" },
       { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },

@@ -22,6 +22,7 @@ import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
 import { RelationsSection } from "./RelationsSection";
 import { ResolutionCallout } from "./ResolutionCallout";
+import { SessionsSection } from "./SessionsSection";
 import { TaskActions } from "./TaskActions";
 import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
@@ -199,6 +200,8 @@ function TaskPanelBody({
           switch (id) {
             case "labels":
               return <LabelsSection task={task} />;
+            case "sessions":
+              return <SessionsSection task={task} />;
             case "links":
               return <LinksSection task={task} />;
             case "relations":

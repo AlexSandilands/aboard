@@ -1,6 +1,6 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
@@ -34,9 +34,9 @@ An override equal to its column's setting is pruned, so any override present mea
 
 ### Task panel sections
 
-The panel's sections are Labels, Links, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Links, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
-section shows a one-line summary in its header (`summarizeSection`): the label names, the link count and
+section shows a one-line summary in its header (`summarizeSection`): the label names, the session count and any thread that needs you, the link count and
 any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
@@ -45,7 +45,8 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Section              | Starts collapsed when                             |
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
-| Links                | The task has no links                             |
+| Sessions             | The task has no T3 threads or agent sessions      |
+| Links                | The task has no PRs, issues, Jira keys or URLs    |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
 | Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
@@ -57,27 +58,33 @@ the smart default apply. **Collapse all** and **Expand all** store a choice for 
 them until **Reset**. The **Customize sections** popover in the panel's top bar reorders, shows and
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
-appended.
+appended, except Sessions, which goes before Links in a layout saved without it (and is hidden when that layout
+hid Links, since it used to be part of it).
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
 
-#### The Links section
+#### The Sessions section
 
-The Links section has two groups, each a small heading with a rule (`GroupHeading`, not another collapse). They
-show only when the task has sessions; without any, the section is the plain list it was.
+Sessions is a section of its own, above Links by default (`SessionsSection`). It holds what used to sit in a
+Sessions group of the Links section (#111, split out by #118). A task with none shows "No coding sessions yet" and
+starts collapsed.
 
-- **Sessions** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first
-  (`orderLinks`), then its agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`)
-  the first three show, and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is
-  per panel visit, not stored).
+- **Rows** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first (`orderLinks`), then its
+  agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`) the first three show,
+  and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is per panel visit, not
+  stored).
 - **Folded sessions.** When the task has exactly one T3 thread, its Claude Code sessions leave the rows and sit in
   the thread's ⌄ menu, one submenu each (open, fork, copy the resume command, copy the id, remove), as the thread
   runs a Claude session underneath. Sessions don't say which thread they belong to, so with several threads
   nothing folds. Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
   runner's "Autopilot ·" name) and Copilot CLI sessions always stay rows.
-- **Links**: PRs, then issues, Jira keys and other URLs, each kind in link order.
+
+#### The Links section
+
+PRs, then issues, Jira keys and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
+and the list ends with **Add link**; pasting a T3 thread there still works, and the thread lands in Sessions.
 
 ### Autopilot on the board
 
@@ -172,7 +179,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
 | `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
-| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx` | The Links section's groups, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
+| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx`, `SessionsSection.tsx` | Which links are sessions, the two sections' rows, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores                                             |

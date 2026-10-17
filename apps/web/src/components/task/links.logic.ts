@@ -153,19 +153,23 @@ export function orderLinks(links: ReadonlyArray<TaskLink>): TaskLink[] {
   return [...others.slice(0, first), ...sorted, ...others.slice(first)];
 }
 
+/** Whether the link belongs in the Sessions section rather than Links. */
+export const isSessionLink = (link: TaskLink): link is ThreadLink | SessionLink =>
+  link.kind === "t3_thread" || link.kind === "agent_session";
+
 /** Session rows shown before "Show N more". */
 export const SESSION_PREVIEW_COUNT = 3;
 
 export interface LinkGroups {
-  /** The Sessions group: T3 threads (needing attention first), then the sessions that aren't folded into a thread. */
+  /** The Sessions section: T3 threads (needing attention first), then the sessions that aren't folded into a thread. */
   sessionRows: Array<ThreadLink | SessionLink>;
   /** Claude Code sessions in the one thread's menu, newest first; none unless the task has exactly one thread. */
   folded: SessionLink[];
-  /** The Links group: PRs, then issues, Jira keys and other URLs. */
+  /** The Links section: PRs, then issues, Jira keys and other URLs. */
   links: PlainLink[];
 }
 
-/** A link that isn't a session: those have their own group. */
+/** A link that isn't a session: those have their own section. */
 export type PlainLink = Exclude<TaskLink, { kind: "t3_thread" | "agent_session" }>;
 
 const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = { pr: 0, issue: 1, jira: 2, url: 3 };
@@ -176,7 +180,7 @@ const createdMs = (link: TaskLink) => {
 };
 
 /**
- * Splits a task's links into the Sessions and Links groups. A Claude Code session folds into its thread's menu only
+ * Splits a task's links into the Sessions and Links sections. A Claude Code session folds into its thread's menu only
  * when the task has one thread: sessions don't say which thread they belong to, so with several there is no telling.
  * Autopilot's sessions stay rows, as they run headless and never in a thread.
  */

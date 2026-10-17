@@ -78,7 +78,6 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
 import { ModeSwitch } from "~/components/autopilot/ModeSwitch";
-import { GroupHeading } from "~/components/task/LinksSection";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -469,13 +468,6 @@ export function StyleGallery() {
           <ModeSwitch label="Chosen: Inherit" value="inherit" onChange={() => {}} />
           <span className="text-2xs text-info-foreground">Inherit (On from board)</span>
           <span className="text-2xs text-muted-foreground">Inherit (Off by default)</span>
-        </Section>
-
-        <Section title="Task panel group heading (Sessions and Links)">
-          <div className="flex w-full max-w-sm flex-col gap-0.5">
-            <GroupHeading>Sessions</GroupHeading>
-            <GroupHeading className="mt-1.5">Links</GroupHeading>
-          </div>
         </Section>
 
         <Section title="Skeleton, spinner, scroll area">
