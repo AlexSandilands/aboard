@@ -1,5 +1,6 @@
 import type {
   AgentCliStatus,
+  AgentIntegrations,
   AskSettingsInput,
   AskSettingsResult,
   BackupStatus,
@@ -86,6 +87,8 @@ export interface Integrations {
   terminalInfo(): TerminalInfo;
   /** Whether the board can start Claude Code and Copilot CLI here, for the hand-off menu. */
   agentClis(): AgentCliStatus[];
+  /** Whether each harness's CLI runs and has the board's MCP registered, for Settings → Integrations. */
+  agentIntegrations(refresh?: boolean): Promise<AgentIntegrations>;
   /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
   /** Starts a new Claude Code or Copilot CLI session on a task in a terminal and links it. */

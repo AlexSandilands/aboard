@@ -78,7 +78,7 @@ export function createServices(deps: ServiceDeps): Services {
     attachments,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
-  imports = createImportsService(core, { tasks: () => tasks.service });
+  imports = createImportsService(core, { tasks: () => tasks.service, settings });
   plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
   links = createLinksService(core, {
     task: tasks.record,

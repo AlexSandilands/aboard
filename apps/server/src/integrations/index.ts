@@ -10,6 +10,7 @@ import type { RunShell } from "./shellCommand.ts";
 import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createAgentIntegrations, type AgentIntegrationProbes } from "./agentIntegrations.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
@@ -50,6 +51,8 @@ export interface IntegrationOverrides {
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   runGit?: RunGit;
+  /** What the agent integration checks run: the CLIs and the MCP config files. */
+  agentIntegrationProbes?: Partial<AgentIntegrationProbes>;
   /** Process checks for agent sessions' status. */
   processProbe?: ProcessProbe;
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
@@ -131,6 +134,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       });
     },
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const agentIntegrations = createAgentIntegrations({
+    services: deps.services,
+    mcpUrl: () => `http://127.0.0.1:${deps.config.port}/mcp`,
+    host: overrides.terminalHost ?? systemTerminalHost,
+    userHome: deps.config.userHome,
+    ...(overrides.agentIntegrationProbes ? { probes: overrides.agentIntegrationProbes } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.
   const refreshSession = (sessionId: string) => {
@@ -256,6 +266,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
     agentClis: () => sessionLaunch.clis(),
+    agentIntegrations: (refresh) => agentIntegrations.status(refresh),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
     generateDigest: () => digests.generate(),

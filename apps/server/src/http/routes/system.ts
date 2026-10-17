@@ -70,6 +70,14 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     "/api/agent-clis",
     handle((c) => c.json(integrations.agentClis())),
   );
+  // Runs each CLI and asks it about the board's MCP server; `?refresh=1` skips the minute's cache.
+  app.get(
+    "/api/agent-integrations",
+    handle(async (c) => {
+      const { refresh } = parseQuery(c, z.object({ refresh: z.string().optional() }));
+      return c.json(await integrations.agentIntegrations(refresh === "1"));
+    }),
+  );
 
   app.get(
     "/api/settings",

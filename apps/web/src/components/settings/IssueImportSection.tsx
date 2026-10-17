@@ -74,7 +74,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <SettingsRow
             id="tasks.new-tasks.import-jira-tools"
             title="Jira tools"
-            description="Jira issues are read through your own Jira MCP server in Claude Code (one added for you, not for a single project), with these tools allowed, comma-separated (for example mcp__atlassian__getJiraIssue), and tools that look like writes denied. Leave empty to look for the common read-only Jira tools on every MCP server you have."
+            description="Jira issues are read through your own Jira MCP server in Claude Code (one added for you, not for a single project), with these tools allowed, comma-separated (for example mcp__atlassian__getJiraIssue, plus a search tool such as mcp__atlassian__searchJiraIssuesUsingJql to import an epic's tasks), and tools that look like writes denied. Leave empty to look for the common read-only Jira tools on every MCP server you have."
             control={
               <BlurInput
                 aria-label="Jira tools"

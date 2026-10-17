@@ -3,6 +3,7 @@ import {
   importArgs,
   importSettings,
   importPrompt,
+  importOutcome,
   globMatches,
   IMPORT_OUTPUT_SCHEMA,
   jiraToolRules,
@@ -92,10 +93,39 @@ describe("import prompt", () => {
     expect(prompt).toContain("There are no labels on the board yet.");
   });
 
+  it("asks a Jira run to list an epic's children, by parent and then by Epic Link", () => {
+    const prompt = importPrompt(jira, []);
+    expect(prompt).toContain("isEpic: true");
+    expect(prompt).toContain("`parent = PROJ-7`");
+    expect(prompt).toContain('`"Epic Link" = PROJ-7`');
+    expect(prompt).toContain("up to 50");
+  });
+
   it("cuts a very long body", () => {
     const prompt = importPrompt({ ...github, body: "x".repeat(100_000) }, []);
     expect(prompt.length).toBeLessThan(40_000);
     expect(prompt).toContain("[cut]");
+  });
+});
+
+describe("import outcome", () => {
+  it("reports a Jira epic with its children, counting at least the ones listed", () => {
+    const output = { found: true, title: "Checkout", isEpic: true, children: ["PROJ-8", "PROJ-9"], childTotal: 1 };
+    expect(importOutcome(output, "jira", 0.01)).toEqual({
+      title: "Checkout",
+      description: null,
+      labels: [],
+      epic: { children: ["PROJ-8", "PROJ-9"], total: 2 },
+      costUsd: 0.01,
+    });
+    expect(importOutcome({ ...output, isEpic: false }, "jira", null).epic).toBeUndefined();
+    // A GitHub run isn't asked, so whatever it says about an epic is ignored.
+    expect(importOutcome(output, "issue", null).epic).toBeUndefined();
+  });
+
+  it("fails when the issue couldn't be read or no title came back", () => {
+    expect(() => importOutcome({ found: false, reason: "No such issue" }, "jira", null)).toThrow("No such issue");
+    expect(() => importOutcome({ found: true, title: " " }, "jira", null)).toThrow("no title");
   });
 });
 
@@ -117,6 +147,9 @@ describe("finding Jira tools", () => {
       "mcp__claude_ai_Atlassian__get_jira_issue",
       "mcp__claude_ai_Atlassian__getJiraIssue",
       "mcp__claude_ai_Atlassian__jira_get_issue",
+      "mcp__claude_ai_Atlassian__search_jira",
+      "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
+      "mcp__claude_ai_Atlassian__jira_search",
     ]);
     expect(jiraToolRules([])).toEqual([]);
   });
@@ -147,6 +180,13 @@ describe("finding Jira tools", () => {
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__link_jira_issues"))).toBe(true);
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__notion-create-pages"))).toBe(true);
     expect(rules.some((rule) => globMatches(rule, "mcp__jira__get-jira-issue"))).toBe(false);
+  });
+
+  it("never denies the read and search tools the board allows by default", () => {
+    // None of them reads like a write, so the deny list wouldn't match them even if nothing allowed them.
+    const allowed = jiraToolRules(["jira"]);
+    const rules = writeToolDenyRules(["jira"], []);
+    for (const tool of allowed) expect(rules.some((rule) => globMatches(rule, tool))).toBe(false);
   });
 
   it("covers a server only the allow rules name, even one allowed as a whole", () => {

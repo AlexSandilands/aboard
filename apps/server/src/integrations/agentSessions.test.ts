@@ -339,6 +339,32 @@ describe("resuming a session", () => {
     expect(body.error).toMatch(/Couldn't start Windows Terminal \(Git Bash\): spawn wt.exe ENOENT/);
   });
 
+  it("resumes with the CLI path set in Settings, in the command and the launch", async () => {
+    const app = appWith();
+    app.services.settings.update({ headlessReviewCli: "/opt/claude/bin/claude" });
+    const l = app.link(claude(A, app.home.root));
+    const res = await app.post(l.id, {});
+    expect((await res.json()) as { command: string }).toMatchObject({
+      command: `cd ${shQuote(app.home.root)} && /opt/claude/bin/claude --resume ${A}`,
+    });
+    expect(app.spawned[0]?.args.at(-1)).toBe(`/opt/claude/bin/claude --resume ${A}\\; exec bash`);
+    const copy = await app.request(`/api/links/${l.id}/resume-command`);
+    expect(((await copy.json()) as { command: string }).command).toContain(`/opt/claude/bin/claude --resume ${A}`);
+  });
+
+  it("won't start a configured CLI with spaces in its path in Command Prompt", async () => {
+    const app = appWith();
+    app.services.settings.update({
+      terminal: { kind: "cmd" },
+      headlessReviewCli: "C:\\Program Files\\Claude\\claude.exe",
+    });
+    const l = app.link(claude(A, app.home.root));
+    const body = (await (await app.post(l.id, {})).json()) as { launched: boolean; error: string };
+    expect(body.launched).toBe(false);
+    expect(body.error).toMatch(/Command Prompt can't start a CLI whose path has spaces/);
+    expect(app.spawned).toHaveLength(0);
+  });
+
   it("refuses links that aren't agent sessions", async () => {
     const app = appWith();
     const l = app.services.links.add(app.task.id, { value: "https://example.com" }, "u");

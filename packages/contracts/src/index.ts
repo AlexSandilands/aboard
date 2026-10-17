@@ -17,6 +17,7 @@ export * from "./modelTiers.ts";
 export * from "./backup.ts";
 export * from "./agentSessions.ts";
 export * from "./sessionLaunch.ts";
+export * from "./agentIntegrations.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
 export * from "./prReview.ts";

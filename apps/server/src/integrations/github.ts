@@ -479,6 +479,18 @@ export function parseGhIssue(stdout: string): IssueDetails {
   };
 }
 
+/** Parses the issue URLs `gh api … sub_issues --jq '.[].html_url'` prints, one per line. */
+export function parseSubIssueUrls(stdout: string): string[] {
+  return [
+    ...new Set(
+      stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /^https?:\/\//.test(line)),
+    ),
+  ];
+}
+
 // ── Hosts ────────────────────────────────────────────────────────────────
 
 /**
@@ -517,6 +529,8 @@ export interface GithubIntegration {
   pollAll(): Promise<void>;
   /** Reads an issue with `gh issue view`. Throws AppError (`gh` missing or not signed in, issue not found). */
   fetchIssue(ref: IssueRef): Promise<IssueDetails>;
+  /** The URLs of an issue's sub-issues, in GitHub's order; none for an issue without any. Throws AppError. */
+  fetchSubIssues(ref: IssueRef): Promise<string[]>;
   /** Fetches one PR link now. Returns false when the link is not a GitHub PR. Throws AppError on failure. */
   refresh(link: TaskLink): Promise<boolean>;
   /** Merges a Review task's PR, or turns auto-merge on or off, then refreshes it. Throws AppError. */
@@ -763,6 +777,27 @@ export function createGithubIntegration(deps: {
           throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
         }
         throw new AppError("VALIDATION", `Could not read ${ref.repo}#${ref.number}: ${messageOf(error)}`);
+      }
+    },
+    async fetchSubIssues(ref) {
+      try {
+        const stdout = await runGh(
+          [
+            "api",
+            ...(ref.host === "github.com" ? [] : ["--hostname", ref.host]),
+            "--paginate",
+            `repos/${ref.repo}/issues/${ref.number}/sub_issues?per_page=100`,
+            "--jq",
+            ".[].html_url",
+          ],
+          { timeoutMs: 30_000 },
+        );
+        return parseSubIssueUrls(stdout);
+      } catch (error) {
+        throw new AppError(
+          "VALIDATION",
+          `Could not read the sub-issues of ${ref.repo}#${ref.number}: ${messageOf(error)}`,
+        );
       }
     },
     async refresh(link) {
