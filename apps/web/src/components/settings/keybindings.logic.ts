@@ -49,7 +49,8 @@ const EDITABLE_FOCUS = parseWhen("editableFocus");
  */
 export function triggersWhileTyping(binding: ResolvedKeybinding): boolean {
   const { key, mod, alt } = parseShortcut(binding.key);
-  if (mod || alt || key.length !== 1 || !EDITABLE_FOCUS.ok) return false;
+  // Space types a character too, though its name is longer.
+  if (mod || alt || (key.length !== 1 && key !== "space") || !EDITABLE_FOCUS.ok) return false;
   return whenOverlaps(binding.condition, EDITABLE_FOCUS.node);
 }
 

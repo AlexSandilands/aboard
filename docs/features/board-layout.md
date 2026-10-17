@@ -221,7 +221,8 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
 - **`when`.** An expression over the context flags with `!`, `&&`, `||` and parentheses (`!` binds tightest, `||`
   loosest); empty means always. The flags (`KEYBINDING_CONTEXT_KEYS`) are `editableFocus`, `popupFocus`,
   `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack`; `AppShell` builds them per
-  key event. An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
+  key event (`overlayOpen` is the palette or the digest, as it always was; `dialogOpen` is any app dialog, via
+  `anyDialogOpen`). An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
   hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.
 - **Overrides.** The setting `keybindings` holds only what the user changed, per command: `{ key?, when? }` (an empty
   `when` means always). A command left out always follows the current default, so a default added or changed later

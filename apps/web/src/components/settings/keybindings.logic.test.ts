@@ -58,6 +58,7 @@ describe("triggersWhileTyping", () => {
   it("flags a bare character that nothing keeps out of text fields", () => {
     expect(flagged({ "palette.open": { key: "p" } })).toEqual(["palette.open"]);
     expect(flagged({ "idea.new": { when: "" } })).toEqual(["idea.new"]);
+    expect(flagged({ "idea.new": { key: "shift+space", when: "" } })).toEqual(["idea.new"]);
   });
 
   it("lets a condition, a modifier or a non-typing key through", () => {

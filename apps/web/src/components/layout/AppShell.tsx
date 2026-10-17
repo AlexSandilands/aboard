@@ -6,7 +6,7 @@ import { AppDialogs } from "~/components/settings/AppDialogs";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 import { useBoardEvents } from "~/state/queries";
-import { useDialogs, usePalette } from "~/state/ui";
+import { anyDialogOpen, useDialogs, usePalette } from "~/state/ui";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
 import { resolveCommand, runsImmediately } from "./keyboard.logic";
 import { useResolvedKeybindings } from "./useKeybindings";
@@ -111,7 +111,7 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
         popupFocus: isInsidePopup(event.target),
         overlayOpen: palette.open || dialogs.digestOpen,
         paletteOpen: palette.open,
-        dialogOpen: dialogs.digestOpen,
+        dialogOpen: anyDialogOpen(dialogs),
         settingsOpen,
         panelOpen: onBack !== null && !settingsOpen,
         canGoBack: onBack !== null,
