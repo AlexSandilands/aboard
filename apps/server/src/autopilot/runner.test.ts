@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
-import type { T3Integration, TaskThreadInput } from "../integrations/t3.ts";
+import { t3Unavailable, type T3Integration, type TaskThreadInput } from "../integrations/t3.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { createAutopilotRunner, tierModel } from "./runner.ts";
@@ -34,7 +34,17 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
   }, 30_000);
   afterEach(() => repo.cleanup());
 
-  function setup(opts: { t3?: T3IntegrationStatus; agent?: (job: AgentJob) => Promise<string> } = {}) {
+  function setup(
+    opts: {
+      t3?: T3IntegrationStatus;
+      /** What T3 reports after a fresh look (the runner asks when its cached status isn't ready). */
+      t3AfterLook?: T3IntegrationStatus;
+      /** Fails the first launches, in order. */
+      launchFailures?: Error[];
+      holdMs?: number;
+      agent?: (job: AgentJob) => Promise<string>;
+    } = {},
+  ) {
     const h = createTestHarness();
     const project = h.services.projects.create({ title: "App", workspaceRoot: repo.checkout });
     const task = h.services.tasks.create({ projectId: project.id, title: "Add exports", plan });
@@ -42,10 +52,18 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const launches: TaskThreadInput[] = [];
     const sent: Array<{ text: string; commandId: string }> = [];
     const linked: string[] = [];
-    const t3: Pick<T3Integration, "status" | "launchTaskThread" | "sendToThread"> = {
+    const looks: number[] = [];
+    const failures = [...(opts.launchFailures ?? [])];
+    const t3: Pick<T3Integration, "status" | "test" | "launchTaskThread" | "sendToThread"> = {
       status: () => opts.t3 ?? T3_DOWN,
+      test: async () => {
+        looks.push(1);
+        return opts.t3AfterLook ?? opts.t3 ?? T3_DOWN;
+      },
       launchTaskThread: async (taskId, input) => {
         launches.push(input);
+        const failure = failures.shift();
+        if (failure) throw failure;
         const link = h.services.links.add(taskId, { t3Thread: { environmentId: "env-1", threadId: "thread-9" } }, "x");
         return {
           link,
@@ -62,6 +80,8 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const runner = createAutopilotRunner({
       services: () => h.services,
       t3,
+      t3HoldMs: opts.holdMs ?? 0,
+      t3RetryMs: 5,
       worktreesDir: repo.worktrees,
       newSessionId: () => SESSION,
       sessionLinked: (id) => linked.push(id),
@@ -99,7 +119,7 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
     const patches: RunPatch[] = [];
     const start = (request: Partial<RunnerRequest> & { options?: Record<string, unknown> } = {}) =>
       runner.start({ run, prompt: "Do the task", tier: null, options: {}, ...request }, (p) => patches.push(p));
-    return { h, task, run, jobs, launches, sent, linked, t3, start, patches };
+    return { h, task, run, jobs, launches, sent, linked, t3, start, patches, looks };
   }
 
   it("runs headless in a new worktree, records the session and cost, and links the session", async () => {
@@ -319,6 +339,66 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
       const headless = setup({ t3: T3_UP });
       expect((await headless.start({ options: { runner: "headless" } })).runner).toBe("headless");
       expect(headless.launches).toHaveLength(0);
+    });
+
+    it("looks at T3 again before choosing, so a stale status doesn't send a run headless or refuse it", async () => {
+      const auto = setup({ t3: T3_DOWN, t3AfterLook: T3_UP });
+      expect((await auto.start({ options: { runner: "auto" } })).runner).toBe("t3");
+      expect(auto.looks).toHaveLength(1);
+      const t3Only = setup({ t3: T3_DOWN, t3AfterLook: T3_UP });
+      expect((await t3Only.start({ options: { runner: "t3" } })).runner).toBe("t3");
+      const ready = setup({ t3: T3_UP });
+      await ready.start({ options: { runner: "auto" } });
+      expect(ready.looks).toHaveLength(0);
+    });
+
+    describe("while T3 can't be reached", () => {
+      it("retries the launch, with the same command id, and fails nothing", async () => {
+        const { launches, start } = setup({
+          t3: T3_UP,
+          holdMs: 10_000,
+          launchFailures: [t3Unavailable("T3 Code is not running"), t3Unavailable("T3 Code is not running")],
+        });
+        const out = await start({ options: { runner: "t3" } });
+        expect(out.runner).toBe("t3");
+        expect(launches).toHaveLength(3);
+        expect(new Set(launches.map((l) => l.commandId)).size).toBe(1);
+      });
+
+      it("T3 only waits for T3 to show up", async () => {
+        let calls = 0;
+        const { t3, start, launches } = setup({ t3: T3_DOWN, holdMs: 10_000 });
+        t3.test = async () => (++calls < 3 ? T3_DOWN : T3_UP);
+        expect((await start({ options: { runner: "t3" } })).runner).toBe("t3");
+        expect(calls).toBe(3);
+        expect(launches).toHaveLength(1);
+      });
+
+      it("gives up with T3's own message once the hold is over", async () => {
+        const { start, launches } = setup({
+          t3: T3_UP,
+          holdMs: 20,
+          launchFailures: Array.from({ length: 50 }, () => t3Unavailable("T3 Code is not running")),
+        });
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code is not running");
+        expect(launches.length).toBeGreaterThan(1);
+        expect(launches.length).toBeLessThan(50);
+      });
+
+      it("fails at once on a real launch error", async () => {
+        const { start, launches } = setup({
+          t3: T3_UP,
+          holdMs: 10_000,
+          launchFailures: [new Error("No model is ready in T3 Code")],
+        });
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow("No model is ready");
+        expect(launches).toHaveLength(1);
+      });
+
+      it("fails at once when T3 is there but has no working token", async () => {
+        const { start } = setup({ t3: { ...T3_UP, liveStatus: "off" }, holdMs: 10_000 });
+        await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code isn't connected");
+      });
     });
 
     it("runs read-only, tool and schema requests headless even when T3 is connected", async () => {

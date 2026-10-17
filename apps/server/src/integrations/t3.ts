@@ -222,7 +222,26 @@ export async function discoverT3(t3Home: string, fetchFn: FetchFn): Promise<Disc
   }
 }
 
-export class ShellError extends Error {}
+export class ShellError extends Error {
+  constructor(
+    message: string,
+    /** T3 didn't answer at all (as opposed to answering with a refusal). */
+    readonly unreachable = false,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * T3 Code couldn't be reached (not running yet, not answering): worth another try in a minute, unlike a launch it
+ * refused. `withRpc` tags its own unreachable failures the same way.
+ */
+export const t3Unavailable = (message: string) => new AppError("VALIDATION", message, { t3: "unreachable" });
+
+/** Whether a failure means T3 Code couldn't be reached, so a later attempt may well work. */
+export function isT3Unavailable(error: unknown): boolean {
+  return error instanceof AppError && (error.details as { t3?: unknown } | undefined)?.t3 === "unreachable";
+}
 
 /** Parses a T3 response; a mismatch means T3's protocol moved on, which the user should hear about. */
 function parseWire<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
@@ -242,7 +261,7 @@ export async function fetchShell(origin: string, token: string, fetchFn: FetchFn
       signal: AbortSignal.timeout(SHELL_TIMEOUT_MS),
     });
   } catch (error) {
-    throw new ShellError(`T3 Code unreachable: ${messageOf(error)}`);
+    throw new ShellError(`T3 Code unreachable: ${messageOf(error)}`, true);
   }
   if (response.status === 401) throw new ShellError("Token expired or revoked. Paste a new pairing link");
   if (response.status === 403) throw new ShellError("Token lacks the orchestration:read scope");
@@ -524,9 +543,22 @@ export function createT3Integration(deps: {
     if (!discovered) await discover();
   };
 
+  /**
+   * Discovery for an action that needs T3 now. A not-detected answer can be stale (the first discovery after a restart
+   * can catch T3 mid-start, and the timer is up to a minute away), so it is looked at again before anyone gives up.
+   */
+  const ensureDetected = async () => {
+    await ensureDiscovered();
+    if (!discovery.detected) await discover();
+  };
+
+  /** Whether the last shell request got no answer from T3, as opposed to a refusal. */
+  let shellUnreachable = false;
+
   /** Fetches the shell, recording live status. Null when unavailable. */
   const loadShell = async (): Promise<ShellSnapshot | null> => {
     const bearer = token();
+    shellUnreachable = false;
     if (!bearer || !discovery.detected || !discovery.origin) {
       commit({});
       return null;
@@ -536,6 +568,7 @@ export function createT3Integration(deps: {
       commit({ live: { liveStatus: "ok", error: null } });
       return shell;
     } catch (error) {
+      shellUnreachable = error instanceof ShellError && error.unreachable;
       const message = messageOf(error);
       if (live.error !== message) log.warn(`[t3] live status: ${message}`);
       commit({ live: { liveStatus: "error", error: message } });
@@ -576,18 +609,28 @@ export function createT3Integration(deps: {
     return polling;
   };
 
-  /** The task's T3 project and the live shell, or a clear reason why a thread can't be started. */
-  /** A launch is for a task, which the thread is then linked to, or for a project as a whole. */
+  /**
+   * The task's T3 project and the live shell, or a clear reason why a thread can't be started. A launch is for a task,
+   * which the thread is then linked to, or for a project as a whole. Failures to reach T3 are tagged (isT3Unavailable).
+   */
   const launchContext = async (target: { taskId: string } | { projectId: string }) => {
-    await ensureDiscovered();
-    const { origin, environmentId } = discovery;
-    if (!discovery.detected || !origin || !environmentId) throw new AppError("VALIDATION", "T3 Code is not running");
+    await ensureDetected();
+    if (!discovery.detected) throw t3Unavailable("T3 Code is not running");
     const bearer = token();
     if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
     const task = "taskId" in target ? deps.services().tasks.summary(target.taskId) : null;
     const project = deps.services().projects.get("projectId" in target ? target.projectId : task!.projectId);
-    const shell = await loadShell();
-    if (!shell) throw new AppError("VALIDATION", live.error ?? "T3 Code is unavailable");
+    let shell = await loadShell();
+    if (!shell && shellUnreachable) {
+      // The T3 found earlier may have restarted on another port since: look again before giving up.
+      await discover();
+      shell = discovery.detected ? await loadShell() : null;
+    }
+    const { origin, environmentId } = discovery;
+    if (!shell || !origin || !environmentId) {
+      const reason = discovery.detected ? (live.error ?? "T3 Code is unavailable") : "T3 Code is not running";
+      throw discovery.detected && !shellUnreachable ? new AppError("VALIDATION", reason) : t3Unavailable(reason);
+    }
     const t3Project = resolveT3Project(project, shell);
     if (!t3Project) throw new AppError("VALIDATION", `${project.title} isn't a project in T3 Code`);
     return { task, shell, t3Project, origin, environmentId, bearer };
@@ -637,9 +680,9 @@ export function createT3Integration(deps: {
   };
 
   const modelCatalog = async (): Promise<T3ModelCatalog> => {
-    await ensureDiscovered();
+    await ensureDetected();
     const { origin } = discovery;
-    if (!discovery.detected || !origin) throw new AppError("VALIDATION", "T3 Code is not running");
+    if (!discovery.detected || !origin) throw t3Unavailable("T3 Code is not running");
     const bearer = token();
     if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
     return withRpc(origin, bearer, async (rpc) => {
@@ -724,9 +767,9 @@ export function createT3Integration(deps: {
 
   /** The live origin and token for acting on a thread of this environment, or a clear reason why not. */
   const threadAccess = async (link: ThreadLink) => {
-    await ensureDiscovered();
+    await ensureDetected();
     const { origin, environmentId } = discovery;
-    if (!discovery.detected || !origin) throw new AppError("VALIDATION", "T3 Code is not running");
+    if (!discovery.detected || !origin) throw t3Unavailable("T3 Code is not running");
     if (link.ref.environmentId !== environmentId) {
       throw new AppError("VALIDATION", "This thread belongs to a different T3 Code environment");
     }

@@ -21,6 +21,7 @@ import { fakeSocket, success, type SentFrame } from "../test/fakeT3Socket.ts";
 import {
   createT3Integration,
   discoverT3,
+  isT3Unavailable,
   mapThreadSnapshot,
   parsePairingCode,
   parseT3Icon,
@@ -624,14 +625,14 @@ describe("T3 thread launch", () => {
     updatedAt: "",
   };
 
-  const setup = (reply: (frame: SentFrame) => unknown, token: string | null = "tok") => {
+  const setup = (reply: (frame: SentFrame) => unknown, token: string | null = "tok", fetch: FetchFn = t3Fetch()) => {
     const fake = fakeServices({ token, projects: [acme] });
     const socket = fakeSocket(reply);
     const t3 = createT3Integration({
       t3Home: makeT3Home(),
       bus: new EventBus(),
       services: () => fake.services,
-      fetch: t3Fetch(),
+      fetch,
       openSocket: socket.open,
     });
     return { ...fake, socket, t3 };
@@ -753,6 +754,79 @@ describe("T3 thread launch", () => {
     );
     expect(socket.sent.map((f) => f.tag)).not.toContain("orchestration.launchThread");
     expect(added).toEqual([]);
+  });
+
+  describe("right after a restart", () => {
+    const optionsReply = (frame: SentFrame) =>
+      frame.tag === "server.getConfig"
+        ? success(frame.id, SERVER_CONFIG)
+        : success(frame.id, {
+            isRepo: true,
+            refs: [{ name: "main", current: true, isDefault: true, worktreePath: "x" }],
+          });
+
+    /** T3 doesn't answer the first `failures` requests for `path`, then does. */
+    const flaky = (path: string, failures: number): FetchFn => {
+      const inner = t3Fetch();
+      let left = failures;
+      return (url, init) => {
+        if (url.endsWith(path) && left-- > 0) return Promise.reject(new Error("connect ECONNREFUSED"));
+        return inner(url, init);
+      };
+    };
+
+    it("looks again when the discovery before it missed T3, instead of reporting it isn't running", async () => {
+      const { t3 } = setup(optionsReply, "tok", flaky("/.well-known/t3/environment", 1));
+      expect((await t3.discover()).detected).toBe(false);
+      expect(t3.status().detected).toBe(false);
+      const options = await t3.launchOptions("task-1");
+      expect(options.t3ProjectId).toBe("t3-p1");
+      expect(t3.status().detected).toBe(true);
+    });
+
+    it("waits for the first discovery when a launch comes before it finished", async () => {
+      const { t3 } = setup(optionsReply);
+      expect((await t3.launchOptions("task-1")).t3ProjectId).toBe("t3-p1");
+    });
+
+    it("looks again when the shell can't be reached, in case T3 moved", async () => {
+      const { t3, added } = setup(
+        (frame) =>
+          frame.tag === "server.getConfig"
+            ? success(frame.id, SERVER_CONFIG)
+            : frame.tag === "vcs.listRefs"
+              ? success(frame.id, { isRepo: true, refs: [] })
+              : success(frame.id, { threadId: "th-new", resumed: false }),
+        "tok",
+        flaky("/api/orchestration/shell", 1),
+      );
+      await t3.launchTaskThread("task-1", { prompt: "x", commandId: "c", work: true, baseRef: "main" }, "orch");
+      expect(added).toHaveLength(1);
+    });
+
+    it("tags a T3 that stays unreachable as unavailable, so callers can wait for it", async () => {
+      const gone = setup(optionsReply, "tok", flaky("/.well-known/t3/environment", 99));
+      const error = await gone.t3
+        .launchTaskThread("task-1", { prompt: "x", commandId: "c", work: true }, "o")
+        .catch((e) => e);
+      expect(error).toMatchObject({ message: "T3 Code is not running" });
+      expect(isT3Unavailable(error)).toBe(true);
+      const shellGone = setup(optionsReply, "tok", flaky("/api/orchestration/shell", 99));
+      expect(isT3Unavailable(await shellGone.t3.launchOptions("task-1").catch((e) => e))).toBe(true);
+    });
+
+    it("doesn't tag a real refusal as unavailable", async () => {
+      const noToken = setup(optionsReply, null);
+      expect(isT3Unavailable(await noToken.t3.launchOptions("task-1").catch((e) => e))).toBe(false);
+      const noRefs = setup((frame) =>
+        frame.tag === "server.getConfig" ? success(frame.id, SERVER_CONFIG) : success(frame.id, { unexpected: true }),
+      );
+      const error = await noRefs.t3
+        .launchTaskThread("task-1", { prompt: "x", commandId: "c", work: true }, "o")
+        .catch((e) => e);
+      expect(error.message).toContain("couldn't list the project's branches");
+      expect(isT3Unavailable(error)).toBe(false);
+    });
   });
 
   it("tags an unreadable launch result so a retry keeps its commandId", async () => {
