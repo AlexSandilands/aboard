@@ -1,5 +1,6 @@
+import { resolveKeybindings, type KeybindingOverrides } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { describeConflict, withOverride, withoutOverride } from "./keybindings.logic";
+import { describeConflict, triggersWhileTyping, withOverride, withoutOverride } from "./keybindings.logic";
 
 describe("withOverride", () => {
   it("stores a changed key", () => {
@@ -41,5 +42,27 @@ describe("describeConflict", () => {
     expect(describeConflict(["palette.open", "idea.new", "settings.open"])).toContain(
       "Open the command palette, New task and Open Settings",
     );
+  });
+});
+
+describe("triggersWhileTyping", () => {
+  const flagged = (overrides: KeybindingOverrides) =>
+    resolveKeybindings(overrides)
+      .filter(triggersWhileTyping)
+      .map((b) => b.command);
+
+  it("has nothing flagged by default", () => {
+    expect(flagged({})).toEqual([]);
+  });
+
+  it("flags a bare character that nothing keeps out of text fields", () => {
+    expect(flagged({ "palette.open": { key: "p" } })).toEqual(["palette.open"]);
+    expect(flagged({ "idea.new": { when: "" } })).toEqual(["idea.new"]);
+  });
+
+  it("lets a condition, a modifier or a non-typing key through", () => {
+    expect(flagged({ "palette.open": { key: "p", when: "!editableFocus" } })).toEqual([]);
+    expect(flagged({ "palette.open": { key: "mod+p" } })).toEqual([]);
+    expect(flagged({ "palette.open": { key: "escape" } })).toEqual([]);
   });
 });

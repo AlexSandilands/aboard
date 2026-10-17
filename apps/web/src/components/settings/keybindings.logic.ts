@@ -3,7 +3,11 @@ import {
   type KeybindingCommand,
   type KeybindingOverride,
   type KeybindingOverrides,
+  type ResolvedKeybinding,
+  parseWhen,
+  whenOverlaps,
 } from "@repo/contracts";
+import { parseShortcut } from "~/components/layout/keyboard.logic";
 
 /**
  * The overrides with one command's key and/or `when` changed. A value equal to the default is dropped, and a command
@@ -36,3 +40,18 @@ export function describeConflict(others: readonly KeybindingCommand[]): string {
   const list = titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : titles[0];
   return `Same key as ${list}: where both apply, the one listed later wins.`;
 }
+
+const EDITABLE_FOCUS = parseWhen("editableFocus");
+
+/**
+ * True when typing this key into a text field would run the command: a bare character (no Ctrl/Cmd or Alt) under a
+ * `when` that can hold while a field has focus. Escape and the like are fine; they type nothing.
+ */
+export function triggersWhileTyping(binding: ResolvedKeybinding): boolean {
+  const { key, mod, alt } = parseShortcut(binding.key);
+  if (mod || alt || key.length !== 1 || !EDITABLE_FOCUS.ok) return false;
+  return whenOverlaps(binding.condition, EDITABLE_FOCUS.node);
+}
+
+/** The note under a command that would trigger while typing. */
+export const TYPING_WARNING = "Typing this key in a text field runs it. Add !editableFocus to When to stop that.";

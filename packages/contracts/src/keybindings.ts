@@ -170,6 +170,16 @@ const SHORTCUT = /^(?:(?:mod|shift|alt)\+)*(?!(?:mod|shift|alt)$)(?:[^\s+]|[a-z0
 /** True for `mod+k`, `shift+/` or `escape`: lowercase modifiers (mod, shift, alt), then one key. A plus key is `plus`. */
 export const isValidShortcut = (shortcut: string): boolean => SHORTCUT.test(shortcut);
 
+/** The shortcut with its modifiers once each and in the order mod, shift, alt, so two spellings of one key compare equal. */
+function normalizeShortcut(shortcut: string): string {
+  const parts = shortcut.toLowerCase().split("+");
+  const key = parts.pop() ?? "";
+  return [...(["mod", "shift", "alt"] as const).filter((modifier) => parts.includes(modifier)), key].join("+");
+}
+
+/** True when the shortcut uses Ctrl/Cmd or Alt, the keys browsers keep their own commands (print, find, save) on. */
+const usesCommandModifier = (shortcut: string): boolean => /^(?:.*\+)?(?:mod|alt)\+/.test(shortcut);
+
 export const KeybindingOverride = z.object({
   /** Replaces the default key; left out keeps it. */
   key: z
@@ -177,6 +187,7 @@ export const KeybindingOverride = z.object({
     .trim()
     .toLowerCase()
     .refine(isValidShortcut, { message: "Not a shortcut like mod+k or escape" })
+    .transform(normalizeShortcut)
     .optional(),
   /** Replaces the default `when`; an empty string means always, left out keeps the default. */
   when: z
@@ -201,6 +212,7 @@ export interface ResolvedKeybinding {
   /** The expression as written. */
   when: string;
   condition: WhenNode;
+  /** Runs inside the keydown and prevents its default, instead of waiting to see whether something nearer claimed it. */
   immediate: boolean;
 }
 
@@ -222,7 +234,9 @@ export function resolveKeybindings(overrides: KeybindingOverrides = {}): Resolve
       key,
       when,
       condition: parsed.ok ? parsed.node : { type: "always" },
-      immediate: def.immediate ?? false,
+      // A key the user picked with Ctrl/Cmd or Alt is one the browser may use too (Ctrl+P prints): only running inside
+      // the keydown can stop that. The defaults keep waiting for a nearer claim, as they always did.
+      immediate: (def.immediate ?? false) || (override?.key !== undefined && usesCommandModifier(key)),
     };
   });
 }
@@ -234,7 +248,8 @@ export function keybindingConflicts(
   const conflicts = new Map<KeybindingCommand, KeybindingCommand[]>();
   for (const a of bindings) {
     for (const b of bindings) {
-      if (a === b || a.key.toLowerCase() !== b.key.toLowerCase() || !whenOverlaps(a.condition, b.condition)) continue;
+      if (a === b || normalizeShortcut(a.key) !== normalizeShortcut(b.key) || !whenOverlaps(a.condition, b.condition))
+        continue;
       conflicts.set(a.command, [...(conflicts.get(a.command) ?? []), b.command]);
     }
   }

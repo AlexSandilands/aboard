@@ -118,6 +118,23 @@ describe("resolveKeybindings", () => {
     expect(ideaNew.when).toBe(DEFAULT_KEYBINDINGS["idea.new"].when);
   });
 
+  it("runs only the palette immediately by default, and a key the user gave a command with Ctrl/Cmd or Alt", () => {
+    const immediate = (overrides: KeybindingOverrides) =>
+      resolveKeybindings(overrides)
+        .filter((b) => b.immediate)
+        .map((b) => b.command);
+    expect(immediate({})).toEqual(["palette.open"]);
+    // The browser's print, save and find would otherwise run as well.
+    expect(immediate({ "settings.open": { key: "mod+p" }, "idea.new": { key: "alt+n" } })).toEqual([
+      "palette.open",
+      "idea.new",
+      "settings.open",
+    ]);
+    expect(immediate({ "idea.new": { key: "c" }, back: { key: "shift+q" } })).toEqual(["palette.open"]);
+    // Only a key the user chose: the default mod+, keeps waiting for a nearer claim.
+    expect(immediate({ "settings.open": { when: "" } })).toEqual(["palette.open"]);
+  });
+
   it("leaves a command the user didn't change on the current default", () => {
     // Overrides only name what the user changed, so a default added or edited later reaches everyone else.
     const resolved = resolveKeybindings({ "settings.open": { key: "mod+;" } });
@@ -138,6 +155,16 @@ describe("keybindingConflicts", () => {
     expect(conflicts.get("palette.open")).toEqual(["idea.new"]);
   });
 
+  it("sees through the order and repeats of modifiers", () => {
+    const conflicts = keybindingConflicts(
+      resolveKeybindings({
+        "palette.open": { key: "shift+mod+k" },
+        "settings.open": { key: "mod+mod+shift+k", when: "" },
+      }),
+    );
+    expect(conflicts.get("palette.open")).toEqual(["settings.open"]);
+  });
+
   it("ignores a shared key whose conditions exclude each other", () => {
     const bindings = resolveKeybindings({
       "palette.open": { key: "n", when: "editableFocus" },
@@ -154,6 +181,12 @@ describe("overrides schema", () => {
     expect(KeybindingOverrides.safeParse({ back: { when: "nope" } }).success).toBe(false);
     expect(KeybindingOverrides.safeParse({ nope: { key: "k" } }).success).toBe(false);
     expect(KeybindingOverrides.parse({ back: { when: "" } })).toEqual({ back: { when: "" } });
+  });
+
+  it("writes a key's modifiers once each, in a fixed order", () => {
+    expect(KeybindingOverrides.parse({ back: { key: "alt+shift+mod+mod+q" } })).toEqual({
+      back: { key: "mod+shift+alt+q" },
+    });
   });
 });
 

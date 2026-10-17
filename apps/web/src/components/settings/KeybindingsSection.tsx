@@ -2,11 +2,13 @@ import {
   DEFAULT_KEYBINDINGS,
   KEYBINDING_CONTEXT_KEYS,
   KeybindingCommand,
+  type KeybindingOverrides,
   keybindingConflicts,
   parseWhen,
   type AppSettings,
   type ResolvedKeybinding,
 } from "@repo/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { IS_MAC } from "~/components/layout/keyboard";
 import { formatShortcut, shortcutFromEvent } from "~/components/layout/keyboard.logic";
@@ -14,8 +16,15 @@ import { useResolvedKeybindings } from "~/components/layout/useKeybindings";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { useUpdateSettings } from "~/state/mutations";
+import { queryKeys } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { describeConflict, withOverride, withoutOverride } from "./keybindings.logic";
+import {
+  TYPING_WARNING,
+  describeConflict,
+  triggersWhileTyping,
+  withOverride,
+  withoutOverride,
+} from "./keybindings.logic";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 /** The commands, grouped by the heading each is listed under, in registry order. */
@@ -24,10 +33,25 @@ const GROUPS = [...new Set(KeybindingCommand.options.map((command) => DEFAULT_KE
 /** Settings → Board → Keybindings: every shortcut with its key and `when` condition, conflicts flagged. */
 export function KeybindingsSection({ settings }: { settings: AppSettings }) {
   const update = useUpdateSettings();
+  const queryClient = useQueryClient();
   const bindings = useResolvedKeybindings();
   const conflicts = keybindingConflicts(bindings);
   const overrides = settings.keybindings;
   const customised = Object.keys(overrides).length > 0;
+  /**
+   * Saves the overrides `change` makes of the latest ones. A save replaces the whole map, so two edits in a row (a When
+   * field saving on blur as another row's Reset is clicked) must each start from the one before, which is not yet in
+   * this render's props: the cache is patched at once, and refetched if the save fails.
+   */
+  const save = (change: (current: KeybindingOverrides) => KeybindingOverrides) => {
+    const cached = queryClient.getQueryData<AppSettings>(queryKeys.settings);
+    const keybindings = change(cached?.keybindings ?? overrides);
+    if (cached) queryClient.setQueryData(queryKeys.settings, { ...cached, keybindings });
+    update.mutate(
+      { keybindings },
+      { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.settings }) },
+    );
+  };
   return (
     <>
       {GROUPS.map((group, index) => (
@@ -36,7 +60,7 @@ export function KeybindingsSection({ settings }: { settings: AppSettings }) {
           title={index === 0 ? `Keybindings: ${group}` : group}
           headerAction={
             index === 0 && customised ? (
-              <Button size="xs" variant="outline" onClick={() => update.mutate({ keybindings: {} })}>
+              <Button size="xs" variant="outline" onClick={() => save(() => ({}))}>
                 Reset all
               </Button>
             ) : undefined
@@ -50,8 +74,8 @@ export function KeybindingsSection({ settings }: { settings: AppSettings }) {
                 binding={binding}
                 customised={overrides[binding.command] !== undefined}
                 conflictsWith={conflicts.get(binding.command) ?? []}
-                onChange={(patch) => update.mutate({ keybindings: withOverride(overrides, binding.command, patch) })}
-                onReset={() => update.mutate({ keybindings: withoutOverride(overrides, binding.command) })}
+                onChange={(patch) => save((current) => withOverride(current, binding.command, patch))}
+                onReset={() => save((current) => withoutOverride(current, binding.command))}
               />
             ))}
         </SettingsSection>
@@ -74,7 +98,9 @@ function KeybindingRow({
   onReset: () => void;
 }) {
   const def = DEFAULT_KEYBINDINGS[binding.command];
-  const [whenError, setWhenError] = useState<string | null>(null);
+  // Tied to the value it was raised for, so a reset (which changes the stored one) clears it.
+  const [whenFailure, setWhenFailure] = useState<{ when: string; message: string } | null>(null);
+  const whenError = whenFailure?.when === binding.when ? whenFailure.message : null;
   return (
     <SettingsRow
       id={`board.keybindings.${binding.command}`}
@@ -85,8 +111,11 @@ function KeybindingRow({
           : `Default: ${formatShortcut(def.key, IS_MAC)}`
       }
       status={
-        conflictsWith.length > 0 ? (
-          <span className="text-warning-foreground">{describeConflict(conflictsWith)}</span>
+        conflictsWith.length > 0 || triggersWhileTyping(binding) ? (
+          <span className="flex flex-col gap-0.5 text-warning-foreground">
+            {conflictsWith.length > 0 ? <span>{describeConflict(conflictsWith)}</span> : null}
+            {triggersWhileTyping(binding) ? <span>{TYPING_WARNING}</span> : null}
+          </span>
         ) : null
       }
       control={
@@ -111,7 +140,7 @@ function KeybindingRow({
             value={binding.when}
             onSave={(next) => {
               const parsed = parseWhen(next);
-              setWhenError(parsed.ok ? null : parsed.error);
+              setWhenFailure(parsed.ok ? null : { when: binding.when, message: parsed.error });
               if (parsed.ok) onChange({ when: next });
             }}
           />
