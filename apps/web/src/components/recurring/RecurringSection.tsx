@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { SettingsLink, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -58,6 +59,7 @@ export function RecurringSection({ project }: { project: Project }) {
       to: "/settings/project/recurring/$ruleId",
       params: { ruleId },
       search: { project: project.id },
+      state: FROM_SETTINGS_LIST,
     });
   const rules = useRecurringRules(project.id);
   const scope = useAutopilotScope(project.id);

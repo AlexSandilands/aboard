@@ -162,8 +162,10 @@ rule editor take `?project=`; without it the page shows the project the board wa
   `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
   anchor as the hash and asks the page to scroll to it (`requestScroll`). The page (`SettingsScroller`) waits up to
-  about two seconds for the target to render, since sections fill in as their queries load, and opens a folded
-  section that holds it. A reload honours the hash.
+  about two seconds for the target to render and opens a folded section that holds it. On a page that has just
+  opened, sections are still filling in as their queries load, so the target stays pinned to the top until that
+  settles (`pinInView`, about 1.5 s, or until the user scrolls). A request counts as handled only then, so the page
+  being left, which sees the request first, leaves it for the page being opened. A reload honours the hash.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.
@@ -171,7 +173,10 @@ rule editor take `?project=`; without it the page shows the project the board wa
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
   popover (its Settings link, and Recurring tasks… for the project's rules).
 - **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
-  default and as page blocks inside `EditorPage`, so Save as template keeps its dialog.
+  default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
+  leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that
+  list (the `settingsEditorFromList` history state), it steps back in history, so the browser's Back doesn't
+  repeat the page; opened from a link or a reload, it opens the list as a new entry.
 
 ### Persistence
 

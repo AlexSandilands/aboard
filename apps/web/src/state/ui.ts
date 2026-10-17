@@ -244,8 +244,11 @@ export const useDialogs = create<DialogsState>()((set) => ({
 interface SettingsNavState {
   /** The section in view (scroll-spy), highlighted in the list. */
   activeSection: string | null;
-  /** A section or row to bring into view once it renders. `nonce` repeats a scroll to the same target. */
-  scrollTarget: { id: string; nonce: number } | null;
+  /**
+   * A section or row to bring into view once it renders. `nonce` repeats a scroll to the same target; `at` lets a
+   * request nobody could fulfil expire rather than fire on some later page.
+   */
+  scrollTarget: { id: string; nonce: number; at: number } | null;
   /** The board's search when Settings opened, so Back returns to the same view. */
   boardReturn: BoardSearch;
   setActiveSection: (id: string | null) => void;
@@ -258,7 +261,8 @@ export const useSettingsNav = create<SettingsNavState>()((set) => ({
   scrollTarget: null,
   boardReturn: {},
   setActiveSection: (activeSection) => set({ activeSection }),
-  requestScroll: (id) => set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1 } })),
+  requestScroll: (id) =>
+    set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1, at: Date.now() } })),
   setBoardReturn: (boardReturn) => set({ boardReturn }),
 }));
 

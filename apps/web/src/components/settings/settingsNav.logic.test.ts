@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeSectionId,
+  editorListSection,
   isSettingsGroup,
   parseSettingsTarget,
   resolveSettingsProject,
@@ -47,6 +48,21 @@ describe("sectionOf", () => {
   it("doesn't match a section whose id is only a prefix of another word", () => {
     expect(sectionOf("tasks.reviewer")).toBeNull();
     expect(sectionOf("unknown")).toBeNull();
+  });
+});
+
+describe("editorListSection", () => {
+  it("returns each editor to the section listing what it edits", () => {
+    expect(editorListSection("tasks")).toBe("tasks.new-tasks");
+    expect(editorListSection("autopilot")).toBe("autopilot.custom");
+    expect(editorListSection("project")).toBe("project.recurring");
+    expect(editorListSection("board")).toBe("board");
+  });
+
+  it("names sections that exist", () => {
+    for (const group of ["tasks", "autopilot", "project"] as const) {
+      expect(sectionOf(editorListSection(group))?.id).toBe(editorListSection(group));
+    }
   });
 });
 

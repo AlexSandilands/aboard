@@ -1,6 +1,6 @@
 // Adapted from T3 Code (apps/web/src/routes/settings.tsx, components/settings/SettingsSidebarNav.tsx,
 // SettingsBreadcrumb.tsx, components/sidebar/SidebarChrome.tsx), MIT — see NOTICE.
-import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BlocksIcon,
@@ -10,7 +10,7 @@ import {
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { SidebarBrandRow } from "~/components/sidebar/SidebarBrandRow";
 import {
   SidebarContent,
@@ -35,7 +35,7 @@ import {
   settingsCrumbs,
   type SettingsGroupId,
 } from "./settingsNav.logic";
-import { useLeaveSettings, useOpenSettings } from "./settingsNavigation";
+import { useLeaveEditor, useLeaveSettings, useOpenSettings } from "./settingsNavigation";
 
 const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
@@ -71,15 +71,10 @@ export function SettingsShell() {
 export function useSettingsBack(): () => unknown {
   const { group, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
-  const navigate = useNavigate();
   const leave = useLeaveSettings();
+  const leaveEditor = useLeaveEditor();
   if (!inEditor || !group) return leave;
-  return () =>
-    navigate({
-      to: "/settings/$group",
-      params: { group },
-      search: group === "project" && project ? { project } : {},
-    });
+  return () => leaveEditor(group, project);
 }
 
 /**
@@ -224,8 +219,43 @@ export function SettingsTopBar({
   );
 }
 
-// The scroll request the last mounted page handled, so a page mounting later doesn't replay an old one.
+/** How long a scrolled-to target is kept in view while sections above it load and grow. */
+const PIN_MS = 1500;
+
+/**
+ * Keeps `element` at the top of `area` while the content around it settles: sections fill in as their queries load,
+ * which would push a target scrolled to early off the screen, or leave it short of the top. Settles after `PIN_MS`,
+ * or as soon as the user scrolls; the returned function stops it without settling.
+ */
+function pinInView(area: HTMLElement, element: HTMLElement, onSettled: () => void): () => void {
+  const content = area.firstElementChild;
+  if (!content) {
+    onSettled();
+    return () => {};
+  }
+  // On every change: a no-op when it's in place, and it catches a first scroll cut short by a page still too short.
+  const observer = new ResizeObserver(() => element.scrollIntoView({ block: "start" }));
+  observer.observe(content);
+  const stop = () => {
+    observer.disconnect();
+    clearTimeout(timer);
+    for (const type of USER_SCROLL_EVENTS) area.removeEventListener(type, settle);
+  };
+  const settle = () => {
+    stop();
+    onSettled();
+  };
+  const timer = setTimeout(settle, PIN_MS);
+  for (const type of USER_SCROLL_EVENTS) area.addEventListener(type, settle, { passive: true });
+  return stop;
+}
+const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
+// The scroll request last brought into view, so a page mounting later doesn't replay it. A request is only handled
+// once a page finds its target: the page being left sees it first, and the page being opened must still act on it.
 let handledScroll = 0;
+/** How long a request waits for a page that has its target (the next page's data may still be loading). */
+const SCROLL_REQUEST_TTL_MS = 3000;
 
 /**
  * The page's scroll area. It runs scroll-spy over the `SettingsSubsection`s inside, for the list's highlight, and
@@ -235,7 +265,12 @@ let handledScroll = 0;
 export function SettingsScroller({ children, className }: { children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const target = useSettingsNav((s) => s.scrollTarget);
-  const firstRun = useRef(true);
+  // When this page opened. A request made before then is the page being opened at a target, while its sections are
+  // still loading; one made after is a jump within a loaded page. (Kept per component rather than as a first-run
+  // flag, so a StrictMode re-run of the effects doesn't count as a jump.)
+  const [openedAt] = useState(() => Date.now());
+  // Whether the URL hash (a reload, or a link from outside) has been brought into view.
+  const hashDone = useRef(false);
 
   useEffect(() => {
     const area = ref.current;
@@ -270,36 +305,52 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
   useEffect(() => {
     const area = ref.current;
     if (!area) return;
-    const isFirst = firstRun.current;
-    firstRun.current = false;
     let id: string | null = null;
-    if (target && target.nonce > handledScroll) {
-      handledScroll = target.nonce;
+    let fromHash = false;
+    if (target && target.nonce > handledScroll && Date.now() - target.at < SCROLL_REQUEST_TTL_MS) {
       id = target.id;
-    } else if (isFirst && window.location.hash.length > 1) {
+    } else if (!hashDone.current && window.location.hash.length > 1) {
       id = decodeURIComponent(window.location.hash.slice(1));
+      fromHash = true;
     }
     if (!id) return;
+    const nonce = target?.id === id && !fromHash ? target.nonce : null;
     if (isSettingsGroup(id)) {
+      // Every page's top is a group's target, so the page being left can't tell; the next one handles it too.
       area.scrollTo({ top: 0 });
       return;
     }
-    const smooth = !isFirst && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const jump = !fromHash && target !== null && target.at >= openedAt;
+    const smooth = jump && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let tries = 0;
     let frame = 0;
+    let unpin = () => {};
     const attempt = () => {
       const element = document.getElementById(id);
       if (element && area.contains(element)) {
+        const handled = () => {
+          hashDone.current = true;
+          if (nonce !== null) handledScroll = Math.max(handledScroll, nonce);
+        };
         element.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
         if (sectionOf(id)) useSettingsNav.getState().setActiveSection(sectionOf(id)!.id);
+        // A page that just opened is still loading what sits above and below the target, so it stays pinned until
+        // that settles, and only then counts as handled: if this effect is cleaned up first (a remount), the next
+        // run picks the request up again. A jump within a loaded page needs no pin, and a pin would cut its smooth
+        // scroll short.
+        if (jump) handled();
+        else unpin = pinInView(area, element, handled);
         return;
       }
       // Give loading content about two seconds to render the target.
       if (++tries < 120) frame = requestAnimationFrame(attempt);
     };
     attempt();
-    return () => cancelAnimationFrame(frame);
-  }, [target]);
+    return () => {
+      cancelAnimationFrame(frame);
+      unpin();
+    };
+  }, [target, openedAt]);
 
   return (
     <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>

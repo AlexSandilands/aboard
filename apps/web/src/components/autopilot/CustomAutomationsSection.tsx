@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -49,7 +50,7 @@ const actionLabel = (custom: CustomAutomation) =>
 export function CustomAutomationsSection() {
   const navigate = useNavigate();
   const onEdit = (customId: string) =>
-    void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId } });
+    void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId }, state: FROM_SETTINGS_LIST });
   const customs = useCustomAutomations();
   const remove = useDeleteCustomAutomation();
   const [deleting, setDeleting] = useState<CustomAutomation | null>(null);

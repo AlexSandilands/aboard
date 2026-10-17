@@ -1,7 +1,10 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useSettingsNav } from "~/state/ui";
-import { parseSettingsTarget } from "./settingsNav.logic";
+import { editorListSection, parseSettingsTarget, type SettingsGroupId } from "./settingsNav.logic";
+
+/** History state for opening an editor sub-page from its list, so leaving it can step back instead. */
+export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
@@ -24,6 +27,28 @@ export function useOpenSettings() {
       });
     },
     [navigate],
+  );
+}
+
+/**
+ * Leaves an editor sub-page for the section listing what it edits (Cancel, Save and Esc all do this). Opened from that
+ * list, it steps back in history, so the browser's Back doesn't land on the same page again; opened from a link or
+ * a reload, it goes to the list as a new entry. Either way the section is scrolled into view.
+ */
+export function useLeaveEditor() {
+  const router = useRouter();
+  const openSettings = useOpenSettings();
+  return useCallback(
+    (group: SettingsGroupId, project?: string) => {
+      const section = editorListSection(group);
+      if (router.state.location.state.settingsEditorFromList && router.history.canGoBack()) {
+        useSettingsNav.getState().requestScroll(section);
+        router.history.back();
+        return;
+      }
+      openSettings(section, project ? { project } : {});
+    },
+    [router, openSettings],
   );
 }
 

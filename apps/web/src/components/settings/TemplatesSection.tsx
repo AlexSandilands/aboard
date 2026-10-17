@@ -9,6 +9,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useDeleteTemplate, useDuplicateTemplate } from "~/state/mutations";
 import { useBoard, useTemplates } from "~/state/queries";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { FROM_SETTINGS_LIST } from "./settingsNavigation";
 
 function IconAction({
   label,
@@ -44,7 +45,11 @@ function IconAction({
 export function TemplatesSection() {
   const navigate = useNavigate();
   const onEdit = (templateId: string) =>
-    void navigate({ to: "/settings/tasks/templates/$templateId", params: { templateId } });
+    void navigate({
+      to: "/settings/tasks/templates/$templateId",
+      params: { templateId },
+      state: FROM_SETTINGS_LIST,
+    });
   const templates = useTemplates();
   const projects = useBoard().data?.projects ?? [];
   const duplicate = useDuplicateTemplate();

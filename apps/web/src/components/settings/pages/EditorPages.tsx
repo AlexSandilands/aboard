@@ -12,7 +12,7 @@ import { useRecurringRules } from "~/state/recurring";
 import { EditorPage } from "../EditorFrame";
 import { SettingsLink } from "../settingsLayout";
 import type { SettingsGroupId } from "../settingsNav.logic";
-import { useOpenSettings } from "../settingsNavigation";
+import { useLeaveEditor } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 
 /** "new" in an editor's URL stands for one not saved yet. */
@@ -57,8 +57,8 @@ function EditorMessage({
 export function TemplateEditorPage() {
   const { templateId } = useParams({ from: "/_app/settings/tasks/templates/$templateId" });
   const templates = useTemplates();
-  const openSettings = useOpenSettings();
-  const back = () => openSettings("tasks.new-tasks", { replace: true });
+  const leaveEditor = useLeaveEditor();
+  const back = () => leaveEditor("tasks");
   const isNew = templateId === NEW;
   const template = isNew ? null : templates.data?.find((t) => t.id === templateId);
   return (
@@ -86,8 +86,8 @@ export function TemplateEditorPage() {
 export function CustomAutomationEditorPage() {
   const { customId } = useParams({ from: "/_app/settings/autopilot/custom/$customId" });
   const customs = useCustomAutomations();
-  const openSettings = useOpenSettings();
-  const back = () => openSettings("autopilot.custom", { replace: true });
+  const leaveEditor = useLeaveEditor();
+  const back = () => leaveEditor("autopilot");
   const isNew = customId === NEW;
   const custom = isNew ? null : customs.data?.find((c) => c.id === customId);
   return (
@@ -137,8 +137,8 @@ export function RuleEditorPage() {
 
 function RuleEditor({ projectId, ruleId }: { projectId: string; ruleId: string }) {
   const rules = useRecurringRules(projectId);
-  const openSettings = useOpenSettings();
-  const back = () => openSettings("project.recurring", { project: projectId, replace: true });
+  const leaveEditor = useLeaveEditor();
+  const back = () => leaveEditor("project", projectId);
   const isNew = ruleId === NEW;
   const rule = isNew ? null : rules.data?.find((r) => r.id === ruleId);
   return (

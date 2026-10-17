@@ -122,4 +122,8 @@ declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
+  interface HistoryState {
+    /** Set when a settings editor sub-page was opened from its list (see `useLeaveEditor`). */
+    settingsEditorFromList?: boolean;
+  }
 }

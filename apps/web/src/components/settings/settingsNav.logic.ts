@@ -106,6 +106,20 @@ export function sectionOf(anchor: string): SettingsSectionDef | null {
   return null;
 }
 
+/** The section listing what an editor sub-page edits, which leaving the editor returns to. */
+export function editorListSection(group: SettingsGroupId): string {
+  switch (group) {
+    case "tasks":
+      return "tasks.new-tasks";
+    case "autopilot":
+      return "autopilot.custom";
+    case "project":
+      return "project.recurring";
+    default:
+      return group;
+  }
+}
+
 /** How far below the top of the scroll area a section's heading may sit and still count as the one being read. */
 export const SPY_THRESHOLD_PX = 96;
 
