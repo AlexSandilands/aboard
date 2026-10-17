@@ -69,11 +69,12 @@ function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: strin
 }
 
 /**
- * Failures another try may get past: a race with another merge into the branch or a push, GitHub still working out
- * mergeability, the network. Anything else (branch rules wanting an approval, permissions) goes to the user at once.
+ * Failures another try may get past: a race with another merge into the branch or a push, the network, GitHub itself
+ * failing (`HTTP 5xx` is how the API client reports it). Anything else, "not mergeable" included (GitHub says it for
+ * branch protection too), goes to the user at once.
  */
 const PASSING_FAILURE =
-  /base branch was modified|head branch was modified|not mergeable|try again|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\b5\d\d\b/i;
+  /base branch was modified|head branch was modified|try again|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\bHTTP 5\d\d\b/i;
 
 interface EpicPrData {
   kind: "open_pr" | "update_pr";

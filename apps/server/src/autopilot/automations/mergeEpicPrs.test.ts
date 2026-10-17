@@ -265,6 +265,27 @@ describe("merge into epic branch", () => {
     expect(merges.at(-1)!.input.headOid).toBe(SHA_B);
   });
 
+  it("asks the user at once about a refusal that only mentions a number in the 500s", async () => {
+    const { setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "Repository rule #512 violated: required review missing"));
+    toReview();
+    setPr();
+    await pass();
+    expect(merges).toHaveLength(1);
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: true });
+  });
+
+  it("retries GitHub's own failures", async () => {
+    const { setPr, toReview, pass, turnOn, runs, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "GitHub at github.com returned HTTP 502"));
+    toReview();
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false, output: { retry: true } });
+  });
+
   it("doesn't count a re-check that found a reason to wait as a try", async () => {
     const { s, task, runs, merges, toReview, setPr } = setup();
     toReview();

@@ -869,6 +869,8 @@ export function createGithubIntegration(deps: {
           input: { pullRequestId: pr.id, mergeMethod: "MERGE", expectedHeadOid: pr.headRefOid },
         });
       } catch (error) {
+        // Show the new head, or the PR merged or closed by hand, so the next check doesn't try the old head again.
+        await refreshOne(link).catch(() => {});
         if (error instanceof AppError) throw error;
         throw new AppError("VALIDATION", messageOf(error));
       }

@@ -483,6 +483,15 @@ describe("github merge into an epic's branch", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(gh.mutations).toEqual([]);
   });
+
+  it("refreshes the snapshot when it doesn't merge, so the next check sees the new head", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout", headRefOid: "head-2" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).rejects.toThrow(
+      "moved on to head-2",
+    );
+    expect(snapshots.get("l1")).toMatchObject({ headOid: "head-2" });
+  });
 });
 
 describe("the epic's pull request", () => {
