@@ -190,7 +190,8 @@ rule editor take `?project=`; without it the page shows the project the board wa
   through the shared headless runner (`agentArgs` with `access: "none"`, the CLI from `headlessReviewCli`) on
   `haiku`, with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
   answer }`. The question and the index are fenced as data with a random fence. A `settingId` that isn't one of the
-  request's ids becomes null (the answer stays). A failed run, a timeout or an answer of the wrong shape comes back
+  request's ids becomes null (the answer stays). Only one question runs at a time (the page discards an edited pending question but can't stop its run), so a second
+  one meanwhile gets "Another question is still being answered". A failed run, a timeout or an answer of the wrong shape comes back
   as `{ ok: false, error }` with status 200, like the CLI test, so the row can show the message. The row holds the
   whole exchange: thinking, then the answer with **Go there** (the same jump and highlight as a result), or the
   error with "Click to try again". `GET /api/settings/ask` says whether the CLI resolves (not whether it is signed

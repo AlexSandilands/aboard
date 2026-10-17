@@ -1,5 +1,5 @@
 import type { AskSettingsInput, AskSettingsResult, SettingsAskStatus } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { AgentJob, RunAgent } from "./headlessAgent.ts";
 import { askPrompt, askStatus } from "./settingsAsk.ts";
@@ -90,6 +90,36 @@ describe("settings Ask", () => {
 
     const empty = setup(() => Promise.resolve(cliResult({ settingId: null, answer: "  " })));
     expect(await ask(empty)).toEqual({ ok: false, error: "Claude Code returned no answer" });
+  });
+
+  it("answers one question at a time, and takes the next once it is done", async () => {
+    let finish: (stdout: string) => void = () => {};
+    let calls = 0;
+    const h = setup(() => {
+      calls += 1;
+      return new Promise<string>((resolve) => (finish = resolve));
+    });
+    const first = ask(h);
+    // Let the first request reach the runner.
+    await vi.waitFor(() => expect(calls).toBe(1));
+    expect(await ask(h)).toMatchObject({ ok: false, error: expect.stringContaining("still being answered") });
+    expect(calls).toBe(1);
+    finish(cliResult({ settingId: null, answer: "Done." }));
+    expect(await first).toMatchObject({ ok: true, answer: "Done." });
+    const next = ask(h);
+    await vi.waitFor(() => expect(calls).toBe(2));
+    finish(cliResult({ settingId: null, answer: "Again." }));
+    expect(await next).toMatchObject({ ok: true, answer: "Again." });
+  });
+
+  it("frees the slot after a failed run", async () => {
+    let fail = true;
+    const h = setup(() =>
+      fail ? Promise.reject(new Error("boom")) : Promise.resolve(cliResult({ settingId: null, answer: "Ok." })),
+    );
+    expect(await ask(h)).toEqual({ ok: false, error: "boom" });
+    fail = false;
+    expect(await ask(h)).toMatchObject({ ok: true });
   });
 
   it("refuses an empty question or list", async () => {

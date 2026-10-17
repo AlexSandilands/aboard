@@ -82,6 +82,9 @@ export function askStatus(cli: string | null): SettingsAskStatus {
 export function createSettingsAsker(deps: { services: () => Services; runAgent?: RunAgent }): SettingsAsker {
   const runAgent = deps.runAgent ?? runHeadlessAgent;
   const cliOf = () => deps.services().settings.get().headlessReviewCli;
+  // One run at a time: a question edited while it is pending is discarded by the page, not stopped, so without this
+  // a few Enters would pile up paid runs.
+  let running = false;
   return {
     status: () => askStatus(cliOf()),
     async ask(input) {
@@ -90,9 +93,12 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
       // A fake runner (tests) stands in for the CLI, so only a real run needs it to exist.
       if (!status.available && !deps.runAgent)
         return { ok: false, error: status.reason ?? "Claude Code isn't available" };
-      // The run needs a folder to start in, and none of the project settings a real checkout carries.
-      const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-ask-`));
+      if (running) return { ok: false, error: "Another question is still being answered. Try again in a moment." };
+      running = true;
+      let cwd: string | null = null;
       try {
+        // The run needs a folder to start in, and none of the project settings a real checkout carries.
+        cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-ask-`));
         const stdout = await runAgent({
           cli,
           cwd,
@@ -120,7 +126,8 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
       } catch (error) {
         return { ok: false, error: messageOf(error) };
       } finally {
-        await rm(cwd, { recursive: true, force: true }).catch(() => {});
+        running = false;
+        if (cwd) await rm(cwd, { recursive: true, force: true }).catch(() => {});
       }
     },
   };
