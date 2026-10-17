@@ -426,6 +426,17 @@ export function createAgentSessionsIntegration(deps: {
   const copyFor = (resolved: ResolvedTerminal | null, h: TerminalHost, ref: AgentSessionRef, mode: ResumeMode) =>
     copyCommand(resolved?.shell ?? defaultShell(h.platform), resumeArgv(ref, mode), ref.cwd);
 
+  /** Brings a board-started session's window to the front. False when that couldn't be done, so the caller asks. */
+  const focusWindow = async (resolved: ResolvedTerminal, window: string, cwd: string, h: TerminalHost) => {
+    try {
+      await spawnFn(resolved.focus!(window, cwd));
+      return true;
+    } catch (focusError) {
+      log.warn(`[sessions] couldn't bring back the window ${window} on ${h.platform}: ${messageOf(focusError)}`);
+      return false;
+    }
+  };
+
   return {
     pollLive,
 
@@ -452,11 +463,15 @@ export function createAgentSessionsIntegration(deps: {
       if (!isDirectory(ref.cwd)) throw new AppError("VALIDATION", `The session's folder no longer exists: ${ref.cwd}`);
       // Check now rather than trust the last poll: opening a running session twice makes two writers on one history.
       const snapshot = (await store([link])).get(sessionKey(ref));
-      if (mode === "resume" && !force && isRunningSession(snapshot?.status)) {
-        throw new AppError("CONFLICT", "The session is still running", snapshot);
-      }
       const { resolved, error, host: h } = terminal();
       const command = copyFor(resolved, h, ref, mode);
+      if (mode === "resume" && !force && isRunningSession(snapshot?.status)) {
+        // A session the board started in a named window is still there: bring that window back instead of asking.
+        if (link.window && resolved?.focus && (await focusWindow(resolved, link.window, ref.cwd, h))) {
+          return { launched: true, focused: true, command, error: null };
+        }
+        throw new AppError("CONFLICT", "The session is still running", snapshot);
+      }
       if (!resolved) return { launched: false, command, error };
       let spec: LaunchSpec;
       try {

@@ -20,8 +20,10 @@ board as you left it. On a narrow window the list is behind the menu button in t
 
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
   when it isn't set up or the board can't tell (Copilot and Codex are set up on their side).
-- The Claude Code CLI the board runs for the board reviewer and issue import is set under
-  **Integrations → Claude Code**, with **Test** to check it.
+- The Claude Code CLI the board runs for the board reviewer, issue import and new Claude Code sessions is set under
+  **Integrations → Claude Code**, with **Test** to check it. **Integrations → GitHub Copilot** has the Copilot CLI
+  new Copilot sessions start. Each has **Session models**: the model a new session starts on for each suggested
+  tier (empty leaves the CLI's default).
 - On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it
   shows what it does and its settings.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.

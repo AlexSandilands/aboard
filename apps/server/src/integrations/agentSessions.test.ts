@@ -261,6 +261,34 @@ describe("resuming a session", () => {
     expect(app.spawned).toHaveLength(1);
   });
 
+  it("brings back the window of a running session the board started, instead of asking", async () => {
+    const app = appWith({ alive: [100] });
+    app.home.claudeFile(100, { sessionId: A, status: "busy" });
+    const l = app.services.links.add(app.task.id, { agentSession: claude(A, app.home.root) }, "board", {
+      window: "aboard-1",
+    });
+    const res = await app.post(l.id, {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ launched: true, focused: true });
+    expect(app.spawned).toEqual([
+      { file: "wt.exe", args: ["-w", "aboard-1", "focus-tab", "-t", "0"], cwd: app.home.root },
+    ]);
+    // An agent relinking it from another folder keeps the window.
+    app.services.links.add(app.task.id, { agentSession: claude(A, "C:\\Other") }, "claude-code");
+    expect(app.services.links.get(l.id)).toMatchObject({ window: "aboard-1", ref: { cwd: "C:\\Other" } });
+  });
+
+  it("still asks about a board-started session when the terminal can't bring windows back", async () => {
+    const app = appWith({ alive: [100] });
+    app.services.settings.update({ terminal: { kind: "cmd" } });
+    app.home.claudeFile(100, { sessionId: A, status: "busy" });
+    const l = app.services.links.add(app.task.id, { agentSession: claude(A, app.home.root) }, "board", {
+      window: "aboard-1",
+    });
+    expect((await app.post(l.id, {})).status).toBe(409);
+    expect(app.spawned).toHaveLength(0);
+  });
+
   it("forks a running Claude session without forcing", async () => {
     const app = appWith({ alive: [100] });
     app.home.claudeFile(100, { sessionId: A, status: "idle" });

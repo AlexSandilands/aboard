@@ -1,8 +1,10 @@
 # Agent sessions
 
-Board task: #69. Verified against Claude Code 2.1.301 on Windows (October 2026).
+Board tasks: #69, #115 (starting sessions). Verified against Claude Code 2.1.301 and Copilot CLI 1.0.85 on Windows
+(October 2026).
 
-An agent in Claude Code or Copilot CLI links its own session to the task it works on. The board then shows
+An agent in Claude Code or Copilot CLI links its own session to the task it works on, or the board starts the
+session itself from the hand-off menu and links it ([Starting a session](#starting-a-session)). The board then shows
 whether that session is still running and offers **Open in terminal**, which resumes it in a new terminal
 window in the session's folder, with **Copy resume command** as a fallback. T3 Code threads already link
 back to their conversation ([agent hand-off](agent-handoff.md)); this does the same for sessions run in a
@@ -73,6 +75,10 @@ polling until the server restarted.
 **Open in terminal** posts to `/api/links/:id/resume` with a mode (`resume` or `fork`) and `force`. The server
 re-reads the link, checks the folder still exists, reads the status afresh, and:
 
+- for a running session the board started in a named Windows Terminal window (the link's `window`), while the
+  terminal setting is still Windows Terminal, runs `wt -w <window> focus-tab -t 0` and answers
+  `{launched: true, focused: true}`: the window comes back to the front on its first tab. If that can't start, or
+  the terminal is another one, it is treated like any running session:
 - answers **409** with the snapshot when the session is running and the mode is `resume` without `force`.
   The web app then asks: **Fork** (Claude Code, recommended), **Open anyway**, Cancel, and **Open T3 thread**
   when the session runs inside T3 Code and the task has a thread;
@@ -109,7 +115,47 @@ command line on `;`, quotes or not, so every `;` is passed as `\;`. A profile we
 Cloud Shell) keeps its look and runs cmd. The settings page shows what the current setting runs for an
 example session.
 
-The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md).
+The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md) and, for new
+sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
+
+### Starting a session
+
+The hand-off menu on a card and in the panel offers **New Claude Code session…** and **New Copilot CLI session…**
+on any open task but an epic, for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
+path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
+`GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
+model for the task's tier, and whether sessions get a named window) and offers:
+
+- the hand-off prompt, editable, with **Plan with me** swapping the work and planning prompts. It is the prompt
+  with `linkedSession`: the agent is told the board linked the session and has no suggested-model line;
+- a model, filled in from **Session models** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
+  planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- **New worktree** from a branch (the default branch first), or **This checkout**.
+
+`POST /api/tasks/:id/sessions` then:
+
+1. for a new worktree, runs `createWorktree` under `<worktreesDir>/sessions` on a new `<brand>/<task#>-<id8>` branch.
+   Autopilot's cleanup never removes these: they are the user's;
+2. builds `claude [--model m] --session-id <uuid> --name "Implementing #N" <prompt>`, or Copilot's
+   `copilot [--model m] --session-id <uuid> --name … -i <prompt>`, with a session id the board picks;
+3. opens it in the terminal setting's terminal. With Windows Terminal it goes to the window named for the task
+   (`taskWindowName`, `<brand>-<task#>`): `wt -w <brand>-115 new-tab …` opens the window, or a tab of it when it is
+   already open, whatever **Open in** says;
+4. once the terminal has started, links the session (label "Implementing #N" or "Planning #N", and the window),
+   then reads its status. When the terminal won't start nothing is linked and the result carries the command to run.
+
+The prompt is one argument (`textArgument` in `terminal.ts`). POSIX shells get it as written, single-quoted. On
+Windows it crosses Windows Terminal, which quotes an argument with spaces but not the quotes inside it, and often
+cmd.exe, which has no escape inside quotes and expands `%NAME%` even there; so line breaks become spaces, `"`
+becomes `'`, a trailing backslash gets a space after it, the text always has a space, and a `%` is refused. A
+refused prompt, or a command line over 8,000 characters on Windows, starts the session with a short prompt built
+from the task alone ("Let's work on #N…: call get_task(…) first"); the result says why (`shortReason`) and the web
+app copies the full prompt to the clipboard. These argvs were run for real through cmd, Windows PowerShell 5.1 and a
+custom cmd template, and the CLI received the prompt unchanged. A Windows Terminal launch couldn't be run from the
+agent's session that built this; it relies on the same quoting the resume command's `bash -c` script does.
+
+The window name is stored beside the session's ref in `ref_json` and returned as the link's `window`. Only the board
+sets it (`AddLinkOptions`); an agent linking the same session again, from another folder, keeps it.
 
 ### Names
 
@@ -156,7 +202,8 @@ Copilot CLI support is unit-tested only.
 | --- | --- |
 | A `claude://` style URL handler | Neither CLI registers one, and it would need installing per machine |
 | Reading the transcript files for status (it is read for the title only) | Larger and slower than the running-session files, with no pid to check |
-| Focusing a window that already shows the session | No reliable way across terminals |
+| Focusing a window that already shows any session | No reliable way across terminals; only a Windows Terminal window the board named can be found again |
+| Writing the prompt to a file for the session to read | Neither CLI takes a first prompt from a file, and a pointer prompt reads worse than the prompt itself |
 
 ## Code map
 
@@ -164,9 +211,13 @@ Copilot CLI support is unit-tested only.
 | --- | --- |
 | `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `TerminalSetting`, REST shapes |
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
-| `apps/server/src/integrations/terminal.ts` | Quoting, Windows Terminal detection, the launch for each terminal and shell, spawning |
+| `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
+| `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
+| `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
-| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal` |
+| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis` |
+| `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
+| `apps/web/src/components/handoff/SessionLaunchDialog.tsx` | The new-session dialog (`sessionLaunch.logic.ts`) |
 | `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Integrations → Terminal |

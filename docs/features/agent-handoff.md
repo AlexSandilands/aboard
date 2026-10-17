@@ -24,6 +24,7 @@ harness-specific way. It offers two levels:
 |---|---|---|---|
 | **Copy prompt** | Any harness with the MCP server registered | Copies a ready-to-paste prompt | Open a session, paste, send |
 | **New T3 Code thread** | T3 Code, with a token set | Creates the T3 thread, starts the agent and links the thread to the task | Pick model and workspace, press Send |
+| **New Claude Code / Copilot CLI session** | The CLI installed (PATH or Settings) | Makes a worktree, opens the CLI in a terminal with the prompt and links the session | Pick model and workspace, press Send ([agent sessions](agent-sessions.md#starting-a-session)) |
 
 Both hand-offs send the same kind of prompt, so the agent behaves the same either way.
 
@@ -126,7 +127,9 @@ header. It only shows on open work: not on Done or archived tasks.
 
 It offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked _Suggested_. An epic
 offers only "Copy prompt to start its tasks" (its orchestrating prompt), and its T3 dialog has no
-**Plan with me**. **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
+**Plan with me**. **New Claude Code session…** and **New Copilot CLI session…** follow T3's entry on any task but
+an epic, when `GET /api/agent-clis` finds the CLI ([agent sessions](agent-sessions.md#starting-a-session)).
+**New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
 
 - T3 Code is running (auto-detected from `~/.t3/userdata/server-runtime.json`);
 - a token is set;

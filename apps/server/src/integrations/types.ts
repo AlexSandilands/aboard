@@ -1,4 +1,5 @@
 import type {
+  AgentCliStatus,
   BackupStatus,
   ConnectT3Result,
   GithubStatus,
@@ -9,6 +10,9 @@ import type {
   ResumeMode,
   ResumeResult,
   ResumeSessionInput,
+  SessionLaunchOptions,
+  StartSessionInput,
+  StartSessionResult,
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
@@ -70,6 +74,12 @@ export interface Integrations {
   resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
   /** What "Open in terminal" runs on this machine, for settings. */
   terminalInfo(): TerminalInfo;
+  /** Whether the board can start Claude Code and Copilot CLI here, for the hand-off menu. */
+  agentClis(): AgentCliStatus[];
+  /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
+  sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
+  /** Starts a new Claude Code or Copilot CLI session on a task in a terminal and links it. */
+  startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
   /** Makes a digest of what changed now; a summarised one is written in the background (see DigestGenerator). */
   generateDigest(): Promise<DigestStart>;
   /** Resolves when no digest is being written. */

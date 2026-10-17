@@ -1,4 +1,5 @@
 import type {
+  AgentClis,
   AppSettings,
   AutopilotOverview,
   AutopilotActiveRun,
@@ -12,6 +13,7 @@ import type {
   IntegrationsStatus,
   NotificationList,
   SkillInfo,
+  SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
   T3ProjectCandidate,
@@ -53,6 +55,8 @@ export const queryKeys = {
   autopilotRunsAll: ["autopilotRuns"] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
+  agentClis: ["agentClis"] as const,
+  sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
   templates: ["templates"] as const,
   /** Prefix of every project's recurring rules query. */
   recurring: ["recurring"] as const,
@@ -206,6 +210,31 @@ export function useTerminalInfo(enabled = true) {
     queryKey: queryKeys.terminal,
     queryFn: ({ signal }) => api<TerminalInfo>("/api/terminal", { signal }),
     enabled,
+  });
+}
+
+/**
+ * Whether the board can start Claude Code and Copilot CLI here, for the hand-off menu's "New … session" entries.
+ * Shared by every card; looked up again after a minute, or when a CLI's path changes in settings.
+ */
+export function useAgentClis() {
+  return useQuery({
+    queryKey: queryKeys.agentClis,
+    queryFn: ({ signal }) => api<AgentClis>("/api/agent-clis", { signal }),
+    staleTime: 60_000,
+  });
+}
+
+/** CLIs, branches and the tier's models for the new-session dialog. Fetched fresh each time it opens. */
+export function useSessionLaunchOptions(taskId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.sessionLaunchOptions(taskId ?? ""),
+    queryFn: ({ signal }) =>
+      api<SessionLaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/session-launch-options`, { signal }),
+    enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
   });
 }
 

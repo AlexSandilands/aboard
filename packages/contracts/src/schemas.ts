@@ -321,6 +321,8 @@ export const TaskLink = z.discriminatedUnion("kind", [
     kind: z.literal("agent_session"),
     ref: AgentSessionRef,
     snapshot: AgentSessionSnapshot.nullable(),
+    /** The Windows Terminal window the board started the session in, so it can bring it back; else absent. */
+    window: z.string().nullish(),
   }),
   z.object({ ...LinkBase, kind: z.literal("url") }),
 ]);
@@ -685,8 +687,10 @@ export const AppSettings = z
     reviewMaxRounds: z.number().int().min(1).max(10),
     /** Let the board run a headless reviewer when no agent picks a round up. */
     headlessReviewEnabled: z.boolean(),
-    /** The Claude Code CLI to run; null looks up `claude` on PATH. */
+    /** The Claude Code CLI to run; null looks up `claude` on PATH. New Claude Code sessions start it too. */
     headlessReviewCli: z.string().nullable(),
+    /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
+    copilotCli: z.string().nullable(),
     headlessReviewBudgetUsd: z.number().positive().max(100),
     /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
@@ -721,6 +725,7 @@ export const UpdateSettingsInput = z.object({
   reviewMaxRounds: z.number().int().min(1).max(10).optional(),
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
+  copilotCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
   issueImportModel: z.string().trim().min(1).optional(),

@@ -155,8 +155,9 @@ on independent timers:
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
 - **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of
-  linked Claude Code and Copilot CLI sessions from their own files; and opening one in a terminal on
-  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)). See
+  linked Claude Code and Copilot CLI sessions from their own files; opening one in a terminal on
+  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)); and starting a new one with the user's
+  prompt ([ADR 0010](decisions/0010-board-starts-new-sessions.md)). See
   [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).

@@ -113,7 +113,7 @@ function IntegrationsContent() {
         <WithSettings>{(settings) => <ClaudeCodeSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.copilot">
-        <CopilotSection />
+        <WithSettings>{(settings) => <CopilotSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.codex">
         <CodexSection />

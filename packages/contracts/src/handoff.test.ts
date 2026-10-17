@@ -47,6 +47,18 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).not.toContain("t3Thread");
   });
 
+  it("tells a board-started CLI session it is linked, without the model line or asking it to link itself", () => {
+    const suggested = { ...task, suggestedModel: { tier: "deep" as const, reason: null } };
+    for (const mode of ["work", "plan"] as const) {
+      const prompt = taskHandoffPrompt({ task: suggested, boardUrl: "http://x", mode, linkedSession: true });
+      expect(prompt).toContain("The board started this session and already linked it to the task");
+      expect(prompt).toContain("Jira issue");
+      expect(prompt).not.toContain("agentSession");
+      expect(prompt).not.toContain("t3Thread");
+      expect(prompt).not.toContain("Suggested model");
+    }
+  });
+
   it("tells work and planning sessions to ask before flagging the task for Autopilot", () => {
     for (const mode of ["work", "plan"] as const) {
       const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode });

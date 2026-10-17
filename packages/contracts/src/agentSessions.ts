@@ -176,6 +176,8 @@ export type ResumeCommand = z.infer<typeof ResumeCommand>;
 /** A launch that failed still returns the command, so it can be copied and run by hand. */
 export const ResumeResult = z.object({
   launched: z.boolean(),
+  /** A running session the board started was brought to the front in its window instead of opened again. */
+  focused: z.boolean().optional(),
   command: z.string(),
   error: z.string().nullable(),
 });

@@ -16,6 +16,8 @@ export interface HandoffPromptInput {
   mode: HandoffMode;
   /** The session was started by the board and is already linked to the task. */
   linkedThread?: boolean;
+  /** A Claude Code or Copilot CLI session the board started and linked to the task (see sessionLaunch.ts). */
+  linkedSession?: boolean;
   /** Names the task's suggested tier in a copied work prompt; without it the line shows the bare tier. */
   modelTiers?: ModelTiers;
   /**
@@ -99,6 +101,7 @@ export function taskHandoffPrompt({
   boardUrl,
   mode,
   linkedThread = false,
+  linkedSession = false,
   modelTiers,
   subagent = false,
 }: HandoffPromptInput): string {
@@ -133,8 +136,16 @@ export function taskHandoffPrompt({
             : []),
         ];
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
-  const model = mode === "work" && !linkedThread ? suggestedModelLine(task, modelTiers) : null;
+  const model = mode === "work" && !linkedThread && !linkedSession ? suggestedModelLine(task, modelTiers) : null;
   if (model) lines.push("", model);
+  if (linkedSession) {
+    lines.push(
+      "",
+      "The board started this session and already linked it to the task; don't link it again. Link the task to its " +
+        "Jira issue with link if it has one.",
+    );
+    return lines.join("\n");
+  }
   lines.push(
     "",
     linkedThread

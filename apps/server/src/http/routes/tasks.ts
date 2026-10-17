@@ -5,6 +5,7 @@ import {
   LinkInput,
   MoveTaskInput,
   PlanInput,
+  StartSessionInput,
   StartT3ThreadInput,
   TaskStatusInput,
   UpdateTaskInput,
@@ -80,6 +81,18 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       const id = taskId(c);
       const input = await parseBody(c, StartT3ThreadInput);
       return c.json(await integrations.startT3Thread(id, input, actorOf(c)), 201);
+    }),
+  );
+  app.get(
+    "/api/tasks/:id/session-launch-options",
+    handle(async (c) => c.json(await integrations.sessionLaunchOptions(taskId(c)))),
+  );
+  app.post(
+    "/api/tasks/:id/sessions",
+    handle(async (c) => {
+      const id = taskId(c);
+      const input = await parseBody(c, StartSessionInput);
+      return c.json(await integrations.startSession(id, input, actorOf(c)), 201);
     }),
   );
   app.post(

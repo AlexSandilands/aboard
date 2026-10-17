@@ -220,13 +220,19 @@ export interface PlansService {
 /** What a poller stores on a link: PR, T3 thread, issue or agent session state. */
 export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | AgentSessionSnapshot;
 
+/** What only the board itself can record on a link, never an agent over MCP or REST. */
+export interface AddLinkOptions {
+  /** A session the board started in a named Windows Terminal window (see taskWindowName). */
+  window?: string;
+}
+
 export interface LinksService {
   /**
    * Idempotent on (task, kind, url). Infers kind via classifyLink when omitted. An `agentSession` is one link per
    * harness and session id; the board links sessions it starts itself (Autopilot's headless runs) the same way an
    * agent links its own, and the folder may be anywhere, such as a worktree outside the project.
    */
-  add(taskId: string, input: LinkInput, actor: string): TaskLink;
+  add(taskId: string, input: LinkInput, actor: string, opts?: AddLinkOptions): TaskLink;
   remove(linkId: string, actor: string): void;
   get(linkId: string): TaskLink;
   /** Links of a kind on non-archived tasks — for pollers. */

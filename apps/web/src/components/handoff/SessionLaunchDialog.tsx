@@ -1,0 +1,291 @@
+import {
+  modelTierLabel,
+  taskHandoffPrompt,
+  taskWindowName,
+  defaultHandoffMode,
+  type AgentHarness,
+  type SessionLaunchOptions,
+  type TaskSummary,
+} from "@repo/contracts";
+import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
+import { useState } from "react";
+import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { copyToClipboard } from "~/components/task/InlineInput";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Skeleton } from "~/components/ui/skeleton";
+import { Spinner } from "~/components/ui/spinner";
+import { toastManager } from "~/components/ui/toast";
+import { cn } from "~/lib/utils";
+import { useStartSession } from "~/state/mutations";
+import { useBoard, useSettings, useSessionLaunchOptions } from "~/state/queries";
+import { useDialogs } from "~/state/ui";
+import { copyHandoffPrompt } from "./HandoffActions";
+import { ComposerControl } from "./T3LaunchPickers";
+import {
+  harnessLabel,
+  initialModel,
+  initialWhere,
+  modelError,
+  startedDescription,
+  toSessionWorkspace,
+  type SessionWhere,
+} from "./sessionLaunch.logic";
+
+const WHERE_ITEMS = [
+  { value: "new_worktree", label: "New worktree" },
+  { value: "current", label: "This checkout" },
+] as const;
+
+/**
+ * "New Claude Code / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI opens
+ * in a terminal with the prompt and the board links the session (useDialogs().openSessionLaunch).
+ */
+export function SessionLaunchDialog() {
+  const target = useDialogs((s) => s.sessionLaunch);
+  const close = useDialogs((s) => s.closeSessionLaunch);
+  const task = useBoard().data?.tasks.find((t) => t.id === target?.taskId);
+  return (
+    <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
+      <DialogPopup className="max-w-2xl">
+        {task && target ? (
+          <SessionLaunch key={`${task.id}:${target.harness}`} task={task} harness={target.harness} onDone={close} />
+        ) : null}
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function SessionLaunch({ task, harness, onDone }: { task: TaskSummary; harness: AgentHarness; onDone: () => void }) {
+  const options = useSessionLaunchOptions(task.id);
+  const modelTiers = useSettings().data?.modelTiers;
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <HarnessIcon harness={harness} className="size-4" />
+          New {harnessLabel(harness)} session
+        </DialogTitle>
+        <DialogDescription>
+          #{task.number} {task.title}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="px-6 pb-6">
+        {options.isPending ? (
+          <Skeleton shape="card" className="h-40 w-full" />
+        ) : options.isError ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
+            <p className="flex items-start gap-2">
+              <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+              <span>{options.error.message}</span>
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => void options.refetch()}>
+                Retry
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)}
+              >
+                Copy prompt instead
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Composer task={task} harness={harness} options={options.data} onDone={onDone} />
+        )}
+      </div>
+    </>
+  );
+}
+
+function Composer({
+  task,
+  harness,
+  options,
+  onDone,
+}: {
+  task: TaskSummary;
+  harness: AgentHarness;
+  options: SessionLaunchOptions;
+  onDone: () => void;
+}) {
+  const promptFor = (plan: boolean) =>
+    taskHandoffPrompt({ task, boardUrl: window.location.origin, mode: plan ? "plan" : "work", linkedSession: true });
+  const [plan, setPlan] = useState(defaultHandoffMode(task) === "plan");
+  const [prompt, setPrompt] = useState(() => promptFor(plan));
+  const [model, setModel] = useState(() => initialModel(options, harness, plan));
+  const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options));
+  const start = useStartSession({ silent: true });
+  const cli = options.clis.find((c) => c.harness === harness);
+
+  const workspace = toSessionWorkspace(where);
+  const badModel = modelError(model);
+  const blocker = !cli?.available
+    ? `${harnessLabel(harness)} isn't installed`
+    : !options.workspaceRoot
+      ? "The project has no folder"
+      : !workspace
+        ? "Choose a branch"
+        : badModel;
+
+  const togglePlan = () => {
+    const next = !plan;
+    // Swap what the dialog generated, but never discard what the user typed.
+    if (prompt === promptFor(plan)) setPrompt(promptFor(next));
+    if (model === initialModel(options, harness, plan)) setModel(initialModel(options, harness, next));
+    setPlan(next);
+  };
+
+  const submit = () => {
+    if (blocker || !workspace || !prompt.trim() || start.isPending) return;
+    start.mutate(
+      { taskId: task.id, harness, mode: plan ? "plan" : "work", prompt, model: model.trim() || null, workspace },
+      {
+        onSuccess: (result) => {
+          if (!result.launched) {
+            const toastId = toastManager.add({
+              type: "error",
+              title: "Couldn't open a terminal",
+              description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead.`,
+              actionProps: {
+                children: "Copy command",
+                onClick: () => {
+                  toastManager.close(toastId);
+                  copyToClipboard(result.command, "command");
+                },
+              },
+            });
+            return;
+          }
+          // The CLI got a short pointer to the task; the full prompt goes on the clipboard to paste into it.
+          if (result.shortPrompt) void navigator.clipboard.writeText(prompt).catch(() => undefined);
+          toastManager.add({
+            type: "success",
+            title: `Started ${harnessLabel(harness)}`,
+            description: [result.shortReason, startedDescription(result, task.number)].filter(Boolean).join(" "),
+          });
+          onDone();
+        },
+        onError: (error) =>
+          toastManager.add({ type: "error", title: "Couldn't start the session", description: error.message }),
+      },
+    );
+  };
+
+  return (
+    <form
+      className="flex flex-col"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <div className="relative z-10 rounded-2xl border border-border bg-card shadow-sm/5">
+        <textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+          aria-label="First message"
+          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+        />
+        <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+          <Input
+            size="sm"
+            className="w-56"
+            aria-label="Model"
+            aria-invalid={badModel ? true : undefined}
+            placeholder="Model (the CLI's default)"
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+          />
+          <ComposerControl
+            aria-pressed={plan}
+            onClick={togglePlan}
+            title="The agent shapes the plan with you before any code is written"
+          >
+            <LightbulbIcon />
+            <span>Plan with me</span>
+          </ComposerControl>
+          <button
+            type="submit"
+            aria-label="Start session"
+            title={blocker ?? "Start session (Ctrl+Enter)"}
+            disabled={!!blocker || start.isPending || !prompt.trim()}
+            className={cn(
+              "ms-auto flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+            )}
+          >
+            {start.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
+          </button>
+        </div>
+      </div>
+      <div className="-mt-3 flex items-center justify-between gap-2 rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+        <Select
+          items={WHERE_ITEMS}
+          value={where.mode}
+          disabled={!options.isRepo}
+          onValueChange={(value) =>
+            setWhere(
+              value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
+            )
+          }
+        >
+          <SelectTrigger size="sm" variant="ghost" aria-label="Where to run" className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {WHERE_ITEMS.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        {where.mode === "new_worktree" ? (
+          <Select
+            items={options.branches.map((b) => ({ value: b, label: b }))}
+            value={where.baseRef}
+            onValueChange={(value) => setWhere({ mode: "new_worktree", baseRef: value })}
+          >
+            <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
+              <SelectValue placeholder="Choose a branch" />
+            </SelectTrigger>
+            <SelectPopup>
+              {options.branches.map((branch) => (
+                <SelectItem key={branch} value={branch}>
+                  {branch}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        ) : (
+          <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
+            {options.workspaceRoot ?? "No project folder"}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 px-1 text-xs text-muted-foreground">
+        {options.tier && !plan ? (
+          <span className="block">
+            <span className="font-medium text-foreground">Suggested model: {modelTierLabel(options.tier)}</span>
+            {options.models[harness]
+              ? null
+              : ` · no ${harnessLabel(harness)} model is set for this tier in Settings → Integrations`}
+          </span>
+        ) : null}
+        {options.namedWindow
+          ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}, which the session's link brings back while it runs.`
+          : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
+      </p>
+    </form>
+  );
+}
