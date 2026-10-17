@@ -87,7 +87,7 @@ toggles):
 | Section      | Rich summary                                                                                                       |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Labels       | Coloured label chips, 3 then `+N`                                                                                  |
-| Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu (sessions folded into a thread included), 4 then `+N`         |
+| Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu, one per expanded row (sessions folded into a thread stay in its menu), 4 then `+N`         |
 | Links        | PR chips coloured by state with a checks dot, 3 then `+N` for the rest. Without a PR the text stays                |
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
 | Local review | The review badge                                                                                                   |

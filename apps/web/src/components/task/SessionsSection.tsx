@@ -73,14 +73,7 @@ export function SessionsSection({ task }: { task: TaskDetail }) {
     <TaskSection
       title="Sessions"
       summary={
-        sessionRows.length > 0 && (
-          <SessionsSummary
-            rows={[...sessionRows, ...[...folded.values()].flat()]}
-            taskId={task.id}
-            t3={t3}
-            settings={settings}
-          />
-        )
+        sessionRows.length > 0 && <SessionsSummary rows={sessionRows} taskId={task.id} t3={t3} settings={settings} />
       }
     >
       <div className="flex flex-col gap-0.5">

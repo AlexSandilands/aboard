@@ -6,7 +6,6 @@ import { useOpenTask } from "~/components/board/boardNavigation";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { Badge } from "~/components/ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import type { SessionLink } from "~/components/sessions/sessions.logic";
 import type { LinkGroups, PlainLink } from "./links.logic";
 import {
   limitItems,
@@ -47,8 +46,9 @@ export function LabelsSummary({ labels }: { labels: ReadonlyArray<string> }) {
 }
 
 /**
- * One button per thread or session (the ones folded into a thread's menu included), each with its status dot and the
- * menu a card's chip has. A thread's button just opens it in T3 Code.
+ * One button per row of the expanded Sessions section: each thread and each session that isn't folded into one, with
+ * its status dot and the menu a card's chip has. Sessions folded into a thread stay in its menu in the expanded row,
+ * so they aren't repeated here. A thread's button just opens it in T3 Code.
  */
 export function SessionsSummary({
   rows,
@@ -56,7 +56,7 @@ export function SessionsSummary({
   t3,
   settings,
 }: {
-  rows: ReadonlyArray<LinkGroups["sessionRows"][number] | SessionLink>;
+  rows: LinkGroups["sessionRows"];
   taskId: string;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
