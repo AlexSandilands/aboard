@@ -82,7 +82,8 @@ text when both are present.
   (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link`, `add_note` and
   `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
-  review round is waiting.
+  review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
+  can open a screenshot as a file ([attachments.md](attachments.md)).
 - `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
   the board open the next round (under the limit), and the result says so and points to `start_review` for its
   brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.

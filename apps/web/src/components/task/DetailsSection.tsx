@@ -2,6 +2,7 @@ import { MODEL_TIERS, ModelTier, modelTierDescription, type TaskDetail } from "@
 import { PencilIcon } from "lucide-react";
 import { useState } from "react";
 
+import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { Markdown } from "~/components/markdown/Markdown";
 import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -20,12 +21,14 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
         <SuggestedModelField task={task} />
         {task.kind === "epic" ? null : <AutopilotField task={task} />}
         <MarkdownField
+          taskId={task.id}
           title="Description"
           value={task.description}
           placeholder="Add a description…"
           onSave={(description) => updateTask({ id: task.id, description })}
         />
         <MarkdownField
+          taskId={task.id}
           title="Plan context"
           value={task.planContext}
           placeholder="Add plan context: goals, constraints, decisions…"
@@ -113,11 +116,13 @@ function AutopilotField({ task }: { task: TaskDetail }) {
 
 /** A titled markdown block that renders until edited; saves on blur or Ctrl/⌘+Enter. */
 function MarkdownField({
+  taskId,
   title,
   value,
   placeholder,
   onSave,
 }: {
+  taskId: string;
   title: string;
   value: string | null;
   placeholder: string;
@@ -143,6 +148,7 @@ function MarkdownField({
       </div>
       {editing ? (
         <MarkdownEditor
+          taskId={taskId}
           ariaLabel={title}
           value={text ?? ""}
           placeholder={placeholder}
@@ -153,7 +159,10 @@ function MarkdownField({
           onCancel={() => setEditing(false)}
         />
       ) : text ? (
-        <Markdown>{text}</Markdown>
+        <>
+          <Markdown>{text}</Markdown>
+          <AttachmentThumbs text={text} />
+        </>
       ) : (
         <button
           type="button"

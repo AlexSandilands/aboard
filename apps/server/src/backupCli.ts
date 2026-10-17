@@ -5,7 +5,7 @@
  *   pnpm backup import <folder|file> [--force]                 replaces the whole board; the server must be stopped
  *   pnpm backup restore-task <folder|file> <number> [--force]  puts one task back; works while the server runs
  */
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ACTOR_HEADER, BRAND, type BoardDump } from "@repo/contracts";
@@ -22,6 +22,9 @@ const USAGE = `Usage:
   pnpm backup export [--dir <folder> | --file <file>]
   pnpm backup import <folder|file> [--force]
   pnpm backup restore-task <folder|file> <number> [--force]`;
+
+/** The backup folder at `path`; null for a single-file dump, which carries no images. */
+const dumpFolder = (path: string): string | null => (statSync(path).isDirectory() ? path : null);
 
 // pnpm runs package scripts from the package's folder; INIT_CWD is where the user typed the command.
 const fromCwd = (path: string) => resolve(process.env.INIT_CWD ?? process.cwd(), path);
@@ -42,7 +45,7 @@ function exportBoard(config: Config, options: { dir?: string; file?: string }): 
     return;
   }
   const dir = options.dir ? fromCwd(options.dir) : join(config.homeDir, "backup");
-  const { written, removed } = writeDumpDir(dir, dump);
+  const { written, removed } = writeDumpDir(dir, dump, config.attachmentsDir);
   console.log(`Exported ${tasks} to ${dir} (${written.length} file(s) written, ${removed.length} removed)`);
 }
 
@@ -51,15 +54,25 @@ async function importBoard(config: Config, path: string, force: boolean): Promis
   if (running) {
     throw new AppError("CONFLICT", `A server is running on ${config.homeDir} (${running}). Stop it, then import.`);
   }
-  const result = restoreBoard(config.dbPath, readDump(fromCwd(path)), { force });
+  const from = fromCwd(path);
+  const result = restoreBoard(config.dbPath, readDump(from), {
+    force,
+    attachments: { from: dumpFolder(from), to: config.attachmentsDir },
+  });
   console.log(
     `Restored ${result.counts.tasks ?? 0} task(s) into ${config.dbPath} (backup schema ${result.schemaVersion})`,
   );
+  if (result.attachments.copied + result.attachments.missing > 0) {
+    console.log(
+      `Restored ${result.attachments.copied} image(s); the backup has no file for ${result.attachments.missing}`,
+    );
+  }
   if (result.previousDb) console.log(`The previous database was kept as ${result.previousDb}`);
 }
 
 async function restoreTask(config: Config, path: string, number: number, force: boolean): Promise<void> {
   const dump = readDump(fromCwd(path));
+  const attachmentsFrom = dumpFolder(fromCwd(path));
   const running = await runningServerUrl(config.homeDir);
   let result: { taskId: string; number: number };
   if (running) {
@@ -71,7 +84,7 @@ async function restoreTask(config: Config, path: string, number: number, force: 
         [ACTOR_HEADER]: "user",
         ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
       },
-      body: JSON.stringify({ dump, number, force }),
+      body: JSON.stringify({ dump, number, force, attachmentsFrom }),
     });
     const body = (await res.json()) as { error?: { message: string } } & typeof result;
     if (!res.ok) throw new Error(body.error?.message ?? `The server answered ${res.status}`);
@@ -79,7 +92,7 @@ async function restoreTask(config: Config, path: string, number: number, force: 
   } else {
     const ctx = createContext({ ...config, pollers: false });
     try {
-      result = ctx.services.backup.restoreTask(dump, number, { force, actor: "user" });
+      result = ctx.services.backup.restoreTask(dump, number, { force, actor: "user", attachmentsFrom });
     } finally {
       ctx.db.close();
     }

@@ -19,7 +19,10 @@ import {
   SettingsIcon,
   SunMoonIcon,
 } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useImagePaste } from "~/components/attachments/useImagePaste";
+import { insertAtSelection, replaceFirst } from "~/lib/attachments.logic";
+import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { followTemplate, prefillFrom, templatesFor, templateRequest } from "~/components/templates/templates.logic";
 import { Button } from "~/components/ui/button";
@@ -255,6 +258,26 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const view = stack.at(-1) ?? { kind: "root" };
   const [query, setQuery] = useState(() => initialQueryFor(view));
   const [description, setDescription] = useState("");
+  // The text as of now, for an image that lands after the next keystroke.
+  const descriptionRef = useRef(description);
+  useEffect(() => {
+    descriptionRef.current = description;
+  }, [description]);
+  // An image pasted here has no task yet; creating the task claims the ones its description refers to.
+  const imagePaste = useImagePaste({
+    taskId: null,
+    insert: (placeholder, at) => {
+      const { text, caret } = insertAtSelection(descriptionRef.current, at.start, at.end, placeholder);
+      descriptionRef.current = text;
+      setDescription(text);
+      return caret;
+    },
+    replace: (placeholder, replacement) => {
+      const text = replaceFirst(descriptionRef.current, placeholder, replacement);
+      descriptionRef.current = text;
+      setDescription(text);
+    },
+  });
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selectedImports, setSelectedImports] = useState<ReadonlySet<string>>(() => new Set());
@@ -379,7 +402,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   function submitTitle(keepOpen: boolean): void {
     if (view.kind !== "title") return;
     const title = query.trim();
-    if (!title || createTask.isPending) return;
+    // An image still uploading is a placeholder in the description, and the task would be created with it.
+    if (!title || createTask.isPending || imagePaste.uploading) return;
     const { flow, projectId, epicId } = view;
     const issue = issueImportRow(title, flow);
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
@@ -955,7 +979,17 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 onKeyDown={handleDescriptionKeyDown}
+                {...imagePaste.handlers}
               />
+              {imagePaste.uploading || imagePaste.error ? (
+                <p
+                  role={imagePaste.error ? "alert" : undefined}
+                  className={`px-1 text-2xs ${imagePaste.error ? "text-destructive-foreground" : "text-muted-foreground"}`}
+                >
+                  {imagePaste.uploading ? "Uploading image…" : imagePaste.error}
+                </p>
+              ) : null}
+              <AttachmentThumbs text={description} />
             </div>
           )}
         </>

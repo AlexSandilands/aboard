@@ -28,6 +28,7 @@ export const TASK_BUNDLE_TABLES = [
   "plan_phases",
   "plan_steps",
   "task_links",
+  "task_attachments",
   "task_labels",
   "task_reviews",
   "review_findings",
@@ -39,6 +40,8 @@ export const TaskBundle = z.object({
   plan_phases: z.array(BackupRow),
   plan_steps: z.array(BackupRow),
   task_links: z.array(BackupRow),
+  /** Pasted images: the rows; the files are beside the JSON, in `attachments/`. Absent before attachments existed. */
+  task_attachments: z.array(BackupRow).default([]),
   task_labels: z.array(BackupRow),
   task_reviews: z.array(BackupRow),
   review_findings: z.array(BackupRow),

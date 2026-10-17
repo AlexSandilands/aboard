@@ -138,7 +138,7 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 ### Delivery
 
 Board task: #123. How an epic's tasks reach the default branch (`tasks.delivery`, `tasks.integration_branch`,
-`024_epic_delivery.sql`; only an epic has them):
+`025_epic_delivery.sql`; only an epic has them):
 
 - **Pull requests to main** (null, or `main` once someone chose it): each task opens its PR to the default branch
   and the user merges it. A task blocked by it becomes startable after that.

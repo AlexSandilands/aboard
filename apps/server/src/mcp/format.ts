@@ -5,6 +5,7 @@ import {
   autopilotRunEventText,
   describeEpicRollup,
   findJiraKeys,
+  formatBytes,
   formatPlanText,
   isGatingSeverity,
   type LabelUsage,
@@ -596,6 +597,8 @@ export function renderTaskDetail(
     progress?: { now: number; closing?: boolean };
     /** For an epic: each child's newest activity, shown in its overview. */
     childActivity?: ChildActivity;
+    /** Images pasted into the task's text, with where they are on disk. */
+    images?: ReadonlyArray<{ path: string; filename: string; size: number }>;
   } = {},
 ): string {
   const lines: string[] = [];
@@ -644,6 +647,10 @@ export function renderTaskDetail(
 
   if (task.description?.trim()) lines.push("", "Description:", task.description.trim());
   if (task.planContext?.trim()) lines.push("", "Plan context:", task.planContext.trim());
+  if (opts.images?.length) {
+    lines.push("", "Images (pasted into the text as ![..](attachment:id); open them as files):");
+    for (const image of opts.images) lines.push(`- ${image.path} (${image.filename}, ${formatBytes(image.size)})`);
+  }
 
   lines.push("");
   if (epic) {

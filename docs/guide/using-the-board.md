@@ -11,6 +11,14 @@ A backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leav
 with a few concrete steps. The task panel shows exactly which step a task is on, and the card shows its
 progress.
 
+## Pasting images
+
+Paste (or drag) a screenshot into a task's description, plan context or a step's notes, or into the description box
+when you create a task. It shows in the text as a small pill with thumbnails under it; click either to see the image
+large. Big images are shrunk in your browser first, and anything still over 5 MB is refused. Agents that read the task
+(`get_task`) get the image's file path, so they can open a screenshot of the bug. The images are part of
+the board's backups, and are deleted with the task.
+
 ## Closing, archiving and deleting
 
 - **Closing without doing it:** a task that another task already delivered, a duplicate, or one you no

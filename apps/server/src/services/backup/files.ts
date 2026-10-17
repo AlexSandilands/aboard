@@ -1,4 +1,5 @@
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -10,7 +11,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { BoardDump, TASK_BUNDLE_TABLES, type BackupRow, type TaskBundle } from "@repo/contracts";
+import {
+  attachmentExtension,
+  BoardDump,
+  isAttachmentPathId,
+  TASK_BUNDLE_TABLES,
+  type BackupRow,
+  type TaskBundle,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 
 // The folder form of a dump, laid out for git: one file per task, sharded by the month it was created so old
@@ -31,6 +39,8 @@ const ROOT_FILES = {
 } as const;
 const TASKS_DIR = "tasks";
 const EVENTS_DIR = "events";
+/** Pasted images, as `attachments/<task id>/<id>.<ext>`: the same layout as the data dir's `attachments/`. */
+const ATTACHMENTS_DIR = "attachments";
 
 /** "2026-10" from an ISO timestamp; rows with no usable date share one folder. */
 const monthOf = (iso: unknown): string => {
@@ -52,6 +62,15 @@ const taskJson = (bundle: TaskBundle): string =>
 
 export const taskFilePath = (task: BackupRow): string =>
   `${TASKS_DIR}/${monthOf(task.created_at)}/task-${String(task.number)}.json`;
+
+/**
+ * Where an attachment's file is under an attachments folder, with "/" separators; null for a row whose ids aren't
+ * ids (a backup is untrusted input, and these become path segments).
+ */
+export const attachmentRelPath = (row: BackupRow): string | null =>
+  [row.task_id, row.id].every(isAttachmentPathId)
+    ? `${String(row.task_id)}/${String(row.id)}.${attachmentExtension(String(row.mime)) ?? "bin"}`
+    : null;
 
 /** The dump as folder files: relative path (with "/") to contents. */
 export function dumpFiles(dump: BoardDump): Map<string, string> {
@@ -112,10 +131,15 @@ export interface WriteResult {
 
 /**
  * Writes the dump into `dir`, touching only files whose contents changed, and removes task and event files the
- * dump no longer has (a deleted task's file goes, so git history shows when). Anything else in `dir` (.git, a
- * README) is left alone.
+ * dump no longer has (a deleted task's file goes, so git history shows when), likewise images of tasks that are gone
+ * from its `attachments/<id>/<id>.<ext>`. Anything else in `dir` (.git, a README) is left alone.
  */
-export function writeDumpDir(dir: string, dump: BoardDump): WriteResult {
+export function writeDumpDir(
+  dir: string,
+  dump: BoardDump,
+  /** The data dir's attachments folder, whose images are copied next to the JSON. */
+  attachmentsDir?: string,
+): WriteResult {
   const files = dumpFiles(dump);
   // Temp files a crash left behind would otherwise be committed with the next backup.
   const leftovers = [
@@ -134,6 +158,28 @@ export function writeDumpDir(dir: string, dump: BoardDump): WriteResult {
   const removed = [...filesUnder(dir, TASKS_DIR), ...filesUnder(dir, EVENTS_DIR)].filter((path) => !files.has(path));
   for (const path of removed) rmSync(join(dir, path));
   removeEmptyDirs(join(dir, TASKS_DIR));
+  if (attachmentsDir) {
+    const wanted = new Set(
+      dump.tasks.flatMap((b) => b.task_attachments).flatMap((row) => attachmentRelPath(row) ?? []),
+    );
+    // An image never changes once stored (its id is its name), so one already copied is left alone.
+    for (const rel of wanted) {
+      const to = join(dir, ATTACHMENTS_DIR, rel);
+      const from = join(attachmentsDir, rel);
+      if (existsSync(to) || !existsSync(from)) continue;
+      mkdirSync(dirname(to), { recursive: true });
+      copyFileSync(from, to);
+      written.push(`${ATTACHMENTS_DIR}/${rel}`);
+    }
+    // Only files in our own layout: the folder is a git repo that may hold other things of its own.
+    const ours = /^attachments\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.[a-z0-9]+$/;
+    const stale = filesUnder(dir, ATTACHMENTS_DIR, "").filter(
+      (path) => ours.test(path) && !wanted.has(path.slice(ATTACHMENTS_DIR.length + 1)),
+    );
+    for (const path of stale) rmSync(join(dir, path));
+    removed.push(...stale);
+    removeEmptyDirs(join(dir, ATTACHMENTS_DIR));
+  }
   return { written, removed };
 }
 
@@ -181,6 +227,32 @@ export function readDumpDir(dir: string): BoardDump {
 
 /** The single-file form: the whole BoardDump as one JSON document, for moving a board by hand. */
 export const dumpFileJson = (dump: BoardDump): string => `${JSON.stringify(dump, null, 2)}\n`;
+
+/**
+ * Copies the images of `rows` from a backup folder's `attachments/` into `toDir` (the data dir's). Returns how many
+ * were copied and how many the backup has no file for (a single-file dump carries none).
+ */
+export function copyAttachmentFiles(
+  rows: readonly BackupRow[],
+  fromDumpDir: string | null,
+  toDir: string,
+): { copied: number; missing: number } {
+  let copied = 0;
+  let missing = 0;
+  for (const row of rows) {
+    const rel = attachmentRelPath(row);
+    const from = fromDumpDir && rel ? join(fromDumpDir, ATTACHMENTS_DIR, rel) : null;
+    if (!from || !existsSync(from)) {
+      missing += 1;
+      continue;
+    }
+    const to = join(toDir, rel!);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(from, to);
+    copied += 1;
+  }
+  return { copied, missing };
+}
 
 /** Reads a backup from a folder or a single file. */
 export function readDump(path: string): BoardDump {

@@ -45,6 +45,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         userHome: "/nonexistent",
         sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
         worktreesDir: "/nonexistent/worktrees",
+        attachmentsDir: "/nonexistent/attachments",
         port: 4317,
         webPort: 5317,
       },
@@ -63,6 +64,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
     bus,
     t3Status: () => integrations.t3Status(),
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
+    attachmentsDir: mkdtempSync(join(tmpdir(), "attachments-")),
   });
   return { services, integrations, events };
 }

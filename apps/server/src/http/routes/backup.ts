@@ -8,6 +8,8 @@ const RestoreTaskBody = z.object({
   dump: BoardDump,
   number: z.number().int().positive(),
   force: z.boolean().optional(),
+  /** The backup folder the dump was read from (the CLI runs on this machine), for the task's pasted images. */
+  attachmentsFrom: z.string().nullable().optional(),
 });
 
 /** Git backup status, "Back up now", and putting one task back from a backup (the CLI's restore-task). */
@@ -23,8 +25,10 @@ export function registerBackupRoutes(app: Hono, { services, integrations }: AppC
   app.post(
     "/api/backup/restore-task",
     handle(async (c) => {
-      const { dump, number, force } = await parseBody(c, RestoreTaskBody);
-      return c.json(services.backup.restoreTask(dump, number, { force: force ?? false, actor: actorOf(c) }));
+      const { dump, number, force, attachmentsFrom } = await parseBody(c, RestoreTaskBody);
+      return c.json(
+        services.backup.restoreTask(dump, number, { force: force ?? false, actor: actorOf(c), attachmentsFrom }),
+      );
     }),
   );
 }

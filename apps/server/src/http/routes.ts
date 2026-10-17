@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import type { AppContext } from "../app.ts";
+import { registerAttachmentRoutes } from "./routes/attachments.ts";
 import { registerAutopilotRoutes } from "./routes/autopilot.ts";
 import { registerBackupRoutes } from "./routes/backup.ts";
 import { registerLabelRoutes } from "./routes/labels.ts";
@@ -19,6 +20,7 @@ export function registerApiRoutes(app: Hono, ctx: AppContext): void {
   registerProjectRoutes(app, ctx);
   registerTaskRoutes(app, ctx);
   registerPlanRoutes(app, ctx);
+  registerAttachmentRoutes(app, ctx);
   registerReviewRoutes(app, ctx);
   registerLabelRoutes(app, ctx);
   registerTemplateRoutes(app, ctx);

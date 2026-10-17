@@ -19,7 +19,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
-   session when you're in Claude Code or Copilot CLI.
+   session when you're in Claude Code or Copilot CLI. If it lists **Images** (a screenshot the user pasted into the
+   text, shown there as `![..](attachment:id)`), open each file path with your file tools: they are often the bug.
 3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
    follow-up, a Jira ticket for later), call `add_to_backlog` once and carry on with your current work.
    Don't derail.

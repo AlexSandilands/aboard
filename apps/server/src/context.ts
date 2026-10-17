@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { EventBus } from "./bus.ts";
 import type { Config } from "./config.ts";
@@ -10,16 +11,24 @@ import type { AppContext } from "./app.ts";
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
   config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
-    Partial<Pick<Config, "webDist" | "worktreesDir">>,
+    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir">>,
   overrides: IntegrationOverrides = {},
 ): AppContext & { db: Db } {
   const db = openDatabase(config.dbPath);
+  // Next to the database unless set; an in-memory one (tests) has no folder, so a temp one stands in.
+  const attachmentsDir =
+    config.attachmentsDir ??
+    (config.dbPath === ":memory:" ? join(tmpdir(), "attachments-test") : join(dirname(config.dbPath), "attachments"));
   const bus = new EventBus();
   let services: Services | null = null;
   const integrations = createIntegrations(
     {
       // Next to the database unless set, so a test's worktrees land in its own temp folder.
-      config: { ...config, worktreesDir: config.worktreesDir ?? join(dirname(config.dbPath), "worktrees") },
+      config: {
+        ...config,
+        worktreesDir: config.worktreesDir ?? join(dirname(config.dbPath), "worktrees"),
+        attachmentsDir,
+      },
       bus,
       services: () => {
         if (!services) throw new Error("services not ready");
@@ -32,6 +41,7 @@ export function createContext(
     db,
     bus,
     t3Status: () => integrations.t3Status(),
+    attachmentsDir,
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),

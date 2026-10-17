@@ -54,6 +54,7 @@ function setup() {
   const warnings: string[] = [];
   const backup = createBackupIntegration({
     services: () => h.services,
+    attachmentsDir: join(root, "attachments"),
     log: { warn: (m: string) => warnings.push(m) },
   });
   return { ...h, root, remote, clone, task, backup, warnings };

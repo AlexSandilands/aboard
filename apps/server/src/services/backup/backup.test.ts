@@ -109,6 +109,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   plan_phases: "id",
   plan_steps: "id",
   task_links: "id",
+  task_attachments: "id",
   task_labels: "task_id, label",
   task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
