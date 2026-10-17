@@ -76,7 +76,9 @@ function PopoverPopup({
         // A panel's card already sits inside its own padding, so the panel can reach the edge.
         collisionPadding={variant === "panel" ? 0 : undefined}
         className={cn(
-          "h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-transform data-instant:transition-none",
+          // --positioner-height is the popup's natural height, so without the cap a tall popup in a short window
+          // overflows the viewport and makes the document scrollable: its scrollbar then narrows the whole layout.
+          "h-(--positioner-height) max-h-(--available-height) w-(--positioner-width) max-w-(--available-width) transition-transform data-instant:transition-none",
           variant === "panel"
             ? // The card inside is the panel width, or the anchor less 12px per side; the viewport
               // pads it by --spacing(2) per side. Panels slide when their offset changes, e.g. to make
