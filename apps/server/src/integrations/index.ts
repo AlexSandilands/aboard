@@ -19,6 +19,7 @@ import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
+import { createSettingsAsker } from "./settingsAsk.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
 import type { SpawnTerminal, TerminalHost } from "./terminal.ts";
@@ -96,6 +97,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runImport ? { runImport: overrides.runImport } : {}),
     ...(overrides.listMcpServers ? { listMcpServers: overrides.listMcpServers } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const settingsAsker = createSettingsAsker({
+    services: deps.services,
+    ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
   });
   const backup = createBackupIntegration({
     services: deps.services,
@@ -178,6 +183,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       autopilot.stop();
       worktrees.stop();
     },
+    settingsAskStatus: () => settingsAsker.status(),
+    askSettings: (input) => settingsAsker.ask(input),
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
     listT3Projects: () => t3.listProjects(),

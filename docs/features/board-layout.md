@@ -167,7 +167,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   settles (`pinInView`, about 1.5 s, or until the user scrolls). A request counts as handled only then, so the page
   being left, which sees the request first, leaves it for the page being opened. A reload honours the hash.
 - **Search.** `SettingsSearch` sits between the brand row and the list. `settingsIndex()`
-  (`settingsIndex.logic.ts`) is the index it searches, and the settings "Ask" will read: every sub-section (from
+  (`settingsIndex.logic.ts`) is the index it searches, and the settings Ask sends: every sub-section (from
   `SETTINGS_GROUPS`), card and row with its title, description, keywords, group, sub-section and `foldedIn` (the
   folded section to open, for the built-in automations). Notification kinds and model tiers are generated from
   their contracts; the rest is written by hand, since the rows are JSX. `settingsIndex.logic.test.ts` scans the
@@ -183,6 +183,20 @@ rule editor take `?project=`; without it the page shows the project the board wa
   the two-second wait for a page that is still opening. A URL hash never falls back. The index's titles
   may be more specific than the rendered label ("Backup interval" for "Every"); the rendered label goes in its
   keywords.
+- **Ask.** The first option of the results is "Ask: <question>" (`SettingsAskRow.tsx`), which puts the typed
+  question to Claude Code. It starts highlighted when `looksLikeQuestion` says the text is one (a `?`, or a question
+  word and at least four words), else the best result is. `POST /api/settings/ask` (`integrations/settingsAsk.ts`)
+  takes the question and the index as `askEntries` sends it, since the web app owns the index. It runs `claude -p`
+  through the shared headless runner (`agentArgs` with `access: "none"`, the CLI from `headlessReviewCli`) on
+  `haiku`, with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
+  answer }`. The question and the index are fenced as data with a random fence. A `settingId` that isn't one of the
+  request's ids becomes null (the answer stays). Only one question runs at a time (the page discards an edited pending question but can't stop its run), so a second
+  one meanwhile gets "Another question is still being answered". A failed run, a timeout or an answer of the wrong shape comes back
+  as `{ ok: false, error }` with status 200, like the CLI test, so the row can show the message. The row holds the
+  whole exchange: thinking, then the answer with **Go there** (the same jump and highlight as a result), or the
+  error with "Click to try again". `GET /api/settings/ask` says whether the CLI resolves (not whether it is signed
+  in; that shows as the run's error); when it doesn't, the row is disabled with the reason and **Set up Claude
+  Code**, which opens `integrations.claude-code.cli-path`. Copilot as a second engine isn't built.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.
@@ -240,6 +254,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |
+| `apps/web/src/components/settings/SettingsAskRow.tsx`, `apps/server/src/integrations/settingsAsk.ts` | The settings Ask: its row in the results, and the endpoint that asks Claude Code (server tested) |
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
 | `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |

@@ -10,6 +10,7 @@ import type {
   BoardSnapshot,
   FsBrowseResult,
   IntegrationsStatus,
+  SettingsAskStatus,
   NotificationList,
   SkillInfo,
   T3LaunchOptions,
@@ -34,6 +35,8 @@ export const queryKeys = {
   task: (id: string) => ["task", id] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
+  /** Whether the settings Ask can run, per Claude Code CLI setting: changing the path asks again. */
+  settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
   t3Projects: ["t3Projects"] as const,
@@ -197,6 +200,18 @@ export function useIntegrationsStatus(enabled = true) {
     queryFn: ({ signal }) => api<IntegrationsStatus>("/api/integrations/status", { signal }),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/** Whether the settings Ask can run: the Claude Code CLI is found. `cli` is the setting, so a new path is checked again. */
+export function useSettingsAskStatus(cli: string | null) {
+  return useQuery({
+    queryKey: queryKeys.settingsAsk(cli),
+    queryFn: ({ signal }) => api<SettingsAskStatus>("/api/settings/ask", { signal }),
+    // A cheap local check, and the answer changes when the user installs the CLI: look again when the page opens.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
