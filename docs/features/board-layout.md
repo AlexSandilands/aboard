@@ -228,17 +228,21 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   reaches everyone who didn't customise it. `PATCH /api/settings` replaces the whole map; loading drops entries for
   commands that no longer exist or values that no longer parse. They are in `EXPORTED_SETTINGS`, so backups carry them.
 - **Dispatch.** `resolveKeybindings` merges defaults and overrides into `ResolvedKeybinding`s (a `when` that doesn't
-  parse falls back to the default); `resolveCommand` picks the command. Only `palette.open` is `immediate`: it runs in
-  the keydown and prevents its default, the rest wait to see whether something nearer the focus claimed the key
-  (see the comment on `useGlobalKeybindings`). The control recording a new key carries `data-recording-shortcut`,
+  parse falls back to the default); `resolveCommand` picks the command. `palette.open` is `immediate`, and so is any
+  command the user moved to a key with Ctrl/Cmd or Alt (browsers keep print, find and save there): it runs in the
+  keydown and prevents its default. The rest wait to see whether something nearer the focus claimed the key
+  (see the comment on `useGlobalKeybindings`). Keys are stored normalized (each modifier once, in the order mod,
+  shift, alt). The control recording a new key carries `data-recording-shortcut`,
   and the shortcuts stand down for it.
 - **Conflicts.** `keybindingConflicts` flags two commands on the same key whose `when`s can both be true
   (`whenOverlaps` tries every assignment of the flags the two use). The flags are treated as independent, so
   `overlayOpen` and `paletteOpen` are not known to imply each other; it may flag a pair that can't really collide.
 - **Editor.** Settings → Board → Keybindings (`KeybindingsSection`): a row per command, grouped by the registry's
   `group`, with a button that records the next key combination (Esc records too; clicking away cancels), a `When`
-  field that saves on blur and shows the parse error, a conflict note, and Reset / Reset all (`keybindings.logic.ts`
-  keeps the stored map free of values equal to the default). Rows have ids `board.keybindings.<command>`, which the
+  field that saves on blur and shows the parse error, a conflict note, a warning when a bare character would run the
+  command while typing in a field (`triggersWhileTyping`), and Reset / Reset all (`keybindings.logic.ts` keeps the
+  stored map free of values equal to the default; saves are built from the cache, which is patched at once, so two
+  edits in a row don't lose the first). Rows have ids `board.keybindings.<command>`, which the
   settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
   header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
