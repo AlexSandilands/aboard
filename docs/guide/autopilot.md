@@ -1,8 +1,10 @@
 # Autopilot
 
 Autopilot lets the board act on its own. It is a list of **automations**, each of which watches the board and
-does something when it's needed. Everything is off until you switch it on, and Autopilot never merges, closes
-or deletes a task, force-pushes, or pushes to the default branch.
+does something when it's needed. Everything is off until you switch it on, and Autopilot never merges into the
+default branch, closes or deletes a task, force-pushes, or pushes to the default branch. The one merge it makes is
+a task's pull request into its epic's integration branch, for an epic you set to deliver that way
+([Merge into epic branch](#merge-into-epic-branch)).
 
 ## Switching automations on
 
@@ -108,7 +110,8 @@ suggested tier. Its settings:
 
 - **Implement skill**: what the agent follows; the default is the board's own workflow.
 - **Runner**, **budget**, **timeout** and **T3 Code access**, as in [How agents run](#how-agents-run).
-- **Start from**: the branch its worktree starts from; blank is the project's default branch.
+- **Start from**: the branch its worktree starts from; blank is the project's default branch. A task of an epic
+  delivered through an integration branch always starts from that branch, and opens its pull request against it.
 - **Start grace period** (15 minutes): the agent moves the task to In Progress itself.
 
 **Agent runs at once** limits how many of its agents are working: a T3 Code thread keeps its place until it goes
@@ -120,6 +123,30 @@ It tries a task once each time it enters Planned. If the run fails, or the task 
 grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
 a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
 **Dry run** to see which tasks it would start.
+
+## Merge into epic branch
+
+For an epic whose tasks build on each other, waiting for you to merge each pull request before the next task can
+start means the epic stops every time a task is done. An epic can instead deliver through an **integration branch**:
+
+- Set it with the branch button next to the epic's Autopilot button in its panel, or at the bottom of the epic's
+  Autopilot popover: **Delivery: Pull requests to main** (the default) or **Integration branch**. The board makes
+  the branch `epic/<number>-<title>` on origin from your default branch. Agents ask you about this when they plan
+  an epic whose tasks depend on each other; they never choose for you.
+- The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
+  hand-off prompts and **New T3 Code thread…** all default to it.
+- **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit, once all of
+  these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
+  PRs (when it's on) found nothing at or above the fix threshold at the current commit, its checks pass and it
+  merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- If GitHub won't let it merge (a branch rule wants an approving review, say), the task shows **Ready to merge into
+  the epic branch** under Needs attention and you get a notification. Merge it yourself.
+- After the first merge it opens a **draft pull request** from the epic's branch into the default branch, links it
+  on the epic and keeps its description listing every task with its pull request and reviews. If it conflicts with
+  the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.**
+- You can go back to pull requests to main until one of the epic's tasks has started.
+
+Switch **Merge into epic branch** on for the epic (or its project). It needs no agent and has no settings.
 
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).

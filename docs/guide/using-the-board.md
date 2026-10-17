@@ -87,6 +87,10 @@ Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste pro
 (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. With [T3 Code](t3-code.md) paired,
 **New T3 Code thread…** starts a thread for the task directly.
 
+A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
+[Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
+says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
+
 ## Your layout
 
 Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the

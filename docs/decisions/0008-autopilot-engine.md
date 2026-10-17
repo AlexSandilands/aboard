@@ -33,8 +33,12 @@ scheduled agent run, or rules inside the server that start an agent only when an
 - **Limits.** Pause all stops new runs (running ones finish). Quiet hours, the concurrency cap and the daily
   run and spend caps hold back only runs that start an agent, which are the ones that cost money and touch code.
   Held candidates aren't recorded; a later pass picks them up.
-- **Safety.** Autopilot never merges, closes or deletes tasks, never force-pushes and never pushes to the
-  default branch. Runners and automations must keep to that; it isn't a setting.
+- **Safety.** Autopilot never merges into the default branch, closes or deletes tasks, never force-pushes and
+  never pushes to the default branch. Runners and automations must keep to that; it isn't a setting. The one merge
+  it may make is a task's PR into its epic's integration branch, when the user set the epic to integration
+  delivery (Merge into epic branch, #123); `checkAutopilotMergeTarget` in `integrations/github.ts` refuses any
+  other target, the default branch above all, on GitHub's own reading just before the merge. The epic's PR into the
+  default branch is only ever opened as a draft and described; the user merges it.
 - **REST only.** Autopilot settings, pause and resume are REST routes for the UI. There is no MCP tool for
   them, so an agent can't turn Autopilot on, raise its limits or unpause it.
 - **The review watchdog stays separate.** `apps/server/src/integrations/reviewFallbacks.ts` is a fallback
