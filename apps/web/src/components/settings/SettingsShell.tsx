@@ -27,6 +27,8 @@ import {
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import { useSettingsNav } from "~/state/ui";
+import { SettingsSearch } from "./SettingsSearch";
+import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
   activeSectionId,
   isSettingsGroup,
@@ -79,7 +81,7 @@ export function useSettingsBack(): () => unknown {
 
 /**
  * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
- * of it. The section in view is highlighted. On narrow windows this is the off-canvas sheet, which closes on a pick.
+ * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow windows this is the off-canvas sheet, which closes on a pick.
  */
 export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
@@ -100,47 +102,60 @@ export function SettingsSidebar() {
     });
   };
 
+  const openResult = (entry: SettingsIndexEntry) => {
+    if (isMobile) setOpenMobile(false);
+    useSettingsNav.getState().setActiveSection(entry.sectionId);
+    openSettings(entry.id, {
+      project: entry.group === "project" ? project : undefined,
+      replace: entry.group === current && !inEditor,
+      // A sub-section is a whole stretch of the page: scrolling to it says enough.
+      highlight: entry.kind !== "section",
+    });
+  };
+
   return (
     <>
       <SidebarBrandRow />
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {SETTINGS_GROUPS.map((group) => {
-              const Icon = GROUP_ICONS[group.id];
-              const here = group.id === current;
-              return (
-                <SidebarMenuItem key={group.id}>
-                  <SidebarMenuButton
-                    isActive={here && (inEditor || active === null)}
-                    aria-current={here ? "page" : undefined}
-                    onClick={() => go(group.id, group.id)}
-                  >
-                    <Icon />
-                    <span className="truncate">{group.label}</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub className="mt-0.5 mb-1.5">
-                    {group.sections.map((section) => (
-                      <SidebarMenuSubItem key={section.id}>
-                        <SidebarMenuSubButton
-                          // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
-                          render={<button type="button" />}
-                          size="sm"
-                          className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
-                          isActive={here && !inEditor && active === section.id}
-                          onClick={() => go(section.id, group.id)}
-                        >
-                          <span>{section.label}</span>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
+      <SettingsSearch onOpen={openResult}>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              {SETTINGS_GROUPS.map((group) => {
+                const Icon = GROUP_ICONS[group.id];
+                const here = group.id === current;
+                return (
+                  <SidebarMenuItem key={group.id}>
+                    <SidebarMenuButton
+                      isActive={here && (inEditor || active === null)}
+                      aria-current={here ? "page" : undefined}
+                      onClick={() => go(group.id, group.id)}
+                    >
+                      <Icon />
+                      <span className="truncate">{group.label}</span>
+                    </SidebarMenuButton>
+                    <SidebarMenuSub className="mt-0.5 mb-1.5">
+                      {group.sections.map((section) => (
+                        <SidebarMenuSubItem key={section.id}>
+                          <SidebarMenuSubButton
+                            // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
+                            render={<button type="button" />}
+                            size="sm"
+                            className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
+                            isActive={here && !inEditor && active === section.id}
+                            onClick={() => go(section.id, group.id)}
+                          >
+                            <span>{section.label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </SettingsSearch>
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -251,6 +266,18 @@ function pinInView(area: HTMLElement, element: HTMLElement, onSettled: () => voi
 }
 const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
+/** How long a picked setting stays marked; the animation in `index.css` fades it over this time. */
+const FLASH_MS = 1600;
+
+/** Marks `element` for a moment so the eye finds it after a jump (`.settings-flash`, see `index.css`). */
+function flashElement(element: HTMLElement) {
+  element.classList.remove("settings-flash");
+  // Reading a layout property restarts the animation when the same element is picked again.
+  void element.offsetWidth;
+  element.classList.add("settings-flash");
+  window.setTimeout(() => element.classList.remove("settings-flash"), FLASH_MS);
+}
+
 // The scroll request last brought into view, so a page mounting later doesn't replay it. A request is only handled
 // once a page finds its target: the page being left sees it first, and the page being opened must still act on it.
 let handledScroll = 0;
@@ -333,6 +360,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
           if (nonce !== null) handledScroll = Math.max(handledScroll, nonce);
         };
         element.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+        if (target?.highlight && !fromHash) flashElement(element);
         if (sectionOf(id)) useSettingsNav.getState().setActiveSection(sectionOf(id)!.id);
         // A page that just opened is still loading what sits above and below the target, so it stays pinned until
         // that settles, and only then counts as handled: if this effect is cleaned up first (a remount), the next

@@ -246,13 +246,14 @@ interface SettingsNavState {
   activeSection: string | null;
   /**
    * A section or row to bring into view once it renders. `nonce` repeats a scroll to the same target; `at` lets a
-   * request nobody could fulfil expire rather than fire on some later page.
+   * request nobody could fulfil expire rather than fire on some later page. `highlight` flashes the element once
+   * it is in view (a pick from settings search).
    */
-  scrollTarget: { id: string; nonce: number; at: number } | null;
+  scrollTarget: { id: string; nonce: number; at: number; highlight: boolean } | null;
   /** The board's search when Settings opened, so Back returns to the same view. */
   boardReturn: BoardSearch;
   setActiveSection: (id: string | null) => void;
-  requestScroll: (id: string) => void;
+  requestScroll: (id: string, highlight?: boolean) => void;
   setBoardReturn: (search: BoardSearch) => void;
 }
 
@@ -261,8 +262,8 @@ export const useSettingsNav = create<SettingsNavState>()((set) => ({
   scrollTarget: null,
   boardReturn: {},
   setActiveSection: (activeSection) => set({ activeSection }),
-  requestScroll: (id) =>
-    set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1, at: Date.now() } })),
+  requestScroll: (id, highlight = false) =>
+    set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1, at: Date.now(), highlight } })),
   setBoardReturn: (boardReturn) => set({ boardReturn }),
 }));
 

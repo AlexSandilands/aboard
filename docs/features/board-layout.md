@@ -157,7 +157,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
 - **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
   (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
-  will target them.
+  targets them.
 - **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
   `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
@@ -166,6 +166,18 @@ rule editor take `?project=`; without it the page shows the project the board wa
   opened, sections are still filling in as their queries load, so the target stays pinned to the top until that
   settles (`pinInView`, about 1.5 s, or until the user scrolls). A request counts as handled only then, so the page
   being left, which sees the request first, leaves it for the page being opened. A reload honours the hash.
+- **Search.** `SettingsSearch` sits between the brand row and the list. `settingsIndex()`
+  (`settingsIndex.logic.ts`) is the index it searches, and the settings "Ask" will read: every sub-section (from
+  `SETTINGS_GROUPS`), card and row with its title, description, keywords, group, sub-section and `foldedIn` (the
+  folded section to open, for the built-in automations). Notification kinds and model tiers are generated from
+  their contracts; the rest is written by hand, since the rows are JSX. `settingsIndex.logic.test.ts` scans the
+  component sources for rendered ids and fails on a row without an entry, or an entry without a row. Only
+  per-GitHub-host rows (`DYNAMIC_ROW_PREFIXES`) go unlisted. A new setting therefore needs an entry in `WRITTEN`
+  there. `searchSettings` (`settingsSearch.logic.ts`) needs every word to match and ranks by the worst word's best
+  field: title (exact, prefix, word start, contains), keyword, group or sub-section name, description. `/` and
+  Ctrl/Cmd+F focus the box (`isSearchShortcut`). A pick calls `useOpenSettings` with `highlight`, which
+  `requestScroll` carries to `SettingsScroller`; it scrolls, `FoldedSettingsSection` opens when the id is its own or
+  under it, and `flashElement` adds `.settings-flash` for 1.6 s. Picking a sub-section only scrolls.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.
@@ -222,6 +234,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
+| `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
 | `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |
