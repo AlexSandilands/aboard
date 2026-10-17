@@ -1,6 +1,8 @@
 import { reviewBadgeLabel, type TaskDetail, type TaskRelation } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
-import { isSessionLink } from "./links.logic";
+import { isSessionLink, type PlainLink } from "./links.logic";
+
+type PrLink = Extract<PlainLink, { kind: "pr" }>;
 
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
 export const SECTION_IDS = [
@@ -168,6 +170,15 @@ export const SUMMARY_CHIP_LIMIT = { labels: 3, sessions: 4, links: 3, relations:
 /** The first `max` items and how many were left out, for a "+N" chip. */
 export function limitItems<T>(items: ReadonlyArray<T>, max: number): { shown: T[]; hidden: number } {
   return { shown: items.slice(0, max), hidden: Math.max(0, items.length - max) };
+}
+
+/** The PRs a collapsed Links header shows, and how many links (more PRs or any other kind) it leaves out. */
+export function linkSummaryChips(links: ReadonlyArray<PlainLink>): { prs: PrLink[]; rest: number } {
+  const { shown } = limitItems(
+    links.filter((link): link is PrLink => link.kind === "pr"),
+    SUMMARY_CHIP_LIMIT.links,
+  );
+  return { prs: shown, rest: links.length - shown.length };
 }
 
 export interface RelationChip {

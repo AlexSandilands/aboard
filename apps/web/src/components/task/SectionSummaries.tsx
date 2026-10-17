@@ -6,8 +6,15 @@ import { useOpenTask } from "~/components/board/boardNavigation";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { Badge } from "~/components/ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import type { SessionLink } from "~/components/sessions/sessions.logic";
 import type { LinkGroups, PlainLink } from "./links.logic";
-import { limitItems, relationChipGroups, SUMMARY_CHIP_LIMIT, type RelationChip } from "./sections.logic";
+import {
+  limitItems,
+  linkSummaryChips,
+  relationChipGroups,
+  SUMMARY_CHIP_LIMIT,
+  type RelationChip,
+} from "./sections.logic";
 import { StepSegments } from "./StepVisuals";
 
 /**
@@ -39,14 +46,17 @@ export function LabelsSummary({ labels }: { labels: ReadonlyArray<string> }) {
   );
 }
 
-/** One button per thread or session, each with its status dot and the menu a card's chip has. */
+/**
+ * One button per thread or session (the ones folded into a thread's menu included), each with its status dot and the
+ * menu a card's chip has. A thread's button just opens it in T3 Code.
+ */
 export function SessionsSummary({
   rows,
   taskId,
   t3,
   settings,
 }: {
-  rows: LinkGroups["sessionRows"];
+  rows: ReadonlyArray<LinkGroups["sessionRows"][number] | SessionLink>;
   taskId: string;
   t3: T3IntegrationStatus;
   settings: AppSettings | undefined;
@@ -68,12 +78,10 @@ export function SessionsSummary({
 
 /** PRs coloured by state, then how many other links there are. Only for a task with a PR; the text says it otherwise. */
 export function LinksSummary({ links }: { links: ReadonlyArray<PlainLink> }) {
-  const prs = links.filter((link) => link.kind === "pr");
-  const { shown } = limitItems(prs, SUMMARY_CHIP_LIMIT.links);
-  const rest = links.length - shown.length;
+  const { prs, rest } = linkSummaryChips(links);
   return (
     <>
-      {shown.map((link) => (
+      {prs.map((link) => (
         <PrStatusChip key={link.id} link={link} />
       ))}
       <More count={rest} label={`${rest} more ${rest === 1 ? "link" : "links"}`} />

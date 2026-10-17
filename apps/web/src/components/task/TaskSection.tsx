@@ -63,7 +63,12 @@ export function TaskSection({
             </h3>
             {rich ? (
               <>
-                <div className="flex min-w-0 items-center gap-1 overflow-hidden" title={frame.summary}>
+                {/* Clicks on the parts that aren't controls toggle too; controls stop theirs (linkHandlers). The padding keeps focus rings inside the clip. */}
+                {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a pointer shortcut; the toggle button is the keyboard route */}
+                <div
+                  className="-mx-0.5 -my-1 flex min-w-0 cursor-pointer items-center gap-1 overflow-hidden px-0.5 py-1"
+                  onClick={frame.onToggle}
+                >
                   {rich}
                 </div>
                 {/* The rest of the header still toggles, as it did when the summary was inside the button. */}

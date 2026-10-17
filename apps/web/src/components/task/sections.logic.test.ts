@@ -1,9 +1,11 @@
 import type { TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
+import type { PlainLink } from "./links.logic";
 import {
   collapsedByDefault,
   firstLine,
   limitItems,
+  linkSummaryChips,
   moveSection,
   normalizeSectionLayout,
   relationChipGroups,
@@ -307,5 +309,24 @@ describe("relationChipGroups", () => {
     const groups = relationChipGroups({ blockedBy: [relation(1, "planned")], blocks: [relation(9, "backlog")] });
     expect(groups.map((g) => g.kind)).toEqual(["blockedBy", "blocks"]);
     expect(groups[1]?.chips).toEqual([{ id: "t9", number: 9, title: "Task 9", tone: "neutral" }]);
+  });
+});
+
+describe("linkSummaryChips", () => {
+  const pr = (id: string) => ({ id, kind: "pr" }) as PlainLink;
+  const jira = (id: string) => ({ id, kind: "jira" }) as PlainLink;
+
+  it("shows PRs and counts every other link as the rest", () => {
+    expect(linkSummaryChips([pr("a"), jira("b"), jira("c")])).toEqual({ prs: [pr("a")], rest: 2 });
+  });
+
+  it("counts PRs past the cap as part of the rest", () => {
+    const { prs, rest } = linkSummaryChips([pr("a"), pr("b"), pr("c"), pr("d"), jira("e")]);
+    expect(prs.map((p) => p.id)).toEqual(["a", "b", "c"]);
+    expect(rest).toBe(2);
+  });
+
+  it("has nothing to show without a PR", () => {
+    expect(linkSummaryChips([jira("a")])).toEqual({ prs: [], rest: 1 });
   });
 });
