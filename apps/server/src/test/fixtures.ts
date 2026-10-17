@@ -13,6 +13,7 @@ export const defaultSettings: AppSettings = {
   t3TokenSet: false,
   autoReview: false,
   reviewSkill: { source: "builtin" },
+  planSkill: { source: "builtin" },
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
   headlessReviewEnabled: false,
   agentT3Threads: false,

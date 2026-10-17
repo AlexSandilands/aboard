@@ -34,10 +34,10 @@ and a click tries again.
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
-| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Review](local-review.md), Models (model tiers) |
+| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), Models (model tiers) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
-| **Project**      | General (name, icon, folder), Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
+| **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
   when it isn't set up or the board can't tell (Codex is set up on its side, so its dot stays grey).

@@ -399,7 +399,7 @@ describe("restore", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
     // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag or priority columns, no
-    // relations, no Autopilot settings.
+    // project planning skill, no relations, no Autopilot settings.
     const {
       autopilot_settings: _a,
       autopilot_recurring: _rc,
@@ -415,6 +415,7 @@ describe("restore", () => {
       autopilot_settings: [],
       autopilot_recurring: [],
       autopilot_custom: [],
+      projects: dump.projects.map(({ plan_skill_json: _ps, ...project }) => project),
       tasks: dump.tasks.map((bundle) => {
         const {
           suggested_tier: _t,

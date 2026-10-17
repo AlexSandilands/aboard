@@ -168,6 +168,19 @@ opening a session that is still running brings that window back to the front. On
 or longer than about 8,000 characters, can't go on the command line: the session starts with a short pointer to the
 task instead, and the full prompt is on your clipboard to paste.
 
+## Planning several tasks at once
+
+To plan a batch of tasks in one go, Ctrl-click (⌘-click on a Mac) their cards to pick them, then use **Plan tasks…**
+in the project's lane header (the button shows how many are picked; Esc or a plain click drops the pick). Choose a new
+T3 Code thread, a Claude Code or Copilot CLI session, or **Copy planning prompt**, tick the tasks you want in the list
+(picked cards are already ticked), and continue. One agent then walks you through a plan for each task: it looks into
+the code, shows you its draft and asks its questions, lets you approve simple tasks together and goes through bigger
+ones one at a time, and saves each plan with its suggested model and labels. The thread or session is linked to every
+task, and runs in the project's own folder since planning writes no code.
+
+The agent follows the built-in planning skill. To use one of your own, pick it under **Settings → Tasks → Planning**,
+or for one project on that project's settings page.
+
 ## Your layout
 
 Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the

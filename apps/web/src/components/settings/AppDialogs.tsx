@@ -1,5 +1,6 @@
 import { ImagePreviewDialog } from "~/components/attachments/ImagePreviewDialog";
 import { DigestDialog } from "~/components/digest/DigestDialog";
+import { PlanSessionDialog, PlanTasksDialog } from "~/components/handoff/PlanTasksDialog";
 import { SessionLaunchDialog } from "~/components/handoff/SessionLaunchDialog";
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
@@ -14,6 +15,8 @@ export function AppDialogs() {
       <DigestDialog />
       <T3LaunchDialog />
       <SessionLaunchDialog />
+      <PlanTasksDialog />
+      <PlanSessionDialog />
       <MergePrDialog />
       <SessionWarningDialog />
       <TemplateDraftDialog />

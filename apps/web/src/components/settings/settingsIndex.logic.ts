@@ -211,6 +211,13 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "The Jira MCP tools Claude Code may use to read an issue, comma-separated.",
     ["issue import", "mcp", "atlassian", "allowed tools"],
   ),
+  // Tasks › Planning
+  draft(
+    "tasks.planning.skill",
+    "Planning skill",
+    "What a session started with Plan tasks… follows to plan the picked tasks with you.",
+    ["plan tasks", "bulk planning", "planner", "prompt", "skill"],
+  ),
   // Tasks › Review
   draft(
     "tasks.review.before-pr",
@@ -441,6 +448,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "import",
     "link",
   ]),
+  draft(
+    "project.plan-skill.skill",
+    "Project planning skill",
+    "A planning skill for this project's Plan tasks… sessions, instead of the board's.",
+    ["plan tasks", "bulk planning", "override", "planner"],
+  ),
   draft(
     "project.review-skill.skill",
     "Project review skill",

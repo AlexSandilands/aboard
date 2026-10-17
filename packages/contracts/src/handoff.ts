@@ -134,8 +134,8 @@ export function taskHandoffPrompt({
           "This has no plan yet. I want to shape the plan with you before any code is written.",
           `1. ${getTask} to read the task, then explore the relevant code.`,
           "2. Ask me clarifying questions about scope, approach and anything ambiguous.",
-          "3. Propose a plan: phases of 3-8 concrete, verifiable steps, plus the key decisions for the plan context.",
-          "4. Once I agree, save it with set_plan and move the task to planned with move_task. If the result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered.",
+          "3. Propose a plan: phases of 3-8 concrete, verifiable steps, plus the key decisions for the plan context. Print it in full as its own message first, and only then ask me about it (never put the plan only inside a question dialog).",
+          "4. Once I agree, save it with set_plan and move the task to planned with move_task. If the result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered. End the turn with a message that restates the plan you saved: some apps collapse everything but a turn's last message.",
           "Don't implement anything yet.",
         ]
       : [

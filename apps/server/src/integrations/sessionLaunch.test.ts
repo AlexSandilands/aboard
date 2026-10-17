@@ -387,3 +387,58 @@ describe("shortPrompt for a fix", () => {
     expect(text).toContain("Never force-push, never push to the default branch and never merge");
   });
 });
+
+describe("starting a planning session from the board", () => {
+  const sessionLinksOf = (app: ReturnType<typeof appWith>, taskId: string) =>
+    app.services.tasks
+      .summary(taskId)
+      .links.filter((l): l is Extract<TaskLink, { kind: "agent_session" }> => l.kind === "agent_session");
+
+  const plan = async (app: ReturnType<typeof appWith>, input: Record<string, unknown>) => {
+    const res = await app.request(`/api/projects/${app.task.projectId}/plan-session`, {
+      method: "POST",
+      json: { harness: "claude-code", prompt: "Plan them", model: null, ...input },
+    });
+    return { status: res.status, body: (await res.json()) as StartSessionResult & { error?: unknown } };
+  };
+
+  it("runs in the project's checkout and links the one session to every task", async () => {
+    const app = appWith();
+    const second = app.services.tasks.create({ projectId: app.task.projectId, title: "More" });
+    const { status, body } = await plan(app, { taskIds: [app.task.id, `#${second.number}`] });
+    expect(status).toBe(201);
+    expect(body).toMatchObject({ launched: true, cwd: app.root, branch: null, shortPrompt: null });
+    const [first] = sessionLinksOf(app, app.task.id);
+    const [other] = sessionLinksOf(app, second.id);
+    expect(first).toMatchObject({ label: "Planning #1, #2", window: WINDOW, ref: { cwd: app.root } });
+    expect(other!.ref.sessionId).toBe(first!.ref.sessionId);
+    expect(body.linkId).toBe(first!.id);
+    expect(app.spawned).toHaveLength(1);
+    expect(app.spawned[0]!.args).toContain("Planning #1, #2");
+  });
+
+  it("starts nothing when a task can't be planned there", async () => {
+    const app = appWith();
+    const planned = app.services.tasks.create({ projectId: app.task.projectId, title: "Planned" });
+    app.services.plans.setPlan(planned.id, { phases: [{ title: "x", steps: [{ title: "y" }] }] }, "user");
+    app.services.tasks.move(planned.id, { status: "planned" }, "user");
+    const epic = app.services.tasks.create({ projectId: app.task.projectId, title: "Epic", kind: "epic" });
+    const elsewhere = app.services.projects.create({ title: "Beta" });
+    const foreign = app.services.tasks.create({ projectId: elsewhere.id, title: "Foreign" });
+    for (const id of [planned.id, epic.id, foreign.id]) {
+      const { status } = await plan(app, { taskIds: [app.task.id, id] });
+      expect(status).toBe(400);
+    }
+    expect(app.spawned).toHaveLength(0);
+    expect(sessionLinksOf(app, app.task.id)).toHaveLength(0);
+  });
+
+  it("falls back to a short prompt that fetches the planning prompt over MCP", async () => {
+    const app = appWith();
+    const { body } = await plan(app, { taskIds: [app.task.id], prompt: "word ".repeat(2000) });
+    expect(body.shortReason).toMatch(/too long/);
+    // Windows command lines get single quotes for double ones.
+    expect(body.shortPrompt).toContain("get_handoff_prompt(tasks: ['#1'], mode: 'plan')");
+    expect(sessionLinksOf(app, app.task.id)).toHaveLength(1);
+  });
+});

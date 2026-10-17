@@ -21,6 +21,7 @@ import { useDeleteProject, useUpdateProject } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
 import { useSettingsNav } from "~/state/ui";
 import { FolderPicker } from "../FolderPicker";
+import { ProjectPlanSkillSection } from "../PlanSkillSection";
 import { ProjectReviewSection } from "../ProjectReviewSection";
 import { SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { resolveSettingsProject } from "../settingsNav.logic";
@@ -258,6 +259,9 @@ function ProjectSections({ project }: { project: Project }) {
             }
           />
         </SettingsSection>
+      </SettingsSubsection>
+      <SettingsSubsection id="project.plan-skill">
+        <ProjectPlanSkillSection project={project} />
       </SettingsSubsection>
       <SettingsSubsection id="project.review-skill">
         <ProjectReviewSection project={project} />

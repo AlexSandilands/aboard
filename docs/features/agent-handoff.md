@@ -59,10 +59,40 @@ Backlog or without a plan, and off otherwise. The copy button offers "Copy promp
 
 #### Suggest epics (projects)
 
-A project has one hand-off, in its lane header: **Suggest epics**, as a new T3 Code thread or a copied prompt. An
+A project has two hand-offs in its lane header. The first is **Suggest epics**, as a new T3 Code thread or a copied prompt. An
 agent proposes epics for the project's open tasks and creates the ones the user agrees to. The launch dialog is
 the same, without **Plan with me** or a task to link
 ([epics.md](epics.md#suggesting-epics)).
+
+#### Plan tasks (several tasks at once)
+
+The second, **Plan tasks…**, starts one session that plans several of the project's tasks with the user. Ctrl/⌘-click
+picks cards on the board (`useBoardPick` in `state/ui.ts`, not persisted; a plain click on a card or Esc drops the
+pick, and a Ctrl/⌘-press never starts a drag), and the button shows how many of the lane's cards are picked. Its menu
+offers a new T3 Code thread, a session for each installed CLI, or the prompt to copy; each opens a picker
+(`PlanTasksDialog`) listing the tasks a planning session can take, with the picked ones ticked. Those are the open
+tasks still in Backlog or without a plan, never an epic (`planTaskProblem` in contracts, which the server checks too);
+one session takes up to 50.
+
+The prompt (`planTasksPrompt` in `packages/contracts/src/planPrompt.ts`) lists each task with its `get_task` call and
+says how to plan: the built-in **aboard-plan** skill's text (`BUILTIN_PLAN_SKILL_BODY`, shipped as
+`skills/aboard-plan/SKILL.md`; a test keeps them identical), or a pointer to the skill chosen in Settings → Tasks →
+Planning or, per project, on its settings page (`planSkill`, the same shape as the review skill; the project's wins).
+The skill has the agent research each task, print the draft plan before asking anything, approve simple tasks as a
+set and complex ones one at a time, then save each (`set_plan` with a tier, labels, `move_task` to planned) and ask
+about the Autopilot flag. It ends each turn by restating what was saved, since T3 Code folds every message of a
+finished turn but the last.
+
+- **T3 Code**: the launch dialog, without **Plan with me** and starting in the project's checkout (planning writes no
+  code). `POST /api/projects/:id/plan-thread` checks the tasks before anything starts, starts the thread titled
+  "Planning #3, #4: <project>" and links it to every task.
+- **Claude Code or Copilot CLI**: `POST /api/projects/:id/plan-session` opens the CLI in the project's checkout and
+  links the one session to every task, labelled "Planning #3, #4"
+  ([agent-sessions.md](agent-sessions.md#starting-a-session)).
+- **Copy prompt** copies it for any harness; that agent links itself to each task.
+
+Agents get the same prompt from `get_handoff_prompt(tasks: ["#3", "#4"])`, which is also where a CLI session's short
+prompt sends it when the full one can't go on the command line.
 
 #### Orchestrate (epics) and subagents
 
@@ -282,10 +312,13 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | File | What it does |
 |---|---|
 | `packages/contracts/src/handoff.ts` | The hand-off prompts (`taskHandoffPrompt`: work, plan, orchestrate, subagent), the suggested model line and the default mode |
+| `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
+| `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
-| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task or a project) and its pickers; pure logic in `handoff.logic.ts` |
+| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pure logic in `handoff.logic.ts` |
+| `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards to plan |
 | `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Tasks → Models |

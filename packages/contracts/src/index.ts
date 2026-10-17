@@ -3,6 +3,7 @@ export * from "./schemas.ts";
 export * from "./labels.ts";
 export * from "./reviews.ts";
 export * from "./reviewPrompt.ts";
+export * from "./planPrompt.ts";
 export * from "./derive.ts";
 export * from "./identity.ts";
 export * from "./links.ts";

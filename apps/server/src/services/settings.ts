@@ -26,6 +26,7 @@ const DEFAULTS: StoredSettings = {
   agentT3Threads: false,
   autoReview: false,
   reviewSkill: { source: "builtin" },
+  planSkill: { source: "builtin" },
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
   headlessReviewEnabled: false,
   headlessReviewCli: null,
@@ -62,6 +63,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "agentT3Threads",
     "autoReview",
     "reviewSkill",
+    "planSkill",
     "reviewMaxRounds",
     "headlessReviewEnabled",
     "headlessReviewCli",
@@ -164,6 +166,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.t3Token !== undefined) repos.settings.set("t3Token", blankToNull(input.t3Token));
         if (input.autoReview !== undefined) repos.settings.set("autoReview", input.autoReview);
         if (input.reviewSkill !== undefined) repos.settings.set("reviewSkill", input.reviewSkill);
+        if (input.planSkill !== undefined) repos.settings.set("planSkill", input.planSkill);
         if (input.reviewMaxRounds !== undefined && input.reviewMaxRounds !== load().reviewMaxRounds) {
           repos.settings.set("reviewMaxRounds", input.reviewMaxRounds);
           // Whether a review is stuck depends on the limit, so reviewed cards change with it.

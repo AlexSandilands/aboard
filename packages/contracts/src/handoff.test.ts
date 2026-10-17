@@ -39,6 +39,9 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("Ask me clarifying questions");
     expect(prompt).toContain("set_plan");
     expect(prompt).toContain("Don't implement anything yet.");
+    // Printed before the questions and restated last, so apps that fold a finished turn keep it in view.
+    expect(prompt).toContain("Print it in full as its own message first");
+    expect(prompt).toContain("restates the plan you saved");
   });
 
   it("tells a board-started thread it is already linked, instead of asking it to link itself", () => {

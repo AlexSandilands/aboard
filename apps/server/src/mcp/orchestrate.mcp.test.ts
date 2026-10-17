@@ -59,6 +59,22 @@ describe("orchestrating an epic over MCP", () => {
     expect((await call(agent, "get_handoff_prompt", { task: "#3" })).text).toContain(`Let's plan #3 "Payment form"`);
   });
 
+  it("gives several tasks one planning prompt, and refuses tasks that can't be planned", async () => {
+    h.services.tasks.create({ projectId: h.services.tasks.summary(taskId).projectId, title: "Receipts" });
+    const both = await call(agent, "get_handoff_prompt", { tasks: ["#3", "#4"] });
+    expect(both.isError).toBe(false);
+    expect(both.text).toContain("Plan prompt for #3, #4. Pass it on as it is:");
+    expect(both.text).toContain("Let's plan 2 tasks in the Alpha project");
+    expect(both.text).toContain('- #4 "Receipts"');
+    expect(both.text).toContain("# Planning tasks");
+
+    const planned = await call(agent, "get_handoff_prompt", { tasks: ["#3", "#1"] });
+    expect(planned).toMatchObject({ isError: true });
+    expect(planned.text).toContain("#1 is an epic");
+    expect((await call(agent, "get_handoff_prompt", { tasks: ["#3"], mode: "work" })).isError).toBe(true);
+    expect((await call(agent, "get_handoff_prompt", {})).isError).toBe(true);
+  });
+
   it("gives a subagent its own prompt, with the suggested model addressed to the orchestrator", async () => {
     h.services.settings.update({
       modelTiers: {

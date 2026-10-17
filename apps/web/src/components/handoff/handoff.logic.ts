@@ -1,6 +1,7 @@
 import {
   defaultBaseRef,
   type AppSettings,
+  type PlanSkillRef,
   type Project,
   type T3IntegrationStatus,
   type T3LaunchModel,
@@ -34,6 +35,12 @@ export function canStartT3Thread(
 ): boolean {
   return showHandoffActions(task) && canStartProjectT3Thread(project, t3, settings);
 }
+
+/** The skill a project's planning sessions follow: its own, else the board's, else the built-in one. */
+export const planSkillOf = (
+  project: Pick<Project, "planSkill">,
+  settings: Pick<AppSettings, "planSkill"> | undefined,
+): PlanSkillRef => project.planSkill ?? settings?.planSkill ?? { source: "builtin" };
 
 /** A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. */
 export function canStartProjectT3Thread(

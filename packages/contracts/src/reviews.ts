@@ -27,19 +27,32 @@ export type ReviewRoundStatus = z.infer<typeof ReviewRoundStatus>;
 export const ReviewTrigger = z.enum(["move", "manual"]);
 export type ReviewTrigger = z.infer<typeof ReviewTrigger>;
 
+/** A skill an agent follows: `builtin` is the board's own, else a SKILL.md found on disk. */
+const skillRef = () =>
+  z.discriminatedUnion("source", [
+    z.object({ source: z.literal("builtin") }),
+    z.object({
+      source: z.enum(["global", "project"]),
+      name: z.string().min(1),
+      /** Absolute path to the SKILL.md. */
+      path: z.string().min(1),
+    }),
+  ]);
+
 /** A skill the reviewer follows. `builtin` is the board's own review skill. */
-export const ReviewSkillRef = z.discriminatedUnion("source", [
-  z.object({ source: z.literal("builtin") }),
-  z.object({
-    source: z.enum(["global", "project"]),
-    name: z.string().min(1),
-    /** Absolute path to the SKILL.md. */
-    path: z.string().min(1),
-  }),
-]);
+export const ReviewSkillRef = skillRef();
 export type ReviewSkillRef = z.infer<typeof ReviewSkillRef>;
 
 export const BUILTIN_REVIEW_SKILL_NAME = "aboard-review";
+
+/** A skill bulk-planning sessions follow, the same shape as a review skill. `builtin` is the board's own. */
+export const PlanSkillRef = skillRef();
+export type PlanSkillRef = z.infer<typeof PlanSkillRef>;
+
+export const BUILTIN_PLAN_SKILL_NAME = "aboard-plan";
+
+export const planSkillName = (skill: PlanSkillRef): string =>
+  skill.source === "builtin" ? BUILTIN_PLAN_SKILL_NAME : skill.name;
 
 /** Actor the board's own headless reviewer records rounds as. */
 export const BOARD_REVIEWER = "board reviewer";

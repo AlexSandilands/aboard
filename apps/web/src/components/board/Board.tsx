@@ -31,7 +31,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
-import { useBoardView, usePalette, usePanel, useReveal } from "~/state/ui";
+import { anyDialogOpen, useBoardPick, useBoardView, useDialogs, usePalette, usePanel, useReveal } from "~/state/ui";
 import {
   buildLanes,
   COLUMN_PREVIEW_COUNT,
@@ -125,6 +125,17 @@ export function Board() {
     if (!boardTasks) return;
     useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
   }, [boardTasks]);
+  // Esc drops the cards picked to plan; dialogs and menus handle their own Esc first.
+  const hasPick = useBoardPick((s) => s.picked.length > 0);
+  useEffect(() => {
+    if (!hasPick) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || anyDialogOpen(useDialogs.getState())) return;
+      useBoardPick.getState().clearPicked();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hasPick]);
   // In-progress-only looks across every project, so a project scope waits (it comes back when the filter is off).
   const inProgressOnly = useBoardFilters().inProgress;
   const scopedProject = inProgressOnly ? null : (boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null);

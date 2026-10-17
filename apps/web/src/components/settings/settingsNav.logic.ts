@@ -40,6 +40,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     label: "Tasks",
     sections: [
       section("tasks.new-tasks", "New tasks", ["templates", "issue import", "jira", "github issues"]),
+      section("tasks.planning", "Planning", ["plan tasks", "planning skill", "bulk planning"]),
       section("tasks.review", "Review", ["local review", "rounds", "board reviewer", "skill", "budget"]),
       section("tasks.models", "Models", ["model tiers", "light", "standard", "deep"]),
     ],
@@ -70,6 +71,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     label: "Project",
     sections: [
       section("project.general", "General", ["name", "icon", "folder", "workspace"]),
+      section("project.plan-skill", "Planning skill"),
       section("project.review-skill", "Review skill"),
       section("project.autopilot", "Autopilot overrides", ["automations"]),
       section("project.recurring", "Recurring tasks", ["schedule", "rules"]),

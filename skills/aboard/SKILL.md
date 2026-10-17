@@ -38,6 +38,19 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
    Then `move_task` to `in_progress`.
 
+   **Showing a plan to the user.** Some apps collapse everything but the last message of a turn once it
+   ends, and question dialogs vanish once answered. So print the draft plan in full as its own message first
+   (what you found, then the phases and steps, the context, tier and labels), and only then ask your
+   questions, with your harness's question dialog if it has one. Never put the plan only inside a dialog or
+   its option previews. Once the plan is saved, end the turn with a message that restates what was saved,
+   making every tool call before it.
+
+   **Planning several tasks at once.** The user can pick a project's tasks on the board and start one
+   session that plans them all (a lane's **Plan tasks**). Its prompt lists the tasks and the planning skill
+   to follow; `get_handoff_prompt(tasks: ["#3", "#4"])` returns the same prompt. Plan simple tasks as one
+   set the user approves together, complex ones one at a time, and save each with `set_plan` before moving
+   it to `planned`.
+
    Tag tasks with `labels` for the kind of work, e.g. `["ui"]`, `["backend", "bug"]`, on
    `create_task` / `add_to_backlog`, or later with `update_task` (which replaces the list). Reuse the labels
    `board_overview` lists rather than inventing near-duplicates. The user filters the board by them, and

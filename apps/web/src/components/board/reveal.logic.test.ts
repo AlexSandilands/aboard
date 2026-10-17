@@ -10,6 +10,7 @@ const project = (id: string, collapsed = false): Project => ({
   workspaceKey: null,
   icon: null,
   t3ProjectId: null,
+  planSkill: null,
   reviewSkill: null,
   position: id,
   collapsed,
