@@ -427,10 +427,9 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
           await new Promise((resolve) => setTimeout(resolve, 40));
           return ++calls < 2 ? T3_DOWN : T3_UP;
         };
-        const started = Date.now();
         await expect(start({ options: { runner: "t3" } })).rejects.toThrow("T3 Code is not running");
-        expect(Date.now() - started).toBeLessThan(250);
-        expect(launches.length).toBeLessThan(15);
+        // Separate holds would each get the full 60 ms, about a dozen launches at one per 5 ms.
+        expect(launches.length).toBeLessThan(8);
       });
 
       it("fails at once on a real launch error", async () => {
@@ -441,6 +440,24 @@ describe("Autopilot runner", { timeout: 30_000 }, () => {
         });
         await expect(start({ options: { runner: "t3" } })).rejects.toThrow("No model is ready");
         expect(launches).toHaveLength(1);
+      });
+
+      it("T3 only goes on to the launch when T3 is detected but its shell isn't answering, and waits there", async () => {
+        const { start, launches } = setup({
+          t3: { ...T3_UP, liveStatus: "error", error: "T3 Code unreachable: ECONNREFUSED" },
+          holdMs: 10_000,
+          launchFailures: [t3Unavailable("T3 Code unreachable: ECONNREFUSED")],
+        });
+        expect((await start({ options: { runner: "t3" } })).runner).toBe("t3");
+        expect(launches).toHaveLength(2);
+        // A refusal (say, an expired token) still fails the run at once.
+        const refused = setup({
+          t3: { ...T3_UP, liveStatus: "error", error: "Token expired or revoked" },
+          holdMs: 10_000,
+          launchFailures: [new Error("Token expired or revoked")],
+        });
+        await expect(refused.start({ options: { runner: "t3" } })).rejects.toThrow("Token expired");
+        expect(refused.launches).toHaveLength(1);
       });
 
       it("fails at once when T3 is there but has no working token", async () => {

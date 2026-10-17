@@ -348,6 +348,9 @@ export function createAutopilotRunner(deps: {
           async () => {
             const status = await lookAtT3();
             if (t3Ready(status)) return;
+            // Detected but its shell isn't answering: T3 mid-start, or a bad token. The launch tells them apart
+            // (an unreachable T3 is waited for there, a refusal fails), so let it go on.
+            if (status.detected && status.liveStatus === "error") return;
             const reason = "T3 Code isn't connected, and this automation runs only there";
             throw status.detected ? new Error(reason) : t3Unavailable(reason);
           },

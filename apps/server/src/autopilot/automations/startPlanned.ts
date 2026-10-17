@@ -200,7 +200,14 @@ export const startPlanned = defineAutomation({
         label: `Start planned · #${task.number}`,
         prompt,
         // A wait for T3 can take minutes: the task may have been started by hand, moved or archived meanwhile.
-        stillWanted: () => notStartable(services.tasks.summary(task.id)) === null,
+        stillWanted: () => {
+          try {
+            return notStartable(services.tasks.summary(task.id)) === null;
+          } catch {
+            // Deleted meanwhile.
+            return false;
+          }
+        },
         tier: task.suggestedModel?.tier ?? null,
         options: config,
         ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
