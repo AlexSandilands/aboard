@@ -17,11 +17,13 @@ pnpm install     # also installs the git hooks
 pnpm dev         # server on :4317, Vite on http://127.0.0.1:5317
 pnpm desktop     # pnpm dev plus an Electron window on the Vite server
 pnpm sandbox     # this checkout on free ports with a throwaway data dir and example data
+pnpm sandbox --desktop   # the same, plus an Electron window ("Sandbox" in its title) on it
 ```
 
 `pnpm dev` and `pnpm desktop` use your real data folder and the default ports. From a git worktree, or
 whenever you don't want to touch your own board, use `pnpm sandbox` instead (`pnpm sandbox stop` ends
-it).
+it). `pnpm sandbox --desktop` is the way to try the Electron shell from a worktree; it can run beside
+your real desktop app.
 
 In `pnpm desktop`, web edits hot-reload and server edits restart the server (the board reconnects on its
 own). Changes under `apps/desktop` need a restart. To try the built app without packaging it:

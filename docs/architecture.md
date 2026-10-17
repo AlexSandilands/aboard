@@ -170,3 +170,10 @@ on independent timers:
   database with pollers off and calls it with `app.request` (no port). MCP tests use the SDK client against the same app.
 - Web: logic only (`*.logic.ts`, the board reducer) in a node environment, no DOM rendering.
 - Contracts: the pure helpers.
+- Under load (Windows, a busy CI runner, several agents on one machine) a test's time goes to starting processes, not
+  to running code. So `pnpm test` runs one package at a time (`--workspace-concurrency=1`), and
+  `apps/server/vitest.config.ts` gives tests 15s instead of 5s and, on Windows, uses half the cores as workers.
+  A test that runs real processes (git, a shell) sets `PROCESS_TEST_TIMEOUT` from `src/test/timeouts.ts`; it only
+  matters when something hangs, so don't tune it down. Build expensive fixtures once per file, not per test:
+  `createGitFixture` makes the repositories once and copies them. No retries: a flaky test is a bug to fix, or a
+  test that is environmental gets a commented skip.

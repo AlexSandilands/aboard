@@ -1,9 +1,11 @@
 import { reviewBadgeLabel, type TaskDetail } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
+import { isSessionLink } from "./links.logic";
 
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
 export const SECTION_IDS = [
   "labels",
+  "sessions",
   "links",
   "relations",
   "review",
@@ -17,6 +19,7 @@ export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_TITLES: Record<SectionId, string> = {
   labels: "Labels",
+  sessions: "Sessions",
   links: "Links",
   relations: "Relations",
   review: "Local review",
@@ -33,9 +36,16 @@ export interface SectionLayout {
   collapsed: Partial<Record<SectionId, boolean>>;
 }
 
+/** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
+const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links" };
+
 const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
-/** Re-validates stored values: unknown ids and duplicates are dropped, sections added since are appended. */
+/**
+ * Re-validates stored values: unknown ids and duplicates are dropped, sections added since are appended (or placed
+ * by SECTION_ANCHORS). Sessions used to be part of Links, so a layout saved before it existed hides and collapses it
+ * with Links.
+ */
 export function normalizeSectionLayout(stored: {
   order?: unknown;
   hidden?: unknown;
@@ -43,15 +53,27 @@ export function normalizeSectionLayout(stored: {
 }): SectionLayout {
   const known = (value: unknown) => (Array.isArray(value) ? [...new Set(value.filter(isSectionId))] : []);
   const order = known(stored.order);
+  const hidden = known(stored.hidden);
+  const beforeSessions = order.length > 0 && !order.includes("sessions");
+  if (beforeSessions && hidden.includes("links")) hidden.push("sessions");
+  for (const id of SECTION_IDS.filter((section) => !order.includes(section))) {
+    const anchor = SECTION_ANCHORS[id];
+    const at = anchor ? order.indexOf(anchor) : -1;
+    if (at >= 0) order.splice(at, 0, id);
+    else order.push(id);
+  }
   const collapsed: SectionLayout["collapsed"] = {};
   if (stored.collapsed && typeof stored.collapsed === "object") {
     for (const [id, value] of Object.entries(stored.collapsed)) {
       if (isSectionId(id) && typeof value === "boolean") collapsed[id] = value;
     }
   }
+  if (beforeSessions && typeof collapsed.links === "boolean" && collapsed.sessions === undefined) {
+    collapsed.sessions = collapsed.links;
+  }
   return {
-    order: [...order, ...SECTION_IDS.filter((id) => !order.includes(id))],
-    hidden: SECTION_IDS.filter((id) => known(stored.hidden).includes(id)),
+    order,
+    hidden: SECTION_IDS.filter((id) => hidden.includes(id)),
     collapsed,
   };
 }
@@ -95,8 +117,10 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
     case "labels":
     case "plan":
       return false;
+    case "sessions":
+      return !task.links.some(isSessionLink);
     case "links":
-      return task.links.length === 0;
+      return task.links.every(isSessionLink);
     case "relations":
       return task.blockedBy.length === 0 && task.blocks.length === 0;
     case "review":
@@ -138,23 +162,25 @@ export function firstLine(markdown: string | null): string | null {
   return null;
 }
 
-const LINK_ATTENTION = new Set([
-  "pr_checks_failing",
-  "pr_changes_requested",
-  "pr_conflict",
-  "thread_needs_input",
-  "thread_failed",
-]);
+const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr_conflict"]);
+const SESSION_ATTENTION = new Set(["thread_needs_input", "thread_failed"]);
 
 /** The one-line summary a collapsed section header shows in place of its content. */
 export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number = Date.now()): string {
   switch (id) {
     case "labels":
       return task.labels.length ? task.labels.join(", ") : "None";
+    case "sessions": {
+      const count = task.links.filter(isSessionLink).length;
+      if (count === 0) return "None";
+      const problem = task.attention.find((a) => SESSION_ATTENTION.has(a.kind));
+      return problem ? `${count} · ${problem.message}` : String(count);
+    }
     case "links": {
-      if (task.links.length === 0) return "None";
+      const count = task.links.filter((link) => !isSessionLink(link)).length;
+      if (count === 0) return "None";
       const problem = task.attention.find((a) => LINK_ATTENTION.has(a.kind));
-      return problem ? `${task.links.length} · ${problem.message}` : String(task.links.length);
+      return problem ? `${count} · ${problem.message}` : String(count);
     }
     case "relations": {
       const open = task.blockedBy.filter((b) => b.status !== "done");

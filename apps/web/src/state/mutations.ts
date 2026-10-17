@@ -498,6 +498,13 @@ export function useMarkNotificationRead() {
   );
 }
 
+/** Marks a task's unread notifications read, for when its panel opens. The notifications.changed event does the rest. */
+export function useMarkTaskNotificationsRead() {
+  return useApiMutation((taskId: string) => api<NotificationList>("/api/notifications/read", { body: { taskId } }), {
+    silent: true,
+  });
+}
+
 export function useMarkAllNotificationsRead() {
   return useApiMutation(() => api<NotificationList>("/api/notifications/read-all", { method: "POST" }));
 }

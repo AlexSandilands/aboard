@@ -189,7 +189,7 @@ export interface PlansService {
   /**
    * Replaces the plan. Phases/steps given with an existing `id` are kept (status and
    * timestamps preserved unless overridden); others are created; missing ones are deleted.
-   * Throws PLAN_REQUIRED if the result has no steps and the task is not in Backlog.
+   * Throws VALIDATION if the plan has no steps or a phase has none (so a plan can't be cleared this way).
    * With `protectStarted`, throws CONFLICT instead of deleting a step that isn't `todo` or has notes, or all of a
    * phase's steps while other existing steps are kept (a partial update, not a rewrite).
    */

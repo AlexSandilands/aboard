@@ -91,6 +91,14 @@ describe("MCP endpoint", () => {
     expect(text(gated)).toContain("PLAN_REQUIRED");
     expect(text(gated)).toContain("set_plan");
 
+    const stepless = await client.callTool({
+      name: "set_plan",
+      arguments: { task, phases: [{ title: "Tests", steps: [] }] },
+    });
+    expect(stepless.isError).toBe(true);
+    expect(text(stepless)).toContain("VALIDATION");
+    expect(text(stepless)).toContain("at least one step");
+
     const planned = await client.callTool({
       name: "set_plan",
       arguments: {

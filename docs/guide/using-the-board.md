@@ -37,8 +37,9 @@ A task can link to:
   works anywhere.
 - **Any URL.**
 
-In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) sit under a
-**Sessions** heading, and everything else under **Links**: PRs first, then issues, Jira keys and other URLs. Past
+In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) have a
+**Sessions** section of their own, above **Links**, which holds everything else: PRs first, then issues, Jira keys
+and other URLs. Like the other sections, each can be collapsed, moved or hidden from **Customize sections**. Past
 three sessions, **Show N more** reveals the rest. When the task has one T3 thread, its Claude Code sessions are in
 the thread's ⌄ menu instead of rows of their own.
 

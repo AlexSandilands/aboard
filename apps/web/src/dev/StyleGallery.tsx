@@ -78,7 +78,6 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
 import { ModeSwitch } from "~/components/autopilot/ModeSwitch";
-import { GroupHeading } from "~/components/task/LinksSection";
 import { FoldedSettingsSection, SettingsRow, SettingsSection, StatusDot } from "~/components/settings/settingsLayout";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
@@ -501,13 +500,6 @@ export function StyleGallery() {
             </FoldedSettingsSection>
           </div>
         </Section>
-        <Section title="Task panel group heading (Sessions and Links)">
-          <div className="flex w-full max-w-sm flex-col gap-0.5">
-            <GroupHeading>Sessions</GroupHeading>
-            <GroupHeading className="mt-1.5">Links</GroupHeading>
-          </div>
-        </Section>
-
         <Section title="Skeleton, spinner, scroll area">
           <div className="flex w-64 flex-col gap-2">
             <Skeleton className="h-4 w-full" />
