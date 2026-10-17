@@ -279,8 +279,10 @@ export const SortableTaskCard = memo(function SortableTaskCard({
     [setNodeRef],
   );
   useCardFlip(task.id, nodeRef, `${task.status}:${task.position}`);
-  const picked = useBoardPick((s) => s.picked.includes(task.id));
+  const inPick = useBoardPick((s) => s.picked.includes(task.id));
   const pickable = canPickTask(task);
+  // A picked card that got a plan meanwhile no longer counts, like the lane button's count; Ctrl-click still drops it.
+  const picked = inPick && pickable;
 
   const open = () => {
     if (suppressClickRef.current) return;
@@ -291,7 +293,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!isPickClick(event)) return open();
     event.preventDefault();
-    if (pickable) useBoardPick.getState().togglePicked(task.id);
+    if (pickable || inPick) useBoardPick.getState().togglePicked(task.id);
   };
 
   return (
