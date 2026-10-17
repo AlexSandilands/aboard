@@ -16,7 +16,18 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
   const automations = useAutopilotOverview().data?.automations ?? [];
   if (!runs?.length) return null;
   return (
-    <TaskSection title="Autopilot">
+    <TaskSection
+      title="Autopilot"
+      summary={
+        <Badge
+          variant={runStatusVariant(runs[0]!.status)}
+          size="sm"
+          title={automationTitle(automations, runs[0]!.automation)}
+        >
+          {runStatusLabel(runs[0]!)}
+        </Badge>
+      }
+    >
       <ul className="flex flex-col gap-1 px-1.5">
         {runs.map((run) => (
           <RunRow key={run.id} run={run} title={automationTitle(automations, run.automation)} />

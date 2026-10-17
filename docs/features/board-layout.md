@@ -73,11 +73,27 @@ An override equal to its column's setting is pruned, so any override present mea
 
 ### Task panel sections
 
-The panel's sections are Labels, Sessions, Links, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Links, Relations, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
-any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
+any link problem, the blockers and what the task blocks, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
+
+That text is the fallback and what screen readers read. Where there is something to show, the section passes
+`TaskSection` a rich `summary` instead (`SectionSummaries.tsx`), drawn beside the toggle rather than inside it so its
+controls work on their own (clicking one never toggles or drags the section; the empty part of the header still
+toggles):
+
+| Section      | Rich summary                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Labels       | Coloured label chips, 3 then `+N`                                                                                  |
+| Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu, 4 then `+N`         |
+| Links        | PR chips coloured by state with a checks dot, 3 then `+N` for the rest. Without a PR the text stays                |
+| Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
+| Local review | The review badge                                                                                                   |
+| Autopilot    | The latest run's status pill                                                                                       |
+| Plan         | The step bar (grey to-do, blue current, green done) with done/total and the current step                           |
+| Details, Activity | Text only                                                                                                     |
 
 Until the user chooses, sections collapse by content (`collapsedByDefault`):
 

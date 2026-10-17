@@ -70,6 +70,7 @@ import {
   PanelSplitGroup,
   ROW_HOVER_ACTION_CLASS,
 } from "./PanelControl";
+import { LinksSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
 export const T3_UNDETECTED: T3IntegrationStatus = {
@@ -124,6 +125,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
   return (
     <TaskSection
       title="Links"
+      summary={links.some((link) => link.kind === "pr") && <LinksSummary links={links} />}
       actions={
         <PanelControl
           part="meta"

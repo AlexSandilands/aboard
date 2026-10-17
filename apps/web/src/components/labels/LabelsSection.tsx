@@ -3,6 +3,7 @@ import { PlusIcon, RotateCcwIcon, ShuffleIcon } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { PanelControl } from "~/components/task/PanelControl";
+import { LabelsSummary } from "~/components/task/SectionSummaries";
 import { TaskSection } from "~/components/task/TaskSection";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -37,7 +38,7 @@ export function LabelsSection({ task }: { task: TaskDetail }) {
   };
 
   return (
-    <TaskSection title="Labels">
+    <TaskSection title="Labels" summary={labels.length > 0 && <LabelsSummary labels={labels} />}>
       <div className="flex flex-wrap items-center gap-1 px-1.5">
         {labels.map((label) => (
           <LabelChip

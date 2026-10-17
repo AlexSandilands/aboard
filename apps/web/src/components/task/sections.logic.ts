@@ -1,4 +1,4 @@
-import { reviewBadgeLabel, type TaskDetail } from "@repo/contracts";
+import { reviewBadgeLabel, type TaskDetail, type TaskRelation } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { isSessionLink } from "./links.logic";
 
@@ -160,6 +160,45 @@ export function firstLine(markdown: string | null): string | null {
     if (line) return line;
   }
   return null;
+}
+
+/** Chips a rich summary shows before folding the rest into "+N". */
+export const SUMMARY_CHIP_LIMIT = { labels: 3, sessions: 4, links: 3, relations: 3 } as const;
+
+/** The first `max` items and how many were left out, for a "+N" chip. */
+export function limitItems<T>(items: ReadonlyArray<T>, max: number): { shown: T[]; hidden: number } {
+  return { shown: items.slice(0, max), hidden: Math.max(0, items.length - max) };
+}
+
+export interface RelationChip {
+  id: string;
+  number: number;
+  title: string;
+  /** blocking: an open blocker. done: a blocker that is Done. neutral: a task this one holds up. */
+  tone: "blocking" | "done" | "neutral";
+}
+
+export interface RelationChipGroup {
+  kind: "blockedBy" | "blocks";
+  label: string;
+  chips: RelationChip[];
+}
+
+/** Collapsed Relations header: open blockers first (they are why the task can't start), then what it holds up. */
+export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks">): RelationChipGroup[] {
+  const chip = (r: TaskRelation, tone: RelationChip["tone"]): RelationChip => ({
+    id: r.id,
+    number: r.number,
+    title: r.title,
+    tone,
+  });
+  const blockedBy = task.blockedBy
+    .map((r) => chip(r, r.status === "done" ? "done" : "blocking"))
+    .toSorted((a, b) => Number(b.tone === "blocking") - Number(a.tone === "blocking"));
+  return [
+    { kind: "blockedBy" as const, label: "blocked by", chips: blockedBy },
+    { kind: "blocks" as const, label: "blocks", chips: task.blocks.map((r) => chip(r, "neutral")) },
+  ].filter((group) => group.chips.length > 0);
 }
 
 const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr_conflict"]);

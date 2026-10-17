@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   collapsedByDefault,
   firstLine,
+  limitItems,
   moveSection,
   normalizeSectionLayout,
+  relationChipGroups,
   SECTION_IDS,
   summarizeSection,
   type SectionTask,
@@ -273,5 +275,37 @@ describe("summarizeSection", () => {
     expect(
       summarizeSection("activity", task({ events: [{ at: "2026-10-15T12:00:00Z" }] as SectionTask["events"] }), NOW),
     ).toBe("1 · last just now");
+  });
+});
+
+describe("limitItems", () => {
+  it("keeps the first items and counts the rest", () => {
+    expect(limitItems(["a", "b", "c", "d", "e"], 3)).toEqual({ shown: ["a", "b", "c"], hidden: 2 });
+  });
+
+  it("hides nothing when everything fits", () => {
+    expect(limitItems(["a", "b"], 3)).toEqual({ shown: ["a", "b"], hidden: 0 });
+    expect(limitItems([], 3)).toEqual({ shown: [], hidden: 0 });
+  });
+});
+
+describe("relationChipGroups", () => {
+  it("is empty without relations", () => {
+    expect(relationChipGroups({ blockedBy: [], blocks: [] })).toEqual([]);
+  });
+
+  it("colours blockers by whether they are done and lists open ones first", () => {
+    const [group] = relationChipGroups({ blockedBy: [relation(1, "done"), relation(2, "in_progress")], blocks: [] });
+    expect(group?.kind).toBe("blockedBy");
+    expect(group?.chips.map((c) => [c.number, c.tone])).toEqual([
+      [2, "blocking"],
+      [1, "done"],
+    ]);
+  });
+
+  it("lists what the task holds up as neutral, after the blockers", () => {
+    const groups = relationChipGroups({ blockedBy: [relation(1, "planned")], blocks: [relation(9, "backlog")] });
+    expect(groups.map((g) => g.kind)).toEqual(["blockedBy", "blocks"]);
+    expect(groups[1]?.chips).toEqual([{ id: "t9", number: 9, title: "Task 9", tone: "neutral" }]);
   });
 });
