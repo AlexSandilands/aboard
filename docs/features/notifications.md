@@ -46,6 +46,7 @@ REST (`http/routes/notifications.ts`):
 | `GET /api/notifications?kind=&limit=`  | Newest first (default 100, max 200) and `unread`, counted over all of them |
 | `POST /api/notifications/:id/read`     | Marks one read                                               |
 | `POST /api/notifications/read-all`     | Marks every one read; returns the list                       |
+| `POST /api/notifications/read`         | Body `{ taskId }`: marks that task's unread ones read; returns the list |
 
 ### Events and delivery
 
@@ -53,6 +54,10 @@ REST (`http/routes/notifications.ts`):
 quiet hours when **Mute during quiet hours** is on (the window is Autopilot's, `engine.quietHours`): the
 notification is in the inbox but nothing pops up. `notifications.changed` carries `unread` after notifications
 are read, or removed with their task. See [live sync](live-sync.md).
+
+Opening a task's panel, by any route, marks that task's unread notifications read (`AppLayout`, via
+`POST /api/notifications/read`), so the bell, badge and favicon clear without a visit to the inbox. Board-wide
+notifications (no task) stay until read in the bell. Only opening clears: one that arrives while the task's panel is already open stays unread until it is read in the bell or the panel is opened again.
 
 The web app's `useBoardEvents` puts a created notification into the inbox query and calls
 `deliverNotification` (`apps/web/src/components/notifications/delivery.ts`), which asks `deliveryTarget`

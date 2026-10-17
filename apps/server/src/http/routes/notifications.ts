@@ -2,7 +2,7 @@ import { NotificationKind } from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
-import { handle, idParam, parseQuery } from "../respond.ts";
+import { handle, idParam, parseBody, parseQuery } from "../respond.ts";
 
 /** /api/notifications: the attention inbox. REST only: agents have no use for the user's inbox. */
 export function registerNotificationRoutes(app: Hono, { services }: AppContext): void {
@@ -23,6 +23,14 @@ export function registerNotificationRoutes(app: Hono, { services }: AppContext):
     "/api/notifications/read-all",
     handle((c) => {
       notifications.markAllRead();
+      return c.json(notifications.list());
+    }),
+  );
+  app.post(
+    "/api/notifications/read",
+    handle(async (c) => {
+      const { taskId } = await parseBody(c, z.object({ taskId: z.string().min(1) }));
+      notifications.markTaskRead(taskId);
       return c.json(notifications.list());
     }),
   );
