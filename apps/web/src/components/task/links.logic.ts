@@ -163,8 +163,8 @@ export const SESSION_PREVIEW_COUNT = 3;
 export interface LinkGroups {
   /** The Sessions section: T3 threads (needing attention first), then the sessions that aren't folded into a thread. */
   sessionRows: Array<ThreadLink | SessionLink>;
-  /** Claude Code sessions in the one thread's menu, newest first; none unless the task has exactly one thread. */
-  folded: SessionLink[];
+  /** Claude Code sessions in each thread's menu, by thread link id, newest first. */
+  folded: Map<string, SessionLink[]>;
   /** The Links section: PRs, then issues, Jira keys and other URLs. */
   links: PlainLink[];
 }
@@ -180,22 +180,32 @@ const createdMs = (link: TaskLink) => {
 };
 
 /**
- * Splits a task's links into the Sessions and Links sections. A Claude Code session folds into its thread's menu only
- * when the task has one thread: sessions don't say which thread they belong to, so with several there is no telling.
- * Autopilot's sessions stay rows, as they run headless and never in a thread.
+ * Splits a task's links into the Sessions and Links sections. A Claude Code session folds into the menu of a thread:
+ * sessions don't say which one, but an agent links its thread and its session together, so it is the newest thread
+ * linked at or before the session. One linked before every thread stays a row, and so do Autopilot's sessions, as
+ * they run headless and never in a thread.
  */
 export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
   const threads = orderLinks(links.filter((link) => link.kind === "t3_thread")).filter(
     (link): link is ThreadLink => link.kind === "t3_thread",
   );
+  const threadsByAge = threads.toSorted((a, b) => createdMs(b) - createdMs(a));
   const sessions = links
     .filter((link): link is SessionLink => link.kind === "agent_session")
     .toSorted((a, b) => createdMs(b) - createdMs(a));
-  const folds = threads.length === 1;
-  const isFolded = (link: SessionLink) => folds && link.ref.harness === "claude-code" && !isAutopilotSession(link);
+  const folded = new Map<string, SessionLink[]>();
+  const rows: SessionLink[] = [];
+  for (const session of sessions) {
+    const owner =
+      session.ref.harness === "claude-code" && !isAutopilotSession(session)
+        ? threadsByAge.find((thread) => createdMs(thread) <= createdMs(session))
+        : undefined;
+    if (!owner) rows.push(session);
+    else folded.set(owner.id, [...(folded.get(owner.id) ?? []), session]);
+  }
   return {
-    sessionRows: [...threads, ...sessions.filter((link) => !isFolded(link))],
-    folded: sessions.filter(isFolded),
+    sessionRows: [...threads, ...rows],
+    folded,
     links: links
       .filter((link): link is PlainLink => !isSessionLink(link))
       .toSorted((a, b) => LINK_KIND_ORDER[a.kind] - LINK_KIND_ORDER[b.kind]),
