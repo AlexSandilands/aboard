@@ -1,6 +1,6 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
@@ -12,6 +12,39 @@ on the server. It also covers the settings page, which takes the board's place.
 A lane stacks its epic bands above its loose cards; how bands are laid out is in [epics.md](epics.md#on-the-board).
 A finished epic has no band: it is one card in the lane's Done cell, so it counts as one card for the column
 counts and the collapsed preview below.
+
+### The priority lane
+
+A task can be marked **priority** (`tasks.priority`, 0 or 1; epics can't be). The board gathers the priority tasks of
+every project in a lane above the project lanes (`PriorityLane`, a `Lane` with `priority: true` whose project is the
+stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). `buildLanes` does the gathering.
+
+- **Membership.** Non-epic, non-archived priority tasks. They **move** into the lane: they aren't in their project's
+  lane or its epic's band while it shows. An archived priority task (Show archived) stays in its project. The lane
+  has no bands: a card of an epic shows the epic on the card as it does anywhere, and the epic's band loses it.
+- **Filters.** A project scope (`?project=`) doesn't hide the lane, since it is for the tasks you want whatever you
+  are looking at. The card filters (search, needs attention, has PR, labels, the epic filter, in progress only) apply
+  to its cards like any other. A lane with no cards isn't built.
+- **Off.** Settings → Board → Appearance → **Priority lane** (`showPriorityLane` in `board-view`, on by default).
+  Off, priority tasks sit in their own lanes as any task.
+- **Cards** name their project in a small chip. Order is by project (the board's order), then position; Done is
+  newest first. The cells count in the column headers like any lane's.
+- **Setting it.** The star on a card (shown on hover, filled while set), **Mark as priority** in the panel's More menu,
+  and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
+- **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which
+  changes its status. It takes no place in the column: positions only mean something inside one project's lane, and
+  the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is
+  placed there like any card and **stops being priority** (`PATCH priority: false`, applied to the cache at once, with
+  the move after it). Other lanes refuse it. Cards from project lanes can't be dragged into the lane; use the star.
+- **Dependency lines** work across the lane as anywhere; a related card that isn't shown gets its stub toward the lane
+  as above the first project.
+- **Autopilot** starts priority tasks first ([autopilot.md](autopilot.md#automations)).
+
+### In progress, all projects
+
+The filter menu's **In progress, all projects** (`inProgressOnly` in `board-view`) shows only In Progress cards,
+across every project: it ignores a project scope while it is on (the scope returns when it is turned off). Epic
+bands keep only their In Progress tasks, and the priority lane holds its In Progress ones.
 
 ### Collapsing columns
 
@@ -215,7 +248,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 `storageKey(...)`:
 
 - `board-view` holds the filters, the column collapse state and which epic bands are folded
-  (`collapsedEpics`, added without a version bump: a stored view without it takes the default). It is at version 2:
+  (`collapsedEpics`, `inProgressOnly` and `showPriorityLane`, added without a version bump: a stored view without
+  them takes the default). It is at version 2:
   `migrateBoardView` keeps version 0's filters and drops its per-lane `expandedDone`, which has no
   per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
@@ -240,6 +274,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/columnCollapse.logic.ts` | Column and cell collapse state, mixed state (tested)           |
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
+| `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |
