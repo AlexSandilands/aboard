@@ -125,9 +125,20 @@ export function loadSettings(repos: Repos): StoredSettings {
   };
 }
 
-/** The views with the first of each id kept, so a repeated id can't make two rows act as one. */
-const uniqueViews = (views: SavedViews): SavedViews =>
-  views.filter((view, index) => views.findIndex((v) => v.id === view.id) === index);
+/**
+ * The views with the first of each id kept, so a repeated id can't make two rows act as one. Two views can't share a
+ * name (ignoring case) either: the sidebar and the palette would list indistinguishable entries.
+ */
+const uniqueViews = (views: SavedViews): SavedViews => {
+  const kept = views.filter((view, index) => views.findIndex((v) => v.id === view.id) === index);
+  const names = new Set<string>();
+  for (const view of kept) {
+    const name = view.name.toLowerCase();
+    if (names.has(name)) throw new AppError("VALIDATION", `A view named "${view.name}" already exists`);
+    names.add(name);
+  }
+  return kept;
+};
 
 /** App settings stored as key/value JSON. The T3 token never leaves the server. */
 export function createSettingsService(core: Core): SettingsService {

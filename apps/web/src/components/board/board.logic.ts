@@ -232,14 +232,15 @@ export function buildLanes(
     filters.inProgressOnly === true ||
     epicFilter !== null ||
     (filters.taskFilters !== undefined && hasTaskOwnFilters(filters.taskFilters));
+  // The filters that look at a card itself: In progress, and status, tier, Autopilot flag, blocked and priority.
+  const passesTaskFilters = (task: TaskSummary) =>
+    (!filters.inProgressOnly || task.status === "in_progress") &&
+    (!filters.taskFilters || matchesTaskOwnFilters(task, filters.taskFilters));
   // An epic with no matching children shows only when it passes the status filters itself. The rest (tier, Autopilot,
   // blocked, priority) describe tasks: an epic has no tier or flag of its own, so it would pass "No tier" and
   // "Default" and leave an empty band.
   const epicOk = (epic: TaskSummary) =>
-    statusOk(epic) && (!filters.taskFilters || !hasNonStatusTaskFilters(filters.taskFilters));
-  const statusOk = (task: TaskSummary) =>
-    (!filters.inProgressOnly || task.status === "in_progress") &&
-    (!filters.taskFilters || matchesTaskOwnFilters(task, filters.taskFilters));
+    passesTaskFilters(epic) && (!filters.taskFilters || !hasNonStatusTaskFilters(filters.taskFilters));
   const inPriorityLane = (task: TaskSummary) => filters.priorityLane === true && isInPriorityLane(task);
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
@@ -260,7 +261,7 @@ export function buildLanes(
   let priorityCount = 0;
   const projectOrder = new Map(board.projects.map((p, index) => [p.id, index]));
   for (const task of tasks) {
-    if (task.kind === "epic" || !statusOk(task)) continue;
+    if (task.kind === "epic" || !passesTaskFilters(task)) continue;
     if (inPriorityLane(task)) {
       // An epic's filter and its card filters look at the epic the task is in, which may be in another project.
       const epic = task.parent ? allEpics.get(task.parent.id) : undefined;

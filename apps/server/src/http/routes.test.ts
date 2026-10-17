@@ -212,6 +212,11 @@ describe("REST", () => {
     expect(
       await errorCode(await h.request("/api/settings", { method: "PATCH", json: { savedViews: [view("c", " ")] } })),
     ).toBe("VALIDATION");
+    const twin = await h.request("/api/settings", {
+      method: "PATCH",
+      json: { savedViews: [view("a", "Same"), view("b", "same")] },
+    });
+    expect(await errorCode(twin)).toBe("VALIDATION");
     // A patch that leaves them out keeps them.
     await h.request("/api/settings", { method: "PATCH", json: { githubPolling: false } });
     expect(await (await h.request("/api/settings")).json()).toMatchObject({ savedViews: [{ id: "a" }, { id: "b" }] });

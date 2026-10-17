@@ -1,11 +1,13 @@
 import type { SavedView } from "@repo/contracts";
 import { BookmarkIcon, PencilIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useApplyFilterParams, useBoardFilterParams } from "~/components/board/boardNavigation";
 import { Button } from "~/components/ui/button";
 import { CollapsibleSectionHeader } from "~/components/ui/collapsible-section-header";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, useSidebar } from "~/components/ui/sidebar";
 import { activeView } from "~/components/views/views.logic";
+import { queryKeys } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { useSavedViews, useViewActions } from "~/state/views";
 
@@ -17,6 +19,14 @@ export function ViewsSection() {
   const apply = useApplyFilterParams();
   const { isMobile, setOpenMobile } = useSidebar();
   const { remove } = useViewActions();
+  // Views are a server setting with no live event: read them again when the window is back, so a view saved in another
+  // window is on the list before this one edits it.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [queryClient]);
   if (views.length === 0) return null;
   const active = activeView(views, params);
 

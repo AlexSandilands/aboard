@@ -28,7 +28,8 @@ filtered board can be bookmarked or shared, and Back undoes a filter. A default 
 | `inprogress` | `true`: only In Progress tasks, from every project ([board-layout.md](board-layout.md#in-progress-all-projects)) |
 | `archived`   | `true`: include archived tasks                                                          |
 
-The router parses a param as JSON when it can, so the schema accepts a number for text and a boolean or `"true"` for a
+The router parses a param as JSON when it can (and writes a string that looks like JSON quoted, so the URLs the app
+makes round-trip), so a hand-typed `?q=1e3` reads as the number 1000. The schema accepts a number for text and a boolean or `"true"` for a
 flag, and **drops a value it can't read instead of failing the page**. `readFilters` (`boardFilters.logic.ts`) turns
 the params into a `FilterState`, dropping unknown list values and writing lists in the order of their choices, so the
 same filters always make the same URL. `filterParams` goes back. The hooks in `boardNavigation.ts`
@@ -63,7 +64,9 @@ The open task isn't part of it.
   names up to 60 characters). It is on the server, so every browser sees the same views, and it is in the **backup
   allow-list** (`EXPORTED_SETTINGS`), so a restore brings it back. Changing it is `PATCH /api/settings` with the whole
   list; the server keeps the first of a repeated id. There is no SSE event for settings, so another open browser
-  shows a new view after its settings query refetches.
+  shows a new view after its settings query refetches, which the sidebar does when the window gets focus. Saving
+  there before that can still overwrite a view added meanwhile elsewhere (the list is replaced whole), and the server
+  refuses a list in which two views share a name (ignoring case).
 - **Saving.** **Save view…** in the filter menu or the palette opens `ViewDialog` (`viewDialog` in `useDialogs`) for a
   name. Names are unique ignoring case. It is disabled with nothing to save. Filters are stored normalised
   (`normalizeParams`).
