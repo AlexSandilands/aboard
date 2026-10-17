@@ -33,7 +33,7 @@ import { announceSession } from "./SessionLaunchDialog";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
 
 /** The planning prompt for these tasks, with the skill the project (or the board) chose. */
-function usePlanPrompt(project: Project, tasks: readonly TaskSummary[]) {
+export function usePlanPrompt(project: Project, tasks: readonly TaskSummary[]) {
   const settings = useSettings().data;
   return (linked: boolean) =>
     planTasksPrompt({

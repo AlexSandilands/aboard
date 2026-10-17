@@ -55,7 +55,7 @@ Once the user agrees to a task's plan:
 1. `set_plan(task, phases, context, suggestedModel: {tier, reason})`.
 2. If the task has no labels, apply the agreed ones with `update_task(task, labels)`.
 3. Record dependencies on other tasks with `update_task(task, addBlockedBy)`.
-4. `move_task(task, "planned")`.
+4. If it is in Backlog, `move_task(task, "planned")`. A task already in progress without a plan stays where it is.
 5. If the result says the Autopilot flag isn't set, ask the user whether to flag the task (one question can
    cover a whole set), and set it with `update_task(task, autopilot: "on" | "off")` only once they answer.
    Never set it on your own.

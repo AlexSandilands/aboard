@@ -2,7 +2,6 @@ import {
   clampRuntimeMode,
   defaultHandoffMode,
   planningSessionLabel,
-  planTasksPrompt,
   suggestEpicsPrompt,
   taskNumberList,
   taskHandoffPrompt,
@@ -34,12 +33,12 @@ import {
   findModel,
   initialWorkspaceChoice,
   launchModelSelection,
-  planSkillOf,
   selectionAfterPlanToggle,
   toLaunchWorkspace,
   type WorkspaceChoice,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
+import { usePlanPrompt } from "./PlanTasksDialog";
 import { AccessPicker, ComposerControl, ModelPicker, RefPicker, TraitsPicker, WorkspaceMenu } from "./T3LaunchPickers";
 
 /**
@@ -212,19 +211,11 @@ function ProjectLaunch({ project, onDone }: { project: Project; onDone: () => vo
 
 function PlanLaunch({ project, taskIds, onDone }: { project: Project; taskIds: string[]; onDone: () => void }) {
   const options = useProjectT3LaunchOptions(project.id);
-  const settings = useSettings().data;
   const boardTasks = useBoard().data?.tasks;
   const mutation = useStartPlanningThread({ silent: true });
   // Read once: the prompt names these tasks, whatever happens to the board while the dialog is open.
   const [tasks] = useState(() => taskIds.flatMap((id) => boardTasks?.find((t) => t.id === id) ?? []));
-  const promptFor = (linked: boolean) =>
-    planTasksPrompt({
-      project,
-      tasks,
-      skill: planSkillOf(project, settings),
-      boardUrl: window.location.origin,
-      linked,
-    });
+  const promptFor = usePlanPrompt(project, tasks);
   const subject: LaunchSubject = {
     label: `${planningSessionLabel(tasks)} · ${project.title}`,
     promptFor: () => promptFor(true),
