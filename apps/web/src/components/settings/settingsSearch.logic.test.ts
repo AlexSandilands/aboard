@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { settingsIndex } from "./settingsIndex.logic";
-import { isSearchShortcut, moveResult, searchSettings } from "./settingsSearch.logic";
+import {
+  askEntries,
+  initialActive,
+  isSearchShortcut,
+  looksLikeQuestion,
+  moveResult,
+  searchSettings,
+} from "./settingsSearch.logic";
 
 const entries = settingsIndex();
 const ids = (query: string, limit?: number) => searchSettings(entries, query, limit).map((entry) => entry.id);
@@ -117,5 +124,39 @@ describe("moveResult", () => {
 
   it("has nothing to move to without results", () => {
     expect(moveResult(0, 1, 0)).toBe(-1);
+  });
+});
+
+describe("looksLikeQuestion", () => {
+  it("takes a question mark or a question word with a few more words", () => {
+    expect(looksLikeQuestion("quiet hours?")).toBe(true);
+    expect(looksLikeQuestion("How do I enable Copilot")).toBe(true);
+    expect(looksLikeQuestion("where can I stop autopilot at night")).toBe(true);
+  });
+
+  it("leaves search words alone, even ones that start like a question", () => {
+    expect(looksLikeQuestion("quiet hours")).toBe(false);
+    expect(looksLikeQuestion("how")).toBe(false);
+    expect(looksLikeQuestion("do not disturb")).toBe(false);
+    expect(looksLikeQuestion("whenever")).toBe(false);
+    expect(looksLikeQuestion("")).toBe(false);
+  });
+});
+
+describe("initialActive", () => {
+  it("starts on the best result for search words, and on the Ask row for a question or no result", () => {
+    expect(initialActive("backup", 5)).toBe(1);
+    expect(initialActive("how do I back up the board", 5)).toBe(0);
+    expect(initialActive("zzzz", 0)).toBe(0);
+  });
+});
+
+describe("askEntries", () => {
+  it("sends every entry with its location, so the model can name any id", () => {
+    const sent = askEntries(entries);
+    expect(sent).toHaveLength(entries.length);
+    const quiet = sent.find((entry) => entry.id === "autopilot.engine.quiet-hours");
+    expect(quiet).toMatchObject({ title: "Quiet hours", location: "Autopilot" });
+    expect(quiet?.keywords).toContain("night");
   });
 });

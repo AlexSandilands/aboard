@@ -1,6 +1,8 @@
 import type {
   AddLinkResult,
   AppSettings,
+  AskSettingsInput,
+  AskSettingsResult,
   AutopilotConfig,
   AutopilotEngineSettings,
   AutopilotOverview,
@@ -394,6 +396,14 @@ export const useResumeSession = (opts?: MutationOpts) =>
   );
 
 // ── Settings ─────────────────────────────────────────────────────────────
+
+/** Asks the settings a question in plain words. A failed run is a reply (`ok: false`), not an error. */
+export function useAskSettings() {
+  return useMutation({
+    mutationFn: (input: AskSettingsInput) =>
+      api<AskSettingsResult>("/api/settings/ask", { method: "POST", body: input }),
+  });
+}
 
 export function useUpdateSettings() {
   const queryClient = useQueryClient();

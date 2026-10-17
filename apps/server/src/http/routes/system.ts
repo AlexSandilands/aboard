@@ -1,4 +1,11 @@
-import { ConnectT3Input, MergePrInput, ResumeMode, ResumeSessionInput, UpdateSettingsInput } from "@repo/contracts";
+import {
+  AskSettingsInput,
+  ConnectT3Input,
+  MergePrInput,
+  ResumeMode,
+  ResumeSessionInput,
+  UpdateSettingsInput,
+} from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -62,6 +69,15 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   app.patch(
     "/api/settings",
     handle(async (c) => c.json(services.settings.update(await parseBody(c, UpdateSettingsInput)))),
+  );
+
+  app.get(
+    "/api/settings/ask",
+    handle((c) => c.json(integrations.settingsAskStatus())),
+  );
+  app.post(
+    "/api/settings/ask",
+    handle(async (c) => c.json(await integrations.askSettings(await parseBody(c, AskSettingsInput)))),
   );
 
   app.get(

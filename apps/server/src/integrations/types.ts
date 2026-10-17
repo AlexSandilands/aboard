@@ -1,4 +1,6 @@
 import type {
+  AskSettingsInput,
+  AskSettingsResult,
   BackupStatus,
   EpicDelivery,
   ConnectT3Result,
@@ -10,6 +12,7 @@ import type {
   ResumeMode,
   ResumeResult,
   ResumeSessionInput,
+  SettingsAskStatus,
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
@@ -77,6 +80,10 @@ export interface Integrations {
   resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
   /** What "Open in terminal" runs on this machine, for settings. */
   terminalInfo(): TerminalInfo;
+  /** Whether the settings "Ask" can run: the Claude Code CLI is found. */
+  settingsAskStatus(): SettingsAskStatus;
+  /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */
+  askSettings(input: AskSettingsInput): Promise<AskSettingsResult>;
   /** Makes a digest of what changed now; a summarised one is written in the background (see DigestGenerator). */
   generateDigest(): Promise<DigestStart>;
   /** Resolves when no digest is being written. */

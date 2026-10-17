@@ -1,7 +1,8 @@
 // Settings search: case-insensitive matching over the settings index, title first. Every word typed has to match
 // something in the entry; the entry ranks by its worst-matching word, so "quiet hours" finds the setting of that
 // name above one that merely mentions them.
-import type { SettingsIndexEntry } from "./settingsIndex.logic";
+import type { SettingsAskEntry } from "@repo/contracts";
+import { settingsLocation, type SettingsIndexEntry } from "./settingsIndex.logic";
 
 /** Best (lowest) first. */
 const RANK = {
@@ -81,4 +82,33 @@ export function moveResult(current: number, delta: 1 | -1, count: number): numbe
   if (count === 0) return -1;
   if (current < 0) return delta === 1 ? 0 : count - 1;
   return (current + delta + count) % count;
+}
+
+/** Words a question starts with ("how do I…", "where can I…"); a lone one is a search word, not a question. */
+const QUESTION_WORDS = /^(how|where|what|why|when|which|who|can|could|does|do|is|are|should|will|i want|i need)\b/;
+
+/**
+ * Whether the box holds a question rather than search words: the Ask row then comes first and Enter asks it. A
+ * question mark does it, or a question word with a few more words after it.
+ */
+export function looksLikeQuestion(query: string): boolean {
+  const text = normalize(query);
+  if (text.endsWith("?")) return true;
+  return QUESTION_WORDS.test(text) && text.split(" ").length >= 4;
+}
+
+/** The index as the Ask sends it: what the model reads to pick a setting. */
+export function askEntries(entries: ReadonlyArray<SettingsIndexEntry>): SettingsAskEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    description: entry.description,
+    location: settingsLocation(entry),
+    keywords: [...entry.keywords],
+  }));
+}
+
+/** Where the highlight starts when results appear: on the Ask row for a question (or nothing found), else the best hit. */
+export function initialActive(query: string, resultCount: number): number {
+  return looksLikeQuestion(query) || resultCount === 0 ? 0 : 1;
 }
