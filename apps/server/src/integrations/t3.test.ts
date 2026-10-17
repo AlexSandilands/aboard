@@ -915,8 +915,24 @@ describe("T3 thread launch", () => {
     expect(await t3.threadWorkspace(threadLink("l1", "th-wt") as ThreadLink)).toEqual({
       worktreePath: "C:/Users/me/.t3/worktrees/acme/t3-1",
       branch: "t3/feature",
+      runStatus: "completed",
+      latestRunId: "run-1",
+      lastError: null,
+      updatedAt: "2026-03-01T00:00:00.000Z",
     });
     expect(await t3.threadWorkspace(threadLink("l2", "th-missing") as ThreadLink)).toBeNull();
+  });
+
+  it("asks T3 to prepare a failed run's workspace again", async () => {
+    const { t3, socket } = setup((frame) => success(frame.id, { sequence: 1 }));
+    await t3.retryPreparation(threadLink("l1", "th-wt") as ThreadLink, "run-1", "autopilot-r1-retry");
+    expect(socket.sent.map((f) => f.tag)).toEqual(["orchestration.dispatchCommand"]);
+    expect(socket.sent[0]!.payload).toEqual({
+      type: "prepared-run.retry",
+      commandId: "autopilot-r1-retry",
+      threadId: "th-wt",
+      runId: "run-1",
+    });
   });
 });
 
