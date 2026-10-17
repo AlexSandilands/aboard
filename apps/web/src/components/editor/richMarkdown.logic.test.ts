@@ -234,6 +234,20 @@ describe("docToMarkdown after edits", () => {
     // A bullet with text, or "1.", can.
     expect(canRoundTrip(schema, "Steps:\n- a\n\nThen:\n1. b")).toBe(true);
     expect(canRoundTrip(schema, "text\n2. b")).toBe(false);
+    // The same after a list or a quote, whose last line the list would continue.
+    const bullets = schema.nodes.bulletList!.create(null, [item("a", { marker: "-" })]);
+    const quote = schema.nodes.blockquote!.create(null, schema.nodes.paragraph!.create(null, schema.text("q")));
+    const two = () => schema.nodes.orderedList!.create({ start: 2 }, [item("b", { marker: "2." })]);
+    expect(docToMarkdown(doc(bullets, two()))).toBe("- a\n\n2. b");
+    expect(docToMarkdown(doc(quote, two()))).toBe("> q\n\n2. b");
+    expect(canRoundTrip(schema, "- a\n2. b")).toBe(false);
+  });
+
+  it("keeps a dashed rule under text from underlining it", () => {
+    const text = schema.nodes.paragraph!.create(null, schema.text("text"));
+    const rule = (source: string) => schema.nodes.horizontalRule!.create({ source });
+    expect(docToMarkdown(doc(text, rule("---")))).toBe("text\n\n---");
+    expect(docToMarkdown(doc(text, rule("***")))).toBe("text\n***");
   });
 
   it("writes an upload still in progress as nothing", () => {

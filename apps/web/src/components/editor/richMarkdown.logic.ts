@@ -478,6 +478,13 @@ function serializeList(list: ProseMirrorNode, parent: { indent: string; width: n
   return lines;
 }
 
+/** Whether a block ends in a line of text the next line could continue (a lazy continuation). */
+const endsInText = (block: ProseMirrorNode | undefined): boolean =>
+  block !== undefined &&
+  (LIST_NAMES.has(block.type.name) ||
+    block.type.name === "blockquote" ||
+    (block.type.name === "paragraph" && block.content.size > 0));
+
 /** The Markdown for an editor document. */
 export function docToMarkdown(doc: ProseMirrorNode): string {
   const lines: string[] = [];
@@ -510,17 +517,23 @@ export function docToMarkdown(doc: ProseMirrorNode): string {
       case "codeBlock":
         lines.push(codeBlockSource(block, index < blocks.length - 1));
         return;
-      case "horizontalRule":
-        lines.push(str(block.attrs.source) || "---");
+      case "horizontalRule": {
+        const source = str(block.attrs.source) || "---";
+        // Under a line of text, dashes alone are a heading underline, not a rule.
+        const previous = blocks[index - 1];
+        if (previous?.type.name === "paragraph" && previous.content.size > 0 && /^-+[ \t]*$/.test(source)) {
+          lines.push("");
+        }
+        lines.push(source);
         return;
+      }
       default:
         if (LIST_NAMES.has(block.type.name)) {
           const list = serializeList(block, null);
-          // Straight after a line of text, only an item with text, marked with a bullet or "1.", starts a list;
-          // any other reads as more of that text (or "-" alone as a heading underline).
-          const previous = index > 0 ? blocks[index - 1]! : null;
+          // Straight after a line of text (a list's or a quote's too), only an item with text, marked with a
+          // bullet or "1.", starts a list; any other reads as more of that text (or "-" alone as an underline).
           const interrupts = /^[ \t]*([-*+]|1[.)])[ \t]+\S/.test(list[0]!);
-          if (previous?.type.name === "paragraph" && previous.content.size > 0 && !interrupts) lines.push("");
+          if (endsInText(blocks[index - 1]) && !interrupts) lines.push("");
           lines.push(...list);
         }
     }
