@@ -33,6 +33,8 @@ export interface NotificationsService {
   list(opts?: { kind?: NotificationKind; limit?: number }): NotificationList;
   markRead(id: string): InboxNotification;
   markAllRead(): number;
+  /** Marks the unread notifications about one task read, for when its panel is opened. Returns how many changed. */
+  markTaskRead(taskId: string): number;
 }
 
 export function createNotificationsService(core: Core): NotificationsService {
@@ -92,6 +94,14 @@ export function createNotificationsService(core: Core): NotificationsService {
     markAllRead() {
       return core.write((fx) => {
         const changed = repos.notifications.markAllRead(core.now().toISOString());
+        if (changed > 0) fx.notificationsChanged();
+        return changed;
+      });
+    },
+
+    markTaskRead(taskId) {
+      return core.write((fx) => {
+        const changed = repos.notifications.markTaskRead(taskId, core.now().toISOString());
         if (changed > 0) fx.notificationsChanged();
         return changed;
       });

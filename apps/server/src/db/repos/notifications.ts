@@ -84,6 +84,12 @@ export function createNotificationsRepo(sql: Sql) {
     markAllRead(at: string): number {
       return Number(sql.run("UPDATE notifications SET read_at = ? WHERE read_at IS NULL", at).changes);
     },
+    /** Marks a task's unread notifications read; returns how many changed. */
+    markTaskRead(taskId: string, at: string): number {
+      return Number(
+        sql.run("UPDATE notifications SET read_at = ? WHERE task_id = ? AND read_at IS NULL", at, taskId).changes,
+      );
+    },
     prune(before: string): void {
       sql.run("DELETE FROM notifications WHERE created_at < ?", before);
     },
