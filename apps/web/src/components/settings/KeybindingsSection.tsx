@@ -38,19 +38,28 @@ export function KeybindingsSection({ settings }: { settings: AppSettings }) {
   const conflicts = keybindingConflicts(bindings);
   const overrides = settings.keybindings;
   const customised = Object.keys(overrides).length > 0;
+  // The overrides the newest save sent, kept while any save is in flight. An earlier save's reply lands in the cache
+  // (useUpdateSettings) and would otherwise be what the next edit is built from, dropping the saves after it.
+  const pending = useRef<{ count: number; latest: KeybindingOverrides } | null>(null);
   /**
    * Saves the overrides `change` makes of the latest ones. A save replaces the whole map, so two edits in a row (a When
    * field saving on blur as another row's Reset is clicked) must each start from the one before, which is not yet in
-   * this render's props: the cache is patched at once, and refetched if the save fails.
+   * this render's props: the cache is patched at once, and refetched if a save fails.
    */
   const save = (change: (current: KeybindingOverrides) => KeybindingOverrides) => {
     const cached = queryClient.getQueryData<AppSettings>(queryKeys.settings);
-    const keybindings = change(cached?.keybindings ?? overrides);
+    const keybindings = change(pending.current?.latest ?? cached?.keybindings ?? overrides);
     if (cached) queryClient.setQueryData(queryKeys.settings, { ...cached, keybindings });
-    update.mutate(
-      { keybindings },
-      { onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.settings }) },
-    );
+    pending.current = { count: (pending.current?.count ?? 0) + 1, latest: keybindings };
+    // mutateAsync, because mutate's callbacks only run for the latest call.
+    update
+      .mutateAsync({ keybindings })
+      .catch(() => void queryClient.invalidateQueries({ queryKey: queryKeys.settings }))
+      .finally(() => {
+        // The hook already reports a failure. Later saves replaced the record, so count down on the current one.
+        const current = pending.current;
+        if (current && --current.count === 0) pending.current = null;
+      });
   };
   return (
     <>

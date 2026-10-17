@@ -242,8 +242,9 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   `group`, with a button that records the next key combination (Esc records too; clicking away cancels), a `When`
   field that saves on blur and shows the parse error, a conflict note, a warning when a bare character would run the
   command while typing in a field (`triggersWhileTyping`), and Reset / Reset all (`keybindings.logic.ts` keeps the
-  stored map free of values equal to the default; saves are built from the cache, which is patched at once, so two
-  edits in a row don't lose the first). Rows have ids `board.keybindings.<command>`, which the
+  stored map free of values equal to the default; saves are built from the cache, which is patched at once, or
+  from the newest save while any is still in flight (an earlier reply must not rewind it), so edits in a row don't
+  lose each other). Rows have ids `board.keybindings.<command>`, which the
   settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
   header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
