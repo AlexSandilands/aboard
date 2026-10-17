@@ -63,9 +63,9 @@ deleting it sets `template_id` to null.
   those were already typed (a field still holding what the last template put there follows the next pick).
   A template with a plan makes "New task with plan" start in Planned instead of opening the plan editor. The
   picker is hidden for epics and for imports.
-- **Settings → Templates:** the list with Edit, Duplicate and Delete, and **New template**. The editor
-  replaces the Settings dialog's contents while it is open (so no second modal stacks on it) and has the
-  fields above, with the plan as the same outline editor the task panel uses.
+- **Settings → Tasks → New tasks:** the list with Edit, Duplicate and Delete, and **New template**. The editor
+  is a settings sub-page (`/settings/tasks/templates/<id>`, `new` for a new one; `EditorFrame` renders the same form
+  in a dialog or on a page) and has the fields above, with the plan as the same outline editor the task panel uses.
 - **Save as template…** in a task's More menu opens the same editor in its own dialog, filled from the
   task: title, description, labels, plan context, suggested tier and the plan's step titles and notes
   (progress is left behind). It is scoped to the task's project to start with.

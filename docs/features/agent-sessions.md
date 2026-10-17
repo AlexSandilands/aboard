@@ -85,7 +85,7 @@ quoted for the shell the terminal setting opens.
 
 ### The terminal
 
-**Settings → Terminal** picks where sessions open (`terminal` setting, machine-only, not in backups):
+**Settings → Integrations → Terminal** picks where sessions open (`terminal` setting, machine-only, not in backups):
 
 | Setting | Runs |
 | --- | --- |
@@ -169,4 +169,4 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
-| `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Terminal |
+| `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Integrations → Terminal |

@@ -35,6 +35,9 @@ import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
 import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
+import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { boardSearchFrom } from "~/components/board/boardNavigation";
 import { PaletteContent } from "./PaletteContent";
 import {
   enabledItemValues,
@@ -222,7 +225,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const closePalette = usePalette((s) => s.closePalette);
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
-  const setAppSettingsOpen = useDialogs((s) => s.setAppSettingsOpen);
+  const openSettingsPage = useOpenSettings();
   const setDigestOpen = useDialogs((s) => s.setDigestOpen);
   const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
@@ -318,13 +321,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (next === "" && view.kind === "browse") popView();
   }
 
-  function openSettings(): void {
+  function openSettings(target = "board"): void {
     closePalette();
-    setAppSettingsOpen(true);
+    openSettingsPage(target);
   }
 
   function openTask(taskId: string): void {
-    void navigate({ to: "/", search: (prev) => ({ ...prev, task: taskId }) });
+    void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) });
   }
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -398,7 +401,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           setLastProjectId(projectId);
           if (flow === "planned") {
             closePalette();
-            void navigate({ to: "/", search: (prev) => ({ ...prev, task: task.id }) }).then(() =>
+            void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: task.id }) }).then(() =>
               planFromTemplate ? undefined : usePanel.getState().requestPlanEditor(),
             );
             return;
@@ -452,7 +455,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     <SetupBadge
       label="Not detected"
       hint="Start T3 Code to import its projects. Open Settings for details."
-      onClick={openSettings}
+      onClick={() => openSettings("integrations.t3-code")}
     />
   );
 
@@ -481,7 +484,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       icon: projectIcon(project),
       run: () => {
         closePalette();
-        void navigate({ to: "/", search: (prev) => ({ ...prev, project: project.id }) });
+        void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: project.id }) });
       },
     };
   }
@@ -569,13 +572,16 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
               setTheme(resolvedTheme === "dark" ? "light" : "dark");
             },
           },
-          {
-            value: "action:settings",
-            title: "Settings",
-            searchTerms: ["preferences", "integrations", "mcp", "github", "jira", "t3"],
-            icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
-            run: openSettings,
-          },
+          // Sub-sections only once the user types, so the list without a query stays short.
+          ...settingsPaletteEntries()
+            .filter((entry) => entry.isGroup || query.trim())
+            .map((entry): PaletteItem => ({
+              value: `settings:${entry.target}`,
+              title: entry.title,
+              searchTerms: entry.searchTerms,
+              icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+              run: () => openSettings(entry.target),
+            })),
         ];
         const groups: PaletteGroup[] = [{ value: "actions", label: "Actions", items: filterItems(actions, query) }];
         if (query.trim()) {
@@ -722,7 +728,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LayersIcon className={ITEM_ICON_CLASS} />,
             run: () => {
               closePalette();
-              void navigate({ to: "/", search: (prev) => ({ ...prev, project: undefined }) });
+              void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: undefined }) });
             },
           });
         }

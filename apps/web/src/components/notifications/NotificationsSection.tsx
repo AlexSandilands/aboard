@@ -2,7 +2,7 @@ import { NOTIFICATION_KINDS, type AppSettings } from "@repo/contracts";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
-import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { SettingsLink, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { useUpdateSettings } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
@@ -15,8 +15,9 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
   // Autopilot owns the window; this only reads it to say what the mute switch follows.
   const autopilot = useAutopilotOverview();
   return (
-    <SettingsSection title="Notifications">
+    <SettingsSection id="board.notifications.settings" title="Notifications">
       <SettingsRow
+        id="board.notifications.popups"
         title="Pop-ups"
         description="An alert when something needs you and the board isn't in front of you. The inbox behind the bell keeps all of them."
         control={<PopupPermission />}
@@ -24,6 +25,7 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
       {NOTIFICATION_KINDS.map(({ kind, label, description }) => (
         <SettingsRow
           key={kind}
+          id={`board.notifications.kind-${kind}`}
           title={label}
           description={description}
           control={
@@ -36,10 +38,15 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
         />
       ))}
       <SettingsRow
+        id="board.notifications.mute-quiet-hours"
         title="Mute during quiet hours"
-        description={`No pop-up while quiet hours are on; they still land in the inbox. ${
-          autopilot.data ? describeQuietHours(autopilot.data.engine.quietHours) : ""
-        }`.trim()}
+        description={
+          <>
+            No pop-up while quiet hours are on; they still land in the inbox.{" "}
+            {autopilot.data ? `${describeQuietHours(autopilot.data.engine.quietHours)} ` : null}
+            <SettingsLink to="autopilot.engine.quiet-hours">Set quiet hours</SettingsLink>
+          </>
+        }
         control={
           <Switch
             aria-label="Mute during quiet hours"

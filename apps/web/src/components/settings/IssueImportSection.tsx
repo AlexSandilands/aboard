@@ -3,19 +3,27 @@ import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
 import { parseToolList } from "./issueImport.logic";
-import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 /**
  * Importing a task from a Jira or GitHub issue URL: Claude Code headless fills in its title, description and
- * labels. It runs the same CLI as the board reviewer.
+ * labels. It runs the Claude Code CLI set under Integrations, as the board reviewer does.
  */
 export function IssueImportSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
   return (
-    <SettingsSection title="Issue import">
+    <SettingsSection id="tasks.new-tasks.issue-import" title="Issue import">
       <SettingsRow
+        id="tasks.new-tasks.import-enabled"
         title="Fill in imported tasks"
-        description="Paste a Jira key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills in its title, description and labels. It uses the Claude Code CLI set under Local review. Without this, a GitHub issue is imported as written and a Jira issue can't be imported."
+        description={
+          <>
+            Paste a Jira key or URL, or a GitHub issue URL, as a new task&apos;s title and Claude Code fills in its
+            title, description and labels. It uses the CLI set under{" "}
+            <SettingsLink to="integrations.claude-code.cli-path">Integrations › Claude Code</SettingsLink>. Without
+            this, a GitHub issue is imported as written and a Jira issue can&apos;t be imported.
+          </>
+        }
         control={
           <Switch
             aria-label="Fill in imported tasks"
@@ -27,6 +35,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
       {settings.issueImportEnabled ? (
         <>
           <SettingsRow
+            id="tasks.new-tasks.import-model"
             title="Model"
             description="Passed to claude --model: an alias such as haiku, or a full model name."
             control={
@@ -43,6 +52,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
             }
           />
           <SettingsRow
+            id="tasks.new-tasks.import-budget"
             title="Budget per import"
             description="The most one import may spend, in US dollars (claude --max-budget-usd)."
             control={
@@ -62,6 +72,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
             }
           />
           <SettingsRow
+            id="tasks.new-tasks.import-jira-tools"
             title="Jira tools"
             description="Jira issues are read through your own Jira MCP server in Claude Code (one added for you, not for a single project), with these tools allowed, comma-separated (for example mcp__atlassian__getJiraIssue), and tools that look like writes denied. Leave empty to look for the common read-only Jira tools on every MCP server you have."
             control={

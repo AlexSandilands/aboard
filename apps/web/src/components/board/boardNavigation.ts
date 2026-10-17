@@ -1,6 +1,16 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
+import type { BoardSearch } from "~/router";
+import { useSettingsNav } from "~/state/ui";
+
+/**
+ * The board search a navigation to "/" builds on: the current one on the board, else the board as it was when
+ * Settings opened, so opening a task from Settings doesn't carry the project page's `?project=` onto the board.
+ */
+export function boardSearchFrom(prev: BoardSearch): BoardSearch {
+  return window.location.pathname === "/" ? prev : useSettingsNav.getState().boardReturn;
+}
 
 /** `?task=` — the task open in the detail panel. */
 export function useSelectedTaskId(): string | null {
@@ -22,7 +32,7 @@ export function useSetLabelFilter() {
   const navigate = useNavigate();
   return useCallback(
     (labels: ReadonlyArray<string>) =>
-      navigate({ to: "/", search: (prev) => ({ ...prev, labels: formatLabelFilter(labels) }) }),
+      navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), labels: formatLabelFilter(labels) }) }),
     [navigate],
   );
 }
@@ -30,14 +40,17 @@ export function useSetLabelFilter() {
 export function useOpenTask() {
   const navigate = useNavigate();
   return useCallback(
-    (taskId: string) => navigate({ to: "/", search: (prev) => ({ ...prev, task: taskId }) }),
+    (taskId: string) => navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) }),
     [navigate],
   );
 }
 
 export function useCloseTask() {
   const navigate = useNavigate();
-  return useCallback(() => navigate({ to: "/", search: (prev) => ({ ...prev, task: undefined }) }), [navigate]);
+  return useCallback(
+    () => navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: undefined }) }),
+    [navigate],
+  );
 }
 
 /** `?epic=`: the epic the board is filtered to. */
@@ -48,7 +61,8 @@ export function useEpicFilter(): string | null {
 export function useSetEpicFilter() {
   const navigate = useNavigate();
   return useCallback(
-    (epicId: string | null) => navigate({ to: "/", search: (prev) => ({ ...prev, epic: epicId ?? undefined }) }),
+    (epicId: string | null) =>
+      navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), epic: epicId ?? undefined }) }),
     [navigate],
   );
 }
@@ -57,7 +71,7 @@ export function useSetProjectFilter() {
   const navigate = useNavigate();
   return useCallback(
     (projectId: string | null) =>
-      navigate({ to: "/", search: (prev) => ({ ...prev, project: projectId ?? undefined }) }),
+      navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: projectId ?? undefined }) }),
     [navigate],
   );
 }

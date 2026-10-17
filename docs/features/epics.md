@@ -161,7 +161,7 @@ The prompt names harnesses only as examples, so the same text reads right in any
 
 #### T3 Code threads
 
-Starting threads with no one watching is off until the user turns on **Settings → T3 Code → Let agents start
+Starting threads with no one watching is off until the user turns on **Settings → Integrations → T3 Code → Let agents start
 threads** (`agentT3Threads`). Unlike the launch dialog, nobody sees the model or access before the agent starts,
 and messages land in threads as if the user had typed them.
 

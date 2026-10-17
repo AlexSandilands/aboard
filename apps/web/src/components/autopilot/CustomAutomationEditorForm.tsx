@@ -9,8 +9,8 @@ import {
 import { type ReactNode, useState } from "react";
 import { WEEKDAYS } from "~/components/recurring/recurring.logic";
 import { Alert, AlertDescription } from "~/components/ui/alert";
+import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
 import { Button } from "~/components/ui/button";
-import { DialogFooter, DialogHeader, DialogPanel, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
@@ -73,7 +73,7 @@ function Choice<T extends string>({
 
 /**
  * The body of the custom automation editor: trigger, filters, action and a preview of what it would run for a task
- * on the board. It takes over the settings dialog. `customId` is null for a new automation.
+ * on the board. It is a settings sub-page. `customId` is null for a new automation.
  */
 export function CustomAutomationEditorForm({
   customId,
@@ -119,14 +119,14 @@ export function CustomAutomationEditorForm({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>{customId ? "Edit custom automation" : "New custom automation"}</DialogTitle>
+      <EditorHeader>
+        <EditorTitle>{customId ? "Edit custom automation" : "New custom automation"}</EditorTitle>
         <p className="text-sm text-muted-foreground">
           Say what to watch for and what to do. It is switched on and off per project like the built-in automations, and
           keeps to the same pause, dry run and limits. It only acts on what happens after it is switched on.
         </p>
-      </DialogHeader>
-      <DialogPanel className="space-y-4">
+      </EditorHeader>
+      <EditorPanel className="space-y-4">
         <Field label="Name">
           <Input
             autoFocus
@@ -449,15 +449,15 @@ export function CustomAutomationEditorForm({
             {error}
           </p>
         ) : null}
-      </DialogPanel>
-      <DialogFooter>
+      </EditorPanel>
+      <EditorFooter>
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
         <Button disabled={pending} onClick={save}>
           {customId ? "Save automation" : "Create automation"}
         </Button>
-      </DialogFooter>
+      </EditorFooter>
     </>
   );
 }

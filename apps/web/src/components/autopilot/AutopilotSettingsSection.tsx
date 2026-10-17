@@ -6,8 +6,7 @@ import { toastManager } from "~/components/ui/toast";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
-import { AutomationRows } from "./AutomationRows";
-import { CustomAutomationsSection, type CustomEdit } from "./CustomAutomationsSection";
+import { AutomationRows, AutomationSections } from "./AutomationRows";
 import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
 
@@ -19,40 +18,34 @@ const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> =
 ];
 
 /**
- * Settings → Autopilot: Pause all, the engine's limits, the board-level switch and config of every automation, then
- * the custom automations. Reads and writes its own queries; the custom automation editor is the caller's, so it can
- * take over the dialog.
+ * Settings → Autopilot: Pause all and the engine's limits, then the board-level switch and config of every
+ * automation, one folded section each. Reads and writes its own queries.
  */
-export function AutopilotSettingsSection({ onEditCustom }: { onEditCustom: (edit: CustomEdit) => void }) {
+export function AutopilotEngineSection() {
   const overview = useAutopilotOverview();
-  if (!overview.data) {
-    return (
-      <SettingsSection title="Autopilot">
-        <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
-          {overview.error ? overview.error.message : "Loading Autopilot..."}
-        </p>
-      </SettingsSection>
-    );
-  }
   return (
     <>
-      <SettingsSection title="Autopilot">
-        <EngineRows paused={overview.data.paused} engine={overview.data.engine} />
+      <SettingsSection id="autopilot.engine.settings" title="Autopilot">
+        {overview.data ? (
+          <EngineRows paused={overview.data.paused} engine={overview.data.engine} />
+        ) : (
+          <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
+            {overview.error ? overview.error.message : "Loading Autopilot..."}
+          </p>
+        )}
       </SettingsSection>
-      <SettingsSection title="Autopilot automations">
-        <AutomationRows projectId={null} />
-      </SettingsSection>
-      <CustomAutomationsSection onEdit={onEditCustom} />
+      <div className="space-y-2.5">
+        <h2 className="flex min-h-7 items-center px-3 text-sm font-normal text-foreground/70 sm:px-4">Automations</h2>
+        <AutomationSections />
+      </div>
     </>
   );
 }
 
-/** A project's own Autopilot switches and config, in its settings. Left out while there are no automations. */
+/** A project's own Autopilot switches and config, in its settings. */
 export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
-  const automations = useAutopilotOverview().data?.automations;
-  if (!automations?.length) return null;
   return (
-    <SettingsSection title="Autopilot">
+    <SettingsSection id="project.autopilot.automations" title="Autopilot overrides">
       <AutomationRows projectId={projectId} />
     </SettingsSection>
   );
@@ -65,11 +58,13 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
   return (
     <>
       <SettingsRow
+        id="autopilot.engine.pause-all"
         title="Pause all"
         description="Stops every new Autopilot run, whatever the switches say. Runs already going finish. A backup restore never lifts it."
         control={<Switch aria-label="Pause all" checked={paused} onCheckedChange={(next) => setPaused.mutate(next)} />}
       />
       <SettingsRow
+        id="autopilot.engine.dry-run"
         title="Dry run"
         description="Records what each automation would do as a skipped run and does nothing. Turn it on to watch a new automation before trusting it."
         control={
@@ -77,6 +72,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.max-concurrent"
         title="Agent runs at once"
         description="How many automations that start an agent can run at the same time."
         control={
@@ -92,6 +88,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.daily-run-cap"
         title="Daily run cap"
         description="The most agent runs to start per day (local time). Leave empty for no cap."
         control={
@@ -107,6 +104,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.daily-spend-cap"
         title="Daily spend cap"
         description="No more agent runs start once today's runs have cost this much. Leave empty for no cap."
         control={
@@ -122,6 +120,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.quiet-hours"
         title="Quiet hours"
         description="No agent runs start in this window (local time, and it may cross midnight). Automations that only change the board still run."
         control={
@@ -148,6 +147,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.pr-review-rounds"
         title="PR review rounds"
         description="How many review rounds the PR review automation runs on a pull request."
         control={
@@ -164,6 +164,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.pr-fix-threshold"
         title="PR fix threshold"
         description="The lowest severity of finding the PR automations ask an agent to fix."
         control={
@@ -188,6 +189,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
         }
       />
       <SettingsRow
+        id="autopilot.engine.worktree-retention"
         title="Worktree retention"
         description="How long a finished headless run's worktree is kept when its PR hasn't merged. Worktrees with uncommitted changes are always kept."
         control={

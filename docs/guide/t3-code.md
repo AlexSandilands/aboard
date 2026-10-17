@@ -21,7 +21,7 @@ to start new threads from a task:
 
 1. In T3 Code, open **Settings → Connections → Create link** and allow "View environment" and "Operate
    tasks".
-2. Paste the pairing link into the board's **Settings → T3 Code** within 5 minutes. The board exchanges
+2. Paste the pairing link into the board's **Settings → Integrations → T3 Code** within 5 minutes. The board exchanges
    it for a 30-day token.
 
 If you have the `t3` CLI, you can paste a token from it instead:

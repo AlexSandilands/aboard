@@ -3,7 +3,7 @@ import { PopoverClose } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
 import type { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { entryFor, inheritLabel, parentEntry, scopeAutomations } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
 
@@ -24,12 +24,13 @@ export function ScopePopover({
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   set: ReturnType<typeof useSetAutopilotScope>;
-  /** Set for a project's popover: under Recurring tasks a link opens the project's settings at that section. */
+  /** Set for a project's popover: under Recurring tasks a link opens the project's settings page at that section. */
   projectId?: string;
   /** An epic's popover: leaves out the automations that don't apply to epics. */
   epic?: boolean;
 }) {
   const overview = useAutopilotOverview();
+  const openSettings = useOpenSettings();
   const paused = overview.data?.paused ?? false;
   return (
     <div className="flex w-full flex-col gap-2">
@@ -37,7 +38,7 @@ export function ScopePopover({
         <h3 className="text-sm font-medium">Autopilot</h3>
         <PopoverClose
           className="cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => useDialogs.getState().setAppSettingsOpen(true)}
+          onClick={() => openSettings("autopilot")}
         >
           Settings
         </PopoverClose>
@@ -77,7 +78,7 @@ export function ScopePopover({
               {projectId && automation.key === AUTOPILOT_RECURRING ? (
                 <PopoverClose
                   className="w-fit cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => useDialogs.getState().openProjectSettings(projectId, "recurring")}
+                  onClick={() => openSettings("project.recurring", { project: projectId })}
                 >
                   Recurring tasks…
                 </PopoverClose>

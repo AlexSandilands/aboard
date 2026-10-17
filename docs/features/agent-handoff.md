@@ -89,7 +89,7 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   null. Agents set it with `set_plan`, `create_task` or `update_task` (`null` clears it), and never need to
   know any harness's model names. The user can change or clear it under Details in the task panel. A change
   is logged as `suggested_model_changed`.
-- **Settings → Model tiers** says what each tier means for you: a free-text description (e.g. "Sonnet 5.5,
+- **Settings → Tasks → Models** says what each tier means for you: a free-text description (e.g. "Sonnet 5.5,
   medium effort") for any harness, and, when T3 Code is connected, a T3 model with its effort and fast mode.
   The T3 model's label is saved with it, so prompts can name it without asking T3.
 - **Copied work prompts** get one line: `Suggested model: standard (Sonnet 5.5, medium effort): <reason>.
@@ -112,7 +112,7 @@ The board needs a T3 session token with two scopes:
 t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
 ```
 
-Paste it in Settings → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
+Paste it in Settings → Integrations → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
 options. `orchestration:operate` allows starting threads. The token is stored in the board's local
 database and never sent to the browser.
 
@@ -175,7 +175,7 @@ own web client uses:
 2. Connect to `ws://<t3-origin>/ws?orchestrationProtocol=2&wsTicket=<ticket>`.
 3. Send Effect-RPC JSON requests and wait for each reply:
    - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog, and
-     `server.getConfig` alone fills the model pickers in Settings → Model tiers;
+     `server.getConfig` alone fills the model pickers in Settings → Tasks → Models;
    - `orchestration.launchThread` creates the thread and sends the prompt as its first message, which starts
      the agent.
 4. On success, add a `t3_thread` link to the task. The card shows the thread straight away, and the
@@ -278,4 +278,4 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task or a project) and its pickers; pure logic in `handoff.logic.ts` |
-| `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Model tiers |
+| `apps/web/src/components/settings/ModelTiersSection.tsx` | Settings → Tasks → Models |

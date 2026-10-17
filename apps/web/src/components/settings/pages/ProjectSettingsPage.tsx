@@ -1,29 +1,31 @@
 import type { Project } from "@repo/contracts";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
+import { ProjectAutopilotSection } from "~/components/autopilot/AutopilotSettingsSection";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
-import { RecurringSection, type RuleEdit } from "~/components/recurring/RecurringSection";
-import { RuleEditorForm } from "~/components/recurring/RuleEditorForm";
+import { RecurringSection } from "~/components/recurring/RecurringSection";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogPanel,
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toastManager } from "~/components/ui/toast";
 import { useDeleteProject, useUpdateProject } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
-import { FolderPicker } from "./FolderPicker";
-import { ProjectAutopilotSection } from "~/components/autopilot/AutopilotSettingsSection";
-import { ProjectReviewSection } from "./ProjectReviewSection";
-import { SettingsRow, SettingsSection } from "./settingsLayout";
-import { useUnarchiveProject } from "./useArchivedProjects";
+import { useSettingsNav } from "~/state/ui";
+import { FolderPicker } from "../FolderPicker";
+import { ProjectReviewSection } from "../ProjectReviewSection";
+import { SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
+import { resolveSettingsProject } from "../settingsNav.logic";
+import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
+import { useUnarchiveProject } from "../useArchivedProjects";
 
 // The picker pulls in lucide's full icon index; load it only when someone picks an icon.
 const ProjectIconPickerDialog = lazy(() =>
@@ -32,39 +34,101 @@ const ProjectIconPickerDialog = lazy(() =>
   })),
 );
 
-/** Project settings, opened from the sidebar gear via useDialogs().openProjectSettings(id). */
-export function ProjectSettingsDialog() {
-  const projectId = useDialogs((s) => s.projectSettingsId);
-  const close = useDialogs((s) => s.closeProjectSettings);
+/**
+ * Settings → Project: a picker for the project (`?project=`, else the board's scope when Settings opened, else the
+ * first), then that project's settings.
+ */
+export function ProjectSettingsPage() {
   const board = useBoard();
-  const project = projectId ? board.data?.projects.find((p) => p.id === projectId) : undefined;
+  const requested = useSearch({ strict: false, select: (search) => search.project });
+  const fromBoard = useSettingsNav((s) => s.boardReturn.project);
+  // In sidebar order, so the picker reads like the project list.
+  const projects = [...(board.data?.projects ?? [])].sort((a, b) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+  );
+  const project = resolveSettingsProject(projects, requested, fromBoard);
+  const navigate = useNavigate();
+  const pick = (id: string) =>
+    void navigate({ to: "/settings/$group", params: { group: "project" }, search: { project: id }, replace: true });
 
   return (
-    <Dialog
-      open={project !== undefined}
-      onOpenChange={(open) => {
-        if (!open) close();
-      }}
-    >
-      <DialogPopup className="max-w-xl">
-        {project ? <ProjectSettingsBody key={project.id} project={project} onClose={close} /> : null}
-      </DialogPopup>
-    </Dialog>
+    <>
+      <SettingsTopBar group="project" />
+      <SettingsScroller>
+        {!board.data ? (
+          <p className="px-3 text-sm text-muted-foreground sm:px-4">
+            {board.error ? board.error.message : "Loading projects..."}
+          </p>
+        ) : !project ? (
+          <p className="px-3 text-sm text-muted-foreground sm:px-4">
+            No projects yet. Add one from the board&apos;s sidebar or the command palette.
+          </p>
+        ) : (
+          <>
+            <ProjectPicker projects={projects} project={project} onPick={pick} />
+            {/* Keyed so per-project drafts (the name field, the folder browser) start fresh on a switch. */}
+            <ProjectSections key={project.id} project={project} />
+          </>
+        )}
+      </SettingsScroller>
+    </>
   );
 }
 
-function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: () => void }) {
+function ProjectPicker({
+  projects,
+  project,
+  onPick,
+}: {
+  projects: ReadonlyArray<Project>;
+  project: Project;
+  onPick: (id: string) => void;
+}) {
+  // Archived projects aren't in the board snapshot; they are restored from Board › Data.
+  return (
+    <div className="flex items-center gap-3 px-3 sm:px-4">
+      <Select
+        items={projects.map((p) => ({ value: p.id, label: p.title }))}
+        value={project.id}
+        onValueChange={(value) => {
+          if (typeof value === "string") onPick(value);
+        }}
+      >
+        <SelectTrigger className="w-full sm:w-72" aria-label="Project">
+          <span className="flex min-w-0 items-center gap-2">
+            <ProjectFavicon title={project.title} icon={project.icon} className="size-4" />
+            <SelectValue />
+          </span>
+        </SelectTrigger>
+        <SelectPopup>
+          {projects.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              <span className="flex min-w-0 items-center gap-2">
+                <ProjectFavicon title={p.title} icon={p.icon} className="size-4" />
+                <span className="truncate">{p.title}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </div>
+  );
+}
+
+function ProjectSections({ project }: { project: Project }) {
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
   const unarchive = useUnarchiveProject();
+  const navigate = useNavigate();
   const [title, setTitle] = useState(project.title);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // The rule editor takes over the dialog, so it doesn't stack a second modal on this one.
-  const [editingRule, setEditingRule] = useState<RuleEdit | null>(null);
   const board = useBoard();
   const taskCount = board.data?.tasks.filter((t) => t.projectId === project.id).length ?? 0;
+  // After archiving or deleting, the page moves on to another project.
+  const clearProject = () =>
+    void navigate({ to: "/settings/$group", params: { group: "project" }, search: {}, replace: true });
 
   function saveTitle() {
     const next = title.trim();
@@ -80,11 +144,11 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
       { id: project.id, archived: true },
       {
         onSuccess: () => {
-          onClose();
+          clearProject();
           toastManager.add({
             type: "success",
             title: "Project archived",
-            description: `${project.title} is hidden from the board. Restore it from Settings.`,
+            description: `${project.title} is hidden from the board. Restore it from Settings › Board › Data.`,
             actionProps: { children: "Undo", onClick: () => unarchive.mutate(project.id) },
           });
         },
@@ -92,27 +156,12 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
     );
   }
 
-  if (editingRule) {
-    return (
-      <RuleEditorForm
-        projectId={project.id}
-        ruleId={editingRule.ruleId}
-        initial={editingRule.initial}
-        onCancel={() => setEditingRule(null)}
-        onDone={() => setEditingRule(null)}
-      />
-    );
-  }
-
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>Project settings</DialogTitle>
-        <DialogDescription>{project.title}</DialogDescription>
-      </DialogHeader>
-      <DialogPanel className="space-y-6">
-        <SettingsSection title="General">
+      <SettingsSubsection id="project.general">
+        <SettingsSection id="project.general.settings" title="General">
           <SettingsRow
+            id="project.general.name"
             title="Name"
             description="Shown on the lane header and in the sidebar."
             control={
@@ -133,6 +182,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
           <SettingsRow
+            id="project.general.icon"
             title="Icon"
             description={project.icon ? "A custom icon." : "Automatic, from the project name."}
             control={
@@ -156,6 +206,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
           <SettingsRow
+            id="project.general.folder"
             title="Workspace folder"
             description={
               project.workspaceRoot ? (
@@ -195,6 +246,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             ) : null}
           </SettingsRow>
           <SettingsRow
+            id="project.general.t3-project"
             title="Linked T3 project"
             description="Set when the project is imported from T3 Code."
             control={
@@ -206,13 +258,27 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
         </SettingsSection>
+      </SettingsSubsection>
+      <SettingsSubsection id="project.review-skill">
         <ProjectReviewSection project={project} />
+      </SettingsSubsection>
+      <SettingsSubsection id="project.autopilot">
         <ProjectAutopilotSection projectId={project.id} />
-        <RecurringSection project={project} onEdit={setEditingRule} />
-        <SettingsSection title="Danger zone">
+      </SettingsSubsection>
+      <SettingsSubsection id="project.recurring">
+        <RecurringSection project={project} />
+      </SettingsSubsection>
+      <SettingsSubsection id="project.danger-zone">
+        <SettingsSection id="project.danger-zone.settings" title="Danger zone">
           <SettingsRow
+            id="project.danger-zone.archive"
             title="Archive project"
-            description="Hides the lane and its tasks. Restore it any time from Settings."
+            description={
+              <>
+                Hides the lane and its tasks. Restore it any time from{" "}
+                <SettingsLink to="board.data.archived-projects">Board › Data</SettingsLink>.
+              </>
+            }
             control={
               <Button size="sm" variant="outline" disabled={updateProject.isPending} onClick={archive}>
                 Archive
@@ -220,6 +286,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
           <SettingsRow
+            id="project.danger-zone.delete"
             title="Delete project"
             description="Permanently deletes the project and all of its tasks."
             control={
@@ -229,7 +296,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
             }
           />
         </SettingsSection>
-      </DialogPanel>
+      </SettingsSubsection>
       {iconPickerOpen ? (
         <Suspense fallback={null}>
           <ProjectIconPickerDialog
@@ -262,7 +329,7 @@ function ProjectSettingsBody({ project, onClose }: { project: Project; onClose: 
                 deleteProject.mutate(project.id, {
                   onSuccess: () => {
                     setConfirmDelete(false);
-                    onClose();
+                    clearProject();
                     toastManager.add({ type: "success", title: "Project deleted", description: project.title });
                   },
                 })

@@ -87,7 +87,7 @@ where a pop-up belongs:
 ### Settings
 
 `AppSettings.notifications` (stored under the `notifications` settings key, exported in backups): a switch
-per kind and `muteInQuietHours`, both on by default. **Settings → Notifications** shows them, the browser
+per kind and `muteInQuietHours`, both on by default. **Settings → Board → Notifications** shows them, the browser
 permission state, and what the quiet-hours window is.
 
 ## Decisions

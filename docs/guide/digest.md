@@ -19,7 +19,7 @@ doesn't hide anything from the next.
 - **Moved**: where each task started and ended in the period.
 - **Merged pull requests**, with the task they finished.
 - **Needs attention**: tasks whose agent started waiting for you, whose checks started failing, or that got
-  change requests. These come from the notifications, so a type you switched off under Settings → Notifications
+  change requests. These come from the notifications, so a type you switched off under Settings → Board → Notifications
   isn't reported.
 - **Autopilot**: how many runs there were, which failed or need you, and what they cost.
 
