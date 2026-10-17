@@ -439,11 +439,17 @@ export interface TaskThreadLaunch extends AutoLaunchSettings {
 export interface ThreadWorkspace {
   worktreePath: string | null;
   branch: string | null;
-  /** The latest run's status as T3 has it: "preparing" while the workspace is set up, then "starting", "failed", … */
+  /**
+   * The run's status as T3 has it, read like `mapThreadStatus` does (the active run's, else the latest run's):
+   * "preparing" while the workspace is set up, then "starting", "running", "failed", …
+   */
   runStatus: string;
+  /** Null until T3 has made the thread's first run. */
   latestRunId: string | null;
   /** Why the latest run failed, e.g. "Workspace preparation failed during provision worktree: …". */
   lastError: string | null;
+  /** When T3 last changed the thread, to tell a fresh failure from one read before a retry. */
+  updatedAt: string | null;
 }
 
 export interface ResolvedThread {
@@ -821,9 +827,10 @@ export function createT3Integration(deps: {
       ? {
           worktreePath: thread.worktreePath ?? null,
           branch: thread.branch ?? null,
-          runStatus: thread.status,
+          runStatus: thread.activityRunStatus ?? thread.status,
           latestRunId: thread.latestRunId ?? null,
           lastError: thread.lastError ?? null,
+          updatedAt: thread.updatedAt ?? null,
         }
       : null;
   };

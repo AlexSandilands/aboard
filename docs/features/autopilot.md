@@ -651,14 +651,15 @@ so the model is the one the user mapped to the task's suggested tier. The thread
   and all but one fail ("Workspace preparation failed during provision worktree: … git fetch origin failed"), and the
   engine doesn't await agent actions, so every launch of a pass would start together. So each launch holds the
   repository's gate (`autopilot/repoGate.ts`, keyed by the project folder) from the launch until T3's shell shows the
-  thread's latest run past `preparing` (`threadWorkspace`, every 2 s), for up to three minutes (`T3_PREPARE_MS`;
+  thread with a run that is past `preparing` (`threadWorkspace`, every 2 s), for up to three minutes (`T3_PREPARE_MS`;
   then the gate is let go and the run carries on), twice that when the preparation is retried. The headless runner's
   worktree fetch takes the same gate (`gateFetches`). What the user asks for doesn't, since a hold can last minutes:
   launches from the dialog and `start_task_thread`, and an epic's branch (`ensureEpicBranch`). A wait for an
   unreachable T3 lets the gate go meanwhile.
 - **A failed preparation is retried once.** When the thread's run goes `failed` during that wait, the runner asks T3
   to prepare it again in the same thread (`retryPreparation`: T3's `prepared-run.retry` command, id
-  `autopilot-<runId>-retry`), still holding the gate, so the link and thread stay. A second failure fails the run with
+  `autopilot-<runId>-retry`), still holding the gate, so the link and thread stay. The shell may still show the old
+  failure for a moment, so a failure counts only once the thread has changed since the retry. A second failure fails the run with
   "T3 Code couldn't prepare the thread's workspace: <T3's error>". T3 refuses the retry for a run that failed for
   another reason, which fails the run with "T3 Code couldn't start the thread: …".
 

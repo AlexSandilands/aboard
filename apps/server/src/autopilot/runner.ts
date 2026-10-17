@@ -172,15 +172,27 @@ export function createAutopilotRunner(deps: {
   };
 
   /**
-   * Waits while T3 prepares a new thread's workspace: the thread once its latest run is past "preparing", or null when
-   * T3 can't say or the wait ran out.
+   * Waits while T3 prepares a new thread's workspace: the thread once it has a run that is past "preparing", or what
+   * was last seen (null when T3 couldn't say) when the wait ran out. After a retry, `before` is the failure that was
+   * retried: T3's shell may still show it for a moment, so a failure counts only once the thread has changed since.
    */
-  const prepared = async (link: ThreadLink): Promise<ThreadWorkspace | null> => {
+  const prepared = async (link: ThreadLink, before?: ThreadWorkspace): Promise<ThreadWorkspace | null> => {
     const deadline = Date.now() + prepareMs;
+    let moved = false;
+    let last: ThreadWorkspace | null = null;
     for (;;) {
       const workspace = await deps.t3.threadWorkspace(link).catch(() => null);
-      if (workspace && workspace.runStatus !== "preparing") return workspace;
-      if (Date.now() + preparePollMs > deadline) return null;
+      if (workspace) last = workspace;
+      if (workspace && before) {
+        moved ||=
+          workspace.runStatus !== "failed" ||
+          workspace.updatedAt !== before.updatedAt ||
+          workspace.lastError !== before.lastError;
+      }
+      // No run yet: T3 hasn't started preparing, let alone fetched.
+      const ready = workspace && workspace.latestRunId !== null && workspace.runStatus !== "preparing";
+      if (ready && (!before || moved)) return workspace;
+      if (Date.now() + preparePollMs > deadline) return last;
       await sleep(preparePollMs);
     }
   };
@@ -202,7 +214,7 @@ export function createAutopilotRunner(deps: {
       // T3 only prepares again a run whose preparation failed: this thread failed for another reason.
       throw new Error(`T3 Code couldn't start the thread: ${why(first)}`, { cause: error });
     }
-    const second = await prepared(link);
+    const second = await prepared(link, first);
     if (second?.runStatus === "failed") {
       throw new Error(`T3 Code couldn't prepare the thread's workspace: ${why(second)}`);
     }

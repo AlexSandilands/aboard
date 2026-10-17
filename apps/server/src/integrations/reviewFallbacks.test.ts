@@ -41,6 +41,7 @@ function setup(
         runStatus: "running",
         latestRunId: "run-1",
         lastError: null,
+        updatedAt: null,
       }),
   };
   const fallbacks = createReviewFallbacks({

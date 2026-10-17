@@ -31,6 +31,7 @@ const WORKSPACE: ThreadWorkspace = {
   runStatus: "running",
   latestRunId: "run-1",
   lastError: null,
+  updatedAt: "2026-10-17T08:00:00.000Z",
 };
 const FETCH_FAILED = "Workspace preparation failed during provision worktree: git fetch origin failed";
 
@@ -613,9 +614,40 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(patches).toEqual([{ runner: "t3", threadUrl: out.threadUrl }]);
       });
 
+      it("doesn't take the failure it retried, still in T3's shell, for the retry failing", async () => {
+        const failedRun = { runStatus: "failed", worktreePath: null, latestRunId: "run-7", lastError: FETCH_FAILED };
+        const { start, retries } = setup({
+          t3: T3_UP,
+          workspaces: [failedRun, failedRun, failedRun, { runStatus: "preparing", worktreePath: null }, {}],
+        });
+        expect((await start({ options: { runner: "t3" } })).runner).toBe("t3");
+        expect(retries).toHaveLength(1);
+      });
+
+      it("waits for T3 to make the thread's run before letting the gate go", async () => {
+        const { start, retries } = setup({
+          t3: T3_UP,
+          workspaces: [
+            { runStatus: "idle", latestRunId: null, worktreePath: null },
+            { runStatus: "failed", worktreePath: null, lastError: FETCH_FAILED },
+            {},
+          ],
+        });
+        await start({ options: { runner: "t3" } });
+        // The failure was seen, so the run had been waited for rather than passed over as "idle".
+        expect(retries).toHaveLength(1);
+      });
+
       it("fails the run when the workspace fails again, keeping the thread on the run", async () => {
         const failedRun = { runStatus: "failed", worktreePath: null, latestRunId: "run-7", lastError: FETCH_FAILED };
-        const { start, retries, patches } = setup({ t3: T3_UP, workspaces: [failedRun] });
+        const { start, retries, patches } = setup({
+          t3: T3_UP,
+          workspaces: [
+            failedRun,
+            { runStatus: "preparing", worktreePath: null },
+            { ...failedRun, updatedAt: "2026-10-17T08:01:00.000Z" },
+          ],
+        });
         await expect(start({ options: { runner: "t3" } })).rejects.toThrow(
           `T3 Code couldn't prepare the thread's workspace: ${FETCH_FAILED}`,
         );

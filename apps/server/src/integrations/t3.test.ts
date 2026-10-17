@@ -918,6 +918,7 @@ describe("T3 thread launch", () => {
       runStatus: "completed",
       latestRunId: "run-1",
       lastError: null,
+      updatedAt: "2026-03-01T00:00:00.000Z",
     });
     expect(await t3.threadWorkspace(threadLink("l2", "th-missing") as ThreadLink)).toBeNull();
   });
