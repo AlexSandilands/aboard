@@ -126,9 +126,8 @@ describe("auto-archive Done", () => {
       const h = setup();
       const { s, pass, archived, turnOn } = h;
       const { epic, tasks } = epicOf(h, ["one"]);
-      s.tasks.update(epic.id, { archived: true }, "user");
-      // An epic archived before its tasks went with it left them unarchived.
-      s.tasks.update(tasks[0]!.id, { archived: false }, "user");
+      // An epic archived before its tasks went with it left them unarchived; the service can't make that now.
+      h.db.prepare("UPDATE tasks SET archived_at = ? WHERE id = ?").run(new Date().toISOString(), epic.id);
       expect(archived(tasks[0]!.id)).toBe(false);
       turnOn();
       await pass(15);

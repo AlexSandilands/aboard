@@ -79,6 +79,27 @@ The window is frameless with Windows' native controls painted over the page (`ti
 `pnpm desktop` runs the dev server, Vite and the shell together; the shell waits for both to answer, then
 attaches.
 
+### Against a sandbox
+
+`pnpm desktop` uses the real data dir and the real ports (:4317 / :5317), so it is for the main checkout.
+Anywhere else, `pnpm sandbox --desktop` starts (or reuses) this checkout's sandbox, then opens the shell on
+it (`openDesktop` in `apps/server/scripts/sandbox.ts`). `--live` is refused: the shell must never attach to
+the real board. The shell is a dev shell like `pnpm desktop` (it loads the sandbox's Vite and attaches to
+its server, never spawning one) with these differences:
+
+- `desktopSandboxEnv` (contracts) gives it the sandbox's ports, `DEV_URL` and `brandEnv("DESKTOP_SANDBOX")`
+  (the sandbox's home), and drops the user's token and data dir.
+- It is named `<Name> Sandbox`: the window title ends in "- Sandbox", and the tray tooltip, the tray's
+  Open item and the app user model id say so too. Its `userData` (profile, logs, single-instance lock) is
+  `<sandbox home>/desktop`, so it runs beside the real app and other worktrees' sandboxes, and
+  `pnpm sandbox stop` deletes it.
+- Before starting, `readDesktopSandbox` checks the setup and the shell exits with a message if it would
+  touch the real data dir or a real port.
+
+The sandbox state file records the shell's pid. `pnpm sandbox stop` (and Ctrl+C on the sandbox) closes it,
+only when the pid is still the process the sandbox started. Its output goes to `desktop.log` in the sandbox
+home; `--desktop` waits a few seconds and reports the log if the shell exits at once.
+
 ## Decisions
 
 - **Attach rather than run a second server.** Two servers on one SQLite file would fight, and agents
@@ -97,6 +118,7 @@ attaches.
 | `apps/desktop/src/server.ts`          | `connectServer`: probe, attach, spawn, stop                      |
 | `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail        |
 | `apps/desktop/src/titleBar.ts`        | Title bar overlay options and sync                               |
+| `packages/contracts/src/desktop.ts`   | `desktopSandboxEnv`, `readDesktopSandbox` (sandbox shell wiring and guard) |
 | `apps/desktop/src/preload.ts`, `ipc.ts` | `window.desktopBridge`                                         |
 | `apps/desktop/scripts/*.ts`           | Build, launch, package                                           |
 | `apps/server/scripts/bundle.ts`       | The server bundle                                                |

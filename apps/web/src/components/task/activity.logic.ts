@@ -133,6 +133,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     case "archived":
     case "unarchived": {
       const withEpic = num(p.withEpic);
+      const becauseTask = num(p.becauseTask);
+      if (becauseTask !== null) {
+        return line("archive", `unarchived this because #${becauseTask} was ${p.reopened ? "reopened" : "unarchived"}`);
+      }
       return line("archive", `${event.type} this${withEpic !== null ? ` with epic #${withEpic}` : ""}`);
     }
     case "note":

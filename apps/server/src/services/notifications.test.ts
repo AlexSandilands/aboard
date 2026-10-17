@@ -105,6 +105,34 @@ describe("notify", () => {
     expect(s.notifications.list({ kind: "review_finished" }).items).toEqual([]);
   });
 
+  it("reads only one task's unread notifications when its panel opens", async () => {
+    const { s, events, task, request } = setup();
+    const note = (key: string, taskId?: string) =>
+      s.notifications.notify({
+        kind: "autopilot_notice",
+        ...(taskId ? { taskId } : {}),
+        title: key,
+        body: "",
+        dedupeKey: key,
+      })!;
+    note("a", task.id);
+    note("b", task.id);
+    note("digest");
+    events.length = 0;
+
+    expect(s.notifications.markTaskRead(task.id)).toBe(2);
+    expect(events).toEqual([{ type: "notifications.changed", unread: 1 }]);
+    // Board-wide notifications stay; reading again changes nothing, so nothing is published.
+    events.length = 0;
+    expect(s.notifications.markTaskRead(task.id)).toBe(0);
+    expect(events).toEqual([]);
+
+    note("c", task.id);
+    const res = await request("/api/notifications/read", { method: "POST", body: JSON.stringify({ taskId: task.id }) });
+    expect(((await res.json()) as { unread: number }).unread).toBe(1);
+    expect((await request("/api/notifications/read", { method: "POST", body: "{}" })).status).toBe(400);
+  });
+
   it("prunes after 30 days", () => {
     let now = new Date("2026-10-01T12:00:00");
     const { s } = setup(() => now);

@@ -8,6 +8,7 @@ import { AppDialogs } from "~/components/settings/AppDialogs";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { TaskPanel } from "~/components/task/TaskPanel";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { useMarkTaskNotificationsRead } from "~/state/mutations";
 import { useBoardEvents } from "~/state/queries";
 import { useDialogs, usePalette } from "~/state/ui";
 import { isEditableTarget, isInsidePopup } from "./keyboard";
@@ -24,6 +25,12 @@ export function AppLayout() {
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
   useGlobalKeybindings(taskId !== null, closeTask);
+  const markTaskRead = useMarkTaskNotificationsRead();
+  // Opening a task, by any route, answers its notifications. Only when it opens: a task that merely shows on the board doesn't.
+  const clearNotifications = useEffectEvent((id: string) => markTaskRead.mutate(id));
+  useEffect(() => {
+    if (taskId) clearNotifications(taskId);
+  }, [taskId]);
 
   return (
     <SidebarProvider className="h-dvh! min-h-0!">

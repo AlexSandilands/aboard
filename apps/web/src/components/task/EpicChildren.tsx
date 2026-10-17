@@ -10,14 +10,24 @@ import { TaskSegments } from "~/components/board/TaskProgress";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
-import { epicChildGroups } from "./epic.logic";
+import { epicChildGroups, showOnBoardToggle } from "./epic.logic";
 
 /**
  * An epic's panel shows this where a task shows where it's up to: the roll-up, then each child grouped by
  * status with its progress, current step, attention and live thread status.
  */
-export function EpicChildren({ task, onFilter }: { task: TaskDetail; onFilter: () => void }) {
+export function EpicChildren({
+  task,
+  boardFilter,
+  onFilter,
+}: {
+  task: TaskDetail;
+  /** The epic the board is filtered to, if any. */
+  boardFilter: string | null;
+  onFilter: (epicId: string | null) => void;
+}) {
   const openTask = useOpenTask();
+  const showOnBoard = showOnBoardToggle(task.id, boardFilter);
   const rollup = task.rollup;
   const groups = epicChildGroups(task.children);
   return (
@@ -30,9 +40,15 @@ export function EpicChildren({ task, onFilter }: { task: TaskDetail; onFilter: (
         </span>
         <div className="ms-auto flex shrink-0 items-center gap-1">
           {task.children.length > 0 ? (
-            <Button variant="ghost-muted" size="xs" onClick={onFilter}>
+            <Button
+              variant={showOnBoard.pressed ? "ghost" : "ghost-muted"}
+              size="xs"
+              aria-pressed={showOnBoard.pressed}
+              className={cn(showOnBoard.pressed && "text-foreground")}
+              onClick={() => onFilter(showOnBoard.next)}
+            >
               <FilterIcon />
-              Show on board
+              {showOnBoard.label}
             </Button>
           ) : null}
           <Button

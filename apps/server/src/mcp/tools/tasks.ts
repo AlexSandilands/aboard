@@ -394,7 +394,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           .optional()
           .describe(
             "Archives or unarchives the task. An epic needs no open tasks to be archived; it takes its Done tasks " +
-              "along, and unarchiving it brings back the ones archived with it.",
+              "along, and unarchiving it brings back the ones archived with it. Unarchiving a task whose epic is " +
+              "archived unarchives the epic too (as does reopening it with move_task).",
           ),
         autoReview: z
           .boolean()

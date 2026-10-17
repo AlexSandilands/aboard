@@ -144,6 +144,12 @@ export function createPlans(
   const replacePlan: PlansModule["replacePlan"] = (task, plan, actor, fx, opts) => {
     noPlanOnEpic(task);
     const stepCount = plan.phases.reduce((n, p) => n + p.steps.length, 0);
+    // Before the gate: an empty plan is a mistake to fix, whatever the task's status.
+    const empty = plan.phases.findIndex((p) => p.steps.length === 0);
+    if (stepCount === 0) throw new AppError("VALIDATION", "The plan needs at least one step");
+    if (empty >= 0) {
+      throw new AppError("VALIDATION", `Phase ${empty + 1} '${plan.phases[empty]!.title}' has no steps`);
+    }
     gate(task, stepCount);
     const deleted = deletionsOf(task.id, plan);
     if (opts?.protectStarted) {
