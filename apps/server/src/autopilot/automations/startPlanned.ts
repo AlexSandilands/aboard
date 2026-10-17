@@ -122,12 +122,31 @@ const patchOf = ({ result: _result, output: _output, ...patch }: RunnerResult) =
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** Waits for the task to leave Planned, up to `deadline` (ms since the epoch). */
-async function leftPlanned(services: Services, taskId: string, deadline: number): Promise<boolean> {
+/**
+ * Waits for the task to leave Planned, up to `deadline` (ms since the epoch): "left", "late", or "failed" once the live
+ * poll, after `since`, sees the run's T3 thread failed (it will never move the task, so the grace period isn't waited
+ * out).
+ */
+async function leftPlanned(
+  services: Services,
+  taskId: string,
+  deadline: number,
+  thread: { url: string; since: number } | null,
+): Promise<"left" | "late" | "failed"> {
   for (;;) {
-    if (services.tasks.summary(taskId).status !== "planned") return true;
+    const task = services.tasks.summary(taskId);
+    if (task.status !== "planned") return "left";
+    const link = thread && task.links.find((l) => l.kind === "t3_thread" && l.url === thread.url);
+    if (
+      link?.kind === "t3_thread" &&
+      link.snapshot?.status === "failed" &&
+      link.syncedAt !== null &&
+      Date.parse(link.syncedAt) >= thread!.since
+    ) {
+      return "failed";
+    }
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return false;
+    if (remaining <= 0) return "late";
     await sleep(Math.min(START_POLL_MS, remaining));
   }
 }
@@ -244,7 +263,12 @@ export const startPlanned = defineAutomation({
     // moved the task or never will. The grace period starts once the thread is up: the runner may have waited for T3.
     const deadline = Date.now() + config.graceMinutes * 60_000;
     const patch = patchOf(started);
-    if (!(await leftPlanned(services, task.id, started.runner === "headless" ? Date.now() : deadline))) {
+    const thread = started.runner === "t3" && started.threadUrl ? { url: started.threadUrl, since: Date.now() } : null;
+    const outcome = await leftPlanned(services, task.id, started.runner === "headless" ? Date.now() : deadline, thread);
+    if (outcome === "failed") {
+      return failed(`its T3 Code thread failed before moving #${task.number} out of Planned`, patch);
+    }
+    if (outcome === "late") {
       return failed(
         `the agent didn't move #${task.number} out of Planned within ${config.graceMinutes} minutes`,
         patch,
