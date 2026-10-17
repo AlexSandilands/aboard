@@ -240,7 +240,21 @@ export function refDisabledReason(ref: T3Ref, mode: WorkspaceMode, workspaceRoot
   return "Switching branches in the current checkout isn't supported. Use New worktree to branch from it.";
 }
 
-export function initialWorkspaceChoice(options: Pick<T3LaunchOptions, "isRepo" | "defaults">): WorkspaceChoice {
+/**
+ * The workspace the dialog opens with. A task of an integration epic starts in a new worktree from its epic's branch
+ * (origin's copy when T3 lists it), since its pull request goes there; anything else follows T3's settings.
+ */
+export function initialWorkspaceChoice(
+  options: Pick<T3LaunchOptions, "isRepo" | "defaults"> & Partial<Pick<T3LaunchOptions, "refs">>,
+  integrationBranch: string | null = null,
+): WorkspaceChoice {
+  if (options.isRepo && integrationBranch) {
+    const refs = options.refs ?? [];
+    const ref =
+      refs.find((r) => r.isRemote && r.name === `origin/${integrationBranch}`) ??
+      refs.find((r) => !r.isRemote && r.name === integrationBranch);
+    if (ref) return { mode: "new_worktree", ref: ref.name };
+  }
   return { mode: options.isRepo && options.defaults.envMode === "worktree" ? "new_worktree" : "current", ref: null };
 }
 

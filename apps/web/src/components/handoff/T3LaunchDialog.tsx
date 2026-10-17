@@ -48,6 +48,8 @@ interface LaunchSubject {
   copyPrompt: () => void;
   /** Offer to open the new thread: nothing on the board links to a project's thread. */
   offerOpen: boolean;
+  /** An integration epic's branch, which the task's worktree starts from by default. */
+  integrationBranch?: string | null;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -102,6 +104,7 @@ function TaskLaunch({ task, onDone }: { task: TaskSummary; onDone: () => void })
     successDescription: `#${task.number} is linked to the new thread.`,
     copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
     offerOpen: false,
+    integrationBranch: epic ? null : task.integrationBranch,
   };
   const starter: Starter = {
     isPending: mutation.isPending,
@@ -207,7 +210,9 @@ function Composer({
   const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
   const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
   const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
-  const [choice, setChoice] = useState<WorkspaceChoice>(() => initialWorkspaceChoice(options));
+  const [choice, setChoice] = useState<WorkspaceChoice>(() =>
+    initialWorkspaceChoice(options, subject.integrationBranch ?? null),
+  );
   const [commandId, setCommandId] = useState(() => crypto.randomUUID());
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
