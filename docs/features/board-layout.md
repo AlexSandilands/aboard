@@ -1,11 +1,12 @@
 # Board and panel layout
 
 Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane).
+The filters and saved views are in [saved-views.md](saved-views.md).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
 panel sections, and which links a card shows. These are browser-only preferences: nothing here is stored
-on the server. It also covers the settings page, which takes the board's place.
+on the server (saved views, which are, are in [saved-views.md](saved-views.md)). It also covers the settings page, which takes the board's place.
 
 ## How it works
 
@@ -24,7 +25,8 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
   lane or its epic's band while it shows. An archived priority task (Show archived) stays in its project. The lane
   has no bands: a card of an epic shows the epic on the card as it does anywhere, and the epic's band loses it.
 - **Filters.** A project scope (`?project=`) doesn't hide the lane, since it is for the tasks you want whatever you
-  are looking at. The card filters (search, needs attention, has PR, labels, the epic filter, in progress only) apply
+  are looking at. The card filters (search, needs attention, has PR, labels, the epic filter, in progress only, and the
+  status, tier, Autopilot, blocked and priority filters) apply
   to its cards like any other. A lane with no cards isn't built.
 - **Off.** Settings → Board → Appearance → **Priority lane** (`showPriorityLane` in `board-view`, on by default).
   Off, priority tasks sit in their own lanes as any task.
@@ -45,7 +47,7 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 
 ### In progress, all projects
 
-The filter menu's **In progress, all projects** (`inProgressOnly` in `board-view`) shows only In Progress cards,
+The filter menu's **In progress, all projects** (`?inprogress=true`) shows only In Progress cards,
 across every project: it ignores a project scope while it is on (the scope returns when it is turned off, and choosing a project in the
 sidebar turns it off). Epic
 bands keep only their In Progress tasks, and the priority lane holds its In Progress ones.
@@ -295,11 +297,11 @@ To add a command: add it to `KeybindingCommand` and `DEFAULT_KEYBINDINGS`, run i
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
 `storageKey(...)`:
 
-- `board-view` holds the filters, the column collapse state and which epic bands are folded
-  (`collapsedEpics`, `inProgressOnly` and `showPriorityLane`, added without a version bump: a stored view without
-  them takes the default). It is at version 2:
-  `migrateBoardView` keeps version 0's filters and drops its per-lane `expandedDone`, which has no
-  per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
+- `board-view` holds the column collapse state, which epic bands are folded and the priority lane switch
+  (`collapsedEpics` and `showPriorityLane`, added without a version bump: a stored view without them takes the
+  default). The filters aren't here: they are the board's URL params ([saved-views.md](saved-views.md)). It is at
+  version 2: `migrateBoardView` drops the filters older versions stored and version 0's per-lane `expandedDone`, which
+  has no per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
   which validates it and keeps it referentially stable.
 

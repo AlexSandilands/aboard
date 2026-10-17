@@ -15,6 +15,7 @@ import {
   rowIndex,
   visibleCellTasks,
 } from "./board.logic";
+import type { TaskOwnFilters } from "./boardFilters.logic";
 
 function project(id: string): Project {
   return {
@@ -550,6 +551,72 @@ describe("buildLanes: in progress only", () => {
     );
     expect(lanes[0]!.bands[0]!.cells.planned).toEqual([]);
     expect(lanes[0]!.bands[0]!.cells.in_progress.map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("buildLanes: task filters", () => {
+  const ids = (lanes: ReturnType<typeof buildLanes>) =>
+    lanes.flatMap((l) => STATUS_ALL.flatMap((s) => l.cells[s].map((t) => t.id)));
+  const own: TaskOwnFilters = { statuses: [], tiers: [], autopilot: [], blocked: false, priority: false };
+
+  it("filters by status, tier, Autopilot flag and blocked", () => {
+    const tasks = [
+      task("a", { status: "review", blocked: true, autopilot: true, suggestedModel: { tier: "deep", reason: null } }),
+      task("b", { status: "review" }),
+      task("c", { status: "planned", blocked: true }),
+    ];
+    const run = (taskFilters: Partial<TaskOwnFilters>) =>
+      ids(buildLanes(board(tasks), { ...noFilters, taskFilters: { ...own, ...taskFilters } }));
+    expect(run({ statuses: ["review"] })).toEqual(["a", "b"]);
+    expect(run({ blocked: true })).toEqual(["c", "a"]);
+    expect(run({ tiers: ["deep"] })).toEqual(["a"]);
+    expect(run({ tiers: ["none"] })).toEqual(["c", "b"]);
+    expect(run({ autopilot: ["on"] })).toEqual(["a"]);
+    expect(run({ statuses: ["review"], blocked: true })).toEqual(["a"]);
+  });
+
+  it("drops lanes with no match", () => {
+    const lanes = buildLanes(board([task("a", { projectId: "p", status: "review" }), task("b", { projectId: "q" })]), {
+      ...noFilters,
+      taskFilters: { ...own, statuses: ["review"] },
+    });
+    expect(lanes.map((l) => l.project.id)).toEqual(["p"]);
+  });
+
+  it("filters to priority tasks, which stay in the priority lane", () => {
+    const lanes = buildLanes(board([task("a", { priority: true, status: "planned" }), task("b")]), {
+      ...noFilters,
+      priorityLane: true,
+      taskFilters: { ...own, priority: true },
+    });
+    expect(lanes.map((l) => l.project.id)).toEqual([PRIORITY_ROW_ID]);
+    expect(ids(lanes)).toEqual(["a"]);
+  });
+
+  it("leaves no empty band for tier, Autopilot, blocked or priority filters, which describe tasks, not epics", () => {
+    const epic = task("e", { kind: "epic" });
+    const deep = { tier: "deep", reason: null } as const;
+    const child = task("a", { parent: { id: "e", number: 1, title: "e" }, suggestedModel: deep, autopilot: true });
+    const lanes = (taskFilters: Partial<TaskOwnFilters>) =>
+      buildLanes(board([epic, child]), { ...noFilters, taskFilters: { ...own, ...taskFilters } });
+    expect(lanes({ tiers: ["none"] })).toEqual([]);
+    expect(lanes({ autopilot: ["default"] })).toEqual([]);
+    expect(lanes({ blocked: true })).toEqual([]);
+    expect(lanes({ tiers: ["deep"] })[0]!.bands.map((b) => b.id)).toEqual(["e"]);
+  });
+
+  it("holds an epic's children to the filter, and drops an epic left with none", () => {
+    const epic = task("e", { kind: "epic", status: "in_progress" });
+    const empty = task("e2", { kind: "epic" });
+    const child = (id: string, status: TaskSummary["status"]) =>
+      task(id, { status, parent: { id: "e", number: 1, title: "e" } });
+    const lanes = buildLanes(board([epic, empty, child("a", "review"), child("b", "planned")]), {
+      ...noFilters,
+      taskFilters: { ...own, statuses: ["review"] },
+    });
+    expect(lanes[0]!.bands.map((b) => b.id)).toEqual(["e"]);
+    expect(lanes[0]!.bands[0]!.cells.review.map((t) => t.id)).toEqual(["a"]);
+    expect(lanes[0]!.bands[0]!.cells.planned).toEqual([]);
   });
 });
 

@@ -7,6 +7,7 @@ import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
+import { SavedViews } from "./savedViews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
@@ -737,6 +738,8 @@ export const AppSettings = z
     terminalOpenIn: TerminalOpenIn,
     /** Which notifications are recorded, and whether quiet hours silence their popups. */
     notifications: NotificationSettings,
+    /** Named sets of board filters, in the order the user keeps them. */
+    savedViews: SavedViews,
     /** The shortcuts the user changed; every other command keeps its default. */
     keybindings: KeybindingOverrides,
   })
@@ -766,6 +769,8 @@ export const UpdateSettingsInput = z.object({
   terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */
   notifications: UpdateNotificationSettingsInput.optional(),
+  /** Replaces the whole list of saved views. */
+  savedViews: SavedViews.optional(),
   /** Replaces the overrides: a command left out goes back to its default. */
   keybindings: KeybindingOverrides.optional(),
   backupEnabled: z.boolean().optional(),

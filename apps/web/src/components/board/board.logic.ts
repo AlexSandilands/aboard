@@ -6,6 +6,12 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+import {
+  hasNonStatusTaskFilters,
+  hasTaskOwnFilters,
+  matchesTaskOwnFilters,
+  type TaskOwnFilters,
+} from "./boardFilters.logic";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** A collapsed column shows only the first few cards of each lane until it is expanded. */
@@ -152,6 +158,8 @@ export interface BoardFilters {
   epicId?: string | null;
   /** Only In Progress cards. */
   inProgressOnly?: boolean;
+  /** Status, tier, Autopilot flag, blocked and priority: each looks at the card itself, never at its epic. */
+  taskFilters?: TaskOwnFilters;
   /** Priority tasks gather in a lane above the projects instead of showing in their own. */
   priorityLane?: boolean;
 }
@@ -222,8 +230,17 @@ export function buildLanes(
     filters.hasPrOnly ||
     filters.labels.length > 0 ||
     filters.inProgressOnly === true ||
-    epicFilter !== null;
-  const statusOk = (task: TaskSummary) => !filters.inProgressOnly || task.status === "in_progress";
+    epicFilter !== null ||
+    (filters.taskFilters !== undefined && hasTaskOwnFilters(filters.taskFilters));
+  // The filters that look at a card itself: In progress, and status, tier, Autopilot flag, blocked and priority.
+  const passesTaskFilters = (task: TaskSummary) =>
+    (!filters.inProgressOnly || task.status === "in_progress") &&
+    (!filters.taskFilters || matchesTaskOwnFilters(task, filters.taskFilters));
+  // An epic with no matching children shows only when it passes the status filters itself. The rest (tier, Autopilot,
+  // blocked, priority) describe tasks: an epic has no tier or flag of its own, so it would pass "No tier" and
+  // "Default" and leave an empty band.
+  const epicOk = (epic: TaskSummary) =>
+    passesTaskFilters(epic) && (!filters.taskFilters || !hasNonStatusTaskFilters(filters.taskFilters));
   const inPriorityLane = (task: TaskSummary) => filters.priorityLane === true && isInPriorityLane(task);
   const matches = (task: TaskSummary) =>
     (!filters.attentionOnly || task.attention.length > 0) &&
@@ -244,7 +261,7 @@ export function buildLanes(
   let priorityCount = 0;
   const projectOrder = new Map(board.projects.map((p, index) => [p.id, index]));
   for (const task of tasks) {
-    if (task.kind === "epic" || !statusOk(task)) continue;
+    if (task.kind === "epic" || !passesTaskFilters(task)) continue;
     if (inPriorityLane(task)) {
       // An epic's filter and its card filters look at the epic the task is in, which may be in another project.
       const epic = task.parent ? allEpics.get(task.parent.id) : undefined;
@@ -270,7 +287,7 @@ export function buildLanes(
   for (const epic of [...epics.values()].sort((a, b) => a.number - b.number)) {
     const cells = bandCells.get(epic.id);
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
-    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && statusOk(epic)))
+    if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && epicOk(epic)))
       continue;
     const resolved = sortCells(cells ?? emptyCells());
     // A finished epic would stack above everything in Done, so it is one card there instead. Filtered to

@@ -47,7 +47,8 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
 - **Settings** are exported from an allow-list (`EXPORTED_SETTINGS` in `apps/server/src/services/settings.ts`).
   The T3 token and the backup settings themselves (they describe this machine) stay out, and so does any key
   nobody has added to the list. A test fails when a new setting is in neither the allow-list nor the
-  machine-only list. Autopilot's engine settings (`autopilotEngine`) are exported;
+  machine-only list. Saved board views (`savedViews`, [saved-views](saved-views.md)) and Autopilot's engine
+  settings (`autopilotEngine`) are exported;
   its pause (`autopilotPaused`) isn't, so restoring a backup can't lift Pause all.
 - **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)).
 - **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on

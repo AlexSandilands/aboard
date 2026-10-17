@@ -27,6 +27,7 @@ export const defaultSettings: AppSettings = {
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  savedViews: [],
   keybindings: {},
   backupEnabled: false,
   backupDir: null,

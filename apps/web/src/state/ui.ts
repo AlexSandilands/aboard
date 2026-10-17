@@ -22,23 +22,12 @@ import {
 } from "~/components/task/sections.logic";
 import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
 
-/** Persisted board view preferences. */
+/** Persisted board view preferences. The filters are not here: they are the board's URL params. */
 interface BoardViewState extends CollapseState {
-  attentionOnly: boolean;
-  hasPrOnly: boolean;
-  showArchived: boolean;
-  /** Only In Progress cards, from every project whatever the project scope. */
-  inProgressOnly: boolean;
   /** Priority tasks gather in a lane above the projects. Off, they stay in their own lanes. */
   showPriorityLane: boolean;
   /** Epic bands folded to their header, by epic id. */
   collapsedEpics: Record<string, true>;
-  /** Free-text card filter from the sidebar search. Not persisted. */
-  search: string;
-  setAttentionOnly: (value: boolean) => void;
-  setHasPrOnly: (value: boolean) => void;
-  setShowArchived: (value: boolean) => void;
-  setInProgressOnly: (value: boolean) => void;
   setShowPriorityLane: (value: boolean) => void;
   /** `mixed`: some shown project differs from the column, so the header collapses them all. */
   toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
@@ -47,24 +36,14 @@ interface BoardViewState extends CollapseState {
   toggleEpicCollapsed: (epicId: string) => void;
   /** Drops collapsed epics that are no longer on the board. */
   pruneCollapsedEpics: (epicIds: ReadonlySet<string>) => void;
-  setSearch: (value: string) => void;
 }
 
 export const useBoardView = create<BoardViewState>()(
   persist(
     (set) => ({
-      attentionOnly: false,
-      hasPrOnly: false,
-      showArchived: false,
-      inProgressOnly: false,
       showPriorityLane: true,
       collapsedEpics: {},
       ...DEFAULT_COLLAPSE,
-      search: "",
-      setAttentionOnly: (attentionOnly) => set({ attentionOnly }),
-      setHasPrOnly: (hasPrOnly) => set({ hasPrOnly }),
-      setShowArchived: (showArchived) => set({ showArchived }),
-      setInProgressOnly: (inProgressOnly) => set({ inProgressOnly }),
       setShowPriorityLane: (showPriorityLane) => set({ showPriorityLane }),
       toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
       toggleCellCollapsed: (rowId, status) => set((s) => toggleCell(s, rowId, status)),
@@ -79,26 +58,12 @@ export const useBoardView = create<BoardViewState>()(
             ? {}
             : { collapsedEpics: Object.fromEntries(kept.map((id) => [id, true as const])) };
         }),
-      setSearch: (search) => set({ search }),
     }),
     {
       name: storageKey("board-view"),
       version: 2,
       migrate: migrateBoardView,
-      partialize: ({
-        attentionOnly,
-        hasPrOnly,
-        showArchived,
-        inProgressOnly,
-        showPriorityLane,
-        collapsedEpics,
-        collapsedColumns,
-        cellOverrides,
-      }) => ({
-        attentionOnly,
-        hasPrOnly,
-        showArchived,
-        inProgressOnly,
+      partialize: ({ showPriorityLane, collapsedEpics, collapsedColumns, cellOverrides }) => ({
         showPriorityLane,
         collapsedEpics,
         collapsedColumns,
@@ -235,7 +200,11 @@ interface DialogsState {
   mergePr: { taskId: string; linkId: string } | null;
   /** Agent session the server wouldn't reopen because it is running, with the status it read. */
   sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
+  /** The save or rename dialog for a saved view: `save` stores the board's current filters, `rename` renames the view. */
+  viewDialog: { kind: "save" } | { kind: "rename"; viewId: string } | null;
   setDigestOpen: (open: boolean) => void;
+  openViewDialog: (dialog: NonNullable<DialogsState["viewDialog"]>) => void;
+  closeViewDialog: () => void;
   openT3Launch: (taskId: string, fixLinkId?: string) => void;
   openProjectT3Launch: (projectId: string) => void;
   closeT3Launch: () => void;
@@ -259,6 +228,7 @@ interface DialogsState {
 export function anyDialogOpen(state: DialogsState): boolean {
   return (
     state.digestOpen ||
+    state.viewDialog !== null ||
     state.t3Launch !== null ||
     state.mergePr !== null ||
     state.sessionWarning !== null ||
@@ -269,6 +239,7 @@ export function anyDialogOpen(state: DialogsState): boolean {
 
 export const useDialogs = create<DialogsState>()((set) => ({
   digestOpen: false,
+  viewDialog: null,
   t3Launch: null,
   sessionLaunch: null,
   mergePr: null,
@@ -276,6 +247,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   templateDraft: null,
   imagePreview: null,
   setDigestOpen: (digestOpen) => set({ digestOpen }),
+  openViewDialog: (viewDialog) => set({ viewDialog }),
+  closeViewDialog: () => set({ viewDialog: null }),
   openT3Launch: (taskId, fixLinkId) => set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}) } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   closeT3Launch: () => set({ t3Launch: null }),
