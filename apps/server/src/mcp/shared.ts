@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AUTOPILOT_START_PLANNED,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -14,6 +14,7 @@ import {
 } from "@repo/contracts";
 import { renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
+import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
 
@@ -23,6 +24,8 @@ export interface ToolContext {
   ctx: AppContext;
   /** Explicit `actor` arg wins, then the MCP client name, then "agent". */
   actor: (explicit?: string) => string;
+  /** The MCP client's name (from initialize, else the User-Agent), to tailor hints to the harness. */
+  client: () => string | undefined;
 }
 
 export type ToolRegistrar = (server: McpServer, tc: ToolContext) => void;
@@ -43,6 +46,21 @@ export const epicField = z
   .string()
   .min(1)
   .describe('The epic this task belongs to: "#12", "12" or its uuid. It must be in the same project.');
+
+export const templateField = z
+  .string()
+  .min(1)
+  .describe(
+    "Start from a template: its name or id (list_templates shows them). Its title pattern, description, labels and " +
+      "plan fill in whatever you leave out, and anything you pass wins; labels you pass replace the template's.",
+  );
+
+export const blockedByField = z
+  .array(z.string().min(1))
+  .describe(
+    'Tasks that must be Done before this one is ready: "#42", "42" or uuids. They may be in other ' +
+      "projects; a relation that would make a cycle is refused.",
+  );
 
 export const actorField = z
   .string()
@@ -69,6 +87,18 @@ export const suggestedModelField = z
     "The model tier you suggest for implementing this task, judged by its complexity and risk. The user maps each " +
       "tier to a model, so the session that picks the task up starts on (or is reminded to switch to) that model.",
   );
+
+export const autopilotField = z
+  .enum(["default", "on", "off"])
+  .describe(
+    "Whether Autopilot may start this task by itself once it is planned. on: flag it. default and off: it is never " +
+      "started automatically. Set it only when the user has said so; ask first, never on your own. You can't change " +
+      "Autopilot's own settings.",
+  );
+
+/** The task's stored flag (null is Default) for a tool's `autopilot` argument. */
+export const autopilotValue = (choice: z.infer<typeof autopilotField>): boolean | null =>
+  choice === "default" ? null : choice === "on";
 
 export const t3ThreadField = z
   .object({
@@ -178,8 +208,7 @@ export function childActivity(services: Services, epic: TaskDetail): ChildActivi
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
 export function boardUrl(ctx: AppContext): string {
-  const { webDist, port, webPort } = ctx.config;
-  return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
+  return boardUrlOf(ctx.config);
 }
 
 /**
@@ -205,11 +234,18 @@ export function safeProject(services: Services, id: string): Project | undefined
   }
 }
 
+/** Whether Start planned tasks is on for a task, from the board, its project or its epic. False while it isn't registered. */
+function startPlannedOn(services: Services, projectId: string, epicId: string | null): boolean {
+  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
+  return automation !== undefined && services.autopilot.resolve(automation, projectId, epicId).enabled;
+}
+
 /**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
- * "Missing labels" and "Suggested model" nudges; only the planning moments (set_plan, create_task) ask for them, so
- * they aren't noise elsewhere. Every result carries the "Plan progress" nudges; `closing` (the move to Done) adds the
- * open-steps one, which get_task never shows for a task that is already Done.
+ * "Missing labels", "Suggested model" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
+ * moments (set_plan, create_task) ask for them, so they aren't noise elsewhere. Every result carries the "Plan progress"
+ * nudges; `closing` (the move to Done) adds the open-steps one, which get_task never shows for a task that is already
+ * Done.
  */
 export function taskResult(
   services: Services,
@@ -221,7 +257,12 @@ export function taskResult(
   const project = safeProject(services, task.projectId);
   const progress = { now: Date.now(), ...(opts.closing ? { closing: true } : {}) };
   const body = opts.planningHints
-    ? renderTaskShort(task, project, { labelsInUse: services.labels.usage(), modelHint: true, progress })
+    ? renderTaskShort(task, project, {
+        labelsInUse: services.labels.usage(),
+        modelHint: true,
+        autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
+        progress,
+      })
     : renderTaskShort(task, project, { progress });
   return textResult(`${headline}\n\n${body}`);
 }

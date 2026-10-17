@@ -22,6 +22,8 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
 | A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
 | Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
+| Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
+| An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
 
 Errors are `VALIDATION` with a message that says what to do instead (plan the tasks, move the tasks).
 
@@ -49,6 +51,17 @@ moves the epic to the end of its new column.
 - An epic is archived only once none of its tasks is open: an archived epic leaves the board, and its open
   tasks would show loose while still claiming it. Restoring an epic from a backup takes back only the tasks
   still in its project.
+- Archiving an epic (`update`, so UI, REST and MCP alike) archives its unarchived tasks, all Done by then, in the
+  same write: each gets the epic's `archived_at` and an `archived` event with `withEpic`. They aren't archived
+  through `update`, which would re-derive the epic from its remaining tasks and drop it to Backlog. Unarchiving
+  the epic unarchives the tasks with that same `archived_at` (`unarchived` with `withEpic`, at the end of their
+  lane) and re-derives it; tasks archived on their own earlier stay archived, and so do leftover tasks Auto-archive
+  archived one at a time (the match is on the stamp, so it is best effort). `archiveFinishedEpic` uses the same helper.
+- `syncEpic` does nothing for an archived epic, which keeps the Done it left with. A task of an epic archived before
+  this (its Done tasks stayed unarchived and still point at it) can be archived or reopened without moving the epic,
+  and Auto-archive treats such a Done task as loose. There is no migration for these.
+- An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
+  with it ([Autopilot](autopilot.md#switches-and-scopes)).
 - Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
   `epicDeleted` on each. Deleting a task logs `child_removed` with `deleted` on its epic.
 - The roll-up (`rollup` on `TaskSummary`: total, done and a count per status) ignores archived tasks; the
@@ -64,7 +77,8 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
   `subgrid`, so its cards line up with the loose cards below.
-- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. It
+- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. Its Autopilot
+  button, at the end, sets what Autopilot does for the epic's tasks. It
   folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the
   roll-up moves under the title.
 - Drag and drop is per **row**: a project's loose cards, or one band (`Row` in `board.logic.ts`; the drag
@@ -74,12 +88,25 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - Filters keep the tasks that match in their band, and all of an epic's tasks when the epic itself matches.
   `?epic=<id>` shows only that band, with a chip in the board header to clear it.
 - Under bands, a lane with no loose cards hides its empty loose row.
+- **A finished epic is a card, not a band.** Once an epic is Done, its band would sit above everything in Done and
+  several of them would push the column down. So it drops into the lane's Done cell as one card (`EpicCard.tsx`),
+  ordered with the other Done cards by when it finished (its `statusChangedAt`, which `syncEpic` sets). The card is
+  the band's header in card form: icon, `#N`, title, roll-up bar, `done/total` and the quick Archive button.
+  Clicking it opens the epic's panel. The chevron unfolds its tasks inside the card (folded by default; opening
+  one of them from elsewhere unfolds it). Those tasks are in `Lane.epicChildren`, not in the lane's cells, so
+  they don't also show loose. The card has no Autopilot button (nothing is left to run; the panel keeps it) and
+  can't be dragged. When a task leaves Done, the epic's status changes and the band comes back.
+  Filters, search, column counts and the collapsed-column preview treat the card like any Done card; a filter
+  that matches only a task inside it keeps the card, listing only the matching tasks. `?epic=` is the exception:
+  filtering to a finished epic shows its band, since that filter is for looking at its tasks.
 
 ### In the panel
 
 - An epic's panel shows **Tasks** where a task shows where it's up to (`EpicChildren.tsx`): the roll-up, then
   each task by status with its progress, current step, attention and live T3 thread. **Show on board** sets
   `?epic=`, **Add task** opens the palette with the epic preselected.
+- An **Autopilot** button in the top bar switches automations on or off for the epic's tasks
+  ([Autopilot](autopilot.md#switches-and-scopes); the band's header has the same button).
 - The status in the top bar is read-only (`Epic · Backlog`), and Plan, Local review, Reopen and Close as… are
   hidden.
 - A task's panel shows its epic as a chip under the title, and **More actions → Epic** moves it into another
@@ -184,7 +211,7 @@ A subagent can't ask the user anything, and most harnesses don't let it start su
 The orchestrator then runs the loop for it. It reads the task first: when the board's own reviewer already
 submitted the round and left blocking or major findings open, it goes straight to the fixes. Otherwise `start_review(task)` returns the brief of the round that is already
 open (it doesn't open another), a fresh reviewer subagent in the task's worktree submits its findings, an implementer subagent in the
-task's worktree fixes them and calls `resolve_finding`, and `start_review` opens the next round when one is due.
+task's worktree fixes them and calls `resolve_finding`; the board opens the next round once the last blocking or major finding is resolved, and `start_review` returns its brief.
 When the loop ends, the implementer opens and links the PR. If the board's own reviewer has already taken the round
 (`start_review` says it is being reviewed), the orchestrator waits for it. The `move_task` result still describes
 the loop to the subagent, so its prompt says to ignore that. Sessions the user started run their own loop.
@@ -236,7 +263,7 @@ launch has no suggested model and returns the thread instead of a link.
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | A separate `epics` table                     | Duplicates numbering, links, notes, labels and activity, which an epic needs as much as a task does  |
 | Epics as a label                             | No roll-up, no description or links of its own, and nothing stops a task carrying two                |
-| An epic as an ordinary card in its column    | Its tasks would be scattered around it; the band shows them together                                 |
+| An epic as an ordinary card in its column    | Its tasks would be scattered around it; the band shows them together (a finished epic is the exception: it is a card in Done, with its tasks folded inside) |
 | Nested epics                                 | Not needed for a feature-sized grouping, and every rule above would need a recursive version         |
 
 ## Code map
@@ -248,7 +275,9 @@ launch has no suggested model and returns the thread instead of a link.
 | `apps/server/src/services/summaries.ts`                | `parent` and `rollup` on summaries                                    |
 | `packages/contracts/src/derive.ts`                     | `deriveEpicRollup`, `deriveEpicStatus`, `describeEpicRollup`          |
 | `apps/web/src/components/board/board.logic.ts`         | Bands, rows, the `?epic=` filter (tested)                             |
-| `apps/web/src/components/board/EpicBand.tsx`           | The band and its roll-up bar                                          |
+| `apps/web/src/components/board/EpicBand.tsx`           | The band and its Autopilot button                                     |
+| `apps/web/src/components/board/EpicRollupBar.tsx`      | The roll-up bar, shared by the band, the card and the panel           |
+| `apps/web/src/components/board/EpicCard.tsx`           | The finished epic's card in Done, with its folded tasks               |
 | `apps/web/src/components/task/EpicChildren.tsx`, `epic.logic.ts` | The epic's Tasks card; the Epic menu's options (tested)     |
 | `apps/server/src/mcp/tools/tasks.ts`, `tools/read.ts`  | `create_epic`, `epic` arguments, `epic_overview`, `get_handoff_prompt` |
 | `packages/contracts/src/handoff.ts`                     | The orchestrating prompt and the subagent work prompt                 |

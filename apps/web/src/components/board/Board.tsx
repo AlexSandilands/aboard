@@ -63,6 +63,7 @@ import {
   type DragPlacement,
   type OverCell,
 } from "./dnd.logic";
+import { DependencyLines } from "./DependencyLines";
 import { TaskCardOverlay } from "./TaskCard";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<TaskStatus, string>;
@@ -95,10 +96,13 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
   const cell = droppableContainers.get(cellDroppableId(at.rowId, status));
   const cellRect = cell ? droppableRects.get(cell.id) : undefined;
   if (!cell?.node.current || !cellRect) return undefined;
-  const firstCard = cell.node.current.querySelector<HTMLElement>(
-    `[data-task-card]:not([data-task-card="${CSS.escape(String(active.id))}"])`,
-  );
-  const firstRect = firstCard ? droppableRects.get(firstCard.dataset.taskCard!) : undefined;
+  // A Done epic's header carries the marker too but isn't sortable, so it has no rect: skip it.
+  let firstRect;
+  for (const card of cell.node.current.querySelectorAll<HTMLElement>("[data-task-card]")) {
+    if (card.dataset.taskCard === String(active.id)) continue;
+    firstRect = droppableRects.get(card.dataset.taskCard!);
+    if (firstRect) break;
+  }
   if (!firstRect) return { x: cellRect.left, y: cellRect.top };
   return { x: firstRect.left, y: firstRect.top + firstRect.height / 2 - collisionRect.height / 2 - 1 };
 };
@@ -227,11 +231,17 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const rowIds = useMemo(() => lanes.flatMap((lane) => laneRows(lane).map((row) => row.id)), [lanes]);
   const rows = useMemo(() => rowIndex(lanes), [lanes]);
   const tasksById = useMemo(() => new Map(board.tasks.map((task) => [task.id, task])), [board.tasks]);
+  // Archived cards shown by Show archived take part in the dependency lines too.
+  const lineTasks = useMemo(
+    () => (archivedTasks ? [...board.tasks, ...archivedTasks.filter((t) => !tasksById.has(t.id))] : board.tasks),
+    [board.tasks, archivedTasks, tasksById],
+  );
   const selectedProjectId = selectedTaskId
     ? ((tasksById.get(selectedTaskId) ?? archivedTasks?.find((task) => task.id === selectedTaskId))?.projectId ?? null)
     : null;
 
   const suppressClickRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const context = useMemo<BoardContextValue>(
     () => ({
       openTask: (id) => void openTask(id),
@@ -437,7 +447,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   return (
     <BoardContext value={context}>
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="w-full min-w-min pb-10">
+        <div ref={contentRef} className="relative w-full min-w-min pb-10">
           <div className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain">
             <div className={cn(BOARD_GRID_CLASS_NAME, "h-9 items-center")} role="row">
               {TASK_STATUSES.map(({ value, label }) => {
@@ -493,6 +503,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                 key={lane.project.id}
                 project={lane.project}
                 cells={lane.cells}
+                epicChildren={lane.epicChildren}
                 selectedTaskId={selectedProjectId === lane.project.id ? selectedTaskId : null}
                 bands={lane.bands}
                 draggingTaskId={activeTask?.projectId === lane.project.id ? activeTask.id : null}
@@ -510,6 +521,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
               No tasks match the current filters.
             </p>
           ) : null}
+          <DependencyLines
+            containerRef={contentRef}
+            tasks={lineTasks}
+            projects={board.projects}
+            selectedTaskId={selectedTaskId}
+            suspended={activeId !== null}
+          />
         </div>
       </div>
     </BoardContext>

@@ -14,6 +14,8 @@ import { AppError } from "../../errors.ts";
 import {
   projectLabel,
   renderEpicChildren,
+  harnessOfClient,
+  renderTemplate,
   renderTaskDetail,
   renderTaskGroups,
   statusLabel,
@@ -47,7 +49,7 @@ function withOpenRoundPointer(detail: string, task: TaskDetail): string {
  * Orientation and lookup tools: board_overview, list_projects, list_tasks, get_task, epic_overview, and
  * get_handoff_prompt.
  */
-export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
+export const registerReadTools: ToolRegistrar = (server, { services, ctx, client }) => {
   server.registerTool(
     "board_overview",
     {
@@ -120,6 +122,31 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         const projects = services.projects.list();
         if (projects.length === 0) return textResult("No projects yet.");
         return textResult(projects.map((p: Project) => `${projectLabel(p)}  [id: ${p.id}]`).join("\n"));
+      }),
+  );
+
+  server.registerTool(
+    "list_templates",
+    {
+      title: "List task templates",
+      description:
+        "Lists the user's task templates: starting points such as Bug, Spike and Feature, each with the title " +
+        "pattern, labels and plan steps it fills in. Pass workspacePath (your cwd) to see the ones available in " +
+        "that project (board-wide ones plus the project's own). Use a template by passing its name as template to " +
+        "add_to_backlog or create_task. You can't create or edit templates; the user does that in Settings.",
+      inputSchema: { ...projectFields },
+      annotations: { readOnlyHint: true },
+    },
+    (args) =>
+      run(() => {
+        const project = hasProjectRef(args) ? findProject(services, args) : null;
+        const templates = services.templates.list(project ? { projectId: project.id } : undefined);
+        // An unknown project has no templates of its own, only the board-wide ones.
+        const shown = hasProjectRef(args) && !project ? templates.filter((t) => t.projectId === null) : templates;
+        if (shown.length === 0) return textResult("No templates. The user can add some in Settings.");
+        const projects = new Map(services.projects.list({ includeArchived: true }).map((p) => [p.id, p]));
+        const text = shown.map((t) => renderTemplate(t, t.projectId ? projects.get(t.projectId) : undefined));
+        return textResult(text.join("\n\n"));
       }),
   );
 
@@ -216,6 +243,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx }) => {
         const detail = renderTaskDetail(task, safeProject(services, task.projectId), {
           events: args.events ?? 10,
           labelsInUse: services.labels.usage(),
+          sessionHarness: harnessOfClient(client()),
           progress: { now: Date.now() },
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });

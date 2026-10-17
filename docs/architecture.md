@@ -9,7 +9,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (GitHub, T3 Code, review watchdog) ──► services/*
+ pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
 ```
 
 ## Packages
@@ -46,7 +46,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files) and `server.json` while a server runs |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -54,6 +54,8 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
+| `CLAUDE_CONFIG_DIR`       | `~/.claude`                 | Where Claude Code keeps running sessions, for session status        |
+| `COPILOT_HOME`            | `~/.copilot`                | The same for Copilot CLI                                            |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
@@ -90,8 +92,8 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 `CODE: message` as an error result, sometimes with a hint.
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
-`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`
-and `labels.colors_changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
+`labels.colors_changed`, `autopilot.changed`, `notification.created` and `notifications.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -110,14 +112,22 @@ ORM.
 | `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
-| `task_links`      | PR, Jira, GitHub issue, T3 thread or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
+| `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
 | `task_imports`    | A task created from a Jira or GitHub issue: source, `pending`/`failed`/`done`, error, attempts ([issue import](features/issue-import.md)) |
 | `task_events`     | The activity log: actor, type, JSON payload                                                                                   |
+| `task_templates`  | Starting points for new tasks, board-wide or per project; `tasks.template_id` records which one a task came from ([templates](features/templates.md)) |
+| `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
 | `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
+| `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
+| `autopilot_recurring` | Recurring-task rules: project, template, schedule, flag, the cursor and the last task made ([autopilot](features/autopilot.md)) |
+| `autopilot_custom` | Custom automations: name, trigger, filters, action and when it was armed ([autopilot](features/autopilot.md#custom-automations)) |
+| `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
+| `autopilot_digests` | Digests of what changed: period, mode, Markdown body, cost, read state. The newest 30; not backed up ([autopilot](features/autopilot.md)) |
+| `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
@@ -127,7 +137,8 @@ status, derived from its tasks but stored so lists and filters treat it like any
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 
 Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](features/plans.md),
-[local review](features/local-review.md), [labels](features/labels.md), [issue import](features/issue-import.md).
+[local review](features/local-review.md), [labels](features/labels.md), [relations](features/relations.md), [issue import](features/issue-import.md),
+[templates](features/templates.md).
 
 ## Integrations
 
@@ -143,8 +154,15 @@ on independent timers:
 - **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (`gh`, then
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
+- **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of
+  linked Claude Code and Copilot CLI sessions from their own files; and opening one in a terminal on
+  request ([ADR 0009](decisions/0009-board-starts-local-processes.md)). See
+  [agent-sessions.md](features/agent-sessions.md).
 - **Review watchdog:** every 30 seconds, for review rounds nobody ran. See
   [local-review.md](features/local-review.md).
+- **Autopilot:** a rule engine in `apps/server/src/autopilot/`, passing over the board after board events and
+  every 60 seconds, and acting where an automation is switched on ([ADR 0008](decisions/0008-autopilot-engine.md),
+  [autopilot.md](features/autopilot.md)). Runs a restart left going are failed at startup, pollers or not.
 
 ## Testing
 

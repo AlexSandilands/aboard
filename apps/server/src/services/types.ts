@@ -1,8 +1,10 @@
 import type {
+  AgentSessionSnapshot,
   AppSettings,
   BoardSnapshot,
   CreateProjectInput,
   CreateTaskInput,
+  CreateTemplateInput,
   IssueSnapshot,
   LinkInput,
   MoveTaskInput,
@@ -11,6 +13,7 @@ import type {
   PlanStep,
   PlanStepInput,
   Project,
+  PrChanges,
   PrSnapshot,
   ResolveFindingInput,
   ReviewFinding,
@@ -29,14 +32,21 @@ import type {
   TaskReview,
   TaskStatus,
   TaskSummary,
+  TaskTemplate,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
+  UpdateTemplateInput,
 } from "@repo/contracts";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
+import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
+import type { CustomAutomationsService } from "./customAutomations.ts";
+import type { RecurringService } from "./recurring.ts";
+import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -57,6 +67,12 @@ export interface Services {
   labels: LabelsService;
   imports: ImportsService;
   backup: BackupService;
+  templates: TemplatesService;
+  autopilot: AutopilotService;
+  recurring: RecurringService;
+  customAutomations: CustomAutomationsService;
+  digests: DigestsService;
+  notifications: NotificationsService;
 }
 
 export interface ProjectRef {
@@ -127,6 +143,13 @@ export interface TasksService {
    * completed/duplicate need `byTaskId` (an existing other task); wont_do must not have one.
    */
   close(id: string, input: CloseInput, actor: string): TaskDetail;
+  /**
+   * Archives a finished epic (every unarchived task Done) together with those tasks, in one write, and returns how
+   * many tasks went with it. The epic keeps its Done status: archiving the tasks one by one through `update` would
+   * leave it with none counted and send it to Backlog. Throws VALIDATION for a task that isn't an epic, an archived
+   * epic, one with an open task, or one that isn't in Done.
+   */
+  archiveFinishedEpic(id: string, actor: string): number;
   addNote(id: string, text: string, actor: string): TaskEvent;
   /**
    * Permanently deletes an archived task with its activity, plan and links. Throws VALIDATION if it isn't
@@ -194,8 +217,15 @@ export interface PlansService {
   resolveStepId(taskId: string, ref: string): string;
 }
 
+/** What a poller stores on a link: PR, T3 thread, issue or agent session state. */
+export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | AgentSessionSnapshot;
+
 export interface LinksService {
-  /** Idempotent on (task, kind, url). Infers kind via classifyLink when omitted. */
+  /**
+   * Idempotent on (task, kind, url). Infers kind via classifyLink when omitted. An `agentSession` is one link per
+   * harness and session id; the board links sessions it starts itself (Autopilot's headless runs) the same way an
+   * agent links its own, and the folder may be anywhere, such as a worktree outside the project.
+   */
   add(taskId: string, input: LinkInput, actor: string): TaskLink;
   remove(linkId: string, actor: string): void;
   get(linkId: string): TaskLink;
@@ -212,7 +242,9 @@ export interface LinksService {
    * - a merge seen while the task was not in Review (e.g. still In Progress) is used up here; `TasksService.move`
    *   completes the task instead when it later enters Review.
    */
-  setSnapshot(linkId: string, snapshot: PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null): void;
+  setSnapshot(linkId: string, snapshot: LinkSnapshot | null): void;
+  /** When each pull request fact began on these links (see nextPrChanges); links with none are left out. */
+  prChanges(linkIds: readonly string[]): Map<string, PrChanges>;
 }
 
 export interface SettingsService {
@@ -305,6 +337,24 @@ export interface ImportsService {
    * done. Starting it again is the caller's job; one already running ignores that.
    */
   retry(taskId: string, actor: string): void;
+}
+
+export interface TemplatesService {
+  /** Board-wide templates and every project's; with `projectId`, those board-wide and that project's. */
+  list(opts?: { projectId?: string }): TaskTemplate[];
+  get(id: string): TaskTemplate;
+  /**
+   * The template `ref` (an id or a name, any case) names for a task in `projectId`: the project's own wins over a
+   * board-wide one of the same name. Throws NOT_FOUND, listing what is available.
+   */
+  resolve(ref: string, projectId: string): TaskTemplate;
+  /** Throws CONFLICT when the scope already has a template of that name. Phases without steps are dropped. */
+  create(input: CreateTemplateInput): TaskTemplate;
+  update(id: string, input: UpdateTemplateInput): TaskTemplate;
+  /** A copy named "<name> copy" in the same scope. */
+  duplicate(id: string): TaskTemplate;
+  /** Tasks made from it keep what they copied and forget which template it was. */
+  delete(id: string): void;
 }
 
 export interface BoardService {

@@ -62,6 +62,8 @@ describe("MCP endpoint", () => {
     ]) {
       expect(names).toContain(name);
     }
+    // Autopilot is REST only, so an agent can't switch it on or lift its limits (ADR 0008).
+    expect(names.filter((n) => /autopilot|pause|resume/i.test(n))).toEqual([]);
     // An outputSchema makes structuredContent mandatory, which Claude Code would show instead of the text.
     expect(tools.filter((t) => t.outputSchema).map((t) => t.name)).toEqual([]);
     expect(client.getInstructions()).toContain("get_task");
@@ -314,6 +316,26 @@ describe("MCP endpoint", () => {
     });
     expect(moved.isError).toBeFalsy();
     expect(h.services.tasks.summary(task.id).projectId).toBe(other.id);
+  });
+
+  it("update_task archives an epic with its Done tasks", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const epic = h.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "Part",
+      epicId: epic.id,
+      plan: { phases: [{ title: "Do", steps: [{ title: "it" }] }] },
+    });
+    h.services.tasks.move(task.id, { status: "done" }, "agent");
+
+    const archived = await client.callTool({
+      name: "update_task",
+      arguments: { task: `#${epic.number}`, archived: true },
+    });
+    expect(archived.isError).toBeFalsy();
+    expect(h.services.tasks.summary(task.id).archivedAt).not.toBeNull();
+    expect(h.services.tasks.summary(epic.id).status).toBe("done");
   });
 
   it("delete_task requires the task to be archived first", async () => {

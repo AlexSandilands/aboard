@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskEvent } from "@repo/contracts";
+import { TASK_STATUSES, autopilotRunEventText, type TaskEvent } from "@repo/contracts";
 
 export type ActivityIcon =
   | "created"
@@ -39,12 +39,15 @@ const FIELD_LABEL: Record<string, string> = {
   description: "description",
   planContext: "plan context",
   autoReview: "auto-review setting",
+  autopilot: "Autopilot flag",
 };
 const FINDING_STATUS_LABEL: Record<string, string> = { fixed: "fixed", wont_fix: "won't fix" };
 const LINK_KIND_LABEL: Record<string, string> = {
   pr: "a pull request",
   jira: "a Jira issue",
   t3_thread: "a T3 Code thread",
+  issue: "a GitHub issue",
+  agent_session: "an agent session",
   url: "a link",
 };
 
@@ -66,7 +69,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
   switch (event.type) {
     case "created": {
       const status = STATUS_LABEL.get(str(p.status) ?? "");
-      return line("created", status ? `created this in ${status}` : "created this");
+      const from = str(p.template) ? ` from the ${str(p.template)} template` : "";
+      return line("created", status ? `created this in ${status}${from}` : `created this${from}`);
     }
     case "status_changed": {
       const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;
@@ -120,9 +124,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       );
     }
     case "archived":
-      return line("archive", "archived this");
-    case "unarchived":
-      return line("archive", "unarchived this");
+    case "unarchived": {
+      const withEpic = num(p.withEpic);
+      return line("archive", `${event.type} this${withEpic !== null ? ` with epic #${withEpic}` : ""}`);
+    }
     case "note":
       return line("note", "left a note", str(p.text));
     case "plan_set": {
@@ -166,6 +171,24 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("link", `linked ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
     case "link_removed":
       return line("link", `removed ${LINK_KIND_LABEL[str(p.kind) ?? ""] ?? "a link"}`);
+    case "blocker_added":
+    case "blocker_removed":
+    case "blocks_added":
+    case "blocks_removed":
+    case "blocker_deleted":
+    case "blocked_deleted": {
+      const other = num(p.task);
+      const task = `${other !== null ? `#${other}` : "a task"}${str(p.title) ? ` ${str(p.title)}` : ""}`;
+      const text = {
+        blocker_added: `made this blocked by ${task}`,
+        blocker_removed: `removed ${task} as a blocker`,
+        blocks_added: `made this block ${task}`,
+        blocks_removed: `stopped this blocking ${task}`,
+        blocker_deleted: `deleted ${task}, which blocked this`,
+        blocked_deleted: `deleted ${task}, which this blocked`,
+      } as const;
+      return line(event.type.endsWith("_deleted") ? "delete" : "link", text[event.type]);
+    }
     case "review_opened": {
       const round = num(p.round);
       const why = str(p.trigger) === "move" ? " (moved to Review)" : "";
@@ -204,6 +227,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
               : `reopened review round ${round}`;
       return line(status === "failed" || status === "stalled" ? "step_blocked" : "review", text, str(p.error));
     }
+    case "autopilot_run":
+      return line("other", autopilotRunEventText(p));
     default:
       return line("other", event.type.replace(/[_.]+/g, " "));
   }

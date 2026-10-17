@@ -9,7 +9,7 @@ export function appIcon(): NativeImage {
   return nativeImage.createFromPath(`${ICONS_DIR}icon.png`);
 }
 
-/** Tray icon; Electron also loads the `@1.5x`/`@2x` files next to it for high-DPI displays. */
-export function trayIcon(): NativeImage {
-  return nativeImage.createFromPath(`${ICONS_DIR}tray.png`);
+/** Tray icon, with a red dot while something is unread; Electron also loads the `@1.5x`/`@2x` files next to it for high-DPI displays. */
+export function trayIcon(unread = false): NativeImage {
+  return nativeImage.createFromPath(`${ICONS_DIR}${unread ? "tray-unread" : "tray"}.png`);
 }

@@ -404,6 +404,8 @@ export interface TaskThreadInput extends AutoLaunchChoice {
   prompt: string;
   /** T3 de-duplicates launches by it, so a retry with the same id returns the thread instead of a second one. */
   commandId: string;
+  /** The thread's title in T3 Code; defaults to the task's number and title. */
+  title?: string;
 }
 
 /** A thread launched without the dialog: its link and what was chosen for it. */
@@ -678,9 +680,14 @@ export function createT3Integration(deps: {
     return result.threadId;
   };
 
-  const startThread = async (taskId: string, input: StartT3ThreadInput, actor: string): Promise<TaskLink> => {
+  const startThread = async (
+    taskId: string,
+    input: StartT3ThreadInput,
+    actor: string,
+    title?: string,
+  ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
-    const threadId = await launch(ctx, input, `#${ctx.task!.number} ${ctx.task!.title}`);
+    const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`);
     const link = deps.services().links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId } }, actor);
     void pollLive();
     return link;
@@ -697,7 +704,7 @@ export function createT3Integration(deps: {
 
   const launchTaskThread = async (
     taskId: string,
-    { prompt, commandId, ...choice }: TaskThreadInput,
+    { prompt, commandId, title, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
     const { options, refsListed } = await loadLaunchOptions({ taskId });
@@ -710,7 +717,7 @@ export function createT3Integration(deps: {
     }
     const auto = autoLaunchSettings(options, choice);
     if (!auto.ok) throw new AppError("VALIDATION", auto.reason);
-    const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor);
+    const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor, title);
     const unavailable = choice.work ? (options.suggestion?.unavailable ?? null) : null;
     return { link, ...auto.launch, suggestionUnavailable: unavailable };
   };

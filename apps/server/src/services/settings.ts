@@ -1,5 +1,13 @@
-import { DEFAULT_REVIEW_MAX_ROUNDS, EMPTY_MODEL_TIERS, type AppSettings, type ModelTiers } from "@repo/contracts";
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_REVIEW_MAX_ROUNDS,
+  EMPTY_MODEL_TIERS,
+  type AppSettings,
+  type ModelTiers,
+  type NotificationSettings,
+} from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
+import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
 import type { SettingsService } from "./types.ts";
 
@@ -22,6 +30,9 @@ const DEFAULTS: StoredSettings = {
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
+  terminal: { kind: "auto" },
+  terminalOpenIn: "tab",
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -30,25 +41,30 @@ const DEFAULTS: StoredSettings = {
 
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
- * someone decides otherwise. Left out: the T3 token, and the backup settings themselves, which describe this
- * machine; a forced restore keeps them from the database it replaces.
+ * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
+ * machine; a forced restore keeps them from the database it replaces. Autopilot's engine settings are stored beside
+ * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
  */
-export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<keyof StoredSettings>([
-  "jiraBaseUrl",
-  "githubPolling",
-  "t3LinkTarget",
-  "agentT3Threads",
-  "autoReview",
-  "reviewSkill",
-  "reviewMaxRounds",
-  "headlessReviewEnabled",
-  "headlessReviewCli",
-  "headlessReviewBudgetUsd",
-  "issueImportEnabled",
-  "issueImportModel",
-  "issueImportBudgetUsd",
-  "issueImportJiraTools",
-  "modelTiers",
+export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
+  AUTOPILOT_ENGINE_KEY,
+  ...([
+    "jiraBaseUrl",
+    "githubPolling",
+    "t3LinkTarget",
+    "agentT3Threads",
+    "autoReview",
+    "reviewSkill",
+    "reviewMaxRounds",
+    "headlessReviewEnabled",
+    "headlessReviewCli",
+    "headlessReviewBudgetUsd",
+    "issueImportEnabled",
+    "issueImportModel",
+    "issueImportBudgetUsd",
+    "issueImportJiraTools",
+    "modelTiers",
+    "notifications",
+  ] satisfies Array<keyof StoredSettings>),
 ]);
 
 /** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
@@ -62,14 +78,23 @@ const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): Model
   ),
 });
 
+/** The stored notification settings over the defaults, so a kind added later starts on. */
+const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
+  muteInQuietHours: stored?.muteInQuietHours ?? DEFAULT_NOTIFICATION_SETTINGS.muteInQuietHours,
+  kinds: { ...DEFAULT_NOTIFICATION_SETTINGS.kinds, ...stored?.kinds },
+});
+
 /** Stored settings over their defaults. Also read by summaries, which derive review state from max rounds. */
 export function loadSettings(repos: Repos): StoredSettings {
   const stored = repos.settings.all();
   const pick = <K extends keyof StoredSettings>(key: K): StoredSettings[K] =>
     stored.has(key) ? (stored.get(key) as StoredSettings[K]) : DEFAULTS[key];
-  return Object.fromEntries(
-    (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
-  ) as unknown as StoredSettings;
+  return {
+    ...(Object.fromEntries(
+      (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
+    ) as unknown as StoredSettings),
+    notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
+  };
 }
 
 /** App settings stored as key/value JSON. The T3 token never leaves the server. */
@@ -124,8 +149,17 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.backupIntervalMinutes !== undefined) {
           repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
+        if (input.terminal !== undefined) repos.settings.set("terminal", input.terminal);
+        if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
+        if (input.notifications !== undefined) {
+          const current = load().notifications;
+          repos.settings.set("notifications", {
+            muteInQuietHours: input.notifications.muteInQuietHours ?? current.muteInQuietHours,
+            kinds: { ...current.kinds, ...input.notifications.kinds },
+          } satisfies NotificationSettings);
+        }
       });
       return get();
     },

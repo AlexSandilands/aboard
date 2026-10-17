@@ -1,10 +1,18 @@
-import type { AppSettings, IssueSnapshot, PrSnapshot, T3ThreadSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
+import type { AppSettings, PrSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
 import { defaultSettings } from "../test/fixtures.ts";
 import { GhError, type RunGh } from "./gh.ts";
-import { createGithubIntegration, isGithubHost, mapPrSnapshot, pollQuery, type GithubServices } from "./github.ts";
+import {
+  createGithubIntegration,
+  isGithubHost,
+  mapPrSnapshot,
+  pollQuery,
+  StaleReviewError,
+  type GithubServices,
+} from "./github.ts";
+import type { LinkSnapshot } from "../services/types.ts";
 
 const repo = {
   squashMergeAllowed: true,
@@ -35,7 +43,11 @@ describe("mapPrSnapshot", () => {
       autoMergeAllowed: true,
       canMerge: true,
       headOid: "head-1",
+      isCrossRepository: false,
+      reviews: [],
+      reviewComments: [],
     });
+    expect(mapPrSnapshot(fakePr({ isCrossRepository: true }), repo).isCrossRepository).toBe(true);
     expect(mapPrSnapshot(fakePr({ isDraft: true }), repo).state).toBe("draft");
     expect(mapPrSnapshot(fakePr({ state: "MERGED", isDraft: true }), repo).state).toBe("merged");
     expect(mapPrSnapshot(fakePr({ state: "CLOSED" }), repo).state).toBe("closed");
@@ -47,6 +59,97 @@ describe("mapPrSnapshot", () => {
     expect(mapPrSnapshot(fakePr({ mergeable: "UNKNOWN" }), repo).mergeable).toBe("unknown");
     expect(mapPrSnapshot(fakePr({ headRefName: "" }), repo).headRef).toBeNull();
     expect(mapPrSnapshot(fakePr({ autoMergeRequest: { mergeMethod: "SQUASH" } }), repo).autoMerge).toBe("squash");
+  });
+
+  it("maps submitted reviews with who wrote them, leaving pending ones out", () => {
+    const reviews = {
+      nodes: [
+        {
+          databaseId: 11,
+          state: "CHANGES_REQUESTED",
+          submittedAt: "2026-10-01T11:00:00Z",
+          authorAssociation: "MEMBER",
+          viewerDidAuthor: false,
+          author: { login: "ana" },
+        },
+        { databaseId: 12, state: "PENDING", submittedAt: null, viewerDidAuthor: true, author: { login: "me" } },
+        null,
+        {
+          databaseId: 13,
+          state: "COMMENTED",
+          submittedAt: "2026-10-01T12:00:00Z",
+          authorAssociation: "NONE",
+          viewerDidAuthor: false,
+          author: null,
+        },
+        {
+          databaseId: 14,
+          state: "COMMENTED",
+          submittedAt: "2026-10-01T13:00:00Z",
+          authorAssociation: "OWNER",
+          viewerDidAuthor: true,
+          author: { login: "me" },
+        },
+      ],
+    };
+    expect(mapPrSnapshot(fakePr({ reviews }), repo).reviews).toEqual([
+      {
+        id: 11,
+        author: "ana",
+        state: "changes_requested",
+        submittedAt: "2026-10-01T11:00:00Z",
+        own: false,
+        trusted: true,
+      },
+      { id: 13, author: null, state: "commented", submittedAt: "2026-10-01T12:00:00Z", own: false, trusted: false },
+      { id: 14, author: "me", state: "commented", submittedAt: "2026-10-01T13:00:00Z", own: true, trusted: true },
+    ]);
+  });
+
+  it("maps comments on unresolved threads, oldest first, with their review", () => {
+    const comment = (id: number, createdAt: string, extra: Record<string, unknown> = {}) => ({
+      databaseId: id,
+      createdAt,
+      authorAssociation: "COLLABORATOR",
+      viewerDidAuthor: false,
+      author: { login: "ana" },
+      pullRequestReview: { databaseId: 100 + id },
+      ...extra,
+    });
+    const reviewThreads = {
+      nodes: [
+        {
+          isResolved: false,
+          comments: { nodes: [comment(3, "2026-10-01T12:00:00Z"), comment(1, "2026-10-01T10:00:00Z")] },
+        },
+        { isResolved: true, comments: { nodes: [comment(2, "2026-10-01T11:00:00Z")] } },
+        null,
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              comment(4, "2026-10-01T13:00:00Z", { viewerDidAuthor: true, pullRequestReview: null }),
+              comment(5, "2026-10-01T14:00:00Z", { authorAssociation: "CONTRIBUTOR", author: null }),
+              { ...comment(6, "2026-10-01T15:00:00Z"), databaseId: null },
+            ],
+          },
+        },
+      ],
+    };
+    expect(mapPrSnapshot(fakePr({ reviewThreads }), repo).reviewComments).toEqual([
+      { id: 1, author: "ana", createdAt: "2026-10-01T10:00:00Z", reviewId: 101, own: false, trusted: true },
+      { id: 3, author: "ana", createdAt: "2026-10-01T12:00:00Z", reviewId: 103, own: false, trusted: true },
+      { id: 4, author: "ana", createdAt: "2026-10-01T13:00:00Z", reviewId: null, own: true, trusted: true },
+      { id: 5, author: null, createdAt: "2026-10-01T14:00:00Z", reviewId: 105, own: false, trusted: false },
+    ]);
+  });
+
+  it("asks for the reviews and the unresolved threads' comments without their bodies", () => {
+    const { query } = pollQuery([1]);
+    expect(query).toContain("reviews(last: 20)");
+    expect(query).toContain("reviewThreads(last: 30)");
+    expect(query).toContain("viewerDidAuthor");
+    expect(query).not.toMatch(/body/);
   });
 
   it("maps the repo's merge settings and the viewer's permission", () => {
@@ -122,7 +225,7 @@ const ghLink = (id: string, number: number, host = "github.com", repoName = "o/r
   prLink(id, `https://${host}/${repoName}/pull/${number}`, { host, repo: repoName, number });
 
 function fakeServices(links: TaskLink[], settings: Partial<AppSettings> = {}, taskStatus: TaskStatus = "review") {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
+  const snapshots = new Map<string, LinkSnapshot | null>();
   const services: GithubServices = {
     links: {
       listByKind: (kind) => links.filter((l) => l.kind === kind),
@@ -432,5 +535,99 @@ describe("github merge", () => {
       ),
     ).rejects.toThrow(/Only GitHub/);
     expect(gh.requests).toEqual([]);
+  });
+});
+
+describe("github postReview", () => {
+  const ref = { host: "github.com", repo: "o/r", number: 7 };
+  const comments = [{ path: "src/a.ts", line: 3, body: "A comment" }];
+
+  it("posts one review as a comment, with its inline threads, against the PR's head", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body: "Summary", comments });
+    expect(posted).toEqual({
+      id: 901,
+      url: "https://github.com/o/r/pull/7#pullrequestreview-901",
+      headOid: "abcdef1234567890",
+      folded: 0,
+    });
+    expect(gh.mutations).toEqual([
+      {
+        operation: "PostPullRequestReview",
+        input: {
+          pullRequestId: "PR_o/r#7",
+          commitOID: "abcdef1234567890",
+          event: "COMMENT",
+          body: "Summary",
+          threads: [{ path: "src/a.ts", line: 3, side: "RIGHT", body: "A comment" }],
+        },
+      },
+    ]);
+  });
+
+  it("cuts a body that would be too long for GitHub, also after folding the comments in", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    gh.failNextThreadedReview();
+    await github.postReview(ref, {
+      reviewedSha: "abcdef1",
+      body: "x".repeat(50_000),
+      comments: [{ path: "a.ts", line: 1, body: "y".repeat(40_000) }],
+    });
+    const retried = gh.mutations[1]!.input.body as string;
+    expect(retried.length).toBeLessThan(65_536);
+    expect(retried.endsWith("_…cut off_")).toBe(true);
+  });
+
+  it("reads the PR's head commit", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await expect(github.prHead(ref)).resolves.toBe("abcdef1234567890");
+    await expect(github.prHead({ ...ref, number: 404 })).rejects.toThrow(/Could not resolve to a PullRequest/);
+  });
+
+  it("posts a review with no inline comments without a threads field", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await github.postReview(ref, { reviewedSha: "abcdef1234567890", body: "Nothing to fix", comments: [] });
+    expect(gh.mutations[0]!.input).not.toHaveProperty("threads");
+  });
+
+  it("refuses when the PR's head isn't the commit the reviewer read", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    const refusal = await github
+      .postReview(ref, { reviewedSha: "1234567", body: "x", comments })
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(StaleReviewError);
+    expect(refusal).toMatchObject({ code: "CONFLICT", head: "abcdef1234567890" });
+    expect((refusal as Error).message).toContain("abcdef1");
+    expect(gh.mutations).toEqual([]);
+  });
+
+  it("puts the inline comments in the body when GitHub refuses them", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    gh.failNextThreadedReview();
+    const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body: "Summary", comments });
+    expect(posted.folded).toBe(1);
+    const [, retry] = gh.mutations;
+    expect(retry!.input).not.toHaveProperty("threads");
+    expect(retry!.input.body).toContain("Summary");
+    expect(retry!.input.body).toContain("`src/a.ts:3`");
+    expect(retry!.input.body).toContain("A comment");
+  });
+
+  it("reports a host gh isn't signed in to, and GitHub's refusal", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)], { hosts: [] });
+    await expect(
+      github.postReview({ ...ref, host: "github.example.com" }, { reviewedSha: "abcdef1", body: "x", comments: [] }),
+    ).rejects.toThrow(/not signed in to github\.example\.com/);
+    const ok = setup([ghLink("l1", 7)]);
+    await expect(ok.github.postReview(ref, { reviewedSha: "abcdef1", body: "x", comments: [] })).rejects.toThrow(
+      /Could not resolve to a PullRequest/,
+    );
+    expect(gh.mutations).toEqual([]);
   });
 });

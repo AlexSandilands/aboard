@@ -38,12 +38,21 @@ function seed() {
     title: "Feature",
     description: "Line one\nline two",
     plan,
+    template: "Bug",
     labels: ["ui", "backend"],
+    autopilot: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
   });
-  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan });
+  s.templates.create({
+    name: "Weekly review",
+    projectId: project.id,
+    titlePattern: "Review {{date}}",
+    labels: ["ops"],
+    phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
+  });
+  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
-  s.tasks.create({ projectId: project.id, title: "Idea" });
+  const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   s.tasks.addNote(a.id, "handover", "agent");
   s.reviews.submit(
     a.id,
@@ -51,10 +60,38 @@ function seed() {
     "rev",
   );
   s.labels.setColor("ui", 120);
+  // A recurring rule remembers the task it last made, so it must come back after the tasks.
+  const weekly = s.templates.list({ projectId: project.id }).find((t) => t.name === "Weekly review")!;
+  const rule = s.recurring.create(project.id, {
+    name: "Weekly review",
+    templateId: weekly.id,
+    schedule: { kind: "weekly", days: [1, 4], time: "09:00" },
+    flagAutopilot: true,
+  });
+  s.recurring.handled(rule.id, { dueAt: "2026-10-12T09:00:00", taskId: a.id });
+  // A custom automation and its switch: the switch is an ordinary settings row.
+  const custom = s.customAutomations.create({
+    name: "Notify",
+    trigger: { kind: "status_change", to: "review" },
+    filters: { projectIds: [project.id] },
+    action: { kind: "shell", command: "./notify.sh" },
+  });
+  s.autopilot.setScope("board", null, `custom:${custom.id}`, { mode: "on" });
+  // Autopilot settings are exported; its runs are history and stay out.
+  h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+    ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
+    ('project', '${project.id}', 'noop', 'off', '{"days":3}', '2026-10-16T00:00:00.000Z')`);
+  s.autopilot.updateEngine({ maxConcurrent: 2, quietHours: { enabled: true } });
+  s.autopilot.setPaused(true);
+  s.autopilot.record({
+    automation: "noop",
+    candidate: { dedupeKey: "k", summary: "do it", taskId: a.id },
+    dryRun: false,
+  });
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
-  return { ...h, s, project, a, b };
+  return { ...h, s, project, a, b, idea };
 }
 
 const PRIMARY_KEYS: Record<string, string> = {
@@ -62,11 +99,16 @@ const PRIMARY_KEYS: Record<string, string> = {
   projects: "id",
   label_colors: "label",
   counters: "name",
+  task_templates: "id",
+  autopilot_settings: "scope_kind, scope_id, automation",
+  autopilot_recurring: "id",
+  autopilot_custom: "id",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
   task_links: "id",
   task_labels: "task_id, label",
+  task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
   review_findings: "id",
   task_events: "id",
@@ -115,7 +157,15 @@ describe("settings export", () => {
 
   it("makes every setting a deliberate choice: exported or listed as machine-only", () => {
     // A new setting fails here until it is added to one list or the other.
-    const machineOnly = ["t3Token", "backupEnabled", "backupDir", "backupRemote", "backupIntervalMinutes"];
+    const machineOnly = [
+      "t3Token",
+      "backupEnabled",
+      "backupDir",
+      "backupRemote",
+      "backupIntervalMinutes",
+      "terminal",
+      "terminalOpenIn",
+    ];
     const all = Object.keys(loadSettings(createRepos(openDatabase(":memory:"))));
     expect(all.filter((k) => !EXPORTED_SETTINGS.has(k)).sort()).toEqual(machineOnly.sort());
   });
@@ -133,7 +183,9 @@ describe("dump", () => {
         "settings.json",
         "projects.json",
         "labels.json",
+        "relations.json",
         "counters.json",
+        "autopilot.json",
         `tasks/${a.createdAt.slice(0, 7)}/task-${a.number}.json`,
         `events/${a.createdAt.slice(0, 7)}.json`,
       ]),
@@ -188,7 +240,7 @@ describe("dump", () => {
 
 describe("restore", () => {
   it("round-trips a board through a folder into a new database", () => {
-    const { s, db } = seed();
+    const { s, db, a } = seed();
     const dir = tempDir();
     writeDumpDir(dir, s.backup.dump());
 
@@ -198,10 +250,28 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
+      // Both flags survive: On, Off, and Default (null) for the task that never had one.
+      expect(restored.prepare("SELECT autopilot FROM tasks ORDER BY number").all()).toEqual([
+        { autopilot: 1 },
+        { autopilot: 0 },
+        { autopilot: null },
+      ]);
       expect(restored.prepare("SELECT snapshot_json FROM task_links").all()).toEqual(
         expect.arrayContaining([{ snapshot_json: null }]),
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
+      expect(restored.prepare("SELECT name, action_json FROM autopilot_custom").all()).toEqual([
+        { name: "Notify", action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300 }) },
+      ]);
+      expect(restored.prepare("SELECT flag_autopilot, last_task_id FROM autopilot_recurring").all()).toEqual([
+        { flag_autopilot: 1, last_task_id: a.id },
+      ]);
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_runs").get()).toEqual({ n: 0 });
+      const restoredRepos = createRepos(restored);
+      // Pause stays with the machine: a restore can't lift it, or set it.
+      expect(restoredRepos.settings.all().has("autopilotPaused")).toBe(false);
+      expect(restoredRepos.settings.all().get("autopilotEngine")).toMatchObject({ maxConcurrent: 2 });
     } finally {
       restored.close();
     }
@@ -219,6 +289,32 @@ describe("restore", () => {
     } finally {
       restored.close();
     }
+  });
+
+  it("reads a folder written before Recurring tasks, which has no recurring.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    expect(readDumpDir(dir).autopilot_recurring).toHaveLength(1);
+    rmSync(join(dir, "recurring.json"));
+    expect(readDumpDir(dir).autopilot_recurring).toEqual([]);
+  });
+
+  it("reads a folder written before custom automations, which has no custom-automations.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    expect(readDumpDir(dir).autopilot_custom).toHaveLength(1);
+    rmSync(join(dir, "custom-automations.json"));
+    expect(readDumpDir(dir).autopilot_custom).toEqual([]);
+  });
+
+  it("reads a folder written before Autopilot, which has no autopilot.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "autopilot.json"));
+    expect(readDumpDir(dir).autopilot_settings).toEqual([]);
   });
 
   it("refuses to replace a board without force, and keeps machine settings and the old file when forced", () => {
@@ -267,15 +363,58 @@ describe("restore", () => {
     expect(readdirSync(join(dbPath, ".."))).toEqual([]);
   });
 
+  it("reads a folder written before templates existed, with no templates.json", () => {
+    const { s, db } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    rmSync(join(dir, "templates.json"));
+    const dump = readDumpDir(dir);
+    expect(dump.task_templates).toEqual([]);
+    const dbPath = join(tempDir(), "data.sqlite");
+    // An older manifest doesn't count templates, and its tasks and recurring rules don't point at any.
+    const { task_templates: _n, autopilot_recurring: _r, ...counts } = dump.manifest.counts;
+    const tasks = dump.tasks.map((b) => ({ ...b, task: { ...b.task, template_id: null } }));
+    restoreBoard(dbPath, { ...dump, manifest: { ...dump.manifest, counts }, autopilot_recurring: [], tasks });
+    const restored = openDatabase(dbPath);
+    try {
+      expect(restored.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual(
+        db.prepare("SELECT count(*) AS n FROM tasks").get(),
+      );
+    } finally {
+      restored.close();
+    }
+  });
+
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model or epic columns.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no
+    // relations, no Autopilot settings.
+    const {
+      autopilot_settings: _a,
+      autopilot_recurring: _rc,
+      autopilot_custom: _cu,
+      task_relations: _rel,
+      ...counts
+    } = dump.manifest.counts;
     const old: BoardDump = {
       ...dump,
-      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql" },
+      manifest: { ...dump.manifest, schemaVersion: "005_task_labels.sql", counts },
+      task_templates: [],
+      task_relations: [],
+      autopilot_settings: [],
+      autopilot_recurring: [],
+      autopilot_custom: [],
       tasks: dump.tasks.map((bundle) => {
-        const { suggested_tier: _t, suggested_reason: _r, kind: _k, parent_id: _p, ...task } = bundle.task;
+        const {
+          suggested_tier: _t,
+          suggested_reason: _r,
+          kind: _k,
+          parent_id: _p,
+          autopilot: _f,
+          template_id: _m,
+          ...task
+        } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
       }),
       task_events: dump.task_events.map((e) =>
@@ -290,6 +429,9 @@ describe("restore", () => {
     try {
       const statuses = restored.prepare("SELECT status FROM tasks").all() as Array<{ status: string }>;
       expect(statuses.map((r) => r.status)).not.toContain("idea");
+      // The migrations after the dump's schema seed the starter templates.
+      const names = restored.prepare("SELECT name FROM task_templates ORDER BY name").all();
+      expect(names).toEqual([{ name: "Bug" }, { name: "Feature" }, { name: "Spike" }]);
       const created = restored
         .prepare("SELECT payload_json FROM task_events WHERE task_id = ? AND type = 'created'")
         .get(a.id) as { payload_json: string };
@@ -299,6 +441,36 @@ describe("restore", () => {
       });
     } finally {
       restored.close();
+    }
+  });
+});
+
+describe("backups from before relations existed", () => {
+  it("reads a folder with no relations.json and a single file with no task_relations", () => {
+    const { s } = seed();
+    const dump = s.backup.dump();
+    const { task_relations: _r, ...counts } = dump.manifest.counts;
+    const oldManifest = { ...dump.manifest, counts };
+
+    const dir = tempDir();
+    writeDumpDir(dir, { ...dump, manifest: oldManifest });
+    rmSync(join(dir, "relations.json"));
+    const fromFolder = readDumpDir(dir);
+    expect(fromFolder.task_relations).toEqual([]);
+
+    const file = join(tempDir(), "board.json");
+    const { task_relations: _t, ...bare } = dump;
+    writeFileSync(file, JSON.stringify({ ...bare, manifest: oldManifest }));
+    expect(readDump(file).task_relations).toEqual([]);
+
+    const restored = join(tempDir(), "data.sqlite");
+    restoreBoard(restored, fromFolder);
+    const db = openDatabase(restored);
+    try {
+      expect(db.prepare("SELECT count(*) AS n FROM task_relations").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT count(*) AS n FROM tasks").get()).toEqual({ n: dump.tasks.length });
+    } finally {
+      db.close();
     }
   });
 });
@@ -340,6 +512,33 @@ describe("restoreTask", () => {
     expect(after.links.map((l) => l.url)).toEqual(before.links.map((l) => l.url));
     expect(after.events.at(-1)).toMatchObject({ type: "restored", actor: "user" });
     expect(events.some((e) => e.type === "task.upserted")).toBe(true);
+  });
+
+  it("brings a task back without its template when the template has been deleted since", () => {
+    const { s, db, a } = seed();
+    const dump = s.backup.dump();
+    const bug = s.templates.list().find((t) => t.name === "Bug")!;
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: bug.id });
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    s.templates.delete(bug.id);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: null });
+  });
+
+  it("puts back what it blocked, and keeps current relations when it replaces a task", () => {
+    const { s, a, idea } = seed();
+    const dump = s.backup.dump();
+    s.tasks.update(a.id, { archived: true }, "user");
+    s.tasks.delete(a.id, "user");
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
+    s.backup.restoreTask(dump, a.number, { actor: "user" });
+    expect(s.tasks.summary(idea.id).blockedBy.map((t) => t.id)).toEqual([a.id]);
+
+    // The relation changed since the backup: a forced restore leaves it as it is now.
+    s.tasks.update(idea.id, { removeBlockedBy: [a.id] }, "user");
+    s.backup.restoreTask(dump, a.number, { actor: "user", force: true });
+    expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
   });
 
   it("refuses a task still on the board unless forced, and renumbers on a number clash", () => {

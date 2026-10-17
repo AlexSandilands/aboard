@@ -12,6 +12,7 @@ import {
   MonitorIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { BellBadge, NotificationRow } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
@@ -75,6 +76,9 @@ import {
   SidebarTrigger,
 } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
+import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
+import { ModeSwitch } from "~/components/autopilot/ModeSwitch";
+import { GroupHeading } from "~/components/task/LinksSection";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -83,6 +87,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { formatElapsedDurationLabel, formatRelativeTimeLabel } from "~/lib/timestampFormat";
+import { cn } from "~/lib/utils";
 
 const BUTTON_VARIANTS = [
   "default",
@@ -437,6 +442,42 @@ export function StyleGallery() {
           <Separator className="w-full" />
         </Section>
 
+        <Section title="Autopilot pill and epic button (off, idle, paused, active) and card badge">
+          {(["off", "idle", "paused", "active"] as const).map((state) => (
+            <span key={state} data-autopilot-state={state} className={pillClassName(state)}>
+              <PillLabel state={state} />
+            </span>
+          ))}
+          {(["off", "idle", "paused", "active"] as const).map((state) => (
+            <span
+              key={state}
+              data-autopilot-state={state}
+              className={cn(
+                "autopilot-pill inline-flex size-5.5 items-center justify-center rounded-full border",
+                PILL_CLASS_NAME[state],
+              )}
+            >
+              <PillIcon state={state} />
+            </span>
+          ))}
+          <Badge variant="info" size="sm">
+            <Spinner size="xs" aria-hidden role="presentation" />
+            Autopilot
+          </Badge>
+          {/* The popover's switch: On is blue when chosen, and Inherit's note is blue while it resolves to On. */}
+          <ModeSwitch label="Chosen: On" value="on" onChange={() => {}} />
+          <ModeSwitch label="Chosen: Inherit" value="inherit" onChange={() => {}} />
+          <span className="text-2xs text-info-foreground">Inherit (On from board)</span>
+          <span className="text-2xs text-muted-foreground">Inherit (Off by default)</span>
+        </Section>
+
+        <Section title="Task panel group heading (Sessions and Links)">
+          <div className="flex w-full max-w-sm flex-col gap-0.5">
+            <GroupHeading>Sessions</GroupHeading>
+            <GroupHeading className="mt-1.5">Links</GroupHeading>
+          </div>
+        </Section>
+
         <Section title="Skeleton, spinner, scroll area">
           <div className="flex w-64 flex-col gap-2">
             <Skeleton className="h-4 w-full" />
@@ -498,6 +539,43 @@ export function StyleGallery() {
                 Toast: {type}
               </Button>
             ))}
+          </div>
+        </Section>
+
+        <Section title="Notification bell and inbox rows">
+          <div className="flex items-center gap-3">
+            {[0, 3, 12].map((count) => (
+              <Button key={count} variant="ghost-muted" size="icon-sm" aria-label={`Notifications, ${count} unread`}>
+                <BellIcon />
+                <BellBadge count={count} />
+              </Button>
+            ))}
+          </div>
+          <div className="w-96 rounded-lg border bg-popover py-1">
+            <NotificationRow
+              notification={{
+                id: "unread",
+                kind: "pr_checks_failing",
+                taskId: null,
+                title: "Checks failing on PR #7",
+                body: "#12 Rewrite the cart drawer",
+                createdAt: SAMPLE_UPDATED_AT,
+                readAt: null,
+              }}
+              onOpen={() => {}}
+            />
+            <NotificationRow
+              notification={{
+                id: "read",
+                kind: "review_finished",
+                taskId: null,
+                title: "Review round 1 finished",
+                body: "#12 Rewrite the cart drawer\n2 major, 1 nit",
+                createdAt: SAMPLE_STARTED_AT,
+                readAt: SAMPLE_UPDATED_AT,
+              }}
+              onOpen={() => {}}
+            />
           </div>
         </Section>
 

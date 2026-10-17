@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { AutopilotStatus } from "./autopilot.ts";
 import { LabelHue } from "./labels.ts";
+import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
+import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
@@ -43,7 +46,7 @@ export type TaskKind = z.infer<typeof TaskKind>;
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
-export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "url"]);
+export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "agent_session", "url"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 export const PROJECT_ICON_COLORS = [
@@ -166,6 +169,32 @@ export type IssueSnapshot = z.infer<typeof IssueSnapshot>;
 export const MergeMethod = z.enum(["squash", "merge", "rebase"]);
 export type MergeMethod = z.infer<typeof MergeMethod>;
 
+/** A review on a pull request, as the poll last read it. */
+export const PrReviewInfo = z.object({
+  /** GitHub's databaseId, as Autopilot's review runs record it. */
+  id: z.number().int().nullable(),
+  author: z.string().nullable(),
+  state: z.enum(["approved", "changes_requested", "commented", "dismissed"]),
+  submittedAt: IsoDate.nullable(),
+  /** Written by the signed-in `gh` account, which is also the account Autopilot posts as. */
+  own: z.boolean(),
+  /** The author is an owner, member or collaborator of the repository. */
+  trusted: z.boolean(),
+});
+export type PrReviewInfo = z.infer<typeof PrReviewInfo>;
+
+/** An inline review comment on a thread that isn't resolved. No body: the snapshot only says who wrote what when. */
+export const PrReviewCommentInfo = z.object({
+  id: z.number().int(),
+  author: z.string().nullable(),
+  createdAt: IsoDate,
+  /** The review the comment was posted in (every inline comment is in one). */
+  reviewId: z.number().int().nullable(),
+  own: z.boolean(),
+  trusted: z.boolean(),
+});
+export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
+
 export const PrSnapshot = z.object({
   state: z.enum(["open", "draft", "merged", "closed"]),
   title: z.string(),
@@ -184,8 +213,68 @@ export const PrSnapshot = z.object({
   /** Whether the signed-in account can push to the repo, and so merge. */
   canMerge: z.boolean().optional(),
   headOid: z.string().nullable().optional(),
+  /** Whether the head branch is in another repository (a fork), so not on the base repo's `origin`. */
+  isCrossRepository: z.boolean().optional(),
+  /** The newest reviews, oldest first. Optional, as below, so older snapshots still parse. */
+  reviews: z.array(PrReviewInfo).optional(),
+  /** Comments on the newest unresolved review threads, oldest first. */
+  reviewComments: z.array(PrReviewCommentInfo).optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
+
+/**
+ * When the board saw each pull request fact begin, from one snapshot to the next (`nextPrChanges`): the merge, the
+ * checks starting to fail, a conflict appearing, and the head moving from one commit to another. Server-side only,
+ * for Autopilot's PR triggers; the snapshot alone can't say when a state began.
+ */
+export const PrChanges = z.object({
+  merged: IsoDate.optional(),
+  checksFailing: IsoDate.optional(),
+  conflict: IsoDate.optional(),
+  newHead: IsoDate.optional(),
+  /** The last known checks and mergeability, kept across `pending` and `unknown`, which say nothing either way. */
+  failing: z.boolean().optional(),
+  conflicting: z.boolean().optional(),
+});
+export type PrChanges = z.infer<typeof PrChanges>;
+
+/**
+ * The PR changes after a new snapshot at `at`. A fact that became true is stamped; one that holds keeps its stamp.
+ * The first snapshot (`prev` null: the PR was just linked, or the board was restored, which leaves snapshots out)
+ * only records what is true, so a state the board finds already in place never counts as beginning. Pending checks
+ * and unknown mergeability keep the last known state, so a push that re-runs failing checks, or GitHub recomputing
+ * a conflict, isn't a new failure or conflict.
+ */
+export function nextPrChanges(
+  prev: PrSnapshot | null,
+  next: PrSnapshot | null,
+  changes: PrChanges,
+  at: string,
+): PrChanges {
+  if (!next) return changes;
+  const out: PrChanges = { ...changes };
+  const failing = next.checks === "pending" ? undefined : next.checks === "failing";
+  const conflicting = next.mergeable === "unknown" ? undefined : next.mergeable === "conflicting";
+  if (!prev) {
+    if (failing !== undefined) out.failing = failing;
+    if (conflicting !== undefined) out.conflicting = conflicting;
+    return out;
+  }
+  // Rows from before these flags fall back to the previous snapshot.
+  const wasFailing = changes.failing ?? prev.checks === "failing";
+  const wasConflicting = changes.conflicting ?? prev.mergeable === "conflicting";
+  if (next.state === "merged" && prev.state !== "merged") out.merged = at;
+  if (failing !== undefined) {
+    if (failing && !wasFailing) out.checksFailing = at;
+    out.failing = failing;
+  }
+  if (conflicting !== undefined) {
+    if (conflicting && !wasConflicting) out.conflict = at;
+    out.conflicting = conflicting;
+  }
+  if (prev.headOid && next.headOid && prev.headOid !== next.headOid) out.newHead = at;
+  return out;
+}
 
 export const T3ThreadRef = z.object({
   environmentId: z.string().min(1),
@@ -227,6 +316,12 @@ export const TaskLink = z.discriminatedUnion("kind", [
     snapshot: T3ThreadSnapshot.nullable(),
   }),
   z.object({ ...LinkBase, kind: z.literal("issue"), ref: IssueRef, snapshot: IssueSnapshot.nullable() }),
+  z.object({
+    ...LinkBase,
+    kind: z.literal("agent_session"),
+    ref: AgentSessionRef,
+    snapshot: AgentSessionSnapshot.nullable(),
+  }),
   z.object({ ...LinkBase, kind: z.literal("url") }),
 ]);
 export type TaskLink = z.infer<typeof TaskLink>;
@@ -244,6 +339,7 @@ export const AttentionReason = z.object({
     "review_failed",
     "review_unattended",
     "import_failed",
+    "autopilot",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
@@ -295,6 +391,14 @@ export const EpicRollup = z.object({
 });
 export type EpicRollup = z.infer<typeof EpicRollup>;
 
+/** The other end of a blocks / blocked-by relation: enough to show it, and to tell whether it still blocks. */
+export const TaskRelation = TaskRef.extend({
+  status: TaskStatus,
+  /** An archived task that isn't Done still blocks, but its card isn't on the board. */
+  archived: z.boolean(),
+});
+export type TaskRelation = z.infer<typeof TaskRelation>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -314,6 +418,12 @@ export const TaskSummary = z.object({
   statusChangedAt: IsoDate,
   /** Normalised labels (see normalizeLabel), sorted by name. */
   labels: z.array(z.string()),
+  /** Tasks that must be Done before this one is ready, by number. */
+  blockedBy: z.array(TaskRelation),
+  /** Tasks waiting on this one, by number. */
+  blocks: z.array(TaskRelation),
+  /** True while any of `blockedBy` isn't Done (see isBlocked). */
+  blocked: z.boolean(),
   resolution: TaskResolution.nullable(),
   /** The task that delivered or duplicates this one; null for "won't do" or once that task is deleted. */
   resolvedBy: TaskRef.nullable(),
@@ -326,6 +436,8 @@ export const TaskSummary = z.object({
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
+  /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
+  autopilot: z.boolean().nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */
@@ -365,6 +477,7 @@ export const BoardSnapshot = z.object({
   /** Label colour overrides by label; labels not listed take a hue hashed from their name. */
   labelColors: z.record(z.string(), LabelHue),
   integrations: z.object({ t3: T3IntegrationStatus }),
+  autopilot: AutopilotStatus,
 });
 export type BoardSnapshot = z.infer<typeof BoardSnapshot>;
 
@@ -377,6 +490,20 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("integrations.changed"), t3: T3IntegrationStatus }),
   /** Label colours are board-wide, so a change is sent whole rather than per task. */
   z.object({ type: z.literal("labels.colors_changed"), labelColors: z.record(z.string(), LabelHue) }),
+  /** A run started or finished, or Autopilot settings or pause changed. Sent whole: it is small and board-wide. */
+  z.object({ type: z.literal("autopilot.changed"), autopilot: AutopilotStatus }),
+  /**
+   * Something worth the user's attention happened. `unread` counts every unread notification; `popup` is false when
+   * quiet hours keep it to the inbox. The window shows the OS notification and badge from this.
+   */
+  z.object({
+    type: z.literal("notification.created"),
+    notification: InboxNotification,
+    unread: z.number(),
+    popup: z.boolean(),
+  }),
+  /** Notifications were read or removed (their task was deleted); the inbox refetches. */
+  z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -431,6 +558,8 @@ export const LinkInput = z.object({
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
+  /** A Claude Code or Copilot CLI session, so the board can show its status and resume it in a terminal. */
+  agentSession: AgentSessionRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
@@ -451,15 +580,29 @@ export const CreateTaskInput = z
     links: z.array(LinkInput).optional(),
     /** Normalised by the server; see normalizeLabels. */
     labels: z.array(z.string()).optional(),
+    /** The Autopilot flag: null or omitted is Default. */
+    autopilot: z.boolean().nullable().optional(),
+    /** Tasks that block this one (uuid, "#42" or "42"). */
+    blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
      * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
      */
     sourceUrl: z.string().trim().min(1).optional(),
+    /**
+     * A template (id or name) to start from. Its title pattern, description, labels and plan fill in whatever the
+     * other fields leave out; fields given here win. See templates.ts.
+     */
+    template: z.string().trim().min(1).optional(),
+    /**
+     * Where the task lands. Defaults to "planned" when a plan is given and to "backlog" otherwise, so a template's
+     * plan is copied into a Backlog task unless "planned" is asked for.
+     */
+    status: z.enum(["backlog", "planned"]).optional(),
     actor: z.string().optional(),
   })
-  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined, {
-    message: "Provide a title or a sourceUrl",
+  .refine((input) => input.title !== undefined || input.sourceUrl !== undefined || input.template !== undefined, {
+    message: "Provide a title, a sourceUrl or a template",
     path: ["title"],
   })
   .refine((input) => input.sourceUrl === undefined || input.plan === undefined, {
@@ -477,12 +620,18 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
+  /** null is Default: Start planned tasks never starts the task. */
+  autopilot: z.boolean().nullable().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
   /** null clears it. */
   suggestedModel: SuggestedModelInput.nullable().optional(),
   /** The epic to put the task in (uuid, "#42" or "42"); null takes it out of its epic. */
   epicId: z.string().trim().min(1).nullable().optional(),
+  /** Tasks to add as blockers of this one (uuid, "#42" or "42"). A cycle is rejected. */
+  addBlockedBy: z.array(z.string().trim().min(1)).optional(),
+  /** Blockers to remove. Removing a relation that doesn't exist does nothing. */
+  removeBlockedBy: z.array(z.string().trim().min(1)).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
@@ -551,6 +700,12 @@ export const AppSettings = z
     issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Where "Open in terminal" resumes agent sessions. */
+    terminal: TerminalSetting,
+    /** Windows Terminal only: a tab in its last window, or a new window. */
+    terminalOpenIn: TerminalOpenIn,
+    /** Which notifications are recorded, and whether quiet hours silence their popups. */
+    notifications: NotificationSettings,
   })
   .extend(BackupSettings.shape);
 
@@ -573,6 +728,10 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  terminal: TerminalSetting.optional(),
+  terminalOpenIn: TerminalOpenIn.optional(),
+  /** Merges into the notification settings: kinds left out keep their switch. */
+  notifications: UpdateNotificationSettingsInput.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

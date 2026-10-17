@@ -1,7 +1,10 @@
 import type {
+  AgentSessionRef,
+  AgentSessionSnapshot,
   IssueRef,
   IssueSnapshot,
   LinkKind,
+  PrChanges,
   PrRef,
   PrSnapshot,
   T3ThreadRef,
@@ -57,6 +60,13 @@ export function toLink(r: LinkRow): TaskLink {
         ref: parseJson<IssueRef>(r.ref_json) ?? { host: "", repo: "", number: 0 },
         snapshot: parseJson<IssueSnapshot>(r.snapshot_json),
       };
+    case "agent_session":
+      return {
+        ...base,
+        kind: "agent_session",
+        ref: parseJson<AgentSessionRef>(r.ref_json) ?? { harness: "claude-code", sessionId: "", cwd: "" },
+        snapshot: parseJson<AgentSessionSnapshot>(r.snapshot_json),
+      };
     case "url":
       return { ...base, kind: "url" };
   }
@@ -91,8 +101,25 @@ export function createLinksRepo(sql: Sql) {
     insert(r: LinkRow): void {
       sql.insert("task_links", { ...r });
     },
+    setRef(id: string, refJson: string): void {
+      sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
+    },
+    setLabel(id: string, label: string | null): void {
+      sql.run("UPDATE task_links SET label = ? WHERE id = ?", label, id);
+    },
     setSnapshot(id: string, snapshotJson: string | null, syncedAt: string): void {
       sql.run("UPDATE task_links SET snapshot_json = ?, synced_at = ? WHERE id = ?", snapshotJson, syncedAt, id);
+    },
+    setPrChanges(id: string, changes: PrChanges): void {
+      sql.run("UPDATE task_links SET pr_changes_json = ? WHERE id = ?", JSON.stringify(changes), id);
+    },
+    /** When each PR fact began, per link id; links with none recorded are left out. */
+    prChanges(ids: readonly string[]): Map<string, PrChanges> {
+      const rows = sql.all<{ id: string; pr_changes_json: string | null }>(
+        "SELECT id, pr_changes_json FROM task_links WHERE id IN (SELECT value FROM json_each(?)) AND pr_changes_json IS NOT NULL",
+        jsonList(ids),
+      );
+      return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);

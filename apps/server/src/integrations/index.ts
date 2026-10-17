@@ -1,21 +1,31 @@
 import { randomUUID } from "node:crypto";
+import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
+import { createDigestGenerator } from "../autopilot/digest.ts";
+import { createAutopilotEngine } from "../autopilot/engine.ts";
+import { createAutopilotRunner } from "../autopilot/runner.ts";
+import type { Automation, Runner } from "../autopilot/types.ts";
+import type { RunShell } from "./shellCommand.ts";
 import type { EventBus } from "../bus.ts";
-import type { Config } from "../config.ts";
+import { boardUrlOf, type Config } from "../config.ts";
 import type { Services } from "../services/types.ts";
+import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
-import { createGithubIntegration } from "./github.ts";
+import { createGithubIntegration, messageOf } from "./github.ts";
+import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
+import type { SpawnTerminal, TerminalHost } from "./terminal.ts";
 import type { Integrations } from "./types.ts";
 import type { Logger } from "./util.ts";
 
 export interface IntegrationDeps {
-  config: Pick<Config, "t3Home" | "pollers">;
+  config: Pick<Config, "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "port" | "webPort"> &
+    Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -32,10 +42,27 @@ export interface IntegrationOverrides {
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   runGit?: RunGit;
+  /** Process checks for agent sessions' status. */
+  processProbe?: ProcessProbe;
+  /** The machine "Open in terminal" runs on, and how it starts a terminal. */
+  terminalHost?: () => TerminalHost;
+  spawnTerminal?: SpawnTerminal;
+  /** Carries out Autopilot's agent actions; replaces the T3 and headless runners entirely. */
+  autopilotRunner?: Runner;
+  /** Git for Autopilot's worktrees (the runner and their cleanup). */
+  autopilotGit?: RunGit;
+  /** Runs one headless Autopilot agent (`claude -p`) to the end. */
+  runAgent?: RunAgent;
+  /** Replaces the Autopilot catalogue (read by the services, see createContext). */
+  automations?: readonly Automation[];
+  /** Runs custom automations' shell commands (read by the services, see createContext). */
+  runShell?: RunShell;
+  /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
+  now?: () => Date;
   log?: Logger;
 }
 
-/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations. */
+/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations, the review watchdog, backup and Autopilot. */
 export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
   const github = createGithubIntegration({
     services: deps.services,
@@ -69,6 +96,54 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const sessions = createAgentSessionsIntegration({
+    services: deps.services,
+    bus: deps.bus,
+    dirs: deps.config.sessionDirs,
+    userHome: deps.config.userHome,
+    ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
+    ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
+    ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  // An Autopilot session's state comes from its run, which changes without the harness's files changing.
+  const refreshSession = (sessionId: string) => {
+    sessions.refreshSession(sessionId).catch((error: unknown) => {
+      (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
+    });
+  };
+  const runner =
+    overrides.autopilotRunner ??
+    createAutopilotRunner({
+      services: deps.services,
+      t3,
+      worktreesDir: deps.config.worktreesDir,
+      ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
+      ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
+      sessionLinked: refreshSession,
+      ...(overrides.log ? { log: overrides.log } : {}),
+    });
+  const autopilot = createAutopilotEngine({
+    services: deps.services,
+    bus: deps.bus,
+    runner,
+    github,
+    runEnded: (run) => {
+      if (run.sessionId) refreshSession(run.sessionId);
+    },
+    boardUrl: () => boardUrlOf(deps.config),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const digests = createDigestGenerator({
+    services: deps.services,
+    runner,
+    ...(overrides.now ? { now: overrides.now } : {}),
+  });
+  const worktrees = createWorktreeCleanup({
+    services: deps.services,
+    ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
 
   return {
@@ -82,6 +157,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.start();
       reviews.start();
       backup.start();
+      sessions.start();
+      autopilot.start();
+      worktrees.start();
     },
     stop() {
       started = false;
@@ -89,6 +167,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       t3.stop();
       reviews.stop();
       backup.stop();
+      sessions.stop();
+      autopilot.stop();
+      worktrees.stop();
     },
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
@@ -97,6 +178,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     async refreshLink(linkId) {
       const link = deps.services().links.get(linkId);
       if (await github.refresh(link)) return;
+      if (await sessions.refresh(link)) return;
       await t3.refresh(link);
     },
     async mergePr(linkId, input) {
@@ -119,6 +201,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const { value: _value, ...rest } = input;
       return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
     },
+    resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
+    resumeSession: (linkId, input) => sessions.resume(linkId, input),
+    terminalInfo: () => sessions.terminalInfo(),
+    generateDigest: () => digests.generate(),
+    digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
   };

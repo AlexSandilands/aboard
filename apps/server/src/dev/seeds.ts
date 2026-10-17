@@ -1,5 +1,7 @@
 import {
   BOARD_REVIEWER,
+  type AgentHarness,
+  type AgentSessionSnapshot,
   type PlanInput,
   type PrSnapshot,
   type T3ThreadSnapshot,
@@ -75,8 +77,8 @@ const basic: Scenario = (s, opts) => {
     { context: "Backlog task with a plan already written.", ...steps("Retry", ["Add backoff", "Log final failures"]) },
     AGENT,
   );
-  addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
-  addTask(s, shop.id, {
+  const edgeCache = addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
+  const estimates = addTask(s, shop.id, {
     title: "Show delivery estimates on the product page",
     status: "planned",
     description: "Use the carrier API; fall back to the static table.",
@@ -141,13 +143,28 @@ const basic: Scenario = (s, opts) => {
     actor: AGENT,
   }).id;
   addTask(s, shop.id, { title: "Address autocomplete", status: "backlog", epicId: checkout });
-  addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
+  const payment = addTask(s, shop.id, { title: "Inline payment form", status: "in_progress", epicId: checkout });
   addTask(s, shop.id, { title: "Merge shipping and billing steps", status: "review", epicId: checkout });
   s.tasks.create({ projectId: billing.id, title: "Usage-based pricing", kind: "epic", actor: AGENT });
+  // Finished epics, which show as cards among the Done cards instead of bands.
+  for (const [title, tasks] of [
+    ["Faster product pages", ["Preload hero images", "Split the product bundle", "Cache price lookups"]],
+    ["Guest checkout", ["Skip account creation", "Email receipts to guests"]],
+  ] as const) {
+    const done = s.tasks.create({ projectId: shop.id, title, kind: "epic", actor: AGENT }).id;
+    for (const child of tasks) addTask(s, shop.id, { title: child, status: "done", epicId: done });
+  }
 
-  addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
+  const invoices = addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
   addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });
   addTask(s, billing.id, { title: "Nightly reconciliation report", status: "done" });
+
+  // A dependency chain across both projects: edge cache > delivery estimates > invoice PDFs, with the cart
+  // rewrite holding up the webhook retries and a finished blocker (the router upgrade) behind the payment form.
+  s.tasks.update(estimates, { addBlockedBy: [edgeCache] }, AGENT);
+  s.tasks.update(invoices, { addBlockedBy: [estimates] }, AGENT);
+  s.tasks.update(planned, { addBlockedBy: [active] }, AGENT);
+  s.tasks.update(payment, { addBlockedBy: [doneIds[2]!, active] }, AGENT);
 };
 
 const review: Scenario = (s, opts) => {
@@ -346,6 +363,91 @@ const threads: Scenario = (s, opts) => {
     status: "planned",
     links: ["SHOP-77", "https://example.com/design-spec"],
   });
+
+  // Agent sessions in each status. The ids are made up, so the pollers would find none of them running; the
+  // pollers are off in a sandbox, and opening one reads its real status first.
+  const sessionCwd = opts.workspaceRoot ?? "/work/links";
+  const session = (title: string, harness: AgentHarness, snapshot: AgentSessionSnapshot | null, n: number) => {
+    const taskId = addTask(s, project.id, { title, status: "in_progress" });
+    const sessionId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const link = s.links.add(taskId, { agentSession: { harness, sessionId, cwd: sessionCwd } }, AGENT);
+    if (snapshot) s.links.setSnapshot(link.id, snapshot);
+  };
+  session("Claude session working", "claude-code", { status: "busy", inApp: false }, 1);
+  session("Claude session idle", "claude-code", { status: "idle", inApp: false }, 2);
+  session("Claude session not running", "claude-code", { status: "not_running", inApp: false }, 3);
+  const ended = new Date(Date.now() - 12 * 60_000).toISOString();
+  session("Autopilot session finished", "claude-code", { status: "finished", inApp: false, endedAt: ended }, 7);
+  session("Autopilot session failed", "claude-code", { status: "failed", inApp: false, endedAt: ended }, 8);
+  session("Copilot session running", "copilot-cli", { status: "running", inApp: false }, 4);
+  session("Session status unknown", "claude-code", null, 5);
+  // A thread hides the session on the card; the panel shows both.
+  const inT3 = addTask(s, project.id, {
+    title: "Session inside a T3 thread",
+    status: "in_progress",
+    links: ["t3code://threads/sandbox-env/thread-with-session"],
+  });
+  s.links.setSnapshot(s.tasks.detail(inT3).links[0]!.id, {
+    title: "Thread with a session",
+    status: "working",
+    lastActivityAt: now,
+    model: "claude-opus",
+    branch: null,
+  });
+  const inT3Session = s.links.add(
+    inT3,
+    {
+      agentSession: { harness: "claude-code", sessionId: "00000000-0000-4000-8000-000000000006", cwd: sessionCwd },
+    },
+    AGENT,
+  );
+  s.links.setSnapshot(inT3Session.id, { status: "busy", inApp: true });
+
+  // Tasks with many sessions, for the panel's Sessions and Links groups: without a T3 thread every session is a
+  // row; beside one, its Claude Code sessions fold into the thread's menu and Autopilot's stay rows.
+  let manyN = 100;
+  const manySession = (taskId: string, label: string | null, snapshot: AgentSessionSnapshot) => {
+    const sessionId = `00000000-0000-4000-8000-${String(manyN++).padStart(12, "0")}`;
+    const link = s.links.add(
+      taskId,
+      { agentSession: { harness: "claude-code", sessionId, cwd: sessionCwd }, ...(label ? { label } : {}) },
+      AGENT,
+    );
+    s.links.setSnapshot(link.id, snapshot);
+  };
+  const manyLinks = [
+    "SHOP-31",
+    "https://example.com/spec",
+    "https://github.com/acme/shop/issues/9",
+    "https://github.com/acme/shop/pull/31",
+  ];
+  const manyEnded = new Date(Date.now() - 3 * 3_600_000).toISOString();
+  const noThread = addTask(s, project.id, {
+    title: "Many sessions, no T3 thread",
+    status: "in_progress",
+    links: manyLinks,
+  });
+  manySession(noThread, "Implementing the cart", { status: "busy", inApp: false });
+  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
+  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, null, { status: "not_running", inApp: false });
+  const withThread = addTask(s, project.id, {
+    title: "Many sessions beside a T3 thread",
+    status: "in_progress",
+    links: ["t3code://threads/sandbox-env/thread-many-sessions", ...manyLinks],
+  });
+  s.links.setSnapshot(s.tasks.detail(withThread).links.find((l) => l.kind === "t3_thread")!.id, {
+    title: "Build the cart",
+    status: "working",
+    lastActivityAt: now,
+    model: "claude-opus",
+    branch: "feat/cart",
+  });
+  manySession(withThread, "Planning the cart", { status: "not_running", inApp: false });
+  manySession(withThread, "Implementing the cart", { status: "busy", inApp: true });
+  manySession(withThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(withThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
 };
 
 /**
@@ -459,6 +561,43 @@ const showcase: Scenario = (s, opts) => {
   s.reviews.openRound(rounding, { trigger: "manual", actor: AGENT, force: true });
   s.reviews.submit(rounding, { summary: "Rounding is correct for every currency now.", findings: [] }, AGENT);
 
+  // Autopilot history. A run still going can't be seeded: the server fails runs a restart left running.
+  const autopilotRun = (
+    taskId: string,
+    automation: string,
+    key: string,
+    summary: string,
+    result: Parameters<typeof s.autopilot.finish>[1],
+    dryRun = false,
+  ) => {
+    const run = s.autopilot.record({ automation, candidate: { dedupeKey: key, summary, taskId }, dryRun });
+    if (!run || dryRun) return;
+    s.autopilot.start(run.id);
+    s.autopilot.finish(run.id, result);
+  };
+  autopilotRun(drawer, "start_planned", `start:${drawer}`, `start ${s.tasks.summary(drawer).title}`, {
+    summary: "Started a T3 Code thread",
+    runner: "t3",
+    threadUrl: "t3code://threads/sandbox-env/showcase-1",
+    costUsd: 0.42,
+  });
+  autopilotRun(rounding, "review_prs", `review:${rounding}:1`, "review the pull request", {
+    status: "failed",
+    error: "The review agent exited with code 1 before submitting findings",
+    runner: "headless",
+    sessionId: "6f1c2e0a-9d3b-4c52-8f7e-2a41b0c9d5e3",
+    costUsd: 0.07,
+    needsAttention: true,
+  });
+  autopilotRun(
+    drawer,
+    "fix_pr_findings",
+    `fix:${drawer}`,
+    "fix the open findings on the pull request",
+    { summary: "" },
+    true,
+  );
+
   const sitemap = done("Add a sitemap", ["seo"]);
   done("Lazy-load product reviews", ["perf"]);
   const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "backlog" });
@@ -542,6 +681,30 @@ const showcase: Scenario = (s, opts) => {
   addTask(s, docs.id, { title: "Dark mode", status: "done", labels: ["ui"] });
   const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "backlog" });
   s.tasks.close(ie, { resolution: "wont_do" }, "user");
+
+  // The attention inbox: what the board has told you, newest last. The first two are read.
+  const label = (taskId: string) => `#${s.tasks.summary(taskId).number} ${s.tasks.summary(taskId).title}`;
+  const inbox = [
+    { kind: "review_finished", taskId: drawer, title: "Review round 1 finished", detail: "2 major, 1 nit" },
+    { kind: "pr_changes_requested", taskId: crash, title: "Changes requested on PR #33", detail: "" },
+    { kind: "pr_checks_failing", taskId: drawer, title: "Checks failing on PR #7", detail: "" },
+    {
+      kind: "thread_waiting",
+      taskId: biometric,
+      title: "Thread waiting for input",
+      detail: "Use Face ID on iOS only, or Android too?",
+    },
+  ] as const;
+  inbox.forEach((n, index) => {
+    const made = s.notifications.notify({
+      kind: n.kind,
+      taskId: n.taskId,
+      title: n.title,
+      body: [label(n.taskId), n.detail].filter(Boolean).join("\n"),
+      dedupeKey: `seed:${index}`,
+    });
+    if (made && index < 2) s.notifications.markRead(made.id);
+  });
 };
 
 export const SCENARIOS = { basic, review, threads, showcase } satisfies Record<string, Scenario>;
@@ -562,6 +725,7 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
     t3Home: "/nonexistent",
     pollers: false,
     userHome: "/nonexistent",
+    sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
   });
   try {
     SCENARIOS[scenario](ctx.services, opts);

@@ -2,14 +2,25 @@ import { reviewBadgeLabel, type TaskDetail } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
-export const SECTION_IDS = ["labels", "links", "review", "plan", "details", "activity"] as const;
+export const SECTION_IDS = [
+  "labels",
+  "links",
+  "relations",
+  "review",
+  "autopilot",
+  "plan",
+  "details",
+  "activity",
+] as const;
 
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_TITLES: Record<SectionId, string> = {
   labels: "Labels",
   links: "Links",
+  relations: "Relations",
   review: "Local review",
+  autopilot: "Autopilot",
   plan: "Plan",
   details: "Details",
   activity: "Activity",
@@ -60,6 +71,8 @@ export type SectionTask = Pick<
   TaskDetail,
   | "labels"
   | "links"
+  | "blockedBy"
+  | "blocks"
   | "attention"
   | "review"
   | "reviews"
@@ -84,8 +97,13 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
       return false;
     case "links":
       return task.links.length === 0;
+    case "relations":
+      return task.blockedBy.length === 0 && task.blocks.length === 0;
     case "review":
       return task.reviews.length === 0;
+    // The runs aren't in the task detail; open it when one needs attention, since that is why you'd look.
+    case "autopilot":
+      return !task.attention.some((a) => a.kind === "autopilot");
     case "details":
       return !hasText(task.description) && !hasText(task.planContext);
     case "activity":
@@ -138,12 +156,22 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       const problem = task.attention.find((a) => LINK_ATTENTION.has(a.kind));
       return problem ? `${task.links.length} · ${problem.message}` : String(task.links.length);
     }
+    case "relations": {
+      const open = task.blockedBy.filter((b) => b.status !== "done");
+      const parts = [
+        open.length ? `blocked by ${open.map((b) => `#${b.number}`).join(", ")}` : null,
+        task.blocks.length ? `blocks ${task.blocks.map((b) => `#${b.number}`).join(", ")}` : null,
+      ].filter((part) => part !== null);
+      return parts.length ? parts.join(" · ") : task.blockedBy.length ? "Unblocked" : "None";
+    }
     case "review": {
       if (!task.review) return "Not reviewed yet";
       if (task.review.state === "pending" || task.review.state === "running") return reviewBadgeLabel(task.review);
       const open = task.reviews.flatMap((r) => r.findings).filter((f) => f.status === "open").length;
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
+    case "autopilot":
+      return task.attention.find((a) => a.kind === "autopilot")?.message ?? "Runs on this task";
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";

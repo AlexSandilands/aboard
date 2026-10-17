@@ -1,6 +1,7 @@
-import { describeEpicRollup, ROLLUP_ORDER, type EpicRollup, type TaskStatus } from "@repo/contracts";
+import { describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, type CSSProperties } from "react";
+import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardView } from "~/state/ui";
@@ -8,34 +9,7 @@ import { laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band } from "./b
 import { BoardCell } from "./BoardCell";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
-
-const ROLLUP_TONE: Record<TaskStatus, string> = {
-  done: "bg-success",
-  review: "bg-info",
-  in_progress: "bg-primary",
-  planned: "bg-muted-foreground/45",
-  backlog: "bg-muted-foreground/20",
-};
-
-/** The epic's children as one bar, a segment per status. */
-export function EpicRollupBar({ rollup, className }: { rollup: EpicRollup; className?: string }) {
-  if (rollup.total === 0) {
-    return <span aria-hidden className={cn("h-1 rounded-full bg-muted-foreground/15", className)} />;
-  }
-  return (
-    <span aria-hidden className={cn("flex h-1 overflow-hidden rounded-full bg-muted-foreground/15", className)}>
-      {ROLLUP_ORDER.map((status) =>
-        rollup.byStatus[status] > 0 ? (
-          <span
-            key={status}
-            className={ROLLUP_TONE[status]}
-            style={{ width: `${(rollup.byStatus[status] / rollup.total) * 100}%` }}
-          />
-        ) : null,
-      )}
-    </span>
-  );
-}
+import { EpicRollupBar } from "./EpicRollupBar";
 
 /**
  * An epic's row in its lane: a header, then a cell for each column its children are in, laid on the lane's
@@ -88,7 +62,11 @@ export const EpicBand = memo(function EpicBand({
         epic.archivedAt && "opacity-60",
       )}
     >
-      <header className={cn("col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2", narrow ? "py-1" : "h-8")}>
+      <header
+        // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
+        data-task-card={epic.id}
+        className={cn("col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2", narrow ? "py-1" : "h-8")}
+      >
         <Button
           variant="ghost-muted"
           size="icon-xs"
@@ -121,6 +99,7 @@ export const EpicBand = memo(function EpicBand({
             </span>
           </span>
         </button>
+        <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
       </header>
       {collapsed
         ? null

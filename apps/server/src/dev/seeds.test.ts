@@ -24,11 +24,13 @@ function seeded(scenario: ScenarioName) {
     t3Home: "/nonexistent",
     pollers: false,
     userHome: "/nonexistent",
+    sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
   });
   const tasks = ctx.services.tasks.summaries({ includeArchived: true });
   const details = tasks.map((t) => ctx.services.tasks.detail(t.id));
+  const runs = tasks.flatMap((t) => ctx.services.autopilot.runsForTask(t.id));
   ctx.db.close();
-  return { tasks, details };
+  return { tasks, details, runs };
 }
 
 describe("seed scenarios", () => {
@@ -45,9 +47,21 @@ describe("seed scenarios", () => {
     expect(tasks.some((t) => t.archivedAt)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
     expect(details.some((t) => t.status === "backlog" && t.phases.length > 0)).toBe(true);
-    const epic = details.find((t) => t.kind === "epic" && t.children.length > 0);
+    const epic = details.find((t) => t.title === "One-page checkout");
     expect(new Set(epic?.children.map((c) => c.status))).toEqual(new Set(["backlog", "in_progress", "review"]));
     expect(epic?.status).toBe("backlog");
+    const finished = details.filter((t) => t.kind === "epic" && t.status === "done");
+    expect(finished.length).toBeGreaterThan(1);
+    expect(finished.every((t) => t.children.length > 0)).toBe(true);
+  });
+
+  it("basic has a dependency chain across projects, with a finished blocker", () => {
+    const { tasks } = seeded("basic");
+    const blocked = tasks.filter((t) => t.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(blocked.map((t) => t.projectId)).size).toBeGreaterThan(1);
+    expect(tasks.some((t) => t.blockedBy.some((b) => b.status === "done"))).toBe(true);
+    expect(tasks.some((t) => t.blocks.length > 0 && t.blockedBy.length > 0)).toBe(true);
   });
 
   it("review covers every round status and finding severity", () => {
@@ -74,6 +88,28 @@ describe("seed scenarios", () => {
     expect(links.some((l) => l.kind === "pr" && !l.snapshot)).toBe(true);
   });
 
+  it("threads has an agent session in each status, and one beside a T3 thread", () => {
+    const { details } = seeded("threads");
+    const sessions = details.flatMap((t) => t.links.filter((l) => l.kind === "agent_session"));
+    expect(sessions.map((l) => (l.kind === "agent_session" ? (l.snapshot?.status ?? null) : null))).toEqual(
+      expect.arrayContaining(["busy", "idle", "not_running", "running", "finished", "failed", null]),
+    );
+    const withThread = details.find((t) => t.title === "Session inside a T3 thread");
+    expect(withThread?.links.map((l) => l.kind).sort()).toEqual(["agent_session", "t3_thread"]);
+  });
+
+  it("threads has tasks with many sessions, with and without a T3 thread", () => {
+    const { details } = seeded("threads");
+    const kinds = (title: string) =>
+      details.find((t) => t.title === title)?.links.filter((l) => l.kind === "agent_session").length;
+    expect(kinds("Many sessions, no T3 thread")).toBe(5);
+    expect(kinds("Many sessions beside a T3 thread")).toBe(4);
+    const thread = details
+      .find((t) => t.title === "Many sessions beside a T3 thread")
+      ?.links.find((l) => l.kind === "t3_thread");
+    expect(thread?.kind === "t3_thread" && thread.snapshot?.title).toBe("Build the cart");
+  });
+
   it("threads offers every merge control on Review PRs", () => {
     const { details } = seeded("threads");
     const actions = details.flatMap((t) =>
@@ -95,5 +131,12 @@ describe("seed scenarios", () => {
     const kinds = details.flatMap((t) => t.links.map((l) => l.kind));
     expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "jira"]));
     expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
+  });
+
+  it("showcase has Autopilot history: a finished run, a failed one that needs attention, and a dry run", () => {
+    const { runs } = seeded("showcase");
+    expect(runs.some((r) => r.status === "succeeded" && r.threadUrl && r.costUsd)).toBe(true);
+    expect(runs.some((r) => r.status === "failed" && r.needsAttention && r.error)).toBe(true);
+    expect(runs.some((r) => r.dryRun && r.status === "skipped")).toBe(true);
   });
 });

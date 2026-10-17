@@ -25,6 +25,14 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("Jira issue");
   });
 
+  it("tells a work session not to start a blocked task", () => {
+    const free = taskHandoffPrompt({ task: { ...task, blocked: false }, boardUrl: "http://x", mode: "work" });
+    expect(free).not.toContain("is blocked");
+    const blocked = taskHandoffPrompt({ task: { ...task, blocked: true }, boardUrl: "http://x", mode: "work" });
+    expect(blocked).toContain("This task is blocked");
+    expect(blocked).toContain("Blocked by");
+  });
+
   it("asks a planning session to collaborate and not implement", () => {
     const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" });
     expect(prompt).toContain("Let's plan #9");
@@ -37,6 +45,20 @@ describe("taskHandoffPrompt", () => {
     const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work", linkedThread: true });
     expect(prompt).toContain("already linked to the task");
     expect(prompt).not.toContain("t3Thread");
+  });
+
+  it("tells work and planning sessions to ask before flagging the task for Autopilot", () => {
+    for (const mode of ["work", "plan"] as const) {
+      const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode });
+      expect(prompt).toContain("asks about the Autopilot flag, ask me");
+    }
+  });
+
+  it("asks a session to link itself under a name saying what it does", () => {
+    const work = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" });
+    expect(work).toContain(`link(agentSession: {harness, sessionId, cwd}, label: "Implementing #9")`);
+    const plan = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" });
+    expect(plan).toContain(`label: "Planning #9"`);
   });
 
   it("asks a planning session to link itself too", () => {
@@ -68,6 +90,10 @@ describe("subagent work prompt", () => {
     expect(prompt).not.toContain("Suggested model");
     expect(prompt).not.toContain("link(t3Thread");
     expect(prompt).toContain("Don't link a T3 thread");
+  });
+
+  it("leaves the Autopilot flag to the user", () => {
+    expect(prompt).toContain("Don't set the task's Autopilot flag");
   });
 });
 

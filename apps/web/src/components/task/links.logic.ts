@@ -7,6 +7,7 @@ import {
   type T3ThreadStatus,
   type TaskLink,
 } from "@repo/contracts";
+import { isAutopilotSession, type SessionLink } from "~/components/sessions/sessions.logic";
 
 /** What the "Add link" input will create, for the live preview. Null when unrecognised. */
 export function describeLinkInput(link: ClassifiedLink | null): { kind: ClassifiedLink["kind"]; label: string } | null {
@@ -20,6 +21,8 @@ export function describeLinkInput(link: ClassifiedLink | null): { kind: Classifi
       return { kind: "t3_thread", label: "T3 Code thread" };
     case "issue":
       return { kind: "issue", label: `GitHub issue ${link.ref.repo}#${link.ref.number}` };
+    case "agent_session":
+      return { kind: "agent_session", label: "Agent session" };
     case "url":
       return { kind: "url", label: `Link to ${hostnameOf(link.url) ?? link.url}` };
   }
@@ -148,6 +151,57 @@ export function orderLinks(links: ReadonlyArray<TaskLink>): TaskLink[] {
   const first = links.indexOf(threads[0]!);
   const others = links.filter((link) => link.kind !== "t3_thread");
   return [...others.slice(0, first), ...sorted, ...others.slice(first)];
+}
+
+/** Session rows shown before "Show N more". */
+export const SESSION_PREVIEW_COUNT = 3;
+
+export interface LinkGroups {
+  /** The Sessions group: T3 threads (needing attention first), then the sessions that aren't folded into a thread. */
+  sessionRows: Array<ThreadLink | SessionLink>;
+  /** Claude Code sessions in the one thread's menu, newest first; none unless the task has exactly one thread. */
+  folded: SessionLink[];
+  /** The Links group: PRs, then issues, Jira keys and other URLs. */
+  links: PlainLink[];
+}
+
+/** A link that isn't a session: those have their own group. */
+export type PlainLink = Exclude<TaskLink, { kind: "t3_thread" | "agent_session" }>;
+
+const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = { pr: 0, issue: 1, jira: 2, url: 3 };
+
+const createdMs = (link: TaskLink) => {
+  const ms = Date.parse(link.createdAt);
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Splits a task's links into the Sessions and Links groups. A Claude Code session folds into its thread's menu only
+ * when the task has one thread: sessions don't say which thread they belong to, so with several there is no telling.
+ * Autopilot's sessions stay rows, as they run headless and never in a thread.
+ */
+export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
+  const threads = orderLinks(links.filter((link) => link.kind === "t3_thread")).filter(
+    (link): link is ThreadLink => link.kind === "t3_thread",
+  );
+  const sessions = links
+    .filter((link): link is SessionLink => link.kind === "agent_session")
+    .toSorted((a, b) => createdMs(b) - createdMs(a));
+  const folds = threads.length === 1;
+  const isFolded = (link: SessionLink) => folds && link.ref.harness === "claude-code" && !isAutopilotSession(link);
+  return {
+    sessionRows: [...threads, ...sessions.filter((link) => !isFolded(link))],
+    folded: sessions.filter(isFolded),
+    links: links
+      .filter((link): link is PlainLink => link.kind !== "t3_thread" && link.kind !== "agent_session")
+      .toSorted((a, b) => LINK_KIND_ORDER[a.kind] - LINK_KIND_ORDER[b.kind]),
+  };
+}
+
+/** The first rows of a group, and how many "Show N more" would reveal. */
+export function previewRows<T>(rows: ReadonlyArray<T>, expanded: boolean): { shown: T[]; hidden: number } {
+  if (expanded || rows.length <= SESSION_PREVIEW_COUNT) return { shown: [...rows], hidden: 0 };
+  return { shown: rows.slice(0, SESSION_PREVIEW_COUNT), hidden: rows.length - SESSION_PREVIEW_COUNT };
 }
 
 /** Model is only worth showing when the task's threads don't all use the same one. */

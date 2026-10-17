@@ -27,10 +27,12 @@ export interface EpicBand {
 
 export interface Lane {
   project: Project;
-  /** Epic bands, stacked above the loose cards in the epics' Backlog order. */
+  /** Epic bands (epics not yet Done), stacked above the loose cards in the epics' Backlog order. */
   bands: ReadonlyArray<EpicBand>;
-  /** Cards in no epic, or whose epic isn't shown. */
+  /** Cards in no epic, or whose epic isn't shown. A finished epic is one of them, in Done. */
   cells: LaneCells;
+  /** The tasks of each finished epic card in `cells.done`, by epic id: shown inside the card, not loose. */
+  epicChildren: Readonly<Record<string, ReadonlyArray<TaskSummary>>>;
 }
 
 /**
@@ -43,7 +45,7 @@ export interface Row {
   cells: LaneCells;
 }
 
-export function laneRows(lane: Lane): Row[] {
+export function laneRows(lane: Pick<Lane, "project" | "bands" | "cells">): Row[] {
   return [
     ...lane.bands.map((band) => ({ id: band.id, projectId: lane.project.id, cells: band.cells })),
     { id: lane.project.id, projectId: lane.project.id, cells: lane.cells },
@@ -158,8 +160,9 @@ function sortCells(cells: Record<TaskStatus, TaskSummary[]>): Record<TaskStatus,
 
 /**
  * Groups the board into one lane per project (in project order). Each epic gets a band holding its children
- * in five cells, and the other cards fill the lane's own five cells. Cells are ordered by position, except
- * Done which is newest-first. With a text, attention, PR or label filter active, a band keeps the children
+ * in five cells, and the other cards fill the lane's own five cells. A Done epic gets no band: it joins the
+ * lane's Done cell as one card (newest-first by when it finished) and its children go in `epicChildren`.
+ * Cells are ordered by position, except Done which is newest-first. With a text, attention, PR or label filter active, a band keeps the children
  * that match (all of them when the epic itself matches), and lanes without a match are dropped so results
  * are easy to scan. `archived` tasks (Show archived) join their lanes; the snapshot's copy wins if a task
  * is in both.
@@ -206,12 +209,24 @@ export function buildLanes(
   }
 
   const bandsByProject = new Map<string, EpicBand[]>();
+  const childrenByProject = new Map<string, Record<string, ReadonlyArray<TaskSummary>>>();
   // By number: an epic's position belongs to its derived column and resets whenever that changes.
   for (const epic of [...epics.values()].sort((a, b) => a.number - b.number)) {
     const cells = bandCells.get(epic.id);
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
     if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic))) continue;
     const resolved = sortCells(cells ?? emptyCells());
+    // A finished epic would stack above everything in Done, so it is one card there instead. Filtered to
+    // (`?epic=`), it keeps its band: the filter is for looking at its tasks.
+    if (epic.status === "done" && epicFilter !== epic.id) {
+      let loose = looseCells.get(epic.projectId);
+      if (!loose) looseCells.set(epic.projectId, (loose = emptyCells()));
+      loose.done.push(epic);
+      const children = childrenByProject.get(epic.projectId) ?? {};
+      children[epic.id] = STATUS_ORDER.flatMap((status) => resolved[status]);
+      childrenByProject.set(epic.projectId, children);
+      continue;
+    }
     const bands = bandsByProject.get(epic.projectId) ?? [];
     bands.push({ id: epic.id, epic, cells: resolved, ...bandSpan(resolved) });
     bandsByProject.set(epic.projectId, bands);
@@ -223,13 +238,18 @@ export function buildLanes(
     const cells = looseCells.get(project.id);
     const bands = bandsByProject.get(project.id) ?? [];
     if (!cells && bands.length === 0 && filtering) continue;
-    lanes.push({ project, bands, cells: sortCells(cells ?? emptyCells()) });
+    lanes.push({
+      project,
+      bands,
+      cells: sortCells(cells ?? emptyCells()),
+      epicChildren: childrenByProject.get(project.id) ?? {},
+    });
   }
   return lanes;
 }
 
 /** Cards per column across a lane's bands and loose cells. */
-export function laneCounts(lane: Lane): Record<TaskStatus, number> {
+export function laneCounts(lane: Pick<Lane, "project" | "bands" | "cells">): Record<TaskStatus, number> {
   const counts = { backlog: 0, planned: 0, in_progress: 0, review: 0, done: 0 };
   for (const row of laneRows(lane)) for (const status of STATUS_ORDER) counts[status] += row.cells[status].length;
   return counts;
@@ -246,6 +266,14 @@ export function columnCounts(lanes: ReadonlyArray<Lane>): Record<TaskStatus, num
 
 function sameItems<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>) {
   return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+function reuseChildren(old: Lane["epicChildren"], next: Lane["epicChildren"]): Lane["epicChildren"] {
+  const ids = Object.keys(next);
+  const merged = Object.fromEntries(
+    ids.map((id) => [id, old[id] && sameItems(old[id], next[id]!) ? old[id] : next[id]!]),
+  );
+  return ids.length === Object.keys(old).length && ids.every((id) => merged[id] === old[id]) ? old : merged;
 }
 
 /** `old` when every cell holds the same cards, else `next` with its unchanged cells taken from `old`. */
@@ -279,8 +307,11 @@ export function reuseUnchangedLanes(previous: ReadonlyArray<Lane>, next: Lane[])
       return same ? was : { ...band, cells: bandCells };
     });
     const sameBands = sameItems(old.bands, bands);
-    if (cells === old.cells && sameBands && old.project === lane.project) return old;
-    return { project: lane.project, cells, bands: sameBands ? old.bands : bands };
+    const epicChildren = reuseChildren(old.epicChildren, lane.epicChildren);
+    if (cells === old.cells && sameBands && epicChildren === old.epicChildren && old.project === lane.project) {
+      return old;
+    }
+    return { project: lane.project, cells, bands: sameBands ? old.bands : bands, epicChildren };
   });
 }
 
@@ -301,6 +332,7 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   review_failed: "Review failed",
   review_unattended: "Review findings",
   import_failed: "Import failed",
+  autopilot: "Autopilot",
 };
 
 /** Tasks for the sidebar's "Needs attention" list: errors first, then most recently updated. */

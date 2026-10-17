@@ -34,6 +34,19 @@ describe("describeEvent", () => {
     expect(text({})).toBe("changed the labels");
   });
 
+  it("describes relation changes from either side", () => {
+    const text = (type: string) => describeEvent(event(type, { task: 4, title: "Migration" }), ctx).text;
+    expect(text("blocker_added")).toBe("made this blocked by #4 Migration");
+    expect(text("blocks_added")).toBe("made this block #4 Migration");
+    expect(text("blocker_removed")).toBe("removed #4 Migration as a blocker");
+    expect(text("blocked_deleted")).toBe("deleted #4 Migration, which this blocked");
+    expect(describeEvent(event("blocker_deleted", {}), ctx)).toEqual({
+      icon: "delete",
+      text: "deleted a task, which blocked this",
+      quote: null,
+    });
+  });
+
   it("describes suggested model changes", () => {
     const line = (payload: Record<string, unknown>) => describeEvent(event("suggested_model_changed", payload), ctx);
     expect(line({ tier: "deep", reason: "Migration" })).toMatchObject({
@@ -113,6 +126,9 @@ describe("describeEvent", () => {
       quote: "Deleted 2 steps:\n\n- 1.1 a\n- 1.2 b",
     });
     expect(describeEvent(event("moved_project", { to: "p2" }), ctx).text).toBe("moved to project storefront");
+    expect(describeEvent(event("archived"), ctx).text).toBe("archived this");
+    expect(describeEvent(event("archived", { withEpic: 12 }), ctx).text).toBe("archived this with epic #12");
+    expect(describeEvent(event("unarchived", { withEpic: 12 }), ctx).text).toBe("unarchived this with epic #12");
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",
     );

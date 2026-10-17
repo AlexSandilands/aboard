@@ -48,6 +48,9 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     updatedAt: "",
     statusChangedAt: "",
     labels: [],
+    blockedBy: [],
+    blocks: [],
+    blocked: false,
     resolution: null,
     resolvedBy: null,
     progress: { done: 0, total: 0 },
@@ -57,6 +60,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     attention: [],
     lastNote: null,
     autoReview: null,
+    autopilot: null,
     review: null,
     suggestedModel: null,
     import: null,
@@ -72,6 +76,7 @@ function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): B
     integrations: {
       t3: { detected: false, origin: null, environmentId: null, label: null, liveStatus: "off", error: null },
     },
+    autopilot: { paused: false, active: [] },
   };
 }
 
@@ -355,5 +360,90 @@ describe("epic bands", () => {
     const second = reuseUnchangedLanes(first, buildLanes(changed, noFilters));
     expect(second[0]!.bands[0]).toBe(first[0]!.bands[0]);
     expect(second[0]!.cells).not.toBe(first[0]!.cells);
+  });
+
+  describe("a finished epic", () => {
+    const doneEpic = (id: string, statusChangedAt: string, overrides: Partial<TaskSummary> = {}) =>
+      epic(id, { status: "done", statusChangedAt, ...overrides });
+    const doneChild = (id: string, epicId: string, overrides: Partial<TaskSummary> = {}) =>
+      child(id, epicId, { status: "done", ...overrides });
+
+    it("is one card in Done instead of a band, ordered with the other Done cards by when it finished", () => {
+      const [lane] = buildLanes(
+        board([
+          doneEpic("e", "2026-02-01"),
+          doneChild("a", "e"),
+          doneChild("b", "e"),
+          task("older", { status: "done", statusChangedAt: "2026-01-01" }),
+          task("newer", { status: "done", statusChangedAt: "2026-03-01" }),
+          epic("open"),
+          child("c", "open", { status: "planned" }),
+        ]),
+        { ...noFilters, projectId: "p" },
+      );
+      expect(lane!.bands.map((b) => b.id)).toEqual(["open"]);
+      expect(ids(lane!.cells.done)).toEqual(["newer", "e", "older"]);
+    });
+
+    it("groups its tasks under the card and doesn't repeat them loose", () => {
+      const [lane] = buildLanes(board([doneEpic("e", "2026-02-01"), doneChild("a", "e"), doneChild("b", "e")]), {
+        ...noFilters,
+        projectId: "p",
+      });
+      expect(Object.keys(lane!.epicChildren)).toEqual(["e"]);
+      expect(ids(lane!.epicChildren.e!).sort()).toEqual(["a", "b"]);
+      expect(ids(lane!.cells.done)).toEqual(["e"]);
+      expect(columnCounts([lane!]).done).toBe(1);
+      expect(rowIndex([lane!]).has("a")).toBe(false);
+    });
+
+    it("brings the band back when a task leaves Done", () => {
+      const tasks = [doneEpic("e", "2026-02-01"), doneChild("a", "e"), doneChild("b", "e")];
+      const reopened = tasks.map((t) => (t.id === "b" ? { ...t, status: "review" as const } : t));
+      reopened[0] = { ...reopened[0]!, status: "review" };
+      const [lane] = buildLanes(board(reopened), { ...noFilters, projectId: "p" });
+      expect(lane!.bands.map((b) => [b.id, b.start, b.end])).toEqual([["e", 3, 4]]);
+      expect(ids(lane!.cells.done)).toEqual([]);
+      expect(lane!.epicChildren).toEqual({});
+    });
+
+    it("keeps the card when a search matches only a task inside it, with just the matching tasks", () => {
+      const tasks = [
+        doneEpic("e", "2026-02-01", { title: "Checkout" }),
+        doneChild("a", "e", { title: "Address" }),
+        doneChild("b", "e", { title: "Payment" }),
+      ];
+      const [byChild] = buildLanes(board(tasks), { ...noFilters, search: "pay" });
+      expect(ids(byChild!.cells.done)).toEqual(["e"]);
+      expect(ids(byChild!.epicChildren.e!)).toEqual(["b"]);
+      const [byEpic] = buildLanes(board(tasks), { ...noFilters, search: "checkout" });
+      expect(ids(byEpic!.epicChildren.e!).sort()).toEqual(["a", "b"]);
+      expect(buildLanes(board(tasks), { ...noFilters, search: "nothing" })).toEqual([]);
+    });
+
+    it("lists archived tasks of the epic in the card when they are shown", () => {
+      const archived = doneChild("old", "e", { archivedAt: "2026-01-01" });
+      const [lane] = buildLanes(board([doneEpic("e", "2026-02-01"), doneChild("a", "e")]), noFilters, [archived]);
+      expect(ids(lane!.epicChildren.e!).sort()).toEqual(["a", "old"]);
+      expect(ids(lane!.cells.done)).toEqual(["e"]);
+    });
+
+    it("keeps its band when filtered to with ?epic=", () => {
+      const tasks = [doneEpic("e", "2026-02-01"), doneChild("a", "e")];
+      const [lane] = buildLanes(board(tasks), { ...noFilters, epicId: "e" });
+      expect(lane!.bands.map((b) => b.id)).toEqual(["e"]);
+      expect(ids(lane!.cells.done)).toEqual([]);
+    });
+
+    it("reuses the card's tasks across rebuilds until one of them changes", () => {
+      const snapshot = board([doneEpic("e", "2026-02-01"), doneChild("a", "e"), task("loose")]);
+      const first = buildLanes(snapshot, noFilters);
+      const same = reuseUnchangedLanes(first, buildLanes({ ...snapshot, tasks: [...snapshot.tasks] }, noFilters));
+      expect(same[0]).toBe(first[0]);
+      const renamed = { ...snapshot, tasks: snapshot.tasks.map((t) => (t.id === "a" ? { ...t, title: "x" } : t)) };
+      const next = reuseUnchangedLanes(first, buildLanes(renamed, noFilters));
+      expect(next[0]!.epicChildren.e).not.toBe(first[0]!.epicChildren.e);
+      expect(next[0]!.cells).toBe(first[0]!.cells);
+    });
   });
 });

@@ -12,7 +12,15 @@ const TABLES = [
   "projects",
   "label_colors",
   "counters",
+  "task_templates",
+  "task_relations",
   "tasks",
+  // After tasks: an epic scope points at one.
+  "autopilot_settings",
+  // After tasks too: a rule remembers the last task it made.
+  "autopilot_recurring",
+  // After autopilot_settings, so clearing it (whose trigger deletes its switches) comes first.
+  "autopilot_custom",
   ...TASK_BUNDLE_TABLES,
   "task_events",
 ] as const;
@@ -23,7 +31,12 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   projects: dump.projects,
   label_colors: dump.label_colors,
   counters: dump.counters,
+  task_templates: dump.task_templates,
+  task_relations: dump.task_relations,
   tasks: dump.tasks.map((b) => b.task),
+  autopilot_settings: dump.autopilot_settings,
+  autopilot_recurring: dump.autopilot_recurring,
+  autopilot_custom: dump.autopilot_custom,
   plan_phases: dump.tasks.flatMap((b) => b.plan_phases),
   plan_steps: dump.tasks.flatMap((b) => b.plan_steps),
   task_links: dump.tasks.flatMap((b) => b.task_links),

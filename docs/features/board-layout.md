@@ -10,6 +10,8 @@ on the server.
 ## How it works
 
 A lane stacks its epic bands above its loose cards; how bands are laid out is in [epics.md](epics.md#on-the-board).
+A finished epic has no band: it is one card in the lane's Done cell, so it counts as one card for the column
+counts and the collapsed preview below.
 
 ### Collapsing columns
 
@@ -32,10 +34,10 @@ An override equal to its column's setting is pruned, so any override present mea
 
 ### Task panel sections
 
-The panel's sections are Labels, Links, Local review, Plan, Details (description and plan context
+The panel's sections are Labels, Links, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the link count and
-any link problem, open findings, plan progress and the current step, the first line of the description (or of the
+any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
 Until the user chooses, sections collapse by content (`collapsedByDefault`):
@@ -44,7 +46,9 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
 | Links                | The task has no links                             |
+| Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
+| Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
 
@@ -54,6 +58,75 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended.
+
+The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
+runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
+tasks Autopilot never touched don't show it.
+
+#### The Links section
+
+The Links section has two groups, each a small heading with a rule (`GroupHeading`, not another collapse). They
+show only when the task has sessions; without any, the section is the plain list it was.
+
+- **Sessions** (`groupLinks` in `links.logic.ts`): the task's T3 threads, needing attention first
+  (`orderLinks`), then its agent sessions, newest first. When there are more than three rows (`SESSION_PREVIEW_COUNT`)
+  the first three show, and **Show N more** expands the rest inline (**Show fewer** folds them again; the state is
+  per panel visit, not stored).
+- **Folded sessions.** When the task has exactly one T3 thread, its Claude Code sessions leave the rows and sit in
+  the thread's ⌄ menu, one submenu each (open, fork, copy the resume command, copy the id, remove), as the thread
+  runs a Claude session underneath. Sessions don't say which thread they belong to, so with several threads
+  nothing folds. Autopilot's sessions (`isAutopilotSession`: their run's finished or failed status, or the
+  runner's "Autopilot ·" name) and Copilot CLI sessions always stay rows.
+- **Links**: PRs, then issues, Jira keys and other URLs, each kind in link order.
+
+### Autopilot on the board
+
+Four things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
+kept live by `autopilot.changed`) and none of them shown while the catalogue has no automations. A fifth, the
+[digest button](#digest-of-what-changed), is always there:
+
+- **The lane's Autopilot pill**, after the lane's other header buttons (`AutopilotPill`). Off (no automation
+  is on for the project) is dim; on and idle is a calm ring; paused is warning-coloured with a pause icon; while
+  a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
+  in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
+  even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
+  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
+  "Recurring tasks…" link opens the project's settings at that section. The chosen **On** is the app's info blue
+  (`ModeSwitch`), and an Inherit that resolves to On shows its note in the same blue.
+- **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
+  in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
+  reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
+  run), and opens the same popover (`ScopePopover`) for the epic. Its Inherit labels read the project's entries,
+  which already resolve through the board ("Inherit (Off from project)"). Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
+  tasks, whether the epic or its project says so. It isn't shown for an archived epic.
+- **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
+  Resume" while set.
+- **A card badge** (`AutopilotBadge`) with a spinner while a run is working on the task.
+
+### Digest of what changed
+
+The digest (what it makes is in [autopilot.md](autopilot.md#automations)) has a button in the header, between the
+pause button and the notifications bell (`DigestButton`). It is always shown, since "Generate now" works with the
+automation off. A dot marks unread digests (with screen-reader text "Digest of what changed, N unread"), and the
+icon becomes a spinner while a run of the `digest` automation is active; it stays clickable then, so older digests
+can still be read. It opens the panel (`DigestDialog`, opened by `digestOpen` in `useDialogs`):
+
+- The newest digest: its period in local time, a badge for Plain or Summarised, whether it was made on the schedule
+  or on request, the cost when there is one, and the `note` (why a summary came out plain) as a muted line. The
+  body is Markdown through the app's shared `Markdown` component with `taskLinks`: a `#N` that is a task on the
+  board becomes a link that closes the panel and opens the task (`taskRefs.logic.ts`, a remark plugin that skips
+  code and existing links; an archived task isn't on the snapshot, so its number stays text).
+- Older and Newer buttons and a select (the last 30, unread ones marked) in the footer. Opening the panel marks the
+  digest on screen read, and browsing to another marks that one; only the one being looked at is marked.
+- **Generate now** makes a digest; it is disabled while an agent is writing one, which shows as an info alert. A 409
+  shows a toast. The command palette's **Autopilot: digest now** opens the panel and generates.
+
+The list is a query (`useDigests`, `state/digests.ts`) refetched on every `autopilot.changed` and on reconnect.
+
+### Dependency lines
+
+Hovering a card, or opening one, draws lines to the cards it blocks and is blocked by; Shift shows the whole
+chain. The overlay and its rules are in [relations.md](relations.md#on-the-board).
 
 ### Links on cards
 
@@ -94,7 +167,12 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
+| `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
+| `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |
+| `apps/web/src/components/digest/` (`digest.logic.ts` is tested), `state/digests.ts` | The header button, the panel and the digest queries |
+| `apps/web/src/components/markdown/taskRefs.logic.ts` | Linking `#N` task numbers in rendered Markdown (tested) |
 | `apps/web/src/components/task/sections.logic.ts`       | Section ids, defaults, summaries, layout validation (tested)      |
+| `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx` | The Links section's groups, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores                                             |

@@ -5,6 +5,9 @@ import type {
   IssueSnapshot,
   MergeMethod,
   MergePrInput,
+  PrRef,
+  PrReviewCommentInfo,
+  PrReviewInfo,
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
@@ -43,6 +46,26 @@ const RollupItem = z
 
 const MergeMethodJson = z.string().transform((m) => m.toLowerCase());
 
+const Author = z.object({ login: z.string() }).nullish();
+
+const ReviewNode = z.object({
+  databaseId: z.number().nullish(),
+  state: z.string(),
+  submittedAt: z.string().nullish(),
+  authorAssociation: z.string().nullish(),
+  viewerDidAuthor: z.boolean().nullish(),
+  author: Author,
+});
+
+const ReviewCommentNode = z.object({
+  databaseId: z.number().nullish(),
+  createdAt: z.string(),
+  authorAssociation: z.string().nullish(),
+  viewerDidAuthor: z.boolean().nullish(),
+  author: Author,
+  pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
+});
+
 /** The fields of one pull request the poll reads (`PR_FIELDS`). */
 export const GraphqlPr = z.object({
   number: z.number().optional(),
@@ -53,8 +76,19 @@ export const GraphqlPr = z.object({
   mergeable: z.string().nullish(),
   headRefName: z.string().nullish(),
   headRefOid: z.string().nullish(),
+  isCrossRepository: z.boolean().nullish(),
   updatedAt: z.string().nullish(),
   autoMergeRequest: z.object({ mergeMethod: MergeMethodJson.nullish() }).nullish(),
+  reviews: z.object({ nodes: z.array(ReviewNode.nullable()) }).nullish(),
+  reviewThreads: z
+    .object({
+      nodes: z.array(
+        z
+          .object({ isResolved: z.boolean(), comments: z.object({ nodes: z.array(ReviewCommentNode.nullable()) }) })
+          .nullable(),
+      ),
+    })
+    .nullish(),
   commits: z
     .object({
       nodes: z.array(
@@ -85,6 +119,54 @@ const FAILING = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_R
 const PENDING = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"]);
 /** Permissions that can push to the repo, and so merge. */
 const CAN_MERGE = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+/** Authors whose reviews the fix automation acts on: people the repository gave access, not anyone who can comment. */
+const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+
+const REVIEW_STATES: Record<string, PrReviewInfo["state"]> = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes_requested",
+  COMMENTED: "commented",
+  DISMISSED: "dismissed",
+};
+
+/** Submitted reviews, oldest first; a pending one is only its author's draft. */
+function mapReviews(nodes: ReadonlyArray<z.infer<typeof ReviewNode> | null> | undefined): PrReviewInfo[] {
+  return (nodes ?? []).flatMap((node) => {
+    const state = node && REVIEW_STATES[node.state.toUpperCase()];
+    if (!node || !state) return [];
+    return [
+      {
+        id: node.databaseId ?? null,
+        author: node.author?.login ?? null,
+        state,
+        submittedAt: node.submittedAt ?? null,
+        own: node.viewerDidAuthor ?? false,
+        trusted: TRUSTED.has(node.authorAssociation?.toUpperCase() ?? ""),
+      },
+    ];
+  });
+}
+
+/** Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with. */
+function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]): PrReviewCommentInfo[] {
+  return (threads?.nodes ?? [])
+    .flatMap((thread) => (thread && !thread.isResolved ? thread.comments.nodes : []))
+    .flatMap((c): PrReviewCommentInfo[] =>
+      c && typeof c.databaseId === "number"
+        ? [
+            {
+              id: c.databaseId,
+              author: c.author?.login ?? null,
+              createdAt: c.createdAt,
+              reviewId: c.pullRequestReview?.databaseId ?? null,
+              own: c.viewerDidAuthor ?? false,
+              trusted: TRUSTED.has(c.authorAssociation?.toUpperCase() ?? ""),
+            },
+          ]
+        : [],
+    )
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id));
+}
 
 /** One rollup entry's effective state: StatusContext.state, or CheckRun conclusion once completed. */
 function rollupItemState(item: z.infer<typeof RollupItem>): string {
@@ -142,14 +224,21 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     autoMergeAllowed: repo.autoMergeAllowed ?? false,
     canMerge: CAN_MERGE.has(repo.viewerPermission?.toUpperCase() ?? ""),
     headOid: pr.headRefOid || null,
+    isCrossRepository: pr.isCrossRepository ?? false,
+    reviews: mapReviews(pr.reviews?.nodes),
+    reviewComments: mapReviewComments(pr.reviewThreads),
   };
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
-const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid updatedAt
+const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
+      reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
+      reviewThreads(last: 30) { nodes { isResolved comments(last: 5) { nodes {
+        databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
+      } } } }
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
         ... on CheckRun { status conclusion }
@@ -196,6 +285,62 @@ const ENABLE_AUTO_MERGE_MUTATION = `mutation EnableAutoMerge($input: EnablePullR
 const DISABLE_AUTO_MERGE_MUTATION = `mutation DisableAutoMerge($pullRequestId: ID!) {
   disablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId }) { clientMutationId }
 }`;
+
+const POST_REVIEW_MUTATION = `mutation PostPullRequestReview($input: AddPullRequestReviewInput!) {
+  addPullRequestReview(input: $input) { pullRequestReview { databaseId url } }
+}`;
+const PostedReviewData = z.object({
+  addPullRequestReview: z.object({
+    pullRequestReview: z.object({ databaseId: z.number().nullish(), url: z.string() }),
+  }),
+});
+
+/** An inline comment on a line of the PR's diff. */
+export interface ReviewComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
+export interface PostReviewInput {
+  /** The commit the reviewer read (a prefix will do). The review is refused when the PR's head is another. */
+  reviewedSha: string;
+  body: string;
+  comments: readonly ReviewComment[];
+}
+
+export interface PostedReview {
+  id: number | null;
+  url: string;
+  /** The PR's head commit the review was posted against, in full. */
+  headOid: string;
+  /** Inline comments GitHub refused (a line outside the diff) and that went into the body instead. */
+  folded: number;
+}
+
+/** GitHub refuses a review body past 65536 characters. */
+const MAX_REVIEW_BODY = 60_000;
+
+const clipBody = (text: string): string =>
+  text.length > MAX_REVIEW_BODY ? `${text.slice(0, MAX_REVIEW_BODY)}\n\n_…cut off_` : text;
+
+/** The body, with comments that can't be placed on the diff added under it, cut to what GitHub takes. */
+export function foldReviewComments(body: string, comments: readonly ReviewComment[]): string {
+  if (comments.length === 0) return clipBody(body);
+  const items = comments.map((c) => `**\`${c.path}:${c.line}\`**\n\n${c.body}`);
+  return clipBody(`${body}\n\n### Inline comments\n\n${items.join("\n\n")}`);
+}
+
+/** The PR's head isn't the commit that was reviewed: it moved while the review ran. Nothing was posted. */
+export class StaleReviewError extends AppError {
+  constructor(
+    readonly head: string,
+    reviewed: string,
+  ) {
+    super("CONFLICT", `The PR's head is ${head.slice(0, 7)}, not the ${reviewed.slice(0, 7)} that was reviewed`);
+    this.name = "StaleReviewError";
+  }
+}
 
 /** States in which GitHub merges at once rather than waiting, as `gh pr merge --auto` treats them. */
 const IMMEDIATELY_MERGEABLE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
@@ -278,6 +423,13 @@ export interface GithubIntegration {
   refresh(link: TaskLink): Promise<boolean>;
   /** Merges a Review task's PR, or turns auto-merge on or off, then refreshes it. Throws AppError. */
   merge(link: TaskLink, input: MergePrInput): Promise<void>;
+  /**
+   * Posts one review on the PR as the signed-in account, always as a comment (never an approval or a request for
+   * changes). Throws AppError: `gh` missing or not signed in, the PR's head isn't the commit read, GitHub's refusal.
+   */
+  postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
+  /** The PR's head commit on GitHub now. Throws AppError. */
+  prHead(ref: PrRef): Promise<string>;
   start(): void;
   stop(): void;
 }
@@ -455,6 +607,18 @@ export function createGithubIntegration(deps: {
     }
   };
 
+  /** Checks `gh` can be used for the host, as an AppError. */
+  const requireSignedIn = async (host: string): Promise<void> => {
+    const current = await ensureStatus();
+    if (!current.available) throw new AppError("VALIDATION", "GitHub CLI (gh) is not installed");
+    if (!isGithubHost(host, signedInHosts(current)) || !signedInTo(host, current)) {
+      throw new AppError(
+        "VALIDATION",
+        `GitHub CLI (gh) is not signed in to ${host}: run \`gh auth login --hostname ${host}\``,
+      );
+    }
+  };
+
   const refreshOne = async (link: RefPrLink): Promise<void> => {
     const [owner, name] = splitRepo(link.ref.repo);
     const { query, variables } = pollQuery([link.ref.number]);
@@ -557,6 +721,63 @@ export function createGithubIntegration(deps: {
         await refreshOne(link);
       } catch (error) {
         logOnce(link.id, link.url, messageOf(error));
+      }
+    },
+    async prHead(ref) {
+      await requireSignedIn(ref.host);
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const raw = await api.graphql(ref.host, ACTION_STATE_QUERY, { owner, name, number: ref.number });
+        const parsed = ActionState.safeParse(raw);
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        return parsed.data.repository.pullRequest.headRefOid;
+      } catch (error) {
+        throw new AppError("VALIDATION", messageOf(error));
+      }
+    },
+    async postReview(ref, input) {
+      await requireSignedIn(ref.host);
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const raw = await api.graphql(ref.host, ACTION_STATE_QUERY, { owner, name, number: ref.number });
+        const parsed = ActionState.safeParse(raw);
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        const { id, headRefOid: head } = parsed.data.repository.pullRequest;
+        const sha = input.reviewedSha.toLowerCase();
+        if (sha.length < 7 || !(head.toLowerCase().startsWith(sha) || sha.startsWith(head.toLowerCase()))) {
+          throw new StaleReviewError(head, input.reviewedSha);
+        }
+        const post = (comments: readonly ReviewComment[], body: string) =>
+          api.graphql(ref.host, POST_REVIEW_MUTATION, {
+            input: {
+              pullRequestId: id,
+              commitOID: head,
+              event: "COMMENT",
+              body,
+              ...(comments.length > 0
+                ? { threads: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })) }
+                : {}),
+            },
+          });
+        let data: unknown;
+        let folded = 0;
+        try {
+          data = await post(input.comments, input.body);
+        } catch (error) {
+          // One comment on a line the diff doesn't touch refuses the whole review: say it in the body instead.
+          if (!(error instanceof GithubApiError) || error.kind !== "response" || input.comments.length === 0) {
+            throw error;
+          }
+          data = await post([], foldReviewComments(input.body, input.comments));
+          folded = input.comments.length;
+        }
+        const posted = PostedReviewData.safeParse(data);
+        if (!posted.success) throw new Error("GitHub returned an unexpected review shape");
+        const review = posted.data.addPullRequestReview.pullRequestReview;
+        return { id: review.databaseId ?? null, url: review.url, headOid: head, folded };
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("VALIDATION", messageOf(error));
       }
     },
     start() {

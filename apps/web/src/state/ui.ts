@@ -1,4 +1,10 @@
-import { storageKey, type MergeMethod, type TaskStatus } from "@repo/contracts";
+import {
+  storageKey,
+  type AgentSessionSnapshot,
+  type CreateTemplateInput,
+  type MergeMethod,
+  type TaskStatus,
+} from "@repo/contracts";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
@@ -194,34 +200,57 @@ export const usePalette = create<PaletteState>()(
 /** App-level dialogs opened from anywhere (sidebar gear, palette, panel menus). */
 interface DialogsState {
   projectSettingsId: string | null;
+  /** A section of project settings to scroll to when it opens. */
+  projectSettingsSection: "recurring" | null;
   appSettingsOpen: boolean;
+  /** The Autopilot digest panel, from the header button or the palette. */
+  digestOpen: boolean;
   /** What the open "Start in T3 Code" dialog starts a thread for: a task, or a project's Suggest epics. */
   t3Launch: { kind: "task"; taskId: string } | { kind: "project"; projectId: string } | null;
   /** PR link whose merge dialog is open, from the panel or a card chip. */
   mergePr: { taskId: string; linkId: string } | null;
-  openProjectSettings: (projectId: string) => void;
+  /** Agent session the server wouldn't reopen because it is running, with the status it read. */
+  sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
+  openProjectSettings: (projectId: string, section?: "recurring") => void;
   closeProjectSettings: () => void;
   setAppSettingsOpen: (open: boolean) => void;
+  setDigestOpen: (open: boolean) => void;
   openT3Launch: (taskId: string) => void;
   openProjectT3Launch: (projectId: string) => void;
   closeT3Launch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
+  openSessionWarning: (warning: NonNullable<DialogsState["sessionWarning"]>) => void;
+  closeSessionWarning: () => void;
+  /** A template being made outside Settings, e.g. "Save as template" on a task. */
+  templateDraft: CreateTemplateInput | null;
+  openTemplateDraft: (draft: CreateTemplateInput) => void;
+  closeTemplateDraft: () => void;
 }
 
 export const useDialogs = create<DialogsState>()((set) => ({
   projectSettingsId: null,
+  projectSettingsSection: null,
   appSettingsOpen: false,
+  digestOpen: false,
   t3Launch: null,
   mergePr: null,
-  openProjectSettings: (projectSettingsId) => set({ projectSettingsId }),
-  closeProjectSettings: () => set({ projectSettingsId: null }),
+  sessionWarning: null,
+  templateDraft: null,
+  openProjectSettings: (projectSettingsId, section) =>
+    set({ projectSettingsId, projectSettingsSection: section ?? null }),
+  closeProjectSettings: () => set({ projectSettingsId: null, projectSettingsSection: null }),
   setAppSettingsOpen: (appSettingsOpen) => set({ appSettingsOpen }),
+  setDigestOpen: (digestOpen) => set({ digestOpen }),
   openT3Launch: (taskId) => set({ t3Launch: { kind: "task", taskId } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   closeT3Launch: () => set({ t3Launch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),
+  openSessionWarning: (sessionWarning) => set({ sessionWarning }),
+  closeSessionWarning: () => set({ sessionWarning: null }),
+  openTemplateDraft: (templateDraft) => set({ templateDraft }),
+  closeTemplateDraft: () => set({ templateDraft: null }),
 }));
 
 /** The merge method last picked per repo (`host/owner/repo`), offered first next time. */

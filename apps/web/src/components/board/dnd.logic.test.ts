@@ -125,6 +125,7 @@ describe("previewMove", () => {
   const lane = (id: string, cells: Partial<Record<TaskStatus, string[]>>): Lane => ({
     project: { id } as Project,
     bands: [],
+    epicChildren: {},
     cells: {
       backlog: (cells.backlog ?? []).map(card),
       planned: (cells.planned ?? []).map(card),
@@ -152,6 +153,12 @@ describe("previewMove", () => {
     expect(next[1]).toBe(lanes[1]);
     expect(next[0]!.cells.backlog).toBe(lanes[0]!.cells.backlog);
     expect(next[0]!.cells.done).toBe(lanes[0]!.cells.done);
+  });
+
+  it("puts a card dragged into Done above a finished epic's card", () => {
+    const withEpic = [lane("p", { planned: ["a"], done: ["epic", "old"] })];
+    const next = previewMove(withEpic, { taskId: "a", rowId: "p", status: "done", index: 0 });
+    expect(ids(next[0], "done")).toEqual(["a", "epic", "old"]);
   });
 
   it("reorders within the card's own cell", () => {

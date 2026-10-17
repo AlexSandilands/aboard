@@ -17,7 +17,8 @@ progress.
   longer want can be closed as **Done by #N**, **Duplicate of #N** or **Won't do** (task menu, or
   `close_task` over MCP). It moves to Done without needing a plan, and the other task lists it under
   "Also resolved". Moving it out of Done reopens it.
-- **Archiving** clears a card off the board. It's for tidying up, not for resolving work.
+- **Archiving** clears a card off the board. It's for tidying up, not for resolving work. Archiving an epic
+  (once none of its tasks is open) archives its Done tasks with it, and unarchiving the epic brings them back.
 - **Deleting** removes an archived task for good, with its plan, links and activity (task menu, or
   `delete_task` over MCP). Archive first; active tasks can't be deleted.
 
@@ -30,10 +31,19 @@ A task can link to:
 - **GitHub issues**, with their state when imported (see [Importing issues](importing-issues.md)).
 - **Jira issues.** Keys in a task's title are linked automatically.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
+- **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
+  session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
+  Code, when it is still running). Choose the terminal in **Settings → Terminal**; **Copy resume command**
+  works anywhere.
 - **Any URL.**
 
+In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) sit under a
+**Sessions** heading, and everything else under **Links**: PRs first, then issues, Jira keys and other URLs. Past
+three sessions, **Show N more** reveals the rest. When the task has one T3 thread, its Claude Code sessions are in
+the thread's ⌄ menu instead of rows of their own.
+
 Failing checks, requested changes and blocked steps show up under **Needs attention** in the sidebar.
-Agents are told which Jira issue and T3 thread a task is still missing, so links tend to fill in on
+Agents are told which Jira issue, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 
 ## Labels
@@ -42,6 +52,20 @@ Tag tasks with the kind of work (`ui`, `backend`, `bug`) from the task panel, or
 are asked to suggest labels for tasks that have none. Filter the board by one or more labels. Each label
 gets a colour you can change.
 
+## Templates
+
+Start a task from a template (Bug, Spike, Feature or your own) in New task, to pre-fill its description, labels and plan. See [Templates](templates.md).
+
+## Blocking
+
+A task can wait on others, in any project: open its panel, find **Relations** and **Add** a task under
+**Blocked by** (or under **Blocks**, to make another task wait on this one). A blocked card shows a lock, and
+hovering it names what it is waiting on. It is ready once every blocker is Done. Loops are refused.
+
+Hover a card, or open one, to draw lines to the tasks it blocks (green) and is blocked by (red). Hold Shift to
+draw the whole chain, with each step further away a little darker. Agents set blockers too and are told not to
+start a blocked task.
+
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
@@ -49,6 +73,13 @@ each tier means in **Settings → Model tiers**; copied prompts name it, and new
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.
+
+## Autopilot flag
+
+Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
+project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
+flag tasks but never change Autopilot's own settings.
 
 ## Handing a task to an agent
 

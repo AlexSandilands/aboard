@@ -36,7 +36,12 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
       return { ...board, integrations: { ...board.integrations, t3: event.t3 } };
     case "labels.colors_changed":
       return { ...board, labelColors: event.labelColors };
+    case "autopilot.changed":
+      return { ...board, autopilot: event.autopilot };
+    // Notifications aren't part of the board snapshot; useBoardEvents hands them to the inbox cache.
     case "task.detail_changed":
+    case "notification.created":
+    case "notifications.changed":
       return board;
   }
 }

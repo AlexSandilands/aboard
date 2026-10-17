@@ -21,7 +21,12 @@ manifest.json        format, app, app version, schema version, row counts
 settings.json        allow-listed settings only
 projects.json
 labels.json          label colour overrides
+templates.json       task templates (absent in backups taken before templates existed)
+relations.json       blocks / blocked-by pairs
 counters.json
+autopilot.json       Autopilot switches and config per scope (optional: older dumps have none)
+recurring.json       recurring-task rules (optional: absent before Recurring tasks)
+custom-automations.json  custom Autopilot automations (optional: absent before them)
 tasks/2026-10/task-42.json   one task with its phases, steps, links, labels, reviews and findings
 events/2026-10.json          the activity log for the month the events happened
 ```
@@ -41,8 +46,11 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
 - **Settings** are exported from an allow-list (`EXPORTED_SETTINGS` in `apps/server/src/services/settings.ts`).
   The T3 token and the backup settings themselves (they describe this machine) stay out, and so does any key
   nobody has added to the list. A test fails when a new setting is in neither the allow-list nor the
-  machine-only list.
-- **A link's `snapshot_json` and `synced_at`** are the GitHub and T3 pollers' cache, rewritten on every poll.
+  machine-only list. Autopilot's engine settings (`autopilotEngine`) are exported;
+  its pause (`autopilotPaused`) isn't, so restoring a backup can't lift Pause all.
+- **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)).
+- **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on
+  every poll (`pr_changes_json` is when each PR state began, for Autopilot's custom PR triggers).
   Dumping them would make every scheduled run a commit; the pollers refill them after a restore.
 
 ### Restoring a board

@@ -1,10 +1,19 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { cmdShimArgs, parseClaudeOutput, resolveExecutable } from "./claudeCli.ts";
+import { cmdShimArgs, parseClaudeOutput, resolveExecutable, runClaude } from "./claudeCli.ts";
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 describe("claude CLI", () => {
   it("resolves commands on PATH with Windows extensions", () => {
@@ -43,5 +52,24 @@ describe("claude CLI", () => {
     expect(() => parseClaudeOutput(wrong, schema, "import")).toThrow("expected shape");
     const failed = JSON.stringify({ is_error: true, subtype: "error_max_turns" });
     expect(() => parseClaudeOutput(failed, schema, "import")).toThrow("Claude Code's import failed: error max turns");
+  });
+
+  // Windows ends the tree with taskkill /T; elsewhere the run is its own process group.
+  it.skipIf(process.platform === "win32")("ends everything a timed-out run started", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-cli-kill-"));
+    try {
+      const pidFile = join(dir, "child.pid");
+      const cli = join(dir, "claude");
+      // Starts a child of its own, the way claude starts shells, and waits on it past the timeout.
+      writeFileSync(cli, `#!/bin/sh\nsleep 60 &\necho $! > "${pidFile}"\nwait\n`);
+      chmodSync(cli, 0o755);
+      await expect(runClaude({ cli, cwd: dir, prompt: "", args: [], timeoutMs: 500 })).rejects.toThrow(
+        "didn't finish within",
+      );
+      const child = Number(readFileSync(pidFile, "utf8"));
+      await expect.poll(() => alive(child), { timeout: 5_000 }).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

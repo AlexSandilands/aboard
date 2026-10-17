@@ -10,6 +10,7 @@ import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandler
 import { ApiError } from "~/lib/api";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { usePanel } from "~/state/ui";
+import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
@@ -19,6 +20,7 @@ import { ImportCallout } from "./ImportCallout";
 import { ManagedSections } from "./ManagedSections";
 import { PlanEditor, type PlanEditorMode } from "./PlanEditor";
 import { PlanTimeline } from "./PlanTimeline";
+import { RelationsSection } from "./RelationsSection";
 import { ResolutionCallout } from "./ResolutionCallout";
 import { TaskActions } from "./TaskActions";
 import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
@@ -199,8 +201,12 @@ function TaskPanelBody({
               return <LabelsSection task={task} />;
             case "links":
               return <LinksSection task={task} />;
+            case "relations":
+              return <RelationsSection task={task} />;
             case "review":
               return <ReviewSection task={task} />;
+            case "autopilot":
+              return <AutopilotSection task={task} />;
             case "plan":
               return <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />;
             case "details":

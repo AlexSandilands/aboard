@@ -1,5 +1,9 @@
 import {
+  BOARD_ACTOR,
+  deriveReviewSummary,
+  FindingSeverity,
   reviewSkillName,
+  reviewWantsAnotherRound,
   type ReviewFinding,
   type ReviewRoundStatus,
   type ReviewSkillRef,
@@ -12,6 +16,7 @@ import type { FindingRecord, ReviewRecord } from "../db/repos/reviews.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 import { loadSettings } from "./settings.ts";
 import { toTaskReviews } from "./summaries.ts";
 import type { OpenRoundOptions, ReviewsService } from "./types.ts";
@@ -26,7 +31,10 @@ const countBySeverity = (findings: ReadonlyArray<{ severity: FindingRecord["seve
 };
 
 /** Local review rounds and their findings. */
-export function createReviewsService(core: Core, deps: { task: (id: string) => TaskRecord }): ReviewsService {
+export function createReviewsService(
+  core: Core,
+  deps: { task: (id: string) => TaskRecord; notifications: NotificationsService },
+): ReviewsService {
   const { repos } = core;
 
   const reviewsOf = (taskId: string): TaskReview[] =>
@@ -193,8 +201,18 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
           updatedAt: now,
           completedAt: now,
         });
-        fx.log(taskId, actor, "review_submitted", { round: round.round, findings: countBySeverity(input.findings) });
+        const counts = countBySeverity(input.findings);
+        fx.log(taskId, actor, "review_submitted", { round: round.round, findings: counts });
         touch(taskId, fx);
+        const task = deps.task(taskId);
+        const found = FindingSeverity.options.filter((s) => counts[s] > 0).map((s) => `${counts[s]} ${s}`);
+        deps.notifications.notify({
+          kind: "review_finished",
+          taskId,
+          title: `Review round ${round.round} finished`,
+          body: `#${task.number} ${task.title}\n${found.length > 0 ? found.join(", ") : "No findings"}`,
+          dedupeKey: `review:${round.id}`,
+        });
         return round.id;
       });
       return review(taskId, id);
@@ -221,6 +239,20 @@ export function createReviewsService(core: Core, deps: { task: (id: string) => T
           status: input.status,
           ...(note ? { note } : {}),
         });
+        // The agent that fixed the last gating finding is mid-turn and may stop before it asks for the next round,
+        // so the board opens it: the task would sit at "Fixed, re-review" with nobody to run it.
+        // Only in Review: that's where the watchdog runs rounds, so on a Done or archived task it would sit pending.
+        const task = deps.task(taskId);
+        if (!reopened && task.status === "review" && !task.archivedAt && service.effectiveAutoReview(taskId)) {
+          const summary = deriveReviewSummary(
+            repos.reviews.forTasks([taskId]),
+            repos.reviews.findingsFor([taskId]),
+            loadSettings(repos).reviewMaxRounds,
+          );
+          if (summary?.state === "fixed" && reviewWantsAnotherRound(summary)) {
+            openRoundIn(taskId, { trigger: "manual", actor: BOARD_ACTOR }, fx);
+          }
+        }
         touch(taskId, fx);
         return finding.id;
       });

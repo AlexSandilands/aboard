@@ -1,5 +1,8 @@
+import { DigestDialog } from "~/components/digest/DigestDialog";
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
+import { SessionWarningDialog } from "~/components/sessions/SessionWarningDialog";
+import { TemplateDraftDialog } from "~/components/templates/TemplateDraftDialog";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 
@@ -9,8 +12,11 @@ export function AppDialogs() {
     <>
       <ProjectSettingsDialog />
       <AppSettingsDialog />
+      <DigestDialog />
       <T3LaunchDialog />
       <MergePrDialog />
+      <SessionWarningDialog />
+      <TemplateDraftDialog />
     </>
   );
 }

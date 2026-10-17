@@ -27,6 +27,10 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
 - A Jira key or URL, or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
   Backlog titled after the issue, and its details are filled in in the background
   ([issue import](issue-import.md)).
+- `add_to_backlog`, `create_task` and `POST /api/tasks` can set the task's Autopilot flag at creation; it
+  defaults to unset ([autopilot.md](autopilot.md#the-per-task-flag)).
+- A `template` (id or name) on `POST /api/tasks`, or on either MCP create tool: the template fills in what the
+  input leaves out, and the task lands in Backlog unless `status: "planned"` is asked for ([templates](templates.md)).
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
   keys in the title are linked automatically (on later title edits too).
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
@@ -75,12 +79,17 @@ The plan side of the gate (a plan can't be emptied outside Backlog) is in [plans
 
 Archive clears a card away without resolving it. `archived_at` is set and the position kept. Archived
 tasks drop out of the board and lists unless asked for (`includeArchived`, **Show archived**).
-Unarchiving puts the task at the end of its lane.
+Unarchiving puts the task at the end of its lane. Archiving an epic archives its Done tasks with it (same
+`archived_at`, `archived` logged with `withEpic`), and unarchiving the epic brings back the tasks archived with it,
+not ones archived on their own earlier ([epics.md](epics.md#joining-and-leaving)). The Autopilot **Auto-archive Done** automation can archive
+tasks that have sat in Done for N days (as the actor `autopilot`), and a finished epic together with its tasks
+(its tasks are never archived on their own, so the epic stays Done; a Done task whose epic is already archived counts as
+loose); see [autopilot.md](autopilot.md#automations).
 
 ### Deleting
 
 Permanent, and only for archived tasks: archive first, then delete (task menu, `DELETE /api/tasks/:id` or
-`delete_task`). The plan, links, events and review rounds go with it. Tasks resolved by it lose the link,
+`delete_task`). The plan, links, events, review rounds and blocks / blocked-by relations go with it. Tasks resolved by it lose the link,
 not their resolution.
 
 ### Numbering

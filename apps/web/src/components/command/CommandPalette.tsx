@@ -11,24 +11,29 @@ import {
   GroupIcon,
   ImportIcon,
   LayersIcon,
+  LayoutTemplateIcon,
   LightbulbIcon,
   ListTodoIcon,
+  NewspaperIcon,
   SearchIcon,
   SettingsIcon,
   SunMoonIcon,
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { followTemplate, prefillFrom, templatesFor, templateRequest } from "~/components/templates/templates.logic";
 import { Button } from "~/components/ui/button";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "~/components/ui/command";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { ApiError } from "~/lib/api";
+import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
-import { useArchivedTasks, useBoard, useT3ProjectCandidates } from "~/state/queries";
+import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { PaletteContent } from "./PaletteContent";
 import {
@@ -218,6 +223,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
   const setAppSettingsOpen = useDialogs((s) => s.setAppSettingsOpen);
+  const setDigestOpen = useDialogs((s) => s.setDigestOpen);
+  const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
 
   const board = useBoard();
@@ -248,9 +255,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selectedImports, setSelectedImports] = useState<ReadonlySet<string>>(() => new Set());
+  // The template a new task starts from, and the title and description it last filled in (see followTemplate).
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [applied, setApplied] = useState({ title: "", description: "" });
 
   const addProject = useAddProject();
   const createTask = useCreateTask();
+  const templates = useTemplates().data;
   const importProjects = useImportT3Projects();
   const candidates = useT3ProjectCandidates(view.kind === "import-t3" && t3Detected);
   const browse = useFolderBrowse(query, view.kind === "browse");
@@ -263,6 +274,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     setStack((current) => [...current, next]);
     setQuery(initialQueryFor(next));
     setDescription("");
+    resetTemplate();
     setHighlighted(null);
   }
 
@@ -271,7 +283,23 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     setStack((current) => current.slice(0, -1));
     setQuery("");
     setDescription("");
+    resetTemplate();
     setHighlighted(null);
+  }
+
+  function resetTemplate(): void {
+    setTemplateId(null);
+    setApplied({ title: "", description: "" });
+  }
+
+  /** Picks the template for the new task and pre-fills the title and description it brings, unless they were edited. */
+  function pickTemplate(id: string | null): void {
+    const template = id ? availableTemplates.find((t) => t.id === id) : undefined;
+    const filled = template && titleProject ? prefillFrom(template, titleProject) : { title: "", description: "" };
+    setTemplateId(template?.id ?? null);
+    setApplied(filled);
+    setQuery((current) => followTemplate(current, applied.title, filled.title));
+    setDescription((current) => followTemplate(current, applied.description, filled.description));
   }
 
   /** Replaces the query and remounts the input so Base UI drops its highlight. */
@@ -351,12 +379,19 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     if (!title || createTask.isPending) return;
     const { flow, projectId, epicId } = view;
     const issue = issueImportRow(title, flow);
+    // An import takes its details from the issue, so the template (and its plan) stays out of it.
+    const template = issue ? undefined : availableTemplates.find((t) => t.id === templateId);
+    const { fields: templateFields, planFromTemplate } = templateRequest(template, flow);
     createTask.mutate(
       {
         projectId,
-        ...(issue ? { sourceUrl: issue.sourceUrl } : { title, description: normalizeDescription(description) }),
+        // Blank text is sent as "" with a template, so clearing its pre-filled description sticks.
+        ...(issue
+          ? { sourceUrl: issue.sourceUrl }
+          : { title, description: normalizeDescription(description) ?? (template ? "" : undefined) }),
         ...(flow === "epic" ? { kind: "epic" as const } : {}),
         ...(epicId ? { epicId } : {}),
+        ...templateFields,
       },
       {
         onSuccess: (task) => {
@@ -364,14 +399,14 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           if (flow === "planned") {
             closePalette();
             void navigate({ to: "/", search: (prev) => ({ ...prev, task: task.id }) }).then(() =>
-              usePanel.getState().requestPlanEditor(),
+              planFromTemplate ? undefined : usePanel.getState().requestPlanEditor(),
             );
             return;
           }
           toastManager.add({
             type: "success",
             title: flow === "epic" ? "Epic created" : "Added to Backlog",
-            description: `#${task.number} ${task.title}${issue ? " · fetching details" : ""}`,
+            description: `#${task.number} ${task.title}${issue ? " · fetching details" : ""}${template ? ` · from ${template.name}` : ""}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
           if (keepOpen) {
@@ -512,6 +547,17 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LayersIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
             run: () => pushView({ kind: "go-to-project" }),
+          },
+          {
+            value: "action:digest-now",
+            title: "Autopilot: digest now",
+            searchTerms: ["digest", "summary", "changes", "report", "generate", "what changed"],
+            icon: <NewspaperIcon className={ITEM_ICON_CLASS} />,
+            run: () => {
+              closePalette();
+              setDigestOpen(true);
+              generateDigest();
+            },
           },
           {
             value: "action:toggle-theme",
@@ -696,6 +742,15 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const titleProject = view.kind === "title" ? projectById.get(view.projectId) : undefined;
   const titleEpic = view.kind === "title" && view.epicId ? tasks.find((t) => t.id === view.epicId) : undefined;
   const importRow = view.kind === "title" ? issueImportRow(query, view.flow) : null;
+  const availableTemplates =
+    view.kind === "title" && view.flow !== "epic" && templates ? templatesFor(templates, view.projectId) : [];
+  const templateItems = [
+    { value: "none", label: "No template" },
+    ...availableTemplates.map((t) => ({
+      value: t.id,
+      label: t.projectId ? `${t.name} · ${titleProject?.title ?? "project"}` : t.name,
+    })),
+  ];
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === "Backspace" && query === "" && isSubmenu) {
@@ -868,7 +923,25 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
               description={importRow.description}
             />
           ) : (
-            <div className="px-4 pb-3">
+            <div className="space-y-2 px-4 pb-3">
+              {availableTemplates.length > 0 ? (
+                <Select
+                  items={templateItems}
+                  value={templateId ?? "none"}
+                  onValueChange={(value) => pickTemplate(value === "none" ? null : value)}
+                >
+                  <SelectTrigger size="sm" aria-label="Template" icon={<LayoutTemplateIcon className="size-3.5" />}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {templateItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              ) : null}
               <Textarea
                 size="sm"
                 aria-label="Description (optional)"

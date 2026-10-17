@@ -38,7 +38,19 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
   bus.subscribe((e) => events.push(e));
   let services: Services | null = null;
   const integrations = createIntegrations(
-    { config: { t3Home, pollers: false }, bus, services: () => services! },
+    {
+      config: {
+        t3Home,
+        pollers: false,
+        userHome: "/nonexistent",
+        sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
+        worktreesDir: "/nonexistent/worktrees",
+        port: 4317,
+        webPort: 5317,
+      },
+      bus,
+      services: () => services!,
+    },
     {
       log: { warn: () => {} },
       ...(opts.runGh ? { runGh: opts.runGh } : {}),

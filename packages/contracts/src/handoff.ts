@@ -9,7 +9,8 @@ import type { Project, TaskSummary } from "./schemas.ts";
 export type HandoffMode = "work" | "plan" | "orchestrate";
 
 export interface HandoffPromptInput {
-  task: Pick<TaskSummary, "id" | "number" | "title"> & Partial<Pick<TaskSummary, "suggestedModel" | "kind">>;
+  task: Pick<TaskSummary, "id" | "number" | "title"> &
+    Partial<Pick<TaskSummary, "suggestedModel" | "kind" | "blocked">>;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
@@ -115,7 +116,7 @@ export function taskHandoffPrompt({
           `1. ${getTask} to read the task, then explore the relevant code.`,
           "2. Ask me clarifying questions about scope, approach and anything ambiguous.",
           "3. Propose a plan: phases of 3-8 concrete, verifiable steps, plus the key decisions for the plan context.",
-          "4. Once I agree, save it with set_plan and move the task to planned with move_task.",
+          "4. Once I agree, save it with set_plan and move the task to planned with move_task. If the result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered.",
           "Don't implement anything yet.",
         ]
       : [
@@ -124,6 +125,12 @@ export function taskHandoffPrompt({
           "",
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step (mark each in_progress when you start it and done the moment it finishes, never all at the end of a phase), link any PR you open, and finish with an add_note handover.`,
+          "If a plan result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered. You can flag tasks but never change Autopilot's settings.",
+          ...(task.blocked
+            ? [
+                `This task is blocked: get_task lists what it waits on under "Blocked by". Don't start it until those are Done; tell me what it waits on instead.`,
+              ]
+            : []),
         ];
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
   const model = mode === "work" && !linkedThread ? suggestedModelLine(task, modelTiers) : null;
@@ -134,6 +141,9 @@ export function taskHandoffPrompt({
       ? "This thread is already linked to the task; don't link it again."
       : "Link the task to its Jira issue with link if it has one, and, if you're running in T3 Code, to this " +
           "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
+    "In Claude Code or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
+      `label: "${mode === "plan" ? "Planning" : "Implementing"} #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID or ` +
+      "$COPILOT_AGENT_SESSION_ID, so it can be reopened from the board under that name (unless you're told the board linked it for you).",
   );
   return lines.join("\n");
 }
@@ -150,7 +160,7 @@ function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): str
     "",
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server first: it has the description, plan, current step and latest handover notes.`,
     `Then follow the ${BRAND.id} skill: pick up from the current step, keep steps current with update_step (mark each in_progress when you start it and done the moment it finishes, never all at the end of a phase) and work in the git worktree or branch you were given.`,
-    "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back.",
+    "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back. Don't set the task's Autopilot flag: that is the user's call.",
     "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
     "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",
     "",
@@ -171,13 +181,13 @@ function orchestratePrompt(task: HandoffPromptInput["task"], boardUrl: string, l
     "",
     `1. Call ${overview} on the ${BRAND.id} MCP server: it lists the epic's tasks with their status, plan progress, current step and sessions. get_task("${task.id}") adds the epic's description.`,
     "2. Tasks without a plan (in Backlog): read each with get_task and explore the code, then draft a plan for each. Show me the drafts together, and once I approve save each with set_plan (with suggestedModel) and move_task it to planned. Don't start a task before its plan is approved.",
-    "3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them. Tell me the order before starting anything.",
+    '3. Work out which tasks can run in parallel and which must wait for another (one builds on another, or they change the same files). Leave out tasks that are done, in review or already have a session working on them, and tasks that are blocked (epic_overview shows "blocked by #N"): start those once what blocks them is Done. Tell me the order before starting anything.',
     "4. Start each task by the first route that works here:",
     "   - T3 Code threads, if epic_overview says T3 Code is available: start_task_thread(task) for each. Each gets its own worktree (pass baseRef when a task builds on another's branch), runs its own review loop, and its live status shows in epic_overview.",
     "   - Subagents, if you can start them (Claude Code's Agent tool, Copilot CLI's subagents, or your harness's equivalent): one per task, with get_handoff_prompt(task, subagent: true) as its prompt. Start it on the model of the task's suggested tier if you can choose one. Give each its own git worktree and branch when they run in parallel (your harness's worktree isolation, or git worktree add), otherwise run them one at a time.",
     "   - Otherwise, give me get_handoff_prompt(task) for each, and I'll paste them into new sessions.",
     `5. Keep track with ${overview}: progress, current step, blocked steps, review rounds and each task's last note. Answer a blocked step yourself if you can, else ask me. To tell a session something, use message_task_thread for a T3 thread, message a subagent directly if your harness allows it, else add_note on its task, which a session reads on its next get_task.`,
-    "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it. First read the task with get_task: if its latest round was already submitted (the board's own reviewer can take a round nobody picked up) and left blocking or major findings open, start with the fixes below. Otherwise call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent working in the task's worktree; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. If the round raised blocking or major findings, call start_review(task) for the next round with a new reviewer. When the loop ends, have the implementer open the pull request and link it. If start_review says the round is already being reviewed, the board's own reviewer has it: check back with get_task. T3 threads and sessions I started run their own review loop.",
+    "6. A subagent stops when its move to Review opens a review round and reports the round. Run the loop for it. First read the task with get_task: if its latest round was already submitted (the board's own reviewer can take a round nobody picked up) and left blocking or major findings open, start with the fixes below. Otherwise call start_review(task) for the open round's reviewer brief and give it to a fresh reviewer subagent working in the task's worktree; once it has submitted, have an implementer subagent in the task's worktree fix the open findings and mark each with resolve_finding. When the implementer has resolved the last blocking or major finding the board opens the next round itself: call start_review(task) for its brief and give it to a new reviewer. When the loop ends, have the implementer open the pull request and link it. If start_review says the round is already being reviewed, the board's own reviewer has it: check back with get_task. T3 threads and sessions I started run their own review loop.",
     `7. Don't set_plan, move or review the epic itself: its status follows its tasks. Finish with add_note on ${ref}: which tasks started by which route, where each is, and what's left.`,
     "",
     linkedThread

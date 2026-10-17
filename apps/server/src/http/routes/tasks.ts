@@ -127,6 +127,8 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       const id = taskId(c);
       const { input, warning } = await integrations.resolveLinkInput(await parseBody(c, LinkInput));
       const link: AddLinkResult = services.links.add(id, input, actorOf(c));
+      // A session's status is a local file read; show it now rather than at the next poll.
+      if (link.kind === "agent_session") void integrations.refreshLink(link.id).catch(() => {});
       return c.json(warning ? { ...link, warning } : link, 201);
     }),
   );

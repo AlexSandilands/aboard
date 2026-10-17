@@ -4,7 +4,10 @@ import {
   findJiraKeys,
   normalizeLabel,
   parseIssueSource,
+  renderTemplateText,
   resolutionNeedsTask,
+  templateHasPlan,
+  type PlanInput,
   type TaskDetail,
   type TaskSummary,
 } from "@repo/contracts";
@@ -19,9 +22,19 @@ import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import type { LinksModule } from "./links.ts";
-import type { CloseInput, ProjectsService, ReviewsService, SettingsService, TaskQuery, TasksService } from "./types.ts";
+import type { RelationsModule } from "./relations.ts";
+import type {
+  CloseInput,
+  ProjectsService,
+  ReviewsService,
+  SettingsService,
+  TaskQuery,
+  TasksService,
+  TemplatesService,
+} from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
+const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
 
 /** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
@@ -48,6 +61,9 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   const epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
   fx.task(epicId);
+  // An archived epic keeps the status it left with (Done), so a task of it archived or reopened later can't move it.
+  // Its card is still republished: the roll-up may have changed.
+  if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
   const status = deriveEpicStatus(deriveEpicRollup(children));
   if (status === epic.status) return;
@@ -68,6 +84,8 @@ export function createTasksService(
     labels: LabelsModule;
     settings: SettingsService;
     imports: () => ImportsModule;
+    templates: TemplatesService;
+    relations: () => RelationsModule;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -126,6 +144,30 @@ export function createTasksService(
   };
 
   const syncEpic = (epicId: string, actor: string, fx: Effects): void => syncEpicStatus(repos, epicId, actor, fx);
+
+  /**
+   * Archives an epic's unarchived `tasks` (all Done) along with it, stamped with the epic's `archivedAt` so
+   * unarchiving the epic can tell them from tasks archived on their own (best effort: a task Auto-archive archived
+   * one at a time later has its own stamp, so it stays archived). Not through `update`: that would re-derive
+   * the epic from its remaining tasks, and archiving the last one drops it to Backlog.
+   */
+  const archiveWithEpic = (epic: TaskRecord, tasks: TaskRecord[], actor: string, fx: Effects): void => {
+    for (const task of tasks) {
+      repos.tasks.update({ ...task, archivedAt: epic.archivedAt, updatedAt: epic.updatedAt });
+      fx.log(task.id, actor, "archived", { withEpic: epic.number });
+      fx.task(task.id);
+    }
+  };
+
+  /** Unarchives the tasks that were archived with `epic` (see archiveWithEpic) as it comes back. */
+  const unarchiveWithEpic = (epic: TaskRecord, archivedAt: string, actor: string, fx: Effects): void => {
+    for (const task of repos.tasks.childrenOf([epic.id]).filter((c) => c.archivedAt === archivedAt)) {
+      const restored = { ...task, archivedAt: null, updatedAt: epic.updatedAt };
+      repos.tasks.update({ ...restored, position: endOfLane(restored) });
+      fx.log(task.id, actor, "unarchived", { withEpic: epic.number });
+      fx.task(task.id);
+    }
+  };
 
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
   const logEpicChange = (
@@ -191,8 +233,12 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic has no plan; create its child tasks with plans instead");
         }
         if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
+        if (kind === "epic" && input.autopilot != null) throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
+        }
+        if (kind === "epic" && input.template) {
+          throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
         }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
         const source = input.sourceUrl ? parseIssueSource(input.sourceUrl, deps.settings.get()) : null;
@@ -201,11 +247,60 @@ export function createTasksService(
         }
         if (source && input.plan)
           throw new AppError("VALIDATION", "A task imported from an issue can't start with a plan");
-        const title = input.title ?? source?.placeholder;
-        if (!title) throw new AppError("VALIDATION", "A task needs a title");
-        const hasSteps = (input.plan?.phases ?? []).some((p) => p.steps.length > 0);
+        const template = input.template ? deps.templates.resolve(input.template, project.id) : null;
+        const templatePlan = template && !input.plan && templateHasPlan(template);
+        if (source && templatePlan) {
+          throw new AppError(
+            "VALIDATION",
+            `Template "${template.name}" has a plan, and a task imported from an issue can't start with one`,
+          );
+        }
+        // What the template fills in is rendered once, here, and copied: the task never reads the template again.
+        const context = { date: new Date(), project: project.title };
+        const fromPattern = template ? renderTemplateText(template.titlePattern, context).trim() : "";
+        const title = input.title ?? source?.placeholder ?? (fromPattern || undefined);
+        if (!title) {
+          throw new AppError(
+            "VALIDATION",
+            template
+              ? `A task needs a title; template "${template.name}" has no title pattern`
+              : "A task needs a title",
+          );
+        }
+        // An imported task takes its description from the issue, and only while it is still empty.
+        // A description given, even a blank one, is explicit: blank means none, not "use the template's".
+        const description =
+          input.description !== undefined
+            ? input.description.trim()
+              ? input.description
+              : undefined
+            : source || !template?.description
+              ? undefined
+              : renderTemplateText(template.description, context);
+        const plan: PlanInput | undefined =
+          input.plan ??
+          (templatePlan
+            ? {
+                ...(template.planContext ? { context: template.planContext } : {}),
+                ...(template.suggestedTier ? { suggestedModel: { tier: template.suggestedTier } } : {}),
+                phases: template.phases.map((phase) => ({
+                  title: phase.title,
+                  steps: phase.steps.map((step) => ({
+                    title: step.title,
+                    ...(step.notes ? { notes: step.notes } : {}),
+                  })),
+                })),
+              }
+            : undefined);
+        const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
-        const status = hasSteps ? "planned" : "backlog";
+        const status = input.status ?? (input.plan && hasSteps ? "planned" : "backlog");
+        if (status === "planned" && !hasSteps) {
+          throw new AppError(
+            "VALIDATION",
+            "A planned task needs a plan; give one, or start from a template that has one",
+          );
+        }
         const task: TaskRecord = {
           id: randomUUID(),
           number: repos.tasks.nextNumber(),
@@ -213,7 +308,7 @@ export function createTasksService(
           kind,
           parentId: epic?.id ?? null,
           title,
-          description: input.description ?? null,
+          description: description ?? null,
           planContext: null,
           status,
           position: positionAmong(repos.tasks.lane(project.id, status), {}),
@@ -225,11 +320,14 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
+          autopilot: input.autopilot ?? null,
           suggestedModel: null,
+          templateId: template?.id ?? null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
           status,
+          ...(template ? { template: template.name } : {}),
           ...(kind === "epic" ? { kind } : {}),
           ...(epic ? { epic: epic.number } : {}),
         });
@@ -237,8 +335,10 @@ export function createTasksService(
           fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title });
           syncEpic(epic.id, actor, fx);
         }
-        if (input.labels?.length) deps.labels.setIn(task.id, input.labels, actor, fx);
-        if (input.plan) deps.plans().replacePlan(task, input.plan, actor, fx);
+        const labels = input.labels ?? template?.labels;
+        if (labels?.length) deps.labels.setIn(task.id, labels, actor, fx);
+        if (plan) deps.plans().replacePlan(task, plan, actor, fx);
+        if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
           deps.links().service.add(task.id, { value: source.url }, actor);
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
@@ -286,6 +386,12 @@ export function createTasksService(
         if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
           next.autoReview = input.autoReview;
           changed.push("autoReview");
+        }
+        if (current.kind === "epic" && input.autopilot != null)
+          throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
+        if (input.autopilot !== undefined && input.autopilot !== current.autopilot) {
+          next.autopilot = input.autopilot;
+          changed.push("autopilot");
         }
         const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
         if (movedProject) {
@@ -343,12 +449,30 @@ export function createTasksService(
           }
         }
         const archivedChanged = next.archivedAt !== current.archivedAt;
+        if (archivedChanged && current.kind === "epic") {
+          if (next.archivedAt !== null) {
+            // Open tasks were refused above, so what is left is Done.
+            archiveWithEpic(
+              next,
+              repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null),
+              actor,
+              fx,
+            );
+          } else {
+            unarchiveWithEpic(next, current.archivedAt!, actor, fx);
+            // It left as Done, but may have come back to tasks moved in or out of it since.
+            syncEpic(id, actor, fx);
+          }
+        }
         if (current.parentId && (current.parentId !== next.parentId || archivedChanged)) {
           syncEpic(current.parentId, actor, fx);
         }
         if (next.parentId && (next.parentId !== current.parentId || archivedChanged))
           syncEpic(next.parentId, actor, fx);
         if (input.labels !== undefined) deps.labels.setIn(id, input.labels, actor, fx);
+        // Removals first, so one call can swap a blocker.
+        if (input.removeBlockedBy?.length) deps.relations().removeBlockersIn(id, input.removeBlockedBy, actor, fx);
+        if (input.addBlockedBy?.length) deps.relations().addBlockersIn(id, input.addBlockedBy, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
         fx.task(id);
@@ -437,6 +561,31 @@ export function createTasksService(
       return service.detail(id);
     },
 
+    archiveFinishedEpic(id, actor) {
+      return core.write((fx) => {
+        const epic = record(id);
+        if (epic.kind !== "epic") throw new AppError("VALIDATION", `#${epic.number} is not an epic`);
+        if (epic.archivedAt !== null) throw new AppError("VALIDATION", `Epic #${epic.number} is already archived`);
+        const tasks = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null);
+        const open = tasks.filter((c) => c.status !== "done");
+        if (open.length > 0) {
+          throw new AppError(
+            "VALIDATION",
+            `Epic #${epic.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")})`,
+          );
+        }
+        if (epic.status !== "done")
+          throw new AppError("VALIDATION", `Epic #${epic.number} isn't finished (not in Done)`);
+        const now = nowIso();
+        const archived = { ...epic, archivedAt: now, updatedAt: now };
+        archiveWithEpic(archived, tasks, actor, fx);
+        repos.tasks.update(archived);
+        fx.log(id, actor, "archived", { tasks: tasks.length });
+        fx.task(id);
+        return tasks.length;
+      });
+    },
+
     addNote(id, text, actor) {
       const body = text.trim();
       if (!body) throw new AppError("VALIDATION", "Note text must not be empty");
@@ -467,6 +616,8 @@ export function createTasksService(
         for (const child of repos.tasks.childrenOf([id])) {
           fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
         }
+        // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
+        deps.relations().noteDeletionIn(task, actor, fx);
         repos.tasks.delete(id);
         fx.taskDeleted(id);
         if (task.parentId) {

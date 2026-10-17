@@ -1,5 +1,8 @@
 import {
+  AGENT_HARNESSES,
+  type AgentHarness,
   TASK_STATUSES,
+  autopilotRunEventText,
   describeEpicRollup,
   findJiraKeys,
   formatPlanText,
@@ -11,13 +14,26 @@ import {
   type PlanPhase,
   type Project,
   type TaskDetail,
+  type TaskTemplate,
   type TaskEvent,
   type TaskLink,
+  type TaskRelation,
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
+
+/**
+ * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
+ * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't.
+ */
+export function harnessOfClient(client: string | undefined): AgentHarness | null {
+  if (!client) return null;
+  if (/claude[-_ ]?code/i.test(client)) return "claude-code";
+  if (/copilot/i.test(client)) return "copilot-cli";
+  return null;
+}
 
 export function statusLabel(status: TaskStatus): string {
   return TASK_STATUSES.find((s) => s.value === status)?.label ?? status;
@@ -66,6 +82,12 @@ export function linkText(link: TaskLink): string {
       const s = link.snapshot ? ` (${link.snapshot.state})` : "";
       return `Issue ${link.ref.repo}#${link.ref.number}${s}${label} ${link.url}`;
     }
+    case "agent_session": {
+      const s = link.snapshot
+        ? ` (${link.snapshot.status.replace("_", " ")}${link.snapshot.inApp ? ", in an app" : ""})`
+        : "";
+      return `${AGENT_HARNESSES[link.ref.harness].label} session ${link.ref.sessionId}${s}${label} in ${link.ref.cwd}`;
+    }
     case "url":
       return `URL${label} ${link.url}`;
   }
@@ -81,10 +103,20 @@ function shortLink(link: TaskLink): string {
       return "T3 thread";
     case "issue":
       return `issue #${link.ref.number}`;
+    case "agent_session":
+      return `${AGENT_HARNESSES[link.ref.harness].label} session`;
     case "url":
       return "link";
   }
 }
+
+/** The blockers that aren't Done yet. */
+const openBlockers = (task: Pick<TaskSummary, "blockedBy">): TaskRelation[] =>
+  task.blockedBy.filter((b) => b.status !== "done");
+
+/** "#79 Title [Done]", with "(archived)" for a blocker that has left the board. */
+const relationText = (r: TaskRelation): string =>
+  `#${r.number} ${r.title} [${statusLabel(r.status)}${r.archived ? ", archived" : ""}]`;
 
 /**
  * One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". An epic shows its
@@ -103,6 +135,12 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
     parts.push("no plan");
   }
   if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
+  if (task.blocked)
+    parts.push(
+      `blocked by ${openBlockers(task)
+        .map((b) => `#${b.number}`)
+        .join(", ")}`,
+    );
   const links = task.links.map(shortLink);
   if (links.length) parts.push(links.join(", "));
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
@@ -120,6 +158,21 @@ export function renderTaskGroups(tasks: ReadonlyArray<TaskSummary>, indent = "")
     if (inStatus.length === 0) continue;
     lines.push(`${indent}${label} (${inStatus.length}):`);
     for (const t of inStatus) lines.push(`${indent}  ${summaryLine(t)}`);
+  }
+  return lines.join("\n");
+}
+
+/** One template for list_templates: name, scope, what it fills in, and its plan. */
+export function renderTemplate(template: TaskTemplate, project: Project | undefined): string {
+  const scope = template.projectId ? `project ${project?.title ?? "?"}` : "board-wide";
+  const lines = [`${template.name}  (${scope})`];
+  if (template.titlePattern) lines.push(`  title: ${template.titlePattern}`);
+  if (template.labels.length) lines.push(`  labels: ${template.labels.join(", ")}`);
+  const headline = template.description?.split("\n").find((line) => line.trim());
+  if (headline) lines.push(`  description: ${headline.slice(0, 80)}${headline.length > 80 ? "..." : ""}`);
+  if (template.suggestedTier) lines.push(`  suggested model: ${template.suggestedTier}`);
+  for (const phase of template.phases) {
+    lines.push(`  plan: ${phase.title}: ${phase.steps.map((step) => step.title).join("; ")}`);
   }
   return lines.join("\n");
 }
@@ -183,6 +236,7 @@ export function eventText(event: TaskEvent): string {
     case "created":
       what = `created ${p.kind === "epic" ? "the epic" : `in ${statusLabel((str("status") ?? "backlog") as TaskStatus)}`}`;
       if (typeof p.epic === "number") what += ` in epic #${p.epic}`;
+      if (str("template")) what += ` from template "${str("template")}"`;
       break;
     case "epic_changed": {
       const num = (k: string) => (typeof p[k] === "number" ? `#${p[k]}` : null);
@@ -195,6 +249,29 @@ export function eventText(event: TaskEvent): string {
       if (p.epicDeleted) what += " (epic deleted)";
       break;
     }
+    case "blocker_added":
+    case "blocker_removed":
+    case "blocks_added":
+    case "blocks_removed": {
+      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      const text = {
+        blocker_added: `now blocked by ${other}`,
+        blocker_removed: `no longer blocked by ${other}`,
+        blocks_added: `now blocks ${other}`,
+        blocks_removed: `no longer blocks ${other}`,
+      } as const;
+      what = text[event.type];
+      break;
+    }
+    case "blocker_deleted":
+    case "blocked_deleted": {
+      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      what =
+        event.type === "blocker_deleted"
+          ? `${other}, which blocked this, was deleted`
+          : `${other}, which this blocked, was deleted`;
+      break;
+    }
     case "child_added":
     case "child_removed": {
       const child = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
@@ -204,6 +281,9 @@ export function eventText(event: TaskEvent): string {
     }
     case "finding_resolved":
       what = `finding ${str("finding") ?? "?"} ${str("status") ?? "?"}${str("note") ? `: ${str("note")}` : ""}`;
+      break;
+    case "autopilot_run":
+      what = autopilotRunEventText(p);
       break;
     default: {
       const json = Object.keys(p).length ? ` ${JSON.stringify(p)}` : "";
@@ -218,7 +298,7 @@ export function eventText(event: TaskEvent): string {
  * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
-export function missingLinkHints(task: TaskDetail): string[] {
+export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness | null = null): string[] {
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
   const linked = new Set(task.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])));
@@ -230,6 +310,19 @@ export function missingLinkHints(task: TaskDetail): string[] {
     hints.push(
       `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
         "from t3_environment_read and t3_thread_configuration",
+    );
+  }
+  // An epic is coordinated, not worked on, so no session belongs to it.
+  const needsSession =
+    sessionHarness &&
+    task.kind !== "epic" &&
+    !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness);
+  if (needsSession) {
+    const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
+    hints.push(
+      `Your session: if you are the one working on this task, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
+        'cwd: <your working directory>}, label: "<what this session does, e.g. Implementing #N>"), so the user can see it running ' +
+        "and reopen it in a terminal from the board",
     );
   }
   // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.
@@ -265,6 +358,21 @@ export function suggestedModelHint(task: TaskDetail): string | null {
   return (
     "This task has no suggested model. Judge how much reasoning implementing it needs and call " +
     `update_task(task: "#${task.number}", suggestedModel: {tier: "light" | "standard" | "deep", reason}).`
+  );
+}
+
+/**
+ * A nudge, at planning moments, to ask the user whether to flag a planned task for Autopilot. Only worth saying when
+ * Start planned tasks is on for the task's scope, since the flag does nothing otherwise. The agent must ask: the
+ * flag lets the board start an agent on the task unattended, so it is the user's call.
+ */
+export function autopilotFlagHint(task: TaskDetail): string | null {
+  if (task.autopilot !== null || task.kind === "epic" || task.progress.total === 0) return null;
+  if (task.resolution || task.archivedAt || (task.status !== "backlog" && task.status !== "planned")) return null;
+  return (
+    "Autopilot's Start planned tasks is on for this task, and only starts tasks flagged for Autopilot. " +
+    "Ask the user whether to flag this one, and never set it without their answer. Once they decide, call " +
+    `update_task(task: "#${task.number}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
   );
 }
 
@@ -445,6 +553,10 @@ export function renderTaskDetail(
     events?: number;
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    /** The harness calling, when it is one that can link its own session; the Missing links hint asks for it. */
+    sessionHarness?: AgentHarness | null;
+    /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
+    autopilotHint?: boolean;
     /** Adds the "Plan progress" nudges; off for renderings that aren't for the implementing agent. */
     progress?: { now: number; closing?: boolean };
     /** For an epic: each child's newest activity, shown in its overview. */
@@ -462,6 +574,7 @@ export function renderTaskDetail(
     const { tier, reason } = task.suggestedModel;
     lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
   }
+  if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;
@@ -478,6 +591,15 @@ export function renderTaskDetail(
     );
     lines.push(`Also resolved: ${resolved.join("; ")}`);
   }
+  if (task.blockedBy.length) {
+    const wait = task.blocked
+      ? ` (blocked until ${openBlockers(task)
+          .map((b) => `#${b.number}`)
+          .join(", ")} are Done)`
+      : "";
+    lines.push(`Blocked by: ${task.blockedBy.map(relationText).join("; ")}${wait}`);
+  }
+  if (task.blocks.length) lines.push(`Blocks: ${task.blocks.map(relationText).join("; ")}`);
   if (task.attention.length) lines.push(`Needs attention: ${task.attention.map((a) => a.message).join("; ")}`);
   if (task.import?.status === "pending") {
     lines.push(`Import: pending. The title, description and labels are being filled in from ${task.import.sourceUrl}.`);
@@ -512,7 +634,7 @@ export function renderTaskDetail(
     lines.push("", "Links:");
     for (const link of task.links) lines.push(`- ${linkText(link)}`);
   }
-  const missing = missingLinkHints(task);
+  const missing = missingLinkHints(task, opts.sessionHarness ?? null);
   if (missing.length) {
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
@@ -528,6 +650,8 @@ export function renderTaskDetail(
   if (labels) lines.push("", "Missing labels:", `- ${labels}`);
   const model = opts.modelHint ? suggestedModelHint(task) : null;
   if (model) lines.push("", "Missing suggested model:", `- ${model}`);
+  const autopilot = opts.autopilotHint ? autopilotFlagHint(task) : null;
+  if (autopilot) lines.push("", "Autopilot flag not set:", `- ${autopilot}`);
 
   const limit = opts.events ?? 10;
   if (limit > 0 && task.events.length) {
@@ -545,6 +669,7 @@ export function renderTaskShort(
   opts: {
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    autopilotHint?: boolean;
     progress?: { now: number; closing?: boolean };
   } = {},
 ): string {

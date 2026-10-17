@@ -2,13 +2,21 @@ import { TASK_STATUSES, type Project } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
 import { canStartProjectT3Thread } from "~/components/handoff/handoff.logic";
+import { AutopilotPill } from "~/components/autopilot/AutopilotPill";
 import { SuggestEpicsMenu } from "~/components/handoff/HandoffActions";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
-import { laneCounts, laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band, type LaneCells } from "./board.logic";
+import {
+  laneCounts,
+  laneHasCollapsibleCell,
+  STATUS_ORDER,
+  type EpicBand as Band,
+  type Lane,
+  type LaneCells,
+} from "./board.logic";
 import { BoardCell } from "./BoardCell";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
@@ -26,6 +34,7 @@ export const BoardLane = memo(function BoardLane({
   project,
   bands,
   cells,
+  epicChildren,
   selectedTaskId,
   draggingTaskId,
   draggingRowId,
@@ -35,6 +44,7 @@ export const BoardLane = memo(function BoardLane({
   project: Project;
   bands: ReadonlyArray<Band>;
   cells: LaneCells;
+  epicChildren: Lane["epicChildren"];
   selectedTaskId: string | null;
   /** The card being dragged, when it belongs to this lane. */
   draggingTaskId: string | null;
@@ -106,6 +116,7 @@ export const BoardLane = memo(function BoardLane({
           <TooltipPopup>Add epic</TooltipPopup>
         </Tooltip>
         <SuggestEpicsMenu project={project} canStartT3={canStartProjectT3Thread(project, t3, settings)} />
+        <AutopilotPill project={project} />
       </header>
       {collapsed ? null : (
         <div className={cn(BOARD_GRID_CLASS_NAME, "mt-1")}>
@@ -132,6 +143,7 @@ export const BoardLane = memo(function BoardLane({
                   gridRow={bands.length ? bands.length + 1 : undefined}
                   status={status}
                   tasks={cells[status]}
+                  epicChildren={status === "done" ? epicChildren : undefined}
                   toggleRow={toggleRow}
                   selectedTaskId={selectedTaskId}
                   draggingTaskId={draggingTaskId}

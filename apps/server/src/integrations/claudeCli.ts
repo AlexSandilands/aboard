@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 import { z } from "zod";
+import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
 
 // Running Claude Code headless (`claude -p`): finding the executable, spawning it on every platform, and reading
-// its JSON result. Shared by the board's reviewer and the issue import.
+// its JSON result. Shared by the board's reviewer, the issue import and Autopilot's headless runs.
 
 export const VERSION_TIMEOUT_MS = 15_000;
 
@@ -58,31 +59,36 @@ interface RunResult {
 function run(
   exe: string,
   args: string[],
-  opts: { cwd?: string; input?: string; timeoutMs: number },
+  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
     const child = /\.(cmd|bat)$/i.test(exe)
       ? spawn(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(exe, args), {
           cwd: opts.cwd,
+          env: opts.env,
           windowsHide: true,
           windowsVerbatimArguments: true,
         })
-      : spawn(exe, args, { cwd: opts.cwd, windowsHide: true });
+      : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
+    const group = POSIX_GROUPS ? child.pid : undefined;
+    if (group !== undefined) liveGroups.add(group);
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
-      child.kill();
+      killTree(child);
       reject(new Error(`Claude Code didn't finish within ${formatDuration(opts.timeoutMs)}`));
     }, opts.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
     child.on("error", (error) => {
       clearTimeout(timer);
+      if (group !== undefined) liveGroups.delete(group);
       reject(error);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (group !== undefined) liveGroups.delete(group);
       resolve({ code, stdout, stderr });
     });
     child.stdin.end(opts.input ?? "");
@@ -93,9 +99,49 @@ const CliResult = z.object({
   is_error: z.boolean().optional(),
   subtype: z.string().optional(),
   result: z.string().optional(),
+  session_id: z.string().optional(),
   total_cost_usd: z.number().optional(),
   structured_output: z.unknown().optional(),
 });
+
+/** The result line of `--output-format json` stdout. */
+export interface ClaudeResult {
+  isError: boolean;
+  /** "success", or why the run stopped, e.g. "error_max_budget_usd". */
+  subtype: string | null;
+  /** The agent's final message. */
+  result: string | null;
+  sessionId: string | null;
+  costUsd: number | null;
+  structuredOutput: unknown;
+}
+
+/** Reads the result line (the last one: the CLI may print warnings first). Throws when there is none. */
+export function readClaudeResult(stdout: string): ClaudeResult {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout.trim().split(/\r?\n/).at(-1) ?? "");
+  } catch {
+    throw new Error(`Claude Code returned no JSON result: ${stdout.trim().slice(0, 200) || "(empty output)"}`);
+  }
+  const parsed = CliResult.safeParse(json);
+  if (!parsed.success) throw new Error("Claude Code's result didn't match the expected shape");
+  const out = parsed.data;
+  return {
+    isError: out.is_error ?? false,
+    subtype: out.subtype ?? null,
+    result: out.result ?? null,
+    sessionId: out.session_id ?? null,
+    costUsd: out.total_cost_usd ?? null,
+    structuredOutput: out.structured_output,
+  };
+}
+
+/** Why a run failed, in words: the subtype ("error max budget usd") or the CLI's own message. */
+export const claudeFailure = (out: ClaudeResult, what: string): string =>
+  out.subtype && out.subtype !== "success"
+    ? out.subtype.replace(/_/g, " ")
+    : (out.result ?? `no ${what} result returned`);
 
 /**
  * Parses `--output-format json` stdout into the structured output (checked against `schema`) and its cost.
@@ -106,25 +152,13 @@ export function parseClaudeOutput<T>(
   schema: z.ZodType<T>,
   what: string,
 ): { output: T; costUsd: number | null } {
-  let json: unknown;
-  try {
-    json = JSON.parse(stdout.trim().split(/\r?\n/).at(-1) ?? "");
-  } catch {
-    throw new Error(`Claude Code returned no JSON result: ${stdout.trim().slice(0, 200) || "(empty output)"}`);
+  const out = readClaudeResult(stdout);
+  if (out.isError || out.structuredOutput === undefined) {
+    throw new Error(`Claude Code's ${what} failed: ${claudeFailure(out, what)}`);
   }
-  const parsed = CliResult.safeParse(json);
-  if (!parsed.success) throw new Error("Claude Code's result didn't match the expected shape");
-  const out = parsed.data;
-  if (out.is_error || out.structured_output === undefined) {
-    const why =
-      out.subtype && out.subtype !== "success"
-        ? out.subtype.replace(/_/g, " ")
-        : (out.result ?? `no ${what} result returned`);
-    throw new Error(`Claude Code's ${what} failed: ${why}`);
-  }
-  const output = schema.safeParse(out.structured_output);
+  const output = schema.safeParse(out.structuredOutput);
   if (!output.success) throw new Error("Claude Code's result didn't match the expected shape");
-  return { output: output.data, costUsd: out.total_cost_usd ?? null };
+  return { output: output.data, costUsd: out.costUsd };
 }
 
 export interface ClaudeJob {
@@ -135,6 +169,8 @@ export interface ClaudeJob {
   prompt: string;
   args: string[];
   timeoutMs: number;
+  /** Replaces the environment; defaults to the server's. */
+  env?: NodeJS.ProcessEnv;
 }
 
 const cliPath = (cli: string | null): string => {
@@ -144,8 +180,8 @@ const cliPath = (cli: string | null): string => {
 };
 
 /** Runs one headless job and returns its stdout. Throws when the CLI can't run or printed nothing. */
-export async function runClaude({ cli, cwd, prompt, args, timeoutMs }: ClaudeJob): Promise<string> {
-  const result = await run(cliPath(cli), args, { cwd, input: prompt, timeoutMs });
+export async function runClaude({ cli, cwd, prompt, args, timeoutMs, env }: ClaudeJob): Promise<string> {
+  const result = await run(cliPath(cli), args, { cwd, input: prompt, timeoutMs, ...(env ? { env } : {}) });
   if (result.stdout.trim()) return result.stdout;
   throw new Error(`Claude Code exited with code ${result.code}: ${result.stderr.trim().slice(0, 300) || "no output"}`);
 }

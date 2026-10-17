@@ -7,8 +7,14 @@ import {
   type PlanPhase,
   type StepStatus,
   type TaskImport,
+  type TaskRelation,
   type TaskLink,
 } from "./schemas.ts";
+
+/** Whether any blocker is still open: a blocker is finished only once Done, whatever its resolution. */
+export function isBlocked(blockedBy: ReadonlyArray<Pick<TaskRelation, "status">>): boolean {
+  return blockedBy.some((b) => b.status !== "done");
+}
 
 /** Statuses that count as finished for progress. */
 export function isStepComplete(status: StepStatus): boolean {
@@ -67,8 +73,11 @@ export function deriveAttention(
   links: ReadonlyArray<TaskLink>,
   review: TaskReviewSummary | null = null,
   issueImport: TaskImport | null = null,
+  /** Why an Autopilot run on the task needs the user (see the autopilot_runs repo); null when none does. */
+  autopilot: string | null = null,
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
+  if (autopilot) reasons.push({ kind: "autopilot", severity: "warning", message: autopilot });
   if (issueImport?.status === "failed") {
     reasons.push({
       kind: "import_failed",
@@ -160,7 +169,7 @@ export function deriveEpicRollup(children: ReadonlyArray<{ status: TaskStatus }>
 /** Furthest along first: the order an epic's roll-up bar fills in and its summary lists statuses. */
 export const ROLLUP_ORDER: ReadonlyArray<TaskStatus> = ["done", "review", "in_progress", "planned", "backlog"];
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
+export const STATUS_LABELS: Record<TaskStatus, string> = {
   backlog: "Backlog",
   planned: "Planned",
   in_progress: "In Progress",

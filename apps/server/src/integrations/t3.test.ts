@@ -6,17 +6,16 @@ import type {
   BoardEvent,
   CreateProjectInput,
   LinkInput,
-  PrSnapshot,
   Project,
   StartT3ThreadInput,
   T3ThreadSnapshot,
-  IssueSnapshot,
   TaskLink,
   TaskSummary,
 } from "@repo/contracts";
 import { BRAND, normalizeWorkspaceKey } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus.ts";
+import type { LinkSnapshot } from "../services/types.ts";
 import { AppError } from "../errors.ts";
 import { fakeSocket, success, type SentFrame } from "../test/fakeT3Socket.ts";
 import {
@@ -250,7 +249,7 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
 }
 
 function fakeServices(opts: { token?: string | null; links?: TaskLink[]; projects?: Project[] } = {}) {
-  const snapshots = new Map<string, PrSnapshot | T3ThreadSnapshot | IssueSnapshot | null>();
+  const snapshots = new Map<string, LinkSnapshot | null>();
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
   let token = opts.token ?? null;
@@ -719,6 +718,22 @@ describe("T3 thread launch", () => {
       { taskId: "task-1", input: { t3Thread: { environmentId: ENV_ID, threadId: "th-auto" } }, actor: "orch" },
     ]);
     expect(launched).toMatchObject({ runtimeMode: "full-access", suggestionUnavailable: null });
+  });
+
+  it("titles an unattended launch with the title it was given", async () => {
+    const { t3, socket } = setup((frame) => {
+      if (frame.tag === "server.getConfig") return success(frame.id, SERVER_CONFIG);
+      if (frame.tag === "vcs.listRefs") return success(frame.id, { isRepo: true, refs: [] });
+      return success(frame.id, { threadId: "th-auto", resumed: false });
+    });
+    await t3.launchTaskThread(
+      "task-1",
+      { prompt: "x", commandId: "c", work: true, baseRef: "main", title: "Autopilot · Start planned · #9" },
+      "orch",
+    );
+    expect(socket.sent.find((f) => f.tag === "orchestration.launchThread")!.payload).toMatchObject({
+      title: "Autopilot · Start planned · #9",
+    });
   });
 
   it("starts a thread about a whole project, titled by the caller, without linking it", async () => {

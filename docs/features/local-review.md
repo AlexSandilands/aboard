@@ -22,9 +22,12 @@ panel (Auto: Default / On / Off), or an agent can with `update_task(autoReview)`
    `submit_review`. It never edits files.
 4. The agent fixes the findings and marks each one with `resolve_finding`: `fixed`, or `wont_fix` with a
    note saying why.
-5. If the round raised blocking or major findings, the agent calls `start_review` for the next round,
-   with a new reviewer. It stops when a round comes back clean, or after the round limit (3 by default).
-6. Only then does it open the pull request, and it always does: also at the round limit, with the findings
+5. If the round raised blocking or major findings, **the board opens the next round itself** when the
+   agent resolves the last of them, under the round limit (the round is `openedBy` "board", trigger
+   `manual`; the `resolve_finding` result says so). The agent calls `start_review`, which returns that
+   open round's brief, and runs it with a new reviewer. It stops when a round comes back clean, or after
+   the round limit (3 by default).
+6. Only then does it open the pull request, never earlier, and it always does: also at the round limit, with the findings
    still open listed in the PR description, unless you told it not to.
 
 One round is one subagent call. Everything that has to survive between rounds lives on the board: every
@@ -45,6 +48,14 @@ the task's worktree for the fixes and the PR. The board sees the same rounds, fi
 
 A round is **clean** when it raises no blocking or major findings and none are open from earlier rounds.
 Minor findings and nits may stay open.
+
+The board opens the round because the agent that fixed the findings is mid-turn and may simply stop: with
+the round left to the agent, tasks sat at "Fixed, re-review". A round the board opened looks like an agent's to
+the watchdog below (its grace, the nudge of the task's T3 thread, then the board reviewer). It only does so
+when auto-review is on for the task and the task is in Review (not Done or archived, where nothing would run the
+round). A PR opened before the loop ends would be reviewed on GitHub too, so
+Autopilot's [Review PRs](autopilot.md) waits for the loop (`reviewIsInProgress`), and
+`move_task` to Review with a PR already linked says to finish the loop first and push fixes to that PR.
 
 ### Findings
 
@@ -161,7 +172,7 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
   already short of width, and cards narrower than now get too busy, so review state is a badge.
 - **No gate.** Moving to Review is never blocked by open findings; the card signals instead.
 - **Review before the PR.** With auto-review on, "Review" means "done, being reviewed locally", and the PR
-  is opened once the loop ends. Without it, agents open and link the PR before moving to Review, as
+  is opened once the loop ends. Autopilot's PR review holds off until then. Without it, agents open and link the PR before moving to Review, as
   before.
 - **Say it where the loop ends.** The brief at the start of the loop was the only place that said to open
   the PR, and agents sometimes stopped after the last round without doing it. So every end point repeats
