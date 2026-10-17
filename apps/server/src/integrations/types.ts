@@ -1,5 +1,7 @@
 import type {
   AgentCliStatus,
+  AskSettingsInput,
+  AskSettingsResult,
   BackupStatus,
   EpicDelivery,
   ConnectT3Result,
@@ -14,6 +16,7 @@ import type {
   SessionLaunchOptions,
   StartSessionInput,
   StartSessionResult,
+  SettingsAskStatus,
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
@@ -87,6 +90,10 @@ export interface Integrations {
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
   /** Starts a new Claude Code or Copilot CLI session on a task in a terminal and links it. */
   startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
+  /** Whether the settings "Ask" can run: the Claude Code CLI is found. */
+  settingsAskStatus(): SettingsAskStatus;
+  /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */
+  askSettings(input: AskSettingsInput): Promise<AskSettingsResult>;
   /** Makes a digest of what changed now; a summarised one is written in the background (see DigestGenerator). */
   generateDigest(): Promise<DigestStart>;
   /** Resolves when no digest is being written. */

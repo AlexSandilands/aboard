@@ -18,6 +18,17 @@ description, and every word you type has to match. **↑ ↓** move through the 
 Autopilot, say), scrolls to it and marks it for a moment. A setting that only shows in some states (the issue import's model while
 import is off) lands on the part of the page that does.
 
+### Asking in plain words
+
+If you don't know what a setting is called, ask. The first row of the results is **Ask: your question**; it starts
+selected when what you typed reads as a question ("How do I stop agents running at night?"), so Enter asks it. Claude
+Code answers in a sentence or two and names the setting, and **Go there** (or Enter) opens it and marks it, like a
+result. If no one setting fits, you get the answer without a button. It uses the Claude Code CLI under
+Integrations › Claude Code, on a small model (Haiku) with no tools and a few cents of budget per question, so
+nothing but the question and the list of settings is sent. When the CLI can't be found the row says so and **Set up
+Claude Code** takes you to its setting; if it can't answer (not signed in, over budget, too slow) the row shows why,
+and a click tries again.
+
 ## The pages
 
 | Page             | Sections                                                                                                  |
