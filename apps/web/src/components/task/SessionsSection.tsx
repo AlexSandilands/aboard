@@ -5,10 +5,10 @@ import {
   type TaskDetail,
   type TaskLink,
 } from "@repo/contracts";
-import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, MessagesSquareIcon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 
-import { HarnessIcon, SessionMenuItems } from "~/components/sessions/SessionParts";
+import { HarnessIcon, SessionMenuItems, T3Icon } from "~/components/sessions/SessionParts";
 import {
   folderName,
   isSettledSession,
@@ -159,7 +159,7 @@ function T3ThreadRow({
         className={cn(multiThread && "h-auto items-start py-1.5")}
         render={<a {...linkProps(targets.primary.href)} />}
       >
-        <MessagesSquareIcon className={PANEL_ICON_CLASS} />
+        <T3Icon className={PANEL_ICON_CLASS} />
         {multiThread ? (
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="flex min-w-0 items-center gap-2.5">

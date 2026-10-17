@@ -14,6 +14,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { BellBadge, NotificationRow } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
 import { STAGE_BANNERS } from "~/components/stage/stageBanner.logic";
@@ -599,6 +600,19 @@ export function StyleGallery() {
               onOpen={() => {}}
             />
           </div>
+        </Section>
+
+        <Section title="Tool icons">
+          {[
+            { name: "T3 Code", icon: <T3Icon className="size-5" /> },
+            { name: "Claude Code", icon: <HarnessIcon harness="claude-code" className="size-5" /> },
+            { name: "Copilot CLI", icon: <HarnessIcon harness="copilot-cli" className="size-5" /> },
+          ].map(({ name, icon }) => (
+            <div key={name} className="flex items-center gap-2 text-sm">
+              {icon}
+              <span>{name}</span>
+            </div>
+          ))}
         </Section>
 
         <Section title="Project icons">
