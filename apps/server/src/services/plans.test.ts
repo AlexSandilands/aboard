@@ -24,11 +24,46 @@ const codeOf = (fn: () => unknown): string | undefined => {
 };
 
 describe("plans", () => {
+  it("rejects a plan with no steps or a phase without steps, saying which", () => {
+    const { s, task } = setup();
+    const message = (fn: () => unknown): string | undefined => {
+      try {
+        fn();
+      } catch (error) {
+        return error instanceof AppError ? `${error.code}: ${error.message}` : "NOT_APP_ERROR";
+      }
+      return undefined;
+    };
+    expect(message(() => s.plans.setPlan(task.id, { phases: [{ title: "Empty", steps: [] }] }, "user"))).toBe(
+      "VALIDATION: The plan needs at least one step",
+    );
+    expect(message(() => s.plans.setPlan(task.id, { phases: [] }, "user"))).toBe(
+      "VALIDATION: The plan needs at least one step",
+    );
+    expect(
+      message(() =>
+        s.plans.setPlan(
+          task.id,
+          {
+            phases: [
+              { title: "One", steps: [{ title: "a" }] },
+              { title: "Tests", steps: [] },
+            ],
+          },
+          "user",
+        ),
+      ),
+    ).toBe("VALIDATION: Phase 2 'Tests' has no steps");
+    const project = s.projects.create({ title: "Q" });
+    expect(
+      codeOf(() =>
+        s.tasks.create({ projectId: project.id, title: "X", plan: { phases: [{ title: "E", steps: [] }] } }),
+      ),
+    ).toBe("VALIDATION");
+  });
+
   it("rejects plans that would leave a task outside Backlog without steps", () => {
     const { s, task } = setup();
-    expect(codeOf(() => s.plans.setPlan(task.id, { phases: [{ title: "Empty", steps: [] }] }, "user"))).toBe(
-      "PLAN_REQUIRED",
-    );
     const [a, b] = task.phases[0]!.steps;
     s.plans.deleteStep(a!.id, "user");
     expect(codeOf(() => s.plans.deleteStep(b!.id, "user"))).toBe("PLAN_REQUIRED");

@@ -71,6 +71,11 @@ Computed from the steps, never stored (`packages/contracts/src/derive.ts`):
 
 ### The gate on the plan side
 
+A plan given whole (`set_plan`, `create_task`, REST) must have at least one step and every phase must have
+one, whatever the task's status: otherwise `VALIDATION` ("The plan needs at least one step", "Phase 2
+'Tests' has no steps"). The rule lives in the plans service, so Markdown plans get it too (they drop empty
+phases first).
+
 Outside Backlog a plan can't become empty. `set_plan`, deleting a phase and deleting a step all throw
 `PLAN_REQUIRED` if they'd leave a task outside Backlog with no steps. See
 [task-lifecycle.md](task-lifecycle.md) and [ADR 0004](../decisions/0004-plan-gate.md).
