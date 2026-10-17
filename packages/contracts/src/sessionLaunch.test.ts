@@ -16,7 +16,7 @@ describe("new session argv", () => {
   it("passes Claude Code the prompt as its last argument, after the model, id and name", () => {
     expect(
       newSessionArgv({ harness: "claude-code", sessionId: ID, model: "opus", name: "Implementing #4", prompt: "Go" }),
-    ).toEqual(["claude", "--model", "opus", "--session-id", ID, "--name", "Implementing #4", "Go"]);
+    ).toEqual(["claude", "--model", "opus", "--session-id", ID, "--name", "Implementing #4", "--", "Go"]);
   });
 
   it("starts Copilot CLI interactively with -i, and leaves the model out for the CLI's default", () => {

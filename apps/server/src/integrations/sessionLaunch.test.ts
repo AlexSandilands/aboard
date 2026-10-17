@@ -7,7 +7,7 @@ import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { shortPrompt } from "./sessionLaunch.ts";
-import { shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
+import { cmdQuote, shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const WT_SETTINGS = JSON.stringify({
   defaultProfile: "{cmd}",
@@ -113,6 +113,7 @@ describe("starting a session from the board", () => {
           id,
           "--name",
           "Implementing #1",
+          "--",
           // Line breaks become spaces on Windows; the session reads the prompt the same.
           "Work on #1. Then tell me.",
         ],
@@ -120,7 +121,7 @@ describe("starting a session from the board", () => {
       },
     ]);
     expect(body.command).toBe(
-      `cd /d ${app.root.includes(" ") ? `"${app.root}"` : app.root} && claude --model opus --session-id ${id} --name "Implementing #1" "Work on #1. Then tell me."`,
+      `cd /d ${cmdQuote(app.root)} && claude --model opus --session-id ${id} --name "Implementing #1" -- "Work on #1. Then tell me."`,
     );
   });
 
@@ -177,14 +178,24 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()).toHaveLength(1);
   });
 
-  it("returns the command to run by hand, and links nothing, when the terminal won't start", async () => {
+  it("returns the command to run by hand, and links its session without a window, when the terminal won't start", async () => {
     const app = appWith({ spawnError: new Error("spawn wt.exe ENOENT") });
     const { status, body } = await app.start({});
     expect(status).toBe(201);
-    expect(body).toMatchObject({ launched: false, linkId: null });
+    expect(body).toMatchObject({ launched: false });
     expect(body.error).toMatch(/ENOENT/);
-    expect(body.command).toContain("claude --session-id");
-    expect(app.sessionLinks()).toHaveLength(0);
+    // The prompt tells the agent the board linked it, so the board does, with the id the command carries.
+    const [link] = app.sessionLinks();
+    expect(body.linkId).toBe(link!.id);
+    expect(body.command).toContain(`claude --session-id ${link!.ref.sessionId}`);
+    expect(link).toMatchObject({ label: "Implementing #1", ref: { cwd: app.root } });
+    expect(link!.window).toBeUndefined();
+  });
+
+  it("passes Claude Code a prompt starting with - after --, so it isn't read as an option", async () => {
+    const app = appWith({ host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null } });
+    await app.start({ prompt: "- fix the bug" });
+    expect(app.spawned[0]!.args.at(-1)).toContain(`--name 'Implementing #1' -- '- fix the bug'; exec bash`);
   });
 
   it("refuses before making a worktree when there is no terminal to open", async () => {
@@ -258,7 +269,8 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
       };
       expect(options.isRepo).toBe(true);
       expect(options.branches).toEqual(expect.arrayContaining(["main", "origin/main", "origin/feature"]));
-      expect(options.defaultBaseRef).toBe("main");
+      // Origin's copy, which Autopilot's worktrees start from too: the local branch can be behind.
+      expect(options.defaultBaseRef).toBe("origin/main");
 
       const { body } = await app.start({ workspace: { mode: "new_worktree", baseRef: "origin/feature" } });
       expect(body.launched).toBe(true);

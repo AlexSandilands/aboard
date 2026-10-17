@@ -131,19 +131,22 @@ model for the task's tier, and whether sessions get a named window) and offers:
 - a model, filled in from **Session models** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
 - **New worktree** from a branch, or **This checkout**. The branch starts on the task's integration branch when its
-  epic delivers through one (origin's copy first, as the T3 dialog does), else the default branch.
+  epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch
+  (the local one when origin has none), as Autopilot's worktrees start from it.
 
 `POST /api/tasks/:id/sessions` then:
 
 1. for a new worktree, runs `createWorktree` under `<worktreesDir>/sessions` on a new `<brand>/<task#>-<id8>` branch.
    Autopilot's cleanup never removes these: they are the user's;
-2. builds `claude [--model m] --session-id <uuid> --name "Implementing #N" <prompt>`, or Copilot's
+2. builds `claude [--model m] --session-id <uuid> --name "Implementing #N" -- <prompt>` (`--` so a prompt starting
+   with `-` isn't read as an option), or Copilot's
    `copilot [--model m] --session-id <uuid> --name … -i <prompt>`, with a session id the board picks;
 3. opens it in the terminal setting's terminal. With Windows Terminal it goes to the window named for the task
    (`taskWindowName`, `<brand>-<task#>`): `wt -w <brand>-115 new-tab …` opens the window, or a tab of it when it is
    already open, whatever **Open in** says;
-4. once the terminal has started, links the session (label "Implementing #N" or "Planning #N", and the window),
-   then reads its status. When the terminal won't start nothing is linked and the result carries the command to run.
+4. links the session (label "Implementing #N" or "Planning #N", plus the window once the terminal has started), then
+   reads its status. When the terminal won't start the result carries the command to run by hand; the session is
+   linked all the same, since that command has its id and its prompt says the board linked it.
 
 The prompt is one argument (`textArgument` in `terminal.ts`). POSIX shells get it as written, single-quoted. On
 Windows it crosses Windows Terminal, which quotes an argument with spaces but not the quotes inside it, and often

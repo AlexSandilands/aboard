@@ -150,7 +150,9 @@ export function createSessionLaunch(deps: {
       const { isRepo, branches } = root ? await branchesOf(root) : { isRepo: false, branches: [] };
       const defaultBranch = isRepo && root ? await defaultBranchOf(deps.runGit, root).catch(() => null) : null;
       const defaultBaseRef =
-        (defaultBranch && branches.find((b) => b === defaultBranch || b === `origin/${defaultBranch}`)) ??
+        // Origin's copy first, as Autopilot's worktrees start from it: a local default branch can be behind.
+        (defaultBranch &&
+          (branches.find((b) => b === `origin/${defaultBranch}`) ?? branches.find((b) => b === defaultBranch))) ??
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
@@ -246,7 +248,21 @@ export function createSessionLaunch(deps: {
         shortPrompt: shortReason ? argv.at(-1)! : null,
         shortReason,
       };
-      if (!spec) return { ...result, launched: false, error: launchError, linkId: null };
+      // Linked whether or not the terminal starts: the prompt tells the agent the board linked it, and the command
+      // to run by hand carries the same session id. Only a launched session has a window to bring back.
+      const link = (opened: boolean) => {
+        const added = deps
+          .services()
+          .links.add(
+            task.id,
+            { agentSession: { harness: input.harness, sessionId, cwd }, label },
+            actor,
+            opened && window ? { window } : {},
+          );
+        deps.linked?.(added.id);
+        return added.id;
+      };
+      if (!spec) return { ...result, launched: false, error: launchError, linkId: link(false) };
 
       try {
         await deps.spawn(spec);
@@ -256,19 +272,10 @@ export function createSessionLaunch(deps: {
           ...result,
           launched: false,
           error: `Couldn't start ${resolved.label}: ${messageOf(error)}`,
-          linkId: null,
+          linkId: link(false),
         };
       }
-      const link = deps
-        .services()
-        .links.add(
-          task.id,
-          { agentSession: { harness: input.harness, sessionId, cwd }, label },
-          actor,
-          window ? { window } : {},
-        );
-      deps.linked?.(link.id);
-      return { ...result, launched: true, error: null, linkId: link.id };
+      return { ...result, launched: true, error: null, linkId: link(true) };
     },
   };
 }

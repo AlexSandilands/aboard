@@ -105,7 +105,7 @@ export const sessionLabel = (mode: "work" | "plan", taskNumber: number): string 
 
 /**
  * The CLI's argv for a new session: its model and id, a name to find it by, and the first prompt as one argument.
- * Copilot CLI takes the prompt with `-i` (interactive); Claude Code as its positional argument.
+ * Copilot CLI takes the prompt with `-i` (interactive); Claude Code as its positional argument, after `--`.
  */
 export function newSessionArgv(input: {
   harness: AgentHarness;
@@ -117,7 +117,8 @@ export function newSessionArgv(input: {
   const model = input.model ? ["--model", input.model] : [];
   const cli = AGENT_HARNESSES[input.harness].cli;
   return input.harness === "claude-code"
-    ? [cli, ...model, "--session-id", input.sessionId, "--name", input.name, input.prompt]
+    ? // `--` ends the options, so a prompt starting with "-" (a Markdown list item) isn't read as one.
+      [cli, ...model, "--session-id", input.sessionId, "--name", input.name, "--", input.prompt]
     : [cli, ...model, "--session-id", input.sessionId, "--name", input.name, "-i", input.prompt];
 }
 
