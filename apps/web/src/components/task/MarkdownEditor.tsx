@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { useImagePaste } from "~/components/attachments/useImagePaste";
 import { Textarea } from "~/components/ui/textarea";
-import { insertAtSelection } from "~/lib/attachments.logic";
+import { insertAtSelection, replaceFirst } from "~/lib/attachments.logic";
 
 const SAVE_HINT =
   typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
@@ -47,11 +47,12 @@ export function MarkdownEditor({
   }, [onSave]);
   const paste = useImagePaste({
     taskId,
-    insert: (token, at) => {
-      const { text, caret } = insertAtSelection(draftRef.current, at.start, at.end, token);
+    insert: (marker, at) => {
+      const { text, caret } = insertAtSelection(draftRef.current, at.start, at.end, marker);
       setText(text);
       return caret;
     },
+    replace: (marker, replacement) => setText(replaceFirst(draftRef.current, marker, replacement)),
     // Leaving the box mid-upload would save before the image's token is in the text; it saves once they land.
     onSettled: () => {
       if (blurredWhileUploading.current) save();

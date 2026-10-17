@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { fitWithin, insertAtSelection, KEEP_BELOW_BYTES, planImage, pickUpload } from "./attachments.logic";
+import {
+  fitWithin,
+  insertAtSelection,
+  KEEP_BELOW_BYTES,
+  planImage,
+  pickUpload,
+  replaceFirst,
+} from "./attachments.logic";
 
 const MB = 1024 * 1024;
 
@@ -69,6 +76,16 @@ describe("pickUpload", () => {
       use: "none",
       reason: expect.stringContaining("limit is 5.0 MB"),
     });
+  });
+});
+
+describe("replaceFirst", () => {
+  it("swaps the placeholder wherever it has moved to, and leaves the text alone when it is gone", () => {
+    expect(replaceFirst("typed first [up 1…] then more", "[up 1…]", "![a](attachment:x)")).toBe(
+      "typed first ![a](attachment:x) then more",
+    );
+    expect(replaceFirst("no placeholder", "[up 1…]", "x")).toBe("no placeholder");
+    expect(replaceFirst("a [p] b", "[p]", "$&")).toBe("a $& b");
   });
 });
 

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useImagePaste } from "~/components/attachments/useImagePaste";
-import { insertAtSelection } from "~/lib/attachments.logic";
+import { insertAtSelection, replaceFirst } from "~/lib/attachments.logic";
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { followTemplate, prefillFrom, templatesFor, templateRequest } from "~/components/templates/templates.logic";
@@ -263,11 +263,16 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   // An image pasted here has no task yet; creating the task claims the ones its description refers to.
   const imagePaste = useImagePaste({
     taskId: null,
-    insert: (token, at) => {
-      const { text, caret } = insertAtSelection(descriptionRef.current, at.start, at.end, token);
+    insert: (placeholder, at) => {
+      const { text, caret } = insertAtSelection(descriptionRef.current, at.start, at.end, placeholder);
       descriptionRef.current = text;
       setDescription(text);
       return caret;
+    },
+    replace: (placeholder, replacement) => {
+      const text = replaceFirst(descriptionRef.current, placeholder, replacement);
+      descriptionRef.current = text;
+      setDescription(text);
     },
   });
   const [highlighted, setHighlighted] = useState<string | null>(null);
@@ -394,7 +399,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   function submitTitle(keepOpen: boolean): void {
     if (view.kind !== "title") return;
     const title = query.trim();
-    if (!title || createTask.isPending) return;
+    // An image still uploading is a placeholder in the description, and the task would be created with it.
+    if (!title || createTask.isPending || imagePaste.uploading) return;
     const { flow, projectId, epicId } = view;
     const issue = issueImportRow(title, flow);
     // An import takes its details from the issue, so the template (and its plan) stays out of it.

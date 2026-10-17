@@ -79,5 +79,9 @@ export function insertAtSelection(
   return { text: `${before}${inserted}${after}`, caret: before.length + lead.length + insert.length + trail.length };
 }
 
+/** `text` with the first `from` replaced by `to`; unchanged when `from` is gone (the person deleted it). */
+export const replaceFirst = (text: string, from: string, to: string): string =>
+  text.includes(from) ? text.replace(from, () => to) : text;
+
 /** The image files among a paste or drop's files. */
 export const imageFiles = (files: Iterable<File>): File[] => [...files].filter((f) => f.type.startsWith("image/"));

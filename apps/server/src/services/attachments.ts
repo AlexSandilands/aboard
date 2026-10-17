@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   attachmentExtension,
@@ -160,6 +160,16 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
       if (!existsSync(dir)) return;
       for (const name of readdirSync(dir)) {
         if (name !== PENDING_DIR && !repos.tasks.get(name)) rmSync(join(dir, name), { recursive: true, force: true });
+      }
+      // Files waiting for a task whose row is gone: a whole-board restore swaps the database, and a crash between
+      // writing a file and its row leaves one too. Old enough that an upload still being recorded isn't caught.
+      const pending = join(dir, PENDING_DIR);
+      if (!existsSync(pending)) return;
+      for (const name of readdirSync(pending)) {
+        const path = join(pending, name);
+        if (repos.attachments.get(name.split(".")[0]!) || statSync(path).mtimeMs > Date.now() - PENDING_TTL_MS)
+          continue;
+        rmSync(path, { force: true });
       }
     },
   };

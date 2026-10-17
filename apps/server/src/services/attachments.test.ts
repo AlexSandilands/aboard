@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { attachmentToken, BRAND, MAX_ATTACHMENT_BYTES } from "@repo/contracts";
@@ -107,6 +107,23 @@ describe("attachment files", () => {
     expect(claimed.map((a) => a.id)).toEqual([kept.id]);
     expect(existsSync(claimed[0]!.path)).toBe(true);
     expect(services.attachments.get(stray.id).taskId).toBeNull();
+  });
+
+  it("sweep removes old files waiting for a task that have no row, and keeps recent ones", async () => {
+    const { upload, services, task } = setup();
+    await upload(task.id);
+    const [stored] = services.attachments.forTask(task.id);
+    const pending = join(attachmentsDirOf(stored!.path), "_pending");
+    mkdirSync(pending, { recursive: true });
+    const old = join(pending, `${"a".repeat(8)}-0000-0000-0000-${"b".repeat(12)}.png`);
+    const recent = join(pending, `${"c".repeat(8)}-0000-0000-0000-${"d".repeat(12)}.png`);
+    writeFileSync(old, "x");
+    writeFileSync(recent, "x");
+    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    utimesSync(old, longAgo, longAgo);
+    services.attachments.sweep();
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
   });
 
   it("sweep removes unclaimed images after a day", async () => {
