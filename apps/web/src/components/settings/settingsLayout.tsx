@@ -1,9 +1,13 @@
-// Adapted from T3 Code (apps/web/src/components/settings/SettingsGroup.tsx, settingsLayout.tsx), MIT — see NOTICE.
-import { CheckIcon, CopyIcon } from "lucide-react";
+// Adapted from T3 Code (apps/web/src/components/settings/SettingsGroup.tsx, settingsLayout.tsx,
+// FoldedSettingsSection.tsx), MIT — see NOTICE.
+import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react";
 import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
+import { useSettingsNav } from "~/state/ui";
+import { useOpenSettings } from "./settingsNavigation";
 
 /** Shared settings card surface, with separators between rows. */
 export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<"div">) {
@@ -18,20 +22,61 @@ export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<
   );
 }
 
+/**
+ * One entry of the settings list: the anchor its link scrolls to and scroll-spy watches. `id` is the section's
+ * stable id from `SETTINGS_GROUPS`. Holds one or more `SettingsSection`s.
+ */
+export function SettingsSubsection({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <div id={id} data-settings-section={id} className="scroll-mt-4 space-y-6">
+      {children}
+    </div>
+  );
+}
+
+export type StatusTone = "success" | "warning" | "muted";
+
+const DOT_TONES: Record<StatusTone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  muted: "bg-muted-foreground/40",
+};
+
+/** A small coloured dot for an integration's state; `label` is read out and shown on hover. */
+export function StatusDot({ tone, label, className }: { tone: StatusTone; label: string; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn("inline-block size-2 shrink-0 rounded-full", DOT_TONES[tone], className)}
+    />
+  );
+}
+
 /** A titled group of settings rows. Muted headings have no descriptions; copy belongs to rows. */
 export function SettingsSection({
+  id,
   title,
+  status,
   headerAction,
   children,
 }: {
+  /** A stable id (`<group>.<section>.<part>`) when the group is a target of its own. */
+  id?: string;
   title: string;
+  /** Shown before the title, e.g. a StatusDot. */
+  status?: ReactNode;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-2.5">
+    <section id={id} className="scroll-mt-4 space-y-2.5">
       <div className="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">
-        <h2 className="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">{title}</h2>
+        <h2 className="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">
+          {status}
+          {title}
+        </h2>
         <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
       </div>
       <SettingsGroup>{children}</SettingsGroup>
@@ -63,7 +108,11 @@ export function SettingsRow({
     <div
       {...rowProps}
       data-slot="settings-row"
-      className={cn("@container/settings-row rounded-xl px-3 sm:px-4", children ? "pt-3 pb-3" : "py-3", className)}
+      className={cn(
+        "@container/settings-row scroll-mt-4 rounded-xl px-3 sm:px-4",
+        children ? "pt-3 pb-3" : "py-3",
+        className,
+      )}
     >
       <div className="flex flex-col gap-3 @min-[32rem]/settings-row:grid @min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">
         <div className="min-w-0 flex-1 space-y-1">
@@ -83,6 +132,70 @@ export function SettingsRow({
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * A grouped section that starts closed: the title and a one-line summary in the header, with an optional control
+ * (such as the section's own switch) beside it. Opens when it is the target of a settings link.
+ */
+export function FoldedSettingsSection({
+  id,
+  title,
+  summary,
+  control,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: ReactNode;
+  control?: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const target = useSettingsNav((s) => s.scrollTarget);
+  // A link to the section (or a row in it) lands inside the fold, so open it before the scroll runs.
+  const [openedFor, setOpenedFor] = useState<number | null>(null);
+  if (target && target.nonce !== openedFor && (target.id === id || target.id.startsWith(`${id}.`))) {
+    setOpenedFor(target.nonce);
+    if (!open) setOpen(true);
+  }
+  return (
+    <section id={id} className="scroll-mt-4">
+      <Collapsible open={open} onOpenChange={setOpen} render={<SettingsGroup />}>
+        <div className="flex items-center gap-4 px-3 sm:px-4">
+          <CollapsibleTrigger className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md py-2 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+            <ChevronRightIcon
+              aria-hidden
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+                open && "rotate-90",
+              )}
+            />
+            <span className="shrink-0 text-sm font-medium">{title}</span>
+            {summary ? <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span> : null}
+          </CollapsibleTrigger>
+          {control ? <div className="flex shrink-0 items-center">{control}</div> : null}
+        </div>
+        <CollapsiblePanel>
+          <div className="[&>*+*]:border-t [&>*+*]:border-border/50">{children}</div>
+        </CollapsiblePanel>
+      </Collapsible>
+    </section>
+  );
+}
+
+/** An inline link to another setting: a group, section or row id (see `useOpenSettings`). */
+export function SettingsLink({ to, project, children }: { to: string; project?: string; children: ReactNode }) {
+  const openSettings = useOpenSettings();
+  return (
+    <button
+      type="button"
+      className="cursor-pointer rounded-sm text-foreground/80 underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={() => openSettings(to, project ? { project } : {})}
+    >
+      {children}
+    </button>
   );
 }
 

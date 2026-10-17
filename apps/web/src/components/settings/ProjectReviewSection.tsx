@@ -12,8 +12,9 @@ export function ProjectReviewSection({ project }: { project: Project }) {
   const skills = useSkills(project.id).data ?? [];
   const inherited = settings ? reviewSkillName(settings.reviewSkill) : "the board's";
   return (
-    <SettingsSection title="Local review">
+    <SettingsSection id="project.review-skill.settings" title="Local review">
       <SettingsRow
+        id="project.review-skill.skill"
         title="Review skill"
         description={
           project.workspaceRoot

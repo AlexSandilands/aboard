@@ -1,24 +1,15 @@
 import type { TaskTemplate } from "@repo/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { CopyIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
-import {
-  emptyForm,
-  formFromTemplate,
-  scopeLabel,
-  templateSummary,
-  type TemplateForm,
-} from "~/components/templates/templates.logic";
+import { scopeLabel, templateSummary } from "~/components/templates/templates.logic";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useDeleteTemplate, useDuplicateTemplate } from "~/state/mutations";
 import { useBoard, useTemplates } from "~/state/queries";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-
-export interface TemplateEdit {
-  templateId: string | null;
-  initial: TemplateForm;
-}
+import { FROM_SETTINGS_LIST } from "./settingsNavigation";
 
 function IconAction({
   label,
@@ -50,8 +41,15 @@ function IconAction({
   );
 }
 
-/** Templates for new tasks: Bug, Spike and Feature to start with, and any the user adds. */
-export function TemplatesSection({ onEdit }: { onEdit: (edit: TemplateEdit) => void }) {
+/** Templates for new tasks: Bug, Spike and Feature to start with, and any the user adds. Edited on a sub-page. */
+export function TemplatesSection() {
+  const navigate = useNavigate();
+  const onEdit = (templateId: string) =>
+    void navigate({
+      to: "/settings/tasks/templates/$templateId",
+      params: { templateId },
+      state: FROM_SETTINGS_LIST,
+    });
   const templates = useTemplates();
   const projects = useBoard().data?.projects ?? [];
   const duplicate = useDuplicateTemplate();
@@ -61,9 +59,10 @@ export function TemplatesSection({ onEdit }: { onEdit: (edit: TemplateEdit) => v
 
   return (
     <SettingsSection
+      id="tasks.new-tasks.templates"
       title="Templates"
       headerAction={
-        <Button size="xs" variant="outline" onClick={() => onEdit({ templateId: null, initial: emptyForm() })}>
+        <Button size="xs" variant="outline" onClick={() => onEdit("new")}>
           <PlusIcon />
           New template
         </Button>
@@ -86,10 +85,7 @@ export function TemplatesSection({ onEdit }: { onEdit: (edit: TemplateEdit) => v
             description={`${scopeLabel(template, projects)} · ${templateSummary(template)}`}
             control={
               <div className="flex items-center gap-0.5">
-                <IconAction
-                  label={`Edit ${template.name}`}
-                  onClick={() => onEdit({ templateId: template.id, initial: formFromTemplate(template) })}
-                >
+                <IconAction label={`Edit ${template.name}`} onClick={() => onEdit(template.id)}>
                   <PencilIcon />
                 </IconAction>
                 <IconAction label={`Duplicate ${template.name}`} onClick={() => duplicate.mutate(template.id)}>

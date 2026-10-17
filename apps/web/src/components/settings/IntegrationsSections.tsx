@@ -6,43 +6,22 @@ import {
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { InfoIcon, MonitorIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { AutopilotSettingsSection } from "~/components/autopilot/AutopilotSettingsSection";
-import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
-import type { CustomEdit } from "~/components/autopilot/CustomAutomationsSection";
-import { NotificationsSection } from "~/components/notifications/NotificationsSection";
-import { ProjectFavicon } from "~/components/project/ProjectFavicon";
-import { TemplateEditorForm } from "~/components/templates/TemplateEditorForm";
-import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
-import {
-  STAGE_BANNERS,
-  type StageBannerChoice,
-  type StageBannerId,
-  resolveStageBanner,
-} from "~/components/stage/stageBanner.logic";
+import { InfoIcon } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
-import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
-import { type Theme, useTheme } from "~/hooks/useTheme";
 import { api } from "~/lib/api";
-import { cn } from "~/lib/utils";
-import { useUpdateSettings } from "~/state/mutations";
-import { queryKeys, useIntegrationsStatus, useSettings } from "~/state/queries";
-import { useAppearance, useDialogs } from "~/state/ui";
-import { BackupSection } from "./BackupSection";
-import { IssueImportSection } from "./IssueImportSection";
-import { ModelTiersSection } from "./ModelTiersSection";
-import { ReviewSettingsSection } from "./ReviewSettingsSection";
-import { TerminalSection } from "./TerminalSection";
-import { CommandSnippet, SettingsRow, SettingsSection } from "./settingsLayout";
-import { type TemplateEdit, TemplatesSection } from "./TemplatesSection";
-import { useArchivedProjects, useUnarchiveProject } from "./useArchivedProjects";
+import { useTestReviewCli, useUpdateSettings } from "~/state/mutations";
+import { queryKeys } from "~/state/queries";
+import { BlurInput } from "./BlurInput";
+import { claudeCodeDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
+import { CommandSnippet, SettingsRow, SettingsSection, StatusDot } from "./settingsLayout";
+
+const Dot = ({ dot }: { dot: IntegrationDot }) => <StatusDot tone={dot.tone} label={dot.label} />;
 
 /** How to get a pairing link, behind an info icon so the settings row stays short. */
 function PairingHelp() {
@@ -77,179 +56,7 @@ function mcpUrl(): string {
   return `${window.location.origin}/mcp`;
 }
 
-/** App settings, opened from the palette or sidebar via useDialogs().setAppSettingsOpen(true). */
-export function AppSettingsDialog() {
-  const open = useDialogs((s) => s.appSettingsOpen);
-  const setOpen = useDialogs((s) => s.setAppSettingsOpen);
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogPopup className="max-w-2xl">{open ? <AppSettingsBody /> : null}</DialogPopup>
-    </Dialog>
-  );
-}
-
-function AppSettingsBody() {
-  const settings = useSettings();
-  const integrations = useIntegrationsStatus();
-  // The template editor takes over the dialog, so it doesn't stack a second modal on this one.
-  const [editing, setEditing] = useState<TemplateEdit | null>(null);
-  const [editingCustom, setEditingCustom] = useState<CustomEdit | null>(null);
-  if (editingCustom) {
-    return (
-      <CustomAutomationEditorForm
-        customId={editingCustom.customId}
-        initial={editingCustom.initial}
-        onCancel={() => setEditingCustom(null)}
-        onDone={() => setEditingCustom(null)}
-      />
-    );
-  }
-  if (editing) {
-    return (
-      <TemplateEditorForm
-        templateId={editing.templateId}
-        initial={editing.initial}
-        onCancel={() => setEditing(null)}
-        onDone={() => setEditing(null)}
-      />
-    );
-  }
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Appearance, notifications, integrations, backup and agent setup.</DialogDescription>
-      </DialogHeader>
-      <DialogPanel className="space-y-6">
-        <AppearanceSection />
-        {settings.data ? (
-          <>
-            <T3Section settings={settings.data} status={integrations.data?.t3} />
-            <TemplatesSection onEdit={setEditing} />
-            <ModelTiersSection settings={settings.data} t3={integrations.data?.t3} />
-            <NotificationsSection settings={settings.data} />
-            <GithubSection settings={settings.data} status={integrations.data?.github} />
-            <JiraSection settings={settings.data} />
-            <ReviewSettingsSection settings={settings.data} />
-            <AutopilotSettingsSection onEditCustom={setEditingCustom} />
-            <IssueImportSection settings={settings.data} />
-            <TerminalSection settings={settings.data} />
-            <BackupSection settings={settings.data} />
-          </>
-        ) : (
-          <p className="px-4 text-sm text-muted-foreground">
-            {settings.error ? settings.error.message : "Loading settings..."}
-          </p>
-        )}
-        <AgentsSection />
-        <ArchivedProjectsSection />
-      </DialogPanel>
-    </>
-  );
-}
-
-function AppearanceSection() {
-  const { theme, setTheme } = useTheme();
-  return (
-    <SettingsSection title="Appearance">
-      <SettingsRow
-        title="Theme"
-        description="Follow the system, or pick light or dark."
-        control={
-          <ToggleGroup
-            aria-label="Theme"
-            value={[theme]}
-            onValueChange={(next) => {
-              const value = next[0];
-              if (value === "light" || value === "dark" || value === "system") setTheme(value satisfies Theme);
-            }}
-          >
-            <Toggle value="light">
-              <SunIcon />
-              Light
-            </Toggle>
-            <Toggle value="dark">
-              <MoonIcon />
-              Dark
-            </Toggle>
-            <Toggle value="system">
-              <MonitorIcon />
-              System
-            </Toggle>
-          </ToggleGroup>
-        }
-      />
-      <BannerRow />
-    </SettingsSection>
-  );
-}
-
-function BannerRow() {
-  const banner = useAppearance((s) => s.banner);
-  const setBanner = useAppearance((s) => s.setBanner);
-  return (
-    <SettingsRow title="Sidebar banner" description="The art behind the name in the top-left corner.">
-      <div role="radiogroup" aria-label="Sidebar banner" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {STAGE_BANNERS.map((option) => (
-          <BannerOption
-            key={option.id}
-            choice={option.id}
-            preview={option.id}
-            label={option.label}
-            selected={banner === option.id}
-            onSelect={setBanner}
-          />
-        ))}
-        <BannerOption
-          choice="rotate"
-          preview={resolveStageBanner("rotate")}
-          label={
-            <>
-              <RefreshCwIcon className="size-3" />
-              Rotate daily
-            </>
-          }
-          selected={banner === "rotate"}
-          onSelect={setBanner}
-        />
-      </div>
-    </SettingsRow>
-  );
-}
-
-function BannerOption({
-  choice,
-  preview,
-  label,
-  selected,
-  onSelect,
-}: {
-  choice: StageBannerChoice;
-  preview: StageBannerId;
-  label: ReactNode;
-  selected: boolean;
-  onSelect: (choice: StageBannerChoice) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={() => onSelect(choice)}
-      className={cn(
-        "stage-ink relative flex h-12 cursor-pointer items-center overflow-hidden rounded-lg border bg-sidebar px-3 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected ? "border-primary ring-1 ring-primary" : "border-border/60 hover:border-border",
-      )}
-    >
-      <SidebarStageBackdrop banner={preview} />
-      <span className="relative z-10 flex items-center gap-1.5 text-xs font-medium text-[var(--stage-ink)]">
-        {label}
-      </span>
-    </button>
-  );
-}
-
-function T3Section({ settings, status }: { settings: AppSettings; status: T3IntegrationStatus | undefined }) {
+export function T3Section({ settings, status }: { settings: AppSettings; status: T3IntegrationStatus | undefined }) {
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
@@ -288,8 +95,13 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
   }
 
   return (
-    <SettingsSection title="T3 Code">
+    <SettingsSection
+      id="integrations.t3-code.status"
+      title="T3 Code"
+      status={<Dot dot={t3Dot(status, settings.t3TokenSet)} />}
+    >
       <SettingsRow
+        id="integrations.t3-code.connection"
         title="Connection"
         description={
           status === undefined
@@ -307,6 +119,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       />
       <SettingsRow
+        id="integrations.t3-code.open-links-in"
         title="Open thread links in"
         description="Where “Open in T3 Code” goes. The other target stays in the link's menu."
         control={
@@ -331,6 +144,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         }
       />
       <SettingsRow
+        id="integrations.t3-code.pairing"
         title="T3 connection"
         description={
           <span className="inline-flex items-center gap-1.5">
@@ -394,6 +208,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
         </div>
       </SettingsRow>
       <SettingsRow
+        id="integrations.t3-code.agent-threads"
         title="Let agents start threads"
         description="An agent orchestrating an epic may start its tasks in new T3 threads (each in a new worktree, on the task's suggested model or T3's default, with no more access than T3's default) and message them in your name. Off: it uses subagents or gives you prompts to paste."
         control={
@@ -408,7 +223,7 @@ function T3Section({ settings, status }: { settings: AppSettings; status: T3Inte
   );
 }
 
-function GithubSection({
+export function GithubSection({
   settings,
   status,
 }: {
@@ -425,8 +240,9 @@ function GithubSection({
           ? (status.error ?? "gh is installed but not signed in. Run `gh auth login`.")
           : `PR status and merging use the account gh is signed in with. Add a GitHub Enterprise host with \`gh auth login --hostname <host>\`.`;
   return (
-    <SettingsSection title="GitHub">
+    <SettingsSection id="integrations.github.status" title="GitHub" status={<Dot dot={githubDot(status)} />}>
       <SettingsRow
+        id="integrations.github.cli"
         title="GitHub CLI"
         description={description}
         control={
@@ -440,6 +256,7 @@ function GithubSection({
       {status?.hosts.map((host) => (
         <SettingsRow
           key={host.host}
+          id={`integrations.github.host-${host.host}`}
           title={host.host}
           description={
             host.authenticated
@@ -456,6 +273,7 @@ function GithubSection({
         />
       ))}
       <SettingsRow
+        id="integrations.github.poll-prs"
         title="Poll PR status"
         description="Refresh state, checks and reviews of GitHub PR links every 2 minutes, on github.com and Enterprise hosts gh is signed in to."
         control={
@@ -470,7 +288,7 @@ function GithubSection({
   );
 }
 
-function JiraSection({ settings }: { settings: AppSettings }) {
+export function JiraSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
   const [baseUrl, setBaseUrl] = useState(settings.jiraBaseUrl ?? "");
 
@@ -480,8 +298,9 @@ function JiraSection({ settings }: { settings: AppSettings }) {
   }
 
   return (
-    <SettingsSection title="Jira">
+    <SettingsSection id="integrations.jira.status" title="Jira" status={<Dot dot={jiraDot(settings.jiraBaseUrl)} />}>
       <SettingsRow
+        id="integrations.jira.base-url"
         title="Base URL"
         description="Used to link keys like ABC-123."
         control={
@@ -506,37 +325,32 @@ function JiraSection({ settings }: { settings: AppSettings }) {
   );
 }
 
-function AgentsSection() {
+/**
+ * Claude Code: register the MCP server, install the skill, and the CLI the board runs headless (the board reviewer
+ * and issue import).
+ */
+export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
   const url = mcpUrl();
+  const updateSettings = useUpdateSettings();
+  const testCli = useTestReviewCli();
+  const check = testCli.data;
   return (
-    <SettingsSection title="Agents (MCP)">
-      <SettingsRow title="Claude Code" description={`Register the ${BRAND.id} MCP server.`}>
+    <SettingsSection
+      id="integrations.claude-code.status"
+      title="Claude Code"
+      status={<Dot dot={claudeCodeDot(check)} />}
+    >
+      <SettingsRow
+        id="integrations.claude-code.mcp"
+        title="MCP server"
+        description={`Register the ${BRAND.id} MCP server.`}
+      >
         <div className="mt-2">
           <CommandSnippet command={`claude mcp add --scope user --transport http ${BRAND.id} ${url}`} />
         </div>
       </SettingsRow>
-      <SettingsRow title="Codex" description={`Register the ${BRAND.id} MCP server.`}>
-        <div className="mt-2">
-          <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${url}`} />
-        </div>
-      </SettingsRow>
       <SettingsRow
-        title="GitHub Copilot CLI"
-        description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
-      >
-        <div className="mt-2">
-          <CommandSnippet command={`copilot mcp add --transport http ${BRAND.id} ${url}`} />
-        </div>
-      </SettingsRow>
-      <SettingsRow
-        title="GitHub Copilot (VS Code)"
-        description={`Add the ${BRAND.id} MCP server to your VS Code user profile, or put the same entry under "servers" in .vscode/mcp.json.`}
-      >
-        <div className="mt-2">
-          <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
-        </div>
-      </SettingsRow>
-      <SettingsRow
+        id="integrations.claude-code.skill"
         title="Skill"
         description={`Teaches Claude Code when to add to the backlog, write plans and update steps. Copy skills/${BRAND.id} from this repo to:`}
       >
@@ -544,41 +358,83 @@ function AgentsSection() {
           <CommandSnippet command={`~/.claude/skills/${BRAND.id}`} />
         </div>
       </SettingsRow>
+      <SettingsRow
+        id="integrations.claude-code.cli-path"
+        title="Claude Code CLI"
+        description="What the board runs headless for the board reviewer and issue import. Leave empty to use claude from your PATH."
+        status={
+          check ? (
+            check.ok ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Badge variant="success">Found</Badge>
+                {check.version} · <span className="font-mono">{check.path}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <Badge variant="warning">Not working</Badge>
+                {check.error}
+              </span>
+            )
+          ) : null
+        }
+        control={
+          <>
+            <BlurInput
+              aria-label="Claude Code CLI"
+              size="sm"
+              className="sm:w-56"
+              placeholder="claude"
+              value={settings.headlessReviewCli ?? ""}
+              onSave={(next) => {
+                testCli.reset();
+                updateSettings.mutate({ headlessReviewCli: next.trim() || null });
+              }}
+            />
+            <Button size="sm" variant="outline" disabled={testCli.isPending} onClick={() => testCli.mutate(undefined)}>
+              Test
+            </Button>
+          </>
+        }
+      />
     </SettingsSection>
   );
 }
 
-function ArchivedProjectsSection() {
-  const archived = useArchivedProjects(true);
-  const unarchive = useUnarchiveProject();
-  const projects = archived.data ?? [];
-  if (projects.length === 0) return null;
+/** GitHub Copilot: the MCP server for the CLI and for VS Code. */
+export function CopilotSection() {
+  const url = mcpUrl();
   return (
-    <SettingsSection title="Archived projects">
-      {projects.map((project) => (
-        <SettingsRow
-          key={project.id}
-          title={
-            <span className="flex min-w-0 items-center gap-2">
-              <ProjectFavicon title={project.title} icon={project.icon} className="size-4" />
-              <span className="truncate">{project.title}</span>
-            </span>
-          }
-          description={
-            project.workspaceRoot ? <span className="break-all font-mono">{project.workspaceRoot}</span> : undefined
-          }
-          control={
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={unarchive.isPending && unarchive.variables === project.id}
-              onClick={() => unarchive.mutate(project.id)}
-            >
-              Restore
-            </Button>
-          }
-        />
-      ))}
+    <SettingsSection id="integrations.copilot.status" title="GitHub Copilot" status={<Dot dot={SNIPPET_DOT} />}>
+      <SettingsRow
+        id="integrations.copilot.cli"
+        title="Copilot CLI"
+        description={`Register the ${BRAND.id} MCP server in ~/.copilot/mcp-config.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`copilot mcp add --transport http ${BRAND.id} ${url}`} />
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        id="integrations.copilot.vscode"
+        title="VS Code"
+        description={`Add the ${BRAND.id} MCP server to your VS Code user profile, or put the same entry under "servers" in .vscode/mcp.json.`}
+      >
+        <div className="mt-2">
+          <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
+        </div>
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+export function CodexSection() {
+  return (
+    <SettingsSection id="integrations.codex.status" title="Codex" status={<Dot dot={SNIPPET_DOT} />}>
+      <SettingsRow id="integrations.codex.mcp" title="MCP server" description={`Register the ${BRAND.id} MCP server.`}>
+        <div className="mt-2">
+          <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${mcpUrl()}`} />
+        </div>
+      </SettingsRow>
     </SettingsSection>
   );
 }

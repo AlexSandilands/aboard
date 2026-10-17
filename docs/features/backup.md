@@ -86,7 +86,7 @@ database directly when no server is running.
 
 ### Scheduled git backup
 
-Settings → Backup sets a folder, an optional remote and an interval. `apps/server/src/integrations/backup.ts`
+Settings → Board → Data sets a folder, an optional remote and an interval. `apps/server/src/integrations/backup.ts`
 checks every minute whether a run is due (and once shortly after startup). A run:
 
 1. Prepares the folder: an empty folder is cloned from the remote (or `git init`ed without one). A folder
@@ -148,4 +148,4 @@ The status (last run, last commit, last push, last error) is held in memory and 
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
 | `apps/server/src/db/database.ts`                  | `migrate(db, upTo)` and `schemaVersion`                              |
-| `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Backup section                                     |
+| `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Board → Data section                                     |

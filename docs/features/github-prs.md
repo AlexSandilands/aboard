@@ -154,4 +154,4 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | `packages/contracts/src/derive.ts`                       | `deriveAttention`                                               |
 | `apps/web/src/components/board/CardLinks.tsx`, `task/LinksSection.tsx` | PR chips and merge controls on the card and in the panel |
 | `apps/web/src/components/merge/MergePrDialog.tsx`        | The merge dialog                                                |
-| `apps/web/src/components/settings/AppSettingsDialog.tsx` | The GitHub section in Settings                                  |
+| `apps/web/src/components/settings/IntegrationsSections.tsx` | The GitHub section in Settings → Integrations                |

@@ -90,6 +90,7 @@ by their working directory, so there's nothing to set up per repo.
 | Guide                                                  | What's in it                                                           |
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [Using the board](docs/guide/using-the-board.md)       | Plans, closing and deleting tasks, links, labels, layout, shortcuts    |
+| [Settings](docs/guide/settings.md)                     | The settings page: its groups, sections and shortcuts                  |
 | [Templates](docs/guide/templates.md)                   | Bug, Spike, Feature and your own starting points for new tasks         |
 | [Recurring tasks](docs/guide/recurring-tasks.md)       | Tasks made from a template on a schedule                               |
 | [Digest of what changed](docs/guide/digest.md)         | A daily summary of the board, plain or written by an agent             |

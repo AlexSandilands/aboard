@@ -17,7 +17,7 @@ when they add a task. They can't create or change templates.
 
 ## Managing templates
 
-Settings → **Templates** lists them. **New template** opens the editor; each row has Edit, Duplicate and
+**Settings → Tasks → New tasks** lists them. **New template** opens the editor; each row has Edit, Duplicate and
 Delete.
 
 - **Available in:** every project, or just one.

@@ -5,7 +5,7 @@ Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
 panel sections, and which links a card shows. These are browser-only preferences: nothing here is stored
-on the server.
+on the server. It also covers the settings page, which takes the board's place.
 
 ## How it works
 
@@ -142,6 +142,42 @@ with no snapshot yet counts as active, since it may be. The first Jira key shows
 top row. Settled and archived threads, other Jira keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
+### The settings page
+
+Settings is a route, `/settings/<group>` with group `board`, `tasks`, `autopilot`, `integrations` or `project`
+(`/settings` and unknown groups redirect to `board`). The editors are sub-routes: `tasks/templates/<id>`,
+`autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
+rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
+
+- **Shell.** The board and Settings sit under one pathless layout route (`_app`, `AppFrame`) that renders a single
+  `AppShell`: the resizable sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync
+  and the shortcuts. It stays mounted between them, so the event stream doesn't reconnect and miss events. On `/settings` the sidebar holds the settings list instead of the
+  projects: every group with its sections, always expanded, and **Back** at the bottom. Esc leaves an editor for its
+  page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
+- **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
+  `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
+  (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
+  will target them.
+- **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
+  `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
+- **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
+  anchor as the hash and asks the page to scroll to it (`requestScroll`). The page (`SettingsScroller`) waits up to
+  about two seconds for the target to render and opens a folded section that holds it. On a page that has just
+  opened, sections are still filling in as their queries load, so the target stays pinned to the top until that
+  settles (`pinInView`, about 1.5 s, or until the user scrolls). A request counts as handled only then, so the page
+  being left, which sees the request first, leaves it for the page being opened. A reload honours the hash.
+- **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
+  `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
+  bottom). The list highlights that section.
+- **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
+  entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
+  popover (its Settings link, and Recurring tasks… for the project's rules).
+- **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
+  default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
+  leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that
+  list (the `settingsEditorFromList` history state), it steps back in history, so the browser's Back doesn't
+  repeat the page; opened from a link or a reload, it opens the list as a new entry.
+
 ### Persistence
 
 Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localStorage under
@@ -182,4 +218,10 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/task/links.logic.ts`, `LinksSection.tsx`, `SessionsSection.tsx` | Which links are sessions, the two sections' rows, folding and "Show N more" (`groupLinks` and `previewRows` are tested) |
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
-| `apps/web/src/state/ui.ts`                             | The persisted stores                                             |
+| `apps/web/src/state/ui.ts`                             | The persisted stores, and `useSettingsNav` (scroll-spy, scroll requests, `boardReturn`) |
+| `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
+| `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
+| `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
+| `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
+| `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
+| `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |

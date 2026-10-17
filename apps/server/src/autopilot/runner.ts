@@ -14,11 +14,18 @@ import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "../integrations/headlessAgent.ts";
 import { latestThread } from "../integrations/reviewFallbacks.ts";
-import type { T3Integration } from "../integrations/t3.ts";
+import { isT3Unavailable, t3Unavailable, type T3Integration } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
-import { WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult, type RunPatch } from "./types.ts";
+import {
+  RunAbandonedError,
+  WorktreeHeadError,
+  type Runner,
+  type RunnerRequest,
+  type RunnerResult,
+  type RunPatch,
+} from "./types.ts";
 import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "./worktrees.ts";
 
 // Carries out Autopilot's agent actions (docs/features/autopilot.md#runners): a new T3 Code thread, a nudge into
@@ -35,6 +42,18 @@ export function tierModel(tiers: ModelTiers, tier: ModelTier | null): string | n
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
 const t3Ready = (status: ReturnType<T3Integration["status"]>) => status.detected && status.liveStatus === "ok";
+
+/** How long a run waits for T3 Code to come up (a restart of the board or of T3) before it fails. */
+export const T3_HOLD_MS = 10 * 60_000;
+/** How often a held run looks at T3 Code again. */
+export const T3_RETRY_MS = 15_000;
+
+/** The wait for T3 Code of one start: when it ends, set by the first failure. */
+interface Hold {
+  deadline?: number;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const SAFETY = (defaultBranch: string | null) =>
   `Never force-push, never push to ${defaultBranch ? `\`${defaultBranch}\`` : "the default branch"} and never merge a pull request; ` +
@@ -70,9 +89,12 @@ export function t3WorkspaceNote(branch: string | null, defaultBranch: string | n
 
 export function createAutopilotRunner(deps: {
   services: () => Services;
-  t3: Pick<T3Integration, "status" | "launchTaskThread" | "sendToThread">;
+  t3: Pick<T3Integration, "status" | "test" | "launchTaskThread" | "sendToThread">;
   /** Where headless runs' worktrees go, under the board's data dir. */
   worktreesDir: string;
+  /** How long a run waits for an unreachable T3 Code before failing, and how often it looks again. */
+  t3HoldMs?: number;
+  t3RetryMs?: number;
   runGit?: RunGit;
   runAgent?: RunAgent;
   newSessionId?: () => string;
@@ -85,13 +107,41 @@ export function createAutopilotRunner(deps: {
   const newSessionId = deps.newSessionId ?? randomUUID;
   const log = deps.log ?? console;
 
+  const holdMs = deps.t3HoldMs ?? T3_HOLD_MS;
+  const retryMs = deps.t3RetryMs ?? T3_RETRY_MS;
+
   const taskOf = (taskId: string): TaskSummary => deps.services().tasks.summary(taskId);
+
+  /**
+   * Runs a T3 action, trying again while T3 Code can't be reached (the board or T3 has just restarted and is not
+   * answering yet), for up to `holdMs`. The run stays running meanwhile, so nothing is flagged for what is usually a
+   * minute's wait. Anything else T3 says fails at once; a retry of a launch carries the same command id, so T3 never
+   * starts two threads. One `hold` can span several actions, so their waits don't add up: its clock starts at the first
+   * failure. `stillWanted` is asked after each wait, since the board may have moved on in ten minutes.
+   */
+  const whileUnavailable = async <T>(action: () => Promise<T>, hold: Hold, stillWanted?: () => boolean): Promise<T> => {
+    for (let waiting = false; ; waiting = true) {
+      try {
+        return await action();
+      } catch (error) {
+        hold.deadline ??= Date.now() + holdMs;
+        if (!isT3Unavailable(error) || Date.now() + retryMs > hold.deadline) throw error;
+        if (!waiting) log.warn(`[autopilot] waiting for T3 Code: ${messageOf(error)}`);
+        await sleep(retryMs);
+        if (stillWanted && !stillWanted()) throw new RunAbandonedError("it changed while waiting for T3 Code");
+      }
+    }
+  };
 
   const nudge = async (request: RunnerRequest, task: TaskSummary, update: (patch: RunPatch) => void) => {
     const thread = latestThread(task);
     if (!thread) throw new Error(`#${task.number} has no live T3 Code thread to nudge`);
     update({ runner: "t3", threadUrl: thread.url });
-    await deps.t3.sendToThread(thread, request.prompt, runCommandId(request.run.id));
+    await whileUnavailable(
+      () => deps.t3.sendToThread(thread, request.prompt, runCommandId(request.run.id)),
+      {},
+      request.stillWanted,
+    );
     return { runner: "t3", threadUrl: thread.url, result: null } satisfies RunnerResult;
   };
 
@@ -109,29 +159,35 @@ export function createAutopilotRunner(deps: {
     task: TaskSummary,
     options: RunnerOptions,
     update: (patch: RunPatch) => void,
+    hold: Hold,
   ): Promise<RunnerResult> => {
     const branch = request.workspace?.branch ?? null;
     const prBase = branch ? null : (request.workspace?.prBase ?? null);
     const project = deps.services().projects.get(task.projectId);
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
-    const launch = await deps.t3.launchTaskThread(
-      task.id,
-      {
-        prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
-        commandId: runCommandId(request.run.id),
-        ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
-        work: true,
-        // A pull request's branch is on origin, and origin's copy is the one to build on.
-        ...(branch
-          ? { baseRef: branch, startFromOrigin: true }
-          : prBase
-            ? { baseRef: prBase, startFromOrigin: true }
-            : request.workspace?.baseRef
-              ? { baseRef: request.workspace.baseRef }
-              : {}),
-        ...(options.t3Access !== "default" ? { maxRuntimeMode: options.t3Access } : {}),
-      },
-      AUTOPILOT_ACTOR,
+    const launch = await whileUnavailable(
+      () =>
+        deps.t3.launchTaskThread(
+          task.id,
+          {
+            prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
+            commandId: runCommandId(request.run.id),
+            ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
+            work: true,
+            // A pull request's branch is on origin, and origin's copy is the one to build on.
+            ...(branch
+              ? { baseRef: branch, startFromOrigin: true }
+              : prBase
+                ? { baseRef: prBase, startFromOrigin: true }
+                : request.workspace?.baseRef
+                  ? { baseRef: request.workspace.baseRef }
+                  : {}),
+            ...(options.t3Access !== "default" ? { maxRuntimeMode: options.t3Access } : {}),
+          },
+          AUTOPILOT_ACTOR,
+        ),
+      hold,
+      request.stillWanted,
     );
     update({ runner: "t3", threadUrl: launch.link.url });
     return { runner: "t3", threadUrl: launch.link.url, result: null };
@@ -289,13 +345,35 @@ export function createAutopilotRunner(deps: {
           throw new Error("This action needs a headless run, but the automation runs only in T3 Code");
         return startHeadless(request, task, options, update);
       }
-      const ready = t3Ready(deps.t3.status());
-      if (options.runner === "t3" && !ready)
-        throw new Error("T3 Code isn't connected, and this automation runs only there");
-      // Auto never falls back once T3 was asked: the thread may have started even when the reply was lost.
-      if (options.runner === "t3" || (options.runner === "auto" && ready)) {
-        return startT3(request, task, options, update);
+      if (options.runner === "headless") return startHeadless(request, task, options, update);
+      // One wait for the whole start: the readiness check and the launch share it.
+      const hold: Hold = {};
+      // The cached status can be a minute stale, and just after a restart it is empty: look at T3 again before
+      // choosing, so a run isn't sent headless (or refused) while T3 is up.
+      const lookAtT3 = async () => {
+        const status = deps.t3.status();
+        return t3Ready(status) ? status : deps.t3.test();
+      };
+      if (options.runner === "t3") {
+        // T3 only: a T3 that isn't there is waited for, a T3 that is there but unusable (no token) is not.
+        await whileUnavailable(
+          async () => {
+            const status = await lookAtT3();
+            if (t3Ready(status)) return;
+            // Detected but its shell isn't answering: T3 mid-start, or a bad token. The launch tells them apart
+            // (an unreachable T3 is waited for there, a refusal fails), so let it go on.
+            if (status.detected && status.liveStatus === "error") return;
+            const reason = "T3 Code isn't connected, and this automation runs only there";
+            throw status.detected ? new Error(reason) : t3Unavailable(reason);
+          },
+          hold,
+          request.stillWanted,
+        );
+        return startT3(request, task, options, update, hold);
       }
+      // Auto never falls back once T3 was asked: the thread may have started even when the reply was lost. A T3 that
+      // is not ready after a fresh look is not waited for here: Auto exists for people who don't always run it.
+      if (t3Ready(await lookAtT3())) return startT3(request, task, options, update, hold);
       return startHeadless(request, task, options, update);
     },
   };

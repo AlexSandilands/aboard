@@ -3,8 +3,8 @@ import { PlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { OutlineEditor } from "~/components/task/PlanEditor";
 import { nextOutlineKey } from "~/components/task/plan.logic";
+import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
 import { Button } from "~/components/ui/button";
-import { DialogFooter, DialogHeader, DialogPanel, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
@@ -31,8 +31,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 /**
- * The body of the template editor: a header, the fields with a plan outline, and Save. It sits in a dialog popup
- * (its own, or Settings'). `templateId` is null for a new template. `onDone` runs after a save, `onCancel` on Cancel.
+ * The body of the template editor: a header, the fields with a plan outline, and Save. It sits in its own dialog
+ * (Save as template) or on a settings sub-page (see EditorFrame). `templateId` is null for a new template. `onDone` runs after a save, `onCancel` on Cancel.
  */
 export function TemplateEditorForm({
   templateId,
@@ -73,14 +73,14 @@ export function TemplateEditorForm({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>{templateId ? "Edit template" : "New template"}</DialogTitle>
+      <EditorHeader>
+        <EditorTitle>{templateId ? "Edit template" : "New template"}</EditorTitle>
         <p className="text-sm text-muted-foreground">
           A starting point for new tasks. Creating a task copies it, so editing a template later doesn&apos;t change
           tasks already made from it.
         </p>
-      </DialogHeader>
-      <DialogPanel className="space-y-4">
+      </EditorHeader>
+      <EditorPanel className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name">
             <Input
@@ -201,15 +201,15 @@ export function TemplateEditorForm({
             {error}
           </p>
         ) : null}
-      </DialogPanel>
-      <DialogFooter>
+      </EditorPanel>
+      <EditorFooter>
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
         <Button disabled={pending} onClick={save}>
           {templateId ? "Save template" : "Create template"}
         </Button>
-      </DialogFooter>
+      </EditorFooter>
     </>
   );
 }

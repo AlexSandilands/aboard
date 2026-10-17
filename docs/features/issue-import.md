@@ -62,7 +62,7 @@ reuses them.
 Claude Code's allow rules take a glob only after a literal `mcp__<server>__` prefix (a `*` in the server
 part is skipped), so "any read-only Jira tool on any server" can't be written. The board does this instead:
 
-- If **Settings → Issue import → Jira tools** lists rules, those are allowed as written.
+- If **Settings → Tasks → New tasks → Jira tools** lists rules, those are allowed as written.
 - Otherwise it runs `claude mcp list`, takes the connected servers and allows `get_jira_issue`,
   `getJiraIssue` and `jira_get_issue` on each. Those are the single-issue reads of the servers we know of.
   A rule for a tool a server lacks does nothing. The list takes seconds, so imports that start together share
