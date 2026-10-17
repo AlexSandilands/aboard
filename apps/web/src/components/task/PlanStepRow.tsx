@@ -89,7 +89,7 @@ export function PlanStepRow({
           isCurrent && "bg-primary/6 ring-1 ring-inset ring-primary/20",
         )}
         onContextMenu={(event) => {
-          if ((event.target as HTMLElement).closest("input, textarea, a")) return;
+          if ((event.target as HTMLElement).closest("input, textarea, a, [contenteditable='true']")) return;
           event.preventDefault();
           setMenuOpen(true);
         }}
