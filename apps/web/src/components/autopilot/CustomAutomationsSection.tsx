@@ -71,7 +71,7 @@ export function CustomAutomationsSection() {
           description={
             customs.error
               ? customs.error.message
-              : "Pick a trigger (a column change, a pull request event, a schedule, a stale task or a finished blocker) and what to do: start an agent with your prompt, or run a command in the project's folder."
+              : "Pick a trigger, then start an agent with your prompt or run a command."
           }
         />
       ) : (

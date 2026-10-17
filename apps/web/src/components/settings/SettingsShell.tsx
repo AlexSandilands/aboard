@@ -439,7 +439,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
 
   return (
     <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
-      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
+      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
     </div>
   );
 }

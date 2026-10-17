@@ -16,10 +16,10 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="tasks.new-tasks.import-enabled"
         title="Fill in imported tasks"
-        description={
+        description="Claude Code fills in a pasted Jira or GitHub issue's title, description and labels."
+        info={
           <>
-            Paste a Jira key or URL, or a GitHub issue URL, as a new task&apos;s title and Claude Code fills in its
-            title, description and labels. It uses the CLI set under{" "}
+            Paste a Jira key or URL, or a GitHub issue URL, as a new task&apos;s title. It uses the CLI set under{" "}
             <SettingsLink to="integrations.claude-code.cli-path">Integrations › Claude Code</SettingsLink>. Without
             this, a GitHub issue is imported as written and a Jira issue can&apos;t be imported.
           </>
@@ -37,7 +37,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <SettingsRow
             id="tasks.new-tasks.import-model"
             title="Model"
-            description="Passed to claude --model: an alias such as haiku, or a full model name."
+            description="Passed to claude --model: an alias such as haiku, or a full name."
             control={
               <BlurInput
                 aria-label="Import model"
@@ -54,7 +54,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <SettingsRow
             id="tasks.new-tasks.import-budget"
             title="Budget per import"
-            description="The most one import may spend, in US dollars (claude --max-budget-usd)."
+            description="The most one import may spend, in US dollars."
             control={
               <BlurInput
                 aria-label="Budget per import in US dollars"
@@ -74,7 +74,8 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <SettingsRow
             id="tasks.new-tasks.import-jira-tools"
             title="Jira tools"
-            description="Jira issues are read through your own Jira MCP server in Claude Code (one added for you, not for a single project), with these tools allowed, comma-separated (for example mcp__atlassian__getJiraIssue, plus a search tool such as mcp__atlassian__searchJiraIssuesUsingJql to import an epic's tasks), and tools that look like writes denied. Leave empty to look for the common read-only Jira tools on every MCP server you have."
+            description="Comma-separated read tools from your Jira MCP server. Empty finds the common ones."
+            info="Jira issues are read through your own Jira MCP server in Claude Code (one added for you, not for a single project), with these tools allowed, for example mcp__atlassian__getJiraIssue, plus a search tool such as mcp__atlassian__searchJiraIssuesUsingJql to import an epic's tasks. Tools that look like writes are denied. Left empty, it looks for the common read-only Jira tools on every MCP server you have."
             control={
               <BlurInput
                 aria-label="Jira tools"

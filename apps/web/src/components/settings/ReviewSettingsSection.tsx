@@ -59,7 +59,8 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="tasks.review.before-pr"
         title="Review before the PR"
-        description="When an agent moves a task to Review, it runs a review loop with a fresh reviewer subagent and fixes what it finds before opening the pull request. Tasks can turn this off or on for themselves."
+        description="An agent reviews and fixes its work before opening the pull request."
+        info="When an agent moves a task to Review, it runs a review loop with a fresh reviewer subagent and fixes what it finds first. Tasks can turn this off or on for themselves."
         control={
           <Switch
             aria-label="Review before the PR"
@@ -71,7 +72,8 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="tasks.review.skill"
         title="Review skill"
-        description="What the reviewer follows. Skills installed for Claude Code, Copilot or Codex are listed; a project can pick one of its own on its settings page."
+        description="What the reviewer follows."
+        info="Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own on its settings page."
         control={
           <ReviewSkillSelect
             ariaLabel="Review skill"
@@ -86,7 +88,7 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="tasks.review.rounds"
         title="Rounds"
-        description="The agent stops after this many rounds; open blocking or major findings then flag the card."
+        description="The agent stops after this many rounds and flags open blocking or major findings."
         control={
           <Select
             items={ROUND_LIMITS}

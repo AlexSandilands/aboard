@@ -213,7 +213,7 @@ function ProjectSections({ project }: { project: Project }) {
               project.workspaceRoot ? (
                 <span className="break-all font-mono">{project.workspaceRoot}</span>
               ) : (
-                "No folder. Agents can't match this project by working directory."
+                "No folder, so agents can't match it by working directory."
               )
             }
             control={
