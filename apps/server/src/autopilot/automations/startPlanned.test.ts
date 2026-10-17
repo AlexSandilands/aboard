@@ -177,6 +177,25 @@ describe("start planned tasks: eligibility", () => {
   });
 });
 
+describe("start planned tasks: priority", () => {
+  it("starts priority tasks first, whatever their project or position", async () => {
+    const { s, task, engine, project, requests, turnOn } = setup();
+    const beta = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const a = task("A");
+    const b = task("B");
+    const urgent = s.tasks.create({ projectId: beta.id, title: "Urgent", plan, autopilot: true, priority: true });
+    const c = task("C");
+    s.tasks.update(c.id, { priority: true }, "user");
+    turnOn();
+    s.autopilot.setScope("project", beta.id, AUTOPILOT_START_PLANNED, { mode: "on" });
+    s.autopilot.updateEngine({ maxConcurrent: 3 });
+    await engine.pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([c.id, urgent.id, a.id]);
+    expect(requests.map((r) => r.run.taskId)).not.toContain(b.id);
+    expect(project.id).not.toBe(beta.id);
+  });
+});
+
 describe("start planned tasks: waiting for T3 Code", () => {
   it("tells the runner to stop waiting once the task isn't startable, and then skips the run instead of flagging it", async () => {
     const { task, pass, runs, requests, behaviour, turnOn } = setup();

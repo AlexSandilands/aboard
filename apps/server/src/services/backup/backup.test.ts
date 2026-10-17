@@ -396,7 +396,7 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic or Autopilot flag columns, no
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag or priority columns, no
     // relations, no Autopilot settings.
     const {
       autopilot_settings: _a,
@@ -420,6 +420,7 @@ describe("restore", () => {
           kind: _k,
           parent_id: _p,
           autopilot: _f,
+          priority: _pr,
           template_id: _m,
           delivery: _d,
           integration_branch: _b,

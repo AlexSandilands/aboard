@@ -71,6 +71,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    (`"default"` clears it). Never set the flag on your own, since it lets an agent start on the task unattended.
    You can flag tasks, but you can't change Autopilot's own settings: only the user can.
 
+   A task can also be marked **priority** (`priority: true` on `create_task` / `add_to_backlog` / `update_task`; `false` clears
+   it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once

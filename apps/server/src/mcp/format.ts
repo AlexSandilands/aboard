@@ -615,6 +615,7 @@ export function renderTaskDetail(
     lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
   }
   if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
+  if (task.priority) lines.push("Priority: yes (shown in the priority lane)");
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;

@@ -97,6 +97,13 @@ export const autopilotField = z
       "Autopilot's own settings.",
   );
 
+export const priorityField = z
+  .boolean()
+  .describe(
+    "True marks the task as priority: it shows in a lane above every project on the board, and Autopilot starts it " +
+      "before other planned tasks. False takes it out. Set it only when the user has asked for it; never on your own.",
+  );
+
 export const deliveryField = z
   .enum(["main", "integration"])
   .describe(
