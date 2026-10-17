@@ -37,6 +37,7 @@ import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { boardSearchFrom } from "~/components/board/boardNavigation";
 import { PaletteContent } from "./PaletteContent";
 import {
   enabledItemValues,
@@ -326,7 +327,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   }
 
   function openTask(taskId: string): void {
-    void navigate({ to: "/", search: (prev) => ({ ...prev, task: taskId }) });
+    void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) });
   }
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -400,7 +401,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           setLastProjectId(projectId);
           if (flow === "planned") {
             closePalette();
-            void navigate({ to: "/", search: (prev) => ({ ...prev, task: task.id }) }).then(() =>
+            void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: task.id }) }).then(() =>
               planFromTemplate ? undefined : usePanel.getState().requestPlanEditor(),
             );
             return;
@@ -483,7 +484,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       icon: projectIcon(project),
       run: () => {
         closePalette();
-        void navigate({ to: "/", search: (prev) => ({ ...prev, project: project.id }) });
+        void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: project.id }) });
       },
     };
   }
@@ -727,7 +728,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LayersIcon className={ITEM_ICON_CLASS} />,
             run: () => {
               closePalette();
-              void navigate({ to: "/", search: (prev) => ({ ...prev, project: undefined }) });
+              void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: undefined }) });
             },
           });
         }

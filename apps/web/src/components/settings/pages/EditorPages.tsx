@@ -55,7 +55,7 @@ function EditorMessage({
 
 /** Route component for `/settings/tasks/templates/$templateId`. */
 export function TemplateEditorPage() {
-  const { templateId } = useParams({ from: "/settings/tasks/templates/$templateId" });
+  const { templateId } = useParams({ from: "/_app/settings/tasks/templates/$templateId" });
   const templates = useTemplates();
   const openSettings = useOpenSettings();
   const back = () => openSettings("tasks.new-tasks", { replace: true });
@@ -84,7 +84,7 @@ export function TemplateEditorPage() {
 
 /** Route component for `/settings/autopilot/custom/$customId`. */
 export function CustomAutomationEditorPage() {
-  const { customId } = useParams({ from: "/settings/autopilot/custom/$customId" });
+  const { customId } = useParams({ from: "/_app/settings/autopilot/custom/$customId" });
   const customs = useCustomAutomations();
   const openSettings = useOpenSettings();
   const back = () => openSettings("autopilot.custom", { replace: true });
@@ -113,15 +113,22 @@ export function CustomAutomationEditorPage() {
 
 /** Route component for `/settings/project/recurring/$ruleId?project=`. */
 export function RuleEditorPage() {
-  const { ruleId } = useParams({ from: "/settings/project/recurring/$ruleId" });
-  const projectId = useSearch({ from: "/settings/project/recurring/$ruleId", select: (search) => search.project });
-  const project = useBoard().data?.projects.find((p) => p.id === projectId);
+  const { ruleId } = useParams({ from: "/_app/settings/project/recurring/$ruleId" });
+  const projectId = useSearch({ from: "/_app/settings/project/recurring/$ruleId", select: (search) => search.project });
+  const board = useBoard();
+  const project = board.data?.projects.find((p) => p.id === projectId);
   if (!projectId || !project) {
+    // Archived projects aren't in the snapshot either, so this also covers a project archived since.
+    const message = !projectId
+      ? "No project was given for this rule."
+      : board.data
+        ? "This project no longer exists, or is archived."
+        : board.error
+          ? board.error.message
+          : "Loading project...";
     return (
       <EditorShell group="project" label="Recurring task">
-        <EditorMessage back={{ to: "project.recurring", label: "Back to recurring tasks" }}>
-          {projectId ? "Loading project..." : "No project was given for this rule."}
-        </EditorMessage>
+        <EditorMessage back={{ to: "project.recurring", label: "Back to recurring tasks" }}>{message}</EditorMessage>
       </EditorShell>
     );
   }

@@ -109,5 +109,7 @@ describe("settingsPaletteEntries", () => {
     const review = entries.find((e) => e.target === "tasks.review");
     expect(review).toMatchObject({ title: "Settings: Review", isGroup: false });
     expect(review?.searchTerms).toContain("Tasks");
+    // No second "Settings: Autopilot" for the Autopilot page's own section.
+    expect(entries.filter((e) => e.title === "Settings: Autopilot")).toHaveLength(1);
   });
 });

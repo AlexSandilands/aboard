@@ -28,7 +28,7 @@ import { ProjectSettingsPage } from "./ProjectSettingsPage";
 
 /** Route component for `/settings/$group`: the group's sections in one scrolling page. */
 export function SettingsGroupPage() {
-  const { group } = useParams({ from: "/settings/$group" });
+  const { group } = useParams({ from: "/_app/settings/$group" });
   // The route redirects anything else; this only narrows the type.
   if (!isSettingsGroup(group)) return null;
   // Keyed so each page starts at its top, with its own scroll-spy.

@@ -142,14 +142,17 @@ Settings is a route, `/settings/<group>` with group `board`, `tasks`, `autopilot
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 
-- **Shell.** The board and Settings share `AppShell`: the resizable sidebar (an off-canvas sheet on narrow windows),
-  the palette, the app dialogs and the shortcuts. On `/settings` the sidebar holds the settings list instead of the
+- **Shell.** The board and Settings sit under one pathless layout route (`_app`, `AppFrame`) that renders a single
+  `AppShell`: the resizable sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync
+  and the shortcuts. It stays mounted between them, so the event stream doesn't reconnect and miss events. On `/settings` the sidebar holds the settings list instead of the
   projects: every group with its sections, always expanded, and **Back** at the bottom. Esc leaves an editor for its
   page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
 - **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
   (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
   will target them.
+- **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
+  `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
   anchor as the hash and asks the page to scroll to it (`requestScroll`). The page (`SettingsScroller`) waits up to
   about two seconds for the target to render, since sections fill in as their queries load, and opens a folded
@@ -204,7 +207,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores, and `useSettingsNav` (scroll-spy, scroll requests, `boardReturn`) |
-| `apps/web/src/components/layout/AppShell.tsx`           | The frame the board and Settings share; the app-wide shortcuts    |
+| `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |

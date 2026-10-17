@@ -7,6 +7,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { z } from "zod";
+import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 import {
   CustomAutomationEditorPage,
@@ -31,8 +32,11 @@ export type BoardSearch = z.infer<typeof BoardSearch>;
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
+// Pathless layout around the board and Settings, so the shell (and its live-update stream) stays mounted between them.
+const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "_app", component: AppFrame });
+
 export const boardRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/",
   validateSearch: (search) => BoardSearch.parse(search),
   component: AppLayout,
@@ -42,7 +46,7 @@ export const boardRoute = createRoute({
 const SettingsProjectSearch = z.object({ project: z.string().optional() });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/settings",
   component: SettingsShell,
 });
@@ -100,13 +104,15 @@ const devRoutes = import.meta.env.DEV
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    boardRoute,
-    settingsRoute.addChildren([
-      settingsIndexRoute,
-      settingsGroupRoute,
-      templateEditorRoute,
-      customAutomationEditorRoute,
-      ruleEditorRoute,
+    appRoute.addChildren([
+      boardRoute,
+      settingsRoute.addChildren([
+        settingsIndexRoute,
+        settingsGroupRoute,
+        templateEditorRoute,
+        customAutomationEditorRoute,
+        ruleEditorRoute,
+      ]),
     ]),
     ...devRoutes,
   ]),

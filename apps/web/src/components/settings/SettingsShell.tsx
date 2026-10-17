@@ -11,7 +11,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
-import { AppShell } from "~/components/layout/AppShell";
 import { SidebarBrandRow } from "~/components/sidebar/SidebarBrandRow";
 import {
   SidebarContent,
@@ -59,44 +58,43 @@ function useSettingsProjectParam(): string | undefined {
   return useSearch({ strict: false, select: (search) => search.project });
 }
 
-/**
- * Route component for `/settings`: the settings list in place of the board's sidebar, and the page. Esc leaves an
- * editor for its page, and a page for the board.
- */
+/** Route component for `/settings`: the page beside the settings list (`AppFrame` swaps the list in). */
 export function SettingsShell() {
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <Outlet />
+    </div>
+  );
+}
+
+/** What Esc does in Settings: leave an editor for its page, and a page for the board. */
+export function useSettingsBack(): () => unknown {
   const { group, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
   const navigate = useNavigate();
   const leave = useLeaveSettings();
-  const back =
-    inEditor && group
-      ? () =>
-          navigate({
-            to: "/settings/$group",
-            params: { group },
-            search: group === "project" && project ? { project } : {},
-          })
-      : leave;
-  return (
-    <AppShell sidebar={<SettingsSidebar />} sidebarLabel="Settings" onBack={back}>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Outlet />
-      </div>
-    </AppShell>
-  );
+  if (!inEditor || !group) return leave;
+  return () =>
+    navigate({
+      to: "/settings/$group",
+      params: { group },
+      search: group === "project" && project ? { project } : {},
+    });
 }
 
 /**
  * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
  * of it. The section in view is highlighted. On narrow windows this is the off-canvas sheet, which closes on a pick.
  */
-function SettingsSidebar() {
+export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
   const active = useSettingsNav((s) => s.activeSection);
   const openSettings = useOpenSettings();
   const leave = useLeaveSettings();
   const { isMobile, setOpenMobile } = useSidebar();
+  // The shell outlives the switch from the board, so a sheet opened there (a project's gear) closes on the way in.
+  useEffect(() => setOpenMobile(false), [setOpenMobile]);
 
   const go = (target: string, group: SettingsGroupId) => {
     if (isMobile) setOpenMobile(false);

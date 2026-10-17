@@ -164,11 +164,14 @@ export function settingsPaletteEntries(): SettingsPaletteEntry[] {
       searchTerms: ["preferences", ...group.sections.map((s) => s.label)],
       isGroup: true,
     },
-    ...group.sections.map((entry) => ({
-      target: entry.id,
-      title: `Settings: ${entry.label}`,
-      searchTerms: ["preferences", group.label, ...entry.keywords],
-      isGroup: false,
-    })),
+    // A section named like its group (Autopilot's own) is the top of the group's page: the group entry covers it.
+    ...group.sections
+      .filter((entry) => entry.label !== group.label)
+      .map((entry) => ({
+        target: entry.id,
+        title: `Settings: ${entry.label}`,
+        searchTerms: ["preferences", group.label, ...entry.keywords],
+        isGroup: false,
+      })),
   ]);
 }
