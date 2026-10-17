@@ -64,7 +64,8 @@ An issue that is an epic becomes one on the board, and its children become its t
 
 - **Finding out.** GitHub: after `gh issue view`, the board reads the issue's sub-issues with
   `gh api --paginate repos/{o}/{r}/issues/{n}/sub_issues --jq '.[].html_url'` (`fetchSubIssues`); an issue with any
-  is an epic. A failed read is logged and the issue imports as a task. Jira: the prompt asks the run, when the issue's
+  is an epic. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
+  child) isn't asked, since epics don't nest. Jira: the prompt asks the run, when the issue's
   type is Epic or its hierarchy level is 1, to set `isEpic`, search with the JQL `parent = KEY` (falling back to
   `"Epic Link" = KEY`, for company-managed projects on older Jira) and return up to 50 child keys in `children`
   and the count in `childTotal`. It doesn't read the children.
@@ -73,7 +74,9 @@ An issue that is an epic becomes one on the board, and its children become its t
   refuses a task that has a plan, is in an epic, is archived or closed, or has an Autopilot flag or priority (none of
   which an epic can have, and all of which the user may have set while the import ran): the import still completes,
   and a note on the task says it is an epic that wasn't imported as one. `tasks.create` still refuses an epic with a
-  `sourceUrl`; only the import converts.
+  `sourceUrl`; only the import converts. A Jira epic with no children listed stays a task with a note too: an empty
+  epic looks the same as one whose children couldn't be searched (a tools list in Settings without a search tool,
+  a search tool by another name, a failed search), and an empty epic nobody notices is worse than a note.
 - **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseIssueSource` (a Jira key from
   the model that isn't one is dropped and counted), then matched against the unarchived tasks in the project linked
   to the same issue (Jira key, or GitHub host, repo and number):
@@ -82,7 +85,7 @@ An issue that is an epic becomes one on the board, and its children become its t
   - a task already in another epic, or an epic: it stays put, and the epic's note names it.
 - **Their imports.** `complete` returns the new tasks (`childImports`), and the job queues them behind whatever is
   waiting, three at a time like any import. A child that fails is a failed import on that task; the epic stays. A
-  child that has sub-issues of its own is already in an epic, so it stays a task (epics don't nest) with a note.
+  child that has sub-issues of its own is already in an epic, so it stays a task (epics don't nest).
 - **The note.** One note by `import` on the epic says what didn't simply become a new task: children that moved in,
   ones left in another epic, skipped keys, and the total when the issue has more than 50.
 

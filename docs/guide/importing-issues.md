@@ -43,6 +43,7 @@ unless you set another), on a small model (Haiku by default).
 may call. By default the board looks for the common read tools on every connected MCP server: one issue
 (`get_jira_issue`, `getJiraIssue`, `jira_get_issue`) and a JQL search (`search_jira`,
 `searchJiraIssuesUsingJql`, `jira_search`), which finds an epic's children. If your Jira server names them
-differently, list them there as `mcp__<server>__<tool>`; without a search tool, an epic imports as a single task.
+differently, list them there as `mcp__<server>__<tool>`. If you list your own tools, include a search tool:
+without one, an epic's children can't be found and it imports as a single task, with a note saying so.
 
 How it works: [docs/features/issue-import.md](../features/issue-import.md).

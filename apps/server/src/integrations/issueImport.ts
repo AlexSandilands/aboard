@@ -74,11 +74,15 @@ export function createIssueImporter(deps: {
     const issue = await deps.github.fetchIssue(source.ref);
     const link = issueLink(record.taskId);
     if (link) s.links.setSnapshot(link.id, { state: issue.state, title: issue.title });
-    // An issue with sub-issues is GitHub's epic. Without them (or when they can't be read) it is a plain task.
-    const subIssues = await deps.github.fetchSubIssues(source.ref).catch((error: unknown) => {
-      log.warn(`[import] ${record.sourceUrl}: couldn't read its sub-issues: ${messageOf(error)}`);
-      return [];
-    });
+    // An issue with sub-issues is GitHub's epic. Without them (or when they can't be read) it is a plain task. A task
+    // already in an epic (an epic's own child) can't become one, since epics don't nest, so it isn't asked.
+    const inEpic = s.tasks.summary(record.taskId).parent !== null;
+    const subIssues = inEpic
+      ? []
+      : await deps.github.fetchSubIssues(source.ref).catch((error: unknown) => {
+          log.warn(`[import] ${record.sourceUrl}: couldn't read its sub-issues: ${messageOf(error)}`);
+          return [];
+        });
     const epic = subIssues.length > 0 ? { epic: { children: subIssues, total: subIssues.length } } : {};
 
     const raw = (): ImportResult => ({

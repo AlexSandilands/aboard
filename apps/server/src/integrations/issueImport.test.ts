@@ -280,9 +280,19 @@ describe("importing an epic", () => {
   it("turns a GitHub issue with sub-issues into an epic", async () => {
     const subIssues: Record<number, string[]> = {
       45: ["https://github.com/acme/app/issues/46", "https://github.com/acme/lib/issues/2"],
+      // A sub-issue with its own: epics don't nest, so it isn't even asked.
+      46: ["https://github.com/acme/app/issues/47"],
     };
-    const { create, run } = setup({ fetchSubIssues: (ref) => Promise.resolve(subIssues[ref.number] ?? []) });
+    const asked: number[] = [];
+    const { create, run } = setup({
+      fetchSubIssues: (ref) => {
+        asked.push(ref.number);
+        return Promise.resolve(subIssues[ref.number] ?? []);
+      },
+    });
     const epic = await run(create(GH_URL).id);
+    expect(asked).toEqual([45]);
+    expect(epic.children.every((c) => c.kind === "task")).toBe(true);
     expect(epic).toMatchObject({ kind: "epic", title: outcome.title });
     expect(sorted(epic.children.map((c) => c.links[0]?.url))).toEqual([
       "https://github.com/acme/app/issues/46",
@@ -327,6 +337,15 @@ describe("importing an epic", () => {
     expect(notes(epic)).toEqual([
       `Already on the board, so moved into this epic: #${loose.number}.\n\nLeft where they are, not added: PROJ-9 (#${taken.number} is in epic #${other.number}).`,
     ]);
+  });
+
+  it("leaves a Jira epic whose children couldn't be listed a task, and says what to check", async () => {
+    const { create, run, jobs } = setup({ runImport: jiraEpic([], 0) });
+    const done = await run(create("PROJ-7").id);
+    expect(done).toMatchObject({ kind: "task", title: "One-page checkout", import: { status: "done" } });
+    expect(notes(done)[0]).toContain("none of its child issues could be listed");
+    expect(notes(done)[0]).toContain("Jira tools");
+    expect(jobs).toHaveLength(1);
   });
 
   it("imports at most 50 children and says how many there are", async () => {

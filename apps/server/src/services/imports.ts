@@ -85,6 +85,16 @@ export function createImportsService(
    */
   const fillEpic = (taskId: string, sourceLabel: string, epic: NonNullable<ImportResult["epic"]>): string[] => {
     const tasks = deps.tasks();
+    // An empty epic and one whose children couldn't be listed (no Jira search tool allowed, or a search that failed)
+    // look the same, so it stays a task rather than becoming an empty epic nobody would notice.
+    if (epic.children.length === 0 && repos.tasks.get(taskId)?.parentId === null) {
+      tasks.addNote(
+        taskId,
+        `${sourceLabel} is an epic, but none of its child issues could be listed, so it was imported as a task. If it has some, check that a Jira search tool is allowed in Settings → Tasks → New tasks → Jira tools, then paste it again.`,
+        IMPORT_ACTOR,
+      );
+      return [];
+    }
     const unable = tasks.makeEpic(taskId, IMPORT_ACTOR);
     if (unable) {
       tasks.addNote(
