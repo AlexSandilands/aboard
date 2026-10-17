@@ -274,7 +274,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       description:
         "Change a task's status: backlog -> planned -> in_progress -> review -> done (any direction is allowed). " +
         "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
-        "when merged or verified. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
+        "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it before opening the PR (a PR opened earlier is reviewed on GitHub too), then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
@@ -290,6 +290,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
       run(
         () => {
           const id = services.tasks.resolveId(args.task);
+          const wasDone = services.tasks.detail(id).status === "done";
           const summary = services.tasks.move(
             id,
             {
@@ -310,7 +311,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, actor }) =>
             review && summary.links.some((l) => l.kind === "pr")
               ? "A pull request is already linked. Finish the local review loop below first, and push every fix to that PR; don't open another. Until the loop ends, Autopilot holds off its own review of the PR."
               : null;
-          return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved);
+          return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved, {
+            closing: summary.status === "done" && !wasDone,
+          });
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },
       ),

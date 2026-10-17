@@ -71,12 +71,22 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    You can flag tasks, but you can't change Autopilot's own settings: only the user can.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
-   it's finished. Use `blocked` (with `appendNotes` explaining why) or `skipped` when appropriate. Before
-   asking the user a question and waiting for the answer, mark the current step `blocked` with a note
-   saying what you need; set it back to `in_progress` once answered. Found more work? `add_steps`.
-   Several steps to update at once (mark a phase done, add notes, move a step, rename a phase)? One
-   `update_plan` call, with `steps: [{step: "2.3", status: "done"}, …]`; labels refer to the plan as it was
-   before the call.
+   it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
+   board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once
+   leaves it showing nothing happened. Use `blocked` (with `appendNotes` explaining why) or `skipped` when
+   appropriate. Before asking the user a question and waiting for the answer, mark the current step
+   `blocked` with a note saying what you need; set it back to `in_progress` once answered. Found more
+   work? `add_steps`.
+
+   If steps can only be verified together, still mark each `in_progress` as you start it and `done` once
+   it is written, and make testing its own step. For example: `update_step(task, "3.1", "in_progress")`,
+   write it, `update_step(task, "3.1", "done")`, then the same for `3.2`; not one `update_plan` at the end.
+   Tool results say when no step is in progress, when the plan hasn't changed for a while, and when a
+   task reaches Review with steps still open; follow them.
+
+   Several things to change at once (add notes, move a step, rename a phase)? One `update_plan` call,
+   with `steps: [{step: "2.3", notes: "…"}, …]`; labels refer to the plan as it was before the call.
+   Don't use it to catch up on statuses.
 
    **`set_plan` replaces the whole plan.** Every phase or step you don't pass back with its id is deleted,
    with its status and notes. Use it to write a plan or deliberately rewrite one, never to update a few

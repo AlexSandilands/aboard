@@ -11,6 +11,7 @@ import {
   reviewBadgeLabel,
   reviewIsDone,
   type ReviewFinding,
+  type PlanPhase,
   type Project,
   type TaskDetail,
   type TaskTemplate,
@@ -375,6 +376,87 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
   );
 }
 
+/** How long an In Progress task's plan may go unchanged before a result says it looks stale. */
+export const STALE_PLAN_MS = 30 * 60_000;
+
+const LISTED_STEPS = 6;
+
+const stepLabels = (phases: ReadonlyArray<PlanPhase>) =>
+  phases.flatMap((phase, pi) => phase.steps.map((step, si) => ({ step, label: `${pi + 1}.${si + 1}` })));
+
+/**
+ * Nudges to keep the plan current as work happens, each naming the exact call to make. Agents tend to tick steps in
+ * bulk at the end of a phase, so the board shows no live progress. Only for open, non-epic tasks with a plan.
+ * `closing` is set by the move to Done, so a long-Done task never nags; `now` is passed in for tests.
+ */
+export function progressHints(task: TaskDetail, now: number, opts: { closing?: boolean } = {}): string[] {
+  if (task.kind === "epic" || task.archivedAt || task.resolution || task.progress.total === 0) return [];
+  const ref = `"#${task.number}"`;
+  const steps = stepLabels(task.phases);
+  const open = steps.filter((s) => s.step.status !== "done" && s.step.status !== "skipped");
+  const hints: string[] = [];
+
+  if ((task.status === "review" || (task.status === "done" && opts.closing)) && open.length > 0) {
+    const shown = open.slice(0, LISTED_STEPS).map((s) => `${s.label} ${s.step.title} [${s.step.status}]`);
+    const more = open.length - shown.length;
+    hints.push(
+      `${open.length} plan step(s) are still open on a task in ${statusLabel(task.status)}: ${shown.join("; ")}` +
+        `${more > 0 ? `; and ${more} more` : ""}. Mark each done (or skipped if it no longer applies) with ` +
+        `update_plan(task: ${ref}, steps: [{step: "${open[0]!.label}", status: "done"}, ...]), or add a note if it was left undone.`,
+    );
+  }
+
+  if (task.status === "in_progress") {
+    const current = task.currentStep;
+    const started = steps.some((s) => s.step.status === "in_progress");
+    if (!started && current?.status === "todo") {
+      hints.push(
+        `No plan step is in progress. Before you start ${current.index} "${current.title}", call ` +
+          `update_step(task: ${ref}, step: "${current.index}", status: "in_progress"), and mark it done the moment it is ` +
+          "finished, not at the end of the phase.",
+      );
+    } else if (started && open.length > 0) {
+      const last = Math.max(...steps.map((s) => Date.parse(s.step.updatedAt)));
+      const minutes = Math.floor((now - last) / 60_000);
+      if (Number.isFinite(last) && now - last >= STALE_PLAN_MS && current) {
+        hints.push(
+          `No plan step has changed for ${minutes} minutes. If ${current.index} "${current.title}" is finished, mark it ` +
+            `done with update_step(task: ${ref}, step: "${current.index}", status: "done"); if you are stuck on it, mark ` +
+            "it blocked with a note.",
+        );
+      }
+    }
+  }
+  return hints;
+}
+
+/**
+ * Feedback for an update_plan call that moved two or more steps straight to done without ever starting them: the
+ * catch-up batching that leaves the board with no live progress. `before` is the plan as it was ahead of the call.
+ */
+export function batchedCompletionHint(
+  before: ReadonlyArray<PlanPhase>,
+  after: ReadonlyArray<PlanPhase>,
+  taskRef: string,
+): string | null {
+  const wasDone = new Set(
+    stepLabels(before).flatMap((s) => (s.step.status === "done" || s.step.status === "skipped" ? [s.step.id] : [])),
+  );
+  const batched = stepLabels(after).filter(
+    (s) => s.step.status === "done" && !wasDone.has(s.step.id) && s.step.startedAt === null,
+  );
+  if (batched.length < 2) return null;
+  const shown = batched.slice(0, LISTED_STEPS).map((s) => `${s.label} ${s.step.title}`);
+  const more = batched.length - shown.length;
+  return (
+    `${batched.length} steps went straight to done without being started (${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}), ` +
+    "so the board showed no progress while you worked on them. Update each step the moment it changes: " +
+    `update_step(task: ${taskRef}, step, status: "in_progress") when you start it and "done" when it is finished. ` +
+    "If steps can only be verified together, still mark each in_progress as you start it and done once it is written, " +
+    "with testing as its own step. Keep update_plan for changes that really are several at once."
+  );
+}
+
 function findingLine(f: ReviewFinding): string {
   const where = f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : "";
   const resolution = f.status === "open" ? "" : ` -> ${f.status}${f.resolutionNote ? `: ${f.resolutionNote}` : ""}`;
@@ -475,6 +557,8 @@ export function renderTaskDetail(
     sessionHarness?: AgentHarness | null;
     /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
     autopilotHint?: boolean;
+    /** Adds the "Plan progress" nudges; off for renderings that aren't for the implementing agent. */
+    progress?: { now: number; closing?: boolean };
     /** For an epic: each child's newest activity, shown in its overview. */
     childActivity?: ChildActivity;
   } = {},
@@ -555,6 +639,13 @@ export function renderTaskDetail(
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
   }
+  const progress = opts.progress
+    ? progressHints(task, opts.progress.now, { closing: opts.progress.closing ?? false })
+    : [];
+  if (progress.length) {
+    lines.push("", "Plan progress:");
+    for (const hint of progress) lines.push(`- ${hint}`);
+  }
   const labels = opts.labelsInUse ? labelHint(task, opts.labelsInUse) : null;
   if (labels) lines.push("", "Missing labels:", `- ${labels}`);
   const model = opts.modelHint ? suggestedModelHint(task) : null;
@@ -575,7 +666,12 @@ export function renderTaskDetail(
 export function renderTaskShort(
   task: TaskDetail,
   project: Project | undefined,
-  opts: { labelsInUse?: ReadonlyArray<LabelUsage>; modelHint?: boolean; autopilotHint?: boolean } = {},
+  opts: {
+    labelsInUse?: ReadonlyArray<LabelUsage>;
+    modelHint?: boolean;
+    autopilotHint?: boolean;
+    progress?: { now: number; closing?: boolean };
+  } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });
 }
