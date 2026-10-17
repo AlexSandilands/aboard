@@ -83,7 +83,7 @@ export function SessionsSection({ task }: { task: TaskDetail }) {
               t3={t3}
               settings={settings}
               multiThread={multiThread}
-              sessions={folded}
+              sessions={folded.get(row.id) ?? []}
               onRemove={() => remove(row.id)}
               onRemoveSession={remove}
             />
