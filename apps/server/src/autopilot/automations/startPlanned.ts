@@ -201,7 +201,12 @@ export const startPlanned = defineAutomation({
         prompt,
         tier: task.suggestedModel?.tier ?? null,
         options: config,
-        ...(config.baseRef.trim() ? { workspace: { baseRef: config.baseRef.trim() } } : {}),
+        // An integration epic's task starts from its branch whatever the setting says: its PR goes there.
+        ...(task.integrationBranch
+          ? { workspace: { prBase: task.integrationBranch } }
+          : config.baseRef.trim()
+            ? { workspace: { baseRef: config.baseRef.trim() } }
+            : {}),
       });
     } catch (error) {
       // A headless run only ends when the agent does: one that hit its budget or timeout did start.

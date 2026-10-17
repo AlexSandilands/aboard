@@ -10,6 +10,7 @@ import type {
   CloseTaskInput,
   CreateTaskInput,
   CreateTemplateInput,
+  EpicDelivery,
   LinkInput,
   MergePrInput,
   MoveTaskInput,
@@ -111,6 +112,13 @@ export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>
       api<TaskDetail>(`/api/tasks/${enc(id)}`, { method: "PATCH", body: input }),
+    opts,
+  );
+/** Sets an epic's delivery; switching to integration makes its branch on origin first, so it can take a moment. */
+export const useSetEpicDelivery = (epicId: string, opts?: MutationOpts) =>
+  useApiMutation(
+    (delivery: EpicDelivery) =>
+      api<TaskDetail>(`/api/tasks/${enc(epicId)}/delivery`, { method: "PUT", body: { delivery } }),
     opts,
   );
 // ── Templates ───────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AUTOPILOT_START_PLANNED,
+  deliveryHintApplies,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -12,7 +13,7 @@ import {
   type TaskDetail,
   type TaskEvent,
 } from "@repo/contracts";
-import { renderTaskShort, type ChildActivity } from "./format.ts";
+import { deliveryHint, renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
@@ -94,6 +95,16 @@ export const autopilotField = z
     "Whether Autopilot may start this task by itself once it is planned. on: flag it. default and off: it is never " +
       "started automatically. Set it only when the user has said so; ask first, never on your own. You can't change " +
       "Autopilot's own settings.",
+  );
+
+export const deliveryField = z
+  .enum(["main", "integration"])
+  .describe(
+    "How the epic's tasks are delivered. main: each task opens a pull request to the default branch and the user " +
+      "merges it. integration: the board makes the branch epic/<number>-<slug> on origin; the tasks start from it " +
+      "and open their pull requests against it, Autopilot merges each one there once it is reviewed and green, and " +
+      "the user merges the epic's own pull request into the default branch. Set it only after the user has chosen; " +
+      "ask first, never on your own. Back to main only while none of the epic's tasks has started.",
   );
 
 /** The task's stored flag (null is Default) for a tool's `autopilot` argument. */
@@ -241,6 +252,18 @@ function startPlannedOn(services: Services, projectId: string, epicId: string | 
 }
 
 /**
+ * The question to put to the user about an epic's delivery (deliveryHint), when deliveryHintApplies to it: nobody chose
+ * one yet and its tasks look like they build on each other. Null otherwise, and for a task with no epic.
+ */
+export function epicDeliveryHint(services: Services, epicId: string | null): string | null {
+  if (!epicId) return null;
+  const epic = services.tasks.summary(epicId);
+  if (epic.kind !== "epic") return null;
+  const children = services.tasks.summaries({ projectId: epic.projectId }).filter((t) => t.parent?.id === epic.id);
+  return deliveryHintApplies(epic, children) ? deliveryHint(epic) : null;
+}
+
+/**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
  * "Missing labels", "Suggested model" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
  * moments (set_plan, create_task) ask for them, so they aren't noise elsewhere. Every result carries the "Plan progress"
@@ -251,19 +274,25 @@ export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { planningHints?: boolean; closing?: boolean } = {},
+  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
   const progress = { now: Date.now(), ...(opts.closing ? { closing: true } : {}) };
+  // Planning one of an epic's tasks is when its shape shows, so set_plan and create_task ask about the epic too.
+  const delivery =
+    opts.deliveryHint || opts.planningHints
+      ? epicDeliveryHint(services, task.kind === "epic" ? task.id : (task.parent?.id ?? null))
+      : null;
   const body = opts.planningHints
     ? renderTaskShort(task, project, {
         labelsInUse: services.labels.usage(),
         modelHint: true,
         autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
+        deliveryHint: delivery,
         progress,
       })
-    : renderTaskShort(task, project, { progress });
+    : renderTaskShort(task, project, { progress, deliveryHint: delivery });
   return textResult(`${headline}\n\n${body}`);
 }
 

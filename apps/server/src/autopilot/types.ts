@@ -145,9 +145,11 @@ export interface RunnerRequest {
   kind?: "start" | "nudge";
   /**
    * Where a new session works. A new branch from `baseRef` (default: the default branch), or one based on an
-   * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch.
+   * existing `branch` that the agent pushes to, e.g. a pull request's. Never the default branch. `prBase` is the branch
+   * the agent's pull request goes to when that isn't the default branch (an integration epic's): the session starts
+   * from origin's copy of it, and the workspace note says to open the pull request against it.
    */
-  workspace?: { baseRef?: string | null; branch?: string | null };
+  workspace?: { baseRef?: string | null; branch?: string | null; prBase?: string | null };
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
