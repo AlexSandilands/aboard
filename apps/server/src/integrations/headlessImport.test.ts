@@ -93,12 +93,15 @@ describe("import prompt", () => {
     expect(prompt).toContain("There are no labels on the board yet.");
   });
 
-  it("asks a Jira run to list an epic's children, by parent and then by Epic Link", () => {
+  it("asks a Jira run to list an epic's children, by Epic Link and by parent, merged", () => {
     const prompt = importPrompt(jira, []);
     expect(prompt).toContain("isEpic: true");
     expect(prompt).toContain("`parent = PROJ-7`");
     expect(prompt).toContain('`"Epic Link" = PROJ-7`');
-    expect(prompt).toContain("up to 50");
+    expect(prompt).toContain("run both searches");
+    expect(prompt).toContain("without duplicates, the Epic Link results first");
+    expect(prompt).toContain("doesn't exist");
+    expect(prompt).toContain("first 50");
   });
 
   it("cuts a very long body", () => {
