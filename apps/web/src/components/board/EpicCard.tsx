@@ -49,7 +49,11 @@ export const EpicCard = memo(function EpicCard({
         epic.archivedAt && "opacity-60",
       )}
     >
-      <div className="flex items-center gap-1 py-2 ps-1 pe-2.5">
+      <div
+        // The marker the dependency lines look for: they end on the header, not the whole card with its tasks.
+        data-task-card={epic.id}
+        className="flex items-center gap-1 py-2 ps-1 pe-2.5"
+      >
         <Button
           variant="ghost-muted"
           size="icon-xs"

@@ -96,10 +96,13 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
   const cell = droppableContainers.get(cellDroppableId(at.rowId, status));
   const cellRect = cell ? droppableRects.get(cell.id) : undefined;
   if (!cell?.node.current || !cellRect) return undefined;
-  const firstCard = cell.node.current.querySelector<HTMLElement>(
-    `[data-task-card]:not([data-task-card="${CSS.escape(String(active.id))}"])`,
-  );
-  const firstRect = firstCard ? droppableRects.get(firstCard.dataset.taskCard!) : undefined;
+  // A Done epic's header carries the marker too but isn't sortable, so it has no rect: skip it.
+  let firstRect;
+  for (const card of cell.node.current.querySelectorAll<HTMLElement>("[data-task-card]")) {
+    if (card.dataset.taskCard === String(active.id)) continue;
+    firstRect = droppableRects.get(card.dataset.taskCard!);
+    if (firstRect) break;
+  }
   if (!firstRect) return { x: cellRect.left, y: cellRect.top };
   return { x: firstRect.left, y: firstRect.top + firstRect.height / 2 - collisionRect.height / 2 - 1 };
 };
