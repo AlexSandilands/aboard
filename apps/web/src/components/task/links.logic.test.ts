@@ -217,13 +217,34 @@ describe("groupLinks", () => {
     expect(ids(groups.folded.get("t") ?? [])).toEqual(["s"]);
   });
 
-  it("keeps a session linked before every thread as a row", () => {
+  it("folds a session linked before every thread into the oldest one", () => {
     const groups = groupLinks([
       session("early", { createdAt: "2026-01-01T00:00:00Z" }),
       thread("t1", null, "2026-01-02T00:00:00Z"),
       thread("t2", null, "2026-01-03T00:00:00Z"),
     ]);
-    expect(ids(groups.sessionRows)).toEqual(["t1", "t2", "early"]);
+    expect(ids(groups.sessionRows)).toEqual(["t1", "t2"]);
+    expect(ids(groups.folded.get("t1") ?? [])).toEqual(["early"]);
+  });
+
+  it("folds a session linked just before the only thread", () => {
+    const groups = groupLinks([
+      session("s", { createdAt: "2026-01-01T00:00:00Z" }),
+      thread("t", null, "2026-01-01T00:00:01Z"),
+    ]);
+    expect(ids(groups.sessionRows)).toEqual(["t"]);
+    expect(ids(groups.folded.get("t") ?? [])).toEqual(["s"]);
+  });
+
+  it("keeps Autopilot and Copilot CLI sessions as rows when there are several threads", () => {
+    const after = "2026-01-04T00:00:00Z";
+    const groups = groupLinks([
+      thread("t1", null, "2026-01-01T00:00:00Z"),
+      thread("t2", null, "2026-01-02T00:00:00Z"),
+      session("auto", { createdAt: after, label: "Autopilot · Review" }),
+      session("copilot", { createdAt: after, harness: "copilot-cli" }),
+    ]);
+    expect(ids(groups.sessionRows).toSorted()).toEqual(["auto", "copilot", "t1", "t2"]);
     expect(groups.folded.size).toBe(0);
   });
 });

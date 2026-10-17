@@ -182,8 +182,9 @@ const createdMs = (link: TaskLink) => {
 /**
  * Splits a task's links into the Sessions and Links sections. A Claude Code session folds into the menu of a thread:
  * sessions don't say which one, but an agent links its thread and its session together, so it is the newest thread
- * linked at or before the session. One linked before every thread stays a row, and so do Autopilot's sessions, as
- * they run headless and never in a thread.
+ * linked at or before the session. One linked before every thread goes to the oldest thread (the agent may link its
+ * session first), so a task with one thread folds all of them. Autopilot's sessions stay rows, as they run headless
+ * and never in a thread.
  */
 export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
   const threads = orderLinks(links.filter((link) => link.kind === "t3_thread")).filter(
@@ -198,7 +199,7 @@ export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
   for (const session of sessions) {
     const owner =
       session.ref.harness === "claude-code" && !isAutopilotSession(session)
-        ? threadsByAge.find((thread) => createdMs(thread) <= createdMs(session))
+        ? (threadsByAge.find((thread) => createdMs(thread) <= createdMs(session)) ?? threadsByAge.at(-1))
         : undefined;
     if (!owner) rows.push(session);
     else folded.set(owner.id, [...(folded.get(owner.id) ?? []), session]);
