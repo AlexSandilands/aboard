@@ -111,6 +111,20 @@ describe("normalizeSectionLayout", () => {
     expect(normalizeSectionLayout({ order: ["sessions", ...order], hidden: ["links"] }).hidden).toEqual(["links"]);
   });
 
+  it("collapses Sessions with Links in a layout saved before Sessions existed", () => {
+    const order = ["labels", "links", "relations", "review", "autopilot", "plan", "details", "activity"];
+    expect(normalizeSectionLayout({ order, collapsed: { links: true } }).collapsed).toEqual({
+      links: true,
+      sessions: true,
+    });
+    expect(normalizeSectionLayout({ order, collapsed: { links: false } }).collapsed.sessions).toBe(false);
+    expect(normalizeSectionLayout({ order, collapsed: { plan: true } }).collapsed).toEqual({ plan: true });
+    // Once saved with Sessions, its own choice stays.
+    expect(normalizeSectionLayout({ order: ["sessions", ...order], collapsed: { links: true } }).collapsed).toEqual({
+      links: true,
+    });
+  });
+
   it("survives garbage", () => {
     expect(normalizeSectionLayout({ order: "plan", hidden: null, collapsed: 5 })).toEqual(normalizeSectionLayout({}));
   });

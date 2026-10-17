@@ -197,7 +197,7 @@ export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
     sessionRows: [...threads, ...sessions.filter((link) => !isFolded(link))],
     folded: sessions.filter(isFolded),
     links: links
-      .filter((link): link is PlainLink => link.kind !== "t3_thread" && link.kind !== "agent_session")
+      .filter((link): link is PlainLink => !isSessionLink(link))
       .toSorted((a, b) => LINK_KIND_ORDER[a.kind] - LINK_KIND_ORDER[b.kind]),
   };
 }

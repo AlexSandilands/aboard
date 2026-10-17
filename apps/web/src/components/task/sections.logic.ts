@@ -43,7 +43,8 @@ const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes
 
 /**
  * Re-validates stored values: unknown ids and duplicates are dropped, sections added since are appended (or placed
- * by SECTION_ANCHORS). Sessions used to be part of Links, so a layout saved before it existed hides it with Links.
+ * by SECTION_ANCHORS). Sessions used to be part of Links, so a layout saved before it existed hides and collapses it
+ * with Links.
  */
 export function normalizeSectionLayout(stored: {
   order?: unknown;
@@ -53,7 +54,8 @@ export function normalizeSectionLayout(stored: {
   const known = (value: unknown) => (Array.isArray(value) ? [...new Set(value.filter(isSectionId))] : []);
   const order = known(stored.order);
   const hidden = known(stored.hidden);
-  if (order.length > 0 && !order.includes("sessions") && hidden.includes("links")) hidden.push("sessions");
+  const beforeSessions = order.length > 0 && !order.includes("sessions");
+  if (beforeSessions && hidden.includes("links")) hidden.push("sessions");
   for (const id of SECTION_IDS.filter((section) => !order.includes(section))) {
     const anchor = SECTION_ANCHORS[id];
     const at = anchor ? order.indexOf(anchor) : -1;
@@ -65,6 +67,9 @@ export function normalizeSectionLayout(stored: {
     for (const [id, value] of Object.entries(stored.collapsed)) {
       if (isSectionId(id) && typeof value === "boolean") collapsed[id] = value;
     }
+  }
+  if (beforeSessions && typeof collapsed.links === "boolean" && collapsed.sessions === undefined) {
+    collapsed.sessions = collapsed.links;
   }
   return {
     order,

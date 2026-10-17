@@ -36,7 +36,7 @@ An override equal to its column's setting is pruned, so any override present mea
 
 The panel's sections are Labels, Sessions, Links, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
-section shows a one-line summary in its header (`summarizeSection`): the label names, the session count and any thread that needs you, the link count and
+section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
 any link problem, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
@@ -59,7 +59,7 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended, except Sessions, which goes before Links in a layout saved without it (and is hidden when that layout
-hid Links, since it used to be part of it).
+hid or collapsed Links, since it used to be part of it).
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
