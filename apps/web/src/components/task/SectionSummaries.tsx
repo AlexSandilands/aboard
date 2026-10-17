@@ -124,7 +124,11 @@ function RelationBadge({ chip }: { chip: RelationChip }) {
                 type="button"
                 aria-label={`Open #${chip.number} ${chip.title}`}
                 {...linkHandlers}
-                onClick={() => void openTask(chip.id)}
+                onClick={(event) => {
+                  // Overrides linkHandlers' onClick, so it has to stop the click reaching the header's toggle itself.
+                  event.stopPropagation();
+                  void openTask(chip.id);
+                }}
               />
             }
           />
