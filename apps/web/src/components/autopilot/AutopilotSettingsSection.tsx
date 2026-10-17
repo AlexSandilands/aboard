@@ -92,7 +92,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.daily-run-cap"
         title="Daily run cap"
-        description="The most agent runs to start per day. Empty is no cap."
+        description="The most agent runs to start per day (local time). Empty is no cap."
         control={
           <LimitInput
             label="Daily run cap"
@@ -108,7 +108,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.daily-spend-cap"
         title="Daily spend cap"
-        description="No more agent runs start once today's have cost this much. Empty is no cap."
+        description="No more agent runs start once today's have cost this much (local time). Empty is no cap."
         control={
           <LimitInput
             label="Daily spend cap"

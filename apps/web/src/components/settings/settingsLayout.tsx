@@ -57,7 +57,7 @@ export function StatusDot({ tone, label, className }: { tone: StatusTone; label:
 
 /**
  * Detail that matters but would crowd a row (setup steps, how something is matched), behind an info button next to
- * the row's title. Opens on hover and on focus or click, so it works from the keyboard and on touch.
+ * the row's title. Opens on hover, and on click or Enter, so it works from the keyboard and on touch.
  */
 export function InfoHover({ label, children }: { label: string; children: ReactNode }) {
   return (
