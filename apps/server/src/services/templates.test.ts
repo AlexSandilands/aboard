@@ -46,6 +46,20 @@ describe("starter templates", () => {
   });
 });
 
+describe("template plans", () => {
+  it("leaves out a stored empty phase when creating a task", () => {
+    const { s, project } = setup();
+    const template = s.templates.create({ name: "Legacy", phases: [{ title: "Do", steps: [{ title: "Step" }] }] });
+    // Saving filters empty phases; a template stored before that did not.
+    vi.spyOn(s.templates, "resolve").mockReturnValue({
+      ...template,
+      phases: [{ title: "Empty", steps: [] }, ...template.phases],
+    });
+    const task = s.tasks.create({ projectId: project.id, template: template.id, title: "T" });
+    expect(task.phases.map((p) => p.title)).toEqual(["Do"]);
+  });
+});
+
 describe("template CRUD", () => {
   it("normalises labels, drops phases without steps and clears blank text", () => {
     const { s } = setup();

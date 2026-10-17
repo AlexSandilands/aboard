@@ -36,6 +36,12 @@ describe("REST", () => {
     expect(gated.status).toBe(422);
     expect(await errorCode(gated)).toBe("PLAN_REQUIRED");
 
+    const stepless = await h.request(`/api/tasks/${h.task.id}/plan`, {
+      method: "PUT",
+      json: { phases: [{ title: "Tests", steps: [] }] },
+    });
+    expect(await errorCode(stepless)).toBe("VALIDATION");
+
     const invalid = await h.request(`/api/tasks/${h.task.id}/move`, { method: "POST", json: { status: "bogus" } });
     expect(invalid.status).toBe(400);
     const body = (await invalid.json()) as ApiErrorBody;
