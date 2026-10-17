@@ -93,8 +93,6 @@ export function SettingsSidebar() {
   const openSettings = useOpenSettings();
   const leave = useLeaveSettings();
   const { isMobile, setOpenMobile } = useSidebar();
-  // The shell outlives the switch from the board, so a sheet opened there (a project's gear) closes on the way in.
-  useEffect(() => setOpenMobile(false), [setOpenMobile]);
 
   const go = (target: string, group: SettingsGroupId) => {
     if (isMobile) setOpenMobile(false);

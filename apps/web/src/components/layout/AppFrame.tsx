@@ -1,7 +1,9 @@
 import { Outlet, useLocation } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
+import { useSidebar } from "~/components/ui/sidebar";
 import { AppShell } from "./AppShell";
 
 /**
@@ -23,7 +25,24 @@ export function AppFrame() {
       // On the project settings page `?project=` is the project being configured, not the board's scope.
       newTaskProjectId={inSettings ? null : projectFilter}
     >
+      <CloseSheetOnSwitch inSettings={inSettings} />
       <Outlet />
     </AppShell>
   );
+}
+
+/**
+ * On a narrow window the sidebar is a sheet. A pick in it that switches between the board and Settings (a project's
+ * gear, Back) would otherwise leave it open over the new page, since the shell outlives the switch. Only the switch
+ * closes it: the sheet mounts its contents on opening, so closing on mount would shut it straight away.
+ */
+function CloseSheetOnSwitch({ inSettings }: { inSettings: boolean }) {
+  const { setOpenMobile } = useSidebar();
+  const previous = useRef(inSettings);
+  useEffect(() => {
+    if (previous.current === inSettings) return;
+    previous.current = inSettings;
+    setOpenMobile(false);
+  }, [inSettings, setOpenMobile]);
+  return null;
 }
