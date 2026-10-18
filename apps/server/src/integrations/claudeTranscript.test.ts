@@ -13,6 +13,7 @@ const fake = {
   base64: "Zx9Kq2Lm".repeat(4),
   pairing: "ABCD".repeat(3),
   base64std: glue("Ab3+", "Cd4/", "Ef5g").repeat(4),
+  base64url: glue("Zx9Kq2Lm".repeat(3), "_", "Pq4Rs7Tu".repeat(2)),
 };
 const leaks = (text: string) => Object.values(fake).filter((secret) => text.includes(secret)).length;
 const pemLine = (edge: string) => glue("-".repeat(5), edge, " PRIVATE", " KEY", "-".repeat(5));
@@ -58,10 +59,17 @@ describe("redact", () => {
     ["a secret name inside a value", `--set=${glue("to", "ken")}=${"x7".repeat(8)}`],
     ["a Basic authorization header", `${glue("Author", "ization")}: ${glue("Ba", "sic")} ${"x7".repeat(8)}`],
     ["a password in a URL", glue("post", "gres:/", "/app", ":", "x7".repeat(8), "@db", ":5432/main")],
+    ["a base64url key", `value ${fake.base64url} end`],
+    ["a secret flag and its value", `${glue("--pass", "word")} ${"x7".repeat(8)} --verbose`],
+    ["a password after curl's -u", `${glue("curl -", "u ", "admin", ":")}${"x7".repeat(8)} host`],
+    ["a password after --user=", `${glue("--us", "er=", "admin", ":")}${"x7".repeat(8)} host`],
+    ["a quoted value with spaces", `${glue("pass", "word")}: "${glue("x7x7", "x7x7 ", "and more")}"`],
+    ["a single-quoted value with spaces", `${glue("api", "Key")}='${glue("x7x7", "x7x7 ", "and more")}'`],
   ])("redacts %s", (_name, input) => {
     const out = redact(input);
     expect(leaks(out)).toBe(0);
     expect(out.includes("x7x7x7x7")).toBe(false);
+    expect(out.includes("and more")).toBe(false);
     expect(out.includes("[redacted]")).toBe(true);
   });
 
@@ -70,6 +78,14 @@ describe("redact", () => {
       ["a", pemLine("BEGIN"), glue("MII", "Ev", "Qz8".repeat(10)), "abc", pemLine("END"), "b"].join("\n"),
     );
     expect(out.includes("MIIE")).toBe(false);
+    expect(out === "a\n[redacted]\nb").toBe(true);
+  });
+
+  it("redacts a PGP key block", () => {
+    const pgpLine = (edge: string) =>
+      glue("-".repeat(5), edge, " PGP", " PRIVATE", " KEY", " BLO", "CK", "-".repeat(5));
+    const out = redact(["a", pgpLine("BEGIN"), "", glue("lQ", "dG", "Bm8".repeat(10)), pgpLine("END"), "b"].join("\n"));
+    expect(out.includes("lQdG")).toBe(false);
     expect(out === "a\n[redacted]\nb").toBe(true);
   });
 
@@ -85,6 +101,32 @@ describe("redact", () => {
     expect(redact("the token expired, so we pass the secret along")).toBe(
       "the token expired, so we pass the secret along",
     );
+  });
+
+  it("keeps code and config beside a secret name: types, calls, other names, numbers, paths", () => {
+    const code = [
+      "password: string;",
+      "accessToken: string | null,",
+      "secretsManager: SecretsManagerClient",
+      "const token = fetchToken(options);",
+      "apiKey = config.apiKey",
+      "password = newPassword",
+      "totalTokens: 154321",
+      "max_tokens=200000",
+      "PWD=/home/dev/aboard OLDPWD=/home/dev",
+      "--token-file ./config/dev.txt",
+    ].join("\n");
+    expect(redact(code)).toBe(code);
+  });
+
+  it("keeps long runs made of words: a project folder, identifiers with a digit", () => {
+    const folder = ["C", "", "Users", "dev", "", "t3", "worktrees", "aboard", "t3", "dad8ce25"].join("-");
+    const names = [
+      glue("handle", "OAuth2", "Callback", "For", "Provider", "Settings"),
+      glue("parse", "ISO8601", "DateTime", "V2", "Format", "Strings"),
+      ["load", "Config", "v2", "from", "remote", "storage", "backend"].join("_"),
+    ];
+    for (const keep of [folder, ...names]) expect(redact(`at ${keep} now`)).toBe(`at ${keep} now`);
   });
 
   it("scans a long run once, so a huge hyphenated or plain run is quick", () => {
@@ -215,6 +257,19 @@ describe("condenseTranscript", () => {
     expect(entries[0]).toBe("[user #1] …");
     expect(entries[0]!.includes(fake.openai.slice(0, 6))).toBe(false);
     expect(entries[2]!.length).toBe("[error] Bash: ".length + 300);
+  });
+
+  it("drops only the tail of a long line the first cut splits, and still the split secret", async () => {
+    const { entries } = await condenseTranscript(
+      lines([
+        user(0, `${";".repeat(6000 - 8)}${fake.openai}`),
+        assistant(1, tool("a", "Bash", { command: "node build.js" })),
+        user(1, [result("a", "x;".repeat(100_000), true)]),
+      ]),
+    );
+    expect(entries[0]!.includes(fake.openai.slice(0, 6))).toBe(false);
+    expect(entries[0] === `[user #1] ${";".repeat(1499)}…`).toBe(true);
+    expect(entries[2] === `[error] Bash: ${"x;".repeat(150).slice(0, 299)}…`).toBe(true);
   });
 
   it("logs slash commands and compaction apart from turns, and an interrupted tool once", async () => {

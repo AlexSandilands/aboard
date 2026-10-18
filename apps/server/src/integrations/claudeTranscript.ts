@@ -17,44 +17,96 @@ const REDACTED = "[redacted]";
 /** Words in a name that say its value is a secret. */
 const SECRET_NAME =
   /token|secret|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization/i;
-/** A name, then `=` or `:`, then a value. The lookbehind starts it only where a name starts. */
-const NAMED_VALUE = /(?<![\w.-])([\w.-]+["']?\s*[:=]\s*["']?)([^\s"',;&]{6,})/g;
+/** Names SECRET_NAME matches that hold no secret: the shell's working directories. */
+const NOT_SECRET_NAME = /^(?:old)?pwd$/i;
+/**
+ * A name, then `=` or `:`, then a value: quoted, when it may hold spaces, or bare. The lookbehind starts it only where
+ * a name starts. The groups are the name, a double- or single-quoted value, then a bare value's quote and the value.
+ */
+const NAMED_VALUE = /(?<![\w.-])([\w.-]+["']?\s*[:=]\s*)(?:"([^"\n]{6,})"|'([^'\n]{6,})'|(["']?)([^\s"',;&]{6,}))/g;
+/** A flag whose name holds a secret word, then a space and its value: `--password …`. Groups as in NAMED_VALUE. */
+const SECRET_FLAG = new RegExp(
+  `(?<!\\S)(--?[\\w-]*(?:${SECRET_NAME.source})[\\w-]*\\s+)(?:"([^"\\n]{6,})"|'([^'\\n]{6,})'|()([^\\s"'-][^\\s"']{5,}))`,
+  "gi",
+);
 
 /** A secret word with the rest of its name and the separator, inside a value. */
 const NAMED_IN_VALUE = new RegExp(`(?:${SECRET_NAME.source})[\\w.-]*[:=]`, "i");
 
+const TYPE_NAME = /^(?:string|number|boolean|bigint|symbol|object|unknown|any|never|null|undefined|void)$/;
+
+/**
+ * Whether a value beside a secret name is code or config rather than the secret: a path, a reference to a variable
+ * (`$API_TOKEN`), a number (`totalTokens: 154321`), a type (`password: string`, `secretsManager: SecretsClient`), a
+ * call (`token = fetchToken()`) or another name (`apiKey = config.apiKey`, `password = newPassword`). A quoted value
+ * is a literal, so only a path or a reference passes there. Whatever passes is still checked for a secret's shape.
+ */
+function isNotSecret(value: string, quoted: boolean): boolean {
+  if (/^(?:~|\.{1,2})?\/|^[A-Za-z]:[\\/]/.test(value) || /^\$\{?[A-Za-z_]\w*\}?$/.test(value)) return true;
+  if (quoted) return false;
+  if (/^\d+(?:\.\d+)?$/.test(value)) return true;
+  const isType = (part: string) => TYPE_NAME.test(part) || /^[A-Z][A-Za-z]*[a-z][A-Za-z]*(?:<.*>)?$/.test(part);
+  if (value.replace(/\[\]/g, "").split("|").every(isType)) return true;
+  if (/^[A-Za-z_$][\w$.]*\(/.test(value)) return true;
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(value) || /^[a-z]+(?:[A-Z][a-z]*)+$/.test(value);
+}
+
 /**
  * The value redacted when its name says it is a secret, or from a secret name inside it on (`--set=token=…`). Not
- * recursive: a value like `a=a=a=…` would nest as deep as it is long.
+ * recursive: a value like `a=a=a=…` would nest as deep as it is long. A quoted value with spaces is prose, so it is
+ * only looked inside when it has none.
  */
-function redactNamed(match: string, name: string, value: string): string {
-  if (SECRET_NAME.test(name)) return `${name}${REDACTED}`;
+function redactNamed(match: string, name: string, double?: string, single?: string, quote = "", bare = ""): string {
+  const quoted = double ?? single;
+  const value = quoted ?? bare;
+  const open = double !== undefined ? '"' : single !== undefined ? "'" : quote;
+  const close = quoted === undefined ? "" : open;
+  if (SECRET_NAME.test(name) && !NOT_SECRET_NAME.test(/^[\w.-]+/.exec(name)?.[0] ?? "")) {
+    return isNotSecret(value, quoted !== undefined) ? match : `${name}${open}${REDACTED}${close}`;
+  }
+  if (quoted !== undefined && /\s/.test(quoted)) return match;
   const inner = NAMED_IN_VALUE.exec(value);
   if (!inner) return match;
   const end = inner.index + inner[0].length;
-  return value.length - end >= 6 ? `${name}${value.slice(0, end)}${REDACTED}` : match;
+  return value.length - end >= 6 ? `${name}${open}${value.slice(0, end)}${REDACTED}${close}` : match;
 }
 
 const hasAllKinds = (s: string) => /[a-z]/.test(s) && /[A-Z]/.test(s) && /\d/.test(s);
 const countOf = (s: string, kind: RegExp) => s.match(kind)?.length ?? 0;
 
 /**
- * Whether a long run looks like a key: mixed-case letters and digits (lower-case hex, a commit, is left alone). Standard
- * base64 has `+` and `/` in it, and so does a path, so such a run counts when a part of it is a key on its own, or when
- * it is dense in all three kinds as random base64 is and has a `+`, `=` padding or a long part.
+ * Whether a run without `+` or `/` reads as random rather than as words. Words (`handleOAuth2Callback`, the dashed
+ * name of a project folder) split into pieces at `-` and `_`, and into words at each change of case or digit, and
+ * those words are longer than the two or so characters random letters and digits give.
+ */
+function looksRandom(run: string): boolean {
+  return run.split(/[-_]/).some((piece) => {
+    if (piece.length < 16 || !hasAllKinds(piece)) return false;
+    const words = piece.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g) ?? [];
+    return piece.length / Math.max(1, words.length) < 3;
+  });
+}
+
+/**
+ * Whether a long run looks like a key: random mixed-case letters and digits (lower-case hex, a commit, is left alone).
+ * Standard base64 has `+` and `/` in it, and so does a path, so such a run counts when a part of it is a key on its
+ * own, or when it is dense in all three kinds as random base64 is and has a `+`, `=` padding or a long part.
  */
 function looksLikeKey(run: string): boolean {
   const parts = run.replace(/=+$/, "").split(/[+/]/);
-  if (parts.length === 1) return hasAllKinds(run);
-  if (parts.some((part) => part.length >= 32 && hasAllKinds(part))) return true;
+  if (parts.length === 1) return looksRandom(run);
+  if (parts.some((part) => part.length >= 32 && looksRandom(part))) return true;
   const dense = countOf(run, /\d/g) >= 3 && countOf(run, /[A-Z]/g) >= 3 && countOf(run, /[a-z]/g) >= 3;
   return dense && (run.includes("+") || run.endsWith("=") || parts.some((part) => part.length >= 20));
 }
 
 /** Secrets by their shape. A transcript holds whatever the agent read, and a gateway may kill a session that echoes one. */
 const SECRET_PATTERNS: Array<[RegExp, string | ((match: string, ...groups: string[]) => string)]> = [
-  // A PEM key block, to its end line or the end of the text. `[ ]` keeps the literal header out of this file.
-  [/-{5}BEGIN [A-Z ]*PRIVATE[ ]KEY-{5}[\s\S]*?(?:-{5}END [A-Z ]*PRIVATE[ ]KEY-{5}|$)/g, REDACTED],
+  // A PEM or PGP key block, to its end line or the end of the text. `[ ]` keeps the literal header out of this file.
+  [
+    /-{5}BEGIN [A-Z ]*PRIVATE[ ]KEY(?:[ ]BLOCK)?-{5}[\s\S]*?(?:-{5}END [A-Z ]*PRIVATE[ ]KEY(?:[ ]BLOCK)?-{5}|$)/g,
+    REDACTED,
+  ],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, `Bearer ${REDACTED}`],
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, REDACTED],
   [/\bsk-[A-Za-z0-9_-]{16,}/g, REDACTED],
@@ -71,6 +123,9 @@ const SECRET_PATTERNS: Array<[RegExp, string | ((match: string, ...groups: strin
   // A name that says it holds a secret, then its value: `API_TOKEN=…`, `"apiKey": "…"`, `pair#token=…`, and with
   // more around the word, `PGPASSWORD=…` or `AWS_SECRET_ACCESS_KEY=…`.
   [NAMED_VALUE, redactNamed],
+  [SECRET_FLAG, redactNamed],
+  // A user and password after curl's `-u` or `--user`: the password goes.
+  [/((?<!\S)(?:-u|--user)(?:\s+|=)["']?[^\s:"'@]+:)[^\s"']+/g, `$1${REDACTED}`],
   // A pairing code or link is a credential: "pairing code: ABCD1234EFGH".
   [/\b(pair(?:ing)?[ _-]?(?:code|link|token)\W{0,4})[A-Za-z0-9#=_-]{8,}/gi, `$1${REDACTED}`],
   // Long runs of letters and digits, such as keys: see looksLikeKey. The lookbehind starts a match only where a run
@@ -87,10 +142,14 @@ export function redact(text: string): string {
   return out;
 }
 
+/** How much a text cut with no space near the cut loses from its end: more than any key is long. */
+const CUT_TAIL = 200;
+
 /**
  * Cut to a generous bound, then redacted, then on one line and cut to `max`. Redacting before the last cut means a
  * secret the limit cuts can't leave its start behind, and the first cut keeps a huge tool output from being scanned
- * whole. A secret the first cut splits is the last run of non-space characters, so that run goes too.
+ * whole. A secret the first cut splits is the last run of non-space characters, so that run goes too, or when it is
+ * long (a minified line), its last CUT_TAIL characters.
  */
 function oneLine(text: string, max: number): string {
   const bound = max * 4;
@@ -98,7 +157,8 @@ function oneLine(text: string, max: number): string {
   let line = redact(cut ? text.slice(0, bound) : text);
   if (cut) {
     let end = line.length;
-    while (end > 0 && !/\s/.test(line[end - 1] ?? " ")) end--;
+    const floor = Math.max(0, end - CUT_TAIL);
+    while (end > floor && !/\s/.test(line[end - 1] ?? " ")) end--;
     line = line.slice(0, end);
   }
   line = line.replace(/\s+/g, " ").trim();

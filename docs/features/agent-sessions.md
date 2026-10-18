@@ -244,11 +244,15 @@ cut, and entries are paged at 20,000 characters (`PAGE_CHARS`); a page names the
 offset past the end says so with the number of entries. Each page reads and condenses the file again, with no
 cache: a transcript is read a few times while it is audited, and a live session's grows between pages.
 
-Every line is redacted (`redact`): API keys, bearer tokens, PEM key blocks, values whose name holds a secret word
-anywhere in it (`PGPASSWORD=…`, `AWS_SECRET_ACCESS_KEY=…`, an `Authorization` header with any scheme), passwords in
-URLs, pairing codes and long mixed-case runs, standard base64 included, become `[redacted]`. Text is first cut to
-four times its limit, so a huge tool output isn't scanned whole, then redacted, then cut to the limit; a secret the
-first cut splits is the last run of non-space characters, which is dropped. The session's label is redacted in the
+Every line is redacted (`redact`): API keys, bearer tokens, PEM and PGP key blocks, values whose name holds a secret
+word anywhere in it (`PGPASSWORD=…`, `AWS_SECRET_ACCESS_KEY=…`, an `Authorization` header with any scheme), quoted
+values with spaces in full, flags named for a secret and their value (`--password …`), the password after curl's
+`-u`, passwords in URLs, pairing codes and long runs of random mixed-case letters and digits, standard base64
+included, become `[redacted]`. Code beside a secret name is kept: a type, a call, another name, a number or a path
+(`password: string`, `PWD=/home/dev`), and so are long runs made of words (an identifier with a digit, a Claude
+project folder). Text is first cut to four times its limit, so a huge tool output isn't scanned whole, then
+redacted, then cut to the limit; a secret the first cut splits is the last run of non-space characters, which is
+dropped, or only its last 200 characters when that run is longer (a minified line). The session's label is redacted in the
 header and in error messages too. A transcript holds whatever the agent read, and the LLM gateway some users sit
 behind kills a session whose messages contain a credential-shaped string.
 
