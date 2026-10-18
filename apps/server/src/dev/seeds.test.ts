@@ -92,7 +92,12 @@ describe("seed scenarios", () => {
       sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
     });
     const stats = await ctx.services.stats.weekly(12);
+    // The run history page has Orchestrate and custom-automation runs with answers across projects to page through.
+    const agentRuns = ctx.services.autopilot.history({ automation: "orchestrate", limit: 100 });
     ctx.db.close();
+    expect(agentRuns.runs.length).toBeGreaterThan(30);
+    expect(new Set(agentRuns.runs.map((r) => r.projectId)).size).toBeGreaterThan(1);
+    expect(agentRuns.runs.some((r) => r.output !== null)).toBe(true);
     const completed = stats.series.tasks_completed!;
     expect(completed.values.filter((n) => (n ?? 0) > 0).length).toBeGreaterThan(8);
     expect(stats.series["cycle_time.in_progress_to_done"]!.total).toBeGreaterThan(0);

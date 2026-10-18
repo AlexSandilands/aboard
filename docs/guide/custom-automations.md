@@ -35,8 +35,8 @@ and keeps to the same pause, dry run, caps and quiet hours.
      Each scheduled run ends with a short **handover**: a note of what the next run needs to know, such as items it is
      holding or waiting on, what it triggered, and what it already triaged or skipped. The next run of the same
      automation in the same project is given it (cut off at 4,000 characters), so the agent remembers between
-     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's Recent runs lists each
-     run's summary and handover.
+     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's **Run history** opens a page that lists
+     each run's summary and handover ([Autopilot](autopilot.md#run-history)).
 
      Under **Allowed tools** you can list tools the agent may use besides the board's own, one per line: a whole MCP
      server (`mcp__issue-tracker`) or a single tool (`mcp__issue-tracker__search_jira`). Nobody is there to approve a call

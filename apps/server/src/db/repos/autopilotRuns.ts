@@ -1,9 +1,12 @@
+import type { SQLInputValue } from "node:sqlite";
 import {
   AUTOPILOT_ACTOR,
+  AUTOPILOT_ALL_RUNS,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
   FIX_GAVE_UP_KEY_PREFIX,
   type AutopilotRun,
+  type AutopilotRunFilter,
   type AutopilotRunStatus,
 } from "@repo/contracts";
 import { parseJson } from "../database.ts";
@@ -87,9 +90,158 @@ const toRow = (r: AutopilotRun) => ({
   updated_at: r.updatedAt,
 });
 
+/** What a hand delete weighs about a run before it goes (see the service's `deleteRuns`). */
+export interface RunDeleteFacts {
+  id: string;
+  automation: string;
+  taskId: string | null;
+  status: AutopilotRunStatus;
+  createdAt: string;
+  runner: string | null;
+  worktreePath: string | null;
+  /** On a task that isn't done or archived. */
+  openTask: boolean;
+  /** The newest succeeded answer of a scheduled agent in its project: what its next run is handed. */
+  latestAnswer: boolean;
+}
+
+/** Escapes `%`, `_` and the escape character itself for `LIKE ? ESCAPE '\'`. */
+const likePattern = (text: string): string => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+
+const encodeCursor = (run: Pick<RunRow, "created_at" | "id">): string =>
+  Buffer.from(JSON.stringify([run.created_at, run.id])).toString("base64url");
+
+/** The (created_at, id) a cursor stands for; null when it isn't one this repo made. */
+function decodeCursor(cursor: string): [string, string] | null {
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (Array.isArray(value) && value.length === 2 && value.every((v) => typeof v === "string")) {
+      return [value[0] as string, value[1] as string];
+    }
+  } catch {
+    // Not base64url or not JSON: the same as any other cursor we didn't make.
+  }
+  return null;
+}
+
+/** The WHERE clause and bindings for a history filter (runs are aliased `r`). */
+function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLInputValue[] } {
+  const where: string[] = [];
+  const params: SQLInputValue[] = [];
+  if (filter.automation !== AUTOPILOT_ALL_RUNS) {
+    where.push("r.automation = ?");
+    params.push(filter.automation);
+  }
+  if (filter.projectId) {
+    where.push("r.project_id = ?");
+    params.push(filter.projectId);
+  }
+  // Stored times are always toISOString(), so a filter time is normalized the same way and compares as text.
+  if (filter.since) {
+    where.push("r.created_at >= ?");
+    params.push(new Date(filter.since).toISOString());
+  }
+  if (filter.until) {
+    where.push("r.created_at < ?");
+    params.push(new Date(filter.until).toISOString());
+  }
+  if (filter.q) {
+    const like = likePattern(filter.q);
+    const taskNumber = /^#(\d+)$/.exec(filter.q);
+    where.push(
+      `(r.id LIKE ? ESCAPE '\\' OR r.summary LIKE ? ESCAPE '\\'
+        OR json_extract(r.output_json, '$.summary') LIKE ? ESCAPE '\\'
+        OR json_extract(r.output_json, '$.handover') LIKE ? ESCAPE '\\'
+        OR EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id AND p.title LIKE ? ESCAPE '\\')
+        ${taskNumber ? "OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.number = ?)" : ""})`,
+    );
+    params.push(like, like, like, like, like);
+    if (taskNumber) params.push(Number(taskNumber[1]));
+  }
+  return { where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
 /** Typed access to autopilot_runs, the engine's history. */
 export function createAutopilotRunsRepo(sql: Sql) {
   return {
+    /**
+     * One page of the history page's list: runs matching the filter, newest first, `limit` of them after the cursor.
+     * Paged by (created_at, id), so runs made meanwhile don't shift a page. Null cursor means the first page; a cursor
+     * this repo didn't make is `invalid`.
+     */
+    history(
+      filter: AutopilotRunFilter,
+      cursor: string | undefined,
+      limit: number,
+    ): { runs: AutopilotRun[]; nextCursor: string | null } | "invalid" {
+      const { where, params } = filterClause(filter);
+      let after = "";
+      if (cursor !== undefined) {
+        const at = decodeCursor(cursor);
+        if (!at) return "invalid";
+        after = `${where ? " AND" : "WHERE"} (r.created_at < ? OR (r.created_at = ? AND r.id < ?))`;
+        params.push(at[0], at[0], at[1]);
+      }
+      const rows = sql.all<RunRow>(
+        `SELECT r.* FROM autopilot_runs r ${where}${after} ORDER BY r.created_at DESC, r.id DESC LIMIT ?`,
+        ...params,
+        limit + 1,
+      );
+      const page = rows.slice(0, limit);
+      return { runs: page.map(toRun), nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]!) : null };
+    },
+    /** The ids of every run matching the filter. */
+    idsMatching(filter: AutopilotRunFilter): string[] {
+      const { where, params } = filterClause(filter);
+      return sql.all<{ id: string }>(`SELECT r.id FROM autopilot_runs r ${where}`, ...params).map((r) => r.id);
+    },
+    /** What a hand delete weighs about each of these runs; an id that doesn't exist isn't returned. */
+    deleteFacts(ids: readonly string[]): RunDeleteFacts[] {
+      return sql
+        .all<{
+          id: string;
+          automation: string;
+          task_id: string | null;
+          status: AutopilotRunStatus;
+          created_at: string;
+          runner: string | null;
+          worktree_path: string | null;
+          open_task: number;
+          latest_answer: number;
+        }>(
+          `SELECT r.id, r.automation, r.task_id, r.status, r.created_at, r.runner, r.worktree_path,
+             r.task_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.status <> 'done' AND t.archived_at IS NULL
+             ) AS open_task,
+             r.id IN (
+               SELECT id FROM (
+                 SELECT id, ROW_NUMBER() OVER (PARTITION BY automation, project_id ORDER BY finished_at DESC, rowid DESC) AS n
+                 FROM autopilot_runs
+                 WHERE project_id IS NOT NULL AND task_id IS NULL AND dry_run = 0 AND status = 'succeeded'
+                   AND json_extract(output_json, '$.kind') = 'scheduled_agent'
+               ) WHERE n = 1
+             ) AS latest_answer
+           FROM autopilot_runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
+          jsonList(ids),
+        )
+        .map((r) => ({
+          id: r.id,
+          automation: r.automation,
+          taskId: r.task_id,
+          status: r.status,
+          createdAt: r.created_at,
+          runner: r.runner,
+          worktreePath: r.worktree_path,
+          openTask: r.open_task === 1,
+          latestAnswer: r.latest_answer === 1,
+        }));
+    },
+    /** Deletes these runs; the caller has already weighed which may go. Returns how many were removed. */
+    deleteIds(ids: readonly string[]): number {
+      return Number(
+        sql.run("DELETE FROM autopilot_runs WHERE id IN (SELECT value FROM json_each(?))", jsonList(ids)).changes,
+      );
+    },
     get(id: string): AutopilotRun | null {
       const row = sql.get<RunRow>("SELECT * FROM autopilot_runs WHERE id = ?", id);
       return row ? toRun(row) : null;

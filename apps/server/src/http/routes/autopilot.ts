@@ -1,4 +1,9 @@
-import { UpdateAutopilotEngineInput, UpdateAutopilotSettingInput } from "@repo/contracts";
+import {
+  DeleteAutopilotRunsInput,
+  ListAutopilotRunsQuery,
+  UpdateAutopilotEngineInput,
+  UpdateAutopilotSettingInput,
+} from "@repo/contracts";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -131,6 +136,16 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
       }
       throw new AppError("VALIDATION", "Pass taskId or projectId");
     }),
+  );
+  // The run history page: filtered, keyset-paged. The route above stays as it was for its callers.
+  app.get(
+    "/api/autopilot/runs/history",
+    handle((c) => c.json(autopilot.history(parseQuery(c, ListAutopilotRunsQuery)))),
+  );
+  // The user deleting history by hand; nothing deletes runs by itself. `preview` counts and deletes nothing.
+  app.post(
+    "/api/autopilot/runs/delete",
+    handle(async (c) => c.json(autopilot.deleteRuns(await parseBody(c, DeleteAutopilotRunsInput)))),
   );
   app.post(
     "/api/autopilot/runs/:id/retry",

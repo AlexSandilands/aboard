@@ -20,7 +20,7 @@ import { FoldedSettingsSection, SettingsGroup, SettingsRow } from "~/components/
 import { cn } from "~/lib/utils";
 import { BlockedWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotOverview, useAutopilotScope, useBoard, useSkills } from "~/state/queries";
+import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import {
   BOARD_MODES,
@@ -36,13 +36,12 @@ import {
   withConfigValue,
 } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
-import { ScheduledRuns } from "./ScheduledRuns";
 import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
-type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
+export type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfig) => void;
 
-interface AutomationItem {
+export interface AutomationItem {
   automation: AutopilotAutomation;
   entry: AutopilotScopeEntry;
   inherited: AutopilotScopeEntry | null;
@@ -54,7 +53,7 @@ interface AutomationItem {
  * Every automation at a scope, with its entry there and the scope's setters, or the message to show instead while
  * loading, on an error or with no automations. `projectId` null is the board.
  */
-function useScopeAutomations(projectId: string | null) {
+export function useScopeAutomations(projectId: string | null) {
   const overview = useAutopilotOverview();
   const scope = useAutopilotScope(projectId);
   const board = useAutopilotScope(null, projectId !== null);
@@ -115,58 +114,48 @@ export function AutomationSections() {
   }
   return (
     <div className="space-y-2">
-      {items.map(({ automation, entry, onMode, onConfig }) => (
-        <FoldedSettingsSection
-          key={automation.key}
-          id={`autopilot.engine.automation-${automation.key}`}
-          title={automation.title}
-          summary={boardSummary(entry.mode)}
-          control={
-            <ModeSwitch
-              label={`${automation.title} for the board`}
-              modes={BOARD_MODES}
-              value={boardSwitchValue(entry.mode)}
-              disabled={pending}
-              blocked={automation.blocked}
-              onChange={(mode) => onMode(boardModeToSave(mode))}
-            />
-          }
-        >
-          <p className="px-3 py-3 text-xs leading-normal text-muted-foreground/80 sm:px-4">{automation.description}</p>
-          {automation.blocked ? (
-            <div className="px-3 pb-3 sm:px-4">
-              <BlockedWarning reason={automation.blocked} />
-            </div>
-          ) : null}
-          {automation.fields.map((field) => (
-            <div key={field.key} className="@container/settings-row px-3 sm:px-4">
-              <FieldRow
-                automation={automation}
-                field={field}
-                entry={entry}
-                projectId={null}
-                rejected={rejected}
-                onConfig={onConfig}
+      {items
+        // Orchestrate has an area of its own above this list (OrchestrateSettings).
+        .filter(({ automation }) => automation.key !== AUTOPILOT_ORCHESTRATE)
+        .map(({ automation, entry, onMode, onConfig }) => (
+          <FoldedSettingsSection
+            key={automation.key}
+            id={`autopilot.engine.automation-${automation.key}`}
+            title={automation.title}
+            summary={boardSummary(entry.mode)}
+            control={
+              <ModeSwitch
+                label={`${automation.title} for the board`}
+                modes={BOARD_MODES}
+                value={boardSwitchValue(entry.mode)}
+                disabled={pending}
+                blocked={automation.blocked}
+                onChange={(mode) => onMode(boardModeToSave(mode))}
               />
-            </div>
-          ))}
-          {automation.key === AUTOPILOT_ORCHESTRATE ? <OrchestrateRuns /> : null}
-        </FoldedSettingsSection>
-      ))}
-    </div>
-  );
-}
-
-/** Orchestrate's latest runs per project: what each did and the handover it left, since its runs have no task. */
-function OrchestrateRuns() {
-  const projects = useBoard().data?.projects.filter((p) => p.archivedAt === null) ?? [];
-  return (
-    <div className="flex flex-col gap-1.5 px-3 py-3 sm:px-4">
-      <p className="text-xs font-medium">Recent runs</p>
-      <p className="text-2xs text-muted-foreground/80">
-        What each run said it did, and the handover it left for the next run in that project.
-      </p>
-      <ScheduledRuns automation={AUTOPILOT_ORCHESTRATE} projects={projects} />
+            }
+          >
+            <p className="px-3 py-3 text-xs leading-normal text-muted-foreground/80 sm:px-4">
+              {automation.description}
+            </p>
+            {automation.blocked ? (
+              <div className="px-3 pb-3 sm:px-4">
+                <BlockedWarning reason={automation.blocked} />
+              </div>
+            ) : null}
+            {automation.fields.map((field) => (
+              <div key={field.key} className="@container/settings-row px-3 sm:px-4">
+                <FieldRow
+                  automation={automation}
+                  field={field}
+                  entry={entry}
+                  projectId={null}
+                  rejected={rejected}
+                  onConfig={onConfig}
+                />
+              </div>
+            ))}
+          </FoldedSettingsSection>
+        ))}
     </div>
   );
 }
@@ -252,7 +241,7 @@ function AutomationRow({
   );
 }
 
-function FieldRow({
+export function FieldRow({
   automation,
   field,
   entry,

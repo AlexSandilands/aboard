@@ -8,9 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { BoardFilterParams } from "@repo/contracts";
 import { z } from "zod";
+import { RunHistorySearch } from "./components/autopilot/runHistory.logic.ts";
 import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 import {
+  AutopilotRunsPage,
   CustomAutomationEditorPage,
   CustomAutomationImportPage,
   RuleEditorPage,
@@ -109,6 +111,14 @@ export const customAutomationEditorRoute = createRoute({
   component: CustomAutomationEditorPage,
 });
 
+// An automation's run history, or every automation's with `all`; the filters are search params.
+export const autopilotRunsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "autopilot/runs/$automation",
+  validateSearch: (search) => RunHistorySearch.parse(search),
+  component: AutopilotRunsPage,
+});
+
 export const ruleEditorRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "project/recurring/$ruleId",
@@ -139,6 +149,7 @@ export const router = createRouter({
         templateEditorRoute,
         customAutomationImportRoute,
         customAutomationEditorRoute,
+        autopilotRunsRoute,
         ruleEditorRoute,
       ]),
     ]),

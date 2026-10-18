@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_ACTOR,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   BOARD_RESTARTED_ERROR,
+  CUSTOM_AUTOMATION_PREFIX,
   AutopilotEngineSettings,
+  AutopilotKeptReason,
   capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
   FIX_GAVE_UP_KEY_PREFIX,
@@ -13,21 +16,29 @@ import {
   isSupersededRun,
   resolveAutopilot,
   RETRIED_PREFIX,
+  RUN_DELETE_MIN_AGE_MS,
+  RUN_PAGE_DEFAULT,
   ScheduledAgentRunOutput,
   unretiredKey,
   type AutopilotAutomation,
   type AutopilotOverview,
   type AutopilotRun,
+  type AutopilotRunPage,
   type AutopilotScopeEntry,
   type AutopilotScopeKind,
   type AutopilotSetting,
   type AutopilotStatus,
+  type DeleteAutopilotRunsInput,
+  type DeleteAutopilotRunsResult,
+  type ListAutopilotRunsQuery,
   type UpdateAutopilotEngineInput,
   type UpdateAutopilotSettingInput,
 } from "@repo/contracts";
+import { AUTOPILOT_AUTO_ARCHIVE } from "../autopilot/automations/autoArchive.ts";
 import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
+import type { RunDeleteFacts } from "../db/repos/autopilotRuns.ts";
 import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
 import type { NotificationsService } from "./notifications.ts";
@@ -128,6 +139,15 @@ export interface AutopilotService {
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   /** One automation's runs in a project, newest first. */
   automationRunsForProject(automation: string, projectId: string, limit?: number): AutopilotRun[];
+  /** One page of an automation's (or every automation's) runs for the history page, newest first. */
+  history(query: ListAutopilotRunsQuery): AutopilotRunPage;
+  /**
+   * Deletes runs by hand (the history page: nothing deletes them automatically), or with `preview` only counts what
+   * would go. Runs the engine still reads, or may redo work without, are kept and reported with why: those still
+   * queued or running, with a worktree on disk, on a task that isn't done, the latest answer of a scheduled agent in
+   * its project, and any under a day old. One transaction; publishes autopilot.changed.
+   */
+  deleteRuns(input: DeleteAutopilotRunsInput): DeleteAutopilotRunsResult;
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
   /**
    * The handover the last successful run of a scheduled agent left in a project, for its next run; null when it has
@@ -185,6 +205,26 @@ export interface AutopilotService {
 }
 
 const RUN_LIMIT = 50;
+
+/** Why a hand delete leaves this run alone, if it does (see `AutopilotService.deleteRuns`). */
+function keptReason(run: RunDeleteFacts, now: number): AutopilotKeptReason | null {
+  if (AUTOPILOT_ACTIVE_STATUSES.includes(run.status)) return "active";
+  // The worktree cleanup finds a run's worktree through its row, so the row stays while the folder does.
+  if (run.worktreePath && existsSync(run.worktreePath)) return "worktree";
+  if (run.openTask) return "open_task";
+  // These key their runs by the task's own state, so a deleted run lets them act on it again: Auto-archive on a task
+  // someone unarchived, a custom trigger that still holds. (Other automations' keys follow a PR head, a slot or a
+  // cursor that has moved on, or sit on tasks that are open while they matter.)
+  if (
+    run.taskId &&
+    (run.automation === AUTOPILOT_AUTO_ARCHIVE || run.automation.startsWith(CUSTOM_AUTOMATION_PREFIX))
+  ) {
+    return "task_key";
+  }
+  if (run.latestAnswer) return "latest_answer";
+  if (now - Date.parse(run.createdAt) < RUN_DELETE_MIN_AGE_MS) return "recent";
+  return null;
+}
 /** How long a Run now request waits for the engine before it is dropped. */
 export const RUN_REQUEST_TTL_MS = 60 * 60_000;
 
@@ -515,6 +555,44 @@ export function createAutopilotService(
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     automationRunsForProject: (automation, projectId, limit = RUN_LIMIT) =>
       repos.autopilotRuns.forProjectAutomation(projectId, automation, limit),
+    history({ cursor, limit = RUN_PAGE_DEFAULT, ...filter }) {
+      const page = repos.autopilotRuns.history(filter, cursor, limit);
+      if (page === "invalid") throw new AppError("VALIDATION", "Invalid cursor");
+      return page;
+    },
+    deleteRuns({ ids, filter, preview = false }) {
+      const weigh = (): { deletable: string[]; kept: Map<AutopilotKeptReason, number> } => {
+        const asked = ids ?? repos.autopilotRuns.idsMatching(filter!);
+        const now = Date.now();
+        const deletable: string[] = [];
+        const kept = new Map<AutopilotKeptReason, number>();
+        for (const facts of repos.autopilotRuns.deleteFacts(asked)) {
+          const reason = keptReason(facts, now);
+          if (reason) kept.set(reason, (kept.get(reason) ?? 0) + 1);
+          else deletable.push(facts.id);
+        }
+        return { deletable, kept };
+      };
+      const result = ({ kept }: ReturnType<typeof weigh>, deleted: number): DeleteAutopilotRunsResult => ({
+        preview,
+        deleted,
+        kept: [...kept.values()].reduce((sum, n) => sum + n, 0),
+        keptReasons: AutopilotKeptReason.options.flatMap((reason) =>
+          kept.has(reason) ? [{ reason, count: kept.get(reason)! }] : [],
+        ),
+      });
+      if (preview) {
+        const weighed = weigh();
+        return result(weighed, weighed.deletable.length);
+      }
+      // Weighed inside the write, so a run that starts between the preview and the confirm is still kept.
+      return core.write((fx) => {
+        const weighed = weigh();
+        const deleted = repos.autopilotRuns.deleteIds(weighed.deletable);
+        if (deleted > 0) fx.autopilot();
+        return result(weighed, deleted);
+      });
+    },
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
     lastHandover(automation, projectId) {
       const parsed = ScheduledAgentRunOutput.safeParse(

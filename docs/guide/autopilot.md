@@ -195,8 +195,12 @@ its work moving, like a T3 Code thread you'd leave watching the board:
 It works through the board's tools and `gh`, never edits code, and runs only while the project has work going on, so
 an idle project costs nothing. Add your own rules in **Extra instructions** (for example, "hold anything that changes
 the board's layout for me to check"): they're added to its prompt and win where they differ. Each run leaves a
-handover for the next, so it remembers what it's waiting on; **Recent runs** in its settings shows what each run did
-and what it passed on. Switch it on per project or for the board; it counts against the agent limits below.
+handover for the next, so it remembers what it's waiting on. Switch it on per project or for the board; it counts
+against the agent limits below.
+
+Orchestrate has its own area in **Settings → Autopilot**, above the other automations: its switch and settings, and **View all runs**, which opens
+its [run history](#run-history). What is per project is set in the project's own settings; its next check and
+**Run now** are in the lane's popover (below).
 
 Orchestrate sits at the top of the lane's Autopilot popover, in a section of its own. It shows when the next check
 is ("Next check in 12:34") and when it last ran. A check is a look, not a promise of a run: when the next one won't
@@ -204,7 +208,8 @@ run, the section says why instead (idle with nothing to check, paused, quiet hou
 now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
 it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
 the next check too (`Autopilot · 12m`). Switch that off in the popover or under **Settings → Appearance →
-Orchestrate countdown on lanes**.
+Orchestrate countdown on lanes**. **View history** in the popover's section opens the run history filtered to that
+project.
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 
@@ -215,6 +220,28 @@ the task flags it again.
 
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).
+
+## Run history
+
+**View all runs** (in Orchestrate's area, and in a scheduled custom automation's editor) and **All runs** (beside the
+Automations heading) open a page listing every run, newest first, with more loading as you scroll. Each run shows its
+status, project, when it ran, what it said it did and, for a scheduled agent, the handover it left, folded away. Narrow
+the list by project and time (the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name,
+a task as `#12`, or any word of the summary or handover. The filters are in the page's address, so you can bookmark a
+view.
+
+You can clear out old runs from this page. Tick runs and choose **Delete selected**, or choose **Delete all matching…**
+to delete everything the filters match: set a custom range ending on a date, say, then delete. The box tells you how many
+will go before you confirm, and that runs aren't in backups, so a delete can't be undone. Autopilot never deletes runs
+by itself.
+
+Some runs stay even when you ask, because Autopilot still reads them. The box says how many it kept and why:
+
+- runs that are queued or running, or whose worktree is still on disk;
+- runs on a task that isn't Done yet (they decide how many review rounds and fix attempts are left);
+- Auto-archive and custom automation runs on a task;
+- the latest answer of each scheduled agent in each project (its next run is handed that handover);
+- runs less than a day old.
 
 ## Limits
 

@@ -52,6 +52,9 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
  */
 export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = ["integrations.github.host-"];
 
+/** Orchestrate's own area on the Autopilot page: its switch, config, per-project checks and run history. */
+const ORCHESTRATE_AREA_ID = "autopilot.engine.orchestrate";
+
 /** Titles and descriptions of the built-in automations, as the server defines them (a test compares the titles). */
 export const AUTOMATION_ENTRIES: ReadonlyArray<{
   key: string;
@@ -630,6 +633,12 @@ function generated(): Draft[] {
       ]),
       foldedIn: `autopilot.engine.automation-${key}`,
     })),
+    draft(
+      ORCHESTRATE_AREA_ID,
+      "Orchestrate",
+      "Every few minutes, an agent looks over the project's work: nudges stalled threads, retries failed runs, merges ready tasks flagged for auto-merge, and flags what needs you.",
+      ["automation", "autopilot", "switch", "babysit", "next check", "run now", "run history", "handover"],
+    ),
   ];
 }
 
@@ -650,6 +659,7 @@ function resolve(entry: Draft): SettingsIndexEntry {
 
 // Cards that name a thing the user would call a section: the entry says "card" so a row of the same name sorts first.
 const CARD_IDS: ReadonlySet<string> = new Set([
+  ORCHESTRATE_AREA_ID,
   "board.data.backup",
   "board.data.archived-projects",
   "tasks.new-tasks.templates",

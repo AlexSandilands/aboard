@@ -24,6 +24,7 @@ export * from "./sessionLaunch.ts";
 export * from "./agentIntegrations.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
+export * from "./autopilotRunHistory.ts";
 export * from "./prReview.ts";
 export * from "./recurring.ts";
 export * from "./customAutomations.ts";

@@ -1,3 +1,4 @@
+import { AUTOPILOT_ALL_RUNS, AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useSettingsNav } from "~/state/ui";
@@ -51,6 +52,33 @@ export function useLeaveEditor() {
     },
     [router, openSettings],
   );
+}
+
+/**
+ * Leaves a run history page for the Autopilot settings, scrolled to where its link was: Orchestrate's area, the list of
+ * automations, or the custom automations. Steps back in history when the page was opened from there (as
+ * `useLeaveEditor`).
+ */
+export function useLeaveRunHistory(automation: string) {
+  const router = useRouter();
+  const openSettings = useOpenSettings();
+  return useCallback(() => {
+    const section =
+      automation === AUTOPILOT_ORCHESTRATE
+        ? "autopilot.engine.orchestrate"
+        : automation === AUTOPILOT_ALL_RUNS
+          ? "autopilot.engine"
+          : "autopilot.custom";
+    if (router.state.location.state.settingsEditorFromList && router.history.canGoBack()) {
+      // A custom automation's history is opened from its editor, which is what Back returns to: nothing to scroll.
+      if (automation === AUTOPILOT_ORCHESTRATE || automation === AUTOPILOT_ALL_RUNS) {
+        useSettingsNav.getState().requestScroll(section);
+      }
+      router.history.back();
+      return;
+    }
+    openSettings(section);
+  }, [router, openSettings, automation]);
 }
 
 /** Back to the board, as it was when Settings opened. */

@@ -1,4 +1,9 @@
-import type { AutopilotEngineSettings, FindingSeverity, UpdateAutopilotEngineInput } from "@repo/contracts";
+import {
+  AUTOPILOT_ALL_RUNS,
+  type AutopilotEngineSettings,
+  type FindingSeverity,
+  type UpdateAutopilotEngineInput,
+} from "@repo/contracts";
 import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
@@ -7,6 +12,8 @@ import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayo
 import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { AutomationRows, AutomationSections } from "./AutomationRows";
+import { OrchestrateSettings } from "./OrchestrateSettings";
+import { RunHistoryLink } from "./RunHistoryLink";
 import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
 
@@ -18,8 +25,8 @@ const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> =
 ];
 
 /**
- * Settings → Autopilot: Pause all and the engine's limits, then the board-level switch and config of every
- * automation, one folded section each. Reads and writes its own queries.
+ * Settings → Autopilot: Pause all and the engine's limits, Orchestrate's own area, then the board-level switch and
+ * config of every other automation, one folded section each. Reads and writes its own queries.
  */
 export function AutopilotEngineSection() {
   const overview = useAutopilotOverview();
@@ -34,8 +41,12 @@ export function AutopilotEngineSection() {
           </p>
         )}
       </SettingsSection>
+      <OrchestrateSettings />
       <div className="space-y-2.5">
-        <h2 className="flex min-h-7 items-center px-3 text-sm font-normal text-foreground/70 sm:px-4">Automations</h2>
+        <div className="flex min-h-7 items-center justify-between gap-4 px-3 sm:px-4">
+          <h2 className="text-sm font-normal text-foreground/70">Automations</h2>
+          <RunHistoryLink automation={AUTOPILOT_ALL_RUNS} label="All runs" />
+        </div>
         <AutomationSections />
       </div>
     </>
