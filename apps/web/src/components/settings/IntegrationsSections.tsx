@@ -1,7 +1,5 @@
 import {
   BRAND,
-  MODEL_TIERS,
-  type AgentHarness,
   type AgentIntegrationStatus,
   type AppSettings,
   type ConnectT3Result,
@@ -21,6 +19,7 @@ import { queryKeys, useAgentIntegrations } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { agentDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
 import { CommandSnippet, SettingsRow, SettingsSection, StatusDot, StatusLine } from "./settingsLayout";
+import { useOpenSettings } from "./settingsNavigation";
 
 const Dot = ({ dot }: { dot: IntegrationDot }) => <StatusDot tone={dot.tone} label={dot.label} />;
 
@@ -215,6 +214,7 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
           />
         }
       />
+      <ModelsPerTierRow section="t3-code" />
     </SettingsSection>
   );
 }
@@ -425,57 +425,27 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
           </>
         }
       />
-      <SessionModelsRow settings={settings} harness="claude-code" section="claude-code" placeholder="e.g. sonnet" />
+      <ModelsPerTierRow section="claude-code" />
     </SettingsSection>
   );
 }
 
 /**
- * The `--model` a new session from the hand-off menu starts on, per suggested tier. The launch dialog fills it in;
- * blank leaves the CLI's own default.
+ * A one-line pointer from an integration to the Model tiers page, where its model per suggested tier is set. The same
+ * row sits in each integration that has one, so none of them looks like it is missing the setting.
  */
-function SessionModelsRow({
-  settings,
-  harness,
-  section,
-  placeholder,
-}: {
-  settings: AppSettings;
-  harness: AgentHarness;
-  section: string;
-  placeholder: string;
-}) {
-  const updateSettings = useUpdateSettings();
+function ModelsPerTierRow({ section }: { section: string }) {
+  const openSettings = useOpenSettings();
   return (
     <SettingsRow
-      id={`integrations.${section}.session-models`}
-      title="Session models"
-      description="The model a new session starts on, by the task's suggested tier. Empty uses the CLI's default."
-      info="Used by a new session from a task's hand-off menu."
-    >
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        {MODEL_TIERS.map(({ value: tier, label }) => {
-          const current = settings.modelTiers[tier];
-          return (
-            <label key={tier} className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-              <span className="w-16 shrink-0">{label}</span>
-              <BlurInput
-                size="sm"
-                aria-label={`${label} tier session model`}
-                placeholder={placeholder}
-                value={current.cli?.[harness] ?? ""}
-                onSave={(next) =>
-                  // Only this tier is sent, so quick edits to two tiers can't overwrite each other.
-                  updateSettings.mutate({
-                    modelTiers: { [tier]: { ...current, cli: { ...current.cli, [harness]: next.trim() || null } } },
-                  })
-                }
-              />
-            </label>
-          );
-        })}
-      </div>
-    </SettingsRow>
+      id={`integrations.${section}.models`}
+      title="Models per tier"
+      control={
+        <Button size="sm" variant="outline" onClick={() => openSettings("models")}>
+          Open Model tiers
+        </Button>
+      }
+    />
   );
 }
 
@@ -546,7 +516,7 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
           </>
         }
       />
-      <SessionModelsRow settings={settings} harness="copilot-cli" section="copilot" placeholder="e.g. gpt-5.4" />
+      <ModelsPerTierRow section="copilot" />
     </SettingsSection>
   );
 }

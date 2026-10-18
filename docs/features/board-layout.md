@@ -224,8 +224,10 @@ inactive threads are dimmed.
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `tasks`, `autopilot`, `integrations` or `project`
-(`/settings` and unknown groups redirect to `board`). The editors are sub-routes: `tasks/templates/<id>`,
+Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
+(`/settings` and unknown groups redirect to `board`). `models` is the Model tiers page: one row per tier
+(`models.tiers.<tier>`) with its description and each set-up provider's model; the integration sections link to it
+with a **Models per tier** row (`integrations.<section>.models`). The editors are sub-routes: `tasks/templates/<id>`,
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 

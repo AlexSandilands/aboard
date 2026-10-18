@@ -4,6 +4,7 @@ import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BlocksIcon,
+  CpuIcon,
   FolderIcon,
   KeyboardIcon,
   ListTodoIcon,
@@ -44,6 +45,7 @@ const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
   keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
+  models: CpuIcon,
   autopilot: ZapIcon,
   integrations: BlocksIcon,
   project: FolderIcon,
