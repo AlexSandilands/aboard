@@ -183,7 +183,14 @@ export function SettingsRow({
         className,
       )}
     >
-      <div className="flex flex-col gap-3 @min-[32rem]/settings-row:grid @min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">
+      <div
+        className={cn(
+          "flex flex-col gap-3",
+          // Without a control (a multiline field's sits in `children`) the title keeps the whole width.
+          control &&
+            "@min-[32rem]/settings-row:grid @min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8",
+        )}
+      >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
@@ -214,11 +221,11 @@ export function SettingsRow({
 
 /**
  * The two widths a control in a settings row has, so the controls of a card line up on the row's right edge: numbers,
- * times and anything with a unit are the first, free text (a model, a path) the second. Full width on narrow screens,
- * where the row stacks.
+ * times and anything with a unit are the first, free text (a model, a path) the second. Full width while the row is
+ * stacked (it switches on the row's own width, like SettingsRow's grid), so use them only inside a SettingsRow.
  */
-export const SETTINGS_NUMBER_WIDTH = "sm:w-36";
-export const SETTINGS_TEXT_WIDTH = "sm:w-56";
+export const SETTINGS_NUMBER_WIDTH = "@min-[32rem]/settings-row:w-36";
+export const SETTINGS_TEXT_WIDTH = "@min-[32rem]/settings-row:w-56";
 
 /** A number field with its unit inside the field as a trailing addon (`[ 30 | minutes ]`), at the number width. */
 export function UnitInput({ unit, className, ...props }: InputProps & { unit?: string }) {
