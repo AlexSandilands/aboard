@@ -54,7 +54,9 @@ function parseActivityTime(text: string, field: string, now: number): Date {
   }
   // A time without an offset would be read as the server's local time; the report says UTC.
   const bare = /^(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d(:\d\d(\.\d+)?)?)$/.exec(text.trim());
-  const at = new Date(bare ? `${bare[1]}T${bare[2]}Z` : text);
+  const iso = /^\d{4}-\d\d-\d\d(T\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)?)?$/i.test(text.trim());
+  // Only ISO forms: the parser would take "7" for a year, and "2026/10/12" for local time.
+  const at = new Date(bare ? `${bare[1]}T${bare[2]}Z` : iso ? text.trim() : Number.NaN);
   if (Number.isNaN(at.getTime())) {
     throw new AppError(
       "VALIDATION",

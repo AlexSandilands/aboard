@@ -112,6 +112,8 @@ describe("board_activity over MCP", () => {
     const bad = await call(agent, { since: "last week" });
     expect(bad.isError).toBe(true);
     expect(bad.text).toContain('since must be an ISO date or time, or how long ago ("24h", "7d")');
+    // Forms the date parser would read loosely: "7" as a year, a slashed date as local time.
+    for (const loose of ["7", "2026/10/12"]) expect((await call(agent, { since: loose })).isError).toBe(true);
     const backwards = await call(agent, {
       since: "2026-10-02",
       until: "2026-10-01",
