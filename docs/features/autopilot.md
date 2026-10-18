@@ -530,7 +530,7 @@ the automation. Runs stay, under the old key.
 | `pr_event`         | Per PR link: `linked`, `new_head`, `checks_failing`, `conflict`, `merged`, timed by `PrChanges` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<began>`, `pr_conflict:<link>:<began>`, `pr_merged:<link>` |
 | `stale`            | A task in `status` for `hours`              | `stale:<taskId>:<statusChangedAt>`             |
 | `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
-| `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<projectId>:<local slot stamp>` |
+| `schedule`         | Per project in scope, no task: weekly (`latestDue`), every N hours (`latestHourlySlot`) or every N minutes, 5 to 1440 (`latestMinutesSlot`), counted from local midnight; only the latest slot counts, so downtime catches up once | `schedule:<projectId>:<local slot stamp>` |
 
 - **Arming.** Events before a task came into the automation's scope don't fire, so switching it on doesn't act on
   the board's history. `customArmedAt` takes the latest of:
@@ -558,12 +558,17 @@ the automation. Runs stay, under the old key.
   mergeability keep the last known state, so checks that fail again after a push, or a conflict GitHub recomputes,
   aren't new; passing and then failing again is.
 - **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
-  contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
-  project filter (`checkCustomDefinition`, run by the service and the form).
+  contracts). Epics and archived tasks never match. A schedule has no task, so it takes only the project filter
+  (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
   It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
-  set to the PR's head branch. Its config is the shared runner options, per scope.
+  set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
+  the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
+  `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
+  (never in the project's checkout, which the board may be running from; "T3 only" fails such a run). The tier is the
+  action's, else the default for the runner's model tiers. Nothing keeps a run from starting while the last one for
+  the project is still going: it counts against `maxConcurrent` like any agent run.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values

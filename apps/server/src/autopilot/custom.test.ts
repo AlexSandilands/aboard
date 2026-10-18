@@ -214,6 +214,66 @@ describe("custom automations: triggers", () => {
     expect(s.autopilot.runsForProject(project.id)[0]!.dedupeKey).toMatch(/^schedule:/);
   });
 
+  describe("an agent on a schedule", () => {
+    const minutes = (everyMinutes: number) => ({
+      kind: "schedule" as const,
+      schedule: { kind: "minutes" as const, everyMinutes },
+    });
+    const agent = { kind: "agent" as const, prompt: "Check on {{project.name}}", skill: "orchestrate" };
+
+    it("starts one task-less run per slot, with a project footer", async () => {
+      const { define, pass, agentRuns, runsOf, project, other } = setup();
+      const custom = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: agent,
+      });
+      await pass();
+      // Nothing before the automation was armed, whatever slot it is.
+      expect(agentRuns).toHaveLength(0);
+      await pass(5 * 60_000);
+      await pass(5 * 60_000);
+      expect(agentRuns).toHaveLength(1);
+      const request = agentRuns[0]!;
+      expect(request.label).toBe("Watch · Alpha");
+      expect(request.prompt).toContain("Use the orchestrate skill.");
+      expect(request.prompt).toContain("Check on Alpha");
+      expect(request.prompt).toContain("Project folder: /work/alpha");
+      expect(request.prompt).toContain("This run has no task");
+      expect(request.prompt).not.toContain("get_task");
+      expect(request.run.taskId).toBeNull();
+      expect(request.workspace).toBeUndefined();
+      expect(runsOf()[0]).toMatchObject({
+        automation: customAutomationKey(custom.id),
+        taskId: null,
+        status: "succeeded",
+      });
+      expect(runsOf()[0]!.dedupeKey).toMatch(/^schedule:/);
+      expect(runsOf(other.id)).toHaveLength(0);
+    });
+
+    it("catches up once after downtime, not once per missed slot", async () => {
+      const { define, pass, agentRuns, project } = setup();
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(60 * 60_000);
+      // One run, though twelve slots passed.
+      expect(agentRuns).toHaveLength(1);
+      await pass(60 * 60_000);
+      expect(agentRuns).toHaveLength(1);
+    });
+
+    it("shows the prompt in a dry run and starts nothing", async () => {
+      const { s, define, pass, agentRuns, runsOf, project } = setup();
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      s.autopilot.updateEngine({ dryRun: true });
+      await pass(5 * 60_000);
+      expect(agentRuns).toHaveLength(0);
+      expect(runsOf()[0]).toMatchObject({ dryRun: true, status: "skipped" });
+      expect(runsOf()[0]!.detail).toContain("Check on Alpha");
+    });
+  });
+
   it("runs a schedule's slot in every project it is on in, not just the first", async () => {
     const { define, pass, shellRuns, shell } = setup();
     define({
@@ -646,7 +706,7 @@ describe("custom automations: definitions", () => {
     const schedule = { kind: "schedule" as const, schedule: { kind: "hourly" as const, everyHours: 2 } };
     expect(() =>
       s.customAutomations.create({ name: "A", trigger: schedule, action: { kind: "agent", prompt: "x" } }),
-    ).toThrow(/no task for an agent/);
+    ).not.toThrow();
     expect(() =>
       s.customAutomations.create({
         name: "B",
