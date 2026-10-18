@@ -135,7 +135,7 @@ past an earlier flag in that very millisecond.
 Default never auto-starts a task; only On does, so an automation that starts work (Start planned tasks) checks
 for `task.autopilot === true` on top of its scope being on. The flag does nothing by itself.
 
-- The user sets it in the task panel's Details section. Agents set it with `autopilot: "default" | "on" | "off"`
+- The user sets it in the task panel's Automation section. Agents set it with `autopilot: "default" | "on" | "off"`
   on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
   as an `updated` activity entry naming `autopilot`.
 - After `set_plan` or `create_task`, when Start planned tasks resolves On for the task (its epic, project or the board)

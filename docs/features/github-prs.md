@@ -123,7 +123,7 @@ the default branch, for tasks the user allowed to be merged that way ([ADR 0008]
 
 - **The flag.** `tasks.auto_merge`: null (Default) and 0 (Off) refuse, 1 (On) allows. Set in the REST task update
   (`autoMerge`) or by an agent with `create_task` / `add_to_backlog` / `update_task` (`autoMerge: "default" | "on" | "off"`),
-  only once the user has said so. Epics can't have it. The task detail shows `Auto-merge:` when set.
+  only once the user has said so. Epics can't have it. The task detail shows `Auto-merge:` when set, and the task panel's Automation section sets it.
 - **Refused** (a `VALIDATION` error with the reason, `mergeTaskPr` in `integrations/mergeTaskPr.ts`) for an epic, a
   task without the flag On, a task in an epic delivered through an integration branch (Autopilot merges those), a
   task with no PR, or more than one, not merged or closed, a PR from a fork, and whenever `notMergeable`

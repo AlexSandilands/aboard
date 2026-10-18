@@ -14,6 +14,7 @@ import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
+import { AutomationSection } from "./AutomationSection";
 import { LinksSection } from "./LinksSection";
 import { DetailsSection } from "./DetailsSection";
 import { ImportCallout } from "./ImportCallout";
@@ -36,8 +37,8 @@ import type { SectionId } from "./sections.logic";
 const MIN_WIDTH = 380;
 const DEFAULT_WIDTH = 540;
 const EMPTY_PROJECTS: ReadonlyArray<Project> = [];
-/** An epic has no plan and isn't reviewed itself; its children are. */
-const EPIC_HIDDEN_SECTIONS: ReadonlyArray<SectionId> = ["plan", "review"];
+/** An epic has no plan, isn't reviewed or merged itself (its children are), and has no Autopilot flag or priority. */
+const EPIC_HIDDEN_SECTIONS: ReadonlyArray<SectionId> = ["plan", "review", "automation"];
 
 /**
  * Highest usePanel.planEditorRequest already acted on. Module-level so a request made just
@@ -210,6 +211,8 @@ function TaskPanelBody({
               return <LinksSection task={task} />;
             case "relations":
               return <RelationsSection task={task} />;
+            case "automation":
+              return <AutomationSection task={task} />;
             case "review":
               return <ReviewSection task={task} />;
             case "autopilot":

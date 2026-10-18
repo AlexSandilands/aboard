@@ -96,10 +96,10 @@ Web Animations API because React would drop a class on re-render. `#N` in the pa
 
 ### Task panel sections
 
-The panel's sections are Labels, Sessions, Links, Relations, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
-any link problem, the blockers and what the task blocks, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
+any link problem, the blockers and what the task blocks, the automation settings that aren't at their default, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
 That text is the fallback and what screen readers read. Where there is something to show, the section passes
@@ -113,6 +113,7 @@ toggles):
 | Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu, one per expanded row (sessions folded into a thread stay in its menu), 4 then `+N`         |
 | Links        | PR chips coloured by state with a checks dot, 3 then `+N` for the rest. Without a PR the text stays                |
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
+| Automation   | Text only                                                                                                          |
 | Local review | The review badge                                                                                                   |
 | Autopilot    | Status pill of the run that needs attention, else the latest run                                                                                       |
 | Plan         | The step bar (grey to-do, blue current, green done) with done/total and the current step                           |
@@ -126,6 +127,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Sessions             | The task has no T3 threads or agent sessions      |
 | Links                | The task has no PRs, issues, Jira keys or URLs    |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
+| Automation           | Never: the settings are its content               |
 | Local review         | No review rounds                                  |
 | Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
 | Details              | No description and no plan context                |
@@ -137,11 +139,21 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended, except Sessions, which goes before Links in a layout saved without it (and takes its hidden and collapsed state from Links when that layout
-had them, since it used to be part of Links).
+had them, since it used to be part of Links) and Automation, which goes before Local review.
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
+
+#### The Automation section
+
+The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,
+whether Start planned tasks may start it), **Auto-review** (Default / On / Off, whether moving to Review opens a local
+review round), **Auto-merge** (Default / On / Off, whether `merge_task_pr` may merge its PR; Default reads as off) and a
+**Priority** switch. Each saves through `useUpdateTask` as soon as it changes. The actions menu's "Mark as priority" and the
+card's star stay as shortcuts to the same field. Local review's header only shows whether auto-review is on, as plain text.
+An epic has none of these (no plan to start, no PR, no priority), so the panel leaves the section out for it, like Plan and
+Local review.
 
 #### The Sessions section
 

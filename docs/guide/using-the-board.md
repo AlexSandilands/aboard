@@ -110,7 +110,7 @@ or clear the tier from the dropdown there; picking one drops the planner's reaso
 
 ## Autopilot flag
 
-Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+Each task has an **Autopilot** setting in the panel's Automation section: Default, On or Off. Autopilot only
 starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
 project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
 flag tasks but never change Autopilot's own settings.
