@@ -13,7 +13,7 @@ const MAX_TITLE_LENGTH = 120;
 export const claudeProjectSlug = (cwd: string): string => cwd.replace(/[^a-zA-Z0-9]/g, "-");
 
 /** `<claudeDir>/projects/<folder>/<sessionId>.jsonl`, found by the working directory or else by looking in each folder. */
-function transcriptPath(claudeDir: string, sessionId: string, cwd: string | undefined): string | null {
+export function transcriptPath(claudeDir: string, sessionId: string, cwd: string | undefined): string | null {
   const root = join(claudeDir, "projects");
   const file = `${sessionId}.jsonl`;
   const exists = (path: string) => {

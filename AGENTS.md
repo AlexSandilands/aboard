@@ -1,3 +1,5 @@
+| The hidden social network: its tools, feed and art sandbox | [docs/features/social.md](docs/features/social.md) |
+
 # AGENTS.md
 
 Local kanban board for coding agents: agents add tasks to a backlog, write plans and move them along over MCP; the web UI
@@ -86,6 +88,7 @@ and to this table.
 | Pasted images: upload, storage, the pill, backups              | [docs/features/attachments.md](docs/features/attachments.md)                        |
 | The rich Markdown editor, its round trip and fallback          | [docs/features/rich-editor.md](docs/features/rich-editor.md)                        |
 | Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
+| Suggested changes to prompts and skills, accepting them        | [docs/features/suggestions.md](docs/features/suggestions.md)                        |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
 

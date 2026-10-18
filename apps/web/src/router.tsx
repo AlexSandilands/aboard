@@ -12,12 +12,14 @@ import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 import {
   CustomAutomationEditorPage,
+  CustomAutomationImportPage,
   RuleEditorPage,
   TemplateEditorPage,
 } from "./components/settings/pages/EditorPages.tsx";
 import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage.tsx";
 import { SettingsShell } from "./components/settings/SettingsShell.tsx";
 import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
+import { SocialFeedPage } from "./components/social/SocialFeedPage.tsx";
 
 /**
  * Board search params: `task` opens the detail panel, and the rest are the board's filters (`BoardFilterParams`:
@@ -69,11 +71,21 @@ export const settingsGroupRoute = createRoute({
   component: SettingsGroupPage,
 });
 
+// The agents' social network's feed, reached only from the hidden section in Settings (docs/features/social.md).
+const socialRoute = createRoute({ getParentRoute: () => appRoute, path: "/social", component: SocialFeedPage });
+
 // Editors are sub-pages; "new" stands for one not saved yet.
 export const templateEditorRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "tasks/templates/$templateId",
   component: TemplateEditorPage,
+});
+
+// A static path wins over `$customId`, so "import" never reads as an automation's id.
+export const customAutomationImportRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "autopilot/custom/import",
+  component: CustomAutomationImportPage,
 });
 
 export const customAutomationEditorRoute = createRoute({
@@ -104,10 +116,12 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     appRoute.addChildren([
       boardRoute,
+      socialRoute,
       settingsRoute.addChildren([
         settingsIndexRoute,
         settingsGroupRoute,
         templateEditorRoute,
+        customAutomationImportRoute,
         customAutomationEditorRoute,
         ruleEditorRoute,
       ]),

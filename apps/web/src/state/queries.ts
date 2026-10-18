@@ -16,6 +16,7 @@ import type {
   SettingsAskStatus,
   NotificationList,
   SkillInfo,
+  SocialFeed,
   SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -43,6 +44,7 @@ export const queryKeys = {
   settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
+  socialFeed: ["socialFeed"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -70,6 +72,7 @@ export const queryKeys = {
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
   customAutomations: ["customAutomations"] as const,
   digests: ["digests"] as const,
+  suggestions: ["suggestions"] as const,
 };
 
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
@@ -425,6 +428,9 @@ export function useBoardEvents() {
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
       }
+      if (event.type === "suggestions.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
+      }
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while
     // the dev server restarts) closes it for good, leaving the board silently stale. Reopen it then.
@@ -447,4 +453,13 @@ export function useBoardEvents() {
       source?.close();
     };
   }, [queryClient]);
+}
+
+/** The agents' social network, for the hidden feed page. No event covers posts, so it polls while the page is open. */
+export function useSocialFeed() {
+  return useQuery({
+    queryKey: queryKeys.socialFeed,
+    queryFn: ({ signal }) => api<SocialFeed>("/api/social", { signal }),
+    refetchInterval: 30_000,
+  });
 }

@@ -35,6 +35,15 @@ export function decideNavigation(target: string, boardUrl: string): NavigationDe
   return EXTERNAL_PROTOCOLS.has(url.protocol) ? "external" : "block";
 }
 
+/**
+ * Whether a frame inside the board may navigate. The board's only frames are sandboxed agent art (the social
+ * network's feed), which loads from srcdoc and must never go anywhere else: a document it navigated to would shed the
+ * art's CSP. So a sub-frame may load only its srcdoc or a blank page.
+ */
+export function allowSubFrameNavigation(target: string): boolean {
+  return target === "about:srcdoc" || target === "about:blank";
+}
+
 /** Keeps the last `max` lines of a stream of output chunks, for error reports. */
 export class LogTail {
   private lines: string[] = [];

@@ -1,10 +1,11 @@
 # Autopilot
 
 Autopilot lets the board act on its own. It is a list of **automations**, each of which watches the board and
-does something when it's needed. Everything is off until you switch it on, and Autopilot never merges into the
-default branch, closes or deletes a task, force-pushes, or pushes to the default branch. The one merge it makes is
-a task's pull request into its epic's integration branch, for an epic you set to deliver that way
-([Merge into epic branch](#merge-into-epic-branch)).
+does something when it's needed. Everything is off until you switch it on, and Autopilot never closes or deletes a
+task, force-pushes, or pushes to the default branch. It merges in two cases only: a task's pull request into its
+epic's integration branch, for an epic you set to deliver that way ([Merge into epic branch](#merge-into-epic-branch)),
+and, through [Orchestrate](#orchestrate), a task's pull request into the default branch when you turned auto-merge on
+for that task.
 
 ## Switching automations on
 
@@ -155,11 +156,32 @@ Switch **Merge into epic branch** on for the epic (or its project). It needs no 
 ## Letting an agent merge into the default branch
 
 Autopilot never merges into the default branch. An agent you run (one orchestrating an epic, say) can, with the
-`merge_task_pr` tool, but only for a task you've allowed it on: tell the agent to turn **auto-merge** on for the
-task (`update_task` with `autoMerge: "on"`). The board then merges the task's pull request only once it is in
+`merge_task_pr` tool, but only for a task you've allowed it on: set **Auto-merge** to On in the task panel's
+Automation section, or tell the agent to turn it on (`update_task` with `autoMerge: "on"`). The board can't tell an
+agent from you, so any agent with the board's tools could set it; agents are told to only when you ask. The board then merges the task's pull request only once it is in
 Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass and
 it merges cleanly, and only at the commit it checked. The agent picks the order, so the tasks' pull requests don't
 conflict. Without the flag, the tool refuses and the merge stays yours.
+
+## Orchestrate
+
+**Orchestrate** is an agent that looks over a project every 30 minutes (**Every**, from 5 minutes to a day) and keeps
+its work moving, like a T3 Code thread you'd leave watching the board:
+
+- it nudges a task's thread that has gone quiet, or starts one when the task has none working;
+- it retries an Autopilot run that failed or was cut short (a review lost to a board restart, say);
+- it tells a thread to fix failing checks or conflicts, and re-runs a flaky CI job once;
+- with **May merge** on (the default), it merges ready pull requests of tasks you turned **auto-merge** on for, one
+  at a time, and checks the others are still green afterwards. Turn it off to have it only list them;
+- it flags a task under **Needs attention** when only you can decide something.
+
+It works through the board's tools and `gh`, never edits code, and runs only while the project has work going on, so
+an idle project costs nothing. Add your own rules in **Extra instructions** (for example, "hold anything that changes
+the board's layout for me to check"): they're added to its prompt and win where they differ. Each run leaves a
+handover for the next, so it remembers what it's waiting on; **Recent runs** in its settings shows what each run did
+and what it passed on. Switch it on per project or for the board; it counts against the agent limits below.
+
+A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).

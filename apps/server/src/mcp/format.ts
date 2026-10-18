@@ -22,6 +22,8 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+import { redact } from "../integrations/claudeTranscript.ts";
+import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
 
@@ -725,4 +727,49 @@ export function renderTaskShort(
   } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });
+}
+
+const spanText = (ms: number): string => {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return `${Math.max(1, Math.round(ms / 1000))}s`;
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+/** A condensed session transcript: a header with the totals, then one page of entries and where the next one starts. */
+export function renderTranscript(t: SessionTranscript): string {
+  const { stats, page } = t;
+  const counts = [
+    `${stats.turns} turn${stats.turns === 1 ? "" : "s"}`,
+    `${stats.toolCalls} tool call${stats.toolCalls === 1 ? "" : "s"}`,
+    `${stats.errors} error${stats.errors === 1 ? "" : "s"}`,
+    `${stats.denials} denied`,
+    `${stats.retries} retr${stats.retries === 1 ? "y" : "ies"}`,
+    `${stats.interruptions} interruption${stats.interruptions === 1 ? "" : "s"}`,
+    ...(stats.durationMs !== null ? [spanText(stats.durationMs)] : []),
+  ];
+  const lines = [
+    // The label is free text an agent wrote, so it is redacted like the transcript.
+    `Transcript of Claude Code session ${t.sessionId}${t.label ? ` "${redact(t.label)}"` : ""} for #${t.taskNumber}`,
+    // The others are described (and redacted) by the reader.
+    ...(t.otherSessions?.length
+      ? [
+          `The newest of ${t.otherSessions.length + 1} linked Claude Code sessions; pass session to read another: ${t.otherSessions.join("; ")}.`,
+        ]
+      : []),
+    counts.join(", "),
+  ];
+  if (stats.startedAt) lines.push(`From ${stats.startedAt}${stats.endedAt ? ` to ${stats.endedAt}` : ""}`);
+  if (page.total === 0) return [...lines, "", "The transcript has no messages."].join("\n");
+  if (page.lines.length === 0) {
+    const entries = `${page.total} entr${page.total === 1 ? "y" : "ies"}`;
+    lines.push(
+      "",
+      `Offset ${page.offset} is past the end: the transcript has ${entries}, offsets 0 to ${page.total - 1}.`,
+    );
+    return lines.join("\n");
+  }
+  const to = page.offset + page.lines.length;
+  lines.push(`Entries ${page.offset + 1}-${to} of ${page.total} (offset ${page.offset}):`, "", ...page.lines);
+  lines.push("", page.next === null ? "End of transcript." : `More follows: call again with offset: ${page.next}.`);
+  return lines.join("\n");
 }

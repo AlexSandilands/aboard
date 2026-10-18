@@ -1,3 +1,4 @@
+| `tools/social.ts`  | `social_read`, `social_post`: registered only while the hidden social network setting is on, and mentioned nowhere else agents look (see [social.md](social.md)) |
 # MCP
 
 Agents use the board through an MCP server at `/mcp` on the board's port. The tools cover what an agent
@@ -22,13 +23,16 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `tools/read.ts`    | `board_overview`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
+| `tools/read.ts`    | `board_overview`, `board_activity`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`, `request_attention` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
-| `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for an epic's tasks (see [epics.md](epics.md#t3-code-threads)) |
+| `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
+| `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
+| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)) |
+| `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
@@ -47,7 +51,8 @@ priority lane and makes Autopilot start it first ([board-layout.md](board-layout
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
 
 `add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
-which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so.
+which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so; the server can't enforce that
+([why](../decisions/0008-autopilot-engine.md)).
 `get_task` shows an "Auto-merge:" line when it is set. An epic can't have it. See
 [github-prs.md](github-prs.md#merge_task_pr).
 
@@ -96,6 +101,9 @@ text when both are present.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)).
+- `get_session_transcript` returns a header with the session's totals, then one page of up to 20,000 characters of
+  one-line entries and the `offset` to call again with when more follows (`renderTranscript`). Credential-shaped text
+  is redacted first ([agent-sessions.md](agent-sessions.md#transcripts)).
 - `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
   the board open the next round (under the limit), and the result says so and points to `start_review` for its
   brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.
@@ -143,6 +151,31 @@ text when both are present.
   `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says
   `Deleted N step(s): 1.2 Title, …`. See [plans.md](plans.md#writing-a-plan).
 
+### board_activity
+
+`board_activity(since, until?, projectId? | workspacePath?)` is the look-back counterpart of `board_overview`:
+read-only text over a window `[since, until)`, for the improvement automation, an orchestrator, or anyone asking
+"how did this week go?". `since` and `until` are ISO dates or times (UTC without an offset) or a time ago
+(`24h`, `7d`); `until` defaults to now. Nothing new is stored: `services/activity.ts` reads `task_events`,
+`task_reviews` and `review_findings`, `autopilot_runs` and `thread_waiting` notifications, and
+`mcp/activityFormat.ts` renders it. Sections, each cut to a cap in `ACTIVITY_CAPS` with "(N more)":
+
+- **Tasks finished:** tasks moved to Done or closed in the window (epics follow their tasks and are left out),
+  with the time each spent in Backlog, Planned, In Progress and Review, its local review rounds, Autopilot PR
+  review rounds, and steps that went blocked or skipped.
+- **Review findings:** local rounds opened in the window (failed and stalled counted), the findings raised in it by
+  severity, status and directory, the most severe titles, and each Autopilot PR review's counts (its run only
+  keeps counts, not titles).
+- **Autopilot runs:** real runs that finished in the window, per automation: outcomes, retries (a run right after a
+  failed run of the same automation on the same task; review and fix rounds are not), "gave up", and failures with
+  their reason. A run the board's restart failed is marked `(board restarted)`.
+- **Stalls:** Unstick's stale and waiting runs and `thread_waiting` notifications, once per task and kind.
+- **Latest note per task:** the last note anyone but Autopilot wrote on each task, newest first (usually its
+  handover). Notes have no "needs the user" flag; what needs the user shows as a run's `needsAttention` or an
+  attention reason on the task.
+
+Task refs (`#42`) let the agent open one with `get_task`.
+
 ### Writing tool descriptions
 
 Descriptions are written for agents, and they are most of what an agent knows about the board:
@@ -186,7 +219,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `apps/server/src/mcp/server.ts`       | `registerMcp`, transport, `INSTRUCTIONS`, actor resolution           |
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
-| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint` |
+| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint`, `renderTranscript` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AutopilotEngineSection } from "~/components/autopilot/AutopilotSettingsSection";
 import { CustomAutomationsSection } from "~/components/autopilot/CustomAutomationsSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
+import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
@@ -23,6 +24,7 @@ import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
+import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
 import { TerminalSection } from "../TerminalSection";
@@ -64,6 +66,7 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />
           </SettingsSubsection>
+          <WithSettings>{(settings) => <VersionAndSocial settings={settings} />}</WithSettings>
         </>
       );
     case "keybindings":
@@ -100,6 +103,9 @@ function TasksContent() {
       </SettingsSubsection>
       <SettingsSubsection id="tasks.review">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="tasks.suggestions">
+        <SuggestionsSection />
       </SettingsSubsection>
     </>
   );

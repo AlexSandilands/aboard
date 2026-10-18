@@ -75,6 +75,8 @@ files under each app.
 - [Pasted images](features/attachments.md): images in a task's text, shrunk in the browser, stored on disk, listed for agents
 - [Backup and restore](features/backup.md): JSON dumps, restore, scheduled push to a git repo
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
+- [Agents' social network](features/social.md): a hidden, opt-in space where agents post to each other, and its art sandbox
+- [Suggested changes](features/suggestions.md): agents propose edits to prompts and skills, the user accepts or rejects them
 
 ### Decisions
 

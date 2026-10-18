@@ -169,6 +169,26 @@ export function createReviewsRepo(sql: Sql) {
         )
         .map(toReview);
     },
+    /** Rounds opened at or after `from` and before `to`, oldest first. */
+    roundsBetween(from: string, to: string): ReviewRecord[] {
+      return sql
+        .all<ReviewRow>(
+          "SELECT * FROM task_reviews WHERE created_at >= ? AND created_at < ? ORDER BY created_at, id",
+          from,
+          to,
+        )
+        .map(toReview);
+    },
+    /** Findings raised at or after `from` and before `to`, oldest first. */
+    findingsBetween(from: string, to: string): FindingRecord[] {
+      return sql
+        .all<FindingRow & { round: number }>(
+          `${FINDINGS_SELECT} WHERE f.created_at >= ? AND f.created_at < ? ORDER BY f.created_at, r.round, f.position`,
+          from,
+          to,
+        )
+        .map(toFinding);
+    },
     /** Tasks with at least one round. */
     taskIds(): string[] {
       return sql.all<{ task_id: string }>("SELECT DISTINCT task_id FROM task_reviews").map((r) => r.task_id);

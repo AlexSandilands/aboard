@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -39,11 +40,21 @@ describe("MCP endpoint", () => {
     h.db.close();
   });
 
+  it("places every tool on one side of Orchestrate's allow or deny list", async () => {
+    const { tools } = await client.listTools();
+    const placed = new Set<string>([...ORCHESTRATE_BOARD_TOOLS, ...ORCHESTRATE_DENIED_BOARD_TOOLS]);
+    expect(tools.map((t) => t.name).filter((name) => !placed.has(name))).toEqual([]);
+    expect(
+      ORCHESTRATE_BOARD_TOOLS.filter((name) => (ORCHESTRATE_DENIED_BOARD_TOOLS as readonly string[]).includes(name)),
+    ).toEqual([]);
+  });
+
   it("lists the agent tools", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
     for (const name of [
       "board_overview",
+      "board_activity",
       "list_projects",
       "list_tasks",
       "get_task",
@@ -61,11 +72,12 @@ describe("MCP endpoint", () => {
       "request_attention",
       "link",
       "merge_task_pr",
+      "retry_autopilot_run",
     ]) {
       expect(names).toContain(name);
     }
     // Autopilot is REST only, so an agent can't switch it on or lift its limits (ADR 0008).
-    expect(names.filter((n) => /autopilot|pause|resume/i.test(n))).toEqual([]);
+    expect(names.filter((n) => /autopilot|pause|resume/i.test(n))).toEqual(["retry_autopilot_run"]);
     // An outputSchema makes structuredContent mandatory, which Claude Code would show instead of the text.
     expect(tools.filter((t) => t.outputSchema).map((t) => t.name)).toEqual([]);
     expect(client.getInstructions()).toContain("get_task");

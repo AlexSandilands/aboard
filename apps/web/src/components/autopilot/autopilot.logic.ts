@@ -1,5 +1,6 @@
 import {
   describeInherited,
+  isRetried,
   ScheduledAgentRunOutput,
   type AutopilotActiveRun,
   type AutopilotAutomation,
@@ -179,7 +180,9 @@ export function parseLimit(
 
 type BadgeVariant = "info" | "warning" | "error" | "success" | "outline";
 
-export function runStatusLabel(run: Pick<AutopilotRun, "status" | "dryRun">): string {
+export function runStatusLabel(run: Pick<AutopilotRun, "status" | "dryRun"> & { dedupeKey?: string }): string {
+  // A retried run's work went back to the engine; what it did itself is still the status below.
+  if (run.dedupeKey && isRetried(run.dedupeKey)) return run.status === "failed" ? "Failed, retried" : "Retried";
   switch (run.status) {
     case "queued":
       return "Queued";

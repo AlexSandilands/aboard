@@ -23,6 +23,7 @@ import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
+import { createSessionTranscriptReader } from "./sessionTranscript.ts";
 import { createSettingsAsker } from "./settingsAsk.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
@@ -36,6 +37,7 @@ export interface IntegrationDeps {
     Config,
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
+    Partial<Pick<Config, "token">> &
     Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -124,6 +126,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const transcripts = createSessionTranscriptReader({
+    services: deps.services,
+    claudeDir: deps.config.sessionDirs.claudeDir,
+  });
   const sessionLaunch = createSessionLaunch({
     services: deps.services,
     host: overrides.terminalHost ?? systemTerminalHost,
@@ -159,6 +165,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
+      boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
       ...(overrides.log ? { log: overrides.log } : {}),
     });
   const autopilot = createAutopilotEngine({
@@ -209,6 +216,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       autopilot.stop();
       worktrees.stop();
     },
+    sessionTranscript: (taskId, input) => transcripts.read(taskId, input),
     settingsAskStatus: () => settingsAsker.status(),
     askSettings: (input) => settingsAsker.ask(input),
     startImport: (taskId) => importer.start(taskId),

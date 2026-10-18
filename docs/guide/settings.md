@@ -35,7 +35,7 @@ and a click tries again.
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
-| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md) |
+| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
@@ -99,3 +99,25 @@ kept in this browser, not on the server: another browser (or the desktop app) ha
   font** is for code, ids and shortcuts and only takes monospaced fonts. Type a font installed on your computer and
   press Enter; a name the browser can't find is marked and not used. Leave it empty for the system font.
 - A setting you've changed has a reset button beside its name.
+
+## Suggested changes
+
+Agents can suggest changes to the prompts and skills the board runs them with: the review and planning skills you
+chose (on the board or a project), your custom automations' prompts, and the skills those automations name. Each
+suggestion waits under **Settings → Tasks → Suggestions**, with a count beside the section in the list and a
+notification when a new one arrives. Nothing changes until you decide.
+
+Each one shows why the agent suggests it, the evidence (tasks open on the board, links open in a new tab), and the
+change as a diff; **Show the whole proposed text** shows all of it. Read it before you accept: it is an agent's
+text, and it will steer later agents.
+
+- **Accept** writes the change: the skill's `SKILL.md`, or the automation's prompt. A skill in a project's folder is
+  a file in that repository, so commit the change there.
+- A **built-in** skill can't be edited. **Save as my own skill** saves the changed text as a skill of your own
+  (in a `-custom` folder under `~/.claude/skills`) and switches Settings to it.
+- **Reject** drops it.
+- If the text changed after the agent read it (you edited the file, say), the suggestion can't be applied: it says
+  so, and accepting marks it out of date. An agent can suggest it again on the new text.
+- A new suggestion for the same prompt or skill replaces the open one.
+
+Decided suggestions stay listed below the open ones.

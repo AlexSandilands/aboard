@@ -25,6 +25,7 @@ write that made the change, so the change and its notification commit together.
 | `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded | `autopilot:<runId>`     |
 | `agent_request`        | An agent calls `request_attention` on a task (`services/attention.ts`)         | `request:<taskId>:<requestedAt>`        |
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
+| `suggestion`           | An agent suggests a change to a prompt or skill ([suggestions](suggestions.md)); task-less, opens Settings › Suggestions from the inbox | `suggestion:<id>` |
 
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked

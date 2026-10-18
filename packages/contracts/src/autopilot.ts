@@ -12,6 +12,17 @@ export const AUTOPILOT_START_PLANNED = "start_planned";
 /** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
 export const AUTOPILOT_UNSTICK = "unstick";
 
+/** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
+export const AUTOPILOT_ORCHESTRATE = "orchestrate";
+
+/** How an Unstick note and run summary open for a task gone quiet; board_activity tells the two kinds apart by it. */
+export const UNSTICK_STALE_PREFIX = "Stale: no activity for";
+/** How they open for a task whose thread waits on the user. */
+export const UNSTICK_WAITING_PREFIX = "Thread waiting for input for";
+
+/** What a run failed by the board restarting says first, so reports can tell it from a failure of the run's own. */
+export const BOARD_RESTARTED_ERROR = "The board restarted";
+
 /** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
@@ -119,7 +130,13 @@ export const AutopilotField = z.discriminatedUnion("kind", [
     /** Shown after the input, e.g. "days" or "USD". */
     unit: z.string().optional(),
   }),
-  z.object({ ...FieldBase, kind: z.literal("text"), placeholder: z.string().optional() }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("text"),
+    placeholder: z.string().optional(),
+    /** Several lines of text (instructions), edited in a text area. */
+    multiline: z.boolean().optional(),
+  }),
   z.object({
     ...FieldBase,
     kind: z.literal("select"),
@@ -145,6 +162,8 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */
+  blocked: z.string().nullable().default(null),
   fields: z.array(AutopilotField),
   /** Every field's value when no scope sets it. */
   defaults: AutopilotConfig,
@@ -274,6 +293,51 @@ export const AutopilotOverview = z.object({
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
 
+/**
+ * A retried run keeps its row as history under this prefix plus its id, so its old dedupe key is free for the
+ * engine to act on again and automations that read keys (rounds, attempts) no longer count it.
+ */
+export const RETRIED_PREFIX = "retried:";
+
+export const isRetried = (dedupeKey: string): boolean => dedupeKey.startsWith(RETRIED_PREFIX);
+
+/**
+ * Whether the same automation has made a real run on the same task (or, for a task-less run, in the same project)
+ * since this one. A superseded run's work is history: retrying it would redo nothing, yet drop it from the rounds and
+ * attempts its automation counts. `others` is newest first, as the board lists runs: when it holds the run, the runs
+ * before it are the later ones, since two runs made in one millisecond share a `createdAt` and only the list's order
+ * (rowid) tells them apart. A run not in the list is compared by time.
+ */
+export function isSupersededRun(
+  run: Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "createdAt">,
+  others: readonly Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "dryRun" | "createdAt">[],
+): boolean {
+  const at = others.findIndex((o) => o.id === run.id);
+  const later = at >= 0 ? others.slice(0, at) : others.filter((o) => o.createdAt > run.createdAt);
+  return later.some(
+    (o) =>
+      !o.dryRun &&
+      o.automation === run.automation &&
+      (run.taskId ? o.taskId === run.taskId : o.taskId === null && o.projectId === run.projectId),
+  );
+}
+
+/**
+ * Whether a run can be retried: a real run that ended failed or skipped, hasn't been retried already and, given the
+ * runs around it, hasn't been superseded by a later run of its automation.
+ */
+export const canRetryRun = (
+  run: Pick<
+    AutopilotRun,
+    "id" | "automation" | "taskId" | "projectId" | "createdAt" | "dryRun" | "status" | "dedupeKey"
+  >,
+  others: Parameters<typeof isSupersededRun>[1] = [],
+): boolean =>
+  !run.dryRun &&
+  (run.status === "failed" || run.status === "skipped") &&
+  !isRetried(run.dedupeKey) &&
+  !isSupersededRun(run, others);
+
 /** The activity line for an `autopilot_run` event (after the actor), shared by the panel and MCP results. */
 export function autopilotRunEventText(payload: Record<string, unknown>): string {
   const text = (key: string) => (typeof payload[key] === "string" ? payload[key] : null);
@@ -286,6 +350,8 @@ export function autopilotRunEventText(payload: Record<string, unknown>): string 
       return `finished ${title}: ${summary}`;
     case "failed":
       return `${title} failed: ${text("error") ?? summary}`;
+    case "retried":
+      return `asked ${title} to try again: ${summary}`;
     default:
       return payload.dryRun === true ? `${title} (dry run): ${summary}` : `skipped ${title}: ${summary}`;
   }

@@ -42,6 +42,7 @@ export function createContext(
     bus,
     t3Status: () => integrations.t3Status(),
     attachmentsDir,
+    userHome: config.userHome,
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveCurrentStep, type PlanPhase, type StepStatus, type TaskDetail, type TaskStatus } from "@repo/contracts";
-import { STALE_PLAN_MS, batchedCompletionHint, progressHints } from "./format.ts";
+import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
+import { STALE_PLAN_MS, batchedCompletionHint, progressHints, renderTranscript } from "./format.ts";
 
 const NOW = Date.parse("2026-01-01T12:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -107,5 +108,66 @@ describe("batchedCompletionHint", () => {
     expect(batchedCompletionHint(before, alone, '"#7"')).toBeNull();
     const finished = phasesOf(step("a", "done", { startedAt: null }), step("b", "done", { startedAt: null }));
     expect(batchedCompletionHint(finished, finished, '"#7"')).toBeNull();
+  });
+});
+
+describe("renderTranscript", () => {
+  const transcript = (page: Partial<SessionTranscript["page"]>, label: string | null = null): SessionTranscript => ({
+    taskNumber: 7,
+    sessionId: "s-1",
+    label,
+    stats: {
+      turns: 1,
+      toolCalls: 2,
+      errors: 0,
+      denials: 1,
+      retries: 0,
+      interruptions: 0,
+      startedAt: "2026-01-01T10:00:00.000Z",
+      endedAt: "2026-01-01T10:12:00.000Z",
+      durationMs: 12 * 60_000,
+    },
+    page: { lines: [], offset: 0, total: 0, next: null, ...page },
+  });
+
+  it("puts the totals on top, then the page and where the next one starts", () => {
+    const out = renderTranscript(
+      transcript({ lines: ["[user #1] Fix it", "[tool] Read /a.ts"], offset: 0, total: 3, next: 2 }, "Implementing #7"),
+    );
+    expect(out.split("\n")).toEqual([
+      'Transcript of Claude Code session s-1 "Implementing #7" for #7',
+      "1 turn, 2 tool calls, 0 errors, 1 denied, 0 retries, 0 interruptions, 12m",
+      "From 2026-01-01T10:00:00.000Z to 2026-01-01T10:12:00.000Z",
+      "Entries 1-2 of 3 (offset 0):",
+      "",
+      "[user #1] Fix it",
+      "[tool] Read /a.ts",
+      "",
+      "More follows: call again with offset: 2.",
+    ]);
+    const last = renderTranscript(transcript({ lines: ["[assistant] Done."], offset: 2, total: 3, next: null }));
+    expect(last).toContain("Entries 3-3 of 3 (offset 2):");
+    expect(last.endsWith("End of transcript.")).toBe(true);
+  });
+
+  it("says when there is nothing, or the offset is past the end", () => {
+    expect(renderTranscript(transcript({})).endsWith("The transcript has no messages.")).toBe(true);
+    const past = renderTranscript(transcript({ offset: 9, total: 4 }));
+    expect(past).toContain("Offset 9 is past the end: the transcript has 4 entries, offsets 0 to 3.");
+    expect(past).not.toContain("Entries");
+  });
+
+  it("names the other linked sessions when it read the newest", () => {
+    const out = renderTranscript({ ...transcript({}), otherSessions: ['s-0 "Planning"'] });
+    expect(out.split("\n")[1]).toBe(
+      'The newest of 2 linked Claude Code sessions; pass session to read another: s-0 "Planning".',
+    );
+  });
+
+  it("redacts the session's label", () => {
+    const value = "x7".repeat(8);
+    const out = renderTranscript(transcript({}, `run ${["TOK", "EN"].join("")}=${value}`));
+    expect(out.includes(value)).toBe(false);
+    expect(out.includes("[redacted]")).toBe(true);
   });
 });

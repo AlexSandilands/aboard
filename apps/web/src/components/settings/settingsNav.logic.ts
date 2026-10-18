@@ -58,6 +58,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("tasks.new-tasks", "New tasks", ["templates", "issue import", "jira", "github issues"]),
       section("tasks.planning", "Planning", ["plan tasks", "planning skill", "bulk planning"]),
       section("tasks.review", "Review", ["local review", "rounds", "board reviewer", "skill", "budget"]),
+      section("tasks.suggestions", "Suggestions", ["suggested changes", "prompts", "skills", "improve", "accept"]),
     ],
   },
   {

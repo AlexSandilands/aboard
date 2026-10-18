@@ -33,6 +33,7 @@ import type {
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
+import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
 /** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
@@ -106,6 +107,11 @@ export interface Integrations {
   startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
   /** Starts a session that plans several of a project's tasks, in its checkout, and links it to each of them. */
   startPlanningSession(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
+  /** The condensed transcript of a Claude Code session linked to a task (see SessionTranscriptReader). Throws AppError when there is none. */
+  sessionTranscript(
+    taskId: string,
+    input: { session?: string | undefined; offset?: number | undefined },
+  ): Promise<SessionTranscript>;
   /** Whether the settings "Ask" can run: the Claude Code CLI is found. */
   settingsAskStatus(): SettingsAskStatus;
   /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */

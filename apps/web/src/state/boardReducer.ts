@@ -38,10 +38,11 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
       return { ...board, labelColors: event.labelColors };
     case "autopilot.changed":
       return { ...board, autopilot: event.autopilot };
-    // Notifications aren't part of the board snapshot; useBoardEvents hands them to the inbox cache.
+    // Notifications and suggestions aren't part of the board snapshot; useBoardEvents refreshes their own caches.
     case "task.detail_changed":
     case "notification.created":
     case "notifications.changed":
+    case "suggestions.changed":
       return board;
   }
 }

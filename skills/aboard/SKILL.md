@@ -16,6 +16,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
 1. **Orient.** At the start of meaningful work call `board_overview` (with `workspacePath`) or
    `list_tasks`. If the user's request matches an existing task, that's the one you're working on.
+   To look back over a period instead (how did the week go, what keeps failing or stalling), call
+   `board_activity(since: "7d")`: it lists what finished, review findings, Autopilot runs and failures,
+   stalls and notes, each section capped, with task numbers to open with `get_task`.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
@@ -93,6 +96,10 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass
    and it merges cleanly. Fix what it names or wait; never merge with `gh` or `git` instead. When several flagged
    tasks are ready, merge one at a time so the rest don't conflict.
+
+   When an Autopilot run on a task failed or was cut short (a review or a start a board restart interrupted),
+   `retry_autopilot_run(task)` hands it back to Autopilot, which acts again on its next pass if there is still
+   work. Retry once the cause is gone, and never push an empty commit to re-trigger a review.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
@@ -196,6 +203,22 @@ hovering a card draws green lines to the tasks it unblocks and red lines to its 
 - Record a dependency when you notice one while planning (the task needs another task's migration, API or
   decision), instead of only writing it in the plan.
 
+## Suggesting changes to prompts and skills
+
+The review and planning skills the user chose, and their custom automations' prompts, steer every agent the board
+starts. When you have evidence that one of them misleads agents or wastes their time (reviews missing the same kind of
+bug, a prompt that keeps sending agents the wrong way), suggest a change instead of editing it:
+
+1. `list_editable_prompts` lists what can be changed, each with a `target` key and where it is used.
+2. `get_editable_prompt(target)` returns the current text and its `hash`.
+3. `suggest_change(target, baseHash, proposed, rationale, evidence)`: `proposed` is the whole new text. Change
+   only what your evidence supports and prefer removing or tightening text to adding it; `rationale` says what
+   goes wrong and how the change fixes it; `evidence` lists task refs (`"#42"`) and URLs.
+
+The user reads the diff in Settings and accepts or rejects it; nothing changes until then. A `CONFLICT` means the
+text changed since you read it: read it again and rework your change. A newer suggestion for the same target
+replaces your open one. Never edit those skill files yourself, and never ask the user to accept a change unseen.
+
 ## Local review
 
 The user can turn on automatic local review (globally, or per task). Then moving a task to `review`
@@ -252,6 +275,9 @@ link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", c
   (harness `"copilot-cli"`). Read it with the shell (`echo $CLAUDE_CODE_SESSION_ID`); never guess it.
 - `cwd` is the absolute path you are working in.
 - Inside T3 Code, link it as well as your thread: it lets the user continue in a terminal.
+- To audit how a task went (what was asked, what ran, where it went wrong), `get_session_transcript(task)` reads a
+  condensed, redacted transcript of the newest Claude Code session linked to it, a page at a time (pass `offset`
+  for the next page, `session` for another one).
 
 ## Setup
 

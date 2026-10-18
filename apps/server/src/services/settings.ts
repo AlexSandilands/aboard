@@ -44,6 +44,7 @@ const DEFAULTS: StoredSettings = {
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   savedViews: [],
   keybindings: {},
+  socialNetwork: false,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -53,7 +54,8 @@ const DEFAULTS: StoredSettings = {
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
  * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
- * machine; a forced restore keeps them from the database it replaces. Autopilot's engine settings are stored beside
+ * machine; and the social network's switch, which goes with its posts (never backed up). A forced restore keeps them
+ * from the database it replaces. Autopilot's engine settings are stored beside
  * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
  */
 export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
@@ -211,6 +213,7 @@ export function createSettingsService(core: Core): SettingsService {
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
         if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
         if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
+        if (input.socialNetwork !== undefined) repos.settings.set("socialNetwork", input.socialNetwork);
         if (input.notifications !== undefined) {
           const current = load().notifications;
           repos.settings.set("notifications", {

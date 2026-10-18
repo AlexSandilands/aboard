@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   customFormToInput,
   emptyCustomForm,
+  emptyFormSlots,
   formFromCustom,
   previewAction,
   sampleTask,
@@ -65,6 +66,8 @@ describe("custom automation form", () => {
           tier: "light",
           onPrBranch: false,
           allowedTools: [],
+          inputs: [],
+          slots: [],
         },
       },
     });
@@ -142,7 +145,16 @@ describe("custom automation form", () => {
   it("round-trips a scheduled agent every few minutes", () => {
     const saved = custom({
       trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
-      action: { kind: "agent", prompt: "Go", skill: "orchestrate", tier: null, onPrBranch: false, allowedTools: [] },
+      action: {
+        kind: "agent",
+        prompt: "Go",
+        skill: "orchestrate",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: [],
+        inputs: [],
+        slots: [],
+      },
     });
     expect(customFormToInput(formFromCustom(saved))).toEqual({
       ok: true,
@@ -173,10 +185,44 @@ describe("custom automation form", () => {
         tier: null,
         onPrBranch: false,
         allowedTools: ["mcp__a", "mcp__b__c"],
+        inputs: [],
+        slots: [],
       },
     });
     expect(formFromCustom(saved).allowedTools).toBe(["mcp__a", "mcp__b__c"].join(NL));
     expect(customFormToInput(formFromCustom(saved))).toMatchObject({ ok: true, input: { action: saved.action } });
+  });
+
+  it("round-trips inputs and slots, with a slot's tools one per line, and numbers the one that is wrong", () => {
+    const saved = custom({
+      action: {
+        kind: "agent",
+        prompt: "Run {{inputs.jql}}",
+        skill: "",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: [],
+        inputs: [{ name: "jql", label: "JQL", type: "text", default: "type = Bug", value: "project = X" }],
+        slots: [{ name: "jira", label: "Jira tools", description: "search", tools: ["mcp__a__b", "mcp__a__c"] }],
+      },
+    });
+    const form = formFromCustom(saved);
+    expect(form.slots[0]!.tools).toBe(["mcp__a__b", "mcp__a__c"].join(NL));
+    expect(form.inputs[0]).toMatchObject({ value: "project = X", default: "type = Bug" });
+    expect(customFormToInput(form)).toMatchObject({ ok: true, input: { action: saved.action } });
+    expect(customFormToInput({ ...form, slots: [{ ...form.slots[0]!, tools: "Bash" }] })).toEqual({
+      ok: false,
+      error: expect.stringMatching(/^Tool slot 1:/),
+    });
+    expect(customFormToInput({ ...form, inputs: [{ ...form.inputs[0]!, name: "Bad Name" }] })).toEqual({
+      ok: false,
+      error: expect.stringMatching(/^Input 1:/),
+    });
+    expect(customFormToInput({ ...form, prompt: "{{inputs.nope}}" })).toEqual({
+      ok: false,
+      error: expect.stringContaining("no input is called nope"),
+    });
+    expect(emptyFormSlots({ slots: [{ ...form.slots[0]!, tools: " " }, form.slots[0]!] })).toHaveLength(1);
   });
 
   it("names the allowed tool that isn't one", () => {
