@@ -448,9 +448,10 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
   job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
-  write (PR comments, CI logs), its run is always denied `ORCHESTRATE_DENIED_TOOLS` (`RunnerRequest.deniedTools`):
-  `update_task` (so it can't flag a task for auto-merge or Autopilot itself), `close_task`, `delete_task`,
-  `move_task`, the plan tools and `create_epic`. It never starts a Planned task: that is Start planned's, under its
+  write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
+  thread tools, `retry_autopilot_run`, `merge_task_pr`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
+  (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
+  or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
   out quiet hours like any agent run. Tier `standard`; `model`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
   only runner options (the runner choice doesn't apply).

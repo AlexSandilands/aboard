@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -37,6 +38,15 @@ describe("MCP endpoint", () => {
   afterEach(async () => {
     await client.close();
     h.db.close();
+  });
+
+  it("places every tool on one side of Orchestrate's allow or deny list", async () => {
+    const { tools } = await client.listTools();
+    const placed = new Set<string>([...ORCHESTRATE_BOARD_TOOLS, ...ORCHESTRATE_DENIED_BOARD_TOOLS]);
+    expect(tools.map((t) => t.name).filter((name) => !placed.has(name))).toEqual([]);
+    expect(
+      ORCHESTRATE_BOARD_TOOLS.filter((name) => (ORCHESTRATE_DENIED_BOARD_TOOLS as readonly string[]).includes(name)),
+    ).toEqual([]);
   });
 
   it("lists the agent tools", async () => {

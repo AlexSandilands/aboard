@@ -69,21 +69,48 @@ const needsLooking = (t: TaskSummary): boolean =>
   (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
 
 /**
- * Board tools an Orchestrate run never gets, whatever else allows them. It reads text anyone can write (PR comments,
- * CI logs), so it must not be able to grant itself auto-merge or the Autopilot flag, close, archive or delete tasks,
- * or rewrite plans; moving tasks is left to the agents doing them (merge_task_pr moves a merged task to Done itself).
+ * The board tools an Orchestrate run uses: reading the board, notes, asking the user, and the unstick and merge tools.
+ * It reads text anyone can write (PR comments, CI logs), so every other board tool is denied (below): none of them
+ * may hand it a way past the merge gate, such as creating a task flagged for auto-merge, linking a PR of its choosing,
+ * or marking review findings away, nor close, archive or delete tasks. A test checks every registered tool is in one
+ * list or the other, so a new tool has to be placed.
  */
-export const ORCHESTRATE_DENIED_TOOLS = [
+export const ORCHESTRATE_BOARD_TOOLS = [
+  "board_overview",
+  "list_projects",
+  "list_templates",
+  "list_tasks",
+  "get_task",
+  "epic_overview",
+  "get_handoff_prompt",
+  "add_note",
+  "request_attention",
+  "start_task_thread",
+  "message_task_thread",
+  "retry_autopilot_run",
+  "merge_task_pr",
+] as const;
+
+/** Board tools an Orchestrate run never gets, whatever else allows them (see ORCHESTRATE_BOARD_TOOLS). */
+export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
+  "add_to_backlog",
+  "create_task",
+  "create_epic",
   "update_task",
-  "delete_task",
-  "close_task",
   "move_task",
+  "close_task",
+  "delete_task",
   "set_plan",
   "update_plan",
   "add_steps",
   "update_step",
-  "create_epic",
-].map((tool) => `mcp__${BRAND.id}__${tool}`);
+  "link",
+  "start_review",
+  "submit_review",
+  "resolve_finding",
+] as const;
+
+export const ORCHESTRATE_DENIED_TOOLS = ORCHESTRATE_DENIED_BOARD_TOOLS.map((tool) => `mcp__${BRAND.id}__${tool}`);
 
 /**
  * The shipped prompt, from the T3 Code "babysitter" threads it replaces. Merging follows only the per-task auto-merge
