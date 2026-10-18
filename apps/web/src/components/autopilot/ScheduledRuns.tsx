@@ -1,4 +1,4 @@
-import { customAutomationKey, type Project } from "@repo/contracts";
+import type { Project } from "@repo/contracts";
 import { Badge } from "~/components/ui/badge";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useAutopilotRuns } from "~/state/queries";
@@ -7,25 +7,21 @@ import { runStatusLabel, runStatusVariant, scheduledAgentRuns, scheduledAnswerOf
 const SHOWN = 3;
 
 /**
- * The latest runs of a scheduled agent in each project it runs in, with what each said it did and the handover it left
- * for the next run. A scheduled run has no task, so this is where its answer can be read.
+ * The latest runs of a scheduled agent (a custom one, or Orchestrate) in each project it runs in, with what each said
+ * it did and the handover it left for the next run. A scheduled run has no task, so this is where its answer can be read.
  */
-export function ScheduledRuns({ customId, projects }: { customId: string; projects: readonly Project[] }) {
+export function ScheduledRuns({ automation, projects }: { automation: string; projects: readonly Project[] }) {
   return (
     <div className="flex flex-col gap-3">
       {projects.map((project) => (
-        <ProjectRuns key={project.id} customId={customId} project={project} />
+        <ProjectRuns key={project.id} automation={automation} project={project} />
       ))}
     </div>
   );
 }
 
-function ProjectRuns({ customId, project }: { customId: string; project: Project }) {
-  const runs = scheduledAgentRuns(
-    useAutopilotRuns({ projectId: project.id }).data,
-    customAutomationKey(customId),
-    SHOWN,
-  );
+function ProjectRuns({ automation, project }: { automation: string; project: Project }) {
+  const runs = scheduledAgentRuns(useAutopilotRuns({ projectId: project.id }).data, automation, SHOWN);
   if (runs.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">

@@ -120,7 +120,10 @@ describe("the Autopilot flag over MCP", () => {
 
   it("gives agents no way to change Autopilot's own settings", async () => {
     const { tools } = await agent.listTools();
-    expect(tools.filter((t) => /autopilot|pause|resume/i.test(t.name))).toEqual([]);
+    // Retrying a run lifts no limit (the engine still decides), so it is the one Autopilot tool agents get.
+    expect(tools.filter((t) => /autopilot|pause|resume/i.test(t.name)).map((t) => t.name)).toEqual([
+      "retry_autopilot_run",
+    ]);
     const instructions = agent.getInstructions() ?? "";
     expect(instructions).toContain("Autopilot's own settings are the user's alone");
   });

@@ -5,6 +5,7 @@ import {
   CUSTOM_NAME_MAX,
   CUSTOM_PLACEHOLDERS,
   CUSTOM_PROMPT_MAX,
+  customAutomationKey,
   customEnvName,
   MODEL_TIERS,
 } from "@repo/contracts";
@@ -537,7 +538,7 @@ export function CustomAutomationEditorForm({
             hint="What each run said it did, and the handover it left for the next run in that project."
           >
             <ScheduledRuns
-              customId={customId}
+              automation={customAutomationKey(customId)}
               projects={form.projectIds.length > 0 ? projects.filter((p) => form.projectIds.includes(p.id)) : projects}
             />
           </Field>

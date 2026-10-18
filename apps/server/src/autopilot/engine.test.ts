@@ -585,6 +585,36 @@ describe("failures and attention", () => {
     expect(s.autopilot.status().active).toEqual([]);
     expect(s.autopilot.recover()).toBe(0);
   });
+
+  it("acts again on a failed run once it is retried, clearing its flag", async () => {
+    const { s, engine, task, started } = setup();
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    await engine.pass();
+    expect(started).toHaveLength(1);
+    // Failed and flagged, and its key keeps the engine away.
+    started[0]!.reject(new Error("the board restarted"));
+    await engine.idle();
+    await engine.pass();
+    expect(started).toHaveLength(1);
+    const failed = s.autopilot.runsForTask(task.id)[0]!;
+    expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("autopilot");
+
+    const retried = s.autopilot.retry(failed.id, "orchestrator");
+    expect(retried).toMatchObject({ dedupeKey: `retried:${failed.id}:agent:${task.id}`, needsAttention: false });
+    expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+    expect(
+      s.tasks.detail(task.id).events.find((e) => e.type === "autopilot_run" && e.payload.status === "retried"),
+    ).toMatchObject({ actor: "orchestrator" });
+    await engine.pass();
+    expect(started).toHaveLength(2);
+    expect(started[1]!.run.dedupeKey).toBe(`agent:${task.id}`);
+
+    expect(() => s.autopilot.retry(failed.id, "user")).toThrow("already been retried");
+    expect(() => s.autopilot.retry(started[1]!.run.id, "user")).toThrow("still going");
+    started[1]!.resolve({});
+    await engine.idle();
+    expect(() => s.autopilot.retry(started[1]!.run.id, "user")).toThrow("succeeded");
+  });
 });
 
 describe("events", () => {

@@ -29,7 +29,8 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
-| `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for an epic's tasks (see [epics.md](epics.md#t3-code-threads)) |
+| `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
+| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)) |
 | `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and

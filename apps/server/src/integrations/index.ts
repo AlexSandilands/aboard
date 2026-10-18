@@ -37,6 +37,7 @@ export interface IntegrationDeps {
     Config,
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
+    Partial<Pick<Config, "token">> &
     Partial<Pick<Config, "webDist">>;
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -164,6 +165,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
+      boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
       ...(overrides.log ? { log: overrides.log } : {}),
     });
   const autopilot = createAutopilotEngine({
