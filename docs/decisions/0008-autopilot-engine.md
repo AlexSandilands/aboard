@@ -80,5 +80,7 @@ scheduled agent run, or rules inside the server that start an agent only when an
 - Anything that wants Autopilot to act differently per project gets it from the scope rules for free; a new
   scope (epic) only changes `resolveAutopilot` and the settings validation.
 - The run table is history and grows with use; it isn't backed up. Settings are.
-- A run left `queued` or `running` by a restart is marked failed and flagged, never restarted.
+- A run left `queued` or `running` by a restart is marked failed and flagged, never restarted in place. A Review
+  PRs or Fix PRs run is also retired once like a hand retry, so the engine redoes it unflagged (a second
+  interruption of the same work is flagged); runs that may have launched an agent are only flagged.
 - Agents can see Autopilot's results (activity, attention reasons) but can't change its settings.

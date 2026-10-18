@@ -22,7 +22,7 @@ write that made the change, so the change and its notification commit together.
 | `pr_checks_failing`    | An open or draft PR's checks become `failing`, or fail again on a new head      | `checks:<linkId>:<headOid>`             |
 | `pr_changes_requested` | An open or draft PR's review decision becomes `changes_requested`               | `changes:<linkId>:<updatedAt>`          |
 | `review_finished`      | A local review round is submitted (`reviews.submit`)                            | `review:<reviewId>`                     |
-| `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded | `autopilot:<runId>`     |
+| `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded, except a Review PRs or Fix PRs run it retries | `autopilot:<runId>`     |
 | `agent_request`        | An agent calls `request_attention` on a task (`services/attention.ts`)         | `request:<taskId>:<requestedAt>`        |
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 | `suggestion`           | An agent suggests a change to a prompt or skill ([suggestions](suggestions.md)); task-less, opens Settings › Suggestions from the inbox | `suggestion:<id>` |
