@@ -62,14 +62,68 @@ describe("art frame", () => {
     const ObjectEl = function ObjectEl() {} as unknown as new () => { contentDocument: unknown };
     Object.defineProperty(Frame.prototype, "contentWindow", { get: () => ({}), configurable: true });
     const win: Record<string, unknown> = { RTCPeerConnection: () => {}, RTCDataChannel: () => {} };
+    const Doc = function Doc() {} as unknown as { prototype: Record<string, (...args: string[]) => unknown> };
+    Doc.prototype.createElement = (name: string) => ({ localName: name });
+    Doc.prototype.createElementNS = (_ns: string, name: string) => ({ localName: name });
+    const doc = Object.create(Doc.prototype) as Record<string, (...args: string[]) => unknown>;
+    type Added = {
+      nodeType: number;
+      localName: string;
+      removed?: boolean;
+      remove(): void;
+      querySelectorAll(): Added[];
+    };
+    let notify: (records: Array<{ addedNodes: Added[] }>) => void = () => {};
+    let observed: unknown = null;
+    class Observer {
+      constructor(callback: typeof notify) {
+        notify = callback;
+      }
+      observe(target: unknown) {
+        observed = target;
+      }
+    }
     // oxlint-disable-next-line typescript/no-implied-eval -- runs the guard's source against fakes, as the frame would
-    const guard = new Function("window", "HTMLIFrameElement", "HTMLObjectElement", "HTMLFrameElement", ART_FRAME_GUARD);
-    guard(win, Frame, ObjectEl, undefined);
+    const guard = new Function(
+      "window",
+      "HTMLIFrameElement",
+      "HTMLObjectElement",
+      "HTMLFrameElement",
+      "Document",
+      "DOMException",
+      "MutationObserver",
+      "document",
+      ART_FRAME_GUARD,
+    );
+    guard(win, Frame, ObjectEl, undefined, Doc, Error, Observer, doc);
+
     expect(win.RTCPeerConnection).toBeUndefined();
     expect(win.webkitRTCPeerConnection).toBeUndefined();
     expect(() => Object.defineProperty(win, "RTCPeerConnection", { value: 1 })).toThrow(TypeError);
     expect(new Frame().contentWindow).toBeNull();
     expect(new ObjectEl().contentDocument).toBeNull();
+
+    expect(() => doc.createElement!("IFRAME")).toThrow("Nested frames");
+    expect(() => doc.createElementNS!("http://www.w3.org/1999/xhtml", "html:embed")).toThrow("Nested frames");
+    expect(doc.createElement!("canvas")).toEqual({ localName: "canvas" });
+
+    // Inserted frames, on their own or inside other markup, are removed; the observer watches the document itself.
+    expect(observed).toBe(doc);
+    const node = (localName: string, inner: Added[] = []): Added => ({
+      nodeType: 1,
+      localName,
+      remove() {
+        this.removed = true;
+      },
+      querySelectorAll: () => inner,
+    });
+    const frame = node("iframe");
+    const nested = node("object");
+    const wrapper = node("div", [nested]);
+    notify([{ addedNodes: [frame, wrapper] }]);
+    expect(frame.removed).toBe(true);
+    expect(nested.removed).toBe(true);
+    expect(wrapper.removed).toBeUndefined();
   });
 
   it("shows SVG through the same document, sized to the frame and without the script guard", () => {

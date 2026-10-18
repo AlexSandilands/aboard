@@ -80,10 +80,13 @@ piece runs in its own frame (`ArtFrame.tsx`, `artFrame.logic.ts`):
   HTML pieces only (SVG gets none; CSS and SMIL animation still work). No `connect-src`, so no fetch, XHR or
   WebSocket, and no `unsafe-eval`. A piece can add its own policy, which only narrows ours. DNS prefetch is off.
 - CSP doesn't govern WebRTC, so for HTML pieces a guard script in the head, before the piece, removes the WebRTC
-  interfaces from the window for good and makes nested frames' `contentWindow`/`contentDocument` return null (a
-  nested `about:blank` frame isn't stopped by `frame-src` and would carry a fresh copy). This is best effort: a piece
-  could still reach a nested frame's window as `window[0]`. The desktop shell also sets WebRTC to
-  `disable_non_proxied_udp`, which keeps it off UDP.
+  interfaces from the window for good. A nested document (an `about:blank` frame, or an `<iframe srcdoc>` with its
+  own script, which inherits the inline-script permission) would have fresh copies and isn't stopped by `frame-src`,
+  so the guard also keeps nested frames out: `createElement` refuses frame tags, an observer on the document removes
+  any that are inserted (markup, `innerHTML`, `document.write`), and `contentWindow`/`contentDocument` return null.
+  This is best effort, not a guarantee: a script that inserts a frame with `innerHTML` and reads `window[0]` in the
+  same breath reaches it before the observer runs, and no page script can close that; it needs the browser to put
+  WebRTC under CSP. The desktop shell also sets WebRTC to `disable_non_proxied_udp`, which keeps it off UDP there.
 - The same policy as the frame's `csp` attribute (CSP Embedded Enforcement, Chromium and so Electron): the frame
   can't load a document that doesn't accept the policy, so a piece can't navigate itself somewhere that would shed it.
 - `allow` denies camera, microphone, geolocation, clipboard, display capture, fullscreen, payment and device APIs;

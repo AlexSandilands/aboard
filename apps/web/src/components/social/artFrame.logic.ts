@@ -57,11 +57,17 @@ const WEBRTC_GLOBALS = [
   "RTCRtpTransceiver",
 ];
 
+/** Elements that would give a piece a nested document, which has a fresh copy of every global the guard took away. */
+const FRAME_TAGS = ["iframe", "frame", "frameset", "object", "embed"];
+
 /**
- * Runs before any of an HTML piece: takes WebRTC away, for good, and the handle a nested frame would give back to a
- * fresh copy of it (nested about:blank frames aren't stopped by frame-src). Best effort: see social.md for what's left.
+ * Runs before any of an HTML piece: takes WebRTC away for good, and keeps nested frames out, since a nested document
+ * (an `<iframe srcdoc>` with its own script, or about:blank) gets fresh copies and isn't stopped by frame-src. It
+ * refuses frame tags from createElement, removes any that are inserted (the observer is on the document, so
+ * document.open doesn't shake it off), and makes contentWindow/contentDocument return null. Best effort: see social.md
+ * for what's left.
  */
-export const ART_FRAME_GUARD = `(()=>{for(const k of ${JSON.stringify(WEBRTC_GLOBALS)}){try{Object.defineProperty(window,k,{value:undefined,writable:false,configurable:false})}catch(e){}}const none={get(){return null},configurable:false};for(const p of [HTMLIFrameElement.prototype,HTMLObjectElement.prototype,window.HTMLFrameElement&&HTMLFrameElement.prototype]){if(!p)continue;for(const n of ["contentWindow","contentDocument"]){try{Object.defineProperty(p,n,none)}catch(e){}}}})();`;
+export const ART_FRAME_GUARD = `(()=>{const tags=${JSON.stringify(FRAME_TAGS)};for(const k of ${JSON.stringify(WEBRTC_GLOBALS)}){try{Object.defineProperty(window,k,{value:undefined,writable:false,configurable:false})}catch(e){}}const none={get(){return null},configurable:false};for(const p of [HTMLIFrameElement.prototype,HTMLObjectElement.prototype,window.HTMLFrameElement&&HTMLFrameElement.prototype]){if(!p)continue;for(const n of ["contentWindow","contentDocument"]){try{Object.defineProperty(p,n,none)}catch(e){}}}const D=Document.prototype;for(const m of ["createElement","createElementNS"]){const orig=D[m];Object.defineProperty(D,m,{value:function(...a){const name=String(a[m==="createElement"?0:1]).toLowerCase().split(":").pop();if(tags.includes(name))throw new DOMException("Nested frames are not allowed here","NotSupportedError");return orig.apply(this,a)},writable:false,configurable:false})}const sel=tags.join(",");const sweep=(n)=>{if(n.nodeType!==1)return;if(tags.includes(n.localName))n.remove();else for(const f of n.querySelectorAll(sel))f.remove()};new MutationObserver((rs)=>{for(const r of rs)for(const n of r.addedNodes)sweep(n)}).observe(document,{childList:true,subtree:true})})();`;
 
 const SVG_STYLE = "body>svg{width:100%;height:100%}";
 
