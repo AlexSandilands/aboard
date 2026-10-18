@@ -35,9 +35,14 @@ function seeded(scenario: ScenarioName) {
 }
 
 describe("seed scenarios", () => {
-  it.each(Object.keys(SCENARIOS) as ScenarioName[])("%s seeds a fresh data dir", (scenario) => {
-    expect(seeded(scenario).tasks.length).toBeGreaterThan(5);
-  });
+  // The stats scenario seeds twelve weeks of history and took 19 s on a busy Windows runner, over the default.
+  it.each(Object.keys(SCENARIOS) as ScenarioName[])(
+    "%s seeds a fresh data dir",
+    (scenario) => {
+      expect(seeded(scenario).tasks.length).toBeGreaterThan(5);
+    },
+    60_000,
+  );
 
   it("basic fills every column, with more than five Done and an archived card", () => {
     const { tasks, details } = seeded("basic");
