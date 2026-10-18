@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import type { RunnerRequest, RunnerResult } from "../types.ts";
-import { AUTOPILOT_ORCHESTRATE, orchestrate, orchestratePrompt } from "./orchestrate.ts";
+import { AUTOPILOT_ORCHESTRATE, ORCHESTRATE_DENIED_TOOLS, orchestrate, orchestratePrompt } from "./orchestrate.ts";
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const MINUTE = 60_000;
@@ -86,7 +86,10 @@ describe("Orchestrate", () => {
       options: { runner: "headless", everyMinutes: 15 },
     });
     expect(request.tools).toContain("Bash(gh pr checks *)");
-    expect(request.deniedTools).toBeUndefined();
+    // It reads text anyone can write, so it can't flag tasks for auto-merge, or close, move or delete them.
+    expect(request.deniedTools).toEqual(ORCHESTRATE_DENIED_TOOLS);
+    expect(request.deniedTools).toContain(`mcp__${BRAND.id}__update_task`);
+    expect(request.deniedTools).not.toContain(`mcp__${BRAND.id}__merge_task_pr`);
     expect(request.outputSchema).toMatchObject({ required: ["summary", "handover"] });
     expect(request.prompt).toContain("merge_task_pr(task)");
 
@@ -113,6 +116,15 @@ describe("Orchestrate", () => {
     expect(agentRuns[1]!.prompt).toContain("<handover>\nholding #1\n</handover>");
   });
 
+  it("doesn't run for a project whose only work is waiting on the user", async () => {
+    const { s, busyTask, pass, on, agentRuns } = setup();
+    const task = busyTask();
+    s.attention.request(task.id, "Pick a library", "agent");
+    on();
+    await pass();
+    expect(agentRuns).toEqual([]);
+  });
+
   it("waits for a run still going in the project, and leaves other projects alone", async () => {
     const { s, other, busyTask, pass, on, agentRuns } = setup({ agent: () => new Promise(() => {}) });
     s.autopilot.updateEngine({ maxConcurrent: 5 });
@@ -132,7 +144,7 @@ describe("Orchestrate", () => {
     on({ mayMerge: false, instructions: "Hold anything touching the editor." });
     await pass();
     const request = agentRuns[0]!;
-    expect(request.deniedTools).toEqual([`mcp__${BRAND.id}__merge_task_pr`]);
+    expect(request.deniedTools).toEqual([...ORCHESTRATE_DENIED_TOOLS, `mcp__${BRAND.id}__merge_task_pr`]);
     expect(request.prompt).toContain("Don't merge");
     expect(request.prompt).not.toContain("merge_task_pr(task)");
     expect(request.prompt).toContain("Hold anything touching the editor.");
@@ -150,6 +162,7 @@ describe("orchestratePrompt", () => {
       expect(prompt).toContain(tool);
     }
     expect(prompt).toContain("Never start a second thread on a task");
+    expect(prompt).toContain("never start one yourself");
     expect(prompt).toContain("re-check the other open PRs' checks");
     expect(prompt).not.toContain("The user's own instructions");
   });

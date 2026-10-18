@@ -102,7 +102,7 @@ key that should act again changes (`review:pr:<headSha>`, `start:<taskId>:<statu
 **Retrying by hand.** A real run that ended `failed` or `skipped` can be handed back to the engine
 (`AutopilotService.retry`): the Autopilot section's **Retry** on the run, `POST /api/autopilot/runs/:id/retry`, or
 the MCP tool `retry_autopilot_run(task, automation?)` (the task's newest such run, optionally of one automation by key
-or title). The run stays as history, but its dedupe key is retired to `retried:<runId>:<old key>` (`RETRIED_PREFIX`,
+or title) that the same automation hasn't run again since (a newer run supersedes it). The run stays as history, but its dedupe key is retired to `retried:<runId>:<old key>` (`RETRIED_PREFIX`,
 `canRetryRun` in contracts) and its attention flag is lifted, and the task logs an `autopilot_run` entry with status
 `retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
 under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
@@ -440,19 +440,24 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   on in (`epicScope: false`: it has no task). Only the latest slot counts, so downtime catches up once, and switching it
   on runs the current slot at once. The dedupe key is `orchestrate:<projectId>:<local slot stamp>`. A project with
   nothing to look at (no unarchived task In Progress or Review, flagged for Autopilot in Planned, or under Needs
-  attention) gets no run, so an idle project costs nothing. One run at a time per project: while one is queued or
+  attention, leaving out tasks waiting on the user: an `agent_request` or a thread asking for input) gets no run, so
+  an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
   running, `check` returns nothing for it and the latest slot runs once it ends.
 - **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
   push guard), with `access: "read-only"`: the read-only file and git list, the board's MCP tools, and the `gh`
   reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
   job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
-  for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. It counts against the caps and waits
+  for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
+  write (PR comments, CI logs), its run is always denied `ORCHESTRATE_DENIED_TOOLS` (`RunnerRequest.deniedTools`):
+  `update_task` (so it can't flag a task for auto-merge or Autopilot itself), `close_task`, `delete_task`,
+  `move_task`, the plan tools and `create_epic`. It never starts a Planned task: that is Start planned's, under its
+  limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
   out quiet hours like any agent run. Tier `standard`; `model`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
   only runner options (the runner choice doesn't apply).
 - **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
   prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
-  instructions. **May merge** (default on) off adds `mcp__<id>__merge_task_pr` to the run's denied tools
-  (`RunnerRequest.deniedTools`) and tells it to list ready tasks instead.
+  instructions. **May merge** (default on) off adds `mcp__<id>__merge_task_pr` to the denied tools and tells it to
+  list ready tasks instead.
 - **The prompt** (`orchestratePrompt`) is adapted from the babysitter threads: ground rules (this project only, never
   read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
   PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when

@@ -61,10 +61,10 @@ describe("retrying an Autopilot run", () => {
   it("retries the task's newest failed or skipped run, by automation when asked", async () => {
     expect((await call("retry_autopilot_run", { task: "#1" })).text).toContain("no failed or skipped Autopilot run");
 
+    endedRun(AUTOPILOT_START_PLANNED, "start:c", "succeeded");
     const older = endedRun(AUTOPILOT_START_PLANNED, "start:a", "failed");
     expect(h.services.tasks.summary(taskId).attention.map((a) => a.kind)).toContain("autopilot");
     endedRun("custom:x", "other:b", "skipped");
-    endedRun(AUTOPILOT_START_PLANNED, "start:c", "succeeded");
 
     const byTitle = await call("retry_autopilot_run", { task: "#1", automation: "Start planned tasks" });
     expect(byTitle.isError).toBe(false);
@@ -81,6 +81,14 @@ describe("retrying an Autopilot run", () => {
     expect((await call("retry_autopilot_run", { task: "#1", automation: AUTOPILOT_START_PLANNED })).text).toContain(
       `no failed or skipped ${AUTOPILOT_START_PLANNED} Autopilot run`,
     );
+  });
+
+  it("leaves a failed run alone once the same automation has run again since", async () => {
+    endedRun(AUTOPILOT_START_PLANNED, "start:a", "failed");
+    endedRun(AUTOPILOT_START_PLANNED, "start:b", "succeeded");
+    const refused = await call("retry_autopilot_run", { task: "#1" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("no failed or skipped Autopilot run");
   });
 
   it("retries over REST, once, and never a dry run", async () => {

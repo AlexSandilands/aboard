@@ -53,13 +53,38 @@ const defaults: OrchestrateConfig = {
   model: "",
 };
 
-/** A task an orchestrator has a reason to look at: work going on, waiting to start, or something wrong with it. */
+/** Attention that is the user's to answer: an orchestrator can only wait on it. */
+const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
+
+/**
+ * A task an orchestrator has a reason to look at: work going on, waiting to start, or something wrong with it. One
+ * that is waiting on the user isn't, or a project whose work all waits on them would start a paid run every slot.
+ */
 const needsLooking = (t: TaskSummary): boolean =>
   t.archivedAt === null &&
+  t.status !== "done" &&
+  !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
   (t.status === "in_progress" ||
     t.status === "review" ||
     (t.status === "planned" && t.autopilot === true) ||
-    (t.status !== "done" && t.attention.length > 0));
+    t.attention.length > 0);
+
+/**
+ * Board tools an Orchestrate run never gets, whatever else allows them. It reads text anyone can write (PR comments,
+ * CI logs), so it must not be able to grant itself auto-merge or the Autopilot flag, close, archive or delete tasks,
+ * or rewrite plans; moving tasks is left to the agents doing them (merge_task_pr moves a merged task to Done itself).
+ */
+export const ORCHESTRATE_DENIED_TOOLS = [
+  "update_task",
+  "delete_task",
+  "close_task",
+  "move_task",
+  "set_plan",
+  "update_plan",
+  "add_steps",
+  "update_step",
+  "create_epic",
+].map((tool) => `mcp__${BRAND.id}__${tool}`);
 
 /**
  * The shipped prompt, from the T3 Code "babysitter" threads it replaces. Merging follows only the per-task auto-merge
@@ -99,10 +124,11 @@ export function orchestratePrompt(input: {
       .join("\n"),
     `1. **Orient.** board_overview(${where}), then list_tasks for In Progress and Review, and anything under Needs attention. Read the handover below first, so you don't redo what an earlier run kicked off.`,
     [
-      "2. **Unstick stalled work.** For each task in progress, in review, or flagged, call get_task and look at its thread, its Autopilot runs (in its activity) and its PR (gh pr view / gh pr checks). Stalled means any of: its thread failed, settled or has been idle 30+ minutes while the task isn't finished; an Autopilot run failed (\"The board restarted while this run was going\", a review that never posted, a start that couldn't make its workspace); a blocked step; failing checks; merge conflicts; a flagged Planned task that never started. Fix it the lightest way:",
+      "2. **Unstick stalled work.** For each task in progress, in review, or flagged, call get_task and look at its thread, its Autopilot runs (in its activity) and its PR (gh pr view / gh pr checks). Stalled means any of: its thread failed, settled or has been idle 30+ minutes while the task isn't finished; an Autopilot run failed (\"The board restarted while this run was going\", a review that never posted, a start that couldn't make its workspace); a blocked step; failing checks; merge conflicts. Fix it the lightest way:",
       "   - **Thread alive but idle:** message_task_thread(task, …) saying exactly what's left.",
-      "   - **No live thread:** start_task_thread(task), only when the task has no thread working on it. Never start a second thread on a task; if it is refused because one is working, message that one.",
+      "   - **In Progress or Review with no live thread:** start_task_thread(task), only when the task has no thread working on it. Never start a second thread on a task; if it is refused because one is working, message that one.",
       "   - **Failed or interrupted Autopilot run** (a PR review, a fix, a start): retry_autopilot_run(task) once its cause is gone. Never push an empty commit to re-trigger anything.",
+      "   - **Planned tasks are Start planned's to start**, under the user's limits and the tasks' blockers: never start one yourself. When its start failed, retry_autopilot_run(task, \"start_planned\") hands it back.",
       "   - **Failing checks or conflicts:** tell the task's thread to fix them and push (merge the default branch, never rebase). A check that failed on an infrastructure hiccup (a flaky runner, a network timeout) can be re-run once with `gh run rerun <id> --failed` before you treat it as real.",
       "   - **Local review round stuck or failed:** tell the task's thread to resume its review loop (start_review gives it the brief).",
       "   - **Something only the user can decide** (a blocked step asking them, a refusal you can't fix, a run that keeps failing): request_attention(task, message) once, saying exactly what to look at. Not for progress or for things you can fix.",
@@ -204,7 +230,9 @@ export const orchestrate = defineAutomation({
       repo: project.workspaceRoot ?? null,
       access: "read-only",
       tools: ORCHESTRATE_TOOLS,
-      ...(config.mayMerge ? {} : { deniedTools: [`mcp__${BRAND.id}__merge_task_pr`] }),
+      deniedTools: config.mayMerge
+        ? ORCHESTRATE_DENIED_TOOLS
+        : [...ORCHESTRATE_DENIED_TOOLS, `mcp__${BRAND.id}__merge_task_pr`],
       outputSchema: SCHEDULED_AGENT_OUTPUT_SCHEMA,
     });
     const { result: _final, output, ...patch } = result;

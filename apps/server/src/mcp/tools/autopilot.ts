@@ -36,10 +36,15 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, actor 
         const taskId = services.tasks.resolveId(args.task);
         const titles = new Map(services.autopilot.automations().map((a) => [a.key, a.title]));
         const wanted = args.automation?.toLowerCase();
-        const target = services.autopilot
+        const runs = services.autopilot
           .runsForTask(taskId)
-          .filter((r) => !wanted || r.automation === wanted || titles.get(r.automation)?.toLowerCase() === wanted)
-          .find(canRetryRun);
+          .filter((r) => !r.dryRun)
+          .filter((r) => !wanted || r.automation === wanted || titles.get(r.automation)?.toLowerCase() === wanted);
+        // Newest first. A run the same automation has run again since (its next head, its next try) is history: retrying
+        // it would redo superseded work and use up another round.
+        const target = runs.find(
+          (r, i) => canRetryRun(r) && !runs.slice(0, i).some((n) => n.automation === r.automation),
+        );
         if (!target) {
           const which = args.automation ? `${args.automation} ` : "";
           throw new AppError("NOT_FOUND", `This task has no failed or skipped ${which}Autopilot run to retry.`);
