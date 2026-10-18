@@ -356,11 +356,22 @@ export const AttentionReason = z.object({
     "review_unattended",
     "import_failed",
     "autopilot",
+    "agent_request",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
 });
 export type AttentionReason = z.infer<typeof AttentionReason>;
+
+/** An agent's standing request for the user to look at a task (the request_attention tool). */
+export const AttentionRequest = z.object({
+  /** What the user should look at. */
+  message: z.string(),
+  /** Who asked: the agent's label. */
+  actor: z.string(),
+  requestedAt: IsoDate,
+});
+export type AttentionRequest = z.infer<typeof AttentionRequest>;
 
 export const CurrentStep = z.object({
   id: z.string(),
@@ -449,11 +460,18 @@ export const TaskSummary = z.object({
   currentStep: CurrentStep.nullable(),
   links: z.array(TaskLink),
   attention: z.array(AttentionReason),
+  /** The agent's request behind an `agent_request` attention reason; null when no agent has one standing. */
+  attentionRequest: AttentionRequest.nullable(),
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
   /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
   autopilot: z.boolean().nullable(),
+  /**
+   * Per-task auto-merge flag: null is Default (off), true is On, false is Off. Only On lets merge_task_pr merge the
+   * task's PR into the default branch.
+   */
+  autoMerge: z.boolean().nullable(),
   /** True shows the task in the priority lane above every project; always false for an epic. */
   priority: z.boolean(),
   /** An epic's delivery; null for a task, and for an epic nobody chose one for yet (which delivers to main). */
@@ -608,6 +626,8 @@ export const CreateTaskInput = z
     labels: z.array(z.string()).optional(),
     /** The Autopilot flag: null or omitted is Default. */
     autopilot: z.boolean().nullable().optional(),
+    /** The auto-merge flag: null or omitted is Default (off). */
+    autoMerge: z.boolean().nullable().optional(),
     /** True puts the task in the priority lane. Defaults to false. */
     priority: z.boolean().optional(),
     /** Tasks that block this one (uuid, "#42" or "42"). */
@@ -650,6 +670,8 @@ export const UpdateTaskInput = z.object({
   autoReview: z.boolean().nullable().optional(),
   /** null is Default: Start planned tasks never starts the task. */
   autopilot: z.boolean().nullable().optional(),
+  /** null is Default: merge_task_pr refuses to merge the task's PR, as for false. */
+  autoMerge: z.boolean().nullable().optional(),
   /** True puts the task in the priority lane above every project; false takes it out. */
   priority: z.boolean().optional(),
   /** Replaces the whole label list. */

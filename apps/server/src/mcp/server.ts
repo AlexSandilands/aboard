@@ -8,6 +8,7 @@ import { registerReadTools } from "./tools/read.ts";
 import { registerTaskTools } from "./tools/tasks.ts";
 import { registerPlanTools } from "./tools/plans.ts";
 import { registerLinkTools } from "./tools/links.ts";
+import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
 
@@ -19,6 +20,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - To plan several of a project's tasks with the user in one session, follow the prompt get_handoff_prompt(tasks: ["#3", "#4"]) returns; the board starts such sessions from a lane's Plan tasks.
 - Autopilot can start flagged Planned tasks by itself. When a planning result says the Autopilot flag isn't set, ask the user whether to flag the task, then apply their answer with update_task(autopilot: "on" | "off"); never set it unasked. You can only flag tasks: Autopilot's own settings are the user's alone, and no tool changes them.
 - Priority tasks show in a lane above every project, and Autopilot starts them first. Set it with update_task(priority: true | false), or priority on create_task / add_to_backlog, only when the user has asked for it.
+- merge_task_pr merges a task's PR into the default branch, only for a task flagged with update_task(autoMerge: "on"), which you set only when the user says so. The board refuses, with the reason, until the PR is reviewed, green and mergeable; fix what it names or wait, and never merge with gh or git instead.
 - set_plan REPLACES the whole plan: steps you don't pass back with their id are deleted with their status and notes. Use it to write or deliberately rewrite a plan. To change an existing plan, use update_plan (several changes at once: notes, moves, phase renames, statuses that really changed together), update_step (one step) or add_steps (append).
 - Keep steps current with update_step (in_progress when you start, done when finished): update each step the moment it changes, one call per step, and never save the updates for the end of a phase. If steps can only be verified together, still mark each in_progress as you start it and done once it is written, with testing as its own step. Results point out when no step is in progress or the plan has gone stale. Before asking the user a question and waiting for the answer, mark the current step blocked with a note saying what you need; set it back to in_progress once answered. move_task to review when the work is done (with auto-review on, finish the review loop first, then always open the PR, or push to the one already linked), link PRs when opened; done when merged/verified.
 - Link the Jira issue at creation: pass its key in links (create_task/add_to_backlog) or call link. Keys in the title are linked automatically. Task results list any "Missing links"; act on them.
@@ -28,6 +30,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Templates: the user keeps task templates (Bug, Spike, Feature, their own). list_templates shows them; pass template (a name) to add_to_backlog or create_task to start from one: its description, labels and plan fill in what you leave out, and what you pass wins. A template with a plan makes create_task's own plan optional. You can't create or edit templates.
 - Tasks can block each other, across projects: pass blockedBy on create_task/add_to_backlog, or addBlockedBy / removeBlockedBy on update_task. A task is blocked while any blocker isn't Done (get_task lists "Blocked by" and "Blocks", list_tasks and epic_overview show "blocked by #N"). Don't start a blocked task: tell the user what it waits on, or work a blocker. Cycles are refused.
 - Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
+- request_attention(task, message) flags a task for the user (Needs attention plus a notification) when you can't go on without them or they should look at something: you are blocked, unsure, found a problem, or have work ready to review. Say exactly what to look at. It interrupts them, so don't use it for progress (add_note) or when nothing is for them to act on; clear: true removes it once resolved.
 - End each session with add_note: a handover of what's done, what's left and the next action.
 - In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.
 - In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}, label); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board. Give it a short label saying what this session does, such as "Implementing #107", "Planning #107" or, for an epic you orchestrate, "Orchestrating #107": it is the name the board shows (link again with a new label when the work changes). A subagent has the same session id as the session that started it, so only the main session links; a subagent must never link or relabel it.`;
@@ -59,6 +62,7 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerTaskTools(server, tc);
   registerPlanTools(server, tc);
   registerLinkTools(server, tc);
+  registerMergeTools(server, tc);
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
   return server;

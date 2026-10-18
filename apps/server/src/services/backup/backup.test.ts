@@ -41,6 +41,7 @@ function seed() {
     template: "Bug",
     labels: ["ui", "backend"],
     autopilot: true,
+    autoMerge: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
   });
   s.templates.create({
@@ -50,12 +51,13 @@ function seed() {
     labels: ["ops"],
     phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
   });
-  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
+  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false, autoMerge: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
   const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [idea.id], "agent");
   s.tasks.setDelivery(epic.id, "integration", "epic/4-checkout", "agent");
   s.tasks.addNote(a.id, "handover", "agent");
+  s.attention.request(a.id, "Check the plan", "agent");
   s.reviews.submit(
     a.id,
     { summary: "One issue", findings: [{ severity: "major", title: "Bug", file: "x.ts" }] },
@@ -255,13 +257,18 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
-      // Both flags survive: On, Off, and Default (null) for the task that never had one.
-      expect(restored.prepare("SELECT autopilot FROM tasks ORDER BY number").all()).toEqual([
-        { autopilot: 1 },
-        { autopilot: 0 },
-        { autopilot: null },
-        { autopilot: null },
+      // The Autopilot and auto-merge flags survive: On, Off, and Default (null) for the tasks that never had one.
+      expect(restored.prepare("SELECT autopilot, auto_merge FROM tasks ORDER BY number").all()).toEqual([
+        { autopilot: 1, auto_merge: 1 },
+        { autopilot: 0, auto_merge: 0 },
+        { autopilot: null, auto_merge: null },
+        { autopilot: null, auto_merge: null },
       ]);
+      // An agent's request for attention survives.
+      expect(restored.prepare("SELECT attention_message, attention_actor FROM tasks WHERE id = ?").get(a.id)).toEqual({
+        attention_message: "Check the plan",
+        attention_actor: "agent",
+      });
       // An epic's delivery and its branch survive.
       expect(restored.prepare("SELECT delivery, integration_branch FROM tasks WHERE kind = 'epic'").all()).toEqual([
         { delivery: "integration", integration_branch: "epic/4-checkout" },
@@ -398,8 +405,8 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag or priority columns, no
-    // project planning skill, no relations, no Autopilot settings.
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag, auto-merge,
+    // priority or attention request columns, no project planning skill, no relations, no Autopilot settings.
     const {
       autopilot_settings: _a,
       autopilot_recurring: _rc,
@@ -424,9 +431,13 @@ describe("restore", () => {
           parent_id: _p,
           autopilot: _f,
           priority: _pr,
+          auto_merge: _am,
           template_id: _m,
           delivery: _d,
           integration_branch: _b,
+          attention_message: _atm,
+          attention_actor: _aa,
+          attention_requested_at: _at,
           ...task
         } = bundle.task;
         return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };

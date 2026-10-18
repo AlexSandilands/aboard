@@ -109,7 +109,7 @@ ORM.
 | Table             | Holds                                                                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
-| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `priority` ([board-layout](features/board-layout.md#the-priority-lane)), `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
+| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `auto_merge` ([merge_task_pr](features/github-prs.md#merge_task_pr)), `priority` ([board-layout](features/board-layout.md#the-priority-lane)), `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, Jira, GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
@@ -132,7 +132,8 @@ ORM.
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
 task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
-attention, an epic's roll-up) are computed when summaries are built, never stored. The exception is an epic's
+attention, an epic's roll-up) are computed when summaries are built, never stored. The exceptions are an agent's
+request for attention (`attention_*` columns on the task, [notifications](features/notifications.md#agent-requests)) and an epic's
 status, derived from its tasks but stored so lists and filters treat it like any status
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 

@@ -152,6 +152,15 @@ start means the epic stops every time a task is done. An epic can instead delive
 
 Switch **Merge into epic branch** on for the epic (or its project). It needs no agent and has no settings.
 
+## Letting an agent merge into the default branch
+
+Autopilot never merges into the default branch. An agent you run (one orchestrating an epic, say) can, with the
+`merge_task_pr` tool, but only for a task you've allowed it on: tell the agent to turn **auto-merge** on for the
+task (`update_task` with `autoMerge: "on"`). The board then merges the task's pull request only once it is in
+Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass and
+it merges cleanly, and only at the commit it checked. The agent picks the order, so the tasks' pull requests don't
+conflict. Without the flag, the tool refuses and the merge stays yours.
+
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).
 

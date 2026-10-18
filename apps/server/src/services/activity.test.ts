@@ -1,4 +1,4 @@
-import { AUTOPILOT_REVIEW_PRS, AUTOPILOT_UNSTICK } from "@repo/contracts";
+import { AUTOPILOT_REVIEW_PRS, AUTOPILOT_UNSTICK, UNSTICK_STALE_PREFIX, UNSTICK_WAITING_PREFIX } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACTIVITY_CAPS, renderActivity } from "../mcp/activityFormat.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -215,7 +215,21 @@ describe("activity.between", () => {
       taskId: t.id,
       key: "5",
       automation: AUTOPILOT_REVIEW_PRS,
-      summary: "Autopilot gave up on PR #7 after 3 review rounds",
+      output: {
+        kind: "pr_review",
+        linkId: "l",
+        prUrl: "u",
+        headOid: "h",
+        round: 3,
+        maxRounds: 3,
+        reviewUrl: "r",
+        reviewId: 1,
+        counts: { blocking: 0, major: 1, minor: 0, nit: 0 },
+        fyi: 0,
+        threshold: "minor",
+        actionable: 1,
+        handoff: "gave_up",
+      },
     });
     // A run still going when the board restarts is failed by recover().
     clock(at(13, 9, 4));
@@ -326,14 +340,14 @@ describe("activity.between", () => {
       taskId: t.id,
       key: "q",
       automation: AUTOPILOT_UNSTICK,
-      summary: "Stale: no activity for 5h",
+      summary: `${UNSTICK_STALE_PREFIX} 5h`,
     });
     run({
       projectId: alpha.id,
       taskId: t.id,
       key: "w",
       automation: AUTOPILOT_UNSTICK,
-      summary: "Thread waiting for input for 20m",
+      summary: `${UNSTICK_WAITING_PREFIX} 20m`,
     });
     s.notifications.notify({
       kind: "thread_waiting",

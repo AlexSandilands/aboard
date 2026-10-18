@@ -1,4 +1,5 @@
 import {
+  capHandover,
   customAgentPrompt,
   customArmedAt,
   customAutomationKey,
@@ -13,11 +14,14 @@ import {
   latestMinutesSlot,
   localStamp,
   customShellEnv,
+  ScheduledAgentAnswer,
+  SCHEDULED_AGENT_OUTPUT_SCHEMA,
   type CustomAutomation,
   type CustomTrigger,
   type CustomData,
   type CustomValues,
   type PrChanges,
+  type ScheduledAgentRunOutput,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
@@ -114,10 +118,14 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
 
   const matches = (task: TaskSummary) => customTaskMatches(filters, task);
 
-  const preview = (values: CustomValues, task: TaskSummary | null, services: Services): string => {
+  const preview = (values: CustomValues, task: TaskSummary | null, services: Services, handover?: string | null) => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
-    return customAgentPrompt(custom, values, task, task ? services.tasks.detail(task.id).description : null);
+    return customAgentPrompt(custom, values, task, task ? services.tasks.detail(task.id).description : null, handover);
   };
+
+  /** What the project's last run of this scheduled agent left for the next one. */
+  const handoverIn = (services: Services, projectId: string) =>
+    services.autopilot.lastHandover(customAutomationKey(custom.id), projectId);
 
   const check = (ctx: CheckContext<Record<string, unknown>>): Candidate[] => {
     const { services, now } = ctx;
@@ -151,7 +159,12 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
             summary: `run "${custom.name}" in ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
             projectId: project.id,
             data: {} satisfies CustomData,
-            preview: preview(customValues(custom, project, null), null, services),
+            preview: preview(
+              customValues(custom, project, null),
+              null,
+              services,
+              isAgent ? handoverIn(services, project.id) : null,
+            ),
           },
         ];
       });
@@ -236,13 +249,30 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
           const result = await ctx.runner.start({
             run: ctx.run,
             label: `${custom.name} · ${where}`,
-            prompt: customAgentPrompt(custom, values, null, null),
+            prompt: customAgentPrompt(custom, values, null, null, project ? handoverIn(services, project.id) : null),
             tier: action.tier,
             options: { ...ctx.config, runner: "headless" },
             repo: project?.workspaceRoot ?? null,
+            // Its answer is the handover the next run of this agent in this project gets.
+            outputSchema: SCHEDULED_AGENT_OUTPUT_SCHEMA,
           });
-          const { result: _final, output: _output, ...patch } = result;
-          return { ...patch, summary: `Started an agent for "${custom.name}" in ${where}` };
+          const { result: _final, output, ...patch } = result;
+          // The runner already fails a run with no structured answer, so this only guards a shape it let through: no
+          // handover is kept then, and the next run gets the one before.
+          const answer = ScheduledAgentAnswer.safeParse(output);
+          return {
+            ...patch,
+            summary: `Started an agent for "${custom.name}" in ${where}`,
+            ...(answer.success
+              ? {
+                  output: {
+                    kind: "scheduled_agent",
+                    summary: answer.data.summary.trim(),
+                    handover: capHandover(answer.data.handover),
+                  } satisfies ScheduledAgentRunOutput,
+                }
+              : {}),
+          };
         }
         const prompt = customAgentPrompt(custom, values, task, services.tasks.detail(task.id).description);
         const branch = action.onPrBranch ? (prOfTask(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;

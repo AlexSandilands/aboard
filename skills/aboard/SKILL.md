@@ -90,6 +90,13 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    A task can also be marked **priority** (`priority: true` on `create_task` / `add_to_backlog` / `update_task`; `false` clears
    it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
 
+   And it can be allowed **auto-merge** (`autoMerge: "on"` on `create_task` / `add_to_backlog` / `update_task`;
+   `"off"` or `"default"` takes it back): then `merge_task_pr(task)` may merge its one open PR into the default
+   branch. Set it only when the user says so. The board refuses the merge, with the reason, until the task is in
+   Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass
+   and it merges cleanly. Fix what it names or wait; never merge with `gh` or `git` instead. When several flagged
+   tasks are ready, merge one at a time so the rest don't conflict.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once
@@ -128,8 +135,15 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
    archive these: archiving hides the card and loses why it was closed. `delete_task` is permanent and
    only works on archived tasks; use it only when the user asks for a task to be deleted.
-9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
-   exact next action. The next agent starts from `get_task`.
+9. **Ask for the user when you need them.** `request_attention(task, message)` flags a task under Needs
+   attention and sends the user a notification. Use it when you can't go on without them or they should look at
+   something: you are blocked, unsure, found a problem, or have work ready to review or approve (and when the user
+   has told you to, e.g. "after writing the plans, ask me to review them"). Say exactly what to look at and what you
+   need, in a sentence or two. Don't use it for progress (that is `add_note`) or when nothing is for them to act on:
+   every call interrupts them. A new request replaces the standing one; `request_attention(task, clear: true)`
+   takes it off once the problem is gone or the user has answered.
+10. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
+    exact next action. The next agent starts from `get_task`.
 
 ## Epics
 

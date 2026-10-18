@@ -161,4 +161,9 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       return c.json(services.tasks.addNote(taskId(c), text, actorOf(c)), 201);
     }),
   );
+  // The user dismissing an agent's request for attention; returns the task either way.
+  app.delete(
+    "/api/tasks/:id/attention-request",
+    handle((c) => c.json(services.attention.clear(taskId(c), actorOf(c)).task)),
+  );
 }

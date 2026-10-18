@@ -10,6 +10,7 @@ export const NotificationKind = z.enum([
   "review_finished",
   "autopilot_failed",
   "autopilot_notice",
+  "agent_request",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 
@@ -24,6 +25,7 @@ export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: 
   { kind: "review_finished", label: "Review finished", description: "A local review round was submitted" },
   { kind: "autopilot_failed", label: "Autopilot failed", description: "An Autopilot run failed or gave up" },
   { kind: "autopilot_notice", label: "Autopilot updates", description: "Other things Autopilot wants you to know" },
+  { kind: "agent_request", label: "Agent requests", description: "An agent asked you to look at a task" },
 ];
 
 export const InboxNotification = z.object({

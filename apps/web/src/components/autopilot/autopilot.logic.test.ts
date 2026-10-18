@@ -1,4 +1,4 @@
-import type { AutopilotAutomation, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
+import type { AutopilotAutomation, AutopilotRun, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   automationTitle,
@@ -19,6 +19,8 @@ import {
   projectActiveRuns,
   runsSummary,
   runStatusLabel,
+  scheduledAgentRuns,
+  scheduledAnswerOf,
   taskActiveRun,
   withConfigValue,
 } from "./autopilot.logic";
@@ -256,5 +258,30 @@ describe("runs", () => {
         { status: "failed", needsAttention: true },
       ]),
     ).toBe("2 runs · 1 running · 1 needs attention");
+  });
+});
+
+describe("scheduled agent runs", () => {
+  const scheduled = (automation: string, patch: Partial<AutopilotRun> = {}) =>
+    ({ automation, taskId: null, dryRun: false, output: null, ...patch }) as AutopilotRun;
+
+  it("keeps one automation's real task-less runs, newest first, up to the limit", () => {
+    const runs = [
+      scheduled("custom:a", { id: "1" }),
+      scheduled("custom:b", { id: "2" }),
+      scheduled("custom:a", { id: "3", dryRun: true }),
+      scheduled("custom:a", { id: "4", taskId: "t" }),
+      scheduled("custom:a", { id: "5" }),
+      scheduled("custom:a", { id: "6" }),
+    ];
+    expect(scheduledAgentRuns(runs, "custom:a", 2).map((r) => r.id)).toEqual(["1", "5"]);
+    expect(scheduledAgentRuns(undefined, "custom:a", 2)).toEqual([]);
+  });
+
+  it("reads the summary and handover a run left", () => {
+    const output = { kind: "scheduled_agent", summary: "Did it", handover: "Holding #7" };
+    expect(scheduledAnswerOf({ output })).toEqual(output);
+    expect(scheduledAnswerOf({ output: null })).toBeNull();
+    expect(scheduledAnswerOf({ output: { kind: "pr_review", summary: "x" } })).toBeNull();
   });
 });

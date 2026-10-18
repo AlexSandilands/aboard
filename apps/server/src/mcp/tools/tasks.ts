@@ -13,6 +13,7 @@ import { resolutionText, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
+  autoMergeField,
   autopilotField,
   autopilotValue,
   priorityField,
@@ -84,7 +85,7 @@ function templateFor(
 
 /**
  * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
- * add_note.
+ * add_note, request_attention.
  */
 export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor }) => {
   server.registerTool(
@@ -98,8 +99,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
-        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, and priority " +
-        "only if the user has asked for it. Pass " +
+        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
+        "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
         "template (a name from list_templates, such as Bug or Spike) to start from the user's template: its " +
         "description, labels and plan are copied, and the task stays in Backlog.",
       inputSchema: {
@@ -119,6 +120,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         links: linksField,
         labels: labelsField.optional(),
         autopilot: autopilotField.optional(),
+        autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
@@ -140,6 +142,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
+          ...(args.autoMerge ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
           ...(args.priority ? { priority: true } : {}),
           actor: actor(args.actor),
         });
@@ -162,7 +165,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
         "blockedBy when other tasks must be Done first. When the result asks about the Autopilot flag, ask the user " +
-        "before setting autopilot; set priority only if the user has asked for it. With template (a name from list_templates, such as Bug or Spike) the plan is " +
+        "before setting autopilot; set autoMerge and priority only if the user has asked for them. With template (a name from list_templates, such as Bug or Spike) the plan is " +
         "optional: the template's plan is copied, and a plan you give replaces it. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
@@ -180,6 +183,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         links: linksField,
         labels: labelsField.optional(),
         autopilot: autopilotField.optional(),
+        autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
@@ -203,6 +207,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(links.length ? { links } : {}),
           ...(args.labels?.length ? { labels: args.labels } : {}),
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
+          ...(args.autoMerge ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
           ...(args.priority ? { priority: true } : {}),
           actor: actor(args.actor),
         });
@@ -374,8 +379,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels, suggested model or Autopilot flag, or archive/unarchive it. " +
-        "The Autopilot flag lets the board start the task by itself, so set it only after the user has said so. To move the task to a different " +
+        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, or archive/unarchive it. " +
+        "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr merge its PR " +
+        "into the default branch, so set either only after the user has said so. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +
@@ -411,6 +417,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
         autopilot: autopilotField.optional(),
+        autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
@@ -441,6 +448,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
+            ...(args.autoMerge !== undefined ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
             ...(args.priority !== undefined ? { priority: args.priority } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
             ...(args.addBlockedBy?.length ? { addBlockedBy: args.addBlockedBy } : {}),
@@ -497,6 +505,52 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
         return textResult(`Note added to #${summary.number}.`);
+      }),
+  );
+
+  server.registerTool(
+    "request_attention",
+    {
+      title: "Ask the user to look at a task",
+      description:
+        "Flag a task for the user: it shows under Needs attention on the board and sends them a notification (inbox, " +
+        "desktop pop-up, badge). Use it when you can't go on without them or they should look at something: you " +
+        "are blocked, unsure, found a problem, or have work ready for them to review or approve. Say exactly what " +
+        'to look at and what you need from them, in a sentence or two; "needs review" alone is not enough. It ' +
+        "is not for progress updates (use add_note) and not a replacement for a step you can mark blocked with a " +
+        "note. A new request replaces the one standing. The user dismisses it from the task; if the problem goes " +
+        "away or the user has answered, remove it with clear: true. Do not use it unless there is something for " +
+        "the user to act on, because every call interrupts them.",
+      inputSchema: {
+        task: taskField,
+        message: z
+          .string()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("What the user should look at and what you need from them. Required unless clear is true."),
+        clear: z
+          .boolean()
+          .optional()
+          .describe("True takes the standing request off the task instead of making one. Don't pass a message."),
+        actor: actorField,
+      },
+    },
+    (args) =>
+      run(() => {
+        const id = services.tasks.resolveId(args.task);
+        if (args.clear) {
+          if (args.message) throw new AppError("VALIDATION", "Pass either message or clear: true, not both.");
+          const { cleared, task } = services.attention.clear(id, actor(args.actor));
+          return textResult(
+            cleared
+              ? `Cleared the request for attention on #${task.number}.`
+              : `#${task.number} had no request for attention to clear.`,
+          );
+        }
+        if (!args.message) throw new AppError("VALIDATION", "Pass a message saying what the user should look at.");
+        const summary = services.attention.request(id, args.message, actor(args.actor));
+        return textResult(`Flagged #${summary.number} for the user. It shows under Needs attention until dismissed.`);
       }),
   );
 };

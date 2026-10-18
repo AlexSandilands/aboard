@@ -2,6 +2,8 @@ import {
   AUTOPILOT_ACTOR,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
+  BOARD_RESTARTED_ERROR,
+  UNSTICK_STALE_PREFIX,
   type AutopilotRunStatus,
   prReviewOutput,
   type FindingSeverity,
@@ -238,16 +240,16 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
           group.failures.push({
             task: ref,
             reason,
-            restarted: /board restarted/i.test(reason),
+            restarted: reason.startsWith(BOARD_RESTARTED_ERROR),
           });
         }
-        if (/gave up/i.test(run.summary)) group.gaveUp += 1;
         if (run.taskId) {
           const key = `${run.automation}:${run.taskId}`;
           if (lastOnTask.get(key) === "failed") group.retries += 1;
           lastOnTask.set(key, run.status);
         }
         const review = run.automation === AUTOPILOT_REVIEW_PRS ? prReviewOutput(run) : null;
+        if (review?.handoff === "gave_up") group.gaveUp += 1;
         if (review && ref) {
           pr.push({
             ...ref,
@@ -262,7 +264,7 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
           addStall({
             ...ref,
             taskId: run.taskId,
-            kind: run.summary.startsWith("Stale") ? "stale" : "waiting",
+            kind: run.summary.startsWith(UNSTICK_STALE_PREFIX) ? "stale" : "waiting",
             at: run.finishedAt ?? run.updatedAt,
             text: run.summary,
           });

@@ -49,6 +49,7 @@ import type { RecurringService } from "./recurring.ts";
 import type { ActivityService } from "./activity.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
+import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
 
 /**
@@ -78,6 +79,7 @@ export interface Services {
   digests: DigestsService;
   activity: ActivityService;
   notifications: NotificationsService;
+  attention: AttentionService;
 }
 
 export interface ProjectRef {
