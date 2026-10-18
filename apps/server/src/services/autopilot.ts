@@ -66,6 +66,7 @@ export const describeAutomation = (a: Automation): AutopilotAutomation => ({
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  blocked: a.blocked ?? null,
   fields: a.fields,
   defaults: a.defaults,
 });
@@ -369,6 +370,7 @@ export function createAutopilotService(
       if (kind === "epic" && !epicScoped(automation)) {
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
+      if (input.mode === "on" && automation.blocked) throw new AppError("VALIDATION", automation.blocked);
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
       const config = input.config ?? own?.config ?? {};

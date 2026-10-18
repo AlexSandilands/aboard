@@ -84,6 +84,51 @@ and keeps to the same pause, dry run, caps and quiet hours.
   section under **Output**.
 - With **dry run** on, each run records what it would have run, under **What it would run**, and does nothing.
 
+## Inputs and required tools
+
+An agent action can declare **Inputs** and **Required tools**, so one prompt works for whoever uses it.
+
+- An **input** is a named value (text, a number or yes / no) that the prompt reads as `{{inputs.name}}`: a JQL query,
+  a look-back in days, whether to ask for approval. Each has a label and a value. Change the value in the editor
+  instead of the prompt.
+- A **required tool** is a slot for a kind of tool the automation needs but can't name, since people use different MCP
+  servers: "Jira tools", say, for searching issues. You fill the slot with tools of your own servers, one per line, as
+  for **Allowed tools**. They are allowed to the agent like any allowed tool, and the prompt is told which tools
+  fill each slot.
+
+While a slot is empty the automation is marked **Won't work until you fill in: Jira tools** in orange, and its **On**
+button is disabled. If you empty a slot of one that is already on, it stops starting agents until it is filled.
+
+## Sharing one
+
+On a custom automation's row, **Export** downloads a file (`dispatch.automation.json`). It holds the trigger,
+prompt, skill name and allowed tools, the declared inputs with their current values as defaults, and the declared
+slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
+automation names a skill you have installed, the skill's text goes in the file.
+
+To use someone's file: **Custom automations → Import**, then choose the file (or **Example: Dispatch**, which the app
+ships). Before anything is saved you see everything it would run: the prompt, any command, the tools it may use
+without asking and the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
+your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
+It comes in **off**; switch it on in the Autopilot list when you have read it and the orange warning is gone.
+
+- A skill in the file is written to `~/.claude/skills` only if you switch **Save the skill** on. One that already
+  exists is never overwritten: a name you use is kept apart (`triage-2`) and the automation names the new one.
+- Export tells you when a skill went into the file. Only its `SKILL.md` travels, not scripts or other files beside
+  it, so check the skill for anything private first.
+- An automation name you already use gets a number: `Dispatch (2)`.
+- A file made by a newer version of the app is refused, saying so.
+
+### Dispatch
+
+Dispatch is the example that ships. Every hour it searches Jira (with your **Jira tools** slot) for recent defects
+that match its JQL, skips keys already on the board (a task linking the key) or in its handover, adds the ones that
+look fixable by an agent to the board with a plan, and then either asks you to approve each plan or, if you turned
+**Require a human to approve plans first** off, flags the task so Autopilot starts it. It never merges: you review the
+pull requests. Fill the Jira slot with tools such as `mcp__issue-tracker__search_jira` and
+`mcp__issue-tracker__get_jira_issue`, check the JQL and the limits, pick the projects, switch **Start planned tasks** on
+if it should start work, and switch Dispatch on.
+
 ## Commands run on your machine
 
 A command runs as you, in sh (Windows PowerShell on Windows), whenever its trigger fires in a project

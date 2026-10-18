@@ -1,14 +1,21 @@
 import { randomUUID } from "node:crypto";
 import {
+  bundleToDefinition,
   checkCustomDefinition,
+  CUSTOM_NAME_MAX,
+  ImportAutomationInput,
+  parseAutomationBundle,
   customAutomationKey,
   epicArmKey,
   CreateCustomAutomationInput,
   normalizeLabels,
   TaskStatus,
   UpdateCustomAutomationInput,
+  type BundleSkill,
   type CustomAutomation,
   type CustomDefinition,
+  type ImportedAutomation,
+  type InstalledSkill,
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
@@ -24,6 +31,13 @@ export interface CustomAutomationsService {
   get(id: string): CustomAutomation;
   /** Throws VALIDATION for a definition that can't run, NOT_FOUND for an unknown project or epic, CONFLICT for a name taken. */
   create(input: CreateCustomAutomationInput): CustomAutomation;
+  /**
+   * Saves an automation from a shared file, switched off like any new one: its inputs and slots filled in as given,
+   * restricted to `projectIds`, under a free name ("Name (2)" when taken). The skill in the file is written with
+   * `installSkill` only when the importer asked for it, and the automation names the name it got. Throws VALIDATION
+   * for a file that isn't one, is from a newer version or doesn't make a definition that can run.
+   */
+  importBundle(input: ImportAutomationInput, installSkill?: (skill: BundleSkill) => InstalledSkill): ImportedAutomation;
   /** A changed trigger or filters arm it again, so events before the change don't fire. */
   update(id: string, input: UpdateCustomAutomationInput): CustomAutomation;
   /** Its switches go with it; its runs stay as history. */
@@ -83,27 +97,54 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
     return next;
   };
 
+  /** Saves a checked definition as a new automation, armed from now. */
+  const insert = (def: CustomDefinition): CustomAutomation =>
+    core.write((fx) => {
+      const now = nowIso();
+      const custom: CustomAutomation = {
+        id: randomUUID(),
+        ...checked(def),
+        armedAt: now,
+        armedProjects: {},
+        createdAt: now,
+        updatedAt: now,
+      };
+      repos.autopilotCustom.insert(custom);
+      fx.autopilot();
+      return custom;
+    });
+
+  /** The name, or "Name (2)", "Name (3)" ... when taken, cut to fit. */
+  const freeName = (name: string): string => {
+    for (let n = 1; ; n++) {
+      const suffix = n === 1 ? "" : ` (${n})`;
+      const candidate = `${name.slice(0, CUSTOM_NAME_MAX - suffix.length).trimEnd()}${suffix}`;
+      if (!repos.autopilotCustom.byName(candidate)) return candidate;
+    }
+  };
+
   return {
     list: () => repos.autopilotCustom.all(),
 
     get,
 
-    create(input) {
-      const def = CreateCustomAutomationInput.parse(input);
-      return core.write((fx) => {
-        const now = nowIso();
-        const custom: CustomAutomation = {
-          id: randomUUID(),
-          ...checked(def),
-          armedAt: now,
-          armedProjects: {},
-          createdAt: now,
-          updatedAt: now,
-        };
-        repos.autopilotCustom.insert(custom);
-        fx.autopilot();
-        return custom;
-      });
+    create: (input) => insert(CreateCustomAutomationInput.parse(input)),
+
+    importBundle(input, installSkill) {
+      const { bundle: file, inputs, slots, projectIds, installSkill: wantSkill } = ImportAutomationInput.parse(input);
+      const parsed = parseAutomationBundle(file);
+      if (!parsed.ok) throw new AppError("VALIDATION", parsed.error);
+      const { bundle } = parsed;
+      const fill = { inputs, slots, projectIds };
+      const named = (skill?: string | null) =>
+        CreateCustomAutomationInput.parse({
+          ...bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
+          name: freeName(bundle.name),
+        });
+      // Check everything before writing a skill, so a file that can't run leaves nothing behind.
+      checked(named(bundle.skill?.name));
+      const installed = bundle.skill && wantSkill && installSkill ? installSkill(bundle.skill) : null;
+      return { automation: insert(named(installed?.name)), skill: installed };
     },
 
     update(id, input) {

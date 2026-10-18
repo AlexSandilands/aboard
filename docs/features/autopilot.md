@@ -1,7 +1,7 @@
 # Autopilot
 
 Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch).
+(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -518,7 +518,7 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 ### Custom automations
 
-Automations the user defines (#97; guide: [custom automations](../guide/custom-automations.md)). Each row of
+Automations the user defines (#97, sharing #135; guide: [custom automations](../guide/custom-automations.md)). Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
 (built-ins, then every custom row), so a create, edit or delete applies from the next pass; nothing is reloaded.
@@ -625,6 +625,57 @@ the automation. Runs stay, under the old key.
   `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`). The preview runs the same contracts helpers as the server
   on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
+
+#### Inputs and required tool slots
+
+An agent action carries `inputs` and `slots` (`AutomationInput`, `AutomationSlot` in contracts), both empty by default,
+so rows saved before them still parse.
+
+- **Inputs** are `{name, label, type: text | number | boolean, default, value}`. The prompt reads `{{inputs.<name>}}`
+  (`renderCustomPrompt` with `CustomValues.inputs`), for declared names only. A value is data: it isn't filled in again,
+  so one that looks like `{{task.title}}` stays as written. `checkCustomDefinition` refuses an undeclared
+  `{{inputs.x}}`, repeated names and a value that doesn't fit its type (`inputValueProblem`).
+- **Slots** are `{name, label, description, tools}`; `tools` follow the `allowedTools` rules. `customAllowedTools` is
+  the allowed tools and every slot's tools together, which is what `act` passes as `RunnerRequest.tools` and what the
+  dry-run note lists. `customAgentPrompt` adds a "Tools to use for this" line per *filled* slot after the prompt.
+- **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
+  catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
+  `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
+  finds nothing meanwhile, so emptying a slot of one that is already on stops it rather than starting an agent without
+  its tools. Inherit and Off are unaffected.
+
+### Sharing automations
+
+An automation is shared as a versioned JSON file, an `AutomationBundle` (`packages/contracts/src/automationBundle.ts`,
+`format: "<brand id>.automation"`, `version: 1`). It holds the name, description, trigger, the filters' labels only, the
+action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
+optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
+importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
+`version` apart from a malformed one.
+
+| Route                                  | Does                                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `GET /api/autopilot/custom/:id/export` | The bundle (`automationBundle`): inputs' current values as defaults, slots empty, and the action's skill read from the user's installed skills when it is there and fits `BUNDLE_SKILL_BODY_MAX` |
+| `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill}`; 201 `{automation, skill}`                       |
+
+`customAutomations.importBundle` parses the file again (a body that isn't one is `VALIDATION`), fills the inputs and
+slots (`bundleToDefinition`; an input left out takes its default), restricts the filters to `projectIds`, gives it a free
+name (`Name (2)`) and runs the usual definition check **before** writing anything, so a file that can't run leaves no
+skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
+`installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
+the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
+is saved like any new one, with no switches, so it is off. As when creating one, a shell action needs the board page's
+`Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
+the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
+frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
+`SKILL.md`, not other files beside it, and the UI says when a skill went into the file.
+
+The web import screen (`CustomAutomationImportForm`, `/settings/autopilot/custom/import`) reads the file in the browser
+and shows the prompt, command, allowed tools and skill text in full, as untrusted, before **Import**. It also offers the
+files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Dispatch** is an hourly scheduled agent with the inputs `jql`,
+`look_back_days`, `max_issues` and `require_approval` and a `jira` slot. It uses `list_tasks(query: KEY)` to skip keys
+already on the board, `add_to_backlog` and `set_plan`, then `request_attention` or the Autopilot flag, and keeps triaged
+and skipped keys in its handover. It never merges.
 
 ### Runners
 
