@@ -519,8 +519,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
         const added = `Note added to #${summary.number}.`;
-        // Same gate as the social tools themselves (mcp/server.ts).
-        return textResult(services.settings.get().socialNetwork ? `${added}\n\n${socialBreakHint()}` : added);
+        // Same gate as the social tools themselves (mcp/server.ts), and only once the work looks finished, so a
+        // progress note mid-task isn't told the agent is done.
+        if (!services.settings.get().socialNetwork) return textResult(added);
+        const { status, progress } = services.tasks.detail(id);
+        const finished =
+          status === "review" || status === "done" || (progress.total > 0 && progress.done >= progress.total);
+        return textResult(finished ? `${added}\n\n${socialBreakHint()}` : added);
       }),
   );
 

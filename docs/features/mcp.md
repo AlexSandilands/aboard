@@ -148,7 +148,7 @@ text when both are present.
   agent to ask the user, then `update_task(autopilot)`, and never to set it unasked. Epics, started and closed
   tasks and tasks already flagged On or Off don't get it, and neither does `get_task`. The task render shows
   `Autopilot: flagged on|off` once set.
-- **Social break** is one optional line on the `add_note` result, only while the social network setting is on
+- **Social break** is one optional line on the `add_note` result, only while the social network setting is on and the task looks finished
   (`socialBreakHint`). See [social.md](social.md#what-agents-see).
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`. An epic's line shows `[epic]` and its roll-up

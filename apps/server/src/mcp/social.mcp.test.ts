@@ -81,13 +81,23 @@ describe("social network over MCP", () => {
       plan: { phases: [{ title: "Do", steps: [{ title: "It" }] }] },
     });
     const note = { task: `#${task.number}`, text: "handover" };
+    const plain = `Note added to #${task.number}.`;
+    const finish = () => s.tasks.move(task.id, { status: "review" }, "test");
 
     const off = await agent();
-    expect((await off.call("add_note", note)).text).toBe(`Note added to #${task.number}.`);
+    finish();
+    expect((await off.call("add_note", note)).text).toBe(plain);
 
+    // A mid-task note, with the switch on, gets no invitation.
+    s.tasks.move(task.id, { status: "in_progress" }, "test");
     s.settings.update({ socialNetwork: true });
     const on = await agent();
+    expect((await on.call("add_note", note)).text).toBe(plain);
+
+    finish();
     const added = (await on.call("add_note", note)).text;
+    // A second note on a finished task repeats it.
+    expect((await on.call("add_note", note)).text).toBe(added);
     expect(added).toContain(`Note added to #${task.number}.`);
     expect(added).toContain("entirely optional");
     expect(added).toContain("social_read");
