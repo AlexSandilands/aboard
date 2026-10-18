@@ -44,6 +44,18 @@ export class GithubApiError extends Error {
   }
 }
 
+/**
+ * Failures another try may get past: GitHub itself failing ("an internal error occurred, please try again", `HTTP 5xx`
+ * as the client reports it), the network, a timeout, a rate limit. Anything else (a refusal, a missing PR) won't change.
+ */
+const TRANSIENT_FAILURE =
+  /try again|internal error|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\bHTTP 5\d\d\b/i;
+
+export function isTransientGithubError(error: unknown): boolean {
+  if (error instanceof GithubApiError && (error.kind === "request" || error.kind === "rate_limited")) return true;
+  return TRANSIENT_FAILURE.test(error instanceof Error ? error.message : String(error));
+}
+
 // ── Tokens ───────────────────────────────────────────────────────────────
 
 export interface GithubTokens {

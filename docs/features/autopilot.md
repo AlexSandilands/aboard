@@ -319,7 +319,11 @@ as comments only.
   `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
   the run is skipped, and the new head is reviewed next as the same round. GitHub refuses a whole review over one
   comment on a line outside the diff, so it then posts again with the inline comments in the body; a body is cut to
-  what GitHub takes. The agent doesn't post itself because Claude Code's permission rules can't scope `gh api`
+  what GitHub takes. GitHub can also create the review and answer with an error ("An internal error occurred, please
+  try again"): on any error `postReview` first reads the account's own reviews on the PR (`findPostedReview`) and,
+  when one at that head starts with `prReviewHeader`, counts it as posted instead of failing or posting twice. The
+  inline fallback runs only for a refusal that isn't transient, and only when no review landed. Its errors are
+  prefixed "GitHub couldn't post the review: …", so a card doesn't read like an Aboard or Claude failure. The agent doesn't post itself because Claude Code's permission rules can't scope `gh api`
   writes to a review (and can't see an `event` inside a heredoc), it refuses a JSON payload in a heredoc, and
   `gh api -f` can't build the inline comments reliably.
 - **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** (engine
@@ -332,8 +336,13 @@ as comments only.
 - **What the board keeps.** The task gets a note "Autopilot reviewed PR #N at `<sha>` (round R of M): review on
   GitHub", linking the review, and the run gets its verdict in `output` (`PrReviewRunOutput`: review URL and id, the
   head commit in full, round, counts, FYI count, threshold, actionable count and `handoff`). An answer that isn't a
-  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too. A run is never retried, so there is one review per head
-  commit even when posting failed.
+  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too, and so does an agent
+  that failed (its text is the run's error: for an API error, such as a 403, `claudeFailure` says that text
+  rather than only the subtype). GitHub failing in passing (`isTransientGithubError`: "try again", "internal error",
+  `HTTP 5xx`, a timeout or the network) while posting ends the run `skipped` ("will retry"), not a round used, with
+  `output.retry`; the next pass reviews the same head again under the key `review:pr:<linkId>:<headOid>:<n>`, up to
+  `REVIEW_ATTEMPTS` (3) tries, after which it fails, flagged. Any other failed run is never retried, so there is one
+  review per head commit even when posting failed.
 - **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
   (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
   gave up…", which shows under Needs attention and sends an `autopilot_failed` notification). The fix automation

@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { cmdShimArgs, parseClaudeOutput, resolveExecutable, runClaude } from "./claudeCli.ts";
+import {
+  claudeFailure,
+  cmdShimArgs,
+  parseClaudeOutput,
+  readClaudeResult,
+  resolveExecutable,
+  runClaude,
+} from "./claudeCli.ts";
 
 const alive = (pid: number) => {
   try {
@@ -60,6 +67,23 @@ describe("claude CLI", () => {
     expect(() => parseClaudeOutput(wrong, schema, "import")).toThrow("expected shape");
     const failed = JSON.stringify({ is_error: true, subtype: "error_max_turns" });
     expect(() => parseClaudeOutput(failed, schema, "import")).toThrow("Claude Code's import failed: error max turns");
+  });
+
+  it("says an API error's own text, not just its subtype", () => {
+    const apiError = "API Error: 403 Forbidden: the request was refused";
+    const refused = JSON.stringify({ is_error: true, subtype: "error_during_execution", result: apiError });
+    expect(() => parseClaudeOutput(refused, z.unknown(), "review")).toThrow(
+      `Claude Code's review failed: ${apiError} (error during execution)`,
+    );
+    const bare = JSON.stringify({ is_error: true, subtype: "success", result: apiError });
+    expect(claudeFailure(readClaudeResult(bare), "agent")).toBe(apiError);
+    // A limit keeps its name: the result is only what the agent last said.
+    const budget = JSON.stringify({ is_error: true, subtype: "error_max_budget_usd", result: "Almost done" });
+    expect(claudeFailure(readClaudeResult(budget), "agent")).toBe("error max budget usd");
+    const long = JSON.stringify({ is_error: true, result: "x".repeat(900) });
+    expect(claudeFailure(readClaudeResult(long), "agent")).toHaveLength(501);
+    // Without an error flag the result is no failure text.
+    expect(claudeFailure(readClaudeResult(JSON.stringify({ result: "fine" })), "agent")).toBe("fine");
   });
 
   // Windows ends the tree with taskkill /T; elsewhere the run is its own process group.
