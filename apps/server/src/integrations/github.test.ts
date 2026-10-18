@@ -781,6 +781,26 @@ describe("github postReview", () => {
       expect(gh.mutations.map((m) => m.operation)).toEqual(["PostPullRequestReview"]);
     });
 
+    it("doesn't look for a review after a plain refusal", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      // An earlier review at this head must not stand in for one GitHub refused.
+      gh.reviews.set("o/r#7", [{ databaseId: 1, url: "u1", body, oid: "abcdef1234567890" }]);
+      gh.failNextMutation("Pull request review thread line must be part of the diff");
+      await expect(github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] })).rejects.toThrow(/line must/);
+      expect(gh.requests.map((r) => r.operation)).not.toContain("PullRequestViewerReviews");
+    });
+
+    it("ignores an older review of the same head: it isn't the post that failed", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.reviews.set("o/r#7", [
+        { databaseId: 1, url: "u1", body, oid: "abcdef1234567890", submittedAt: "2026-01-01T00:00:00Z" },
+      ]);
+      gh.failNextReview(internal, { landed: false });
+      await expect(github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] })).rejects.toThrow(/internal/);
+    });
+
     it("ignores another commit's review and one with another's text", async () => {
       const { gh, github } = setup([ghLink("l1", 7)]);
       gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));

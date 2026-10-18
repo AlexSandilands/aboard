@@ -26,7 +26,10 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
   /** An error for the next review post, which GitHub may or may not have created before answering with it. */
   let failNextReview: { message: string; landed: boolean } | null = null;
   /** The reviews the signed-in account has posted, by PR key. */
-  const reviews = new Map<string, { databaseId: number; url: string; body: string; oid: string }[]>();
+  const reviews = new Map<
+    string,
+    { databaseId: number; url: string; body: string; oid: string; submittedAt?: string }[]
+  >();
 
   const repoOf = (owner: string, name: string): GraphqlRepo | undefined =>
     repos.get(`${owner}/${name}`) ??
@@ -102,6 +105,7 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
         databaseId: r.databaseId,
         url: r.url,
         state: "COMMENTED",
+        submittedAt: r.submittedAt ?? new Date().toISOString(),
         viewerDidAuthor: true,
         body: r.body,
         commit: { oid: r.oid },

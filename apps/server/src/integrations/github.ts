@@ -303,7 +303,7 @@ const PostedReviewData = z.object({
 const VIEWER_REVIEWS_QUERY = `query PullRequestViewerReviews($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviews(last: 30) { nodes { databaseId url state viewerDidAuthor body commit { oid } } }
+      reviews(last: 30) { nodes { databaseId url state submittedAt viewerDidAuthor body commit { oid } } }
     }
   }
 }`;
@@ -317,6 +317,7 @@ const ViewerReviews = z.object({
               databaseId: z.number().nullish(),
               url: z.string(),
               state: z.string(),
+              submittedAt: z.string().nullish(),
               viewerDidAuthor: z.boolean().nullish(),
               body: z.string().nullish(),
               commit: z.object({ oid: z.string() }).nullish(),
@@ -350,6 +351,9 @@ export interface PostedReview {
   /** Inline comments GitHub refused (a line outside the diff) and that went into the body instead. */
   folded: number;
 }
+
+/** How far GitHub's clock may differ from ours when a landed review is told by its time. */
+const CLOCK_SKEW_MS = 2 * 60_000;
 
 /** GitHub refuses a review body past 65536 characters. */
 const MAX_REVIEW_BODY = 60_000;
@@ -819,12 +823,14 @@ export function createGithubIntegration(deps: {
   };
 
   /**
-   * The newest submitted review the signed-in account left on the PR at this head with Autopilot's header, or null.
-   * It is how a post that GitHub answered with an error is told apart from one that never happened.
+   * The newest submitted review the signed-in account left on the PR at this head with Autopilot's header, submitted
+   * since `since` (an older one at the same head isn't the post that failed), or null. It is how a post that GitHub
+   * answered with an error is told apart from one that never happened.
    */
   const findPostedReview = async (
     ref: PrRef,
     headOid: string,
+    since: number,
   ): Promise<{ id: number | null; url: string; body: string } | null> => {
     const [owner, name] = splitRepo(ref.repo);
     const raw = await api.graphql(ref.host, VIEWER_REVIEWS_QUERY, { owner, name, number: ref.number });
@@ -837,7 +843,8 @@ export function createGithubIntegration(deps: {
         r.viewerDidAuthor === true &&
         r.state.toUpperCase() !== "PENDING" &&
         r.commit?.oid.toLowerCase() === headOid.toLowerCase() &&
-        (r.body ?? "").startsWith(header),
+        (r.body ?? "").startsWith(header) &&
+        Date.parse(r.submittedAt ?? "") >= since - CLOCK_SKEW_MS,
     );
     return found ? { id: found.databaseId ?? null, url: found.url, body: found.body ?? "" } : null;
   };
@@ -1099,17 +1106,25 @@ export function createGithubIntegration(deps: {
             },
           });
         // GitHub can create the review and still answer with an error ("internal error, try again"): a review that is
-        // there counts as posted, or the retry would review the same commit twice.
-        const landed = async (folded: number): Promise<PostedReview | null> => {
-          const found = await findPostedReview(ref, head).catch(() => null);
-          return found ? { id: found.id, url: found.url, headOid: head, folded } : null;
+        // there counts as posted, or the retry would review the same commit twice. Only after an error that may be
+        // that: a clear refusal posted nothing, and an older review at this head must not stand in for it.
+        const landed = async (error: unknown, folded: number): Promise<PostedReview | null> => {
+          if (!isTransientGithubError(error)) return null;
+          try {
+            const found = await findPostedReview(ref, head, startedAt);
+            return found ? { id: found.id, url: found.url, headOid: head, folded } : null;
+          } catch {
+            // The lookup failing says nothing: the original error is the one to report.
+            return null;
+          }
         };
+        const startedAt = Date.now();
         let data: unknown;
         let folded = 0;
         try {
           data = await post(input.comments, input.body);
         } catch (error) {
-          const already = await landed(0);
+          const already = await landed(error, 0);
           if (already) return already;
           // One comment on a line the diff doesn't touch refuses the whole review: say it in the body instead. A
           // failure that may pass (GitHub's own error, the network) is retried as it was, not changed.
@@ -1124,7 +1139,7 @@ export function createGithubIntegration(deps: {
           try {
             data = await post([], foldReviewComments(input.body, input.comments));
           } catch (retryError) {
-            const foldedReview = await landed(input.comments.length);
+            const foldedReview = await landed(retryError, input.comments.length);
             if (foldedReview) return foldedReview;
             throw retryError;
           }
