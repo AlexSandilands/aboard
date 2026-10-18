@@ -56,7 +56,7 @@ describe("searchSettings", () => {
   });
 
   it("finds a setting folded inside a section by name, with the fold to open", () => {
-    const [match] = searchSettings(entries, "unstick");
+    const [match] = searchSettings(entries, "stuck tasks");
     expect(match?.id).toBe("autopilot.engine.automation-unstick");
     expect(match?.foldedIn).toBe(match?.id);
   });

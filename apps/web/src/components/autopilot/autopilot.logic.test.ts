@@ -1,7 +1,12 @@
 import type { AutopilotAutomation, AutopilotRun, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  AUTOPILOT_MODES,
+  BOARD_MODES,
   automationTitle,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
   dismissableRun,
   entryFor,
   hasEpicAutomations,
@@ -140,13 +145,37 @@ describe("active runs", () => {
   });
 });
 
+describe("board switch", () => {
+  it("offers On and Off, without Inherit", () => {
+    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["on", "off"]);
+    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "on", "off"]);
+  });
+
+  it("shows no row (inherit) as Off", () => {
+    expect(boardSwitchValue("inherit")).toBe("off");
+    expect(boardSwitchValue("off")).toBe("off");
+    expect(boardSwitchValue("on")).toBe("on");
+  });
+
+  it("saves Off as inherit, so the row goes unless it holds config", () => {
+    expect(boardModeToSave("off")).toBe("inherit");
+    expect(boardModeToSave("on")).toBe("on");
+  });
+
+  it("summarises the choice without mentioning Inherit", () => {
+    expect(boardSummary("on")).toBe("On for the board");
+    expect(boardSummary("off")).toBe("Off for the board");
+    expect(boardSummary("inherit")).toBe("Off for the board");
+  });
+});
+
 describe("inheritLabel", () => {
   it("says what Inherit resolves to from the board's entry", () => {
     expect(inheritLabel({ enabled: true, source: "board" })).toBe("Inherit (On from board)");
     expect(inheritLabel({ enabled: false, source: "board" })).toBe("Inherit (Off from board)");
   });
 
-  it("is off by default with no parent, as for the board itself or while it loads", () => {
+  it("is off by default with no parent, while the board's entries load", () => {
     expect(inheritLabel(null)).toBe("Inherit (Off by default)");
     expect(inheritLabel({ enabled: false, source: "default" })).toBe("Inherit (Off by default)");
   });

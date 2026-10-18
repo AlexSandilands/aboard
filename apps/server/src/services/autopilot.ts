@@ -389,10 +389,13 @@ export function createAutopilotService(
       if (input.mode === "on" && automation.blocked) throw new AppError("VALIDATION", automation.blocked);
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
-      const config = input.config ?? own?.config ?? {};
       const known = new Set(automation.fields.map((f) => f.key));
-      const unknown = Object.keys(config).find((k) => !known.has(k));
+      const stored = own?.config ?? {};
+      // A key the automation has since dropped (Unstick's `nudge`) may still be in the stored row, and the forms send
+      // the whole config back. It is tolerated, and gone from what is saved; a key never stored is still an error.
+      const unknown = Object.keys(input.config ?? {}).find((k) => !known.has(k) && !Object.hasOwn(stored, k));
       if (unknown) throw new AppError("VALIDATION", `${automation.title} has no setting ${unknown}`);
+      const config = Object.fromEntries(Object.entries(input.config ?? stored).filter(([k]) => known.has(k)));
       const parsed = parseConfig(automation, config);
       if (!parsed.success) {
         throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);

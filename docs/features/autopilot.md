@@ -18,6 +18,11 @@ settings UI. The digest's header button and panel are in [board-layout.md](board
 Each automation has a mode at each scope: **Inherit**, **On** or **Off**. The most specific scope that isn't
 Inherit wins: epic over project over board. With nothing set anywhere, an automation is off.
 
+The board is the top scope, so Inherit there would only fall back to that default, which is the same as Off. The
+board's switch therefore offers **On** and **Off** only (`BOARD_MODES`); no row reads as Off, and picking Off saves
+`inherit`, which drops the row unless it still holds config. The server still accepts all three modes at every
+scope, so the API and old rows are unchanged. Projects and epics keep Inherit / On / Off.
+
 | Board | Project | Epic    | Effective      |
 | ----- | ------- | ------- | -------------- |
 | —     | —       | —       | Off (default)  |
@@ -216,8 +221,12 @@ planned tasks on the next tick. It only reports blockers that finished in the la
 `unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
 again, while two blockers finishing together give one notification.
 
-**Unstick stale tasks** (`unstick`, #88; `automations/unstick.ts`). Needs no agent and is off until switched on.
-Watches tasks In Progress for two things, each reported once:
+**Remind me about stuck tasks** (`unstick`, #88; `automations/unstick.ts`; first called "Unstick stale tasks", and
+the key stayed). Needs no agent and is off until switched on. It is a reminder to the user and acts on nothing:
+getting stalled work moving again is Orchestrate's job (below). It is still worth having beside it, because
+Orchestrate leaves a task that is waiting on the user alone, and a thread stuck waiting holds a concurrency slot
+for Start planned tasks. It is also the free option for someone who doesn't run Orchestrate (no agent, no caps, no
+quiet hours). Watches tasks In Progress for two things, each reported once:
 
 - **Quiet**: no activity for `staleHours` (default 24). Activity is any activity entry not written by `autopilot`
   (its own notes and run entries don't count), or the move into In Progress. Puts "Stale: no activity for 26h" under
@@ -227,10 +236,10 @@ Watches tasks In Progress for two things, each reported once:
   the snapshot's `lastActivityAt`. The thread already shows its own Needs attention reason, so only the run and the
   notification are added. The dedupe key is `waiting:<threadLinkId>:<lastActivityAt>`.
 
-Either way it logs a note under `autopilot` and sends an `autopilot_notice`. With `nudge` on (off by default) it
-also posts `nudgeMessage` ("Continue, or report what's blocking you.") into the task's live thread through the
-nudge runner; it never starts a session, and a task with no live thread just says so in the run's summary. The
-nudge isn't an agent run, so quiet hours and the caps don't hold it back.
+Either way it logs a note under `autopilot` and sends an `autopilot_notice`. It used to be able to post a nudge into
+the thread (`nudge`, `nudgeMessage`); that went to Orchestrate. A row that still holds those keys is not an error:
+`setScope` ignores stored keys the automation no longer declares and drops them on the next save, so the forms,
+which send a scope's whole config back, keep working. A key that was never stored is still a `VALIDATION` error.
 
 **Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
 per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
@@ -523,7 +532,7 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
   for ten minutes from the run's end or the snapshot. The slot frees when
   the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
-  waiting for you holds it until you answer, and Unstick stale tasks flags it. A headless run is a running run, which
+  waiting for you holds it until you answer, and Remind me about stuck tasks flags it. A headless run is a running run, which
   the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
@@ -883,8 +892,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 - **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Automations** (`AutomationSections`): one folded section per automation with its Inherit / On / Off switch at
-  the board in the header; opening it shows what it does and a form with a form generated from its `fields`: a switch, number, text, 24-hour time
+- **Automations** (`AutomationSections`): one folded section per automation with its On / Off switch at
+  the board in the header (no Inherit; see [Switches and scopes](#switches-and-scopes)); opening it shows what it does and a form generated from its `fields`: a switch, number, text, 24-hour time
   or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
   it has one, such as the digest's own skill). A project's settings page shows them as rows
@@ -955,7 +964,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run` |
-| `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
+| `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
 | `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
