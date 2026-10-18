@@ -194,7 +194,7 @@ describe("resolveSuggestion", () => {
   it("says why when the tier has no model, its provider isn't ready or the model is gone", () => {
     const why = (t3: ModelTiers["deep"]["t3"]) =>
       resolveSuggestion({ tier: "deep", reason: null }, tiers(t3), providers)?.unavailable;
-    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings.");
+    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Model tiers.");
     expect(why({ selection: { instanceId: "codex", model: "gpt", options: [] }, label: "GPT" })).toBe(
       "Codex isn't ready in T3 Code.",
     );

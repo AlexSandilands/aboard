@@ -63,7 +63,7 @@ describe("searchSettings", () => {
 
   it("finds generated rows: notification kinds and model tiers", () => {
     expect(ids("checks failing")).toContain("board.notifications.kind-pr_checks_failing");
-    expect(ids("deep")).toContain("tasks.models.deep");
+    expect(ids("deep")).toContain("models.tiers.deep");
   });
 
   it("returns a sub-section after a row of the same rank", () => {

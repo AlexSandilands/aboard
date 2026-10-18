@@ -1,6 +1,15 @@
 // Pure helpers for the settings page: its groups and sub-sections, scroll-spy and the project it shows.
+import { keybindingGroups } from "./keybindings.logic";
 
-export const SETTINGS_GROUP_IDS = ["board", "tasks", "autopilot", "integrations", "project"] as const;
+export const SETTINGS_GROUP_IDS = [
+  "board",
+  "keybindings",
+  "tasks",
+  "models",
+  "autopilot",
+  "integrations",
+  "project",
+] as const;
 export type SettingsGroupId = (typeof SETTINGS_GROUP_IDS)[number];
 
 export interface SettingsSectionDef {
@@ -31,9 +40,16 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     sections: [
       section("board.appearance", "Appearance", ["theme", "dark", "light", "banner"]),
       section("board.notifications", "Notifications", ["pop-ups", "alerts", "quiet hours"]),
-      section("board.keybindings", "Keybindings", ["shortcuts", "hotkeys", "keys", "keyboard", "when"]),
       section("board.data", "Data", ["backup", "git", "archived projects", "restore"]),
     ],
+  },
+  {
+    id: "keybindings",
+    label: "Keybindings",
+    // One sub-section per group of the keybinding registry, so a command in a new group needs no wiring here.
+    sections: keybindingGroups().map(({ label, sectionId }) =>
+      section(sectionId, label, ["shortcuts", "hotkeys", "keys", "keyboard", "when"]),
+    ),
   },
   {
     id: "tasks",
@@ -42,8 +58,26 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("tasks.new-tasks", "New tasks", ["templates", "issue import", "jira", "github issues"]),
       section("tasks.planning", "Planning", ["plan tasks", "planning skill", "bulk planning"]),
       section("tasks.review", "Review", ["local review", "rounds", "board reviewer", "skill", "budget"]),
-      section("tasks.models", "Models", ["model tiers", "light", "standard", "deep"]),
       section("tasks.suggestions", "Suggestions", ["suggested changes", "prompts", "skills", "improve", "accept"]),
+    ],
+  },
+  {
+    id: "models",
+    label: "Model tiers",
+    sections: [
+      section("models.tiers", "Model tiers", [
+        "light",
+        "standard",
+        "deep",
+        "model",
+        "suggested model",
+        "session model",
+        "--model",
+        "t3 code",
+        "claude code",
+        "copilot",
+        "effort",
+      ]),
     ],
   },
   {
@@ -59,8 +93,8 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     label: "Integrations",
     sections: [
       section("integrations.t3-code", "T3 Code", ["pairing", "threads", "connection"]),
-      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli", "session", "model"]),
-      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session", "model"]),
+      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli", "session"]),
+      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session"]),
       section("integrations.codex", "Codex", ["mcp"]),
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
       section("integrations.jira", "Jira", ["base url"]),

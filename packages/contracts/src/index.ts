@@ -15,6 +15,7 @@ export * from "./desktop.ts";
 export * from "./handoff.ts";
 export * from "./t3Launch.ts";
 export * from "./modelTiers.ts";
+export * from "./headlessModel.ts";
 export * from "./backup.ts";
 export * from "./agentSessions.ts";
 export * from "./sessionLaunch.ts";

@@ -19,7 +19,8 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.notifications.popups"
         title="Pop-ups"
-        description="An alert when something needs you and the board isn't in front of you. The inbox behind the bell keeps all of them."
+        description="An alert when something needs you and the board isn't in front of you."
+        info="The inbox behind the bell keeps all of them."
         control={<PopupPermission />}
       />
       {NOTIFICATION_KINDS.map(({ kind, label, description }) => (

@@ -16,6 +16,13 @@ describe("headless review", () => {
     expect(JSON.parse(args[args.indexOf("--json-schema") + 1]!)).toMatchObject({ required: ["summary", "findings"] });
   });
 
+  it("runs the chosen model, or the CLI's default when there is none", () => {
+    const args = headlessArgs(1.5, "sonnet");
+    expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
+    expect(headlessArgs(1.5, null)).not.toContain("--model");
+    expect(headlessArgs(1.5)).not.toContain("--model");
+  });
+
   it("puts the task inline and diffs against the base branch", () => {
     const prompt = headlessPrompt({
       taskNumber: 7,
