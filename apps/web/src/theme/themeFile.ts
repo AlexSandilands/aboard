@@ -1,10 +1,11 @@
 // Adapted from T3 Code (apps/web/src/themePalette.ts), MIT — see NOTICE. Reads and writes T3 Code's theme file
-// format, so a theme exported from T3 Code imports into the board unchanged and the other way round.
+// format, so a theme exported from T3 Code imports into the board unchanged and the other way round. Every colour is
+// saved in canonical `oklch(L C H)` form, as T3 Code saves it.
 import { z } from "zod";
+import { decodeThemeColors, toCanonicalThemeColor } from "./color";
 import {
   RESERVED_THEME_IDS,
-  T3_CODE_DARK_THEME_COLORS,
-  T3_CODE_LIGHT_THEME_COLORS,
+  T3_CHAT_THEME,
   THEME_COLOR_ROLES,
   type ThemeAppearance,
   type ThemeColorRole,
@@ -15,18 +16,6 @@ import {
 export const THEME_FILE_VERSION = 1;
 
 const ROLE_SET: ReadonlySet<string> = new Set(THEME_COLOR_ROLES);
-
-/**
- * A literal CSS colour: hex or a colour function with no nesting. T3 Code canonicalises colours to oklch with culori;
- * the board only needs to know a value is a colour and can't break out of the custom property it is written to, so
- * `var()`, nested functions and anything with `;` or braces are refused.
- */
-const COLOR_PATTERN =
-  /^(?:#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^();{}]*\))$/i;
-
-export function isThemeColor(value: unknown): value is string {
-  return typeof value === "string" && COLOR_PATTERN.test(value.trim());
-}
 
 const themeId = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,47})$/);
 const themeLabel = z
@@ -59,9 +48,12 @@ export type ThemeFile = {
   managed?: boolean;
 };
 
-/** T3 Code's own colours: what a theme file leaves out falls back to. */
+/**
+ * What a theme file leaves out falls back to. T3 Code fills gaps from T3 Chat's palette, not its own default one, so a
+ * partial file looks the same in both apps.
+ */
 export function getDefaultThemeColors(mode: ThemeAppearance): ThemeColors {
-  return mode === "dark" ? T3_CODE_DARK_THEME_COLORS : T3_CODE_LIGHT_THEME_COLORS;
+  return mode === "dark" ? T3_CHAT_THEME.variants!.dark! : T3_CHAT_THEME.colors;
 }
 
 export function themeIdFromName(name: string): string {
@@ -84,10 +76,11 @@ function parseColorOverrides(value: unknown): Partial<Record<ThemeColorRole, str
   const overrides: Partial<Record<ThemeColorRole, string>> = {};
   for (const [role, color] of Object.entries(value)) {
     if (!ROLE_SET.has(role)) throw new Error(`"${role}" is not a supported theme color role.`);
-    if (!isThemeColor(color)) {
+    const normalized = toCanonicalThemeColor(color);
+    if (!normalized) {
       throw new Error(`The color for "${role}" must be a literal CSS color such as oklch(0.62 0.2 280).`);
     }
-    overrides[role as ThemeColorRole] = color.trim();
+    overrides[role as ThemeColorRole] = normalized;
   }
   if (Object.keys(overrides).length === 0) throw new Error("Add at least one color role to the theme file.");
   return overrides;
@@ -143,7 +136,23 @@ export function parseThemeFile(value: unknown): ThemeDefinition {
   };
 }
 
-export function serializeThemeFile(theme: ThemeDefinition): string {
+/** The theme with every colour in canonical form; throws when one isn't a colour. */
+export function canonicalizeThemeDefinition(theme: ThemeDefinition): ThemeDefinition {
+  return {
+    ...theme,
+    colors: decodeThemeColors(theme.colors),
+    ...(theme.variants
+      ? {
+          variants: Object.fromEntries(
+            Object.entries(theme.variants).map(([mode, colors]) => [mode, decodeThemeColors(colors)]),
+          ),
+        }
+      : {}),
+  };
+}
+
+export function serializeThemeFile(source: ThemeDefinition): string {
+  const theme = canonicalizeThemeDefinition(source);
   const file: ThemeFile = {
     version: THEME_FILE_VERSION,
     id: theme.id,
@@ -162,7 +171,8 @@ function lenientColors(value: unknown, mode: ThemeAppearance): ThemeColors | nul
   if (!isRecord(value)) return null;
   const colors: Record<string, string> = { ...getDefaultThemeColors(mode) };
   for (const [role, color] of Object.entries(value)) {
-    if (ROLE_SET.has(role) && isThemeColor(color)) colors[role] = color.trim();
+    const normalized = toCanonicalThemeColor(color);
+    if (ROLE_SET.has(role) && normalized) colors[role] = normalized;
   }
   return colors as ThemeColors;
 }

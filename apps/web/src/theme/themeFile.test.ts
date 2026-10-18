@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BUILT_IN_THEMES, T3_CODE_DARK_THEME_COLORS, T3_CODE_LIGHT_THEME_COLORS, THEME_COLOR_ROLES } from "./palettes";
-import { isThemeColor, parseStoredThemes, parseThemeFile, serializeThemeFile, themeIdFromName } from "./themeFile";
+import { decodeThemeColors, isThemeColor, toCanonicalThemeColor } from "./color";
+import { BUILT_IN_THEMES, T3_CHAT_THEME, THEME_COLOR_ROLES } from "./palettes";
+import { parseStoredThemes, parseThemeFile, serializeThemeFile, themeIdFromName } from "./themeFile";
 
 const file = (over: Record<string, unknown> = {}) => ({
   version: 1,
@@ -30,31 +31,49 @@ describe("the palettes", () => {
 });
 
 describe("isThemeColor", () => {
-  it("accepts hex and colour functions", () => {
-    for (const value of ["#fff", "#ffff", "#0a0a0a", "#0a0a0a80", "oklch(0.5 0.1 200)", "rgb(1 2 3 / 50%)"]) {
+  it("accepts hex, colour functions and named colours", () => {
+    for (const value of ["#fff", "#ffff", "#0a0a0a", "#0a0a0a80", "oklch(0.5 0.1 200)", "rgb(1 2 3 / 50%)", "red"]) {
       expect(isThemeColor(value)).toBe(true);
     }
   });
 
   it("refuses anything that could escape a custom property", () => {
-    for (const value of ["var(--x)", "red; color: blue", "rgb(calc(1) 2 3)", "#12345", "red", "", 4]) {
+    for (const value of ["var(--x)", "red; color: blue", "rgb(calc(1) 2 3)", "#12345", "", 4]) {
       expect(isThemeColor(value)).toBe(false);
     }
   });
 });
 
 describe("parseThemeFile", () => {
-  it("fills missing roles from T3 Code's colours for the appearance", () => {
+  it("fills missing roles from T3 Chat's colours for the appearance, as T3 Code does", () => {
     const theme = parseThemeFile(file());
     expect(theme).toMatchObject({ id: "dusk", label: "Dusk", appearance: "dark" });
     expect(theme.colors.canvas).toBe("oklch(0.2 0.02 300)");
-    expect(theme.colors.text).toBe(T3_CODE_DARK_THEME_COLORS.text);
+    expect(theme.colors.accent).toBe(toCanonicalThemeColor("#8b5cf6"));
+    expect(theme.colors.text).toBe(T3_CHAT_THEME.variants!.dark!.text);
   });
 
   it("parses a variant against its own appearance's defaults", () => {
     const theme = parseThemeFile(file({ variants: { light: { canvas: "#ffffff" } } }));
-    expect(theme.variants?.light?.canvas).toBe("#ffffff");
-    expect(theme.variants?.light?.text).toBe(T3_CODE_LIGHT_THEME_COLORS.text);
+    expect(theme.variants?.light?.canvas).toBe("oklch(1 0 0)");
+    expect(theme.variants?.light?.text).toBe(T3_CHAT_THEME.colors.text);
+  });
+
+  it("saves every CSS colour form as oklch, keeping alpha", () => {
+    const theme = parseThemeFile(
+      file({
+        colors: {
+          canvas: "oklch(62% 0.2 280deg / 50%)",
+          focus: "rgb(10 20 30 / 50%)",
+          error: "hsl(350 80% 50%)",
+          terminalSelection: "rebeccapurple",
+          terminalScrollbar: "transparent",
+        },
+      }),
+    );
+    expect(theme.colors.canvas).toBe("oklch(0.62 0.2 280 / 0.5)");
+    expect(theme.colors.terminalScrollbar).toBe("oklch(0 0 0 / 0)");
+    for (const role of ["focus", "error", "terminalSelection"] as const) expect(theme.colors[role]).toMatch(/^oklch\(/);
   });
 
   it("derives the id from the name when there is none", () => {
@@ -66,8 +85,8 @@ describe("parseThemeFile", () => {
     for (const theme of BUILT_IN_THEMES) {
       const copy = { ...theme, id: `${theme.id}-copy` };
       const parsed = parseThemeFile(JSON.parse(serializeThemeFile(copy)));
-      expect(parsed.colors).toEqual(theme.colors);
-      expect(parsed.variants).toEqual(theme.variants);
+      expect(parsed.colors).toEqual(decodeThemeColors(theme.colors));
+      expect(parsed.variants?.dark).toEqual(decodeThemeColors(theme.variants!.dark!));
     }
   });
 
@@ -100,8 +119,8 @@ describe("parseStoredThemes", () => {
     ]);
     const themes = parseStoredThemes(raw);
     expect(themes.map((t) => t.id)).toEqual(["dusk"]);
-    expect(themes[0]!.colors.canvas).toBe("#111111");
-    expect(themes[0]!.colors.text).toBe(T3_CODE_DARK_THEME_COLORS.text);
+    expect(themes[0]!.colors.canvas).toBe(toCanonicalThemeColor("#111111"));
+    expect(themes[0]!.colors.text).toBe(T3_CHAT_THEME.variants!.dark!.text);
   });
 
   it("returns nothing for missing or malformed storage", () => {

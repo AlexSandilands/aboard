@@ -4,9 +4,18 @@
 import { storageKey } from "@repo/contracts";
 import { useSyncExternalStore } from "react";
 import { desktopBridge } from "~/lib/desktopBridge";
-import { applyThemePalette, DEFAULT_BACKGROUND, toHexColor } from "~/theme/applyTheme";
-import type { ThemeAppearance, ThemeDefinition } from "~/theme/palettes";
+import { applyThemePalette, applyThemePreview, DEFAULT_BACKGROUND, toHexColor } from "~/theme/applyTheme";
+import type { ThemeAppearance, ThemeColors, ThemeDefinition } from "~/theme/palettes";
 import { parseStoredThemes } from "~/theme/themeFile";
+import {
+  installTheme,
+  parseThemeLibrary,
+  removeThemes,
+  replaceCollection,
+  themesInCollection,
+  type ThemeLibrary,
+  updateTheme,
+} from "~/theme/themeLibrary.logic";
 import {
   buildPaintSnapshot,
   DEFAULT_THEME_MODE,
@@ -135,6 +144,9 @@ function reportToDesktop(selection: ThemeSelection, custom: ReadonlyArray<ThemeD
   if (hex) bridge.setBackgroundColor?.(hex);
 }
 
+/** The theme editor's draft while it is open: painted over the saved theme until the editor closes. */
+let preview: { colors: ThemeColors; appearance: ThemeAppearance } | null = null;
+
 function applyCurrent(suppressTransitions: boolean) {
   const custom = readCustomThemes();
   const selection = readSelection(custom);
@@ -148,6 +160,8 @@ function applyCurrent(suppressTransitions: boolean) {
   applyThemePalette(root, active);
   const background = active?.colors.canvas ?? DEFAULT_BACKGROUND[appearance];
   root.style.backgroundColor = background;
+  // A tab or OS change mid-edit re-applies the saved theme; the draft stays on top of it.
+  if (preview) applyThemePreview(root, preview.colors, preview.appearance);
   write(THEME_PAINT_KEY, JSON.stringify(buildPaintSnapshot(selection, custom)));
   reportToDesktop(selection, custom, background);
   if (suppressTransitions) {
@@ -200,6 +214,77 @@ const setThemeId = (themeId: string | null) => update((s, custom) => selectWhole
 /** Clicking one orb: the theme takes only that appearance. */
 const setThemeHalf = (appearance: ThemeAppearance, themeId: string | null) =>
   update((s, custom) => selectThemeHalf(s, appearance, themeId, custom));
+
+/** Re-applies the saved theme and tells subscribers, after the custom theme list changed underneath it. */
+function refreshTheme() {
+  applyCurrent(true);
+  emit();
+}
+
+/** Paints the theme editor's draft over the board without saving anything. */
+export function previewThemeColors(colors: ThemeColors, appearance: ThemeAppearance) {
+  preview = { colors, appearance };
+  applyThemePreview(document.documentElement, colors, appearance);
+}
+
+/** Drops the draft and puts the saved theme back. */
+export function endThemePreview() {
+  if (!preview) return;
+  preview = null;
+  refreshTheme();
+}
+
+function readLibrary(): ThemeLibrary {
+  return parseThemeLibrary(read(CUSTOM_THEMES_KEY));
+}
+
+function writeLibrary(library: ThemeLibrary) {
+  try {
+    window.localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(library.stored));
+  } catch {
+    throw new Error("Browser storage is unavailable, so the theme was not saved.");
+  }
+  // Selections naming a removed theme fall back on read; write the cleaned selection so a theme imported later under
+  // the same id doesn't come back on its own.
+  writeSelection(readSelection(readCustomThemes()));
+  refreshTheme();
+}
+
+function saved(library: ThemeLibrary, id: string): ThemeDefinition {
+  return library.themes.find((theme) => theme.id === id)!;
+}
+
+/**
+ * The saved custom themes. Every change throws an Error with a message for the user (a taken id, unreadable or full
+ * storage), and re-applies the theme once written.
+ */
+export const customThemeLibrary = {
+  themes: (): ReadonlyArray<ThemeDefinition> => readCustomThemes(),
+  /** The installed themes of one collection, read fresh: used to detect that it changed during a download. */
+  collection: (collectionId: string) => themesInCollection(readLibrary(), collectionId),
+  install(theme: ThemeDefinition): ThemeDefinition {
+    const next = installTheme(readLibrary(), theme);
+    writeLibrary(next);
+    return saved(next, theme.id);
+  },
+  update(theme: ThemeDefinition): ThemeDefinition {
+    const next = updateTheme(readLibrary(), theme);
+    writeLibrary(next);
+    return saved(next, theme.id);
+  },
+  remove(ids: ReadonlyArray<string>) {
+    if (ids.length > 0) writeLibrary(removeThemes(readLibrary(), ids));
+  },
+  replaceCollection(
+    collectionId: string,
+    themes: ReadonlyArray<ThemeDefinition>,
+    expected?: ReadonlyArray<ThemeDefinition>,
+  ): ReadonlyArray<ThemeDefinition> {
+    const next = replaceCollection(readLibrary(), collectionId, themes, expected);
+    writeLibrary(next);
+    return themesInCollection(next, collectionId);
+  },
+};
 
 export function useTheme() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
