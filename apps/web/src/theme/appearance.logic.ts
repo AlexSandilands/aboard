@@ -4,7 +4,7 @@
 
 export const CONTRAST = { min: 50, max: 200, step: 5, default: 100 } as const;
 export const GLASS_OPACITY = { min: 40, max: 100, step: 5, default: 80 } as const;
-export const PANEL_ANIMATION_MS = { min: 0, max: 400, step: 25, default: 0 } as const;
+export const PANEL_ANIMATION_MS = { min: 0, max: 400, step: 25, default: 150 } as const;
 export const INTERFACE_FONT_SIZE = { min: 12, max: 20, default: 16 } as const;
 
 export const DEFAULT_SANS_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';

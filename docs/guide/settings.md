@@ -93,7 +93,7 @@ kept in this browser, not on the server: another browser (or the desktop app) ha
 - **Contrast** (50–200 %) fades text and borders below 100 % and strengthens them above it.
 - **Glass opacity** (40–100 %) sets how see-through menus, dialogs and popovers are; 100 % makes them solid.
 - **Panel animations** (0–400 ms) sets how fast the sidebar and the task panel slide open; the preview beside it
-  replays when clicked. 0 ms, the default, turns them off, and they stay off when your system asks for reduced
+  replays when clicked. The default is 150 ms; 0 ms turns them off, and they stay off when your system asks for reduced
   motion.
 - **Interface font** and its size (12–20 px) change the text everywhere; the size scales the whole board. **Monospace
   font** is for code, ids and shortcuts and only takes monospaced fonts. Type a font installed on your computer and
