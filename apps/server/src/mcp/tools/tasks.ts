@@ -9,7 +9,7 @@ import {
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
-import { resolutionText, statusLabel } from "../format.ts";
+import { resolutionText, socialBreakHint, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
@@ -518,7 +518,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const id = services.tasks.resolveId(args.task);
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
-        return textResult(`Note added to #${summary.number}.`);
+        const added = `Note added to #${summary.number}.`;
+        // Same gate as the social tools themselves (mcp/server.ts).
+        return textResult(services.settings.get().socialNetwork ? `${added}\n\n${socialBreakHint()}` : added);
       }),
   );
 

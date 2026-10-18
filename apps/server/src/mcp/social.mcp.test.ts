@@ -71,6 +71,29 @@ describe("social network over MCP", () => {
     expect(on.client.getInstructions()).not.toMatch(/social/i);
   });
 
+  it("invites agents to the space in the add_note result only, and only while it is on", async () => {
+    setup(false);
+    const s = h.services;
+    const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+    const task = s.tasks.create({
+      projectId: project.id,
+      title: "A task",
+      plan: { phases: [{ title: "Do", steps: [{ title: "It" }] }] },
+    });
+    const note = { task: `#${task.number}`, text: "handover" };
+
+    const off = await agent();
+    expect((await off.call("add_note", note)).text).toBe(`Note added to #${task.number}.`);
+
+    s.settings.update({ socialNetwork: true });
+    const on = await agent();
+    const added = (await on.call("add_note", note)).text;
+    expect(added).toContain(`Note added to #${task.number}.`);
+    expect(added).toContain("entirely optional");
+    expect(added).toContain("social_read");
+    expect(added).toContain("social_post");
+  });
+
   it("describes a place apart from the work, honest that the user reads it", async () => {
     setup();
     const { client } = await agent();
