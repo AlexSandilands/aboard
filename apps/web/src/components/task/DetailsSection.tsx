@@ -101,6 +101,8 @@ function DueDateField({ task }: { task: TaskDetail }) {
           size="sm"
           type="date"
           aria-label="Due date"
+          min="0001-01-01"
+          max="9999-12-31"
           className="w-auto"
           value={dueDate ?? ""}
           onChange={(event) => {
