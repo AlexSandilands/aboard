@@ -187,6 +187,8 @@ starts collapsed.
 PRs, then issues, Jira keys and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
 and the list ends with **Add link**; pasting a T3 thread there still works, and the thread lands in Sessions.
 
+Row labels in Links and Sessions (`PanelLabel`) are one line with an ellipsis. They clip on x (`overflow-x-clip`) instead of using `truncate`, whose `overflow: hidden` would turn the `overflow-y-visible` that keeps trimmed text from being cut into a scroll container. While a truncated label is hovered it pans to show its end, pauses, and jumps back (`label-pan` in `index.css`, distance from `labelPan` in `labelPan.logic.ts`); it stays still under `prefers-reduced-motion`.
+
 ### Autopilot on the board
 
 Four things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,

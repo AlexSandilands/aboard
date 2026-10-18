@@ -63,13 +63,8 @@ import {
   unrecognisedLinkHint,
   type PlainLink,
 } from "./links.logic";
-import {
-  PANEL_ICON_CLASS,
-  PANEL_LABEL_CLASS,
-  PanelControl,
-  PanelSplitGroup,
-  ROW_HOVER_ACTION_CLASS,
-} from "./PanelControl";
+import { PANEL_ICON_CLASS, PanelControl, PanelSplitGroup, ROW_HOVER_ACTION_CLASS } from "./PanelControl";
+import { PanelLabel } from "./PanelLabel";
 import { LinksSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
@@ -182,7 +177,7 @@ function LinkRow({
           <TicketIcon className={PANEL_ICON_CLASS} />
           <span className="shrink-0 font-mono text-xs">{link.ref.key}</span>
           {link.label ? (
-            <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{link.label}</span>
+            <PanelLabel className="flex-1 font-normal text-muted-foreground">{link.label}</PanelLabel>
           ) : null}
         </RowWithMenu>
       );
@@ -203,7 +198,7 @@ function LinkRow({
           }
         >
           <GlobeIcon className={PANEL_ICON_CLASS} />
-          <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{link.label ?? hostnameOf(link.url) ?? link.url}</span>
+          <PanelLabel className="flex-1">{link.label ?? hostnameOf(link.url) ?? link.url}</PanelLabel>
         </RowWithMenu>
       );
   }
@@ -324,7 +319,7 @@ function PullRequestRow({
     >
       <GitPullRequestArrowIcon className={cn("size-4 shrink-0", state?.tone ?? "text-muted-foreground")} />
       {link.ref ? <span className="shrink-0 tabular-nums text-muted-foreground">#{link.ref.number}</span> : null}
-      <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
+      <PanelLabel className="flex-1">{title}</PanelLabel>
       {snapshot ? (
         <span className="flex shrink-0 items-center gap-1.5 text-xs font-normal">
           {snapshot.state === "open" && snapshot.autoMerge ? (
@@ -434,7 +429,7 @@ function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" 
     >
       <CircleDotIcon className={cn("size-4 shrink-0", state?.tone ?? "text-muted-foreground")} />
       <span className="shrink-0 tabular-nums text-muted-foreground">#{link.ref.number}</span>
-      <span className={cn(PANEL_LABEL_CLASS, "flex-1")}>{title}</span>
+      <PanelLabel className="flex-1">{title}</PanelLabel>
       {state ? <span className={cn("shrink-0 text-xs font-normal", state.tone)}>{state.label}</span> : null}
     </RowWithMenu>
   );
@@ -488,7 +483,7 @@ function AddLinkPopover({
     >
       <PopoverTrigger render={<PanelControl part="row" tone="muted" />}>
         <PlusIcon className={PANEL_ICON_CLASS} />
-        <span className={PANEL_LABEL_CLASS}>Add link</span>
+        <PanelLabel>Add link</PanelLabel>
       </PopoverTrigger>
       <PopoverPopup align="start" width="md" padding="compact">
         <form

@@ -45,13 +45,8 @@ import {
   threadModelsDiffer,
   threadStatusPresentation,
 } from "./links.logic";
-import {
-  PANEL_ICON_CLASS,
-  PANEL_LABEL_CLASS,
-  PanelControl,
-  PanelSplitGroup,
-  PanelSplitSeparator,
-} from "./PanelControl";
+import { PANEL_ICON_CLASS, PanelControl, PanelSplitGroup, PanelSplitSeparator } from "./PanelControl";
+import { PanelLabel } from "./PanelLabel";
 import { SessionsSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
@@ -169,10 +164,10 @@ function T3ThreadRow({
         {multiThread ? (
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="flex min-w-0 items-center gap-2.5">
-              {showOpenLabel ? <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span> : null}
-              <span className={cn(PANEL_LABEL_CLASS, "flex-1", showOpenLabel && "font-normal text-muted-foreground")}>
+              {showOpenLabel ? <PanelLabel className="shrink-0">Open in T3 Code</PanelLabel> : null}
+              <PanelLabel className={cn("flex-1", showOpenLabel && "font-normal text-muted-foreground")}>
                 {title}
-              </span>
+              </PanelLabel>
               {statusBadge}
             </span>
             {details.length > 0 ? (
@@ -183,8 +178,8 @@ function T3ThreadRow({
           </span>
         ) : (
           <>
-            <span className={cn(PANEL_LABEL_CLASS, "shrink-0")}>Open in T3 Code</span>
-            <span className={cn(PANEL_LABEL_CLASS, "flex-1 font-normal text-muted-foreground")}>{title}</span>
+            <PanelLabel className="shrink-0">Open in T3 Code</PanelLabel>
+            <PanelLabel className="flex-1 font-normal text-muted-foreground">{title}</PanelLabel>
             {statusBadge}
           </>
         )}
@@ -289,10 +284,10 @@ function SessionRow({ taskId, link, onRemove }: { taskId: string; link: SessionL
         onClick={() => open(link)}
       >
         <HarnessIcon harness={link.ref.harness} className="size-4" />
-        <span className={cn(PANEL_LABEL_CLASS, "min-w-0 flex-1")}>{name ?? `${harness} session`}</span>
-        <span className={cn(PANEL_LABEL_CLASS, "max-w-[35%] shrink-0 font-normal text-muted-foreground")}>
+        <PanelLabel className="min-w-0 flex-1">{name ?? `${harness} session`}</PanelLabel>
+        <PanelLabel className="max-w-[35%] shrink-0 font-normal text-muted-foreground">
           {folderName(link.ref.cwd)}
-        </span>
+        </PanelLabel>
         <span className={cn("flex shrink-0 items-center gap-1.5 text-xs font-normal", status.colorClass)}>
           <span aria-hidden className={cn("size-1.5 rounded-full", status.dotClass)} />
           {link.snapshot?.inApp && !isSettledSession(link.snapshot) ? `${status.label} in T3` : status.label}

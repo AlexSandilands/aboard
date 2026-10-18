@@ -1220,6 +1220,31 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   }
 }
 
+/*
+ * Hover reveal of a truncated panel label (PanelLabel sets the variables and `data-label-panning`). The text
+ * slides left by its hidden width via text-indent, so the element never scrolls and the ellipsis stays
+ * until the end is in view. Cycle: hold the start, pan, hold the end, jump back.
+ */
+@keyframes label-pan {
+  0%,
+  10% {
+    text-indent: 0;
+  }
+  70%,
+  99.99% {
+    text-indent: calc(-1 * var(--label-pan-distance));
+  }
+  100% {
+    text-indent: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-label-panning] {
+    animation: label-pan var(--label-pan-duration) ease-in-out infinite;
+  }
+}
+
 /* T3 Chat's texture: a 128px tile at T3 Chat's strength, as in T3 Code. */
 html[data-theme-id="t3-chat"] {
   --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02745'/%3E%3C/svg%3E");

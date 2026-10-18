@@ -32,7 +32,13 @@ const parts = {
 };
 
 export const PANEL_ICON_CLASS = "size-4 shrink-0 text-muted-foreground";
-export const PANEL_LABEL_CLASS = "[text-box:trim-both_cap_alphabetic] min-w-0 truncate overflow-y-visible";
+/*
+ * Not `truncate`: it sets `overflow: hidden`, and the `overflow-y-visible` after it would then compute to
+ * `auto`, turning the label into a scroll container (the text-box trim makes glyphs spill past the box).
+ * `clip` leaves the other axis alone.
+ */
+export const PANEL_LABEL_CLASS =
+  "[text-box:trim-both_cap_alphabetic] min-w-0 overflow-x-clip overflow-y-visible text-ellipsis whitespace-nowrap";
 
 /** A detail-panel row or action. Render as an anchor with `render={<a href />}`. */
 export function PanelControl({
