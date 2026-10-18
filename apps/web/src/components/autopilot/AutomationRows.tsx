@@ -225,7 +225,9 @@ function AutomationRow({
             Settings
           </CollapsibleTrigger>
           <CollapsiblePanel>
-            {/* Edge to edge in the row, so the field rows inside line up with every other row of the card. */}
+            {/* Edge to edge in the row, so the field rows inside line up with every other row of the card. The negative
+                margins undo SettingsRow's own padding (px-3 sm:px-4, pb-3 under children), so they must follow it, and
+                this disclosure must stay the row's last child. */}
             <div className="-mx-3 -mb-3 mt-3 border-t border-border/50 sm:-mx-4 [&>*+*]:border-t [&>*+*]:border-border/50">
               {automation.fields.map((field) => (
                 <AutomationField
