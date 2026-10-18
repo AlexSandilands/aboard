@@ -537,6 +537,29 @@ describe("failures and attention", () => {
       expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
     });
 
+    it("only steps a status change past a flag that still stands, not a dismissed one", async () => {
+      const { s, project } = setup();
+      const flagged = (title: string) => {
+        const task = s.tasks.create({ projectId: project.id, title, plan });
+        const run = s.autopilot.record({
+          automation: "agent",
+          candidate: { dedupeKey: `k:${task.id}`, summary: "start it", taskId: task.id, projectId: project.id },
+          dryRun: false,
+        })!;
+        s.autopilot.start(run.id);
+        s.autopilot.finish(run.id, { status: "failed", error: "boom", needsAttention: true });
+        return { task, run };
+      };
+      const kept = flagged("Kept").task;
+      const dismissed = flagged("Dismissed");
+      s.autopilot.dismiss(dismissed.run.id, "user");
+
+      const at = new Date().toISOString();
+      for (const task of [kept, dismissed.task]) s.tasks.move(task.id, { status: "in_progress" }, "user");
+      expect(s.tasks.summary(kept.id).statusChangedAt > at).toBe(true);
+      expect(s.tasks.summary(dismissed.task.id).statusChangedAt).toBe(at);
+    });
+
     it("keeps a flag raised in the same millisecond as the task's last status change", async () => {
       const { s, engine, task, started } = setup();
       s.tasks.move(task.id, { status: "in_progress" }, "user");
@@ -684,7 +707,7 @@ describe("failures and attention", () => {
       expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
     });
 
-    it("refuses a run that isn't flagged, or whose flag was already dismissed", async () => {
+    it("refuses a run that isn't flagged or whose flag no longer stands, and dismissing twice changes nothing", async () => {
       const { s, engine, task, started } = setup();
       s.autopilot.setScope("board", null, "agent", { mode: "on" });
       await engine.pass();
@@ -693,9 +716,20 @@ describe("failures and attention", () => {
       started[0]!.reject(new Error("boom"));
       await engine.idle();
       const failed = s.autopilot.runsForTask(task.id)[0]!;
-      s.autopilot.dismiss(failed.id, "user");
-      expect(() => s.autopilot.dismiss(failed.id, "user")).toThrow("already been dismissed");
+      const dismissed = s.autopilot.dismiss(failed.id, "user");
+      expect(s.autopilot.dismiss(failed.id, "user")).toEqual(dismissed);
       expect(() => s.autopilot.dismiss("nope", "user")).toThrow("not found");
+
+      const moved = s.tasks.create({ projectId: task.projectId, title: "Moved", plan });
+      const stale = s.autopilot.record({
+        automation: "agent",
+        candidate: { dedupeKey: "stale", summary: "start it", taskId: moved.id, projectId: moved.projectId },
+        dryRun: false,
+      })!;
+      s.autopilot.start(stale.id);
+      s.autopilot.finish(stale.id, { status: "failed", error: "boom", needsAttention: true });
+      s.tasks.move(moved.id, { status: "in_progress" }, "user");
+      expect(() => s.autopilot.dismiss(stale.id, "user")).toThrow("no longer stands");
     });
   });
 });

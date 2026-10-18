@@ -151,7 +151,7 @@ export interface AutopilotService {
   /**
    * Lifts the needs-attention flag the user has dealt with, without redoing anything: the run stays as it was (failed
    * or skipped, dedupe key kept), so the engine doesn't act on it again. Covers every flagged run of the task, so an
-   * older flag doesn't surface in its place. Only a flagged run on a task can be dismissed.
+   * older flag doesn't surface in its place. Only a flagged run on a task, whose flag still stands, can be dismissed; dismissing again changes nothing.
    */
   dismiss(runId: string, actor: string): AutopilotRun;
   /** queued → running. */
@@ -543,8 +543,12 @@ export function createAutopilotService(
     },
     dismiss(runId, actor) {
       const run = runOf(runId);
+      // Dismissing twice (a second tab, a double click) already did what was asked.
+      if (run.dismissedAt) return run;
       if (!run.taskId || !run.needsAttention) throw new AppError("CONFLICT", "This run isn't flagged for attention");
-      if (run.dismissedAt) throw new AppError("CONFLICT", "This run's flag has already been dismissed");
+      if (!repos.autopilotRuns.attentionFor([run.taskId]).has(run.taskId)) {
+        throw new AppError("CONFLICT", "This run's flag no longer stands, so there is nothing to dismiss");
+      }
       const at = nowIso();
       core.write((fx) => {
         repos.autopilotRuns.dismissFlagged(run.taskId!, at);

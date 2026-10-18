@@ -265,7 +265,8 @@ describe("Autopilot REST routes", () => {
     const done = await dismiss(flagged.id);
     expect(done.status).toBe(200);
     expect(((await done.json()) as AutopilotRun).dismissedAt).not.toBeNull();
-    expect((await dismiss(flagged.id)).status).toBe(409);
+    // Idempotent: a second tab dismissing the same flag is not an error.
+    expect((await dismiss(flagged.id)).status).toBe(200);
   });
 });
 

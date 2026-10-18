@@ -143,8 +143,8 @@ task panel (a notice with the flag's message, shown while the task carries the `
 nothing: the run stays as it was (`failed` or `skipped`, `needs_attention` still 1, dedupe key kept, so the engine
 doesn't act on it again) and only gets `dismissed_at` (migration 032). `attentionFor` and `latestFlaggedAt` skip runs
 with it set. The service dismisses every flagged run of the task, so an older flag doesn't surface in the dismissed
-one's place; a run flagged afterwards raises the flag again. It refuses a run that isn't flagged or was already
-dismissed (`CONFLICT`), logs an `autopilot_run` entry with status `dismissed` under the user's actor, and publishes
+one's place; a run flagged afterwards raises the flag again. It refuses a run that isn't flagged or whose flag no
+longer stands (`CONFLICT`), does nothing for one already dismissed, logs an `autopilot_run` entry with status `dismissed` under the user's actor, and publishes
 `autopilot.changed` and the task so open boards refresh. REST only, no MCP tool: it is the user saying they dealt with it.
 Backups leave runs out, so the column is not in the dump.
 
