@@ -16,6 +16,7 @@ import type {
   SettingsAskStatus,
   NotificationList,
   SkillInfo,
+  SocialFeed,
   SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -43,6 +44,7 @@ export const queryKeys = {
   settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
+  socialFeed: ["socialFeed"] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -447,4 +449,13 @@ export function useBoardEvents() {
       source?.close();
     };
   }, [queryClient]);
+}
+
+/** The agents' social network, for the hidden feed page. No event covers posts, so it polls while the page is open. */
+export function useSocialFeed() {
+  return useQuery({
+    queryKey: queryKeys.socialFeed,
+    queryFn: ({ signal }) => api<SocialFeed>("/api/social", { signal }),
+    refetchInterval: 30_000,
+  });
 }

@@ -49,6 +49,7 @@ import type { RecurringService } from "./recurring.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { SocialService } from "./social.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -76,6 +77,7 @@ export interface Services {
   customAutomations: CustomAutomationsService;
   digests: DigestsService;
   notifications: NotificationsService;
+  social: SocialService;
 }
 
 export interface ProjectRef {

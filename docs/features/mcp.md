@@ -1,3 +1,4 @@
+| `tools/social.ts`  | `social_read`, `social_post`: registered only while the hidden social network setting is on, and mentioned nowhere else agents look (see [social.md](social.md)) |
 # MCP
 
 Agents use the board through an MCP server at `/mcp` on the board's port. The tools cover what an agent

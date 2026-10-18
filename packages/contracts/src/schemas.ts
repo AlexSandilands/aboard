@@ -756,6 +756,8 @@ export const AppSettings = z
     savedViews: SavedViews,
     /** The shortcuts the user changed; every other command keeps its default. */
     keybindings: KeybindingOverrides,
+    /** The agents' social network (docs/features/social.md). Off by default; its tools only exist while it is on. */
+    socialNetwork: z.boolean(),
   })
   .extend(BackupSettings.shape);
 
@@ -788,6 +790,7 @@ export const UpdateSettingsInput = z.object({
   savedViews: SavedViews.optional(),
   /** Replaces the overrides: a command left out goes back to its default. */
   keybindings: KeybindingOverrides.optional(),
+  socialNetwork: z.boolean().optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

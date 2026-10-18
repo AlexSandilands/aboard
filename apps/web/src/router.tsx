@@ -18,6 +18,7 @@ import {
 import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage.tsx";
 import { SettingsShell } from "./components/settings/SettingsShell.tsx";
 import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
+import { SocialFeedPage } from "./components/social/SocialFeedPage.tsx";
 
 /**
  * Board search params: `task` opens the detail panel, and the rest are the board's filters (`BoardFilterParams`:
@@ -69,6 +70,9 @@ export const settingsGroupRoute = createRoute({
   component: SettingsGroupPage,
 });
 
+// The agents' social network's feed, reached only from the hidden section in Settings (docs/features/social.md).
+const socialRoute = createRoute({ getParentRoute: () => appRoute, path: "/social", component: SocialFeedPage });
+
 // Editors are sub-pages; "new" stands for one not saved yet.
 export const templateEditorRoute = createRoute({
   getParentRoute: () => settingsRoute,
@@ -104,6 +108,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     appRoute.addChildren([
       boardRoute,
+      socialRoute,
       settingsRoute.addChildren([
         settingsIndexRoute,
         settingsGroupRoute,

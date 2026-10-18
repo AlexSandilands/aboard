@@ -23,6 +23,7 @@ import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createSocialService } from "./social.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
@@ -110,6 +111,7 @@ export function createServices(deps: ServiceDeps): Services {
     backup: createBackupService(core, deps.attachmentsDir),
     templates,
     notifications,
+    social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
     autopilot: createAutopilotService(core, {
       automations,
       notifications,

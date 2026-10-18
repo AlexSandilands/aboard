@@ -11,6 +11,7 @@ import { registerLinkTools } from "./tools/links.ts";
 import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
+import { registerSocialTools } from "./tools/social.ts";
 
 const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd).
 - Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task.
@@ -64,6 +65,8 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerMergeTools(server, tc);
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
+  // Only while the user has it on, so it costs nothing otherwise and nothing else points agents to it.
+  if (ctx.services.settings.get().socialNetwork) registerSocialTools(server, tc);
   return server;
 }
 
