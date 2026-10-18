@@ -33,7 +33,7 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 - **Cards** name their project in a small chip. Order is by project (the board's order), then position.
   The cells count in the column headers like any lane's.
 - **Setting it.** The star on a card (shown on hover, filled while set), **Mark as priority** in the panel's More menu,
-  and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
+  the Priority switch in the panel's Automation section, and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
 - **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which
   changes its status. It takes no place in the column: positions only mean something inside one project's lane, and
   the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is

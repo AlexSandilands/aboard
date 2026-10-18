@@ -49,6 +49,8 @@ export function AutomationSection({ task }: { task: TaskDetail }) {
             size="sm"
             checked={task.priority}
             aria-label="Priority"
+            // The actions menu doesn't offer priority on an archived task either.
+            disabled={task.archivedAt !== null}
             onCheckedChange={(priority) => updateTask({ id: task.id, priority })}
           />
         </Row>

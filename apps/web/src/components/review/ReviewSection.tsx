@@ -35,9 +35,11 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
       summary={task.review && <ReviewBadge summary={task.review} />}
       actions={
         <>
-          <span className="text-2xs text-muted-foreground" title="Change it under Automation">
-            Auto-review {effectiveOn ? "on" : "off"}
-          </span>
+          {task.resolution ? null : (
+            <span className="text-2xs text-muted-foreground">
+              Auto-review {effectiveOn ? "on" : "off"} (set under Automation)
+            </span>
+          )}
           <PanelControl
             part="meta"
             title="Copy the review loop prompt, to run it in any agent session"
