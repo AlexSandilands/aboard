@@ -73,9 +73,10 @@ be blocked by them, and live in any project, General included. The rules are in 
   as one `updated` entry naming `manual`, `autopilot` and `autoMerge`. An epic can't be manual, and `makeEpic`
   refuses a manual task.
 - Turning it back into a code task outside Backlog needs a plan, or it would sit past the gate with none.
-- `reviews.effectiveAutoReview` is false for it, so entering Review opens no round.
+- `reviews.effectiveAutoReview` is false for it, so entering Review opens no round, and `openRound` refuses one
+  (Run review, `start_review`). The review watchdog skips a round left pending when a task in Review turns manual.
 - Agents leave it alone: `handoffModeError` refuses every hand-off mode (the prompt, `start_task_thread`, the
-  terminal launcher), `links.add` refuses an `agent_session` link, and `planTaskProblem` keeps it out of planning
+  terminal launcher), `links.add` refuses an `agent_session` or `t3_thread` link, and `planTaskProblem` keeps it out of planning
   sessions. The web hides the hand-off menu (`showHandoffActions`).
 - Autopilot skips it in every automation that works on tasks (see [autopilot.md](autopilot.md#manual-tasks)),
   except Unblock dependents and Auto-archive.

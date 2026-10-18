@@ -507,6 +507,7 @@ describe("manual tasks", () => {
     s.tasks.update(task.id, { autoReview: true }, "user");
     s.tasks.move(task.id, { status: "review" }, "user");
     expect(s.reviews.list(task.id)).toHaveLength(0);
+    expectCode(() => s.reviews.openRound(task.id, { trigger: "manual", actor: "user", force: true }), "VALIDATION");
   });
 
   it("can block a code task", () => {

@@ -71,6 +71,12 @@ export function createReviewsService(
     if (task.kind === "epic") {
       throw new AppError("VALIDATION", `#${task.number} is an epic; review its child tasks instead`);
     }
+    if (task.manual) {
+      throw new AppError(
+        "VALIDATION",
+        `#${task.number} is a manual task, a to-do for a person, so it has no change to review. Make it a code task first if it does.`,
+      );
+    }
     const latest = repos.reviews.latest(taskId);
     const now = nowIso();
     if (latest?.status === "running") {

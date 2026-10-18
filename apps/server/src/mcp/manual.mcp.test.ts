@@ -77,12 +77,14 @@ describe("manual tasks over MCP", () => {
     expect(detail).not.toContain("Autopilot flag not set:");
   });
 
-  it("refuses the hand-off prompt, a thread and a session link", async () => {
+  it("refuses the hand-off prompt, a thread, session or thread links, and a review round", async () => {
     await call("add_to_backlog", { title: "Ask for access", workspacePath, manual: true });
     for (const [tool, args] of [
       ["get_handoff_prompt", { task: "#1" }],
       ["start_task_thread", { task: "#1" }],
       ["link", { task: "#1", agentSession: { harness: "claude-code", sessionId: crypto.randomUUID(), cwd: "C:/x" } }],
+      ["link", { task: "#1", value: "t3code://threads/env/thread-1" }],
+      ["start_review", { task: "#1" }],
     ] as const) {
       const { text, error } = await raw(tool, args);
       expect(error).toBe(true);

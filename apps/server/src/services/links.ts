@@ -198,11 +198,11 @@ export function createLinksService(
       return core.write((fx) => {
         const task = deps.task(taskId);
         const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
-        if (classified.kind === "agent_session" && task.manual) {
+        if ((classified.kind === "agent_session" || classified.kind === "t3_thread") && task.manual) {
           throw new AppError(
             "VALIDATION",
-            `#${task.number} is a manual task, which people do and agents leave alone, so no agent session is linked ` +
-              "to it. Make it a code task first (update_task manual: false) if an agent should work on it.",
+            `#${task.number} is a manual task, which people do and agents leave alone, so no agent session or thread ` +
+              "is linked to it. Make it a code task first (update_task manual: false) if an agent should work on it.",
           );
         }
         const existing =

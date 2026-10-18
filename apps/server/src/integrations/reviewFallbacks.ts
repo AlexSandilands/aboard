@@ -163,7 +163,8 @@ export function createReviewFallbacks(deps: {
   const consider = async (round: ReviewRecord): Promise<void> => {
     const s = deps.services();
     const task = s.tasks.summary(round.taskId);
-    if (task.status !== "review" || task.archivedAt) return;
+    // A task turned manual while a round was pending has no change, and no agent, to chase.
+    if (task.status !== "review" || task.archivedAt || task.manual) return;
     const thread = latestThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;

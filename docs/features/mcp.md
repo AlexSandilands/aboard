@@ -55,7 +55,7 @@ person that needs no plan (so `create_task` takes no plan with it, and lands it 
 Autopilot leave alone ([task-lifecycle.md](task-lifecycle.md#manual-tasks)). `get_task` shows a "Manual task: yes"
 line and `list_tasks` tags it `[manual]`. Its results drop the hints for an agent working on it (Plan progress,
 the Autopilot flag, the suggested model, and every Missing link but Jira keys), and `get_handoff_prompt`,
-`start_task_thread` and an `agentSession` link are refused on it.
+`start_task_thread`, `start_review` and an `agentSession` or `t3Thread` link are refused on it.
 
 `update_task` takes `dueDate` (`YYYY-MM-DD`, `null` clears it; [board-layout.md](board-layout.md#the-due-date)). Agents set it
 only when the user gives a date. `get_task` shows a "Due:" line and `list_tasks` lines "due YYYY-MM-DD", only when set.

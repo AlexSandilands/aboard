@@ -22,8 +22,9 @@ const STATUS_LABEL: Record<ReviewFinding["status"], string> = { open: "Open", fi
 export function ReviewSection({ task }: { task: TaskDetail }) {
   const settings = useSettings().data;
   const { mutate: startReview, isPending: starting } = useStartReview();
-  // Closed tasks only keep the section when there's a history to show.
-  if (task.resolution && task.reviews.length === 0) return null;
+  // Closed and manual tasks only keep the section when there's a history to show; neither gets a new round.
+  const noRounds = task.resolution !== null || task.manual;
+  if (noRounds && task.reviews.length === 0) return null;
 
   const latest = task.reviews.at(-1);
   const earlierOpen = task.reviews.slice(0, -1).flatMap((r) => visibleFindings(r, false));
@@ -35,7 +36,7 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
       summary={task.review && <ReviewBadge summary={task.review} />}
       actions={
         <>
-          {task.resolution ? null : (
+          {noRounds ? null : (
             <span className="text-2xs text-muted-foreground">
               Auto-review {effectiveOn ? "on" : "off"} (set under Automation)
             </span>
@@ -58,15 +59,17 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
             <CopyIcon className="size-3.5" />
             Copy prompt
           </PanelControl>
-          <PanelControl
-            part="meta"
-            title="Open a new review round; an agent or the board's fallbacks pick it up"
-            disabled={starting || latest?.status === "pending" || latest?.status === "running"}
-            onClick={() => startReview(task.id)}
-          >
-            <PlayIcon className="size-3.5" />
-            Run review
-          </PanelControl>
+          {task.manual ? null : (
+            <PanelControl
+              part="meta"
+              title="Open a new review round; an agent or the board's fallbacks pick it up"
+              disabled={starting || latest?.status === "pending" || latest?.status === "running"}
+              onClick={() => startReview(task.id)}
+            >
+              <PlayIcon className="size-3.5" />
+              Run review
+            </PanelControl>
+          )}
         </>
       }
     >

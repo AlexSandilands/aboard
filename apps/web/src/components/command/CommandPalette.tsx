@@ -417,7 +417,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
     const template = issue ? undefined : availableTemplates.find((t) => t.id === templateId);
     const { fields: templateFields, planFromTemplate } = templateRequest(template, flow);
-    const asManual = manual && flow !== "epic" && !issue;
+    // An import is a task too: the issue fills in its text, not what kind of work it is.
+    const asManual = manual && flow !== "epic";
     createTask.mutate(
       {
         projectId,

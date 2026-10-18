@@ -73,6 +73,18 @@ describe("review fallbacks", () => {
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("review_stalled");
   });
 
+  it("leaves a round alone once its task turns manual: no nudge, no board review", async () => {
+    const { s, task, fallbacks, advance, round, sent, jobs } = setup({ headless: true, thread: "done" });
+    s.tasks.move(task.id, { status: "review" }, "user");
+    s.tasks.update(task.id, { manual: true }, "user");
+    await fallbacks.tick();
+    advance(PAST_AGENT_GRACE);
+    await fallbacks.tick();
+    expect(sent).toEqual([]);
+    expect(jobs).toEqual([]);
+    expect(round()?.status).toBe("pending");
+  });
+
   it("nudges the T3 thread at once when the user moved the card, then reviews headless if it stays quiet", async () => {
     const { s, task, fallbacks, advance, round, sent, jobs } = setup({
       headless: true,
