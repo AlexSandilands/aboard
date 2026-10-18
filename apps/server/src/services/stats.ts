@@ -223,8 +223,9 @@ export function createStatsService(core: Core): StatsService {
       for (const run of periodRuns) {
         if (!runInScope(run)) continue;
         const at = run.finishedAt ?? run.updatedAt;
-        if (run.needsAttention) count("friction.autopilot_flags", at);
+        // A restart flags the runs it strands, but that is the board's doing, not Autopilot asking: count it once.
         if (wasRestarted(run)) count("friction.runs_restarted", at);
+        else if (run.needsAttention) count("friction.autopilot_flags", at);
         const kind = stallKind(run);
         if (kind) stall(run.taskId!, kind, at);
       }

@@ -50,7 +50,7 @@ appear only when that automation ran in the two periods.
 | `friction.steps_blocked` | count | Plan steps whose status changed to blocked; a step blocked twice counts twice | `step_updated` |
 | `friction.steps_skipped` | count | Plan steps whose status changed to skipped | `step_updated` |
 | `friction.attention_requests` | count | Times an agent (or anyone) asked for the user's attention on a task, `request_attention` | `task_events` `attention_requested` |
-| `friction.autopilot_flags` | count | Real Autopilot runs that finished flagging their task as needing attention, in the week they finished | `autopilot_runs` |
+| `friction.autopilot_flags` | count | Real Autopilot runs that finished flagging their task as needing attention, in the week they finished; runs a restart cut short are left out, since the board flagged those (they count under `friction.runs_restarted`) | `autopilot_runs` |
 | `friction.stalls.stale` | count | Tasks Unstick found quiet for too long. A task counts once per week and kind, however often it was noticed | `autopilot_runs` |
 | `friction.stalls.waiting` | count | Tasks whose thread waited on input, from Unstick's runs and the inbox's `thread_waiting` notices, once per task and week | `autopilot_runs`, `notifications` |
 | `friction.runs_restarted` | count | Runs cut short by the board restarting (`BOARD_RESTARTED_ERROR`), in the week they were marked failed | `autopilot_runs` |
@@ -101,7 +101,7 @@ The charts are hand-rolled SVG with no dependency:
 - `WeeklyBars` (grouped or stacked), `TrendLine` (a line per series; a week with no value breaks it) and `KpiTile`.
   `SortedBars` draws a breakdown as horizontal bars, largest first, with the previous period's figure beside each; it
   is a plain list with the values written out, so it has no tooltip. `breakdownRows` (in `stats.logic.ts`) keeps the
-  categories with something in the period and folds all past the eighth into "Other".
+  categories with something in the period and folds all past the seventh into one "Other" row, drawn muted because it adds several categories and can be the longest.
   `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
 - Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
   segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names

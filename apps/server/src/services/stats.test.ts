@@ -314,7 +314,7 @@ describe("stats.weekly", () => {
       body: "Waiting",
       dedupeKey: "w2",
     });
-    // A run still going when the board restarted.
+    // A run still going when the board restarted: recover() flags it too, but it counts as a restart only.
     clock(at(14, 10));
     const stranded = s.autopilot.record({
       automation: "auto_archive",
@@ -327,7 +327,7 @@ describe("stats.weekly", () => {
 
     expect(values("friction.stalls.stale")).toMatchObject({ values: [0, 0, 1, 1], total: 2 });
     expect(values("friction.stalls.waiting")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
-    expect(values("friction.autopilot_flags")).toMatchObject({ values: [0, 0, 0, 3], total: 3 });
+    expect(values("friction.autopilot_flags")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
     expect(values("friction.runs_restarted")).toMatchObject({ values: [0, 0, 0, 1], total: 1 });
     expect(values("friction.stalls.waiting", 4, beta.id).total).toBe(1);
     expect(values("friction.autopilot_flags", 4, beta.id).total).toBe(1);

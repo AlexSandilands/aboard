@@ -1,3 +1,4 @@
+import { SERIES_COLORS } from "./chartParts";
 import type { BreakdownRow } from "./stats.logic";
 
 /**
@@ -30,7 +31,10 @@ export function SortedBars({
             <span
               className="block h-full rounded-sm"
               // Never thinner than a sliver, so a count of 1 beside 200 still shows.
-              style={{ width: `${Math.max((row.value / max) * 100, 1.5)}%`, background: color }}
+              style={{
+                width: `${Math.max((row.value / max) * 100, 1.5)}%`,
+                background: row.folded ? SERIES_COLORS.muted : color,
+              }}
             />
           </span>
           <span className="flex items-baseline gap-1.5 tabular-nums">

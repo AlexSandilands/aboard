@@ -195,6 +195,8 @@ export type BreakdownRow = {
   value: number;
   /** The same category in the previous period. */
   previous: number;
+  /** The row adds up several categories, so it may be longer than the rows above it. */
+  folded?: boolean;
 };
 
 /**
@@ -226,6 +228,7 @@ export function breakdownRows(
       label: `Other (${rest.length})`,
       value: rest.reduce((sum, r) => sum + r.value, 0),
       previous: rest.reduce((sum, r) => sum + r.previous, 0),
+      folded: true,
     },
   ];
 }
