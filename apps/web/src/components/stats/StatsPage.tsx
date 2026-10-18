@@ -264,11 +264,12 @@ function StatsSections({ data }: { data: StatsResponse }) {
       </StatsSection>
 
       <StatsSection
-        title="PRs and reviews"
-        description="Pull requests the board saw merge, and how often local reviews looped."
+        title="PRs, commits and reviews"
+        description="Pull requests the board saw merge, commits that landed on each project's default branch, and how often local reviews looped."
       >
         <Tiles>
           {kpi("PRs merged", "prs_merged")}
+          {kpi("Commits", "commits")}
           {kpi("Review rounds per task", "review_rounds_per_task", "down")}
           {kpi("Review findings", "review_findings.blocking", "down", sumTotals(data, findingNames))}
         </Tiles>
@@ -280,6 +281,20 @@ function StatsSections({ data }: { data: StatsResponse }) {
             label="PRs merged per week"
             series={[chartSeries(data, "prs_merged", "PRs merged", SERIES_COLORS.primary, { zeros: true })]}
           />
+        </ChartCard>
+        <ChartCard title="Commits per week">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label="Commits on the default branch per week"
+            series={[chartSeries(data, "commits", "Commits", SERIES_COLORS.primary, { zeros: true })]}
+          />
+          {data.notes.map((note) => (
+            <p key={note} className="mt-2 text-xs text-muted-foreground">
+              {note}
+            </p>
+          ))}
         </ChartCard>
         <ChartCard title="Review rounds per finished task">
           <TrendLine

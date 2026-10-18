@@ -54,6 +54,7 @@ export interface IntegrationOverrides {
   runHeadless?: RunHeadless;
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
+  /** Git for reading project folders: session launch, and the stats' commits (read by the services, see createContext). */
   runGit?: RunGit;
   /** What the agent integration checks run: the CLIs and the MCP config files. */
   agentIntegrationProbes?: Partial<AgentIntegrationProbes>;

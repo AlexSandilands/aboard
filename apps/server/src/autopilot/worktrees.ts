@@ -73,7 +73,7 @@ export async function defaultBranchOf(runGit: RunGit, repo: string): Promise<str
   return null;
 }
 
-const refExists = async (runGit: RunGit, repo: string, ref: string) =>
+export const refExists = async (runGit: RunGit, repo: string, ref: string) =>
   (await runGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], repo)).code === 0;
 
 const gitError = (what: string, result: { stderr: string; stdout: string }) =>

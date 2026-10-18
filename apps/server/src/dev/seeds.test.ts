@@ -76,7 +76,7 @@ describe("seed scenarios", () => {
     expect(new Set(findings.map((f) => f.status))).toEqual(new Set(["open", "fixed", "wont_fix"]));
   });
 
-  it("stats spreads finished tasks and runs over the weeks", () => {
+  it("stats spreads finished tasks and runs over the weeks", async () => {
     const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-seed-`));
     dirs.push(dir);
     const dbPath = join(dir, "data.sqlite");
@@ -91,7 +91,7 @@ describe("seed scenarios", () => {
       userHome: "/nonexistent",
       sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
     });
-    const stats = ctx.services.stats.weekly(12);
+    const stats = await ctx.services.stats.weekly(12);
     ctx.db.close();
     const completed = stats.series.tasks_completed!;
     expect(completed.values.filter((n) => (n ?? 0) > 0).length).toBeGreaterThan(8);
