@@ -21,7 +21,12 @@ import {
   type SectionLayout,
   withCollapseChoice,
 } from "~/components/task/sections.logic";
-import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
+import {
+  DEFAULT_PINS,
+  migrateTaskPanelPrefs,
+  togglePin,
+  type PinnableAction,
+} from "~/components/task/taskActions.logic";
 import { DEFAULT_APPEARANCE_PREFS, normalizeAppearancePrefs, type AppearancePrefs } from "~/theme/appearance.logic";
 
 /** Persisted board view preferences. The filters are not here: they are the board's URL params. */
@@ -138,13 +143,14 @@ export const useAppearance = create<AppearanceState>()(
 );
 
 /**
- * A request to bring a task's card into view on the board, made when a task is opened from outside the board. The
- * board acts on it once it can show the card. `nonce` repeats a reveal of the same task; `at` lets a request nobody
- * could fulfil expire rather than fire on some later board. Not persisted.
+ * A request to bring a task's card into view on the board, made when a task is opened from outside the board or by
+ * the panel's jump action. The board acts on it once it can show the card. `nonce` repeats a reveal of the same
+ * task; `at` lets a request nobody could fulfil expire rather than fire on some later board. `explicit` marks one the
+ * user asked for (it ignores the scroll setting and explains itself when the card can't be shown). Not persisted.
  */
 interface RevealState {
-  request: { taskId: string; nonce: number; at: number } | null;
-  requestReveal: (taskId: string) => void;
+  request: { taskId: string; nonce: number; at: number; explicit: boolean } | null;
+  requestReveal: (taskId: string, options?: { explicit?: boolean }) => void;
   /** The board is done with a request (shown, hidden or expired), so a remounted board doesn't act on it again. */
   consumeReveal: (nonce: number) => void;
 }
@@ -153,9 +159,10 @@ let revealNonce = 0;
 
 export const useReveal = create<RevealState>()((set) => ({
   request: null,
-  requestReveal: (taskId) => {
-    if (!useAppearance.getState().scrollToTask) return;
-    set({ request: { taskId, nonce: ++revealNonce, at: Date.now() } });
+  requestReveal: (taskId, options) => {
+    const explicit = options?.explicit ?? false;
+    if (!explicit && !useAppearance.getState().scrollToTask) return;
+    set({ request: { taskId, nonce: ++revealNonce, at: Date.now(), explicit } });
   },
   consumeReveal: (nonce) => set((s) => (s.request?.nonce === nonce ? { request: null } : {})),
 }));
@@ -185,7 +192,7 @@ export const useTaskPanelPrefs = create<TaskPanelPrefsState>()(
           return { sections: { ...layout, ...update(layout) } };
         });
       return {
-        pinnedActions: [],
+        pinnedActions: [...DEFAULT_PINS],
         togglePinnedAction: (id) => set((s) => ({ pinnedActions: togglePin(s.pinnedActions, id) })),
         sections: {},
         setSectionCollapsed: (id, collapsed, byDefault) =>
@@ -201,6 +208,8 @@ export const useTaskPanelPrefs = create<TaskPanelPrefsState>()(
     },
     {
       name: storageKey("task-panel"),
+      version: 1,
+      migrate: migrateTaskPanelPrefs,
       partialize: ({ pinnedActions, sections }) => ({ pinnedActions, sections }),
     },
   ),

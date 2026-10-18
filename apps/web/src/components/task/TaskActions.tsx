@@ -10,6 +10,7 @@ import {
   GroupIcon,
   HashIcon,
   LinkIcon,
+  LocateFixedIcon,
   ListTodoIcon,
   PinIcon,
   PlusIcon,
@@ -23,14 +24,18 @@ import {
 } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 
+import { useJumpToTask } from "~/components/board/boardNavigation";
+import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
+import { Kbd } from "~/components/ui/kbd";
 import {
   Menu,
   MenuItem,
   MenuItemLabel,
   MenuPopup,
   MenuSeparator,
+  MenuShortcut,
   MenuSub,
   MenuSubPopup,
   MenuSubTrigger,
@@ -55,6 +60,8 @@ interface ActionDef {
   label: string;
   icon: LucideIcon;
   run: () => void;
+  /** The key that does the same, shown in the tooltip. */
+  shortcut?: string | null;
 }
 
 /** Hand-off buttons, pinned actions and the More menu, shown beside the task title. */
@@ -73,6 +80,8 @@ export function TaskActions({
   const { mutate: resolveTask } = useResolveTask();
   const { mutate: deleteTask } = useDeleteTask();
   const setStatus = useSetTaskStatus(task, onOpenPlanEditor);
+  const jumpToTask = useJumpToTask();
+  const jumpShortcut = useShortcutLabel("task.reveal");
   const storedPins = useTaskPanelPrefs((s) => s.pinnedActions);
   const togglePinnedAction = useTaskPanelPrefs((s) => s.togglePinnedAction);
   const [closeAs, setCloseAs] = useState<PickResolution | null>(null);
@@ -88,6 +97,7 @@ export function TaskActions({
   const startT3 = handoff && !!t3 && canStartT3Thread(task, taskProject, t3, settings);
 
   const actions: Record<PinnableAction, ActionDef> = {
+    jump: { label: "Jump to card", icon: LocateFixedIcon, run: () => jumpToTask(task.id), shortcut: jumpShortcut },
     plan: { label: hasPlan ? "Edit plan" : "Write plan", icon: ListTodoIcon, run: onOpenPlanEditor },
     // Back to where a plan allows: a planless task can only be in Backlog.
     reopen: { label: "Reopen", icon: RotateCcwIcon, run: () => setStatus(hasPlan ? "planned" : "backlog") },
@@ -134,6 +144,7 @@ export function TaskActions({
           <TooltipPopup>More actions</TooltipPopup>
         </Tooltip>
         <MenuPopup align="end">
+          {item("jump")}
           {item("plan")}
           <MenuSub>
             <MenuSubTrigger>
@@ -264,7 +275,12 @@ function PinnedButton({ action }: { action: ActionDef }) {
       <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label={action.label} onClick={action.run} />}>
         <Icon />
       </TooltipTrigger>
-      <TooltipPopup>{action.label}</TooltipPopup>
+      <TooltipPopup>
+        <span className="flex items-center gap-2">
+          {action.label}
+          {action.shortcut ? <Kbd>{action.shortcut}</Kbd> : null}
+        </span>
+      </TooltipPopup>
     </Tooltip>
   );
 }
@@ -286,6 +302,7 @@ function PinnableMenuItem({
     <MenuItem className="group/item" onClick={action.run}>
       <Icon />
       <MenuItemLabel>{action.label}</MenuItemLabel>
+      {action.shortcut ? <MenuShortcut>{action.shortcut}</MenuShortcut> : null}
       {/* Pointer-only shortcut: the action itself stays reachable here, so the menu keeps its
           single-stop keyboard model rather than nesting a focusable control in each item. */}
       <span
@@ -297,7 +314,8 @@ function PinnableMenuItem({
         }}
         onMouseUp={stop}
         className={cn(
-          "ms-auto -me-1 flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-opacity hover:bg-foreground/10 hover:text-foreground",
+          action.shortcut ? "ms-1" : "ms-auto",
+          "-me-1 flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-opacity hover:bg-foreground/10 hover:text-foreground",
           pinned
             ? "text-foreground/80"
             : "opacity-0 group-hover/item:opacity-100 group-data-highlighted/item:opacity-100",

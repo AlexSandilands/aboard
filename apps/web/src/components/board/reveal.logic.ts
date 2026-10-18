@@ -45,6 +45,17 @@ export function revealStep(
   return { kind: "hidden" };
 }
 
+/**
+ * Why an explicit jump found no card. `number` is the task's number when it is in the board snapshot: its card is
+ * then on the board unless the filters hide it. Otherwise the task may be archived (shown only by Show archived) or
+ * not loaded yet, so the message doesn't claim which.
+ */
+export function revealHiddenMessage(number: number | undefined): string {
+  return number === undefined
+    ? "This task isn't on the board. Archived tasks only show when Show archived is on."
+    : `The filters hide #${number}.`;
+}
+
 export interface Box {
   top: number;
   left: number;
@@ -80,8 +91,8 @@ export function revealScrollTarget(view: Box, card: Box, scroll: ScrollPosition)
 export type RevealAction =
   /** Nothing yet: the task isn't the open one, or its card isn't drawn; the next change tries again. */
   | { kind: "wait" }
-  /** The request is finished without a scroll: it expired, or a filter leaves the card out. */
-  | { kind: "drop" }
+  /** The request is finished without a scroll: it expired, or the card isn't on the board (a filter, or archived). */
+  | { kind: "drop"; reason: "expired" | "hidden" }
   | { kind: "expand-lane"; project: Project }
   | { kind: "expand-band"; epicId: string }
   | { kind: "scroll" };
@@ -111,9 +122,9 @@ export function advanceReveal(input: {
   selectedTaskId: string | null;
   cardDrawn: () => boolean;
 }): RevealAction {
-  if (input.age > REVEAL_EXPIRY_MS) return { kind: "drop" };
+  if (input.age > REVEAL_EXPIRY_MS) return { kind: "drop", reason: "expired" };
   const step = revealStep(input.lanes, input.taskId, input.collapsedEpics);
-  if (step.kind === "hidden") return { kind: "drop" };
+  if (step.kind === "hidden") return { kind: "drop", reason: "hidden" };
   if (step.kind === "expand-lane") {
     return input.expanded.has(step.project.id) ? { kind: "wait" } : step;
   }

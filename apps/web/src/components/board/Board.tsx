@@ -68,7 +68,7 @@ import {
   type OverCell,
 } from "./dnd.logic";
 import { DependencyLines } from "./DependencyLines";
-import { advanceReveal, revealProgressFor, type RevealProgress } from "./reveal.logic";
+import { advanceReveal, revealHiddenMessage, revealProgressFor, type RevealProgress } from "./reveal.logic";
 import { revealCard } from "./revealCard";
 import { TaskCardOverlay } from "./TaskCard";
 
@@ -524,6 +524,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         return;
       case "drop":
         useReveal.getState().consumeReveal(reveal.nonce);
+        // Only a jump the user asked for explains itself; opening a task from elsewhere stays quiet.
+        if (reveal.explicit && action.reason === "hidden")
+          toastManager.add({
+            type: "info",
+            title: "Can't jump to the card",
+            description: revealHiddenMessage(tasksById.get(reveal.taskId)?.number),
+          });
         return;
       case "expand-lane":
         ids.add(action.project.id);
@@ -540,7 +547,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         if (card) revealCard(scrollRef.current!, columnHeaderRef.current, card);
       }
     }
-  }, [reveal, lanes, collapsedEpics, selectedTaskId, handleToggleCollapsed]);
+  }, [reveal, lanes, collapsedEpics, selectedTaskId, handleToggleCollapsed, tasksById]);
 
   if (board.projects.length === 0) {
     return (

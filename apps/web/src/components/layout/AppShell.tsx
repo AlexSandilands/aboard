@@ -1,6 +1,7 @@
 import { type KeybindingCommand, storageKey } from "@repo/contracts";
 import { type ReactNode, useEffect, useEffectEvent } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
+import { useJumpToTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
@@ -69,7 +70,8 @@ export function AppShell({
 /**
  * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
  * (Settings → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
- * task (in the scoped project), Esc goes back (closes the detail panel, or leaves Settings).
+ * task (in the scoped project), J jumps to the open task's card on the board, Esc goes back (closes the detail panel,
+ * or leaves Settings).
  *
  * It listens in the capture phase because card controls stop their keydowns from bubbling, which
  * would otherwise hide every shortcut while one of them has focus. Ctrl/Cmd+K runs right away.
@@ -81,6 +83,8 @@ export function AppShell({
  */
 function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: string | undefined) {
   const openSettings = useOpenSettings();
+  const selectedTaskId = useSelectedTaskId();
+  const jumpToTask = useJumpToTask();
   const bindings = useResolvedKeybindings();
   const run = (command: KeybindingCommand) => {
     const palette = usePalette.getState();
@@ -96,6 +100,9 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
         return;
       case "back":
         onBack?.();
+        return;
+      case "task.reveal":
+        if (selectedTaskId) jumpToTask(selectedTaskId);
         return;
       default:
         command satisfies never;
