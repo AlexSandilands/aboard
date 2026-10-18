@@ -1,4 +1,11 @@
-import { STATS_PERIODS, type StatsBucket, type StatsPeriod, type StatsResponse, type StatsUnit } from "@repo/contracts";
+import {
+  STATS_PERIODS,
+  type StatsBreakdown,
+  type StatsBucket,
+  type StatsPeriod,
+  type StatsResponse,
+  type StatsUnit,
+} from "@repo/contracts";
 
 /** The period shown when `?weeks=` is missing or isn't one the API takes. */
 export const DEFAULT_STATS_PERIOD: StatsPeriod = 12;
@@ -187,4 +194,48 @@ export function isQuiet(series: StatsResponse["series"]): boolean {
   return Object.entries(series).every(
     ([name, s]) => name.startsWith(OPEN_TASKS_PREFIX) || ((s.total ?? 0) === 0 && (s.previousTotal ?? 0) === 0),
   );
+}
+
+export type BreakdownRow = {
+  key: string;
+  label: string;
+  value: number;
+  /** The same category in the previous period. */
+  previous: number;
+  /** The row adds up several categories, so it may be longer than the rows above it. */
+  folded?: boolean;
+};
+
+/**
+ * A breakdown's rows for sorted bars: the categories that have something in the period, largest first, with the tail
+ * past `limit` folded into one "Other" row. `labelOf` names a key, and null (the "none" category) gets `noneLabel`.
+ */
+export function breakdownRows(
+  breakdown: StatsBreakdown | undefined,
+  labelOf: (key: string) => string,
+  noneLabel: string,
+  limit = 8,
+): BreakdownRow[] {
+  const rows = (breakdown?.items ?? [])
+    .filter((item) => item.total > 0)
+    .map((item) => ({
+      key: item.key ?? "",
+      label: item.key === null ? noneLabel : labelOf(item.key),
+      value: item.total,
+      previous: item.previousTotal,
+    }));
+  // The service sorts them already; sorting here keeps the chart right whatever order a client hands it.
+  rows.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  if (rows.length <= limit) return rows;
+  const rest = rows.slice(limit - 1);
+  return [
+    ...rows.slice(0, limit - 1),
+    {
+      key: "\u0000other",
+      label: `Other (${rest.length})`,
+      value: rest.reduce((sum, r) => sum + r.value, 0),
+      previous: rest.reduce((sum, r) => sum + r.previous, 0),
+      folded: true,
+    },
+  ];
 }

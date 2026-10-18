@@ -47,10 +47,27 @@ export const StatsSeries = z.object({
 });
 export type StatsSeries = z.infer<typeof StatsSeries>;
 
+/** One row of a breakdown: how many fell under `key` in the period, and in the one before it. */
+export const StatsBreakdownItem = z.object({
+  /** Null for "none": a task without that label or tier. */
+  key: z.string().nullable(),
+  total: z.number(),
+  previousTotal: z.number(),
+});
+export type StatsBreakdownItem = z.infer<typeof StatsBreakdownItem>;
+
+/** A count split by a category over the whole period (not per week), largest first. */
+export const StatsBreakdown = z.object({
+  unit: StatsUnit,
+  items: z.array(StatsBreakdownItem),
+});
+export type StatsBreakdown = z.infer<typeof StatsBreakdown>;
+
 /**
  * Weekly stats. `series` is a map by name, so a new metric is a new key and never a change to the shape. Names are
  * stable ids (`tasks_completed`, `autopilot.runs.<automation>.<status>`); labels are the client's to write. Fixed
- * series are always present; per-automation ones only when the automation ran in the two periods.
+ * series are always present; per-automation ones only when the automation ran in the two periods. `breakdowns` is
+ * the same idea for splits of the period by category (`completed_by_label`), also keyed by stable name.
  */
 export const StatsResponse = z.object({
   weeks: z.number().int(),
@@ -63,6 +80,7 @@ export const StatsResponse = z.object({
   project: z.object({ id: z.string(), title: z.string() }).nullable(),
   buckets: z.array(StatsBucket),
   series: z.record(z.string(), StatsSeries),
+  breakdowns: z.record(z.string(), StatsBreakdown),
   /** Things a reader should know about the numbers, e.g. a project whose git history couldn't be read. */
   notes: z.array(z.string()),
 });

@@ -3,7 +3,7 @@
 Board tasks: #64 (the API), #190 (the page), #191 (commits) and #192 (flow and PR flow), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
-reviews loop, how many PRs merge, and what Autopilot and agent sessions do. The server computes them from data
+reviews loop, how many PRs merge, what Autopilot and agent sessions do, and where agents got stuck. The server computes them from data
 it already keeps, and from git for commits; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool. The page that charts it is `/stats` ([The page](#the-page)).
 
 ## How it works
@@ -19,6 +19,8 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 - `series`: a **map by name** to `{ unit, values, total, previousTotal }`. `values` has one entry per bucket.
   `total` covers the whole period and `previousTotal` the period of equal length just before it
   (`previousFrom` to `from`), for "up or down on last time".
+- `breakdowns`: a **map by name** to `{ unit, items }`, the period split by a category rather than by week
+  ([Breakdowns](#breakdowns)).
 - `from`, `to`, `previousFrom`, `project`, `weeks`.
 - `notes`: sentences about the numbers, e.g. a project whose commits weren't counted because its folder isn't a git
   repository. Empty when there is nothing to say.
@@ -55,9 +57,36 @@ appear only when that automation ran in the two periods.
 | `autopilot.pr_review_rounds_per_pr` | ratio, mean | The highest Review PRs round reached on each merged PR (0 when Autopilot never reviewed it), in the week it merged. A PR linked to several tasks sums its links', since Autopilot reviews each link on its own | `autopilot_runs` |
 | `autopilot.fix_attempts_per_pr` | ratio, mean | Fix PRs attempts on each merged PR, conflict-only ones included and skipped ones left out (0 when none), in the week it merged. Runs are matched to the PR by their `fix:pr:<link>:` dedupe key. Only a task's newest 2000 runs are read | `autopilot_runs` |
 | `autopilot.gave_up`, `.review_prs`, `.fix_prs` | count | Times Autopilot gave up on a PR, in the week of the run: a Review PRs verdict that handed off as `gave_up`, or a Fix PRs run recorded under a `fix:gave_up:` key | `autopilot_runs` |
+| `friction.steps_blocked` | count | Plan steps whose status changed to blocked; a step blocked twice counts twice | `step_updated` |
+| `friction.steps_skipped` | count | Plan steps whose status changed to skipped | `step_updated` |
+| `friction.attention_requests` | count | Times an agent (or anyone) asked for the user's attention on a task, `request_attention` | `task_events` `attention_requested` |
+| `friction.autopilot_flags` | count | Real Autopilot runs that finished flagging their task as needing attention, in the week they finished; runs a restart cut short are left out, since the board flagged those (they count under `friction.runs_restarted`) | `autopilot_runs` |
+| `friction.stalls.stale` | count | Tasks Unstick found quiet for too long. A task counts once per week and kind, however often it was noticed | `autopilot_runs` |
+| `friction.stalls.waiting` | count | Tasks whose thread waited on input, from Unstick's runs and the inbox's `thread_waiting` notices, once per task and week | `autopilot_runs`, `notifications` |
+| `friction.runs_restarted` | count | Runs cut short by the board restarting (`BOARD_RESTARTED_ERROR`), in the week they were marked failed | `autopilot_runs` |
+
+A stall and a restart-cut run are read as `board_activity` reads them: `stallKind` and `wasRestarted` in
+`services/activity.ts` are the one definition. Friction isn't failure: a blocked step is often the agent working as
+intended, so the page shows these tiles neutrally, like counts of PRs or runs, rather than colouring a rise red.
 
 Series names are stable ids; the labels are the client's to write. A new metric is a new key, so adding one
 doesn't change the shape.
+
+### Breakdowns
+
+A breakdown splits the whole period by a category, not by week. Each is `{ unit, items }`, with an item per category
+`{ key, total, previousTotal }` (the period and the one before it), largest `total` first. A `null` key is the "none"
+category: a task without a label or a tier suggestion. All three are always present, with no items when nothing
+falls in them. They share the scope of the series: `projectId` limits them to one project.
+
+| Breakdown | What it counts | Source |
+| --------- | -------------- | ------ |
+| `completed_by_label` | Tasks finished (as in `tasks_completed`), by the labels they carry now. A task with several labels counts under each; one with none under `null` | `task_labels`, finish event |
+| `completed_by_tier` | The same tasks, by the model tier their plan suggested (`light`, `standard`, `deep`), `null` when none | `tasks.suggested_tier`, finish event |
+| `sessions_by_harness` | Agent sessions and T3 Code threads, by when first linked, counted once each as `agent_sessions_started` is. The key is the session's harness (`claude-code`, `copilot-cli`) or `t3_thread` for a T3 Code thread | `agent_session` and `t3_thread` links |
+
+Labels and tiers are read as they are now, not as they were when the task finished, since the board keeps no history
+of either.
 
 ### Commits
 
@@ -89,7 +118,7 @@ and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links a
 and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
 loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
 
-The sections (Throughput, Cycle time, Flow, PRs, commits and reviews, PR flow, Autopilot, Sessions) are built in `StatsPage.tsx` from the series
+The sections (Throughput, Cycle time, Flow, PRs, commits and reviews, PR flow, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
 above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
 name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
 plainly better (tasks finished, cycle time, time in a status, PR time to merge, review rounds, findings, retries, fix
@@ -102,6 +131,9 @@ The charts are hand-rolled SVG with no dependency:
 
 - `WeeklyBars` (grouped or stacked), `TrendLine` (a line per series; a week with no value breaks it) and `KpiTile`.
   `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
+- `SortedBars` draws a breakdown as horizontal bars, largest first, with the previous period's figure beside each; it
+  is a plain list with the values written out, so it has no tooltip. `breakdownRows` (in `stats.logic.ts`) keeps the
+  categories with something in the period and folds all past the seventh into one "Other" row, drawn muted because it adds several categories and can be the longest.
 - Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
   segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names
   each series and the tooltip repeats the names.
@@ -151,12 +183,13 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
 | `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
 | `apps/server/src/integrations/commitLog.ts` | The `git log` reader for a project's default branch |
-| `apps/server/src/db/repos/links.ts` | `prsMergedBetween` (with the link and its creation), `agentSessionsStartedBetween` |
-| `apps/server/src/services/activity.ts` | `statusStays`, shared with the activity report |
+| `apps/server/src/db/repos/links.ts` | `prsMergedBetween` (with the link and its creation), `agentSessionsStartedBetween`, `sessionsStartedBetween` |
+| `apps/server/src/services/activity.ts` | `statusStays`, shared with the activity report; `stallKind`, `wasRestarted`: the stall and restart definitions the friction series share with `board_activity` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
 | `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers and the sections |
 | `apps/web/src/components/stats/{WeeklyBars,TrendLine,KpiTile,chartParts}.tsx` | The SVG charts and what they share |
+| `apps/web/src/components/stats/SortedBars.tsx` | The sorted horizontal bars for a breakdown |
 | `apps/web/src/components/stats/stats.logic.ts` | Scales, formatting, change against the previous period, run grouping |
 | `apps/web/src/state/queries.ts` (`useStats`) | The query |
 | `apps/server/src/dev/seeds.ts` (`stats`) | The sandbox seed with twelve weeks of history |

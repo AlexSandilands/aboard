@@ -4,6 +4,7 @@ import {
   AUTOPILOT_UNSTICK,
   BOARD_RESTARTED_ERROR,
   UNSTICK_STALE_PREFIX,
+  type AutopilotRun,
   type AutopilotRunStatus,
   prReviewOutput,
   type FindingSeverity,
@@ -103,6 +104,19 @@ export interface Stall extends ActivityTask {
   kind: "stale" | "waiting";
   at: string;
   text: string;
+}
+
+/** The reason a failed run gives, which is what says whether the board's restart cut it short. */
+export const failureReason = (run: AutopilotRun): string => run.error ?? run.summary;
+
+/** Whether the run was cut short by the board restarting, not by anything it did. */
+export const wasRestarted = (run: AutopilotRun): boolean =>
+  run.status === "failed" && failureReason(run).startsWith(BOARD_RESTARTED_ERROR);
+
+/** Whether a run is Unstick finding a task stalled, and which way: quiet for too long, or waiting on input. */
+export function stallKind(run: AutopilotRun): Stall["kind"] | null {
+  if (run.automation !== AUTOPILOT_UNSTICK || run.status !== "succeeded" || !run.taskId) return null;
+  return run.summary.startsWith(UNSTICK_STALE_PREFIX) ? "stale" : "waiting";
 }
 
 export interface NoteActivity extends ActivityTask {
@@ -258,12 +272,7 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         if (run.status === "skipped") group.skipped += 1;
         if (run.status === "failed") {
           group.failed += 1;
-          const reason = run.error ?? run.summary;
-          group.failures.push({
-            task: ref,
-            reason,
-            restarted: reason.startsWith(BOARD_RESTARTED_ERROR),
-          });
+          group.failures.push({ task: ref, reason: failureReason(run), restarted: wasRestarted(run) });
         }
         if (run.taskId) {
           const key = `${run.automation}:${run.taskId}`;
@@ -282,11 +291,12 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
             handoff: review.handoff,
           });
         }
-        if (run.automation === AUTOPILOT_UNSTICK && run.status === "succeeded" && run.taskId && ref) {
+        const stall = stallKind(run);
+        if (stall && run.taskId && ref) {
           addStall({
             ...ref,
             taskId: run.taskId,
-            kind: run.summary.startsWith(UNSTICK_STALE_PREFIX) ? "stale" : "waiting",
+            kind: stall,
             at: run.finishedAt ?? run.updatedAt,
             text: run.summary,
           });
