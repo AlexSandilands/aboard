@@ -10,6 +10,7 @@ import {
   isGatingSeverity,
   type LabelUsage,
   reviewBadgeLabel,
+  reviewFixedAtLimit,
   reviewIsDone,
   type ReviewFinding,
   type PlanPhase,
@@ -503,6 +504,11 @@ function reviewLines(task: TaskDetail): string[] {
     "",
     `Local review: ${reviewBadgeLabel(r)} (round ${latest.round}, ${r.round} of ${r.maxRounds} this cycle, ${latest.status})`,
   ];
+  if (r.verifiedOnPr)
+    lines.push("  The fixes were re-reviewed on the pull request: Autopilot's PR review came back clean.");
+  else if (reviewFixedAtLimit(r)) {
+    lines.push("  The fixes were made in the last allowed round, so no round will re-review them.");
+  }
   if (latest.summary) lines.push(`  Summary: ${latest.summary}`);
   if (latest.error) lines.push(`  Error: ${latest.error}`);
   // Open findings carry their detail wherever they are listed: the implementer fixes from it.

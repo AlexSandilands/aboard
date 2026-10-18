@@ -262,6 +262,37 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("counts a clean PR review as the re-review of fixes made in the last local round", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true, reviewMaxRounds: 1 });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    expect(s.tasks.summary(task.id).review).toMatchObject({ state: "fixed", round: 1, verifiedOnPr: false });
+    // Timestamps have millisecond resolution: the review has to finish after the fix.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(s.tasks.summary(task.id).review).toMatchObject({ state: "clean", verifiedOnPr: true });
+  });
+
+  it("doesn't count a PR review that asked for fixes as the re-review", async () => {
+    const { s, task, setPr, pass, turnOn, setIssues, requests } = setup();
+    s.settings.update({ autoReview: true, reviewMaxRounds: 1 });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "x" }] }, "reviewer");
+    s.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "agent");
+    setIssues([issue("major")]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(s.tasks.summary(task.id).review).toMatchObject({ state: "fixed", verifiedOnPr: false });
+  });
+
   it("doesn't hold a PR for fixes nobody will re-review because auto-review is off for the task", async () => {
     const { s, task, setPr, pass, turnOn, requests } = setup();
     turnOn();

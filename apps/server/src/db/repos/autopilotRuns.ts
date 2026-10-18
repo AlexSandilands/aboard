@@ -1,4 +1,10 @@
-import { AUTOPILOT_ACTOR, AUTOPILOT_UNSTICK, type AutopilotRun, type AutopilotRunStatus } from "@repo/contracts";
+import {
+  AUTOPILOT_ACTOR,
+  AUTOPILOT_REVIEW_PRS,
+  AUTOPILOT_UNSTICK,
+  type AutopilotRun,
+  type AutopilotRunStatus,
+} from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
 
@@ -202,6 +208,27 @@ export function createAutopilotRunsRepo(sql: Sql) {
           taskId,
         )?.at ?? null
       );
+    },
+    /**
+     * Per task, when its newest clean Autopilot PR review started: a real, succeeded Review PRs run whose verdict
+     * handed off as "clean" and raised nothing blocking or major. The local review counts it as the re-review of
+     * fixes made at the round limit. The start, not the finish, is what says the review saw the fixes: one that
+     * began before they were resolved may have read the old head. The hand-off alone isn't enough, because a
+     * high fix threshold lets a review with major issues hand off clean, and the local gate is blocking and major.
+     */
+    cleanPrReviewTimes(taskIds: readonly string[]): Map<string, string> {
+      const rows = sql.all<{ task_id: string; at: string }>(
+        `SELECT task_id, MAX(COALESCE(started_at, finished_at)) AS at FROM autopilot_runs
+         WHERE task_id IN (SELECT value FROM json_each(?)) AND automation = ? AND status = 'succeeded' AND dry_run = 0
+           AND COALESCE(started_at, finished_at) IS NOT NULL AND json_extract(output_json, '$.kind') = 'pr_review'
+           AND json_extract(output_json, '$.handoff') = 'clean'
+           AND COALESCE(json_extract(output_json, '$.counts.blocking'), 0)
+             + COALESCE(json_extract(output_json, '$.counts.major'), 0) = 0
+         GROUP BY task_id`,
+        jsonList(taskIds),
+        AUTOPILOT_REVIEW_PRS,
+      );
+      return new Map(rows.map((r) => [r.task_id, r.at]));
     },
     /**
      * Per task, the message of its latest run flagged needs_attention, while it stands: no real run of the same
