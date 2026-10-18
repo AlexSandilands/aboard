@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { harnessOfClient } from "./format.ts";
 
@@ -203,16 +203,23 @@ describe("get_session_transcript over MCP", () => {
     expect(past.body).toContain("Offset 5 is past the end: the transcript has 2 entries, offsets 0 to 1.");
   });
 
-  it("asks which session when there are several, and says when one has no transcript", async () => {
-    const { link, call } = await setup();
+  it("reads the newest of several sessions, names the others, and says when one has no transcript", async () => {
+    const { link, write, call } = await setup();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-02T10:00:00.000Z"));
     const first = link("Planning");
+    vi.setSystemTime(new Date("2026-03-02T11:00:00.000Z"));
     const second = link("Implementing");
-    const several = await call();
-    expect(several.error).toBe(true);
-    expect(several.body).toContain("several Claude Code sessions; pass session with one of:");
-    expect(several.body.includes(first) && several.body.includes(second)).toBe(true);
-    const missing = await call({ session: second });
+    vi.useRealTimers();
+    write(second, [{ type: "user", timestamp: at(0), message: { role: "user", content: "Go" } }]);
+    const newest = await call();
+    expect(newest.error).toBe(false);
+    expect(newest.body).toContain(`session ${second}`);
+    expect(newest.body).toContain(
+      `The newest of 2 linked Claude Code sessions; pass session to read another: ${first} "Planning".`,
+    );
+    const missing = await call({ session: first });
     expect(missing.error).toBe(true);
-    expect(missing.body).toContain(`No transcript for session ${second} was found on this machine`);
+    expect(missing.body).toContain(`No transcript for session ${first} was found on this machine`);
   });
 });

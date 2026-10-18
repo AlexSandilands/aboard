@@ -231,8 +231,9 @@ be read is left out rather than guessed.
 
 `get_session_transcript(task, session?, offset?)` lets an agent audit how a task's Claude Code session went: what
 it was asked, what it concluded, what it ran and where it went wrong. Only a session linked to the task can be read,
-found by the link's id and folder as the title is (`transcriptPath`), never by a path the agent gives; `session` is
-needed when the task has more than one. T3 Code threads and Copilot CLI sessions aren't covered.
+found by the link's id and folder as the title is (`transcriptPath`), never by a path the agent gives. Without
+`session` the newest linked session is read and the header names the others; `session` picks another. T3 Code
+threads and Copilot CLI sessions aren't covered.
 
 The transcript is condensed to one line per event (`condenseTranscriptFile`): each user message, the assistant's
 final text of each turn, each tool call with its name and target (file, command, pattern), tool errors, permission
@@ -250,7 +251,9 @@ values with spaces in full, flags named for a secret and their value (`--passwor
 `-u`, passwords in URLs, pairing codes and long runs of random mixed-case letters and digits, standard base64
 included, become `[redacted]`. Code beside a secret name is kept: a type, a call, another name, a number or a path
 (`password: string`, `PWD=/home/dev`), and so are long runs made of words (an identifier with a digit, a Claude
-project folder). Text is first cut to four times its limit, so a huge tool output isn't scanned whole, then
+project folder). A camelCase or dotted word is kept only beside a name written as code: after a flag, a name in
+capitals (`API_TOKEN=…`) or a shell assignment with no spaces (`token=…`) it is redacted, since a short passphrase
+looks the same. Text is first cut to four times its limit, so a huge tool output isn't scanned whole, then
 redacted, then cut to the limit; a secret the first cut splits is the last run of non-space characters, which is
 dropped, or only its last 200 characters when that run is longer (a minified line). The session's label is redacted in the
 header and in error messages too. A transcript holds whatever the agent read, and the LLM gateway some users sit

@@ -119,6 +119,21 @@ describe("redact", () => {
     expect(redact(code)).toBe(code);
   });
 
+  it("redacts a camelCase or dotted word beside a flag, an env name or a shell assignment", () => {
+    const word = glue("horse", "Battery", "Staple");
+    const dotted = glue("horse", ".", "battery", ".", "staple");
+    for (const input of [
+      `${glue("API_", "TOK", "EN")}=${word}`,
+      `${glue("DB_", "PASS", "WORD")}: ${dotted}`,
+      `${glue("to", "ken")}=${dotted}`,
+      `${glue("--to", "ken")} ${word}`,
+    ]) {
+      const out = redact(input);
+      expect(out.includes("horse")).toBe(false);
+      expect(out.includes("[redacted]")).toBe(true);
+    }
+  });
+
   it("keeps long runs made of words: a project folder, identifiers with a digit", () => {
     const folder = ["C", "", "Users", "dev", "", "t3", "worktrees", "aboard", "t3", "dad8ce25"].join("-");
     const names = [

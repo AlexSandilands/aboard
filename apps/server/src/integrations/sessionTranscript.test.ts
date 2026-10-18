@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { claudeProjectSlug } from "./claudeSessionTitle.ts";
 import { createSessionTranscriptReader } from "./sessionTranscript.ts";
@@ -11,6 +11,7 @@ const CWD = "/work/alpha";
 
 const roots: string[] = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -64,15 +65,23 @@ describe("session transcripts", () => {
     expect(named.sessionId).toBe(id);
   });
 
-  it("asks which session when there are several, and refuses one that isn't linked", async () => {
+  it("reads the newest of several sessions and names the others, and refuses one that isn't linked", async () => {
     const { link, write, failure, reader, task } = setup();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-02T10:00:00.000Z"));
     const first = link("claude-code", "Planning");
+    vi.setSystemTime(new Date("2026-03-02T11:00:00.000Z"));
     const second = link("claude-code", "Implementing");
+    vi.useRealTimers();
+    write(first, "Plan it");
     write(second, "Go");
-    const several = await failure();
-    expect(several.includes("several Claude Code sessions")).toBe(true);
-    expect(several.includes(first) && several.includes(second)).toBe(true);
-    expect((await reader.read(task.id, { session: second })).sessionId).toBe(second);
+    const newest = await reader.read(task.id, {});
+    expect(newest.sessionId).toBe(second);
+    expect(newest.otherSessions?.length).toBe(1);
+    expect(newest.otherSessions?.[0]?.includes(first)).toBe(true);
+    const chosen = await reader.read(task.id, { session: first });
+    expect(chosen.sessionId).toBe(first);
+    expect(chosen.otherSessions).toBeUndefined();
     const stranger = await failure({ session: randomUUID() });
     expect(stranger.includes("isn't linked")).toBe(true);
     expect(stranger.includes(first)).toBe(true);
@@ -83,7 +92,7 @@ describe("session transcripts", () => {
     const value = "x7".repeat(8);
     link("claude-code", `run with ${["TOK", "EN"].join("")}=${value}`);
     link("claude-code");
-    const message = await failure();
+    const message = await failure({ session: randomUUID() });
     expect(message.includes(value)).toBe(false);
     expect(message.includes("[redacted]")).toBe(true);
   });

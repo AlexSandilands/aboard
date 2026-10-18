@@ -14,15 +14,16 @@ export const registerTranscriptTools: ToolRegistrar = (server, { services, ctx }
         "(name and target), tool errors, permission denials, retries and interruptions, with the turn count and " +
         "duration on top. Token-shaped strings are redacted. Long text is cut and the transcript is paged: when more " +
         "follows, call again with the offset it names. Only sessions linked to the task can be read, and only Claude " +
-        "Code sessions, not T3 Code threads or Copilot CLI sessions. Pass session (its id, from get_task's links) " +
-        "when the task has more than one.",
+        "Code sessions, not T3 Code threads or Copilot CLI sessions. Without session the newest linked " +
+        "session is read, and the header names the others; pass session (its id, from get_task's links) to read " +
+        "another.",
       inputSchema: {
         task: taskField,
         session: z
           .string()
           .optional()
           .describe(
-            "The session's id (a UUID from get_task's links). Omit it when the task has one Claude Code session.",
+            "The session's id (a UUID from get_task's links). Omit it for the newest Claude Code session linked to the task.",
           ),
         offset: z
           .number()

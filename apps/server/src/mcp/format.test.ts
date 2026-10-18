@@ -157,6 +157,13 @@ describe("renderTranscript", () => {
     expect(past).not.toContain("Entries");
   });
 
+  it("names the other linked sessions when it read the newest", () => {
+    const out = renderTranscript({ ...transcript({}), otherSessions: ['s-0 "Planning"'] });
+    expect(out.split("\n")[1]).toBe(
+      'The newest of 2 linked Claude Code sessions; pass session to read another: s-0 "Planning".',
+    );
+  });
+
   it("redacts the session's label", () => {
     const value = "x7".repeat(8);
     const out = renderTranscript(transcript({}, `run ${["TOK", "EN"].join("")}=${value}`));

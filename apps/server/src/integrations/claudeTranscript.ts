@@ -36,20 +36,31 @@ const NAMED_IN_VALUE = new RegExp(`(?:${SECRET_NAME.source})[\\w.-]*[:=]`, "i");
 const TYPE_NAME = /^(?:string|number|boolean|bigint|symbol|object|unknown|any|never|null|undefined|void)$/;
 
 /**
- * Whether a value beside a secret name is code or config rather than the secret: a path, a reference to a variable
- * (`$API_TOKEN`), a number (`totalTokens: 154321`), a type (`password: string`, `secretsManager: SecretsClient`), a
- * call (`token = fetchToken()`) or another name (`apiKey = config.apiKey`, `password = newPassword`). A quoted value
- * is a literal, so only a path or a reference passes there. Whatever passes is still checked for a secret's shape.
+ * Whether a value beside a secret name is code or config rather than the secret. Always kept: a path
+ * (`./config/dev.txt`), a reference to a variable (`$API_TOKEN`), a number (`totalTokens: 154321`), a type
+ * (`secretsManager: SecretsClient`) and a call (`getToken(x)`). Another name, a camelCase word or a dotted one
+ * (`config.apiKeyName`), is kept only when `asCode` says the name is written as code: a short passphrase looks the
+ * same. A quoted value is a literal, so only a path or a reference passes there. Whatever passes is still checked
+ * for a secret's shape.
  */
-function isNotSecret(value: string, quoted: boolean): boolean {
+function isNotSecret(value: string, quoted: boolean, asCode: boolean): boolean {
   if (/^(?:~|\.{1,2})?\/|^[A-Za-z]:[\\/]/.test(value) || /^\$\{?[A-Za-z_]\w*\}?$/.test(value)) return true;
   if (quoted) return false;
   if (/^\d+(?:\.\d+)?$/.test(value)) return true;
   const isType = (part: string) => TYPE_NAME.test(part) || /^[A-Z][A-Za-z]*[a-z][A-Za-z]*(?:<.*>)?$/.test(part);
   if (value.replace(/\[\]/g, "").split("|").every(isType)) return true;
   if (/^[A-Za-z_$][\w$.]*\(/.test(value)) return true;
+  if (!asCode) return false;
   return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(value) || /^[a-z]+(?:[A-Z][a-z]*)+$/.test(value);
 }
+
+/**
+ * Whether a name with its separator reads as code (`apiKey = `, `token: `) rather than a flag (`--token `), an env
+ * name in capitals (`API_TOKEN=`, `DB_PASSWORD: `) or a shell assignment with no spaces (`token=`), where a bare
+ * word is as likely to be the secret itself.
+ */
+const writtenAsCode = (name: string) =>
+  !name.startsWith("-") && !/^[A-Z][A-Z\d_]*["']?\s*[:=]/.test(name) && !/^[\w.-]+["']?=$/.test(name);
 
 /**
  * The value redacted when its name says it is a secret, or from a secret name inside it on (`--set=token=…`). Not
@@ -62,7 +73,7 @@ function redactNamed(match: string, name: string, double?: string, single?: stri
   const open = double !== undefined ? '"' : single !== undefined ? "'" : quote;
   const close = quoted === undefined ? "" : open;
   if (SECRET_NAME.test(name) && !NOT_SECRET_NAME.test(/^[\w.-]+/.exec(name)?.[0] ?? "")) {
-    return isNotSecret(value, quoted !== undefined) ? match : `${name}${open}${REDACTED}${close}`;
+    return isNotSecret(value, quoted !== undefined, writtenAsCode(name)) ? match : `${name}${open}${REDACTED}${close}`;
   }
   if (quoted !== undefined && /\s/.test(quoted)) return match;
   const inner = NAMED_IN_VALUE.exec(value);

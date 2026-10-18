@@ -14,6 +14,8 @@ export interface SessionTranscript {
   taskNumber: number;
   sessionId: string;
   label: string | null;
+  /** The other linked sessions, described, when none was asked for and the newest was read. */
+  otherSessions?: string[];
   stats: TranscriptStats;
   page: TranscriptPage;
 }
@@ -62,6 +64,7 @@ export function createSessionTranscriptReader(deps: {
         );
       }
       let link: SessionLink | undefined;
+      let others: string[] = [];
       if (session) {
         const wanted = session.trim().toLowerCase();
         link = sessions.find((l) => l.ref.sessionId === wanted);
@@ -71,13 +74,12 @@ export function createSessionTranscriptReader(deps: {
             `Session ${redact(session)} isn't linked to #${task.number}. Linked Claude Code sessions: ${sessions.map(describe).join("; ")}.`,
           );
         }
-      } else if (sessions.length === 1) {
-        link = sessions[0];
       } else {
-        throw new AppError(
-          "VALIDATION",
-          `#${task.number} has several Claude Code sessions; pass session with one of: ${sessions.map(describe).join("; ")}.`,
-        );
+        // The newest link is the session that last worked on the task. Links come oldest first, so a tie goes to
+        // the later one.
+        link = sessions.reduce((newest, l) => (l.createdAt >= newest.createdAt ? l : newest));
+        const chosen = link;
+        others = sessions.filter((l) => l !== chosen).map(describe);
       }
       if (!link) throw new AppError("INTERNAL", "No session chosen");
       const ref: AgentSessionRef = link.ref;
@@ -100,6 +102,7 @@ export function createSessionTranscriptReader(deps: {
         taskNumber: task.number,
         sessionId: ref.sessionId,
         label: link.label ?? null,
+        ...(others.length ? { otherSessions: others } : {}),
         stats: condensed.stats,
         page: pageEntries(condensed.entries, offset ?? 0),
       };

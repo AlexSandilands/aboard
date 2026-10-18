@@ -750,6 +750,12 @@ export function renderTranscript(t: SessionTranscript): string {
   const lines = [
     // The label is free text an agent wrote, so it is redacted like the transcript.
     `Transcript of Claude Code session ${t.sessionId}${t.label ? ` "${redact(t.label)}"` : ""} for #${t.taskNumber}`,
+    // The others are described (and redacted) by the reader.
+    ...(t.otherSessions?.length
+      ? [
+          `The newest of ${t.otherSessions.length + 1} linked Claude Code sessions; pass session to read another: ${t.otherSessions.join("; ")}.`,
+        ]
+      : []),
     counts.join(", "),
   ];
   if (stats.startedAt) lines.push(`From ${stats.startedAt}${stats.endedAt ? ` to ${stats.endedAt}` : ""}`);
