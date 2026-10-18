@@ -2,7 +2,7 @@ import type { PrSnapshot, TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   COLD_INTERVAL_MS,
-  HOT_INTERVAL_MS,
+  POLL_TICK_MS,
   isOlderThan,
   PANEL_REFRESH_AGE_MS,
   prIsDue,
@@ -64,8 +64,8 @@ describe("prTier", () => {
 describe("prIsDue", () => {
   it("is due once the tier's interval has passed since the last read, a little early", () => {
     const hot = link({ snapshot: snapshot({ checks: "pending" }) });
-    expect(prIsDue({ ...hot, syncedAt: ago(HOT_INTERVAL_MS / 2) }, NOW, false)).toBe(false);
-    expect(prIsDue({ ...hot, syncedAt: ago(HOT_INTERVAL_MS - 1_000) }, NOW, false)).toBe(true);
+    expect(prIsDue({ ...hot, syncedAt: ago(POLL_TICK_MS / 2) }, NOW, false)).toBe(false);
+    expect(prIsDue({ ...hot, syncedAt: ago(POLL_TICK_MS - 1_000) }, NOW, false)).toBe(true);
     expect(prIsDue({ ...link(), syncedAt: ago(WARM_INTERVAL_MS - 10_000) }, NOW, false)).toBe(false);
     expect(prIsDue({ ...link(), syncedAt: ago(WARM_INTERVAL_MS) }, NOW, false)).toBe(true);
     const merged = link({ snapshot: snapshot({ state: "merged" }) });

@@ -4,7 +4,7 @@ import type { TaskLink } from "@repo/contracts";
  * How often each PR is read, by how much it is likely to change. A PR waiting on checks, or one someone just touched or
  * is looking at, changes within seconds; an idle open PR changes when a person acts; a finished one almost never.
  */
-export const HOT_INTERVAL_MS = 20_000;
+const HOT_INTERVAL_MS = 20_000;
 export const WARM_INTERVAL_MS = 2 * 60_000;
 export const COLD_INTERVAL_MS = 30 * 60_000;
 /** How often the poller looks for PRs that are due: the shortest interval. */

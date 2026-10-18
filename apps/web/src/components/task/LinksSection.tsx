@@ -28,7 +28,7 @@ import {
   TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useState, type FC, type ReactNode } from "react";
+import { useEffect, useState, type FC, type ReactNode } from "react";
 
 import { FixInMenuItems, usePrSlot } from "~/components/handoff/FixPrMenu";
 import { PR_AUTOPILOT_LABEL, PR_AUTOPILOT_TITLE } from "~/components/handoff/fixPr.logic";
@@ -55,6 +55,7 @@ import { queryKeys, useBoard, useSettings } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { copyToClipboard } from "./InlineInput";
 import {
+  checkedAgoLabel,
   describeLinkInput,
   hostnameOf,
   ISSUE_STATE,
@@ -262,6 +263,16 @@ export function RemoveItem({ onRemove }: { onRemove: () => void }) {
   );
 }
 
+/** The current time, re-read every `everyMs`, so a "checked Ns ago" label keeps counting. */
+function useNow(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
+}
+
 /** The checks icon's tooltip, with the checks that aren't required to merge beside it. */
 function checksHintLabel(label: string, optional: PrSnapshot["optionalChecks"]): string {
   const parts = [
@@ -286,21 +297,31 @@ function PullRequestRow({
   const snapshot = link.snapshot;
   const mergeAction = prMergeAction(task.status, snapshot);
   const slot = usePrSlot(task, link);
+  const checkedAgo = checkedAgoLabel(link.syncedAt, useNow(5_000));
   const state = snapshot ? PR_STATE[snapshot.state] : null;
   const title = snapshot?.title ?? link.label ?? (link.ref ? link.ref.repo : (hostnameOf(link.url) ?? link.url));
   return (
     <RowWithMenu
       href={link.url}
       title={state ? `${state.label} pull request · ${link.url}` : link.url}
-      action={<PrSlotAction task={task} link={link} slot={slot} />}
+      action={
+        <>
+          <PrSlotAction task={task} link={link} slot={slot} />
+          {link.ref ? (
+            <PanelControl
+              part="icon"
+              aria-label="Refresh pull request"
+              title={checkedAgo ? `Refresh now (${checkedAgo})` : "Refresh now"}
+              disabled={refreshing}
+              onClick={() => refresh(link.id)}
+            >
+              <RefreshCwIcon className={cn("size-3.5", refreshing && "animate-spin")} />
+            </PanelControl>
+          ) : null}
+        </>
+      }
       menu={
         <>
-          {link.ref ? (
-            <MenuItem disabled={refreshing} onClick={() => refresh(link.id)}>
-              <RefreshCwIcon />
-              Refresh
-            </MenuItem>
-          ) : null}
           {slot.menu.merge ? (
             <MenuItem onClick={() => openMergePr(task.id, link.id)}>
               <GitMergeIcon />
@@ -360,6 +381,7 @@ function PullRequestRow({
               <CircleDashedIcon className="size-3.5 text-warning" />
             </Hint>
           ) : null}
+          {checkedAgo ? <span className="text-muted-foreground/80 tabular-nums">{checkedAgo}</span> : null}
           {snapshot.reviewDecision === "approved" ? (
             <span className="text-success-foreground">Approved</span>
           ) : snapshot.reviewDecision === "changes_requested" ? (

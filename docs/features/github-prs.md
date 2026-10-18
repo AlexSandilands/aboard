@@ -33,15 +33,32 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 
 `apps/server/src/integrations/github.ts`:
 
-- Every 2 minutes, `pr` links on polled hosts are grouped by host and repo, and each group is read
-  with one aliased query (`pollQuery`: `pr0`, `pr1`, … with numbers as variables), at most 25 PRs a
-  query and 4 queries at a time.
+- A tick every 20 seconds picks the `pr` links that are due (`prIsDue`, `integrations/prPolling.ts`), groups them
+  by host and repo, and reads each group with one aliased query (`pollQuery`: `pr0`, `pr1`, … with numbers as
+  variables), at most 25 PRs a query and 4 queries at a time. A link is due once its tier's interval has passed since
+  `syncedAt` (a little early, so a tick doesn't just miss it). Each cycle that sends queries logs how many PRs and
+  queries it used (`debug`).
+- **Tiers** (`prTier`), by how likely the PR is to change:
+
+  | Tier | Every | PRs |
+  | ---- | ----- | --- |
+  | hot  | 20 s  | never read; checks `pending`; linked or updated on GitHub (`updatedAt`) in the last 10 minutes; its task's panel is open |
+  | warm | 2 min | other open and draft PRs |
+  | cold | 30 min | merged and closed PRs, whoever is looking |
+
+- **Right away.** A PR link added over REST or MCP is read at once (`prLinked` → `pollLink`, which honours **Poll PR
+  status**). When a task panel opens, and every 20 s while it stays open and visible, the web calls
+  `POST /api/tasks/:id/view` (`useTaskView`): the server reads the task's PR links that were last read more than 15 s ago
+  and treats the task as open for 40 s, so its PRs are hot even if they're otherwise warm.
+- **Back-off.** A PR GitHub can't find, or a host that answered with a rate limit or a refused token, is left alone
+  for the warm interval (2 minutes) rather than asked again every tick.
 - A PR GitHub can't find comes back as an error on its alias; the rest of the batch is stored, and
   the error is logged once per link. A rate limit or a refused token stops that host for the rest of
   the poll and is logged once per host.
 - Skipped when **Poll PR status** is off in Settings, or `gh` is missing or signed out everywhere.
 - **Refresh** on a link (`POST /api/links/:id/refresh`) reads it now and reports why it can't (`gh`
-  missing, not signed in to that host, GitHub's error).
+  missing, not signed in to that host, GitHub's error). The PR row in the task panel has it as an always-visible icon
+  beside "checked 23s ago" (`checkedAgoLabel`, from the link's `syncedAt`).
 
 ### The snapshot
 
@@ -50,7 +67,9 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 | Field              | Values                                                                                             |
 | ------------------ | -------------------------------------------------------------------------------------------------- |
 | `state`            | `merged`, `closed`, `draft`, `open`                                                                |
-| `checks`           | From the head commit's status check rollup: `failing` if any check failed, errored, timed out, was cancelled or needs action; else `pending` if any is running; else `passing`; `none` without checks |
+| `checks`           | From the head commit's status check rollup, counting only the checks the base branch requires for this PR (`isRequired(pullRequestNumber:)`), as GitHub's merge box does; with none required, every check counts. `failing` if one failed, errored, timed out, was cancelled or needs action; else `pending` if one is running or expected; else `passing`; `none` without checks |
+| `optionalChecks`   | When some checks are required: how many of the others are `pending` and `failing`, so an optional workflow that is still queued doesn't hold `checks` at pending. Absent when there are none |
+| `mergeState`       | GitHub's `mergeStateStatus`, lowercased (`clean`, `unstable`, `has_hooks`, `blocked`, `behind`, `dirty`, `draft`, `unknown`) |
 | `reviewDecision`   | `approved`, `changes_requested`, `review_required`, or none                                        |
 | `mergeable`        | `mergeable`, `conflicting`, `unknown`                                                              |
 | `autoMerge`        | The method auto-merge will use, or null when it's off                                             |
@@ -65,7 +84,7 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 `trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. Bodies aren't read: the
 fix automation only needs who wrote what when, and Autopilot's own inline comments can be long.
 
-The last eight are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
+`optionalChecks`, `mergeState` and the last eight are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
 no merge until the next poll). `links.setSnapshot` stores the snapshot, and publishes the card only
 when it changed.
 
@@ -83,7 +102,8 @@ fixing, and leaves out what `own` marks: Autopilot posts under the same login.
 ### Attention
 
 An open or draft PR puts the task under **Needs attention** when checks fail (error), changes are
-requested, or it conflicts (warnings). Merged and closed PRs never do.
+requested, or it conflicts (warnings). "Checks fail" is the `checks` verdict, so a failing optional check
+(`optionalChecks`) doesn't raise it when others are required; nor does it hold back Autopilot's merges or start Fix PRs. Merged and closed PRs never do.
 
 ### Merging
 
@@ -215,6 +235,7 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | -------------------------------------------------------- | --------------------------------------------------------------- |
 | `apps/server/src/integrations/githubApi.ts`              | API URLs, `gh` tokens, auth status, GraphQL with error and rate-limit handling |
 | `apps/server/src/integrations/github.ts`                 | Hosts, polling, `mapPrSnapshot`, `refresh`, `merge`             |
+| `apps/server/src/integrations/prPolling.ts`              | `prTier`, `prIsDue`: how often each PR is read                  |
 | `apps/server/src/integrations/gh.ts`                     | Running `gh`                                                    |
 | `apps/server/src/integrations/index.ts`                  | Starts the integrations, `refreshLink`, `mergePr`, `mergeTaskPr` |
 | `apps/server/src/integrations/mergeTaskPr.ts`            | `merge_task_pr`'s checks and merge into the default branch      |

@@ -45,7 +45,11 @@ A task can link to:
 - **GitHub PRs**, on github.com or GitHub Enterprise, with their live state (checks, review, conflicts)
   and a **Merge** button once the task is in Review, through the account the `gh` CLI is signed in with. When
   checks fail, the PR conflicts or changes are requested, **Fix in** takes the button's place (see
-  [Fixing a PR](#fixing-a-pr)).
+  [Fixing a PR](#fixing-a-pr)). Checks follow GitHub's merge box: when the base branch requires some, only those
+  count, and optional ones that are still running or failing show beside the icon instead. A PR is read every
+  20 seconds while its checks run, it was just linked or updated, or its task panel is open; every 2 minutes
+  otherwise; and every 30 minutes once it is merged or closed. The row says when it was last checked, and its
+  refresh button reads it now.
 - **GitHub issues**, with their state when imported (see [Importing issues](importing-issues.md)).
 - **Jira issues.** Keys in a task's title are linked automatically.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
