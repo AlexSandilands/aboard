@@ -362,6 +362,9 @@ describe("stats.weekly", () => {
     s.links.add(linkTask.id, { t3Thread: { environmentId: "env", threadId: "th-1" } }, "agent");
     s.links.add(linkTask.id, { t3Thread: { environmentId: "env", threadId: "th-1" } }, "agent");
 
+    // The same sessions are behind the weekly series and the breakdown, less the T3 thread.
+    expect(stats(4).series.agent_sessions_started!.total).toBe(2);
+
     const { breakdowns } = stats(4);
     expect(breakdowns.completed_by_label).toEqual({
       unit: "count",
