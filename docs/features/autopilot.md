@@ -176,7 +176,7 @@ it. It is for reading what scheduled agents did, since their runs have no task p
 - **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. The page
   can delete the ticked runs, or every run the filters match (**Delete all matching…**, which with no filter is the
   automation's whole history, so with a time range it clears, say, everything before a date).
-  `POST /api/autopilot/runs/delete` takes `{ ids }` or `{ filter }` (the same filter as the list, without paging) and
+  `POST /api/autopilot/runs/delete` takes `{ ids }` (at most 500, `RUN_DELETE_IDS_MAX`; the page stops ticking there) or `{ filter }` (the same filter as the list, without paging) and
   `preview`. A preview counts and deletes nothing, which is what the confirm dialog shows before it asks; a real delete
   weighs the runs again and removes them in one transaction, then publishes `autopilot.changed`. The reply is
   `{ preview, deleted, kept, keptReasons }`. Runs aren't in backups ([backup.md](backup.md)), so there is no way back,
@@ -185,9 +185,9 @@ it. It is for reading what scheduled agents did, since their runs have no task p
   first of these as the reason, when it is: **queued or running**; one whose **worktree is still on disk** (the
   worktree cleanup finds worktrees through the row); **on a task that isn't done or archived**, since dedupe keys
   (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge into epic branch tries and the attention flag read the task's
-  runs; the **latest succeeded answer of a scheduled agent** in its project (`lastScheduledAnswer`, what the next run is
+  runs; a **custom or Auto-archive run on a task** (their dedupe keys follow the task's own state, so without the run Auto-archive would archive a task someone unarchived, and a custom trigger that still holds would fire again); the **latest succeeded answer of a scheduled agent** in its project (`lastScheduledAnswer`, what the next run is
   handed); or **less than a day old** (`RUN_DELETE_MIN_AGE_MS`), so deleting a just-finished run can't free a slot's
-  dedupe key (Orchestrate would run the slot again) or make a notice repeat. Everything else, including every older run
+  dedupe key (Orchestrate would run the slot again) or make a notice repeat. The other automations are safe without their old runs: Recurring tasks has its cursor, the Digest and Start planned follow state that has moved on, and Review PRs, Fix PRs and Merge into epic branch key on a PR head or sit on tasks that are open while it matters. Everything else, including every older run
   of a Done task, can go. `keptReasons` has each reason with its count (`KEPT_REASON_TEXT`).
 
 ### Needs attention

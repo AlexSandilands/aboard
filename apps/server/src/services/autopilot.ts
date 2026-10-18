@@ -6,6 +6,7 @@ import {
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   BOARD_RESTARTED_ERROR,
+  CUSTOM_AUTOMATION_PREFIX,
   AutopilotEngineSettings,
   AutopilotKeptReason,
   capHandover,
@@ -33,6 +34,7 @@ import {
   type UpdateAutopilotEngineInput,
   type UpdateAutopilotSettingInput,
 } from "@repo/contracts";
+import { AUTOPILOT_AUTO_ARCHIVE } from "../autopilot/automations/autoArchive.ts";
 import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -210,6 +212,15 @@ function keptReason(run: RunDeleteFacts, now: number): AutopilotKeptReason | nul
   // The worktree cleanup finds a run's worktree through its row, so the row stays while the folder does.
   if (run.worktreePath && existsSync(run.worktreePath)) return "worktree";
   if (run.openTask) return "open_task";
+  // These key their runs by the task's own state, so a deleted run lets them act on it again: Auto-archive on a task
+  // someone unarchived, a custom trigger that still holds. (Other automations' keys follow a PR head, a slot or a
+  // cursor that has moved on, or sit on tasks that are open while they matter.)
+  if (
+    run.taskId &&
+    (run.automation === AUTOPILOT_AUTO_ARCHIVE || run.automation.startsWith(CUSTOM_AUTOMATION_PREFIX))
+  ) {
+    return "task_key";
+  }
   if (run.latestAnswer) return "latest_answer";
   if (now - Date.parse(run.createdAt) < RUN_DELETE_MIN_AGE_MS) return "recent";
   return null;

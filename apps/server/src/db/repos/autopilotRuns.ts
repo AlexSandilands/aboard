@@ -93,6 +93,8 @@ const toRow = (r: AutopilotRun) => ({
 /** What a hand delete weighs about a run before it goes (see the service's `deleteRuns`). */
 export interface RunDeleteFacts {
   id: string;
+  automation: string;
+  taskId: string | null;
   status: AutopilotRunStatus;
   createdAt: string;
   runner: string | null;
@@ -198,6 +200,8 @@ export function createAutopilotRunsRepo(sql: Sql) {
       return sql
         .all<{
           id: string;
+          automation: string;
+          task_id: string | null;
           status: AutopilotRunStatus;
           created_at: string;
           runner: string | null;
@@ -205,7 +209,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
           open_task: number;
           latest_answer: number;
         }>(
-          `SELECT r.id, r.status, r.created_at, r.runner, r.worktree_path,
+          `SELECT r.id, r.automation, r.task_id, r.status, r.created_at, r.runner, r.worktree_path,
              r.task_id IS NOT NULL AND EXISTS (
                SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.status <> 'done' AND t.archived_at IS NULL
              ) AS open_task,
@@ -222,6 +226,8 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map((r) => ({
           id: r.id,
+          automation: r.automation,
+          taskId: r.task_id,
           status: r.status,
           createdAt: r.created_at,
           runner: r.runner,

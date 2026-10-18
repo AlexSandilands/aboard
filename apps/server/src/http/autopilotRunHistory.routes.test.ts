@@ -260,6 +260,21 @@ describe("POST /api/autopilot/runs/delete", () => {
     expect(count()).toBe(1);
   });
 
+  it("keeps Auto-archive and custom runs on a task, whose keys stop them acting on it again", async () => {
+    const { h, alpha, insert, del, count } = setup();
+    const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
+    const finished = h.services.tasks.create({ projectId: alpha.id, title: "Finished", plan });
+    h.services.tasks.move(finished.id, { status: "done" }, "user");
+    insert({ taskId: finished.id, automation: "auto_archive" });
+    insert({ taskId: finished.id, automation: "custom:abc" });
+    insert({ taskId: finished.id, automation: "review_prs" });
+    // A task-less custom run (a schedule slot) is only held by its age.
+    insert({ automation: "custom:abc" });
+    const result = await del({ filter: { automation: "all" } });
+    expect(result).toMatchObject({ deleted: 2, kept: 2, keptReasons: [{ reason: "task_key", count: 2 }] });
+    expect(count()).toBe(2);
+  });
+
   it("keeps each scheduled agent's latest successful answer per project", async () => {
     const { insert, del, beta, count } = setup();
     const answer = (at: string, over: Partial<AutopilotRun> = {}) =>
@@ -304,6 +319,7 @@ describe("POST /api/autopilot/runs/delete", () => {
     const post = (json: unknown) => h.request("/api/autopilot/runs/delete", { method: "POST", json });
     expect((await post({})).status).toBe(400);
     expect((await post({ ids: [] })).status).toBe(400);
+    expect((await post({ ids: Array.from({ length: 501 }, (_, i) => `r${i}`) })).status).toBe(400);
     expect((await post({ ids: ["a"], filter: { automation: "all" } })).status).toBe(400);
     expect((await post({ filter: { automation: "all", since: "yesterday" } })).status).toBe(400);
     expect((await post({ filter: {} })).status).toBe(400);

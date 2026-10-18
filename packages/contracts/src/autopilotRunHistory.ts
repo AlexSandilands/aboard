@@ -13,6 +13,9 @@ export const RUN_PAGE_MAX = 100;
 /** A run younger than this is never deleted by hand: a pass could redo what its dedupe key stopped (a slot, a notice). */
 export const RUN_DELETE_MIN_AGE_MS = 24 * 60 * 60_000;
 
+/** The most runs one delete by id takes; the page stops ticking there (a filter has no such limit). */
+export const RUN_DELETE_IDS_MAX = 500;
+
 const RunTime = z.iso.datetime({ offset: true });
 
 /** What the history page filters by, and what "delete all matching" deletes. `since` is inclusive, `until` exclusive. */
@@ -43,13 +46,14 @@ export const AutopilotRunPage = z.object({
 export type AutopilotRunPage = z.infer<typeof AutopilotRunPage>;
 
 /** Why a run survived a delete, the first that applies in this order. */
-export const AutopilotKeptReason = z.enum(["active", "worktree", "open_task", "latest_answer", "recent"]);
+export const AutopilotKeptReason = z.enum(["active", "worktree", "open_task", "task_key", "latest_answer", "recent"]);
 export type AutopilotKeptReason = z.infer<typeof AutopilotKeptReason>;
 
 export const KEPT_REASON_TEXT: Record<AutopilotKeptReason, string> = {
   active: "still queued or running",
   worktree: "its worktree is still on disk",
   open_task: "on a task that isn't done (its counts and dedupe keys are still read)",
+  task_key: "a custom or Auto-archive run on a task, whose dedupe key stops it acting on the task again",
   latest_answer: "the latest answer of a scheduled agent, which its next run is handed",
   recent: "less than a day old",
 };
@@ -57,7 +61,7 @@ export const KEPT_REASON_TEXT: Record<AutopilotKeptReason, string> = {
 /** `POST /api/autopilot/runs/delete`: either these runs, or every run matching a filter. */
 export const DeleteAutopilotRunsInput = z
   .object({
-    ids: z.array(z.string().min(1)).min(1).max(500).optional(),
+    ids: z.array(z.string().min(1)).min(1).max(RUN_DELETE_IDS_MAX).optional(),
     filter: AutopilotRunFilter.optional(),
     /** Count what would be deleted and what would be kept, and delete nothing. */
     preview: z.boolean().optional(),

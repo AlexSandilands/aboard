@@ -238,6 +238,7 @@ Some runs stay even when you ask, because Autopilot still reads them. The box sa
 
 - runs that are queued or running, or whose worktree is still on disk;
 - runs on a task that isn't Done yet (they decide how many review rounds and fix attempts are left);
+- Auto-archive and custom automation runs on a task;
 - the latest answer of each scheduled agent in each project (its next run is handed that handover);
 - runs less than a day old.
 

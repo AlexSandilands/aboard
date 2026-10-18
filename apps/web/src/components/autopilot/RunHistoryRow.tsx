@@ -13,6 +13,7 @@ export function RunHistoryRow({
   projectTitle,
   taskNumber,
   checked,
+  disabled = false,
   onCheckedChange,
 }: {
   run: AutopilotRun;
@@ -22,6 +23,7 @@ export function RunHistoryRow({
   /** The run's task, when the board still has it. */
   taskNumber: number | null;
   checked: boolean;
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
   const answer = scheduledAnswerOf(run);
@@ -35,6 +37,7 @@ export function RunHistoryRow({
         aria-label={`Select the run ${run.id}`}
         className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-primary"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onCheckedChange(event.currentTarget.checked)}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

@@ -210,3 +210,5 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | `apps/web/src/components/stats/stats.logic.ts` | Scales, formatting, change against the previous period, run grouping |
 | `apps/web/src/state/queries.ts` (`useStats`) | The query |
 | `apps/server/src/dev/seeds.ts` (`stats`) | The sandbox seed with twelve weeks of history |
+
+The Autopilot series read `autopilot_runs`, which the user can delete by hand ([run history](autopilot.md#run-history)), so deleted runs drop out of past weeks. Digests and `board_activity` read runs the same way.

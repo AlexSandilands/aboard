@@ -1,4 +1,4 @@
-import { AUTOPILOT_ALL_RUNS, type AutopilotRun, type AutopilotRunFilter } from "@repo/contracts";
+import { AUTOPILOT_ALL_RUNS, RUN_DELETE_IDS_MAX, type AutopilotRun, type AutopilotRunFilter } from "@repo/contracts";
 import { ChevronLeftIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { SettingsGroup } from "~/components/settings/settingsLayout";
@@ -85,6 +85,8 @@ export function RunHistory({
   // Ticks belong to the list they were made in: another filter starts clean.
   const selected = selection.key === filterKey ? selection.ids : NO_SELECTION;
   const ticked = runs.filter((r) => selected.has(r.id)).map((r) => r.id);
+  // One delete by id takes only so many; "everything matching" has no such limit.
+  const full = ticked.length >= RUN_DELETE_IDS_MAX;
   const setTicked = (ids: ReadonlySet<string>) => setSelection({ key: filterKey, ids });
   const [target, setTarget] = useState<DeleteTarget | null>(null);
 
@@ -113,14 +115,24 @@ export function RunHistory({
             type="checkbox"
             aria-label="Select all loaded runs"
             className="size-3.5 cursor-pointer accent-primary"
-            checked={runs.length > 0 && ticked.length === runs.length}
+            checked={runs.length > 0 && ticked.length === Math.min(runs.length, RUN_DELETE_IDS_MAX)}
             ref={(el) => {
-              if (el) el.indeterminate = ticked.length > 0 && ticked.length < runs.length;
+              if (el) el.indeterminate = ticked.length > 0 && ticked.length < Math.min(runs.length, RUN_DELETE_IDS_MAX);
             }}
             disabled={runs.length === 0}
-            onChange={(event) => setTicked(event.currentTarget.checked ? new Set(runs.map((r) => r.id)) : NO_SELECTION)}
+            onChange={(event) =>
+              setTicked(
+                event.currentTarget.checked
+                  ? new Set(runs.slice(0, RUN_DELETE_IDS_MAX).map((r) => r.id))
+                  : NO_SELECTION,
+              )
+            }
           />
-          {ticked.length > 0 ? `${ticked.length} selected` : "Select all loaded"}
+          {full
+            ? `${ticked.length} selected, the most one delete takes`
+            : ticked.length > 0
+              ? `${ticked.length} selected`
+              : "Select all loaded"}
         </label>
         <div className="ms-auto flex items-center gap-2">
           <Button
@@ -152,6 +164,7 @@ export function RunHistory({
         showAutomation={automation === AUTOPILOT_ALL_RUNS}
         automationTitles={overview.data?.automations ?? []}
         selected={selected}
+        selectionFull={full}
         onTick={(id, on) => {
           const next = new Set(selected);
           if (on) next.add(id);
@@ -285,6 +298,7 @@ function RunList({
   showAutomation,
   automationTitles,
   selected,
+  selectionFull,
   onTick,
   projectTitle,
   taskNumber,
@@ -299,6 +313,8 @@ function RunList({
   showAutomation: boolean;
   automationTitles: ReadonlyArray<{ key: string; title: string }>;
   selected: ReadonlySet<string>;
+  /** Nothing more can be ticked. */
+  selectionFull: boolean;
   onTick: (id: string, on: boolean) => void;
   projectTitle: (id: string | null) => string | null;
   taskNumber: (id: string | null) => number | null;
@@ -320,7 +336,8 @@ function RunList({
     return () => observer.disconnect();
   };
 
-  if (error) return <p className="text-xs text-destructive-foreground">{error}</p>;
+  // A failed refetch or next page keeps what is loaded, and says so above it.
+  if (error && runs.length === 0) return <p className="text-xs text-destructive-foreground">{error}</p>;
   if (loading) {
     return (
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -337,6 +354,7 @@ function RunList({
   }
   return (
     <>
+      {error ? <p className="text-xs text-destructive-foreground">{error}</p> : null}
       <SettingsGroup>
         <ul className="flex flex-col divide-y divide-border/50">
           {runs.map((run) => (
@@ -347,6 +365,7 @@ function RunList({
               projectTitle={projectTitle(run.projectId)}
               taskNumber={taskNumber(run.taskId)}
               checked={selected.has(run.id)}
+              disabled={selectionFull && !selected.has(run.id)}
               onCheckedChange={(on) => onTick(run.id, on)}
             />
           ))}
@@ -434,7 +453,10 @@ function DeleteDialog({
                   {`${result.kept} will be kept, since Autopilot still reads them: ${keptText(result)}.`}
                 </p>
               ) : null}
-              <p className="text-muted-foreground">Runs aren't part of backups, so this can't be undone.</p>
+              <p className="text-muted-foreground">
+                Runs aren't part of backups, so this can't be undone, and the Stats page and digests count runs, so
+                deleting them changes those too.
+              </p>
             </>
           )}
         </DialogPanel>
