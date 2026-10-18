@@ -2,6 +2,7 @@ import {
   checkCustomDefinition,
   CreateCustomAutomationInput,
   customAgentPrompt,
+  customAgentToolsNote,
   customTaskMatches,
   customValues,
   describeShellRun,
@@ -15,6 +16,8 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+
+const NL = String.fromCharCode(10);
 
 /** A custom automation as the editor holds it: numbers as typed, every kind's fields kept while switching. */
 export interface CustomForm {
@@ -42,7 +45,7 @@ export interface CustomForm {
   /** "" takes the task's tier. */
   tier: ModelTier | "";
   onPrBranch: boolean;
-  /** One tool or server per line (commas work too), as typed. */
+  /** One tool or server per line, as typed. */
   allowedTools: string;
   command: string;
   timeoutSeconds: string;
@@ -133,10 +136,10 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
   return form;
 }
 
-/** The tools typed in the field: one per line or comma-separated, blanks dropped. */
+/** The tools typed in the field, one per line (a rule's specifier can hold a comma), blanks dropped. */
 export const parseAllowedTools = (text: string): string[] =>
   text
-    .split(/[\n,]+/)
+    .split(/\r?\n/)
     .map((t) => t.trim())
     .filter(Boolean);
 
@@ -245,5 +248,8 @@ export function previewAction(
   const def = CreateCustomAutomationInput.parse(input);
   const values = customValues(def, project, input.trigger.kind === "schedule" ? null : task);
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
-  return task ? customAgentPrompt(def, values, task, null) : null;
+  if (!task) return null;
+  const tools = customAgentToolsNote(def.action);
+  const prompt = customAgentPrompt(def, values, task, null);
+  return tools ? `${prompt}${NL}${NL}${tools}` : prompt;
 }

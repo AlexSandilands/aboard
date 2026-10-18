@@ -1,5 +1,6 @@
 import {
   customAgentPrompt,
+  customAgentToolsNote,
   customArmedAt,
   customAutomationKey,
   customTaskMatches,
@@ -115,7 +116,9 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services): string => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
-    return customAgentPrompt(custom, values, task!, task ? services.tasks.detail(task.id).description : null);
+    const prompt = customAgentPrompt(custom, values, task!, task ? services.tasks.detail(task.id).description : null);
+    const tools = customAgentToolsNote(action);
+    return tools ? `${prompt}\n\n${tools}` : prompt;
   };
 
   const check = (ctx: CheckContext<Record<string, unknown>>): Candidate[] => {

@@ -70,11 +70,30 @@ export type CustomFilters = z.infer<typeof CustomFilters>;
 /**
  * A tool an agent action is allowed to call without asking, as Claude Code's `--allowedTools` takes it: a whole MCP
  * server (`mcp__issue-tracker`), one of its tools (`mcp__issue-tracker__search_jira`, or `mcp__issue-tracker__search_*`), or a
- * built-in tool, with an optional specifier (`WebFetch`, `Bash(gh pr view *)`). A `*` is only allowed in the tool
- * part of an MCP rule: Claude Code skips one in the server part.
+ * built-in tool with an optional specifier (`WebFetch(domain:example.com)`). A `*` is only allowed in the tool part of
+ * an MCP rule: Claude Code skips one in the server part.
  */
 const MCP_TOOL_RULE = /^mcp__[A-Za-z0-9_-]+(?:__[A-Za-z0-9_*-]+)?$/;
-const BUILT_IN_TOOL_RULE = /^[A-Z][A-Za-z]*(?:\([^()\r\n]+\))?$/;
+
+/**
+ * The built-in tools a rule may name. Not the shell tools (Bash, PowerShell, ...): the push and merge deny rules are
+ * `Bash(...)` patterns, so allowing another shell tool would sidestep them, and an edit run already has Bash.
+ */
+export const CUSTOM_BUILT_IN_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "Edit",
+  "Write",
+  "NotebookEdit",
+  "WebFetch",
+  "WebSearch",
+  "TodoWrite",
+  "Task",
+  "Agent",
+  "Skill",
+] as const;
+const BUILT_IN_TOOL_RULE = new RegExp(`^(?:${CUSTOM_BUILT_IN_TOOLS.join("|")})(?:\\([^()\\r\\n]+\\))?$`);
 
 export const CustomToolRule = z
   .string()
@@ -82,7 +101,7 @@ export const CustomToolRule = z
   .max(CUSTOM_TOOL_MAX)
   .refine(
     (rule) => MCP_TOOL_RULE.test(rule) || BUILT_IN_TOOL_RULE.test(rule),
-    "Use mcp__<server>, mcp__<server>__<tool> or a built-in tool name such as WebFetch",
+    "Use mcp__<server>, mcp__<server>__<tool> or a built-in tool such as WebFetch (not Bash or another shell)",
   );
 
 export const CustomAction = z.discriminatedUnion("kind", [
@@ -104,7 +123,7 @@ export const CustomAction = z.discriminatedUnion("kind", [
      */
     allowedTools: z
       .array(CustomToolRule)
-      .max(CUSTOM_TOOLS_MAX)
+      .max(CUSTOM_TOOLS_MAX, `At most ${CUSTOM_TOOLS_MAX} tools`)
       .default([])
       .transform((rules) => [...new Set(rules)]),
   }),
@@ -273,6 +292,12 @@ export function customValues(
     pr: pr ? { url: pr.url } : null,
     project: project ? { name: project.title, path: project.workspaceRoot } : null,
   };
+}
+
+/** What a dry run or the form's preview adds under an agent's prompt: the extra tools it may call unattended. */
+export function customAgentToolsNote(action: CustomAction): string | null {
+  if (action.kind !== "agent" || action.allowedTools.length === 0) return null;
+  return `Allowed to call without asking, on top of the usual tools: ${action.allowedTools.join(", ")}`;
 }
 
 /** An agent action's prompt: the skill to use, the user's prompt filled in, and the task it is about. */

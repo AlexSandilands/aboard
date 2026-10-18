@@ -566,11 +566,14 @@ the automation. Runs stay, under the old key.
   set to the PR's head branch. Its config is the shared runner options, per scope.
   - **Allowed tools** (`allowedTools`, `CustomToolRule` in contracts): extra tools the agent may call unattended,
     such as the user's own MCP servers, as `mcp__<server>`, `mcp__<server>__<tool>` (a `*` only in the tool part) or a
-    built-in tool with an optional specifier (`WebFetch`, `Bash(gh pr view *)`); at most 20, 200 characters each,
-    deduped. `act` passes them as `RunnerRequest.tools`, which `agentArgs` appends to `--allowedTools`. They make the run
+    built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`WebFetch(domain:example.com)`); at most 20,
+    200 characters each, deduped. The shell tools (Bash, PowerShell) are refused: the push and merge deny rules are
+    `Bash(...)` patterns, so another shell tool would sidestep them, and an edit run has Bash anyway. `act` passes the
+    rules as `RunnerRequest.tools`, which `agentArgs` appends to `--allowedTools`. They make the run
     headless (a T3 thread can't be given tools, so with the runner set to T3 Code only, the run fails and says
     so). Everything else about the run is unchanged: the push and merge deny rules still win, since deny rules beat
-    allow rules. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
+    allow rules. That covers git and gh run through Bash; a tool of an MCP server that runs commands is the user's
+    call, which is why the editor warns. The dry-run preview lists the tools under the prompt. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
     no prompt: the editor warns about that. The server has to be one the run can start without approval: the user's
     own (`claude mcp add --scope user`, a plugin or a connector), as for [issue import](issue-import.md). A server from
     the project's `.mcp.json` needs an approval nobody can give. Custom agent runs never set `untrustedInput`; an

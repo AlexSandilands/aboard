@@ -90,7 +90,7 @@ describe("an agent action's allowed tools", () => {
       " mcp__issue-tracker__search_jira ",
       "mcp__issue-tracker__search_*",
       "WebFetch",
-      "Bash(gh pr view *)",
+      "WebFetch(domain:example.com)",
     ];
     expect(parse([...tools, "mcp__issue-tracker"])).toMatchObject({
       success: true,
@@ -107,7 +107,11 @@ describe("an agent action's allowed tools", () => {
       "mcp__issue*__search_jira",
       "mcp__a b",
       "webfetch",
-      "Bash(",
+      "WebFetch(",
+      // Shell tools would sidestep the Bash push and merge deny rules.
+      "Bash",
+      "Bash(gh pr view *)",
+      "PowerShell",
       "x".repeat(300),
     ]) {
       expect(parse([bad]).success).toBe(false);

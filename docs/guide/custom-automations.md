@@ -33,7 +33,8 @@ and keeps to the same pause, dry run, caps and quiet hours.
      one tool to a whole server. The server has to be your own, added with `claude mcp add --scope user` (or come from
      a plugin or connector); a server that lives in a project's `.mcp.json` needs an approval the agent can't get. An
      agent with extra tools runs headless, so it can't run in T3 Code only. It still can't push to your default
-     branch or merge a pull request.
+     branch or merge a pull request through git or gh; what a tool of a server you allow can do is up to that
+     server.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.

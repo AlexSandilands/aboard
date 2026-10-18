@@ -89,16 +89,20 @@ describe("custom automation form", () => {
     );
   });
 
-  it("reads the allowed tools one per line or comma-separated, and gives them back one per line", () => {
+  it("reads the allowed tools one per line, and gives them back one per line", () => {
     const result = customFormToInput({
       ...emptyCustomForm(),
       name: "Dispatch",
       prompt: "Go",
-      allowedTools: [" mcp__issue-tracker ", "", "mcp__issue-tracker__search_jira, WebFetch", ""].join(NL),
+      allowedTools: [" mcp__issue-tracker ", "", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)", ""].join(
+        NL,
+      ),
     });
     expect(result).toMatchObject({
       ok: true,
-      input: { action: { allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch"] } },
+      input: {
+        action: { allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)"] },
+      },
     });
     const saved = custom({
       action: {
@@ -182,5 +186,18 @@ describe("preview", () => {
     );
     expect(agent).toContain("Look at #7 Fix it");
     expect(agent).toContain('get_task("#7")');
+    expect(agent).not.toContain("Allowed to call");
+    const withTools = previewAction(
+      {
+        name: "Ping",
+        trigger: { kind: "status_change", to: "review" },
+        action: { kind: "agent", prompt: "Go", allowedTools: ["mcp__issue-tracker__search_jira"] },
+      },
+      task("t"),
+      [project],
+    );
+    expect(withTools).toContain(
+      "Allowed to call without asking, on top of the usual tools: mcp__issue-tracker__search_jira",
+    );
   });
 });
