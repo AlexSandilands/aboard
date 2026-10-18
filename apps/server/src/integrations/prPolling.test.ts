@@ -44,6 +44,12 @@ describe("prTier", () => {
   it("reads a PR never fetched, one with pending checks, a recent one and a viewed one hot", () => {
     expect(prTier(link({ snapshot: null }), NOW, false)).toBe("hot");
     expect(prTier(link({ snapshot: snapshot({ checks: "pending" }) }), NOW, false)).toBe("hot");
+    expect(prTier(link({ snapshot: snapshot({ optionalChecks: { pending: 1, failing: 0 } }) }), NOW, false)).toBe(
+      "hot",
+    );
+    expect(prTier(link({ snapshot: snapshot({ optionalChecks: { pending: 0, failing: 2 } }) }), NOW, false)).toBe(
+      "warm",
+    );
     expect(prTier(link({ createdAt: ago(RECENT_MS / 2) }), NOW, false)).toBe("hot");
     expect(prTier(link({ snapshot: snapshot({ updatedAt: ago(RECENT_MS / 2) }) }), NOW, false)).toBe("hot");
     expect(prTier(link(), NOW, true)).toBe("hot");

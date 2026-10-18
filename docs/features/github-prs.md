@@ -42,7 +42,7 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 
   | Tier | Every | PRs |
   | ---- | ----- | --- |
-  | hot  | 20 s  | never read; checks `pending`; linked or updated on GitHub (`updatedAt`) in the last 10 minutes; its task's panel is open |
+  | hot  | 20 s  | never read; checks `pending` or optional checks running; linked or updated on GitHub (`updatedAt`) in the last 10 minutes; its task's panel is open |
   | warm | 2 min | other open and draft PRs |
   | cold | 30 min | merged and closed PRs, whoever is looking |
 
@@ -150,7 +150,7 @@ the default branch, for tasks the user allowed to be merged that way ([ADR 0008]
   task with no PR, or more than one, not merged or closed, a PR from a fork, and whenever `notMergeable`
   ([Autopilot's gate](autopilot.md#merge-into-epic-branch)) gives a reason: not in Review, PR not open or a draft,
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
-  clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable. Also when
+  clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable, GitHub saying it is blocked (a required check not reported yet) unless only a review is missing. Also when
   an approving review is still required, the account can't merge, or the repo doesn't allow the method asked for.
 - **Merging.** `GithubIntegration.mergeIntoDefaultBranch` reads the PR fresh, runs `checkAutopilotMergeTarget` with
   `into: "default"` (the base must be GitHub's default branch, and still the one the snapshot showed), stops with a

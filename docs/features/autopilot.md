@@ -415,7 +415,7 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   on for the task, its review of the current head (`currentPrReview`) has nothing actionable; no reviewer requested
   changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
   the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
-  GitHub says it merges cleanly. The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
+  GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
   of it, then calls `GithubIntegration.mergeIntoEpicBranch`: a fresh read of the PR and the repository's default
   branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
   retargeted since the check, with `MergeTargetError`), and `mergePullRequest` with `MERGE` and `expectedHeadOid`.

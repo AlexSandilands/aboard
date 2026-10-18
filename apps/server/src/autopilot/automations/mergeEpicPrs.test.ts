@@ -179,6 +179,8 @@ describe("merge into epic branch", () => {
       { checks: "failing" as const },
       { mergeable: "conflicting" as const },
       { mergeable: "unknown" as const },
+      // A required check that hasn't reported yet isn't in the rollup: GitHub's merge box is the backstop.
+      { mergeState: "blocked" as const },
     ]) {
       setPr(over);
       await pass();

@@ -42,6 +42,8 @@ export function prTier(link: PrLink, now: number, viewed: boolean): PrTier {
   if (
     viewed ||
     snapshot.checks === "pending" ||
+    // Optional checks still running: the row shows their count, so keep it current too.
+    (snapshot.optionalChecks?.pending ?? 0) > 0 ||
     within(link.createdAt, now, RECENT_MS) ||
     within(snapshot.updatedAt, now, RECENT_MS)
   ) {
