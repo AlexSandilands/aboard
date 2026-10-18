@@ -1,7 +1,7 @@
 # Stats
 
 The stats page shows how work on the board has gone, week by week: how much was created and finished, how long
-it took, how often reviews looped, how many pull requests merged, and what Autopilot and agent sessions did.
+it took, how often reviews looped, how many pull requests merged, what Autopilot and agent sessions did, and where agents got stuck.
 Nothing is set up for it; the board works it out from the history it already keeps, so it covers your whole
 past, not just the time since you opened the page.
 
@@ -29,6 +29,12 @@ such as PRs merged or runs are shown neutrally, since more or fewer isn't good o
   by severity.
 - **Autopilot**: runs by outcome, by automation, and what they cost.
 - **Sessions**: agent sessions, by the week they were first linked to a task.
+- **Friction**: where agents got stuck or needed you: steps marked blocked or skipped, requests for your attention
+  and Autopilot flags, tasks that stalled (quiet for too long, or waiting on input), and runs cut short because
+  the board restarted. A blocked step is often an agent doing the right thing, so a rise isn't marked as bad.
+- **Breakdowns**: the whole period split by category, largest first, each with the previous period beside it:
+  finished tasks by label (a task with several labels counts under each) and by suggested model tier, and
+  sessions by what ran them (Claude Code, Copilot CLI or a T3 Code thread). Labels and tiers are as they are now.
 
 Weeks start on Monday, and the last bar or point is the current week so far, so it is usually the smallest.
 

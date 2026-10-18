@@ -1,5 +1,14 @@
-import type { StatsPeriod, StatsResponse, StatsSeries, StatsUnit, TaskEvent } from "@repo/contracts";
+import type {
+  AutopilotRun,
+  StatsBreakdown,
+  StatsPeriod,
+  StatsResponse,
+  StatsSeries,
+  StatsUnit,
+  TaskEvent,
+} from "@repo/contracts";
 import { notFound } from "../errors.ts";
+import { stallKind, wasRestarted } from "./activity.ts";
 import type { Core } from "./core.ts";
 
 /** Weekly trends over the board's history, read from the activity log, reviews, Autopilot runs and links. */
@@ -37,6 +46,13 @@ const COUNT_SERIES = [
   "agent_sessions_started",
   "autopilot.runs",
   "autopilot.retries",
+  "friction.steps_blocked",
+  "friction.steps_skipped",
+  "friction.attention_requests",
+  "friction.autopilot_flags",
+  "friction.stalls.stale",
+  "friction.stalls.waiting",
+  "friction.runs_restarted",
 ];
 
 /**
@@ -172,8 +188,11 @@ export function createStatsService(core: Core): StatsService {
       // Autopilot runs count in the period they finished in. A run that follows a failed run of the same automation on
       // the same task is a retry; review and fix rounds run on a task again and again by design, and aren't.
       const lastOnTask = new Map<string, string>();
-      for (const run of repos.autopilotRuns.between(start, end, [])) {
-        if (!inScope(run.projectId ?? (run.taskId ? projectOfTask(run.taskId) : null))) continue;
+      const periodRuns = repos.autopilotRuns.between(start, end, []);
+      const runInScope = (run: AutopilotRun): boolean =>
+        inScope(run.projectId ?? (run.taskId ? projectOfTask(run.taskId) : null));
+      for (const run of periodRuns) {
+        if (!runInScope(run)) continue;
         const at = run.finishedAt ?? run.updatedAt;
         count("autopilot.runs", at);
         count(`autopilot.runs.${run.automation}.${run.status}`, at);
@@ -184,6 +203,71 @@ export function createStatsService(core: Core): StatsService {
           lastOnTask.set(key, run.status);
         }
       }
+
+      // Friction: steps an agent marked blocked or skipped, and requests for the user to look at a task.
+      for (const e of repos.events.between(["step_updated", "attention_requested"], start, end)) {
+        if (!inScope(e.projectId)) continue;
+        if (e.type === "attention_requested") count("friction.attention_requests", e.at);
+        else if (e.payload.to === "blocked") count("friction.steps_blocked", e.at);
+        else if (e.payload.to === "skipped") count("friction.steps_skipped", e.at);
+      }
+      // Stalls are Unstick's findings and the inbox's "thread waiting" notices, read as the activity report reads
+      // them: a task stalls one way once per week, however often it was noticed.
+      const stalled = new Set<string>();
+      const stall = (taskId: string, kind: string, at: string) => {
+        const key = `${taskId}:${kind}:${bucketOf(Date.parse(at))}`;
+        if (stalled.has(key)) return;
+        stalled.add(key);
+        count(`friction.stalls.${kind}`, at);
+      };
+      for (const run of periodRuns) {
+        if (!runInScope(run)) continue;
+        const at = run.finishedAt ?? run.updatedAt;
+        if (run.needsAttention) count("friction.autopilot_flags", at);
+        if (wasRestarted(run)) count("friction.runs_restarted", at);
+        const kind = stallKind(run);
+        if (kind) stall(run.taskId!, kind, at);
+      }
+      for (const n of repos.notifications.between(["thread_waiting"], start, end)) {
+        if (n.taskId && inScope(projectOfTask(n.taskId))) stall(n.taskId, "waiting", n.createdAt);
+      }
+
+      // Breakdowns split the period by category rather than by week: what finished, and what ran sessions.
+      const boundary = stamps[weeks]!;
+      const breakdown = (entries: { key: string | null; at: number }[]): StatsBreakdown => {
+        const rows = new Map<string | null, { total: number; previousTotal: number }>();
+        for (const { key, at } of entries) {
+          const row = rows.get(key) ?? { total: 0, previousTotal: 0 };
+          if (at >= boundary) row.total += 1;
+          else row.previousTotal += 1;
+          rows.set(key, row);
+        }
+        const items = [...rows].map(([key, r]) => ({ key, ...r }));
+        items.sort(
+          (a, b) =>
+            b.total - a.total ||
+            b.previousTotal - a.previousTotal ||
+            (a.key === null ? 1 : b.key === null ? -1 : a.key.localeCompare(b.key)),
+        );
+        return { unit: "count", items };
+      };
+      const labelsOf = repos.labels.forTasks(finishedIds);
+      const doneAt = (id: string): number => Date.parse(lastFinish.get(id)!.at);
+      const breakdowns: Record<string, StatsBreakdown> = {
+        completed_by_label: breakdown(
+          finished.flatMap((t) => {
+            const labels = labelsOf.get(t.id);
+            return (labels?.length ? labels : [null]).map((key) => ({ key, at: doneAt(t.id) }));
+          }),
+        ),
+        completed_by_tier: breakdown(finished.map((t) => ({ key: t.suggestedModel?.tier ?? null, at: doneAt(t.id) }))),
+        sessions_by_harness: breakdown(
+          repos.links
+            .sessionsStartedBetween(start, end)
+            .filter((s) => inScope(s.projectId))
+            .map((s) => ({ key: s.harness, at: Date.parse(s.at) })),
+        ),
+      };
 
       const out: Record<string, StatsSeries> = {};
       for (const [name, s] of [...built].sort(([a], [b]) => a.localeCompare(b))) {
@@ -206,6 +290,7 @@ export function createStatsService(core: Core): StatsService {
         project: project ? { id: project.id, title: project.title } : null,
         buckets: shown.slice(0, -1).map((from, i) => ({ start: from, end: shown[i + 1]! })),
         series: out,
+        breakdowns,
       };
     },
   };

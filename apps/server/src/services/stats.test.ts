@@ -1,3 +1,4 @@
+import { UNSTICK_STALE_PREFIX } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -241,6 +242,147 @@ describe("stats.weekly", () => {
     // Only the run right after the failed one retries it.
     expect(values("autopilot.retries").total).toBe(1);
     expect(values("autopilot.cost_usd")).toMatchObject({ unit: "usd", total: 0.75 });
+  });
+
+  it("counts blocked and skipped steps, and attention requests, in the week they happened", () => {
+    const { s, alpha, beta, clock, values } = setup();
+    const withSteps = (projectId: string, n: number) =>
+      s.tasks.create({
+        projectId,
+        title: "Steps",
+        plan: { phases: [{ title: "Build", steps: Array.from({ length: n }, (_, i) => ({ title: `s${i}` })) }] },
+      });
+    const stepsOf = (task: { phases: { steps: { id: string }[] }[] }) => task.phases.flatMap((p) => p.steps);
+    const a = withSteps(alpha.id, 3);
+    const b = withSteps(beta.id, 1);
+    const [one, two, three] = stepsOf(a);
+    clock(at(8, 9));
+    s.plans.updateStep(one!.id, { status: "blocked" }, "agent");
+    clock(at(13, 9));
+    s.plans.updateStep(two!.id, { status: "skipped" }, "agent");
+    s.plans.updateStep(three!.id, { status: "blocked" }, "agent");
+    // A note on a step, or the same status again, isn't a new mark.
+    s.plans.updateStep(three!.id, { notes: "waiting on the user" }, "agent");
+    s.plans.updateStep(stepsOf(b)[0]!.id, { status: "blocked" }, "agent");
+    s.attention.request(a.id, "Need a decision", "agent");
+    clock(at(14, 9));
+    s.attention.request(b.id, "Look at this", "agent");
+
+    expect(values("friction.steps_blocked")).toMatchObject({ values: [0, 0, 1, 2], total: 3, previousTotal: 0 });
+    expect(values("friction.steps_skipped")).toMatchObject({ values: [0, 0, 0, 1], total: 1 });
+    expect(values("friction.attention_requests")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
+    expect(values("friction.steps_blocked", 4, alpha.id).total).toBe(2);
+    expect(values("friction.attention_requests", 4, beta.id).total).toBe(1);
+  });
+
+  it("counts flags, stalls and runs cut short by a restart, naming a stall once per task, kind and week", () => {
+    const { s, alpha, beta, clock, task, values } = setup();
+    const t = task(alpha.id, "Work");
+    const other = task(beta.id, "Other");
+    let n = 0;
+    const run = (automation: string, taskId: string, projectId: string, result: object, hour = 9, day = 13) => {
+      clock(at(day, hour));
+      const recorded = s.autopilot.record({
+        automation,
+        candidate: { dedupeKey: String(n++), summary: "run", projectId, taskId },
+        dryRun: false,
+      })!;
+      s.autopilot.start(recorded.id);
+      s.autopilot.finish(recorded.id, result);
+    };
+    // The same task found stale twice in a week is one stall; found waiting too, a second kind.
+    run("unstick", t.id, alpha.id, { summary: `${UNSTICK_STALE_PREFIX} 26h` }, 9, 8);
+    run("unstick", t.id, alpha.id, { summary: `${UNSTICK_STALE_PREFIX} 30h` }, 9);
+    run("unstick", t.id, alpha.id, { summary: `${UNSTICK_STALE_PREFIX} 31h` }, 10);
+    run("unstick", t.id, alpha.id, { summary: "Waiting on input" }, 11);
+    // A run that failed isn't a stall, and flagging is separate from failing.
+    run("unstick", other.id, beta.id, { status: "failed", error: "boom", needsAttention: true }, 12);
+    run("auto_archive", t.id, alpha.id, { needsAttention: true }, 13);
+    // The inbox's thread-waiting notices count too, once per task and week, even when Unstick found the same.
+    clock(at(14, 9));
+    s.notifications.notify({
+      kind: "thread_waiting",
+      taskId: t.id,
+      title: "Waiting",
+      body: "Waiting",
+      dedupeKey: "w1",
+    });
+    s.notifications.notify({
+      kind: "thread_waiting",
+      taskId: other.id,
+      title: "Waiting",
+      body: "Waiting",
+      dedupeKey: "w2",
+    });
+    // A run still going when the board restarted.
+    clock(at(14, 10));
+    const stranded = s.autopilot.record({
+      automation: "auto_archive",
+      candidate: { dedupeKey: "stranded", summary: "run", projectId: alpha.id, taskId: t.id },
+      dryRun: false,
+    })!;
+    s.autopilot.start(stranded.id);
+    clock(at(14, 11));
+    expect(s.autopilot.recover()).toBe(1);
+
+    expect(values("friction.stalls.stale")).toMatchObject({ values: [0, 0, 1, 1], total: 2 });
+    expect(values("friction.stalls.waiting")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
+    expect(values("friction.autopilot_flags")).toMatchObject({ values: [0, 0, 0, 3], total: 3 });
+    expect(values("friction.runs_restarted")).toMatchObject({ values: [0, 0, 0, 1], total: 1 });
+    expect(values("friction.stalls.waiting", 4, beta.id).total).toBe(1);
+    expect(values("friction.autopilot_flags", 4, beta.id).total).toBe(1);
+    expect(values("friction.runs_restarted", 4, beta.id).total).toBe(0);
+  });
+
+  it("splits finished tasks by label and suggested tier, and sessions by harness, with the previous period beside", () => {
+    const { s, alpha, beta, clock, finish, stats } = setup();
+    const make = (projectId: string, labels: string[], tier?: "light" | "deep") =>
+      s.tasks.create({
+        projectId,
+        title: "T",
+        plan: { ...plan, ...(tier ? { suggestedModel: { tier } } : {}) },
+        labels,
+      });
+    // Last period, then this one.
+    clock(at(10, 9, 8));
+    finish(make(alpha.id, ["ui"], "light").id);
+    clock(at(13, 9));
+    finish(make(alpha.id, ["ui", "backend"], "deep").id);
+    finish(make(alpha.id, ["backend"], "deep").id);
+    finish(make(beta.id, []).id);
+    // Not finished, so not counted.
+    make(alpha.id, ["ui"], "light");
+    const linkTask = make(alpha.id, []);
+    const session = (harness: "claude-code" | "copilot-cli", sessionId: string) => ({
+      agentSession: { harness, sessionId, cwd: "/w" },
+    });
+    s.links.add(linkTask.id, session("claude-code", "709f26ed-ce2f-4449-b7eb-3bb01f89f268"), "agent");
+    s.links.add(linkTask.id, session("claude-code", "709f26ed-ce2f-4449-b7eb-3bb01f89f268"), "agent");
+    s.links.add(linkTask.id, session("copilot-cli", "copilot-1"), "agent");
+    s.links.add(linkTask.id, { t3Thread: { environmentId: "env", threadId: "th-1" } }, "agent");
+    s.links.add(linkTask.id, { t3Thread: { environmentId: "env", threadId: "th-1" } }, "agent");
+
+    const { breakdowns } = stats(4);
+    expect(breakdowns.completed_by_label).toEqual({
+      unit: "count",
+      items: [
+        { key: "backend", total: 2, previousTotal: 0 },
+        { key: "ui", total: 1, previousTotal: 1 },
+        { key: null, total: 1, previousTotal: 0 },
+      ],
+    });
+    expect(breakdowns.completed_by_tier!.items).toEqual([
+      { key: "deep", total: 2, previousTotal: 0 },
+      { key: null, total: 1, previousTotal: 0 },
+      { key: "light", total: 0, previousTotal: 1 },
+    ]);
+    expect(breakdowns.sessions_by_harness!.items).toEqual([
+      { key: "claude-code", total: 1, previousTotal: 0 },
+      { key: "copilot-cli", total: 1, previousTotal: 0 },
+      { key: "t3_thread", total: 1, previousTotal: 0 },
+    ]);
+    expect(stats(4, beta.id).breakdowns.completed_by_label!.items).toEqual([{ key: null, total: 1, previousTotal: 0 }]);
+    expect(stats(4, beta.id).breakdowns.sessions_by_harness!.items).toEqual([]);
   });
 
   it("limits everything to one project when asked, and rejects an unknown one", () => {

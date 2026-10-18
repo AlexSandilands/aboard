@@ -1,4 +1,10 @@
-import { STATS_PERIODS, type StatsPeriod, type StatsResponse, type StatsSeries } from "@repo/contracts";
+import {
+  AGENT_HARNESSES,
+  STATS_PERIODS,
+  type StatsPeriod,
+  type StatsResponse,
+  type StatsSeries,
+} from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
@@ -10,6 +16,7 @@ import { useBoard, useStats } from "~/state/queries";
 import { SERIES_COLORS, type ChartSeries } from "./chartParts";
 import { KpiTile } from "./KpiTile";
 import {
+  breakdownRows,
   changeVsPrevious,
   formatStatsValue,
   isQuiet,
@@ -19,6 +26,7 @@ import {
   runsInStatuses,
   valuesOrZero,
 } from "./stats.logic";
+import { SortedBars } from "./SortedBars";
 import { TrendLine } from "./TrendLine";
 import { WeeklyBars } from "./WeeklyBars";
 
@@ -163,6 +171,18 @@ function sumTotals(data: StatsResponse, names: ReadonlyArray<string>): Pick<Stat
     previousTotal: all.reduce((sum, s) => sum + (s.previousTotal ?? 0), 0),
   };
 }
+
+/** What ran an agent session, as the `sessions_by_harness` breakdown keys it: a harness id, or a T3 Code thread. */
+const sessionSource = (key: string): string =>
+  key === "t3_thread"
+    ? "T3 Code threads"
+    : key in AGENT_HARNESSES
+      ? AGENT_HARNESSES[key as keyof typeof AGENT_HARNESSES].label
+      : key;
+
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+const STALL_NAMES = ["friction.stalls.stale", "friction.stalls.waiting"];
 
 const FINDING_SEVERITIES = [
   ["blocking", "Blocking", SERIES_COLORS.error],
@@ -344,8 +364,102 @@ function StatsSections({ data }: { data: StatsResponse }) {
           />
         </ChartCard>
       </StatsSection>
+
+      <StatsSection
+        title="Friction"
+        description="Where agents got stuck or needed you, by the week it happened. None of these is a failure on its own."
+      >
+        <Tiles>
+          {kpi("Steps blocked", "friction.steps_blocked")}
+          {kpi("Steps skipped", "friction.steps_skipped")}
+          {kpi("Attention requests", "friction.attention_requests")}
+          {kpi("Autopilot flags", "friction.autopilot_flags")}
+          {kpi("Stalls", "friction.stalls.stale", undefined, sumTotals(data, STALL_NAMES))}
+          {kpi("Runs cut short by a restart", "friction.runs_restarted")}
+        </Tiles>
+        <ChartCard title="Blocked and skipped steps">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label="Steps marked blocked or skipped per week"
+            series={[
+              chartSeries(data, "friction.steps_blocked", "Blocked", SERIES_COLORS.warning, { zeros: true }),
+              chartSeries(data, "friction.steps_skipped", "Skipped", SERIES_COLORS.muted, { zeros: true }),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="Asks for attention">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label="Attention requests and Autopilot flags per week"
+            series={[
+              chartSeries(data, "friction.attention_requests", "Agent requests", SERIES_COLORS.info, { zeros: true }),
+              chartSeries(data, "friction.autopilot_flags", "Autopilot flags", SERIES_COLORS.warning, {
+                zeros: true,
+              }),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="Stalls and restarts">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label="Stalled tasks and runs cut short by a restart, per week"
+            series={[
+              chartSeries(data, "friction.stalls.stale", "Quiet too long", SERIES_COLORS.warning, { zeros: true }),
+              chartSeries(data, "friction.stalls.waiting", "Waiting on input", SERIES_COLORS.info, { zeros: true }),
+              chartSeries(data, "friction.runs_restarted", "Runs cut short", SERIES_COLORS.error, { zeros: true }),
+            ]}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        title="Breakdowns"
+        description="The whole period split by category, largest first. A task with several labels counts under each."
+      >
+        <ChartCard title="Finished tasks by label">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.completed_by_label, (key) => key, "No label")}
+            label="Finished tasks by label"
+            previousLabel={previousLabel}
+          />
+        </ChartCard>
+        <ChartCard title="Finished tasks by suggested model tier">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.completed_by_tier, capitalize, "No tier suggested")}
+            label="Finished tasks by suggested model tier"
+            previousLabel={previousLabel}
+          />
+        </ChartCard>
+        <ChartCard title="Sessions by harness">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.sessions_by_harness, sessionSource, "Unknown")}
+            label="Agent sessions and T3 Code threads by what ran them"
+            previousLabel={previousLabel}
+          />
+        </ChartCard>
+      </StatsSection>
     </>
   );
+}
+
+/** Sorted bars for a breakdown, or a line saying nothing fell in it. */
+function Breakdown({
+  rows,
+  label,
+  previousLabel,
+}: {
+  rows: ReturnType<typeof breakdownRows>;
+  label: string;
+  previousLabel: string;
+}) {
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">Nothing in this period.</p>;
+  return <SortedBars rows={rows} color={SERIES_COLORS.primary} label={label} previousLabel={previousLabel} />;
 }
 
 function StatsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {

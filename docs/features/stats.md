@@ -3,7 +3,7 @@
 Board tasks: #64 (the API) and #190 (the page), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
-reviews loop, how many PRs merge, and what Autopilot and agent sessions do. The server computes them from data
+reviews loop, how many PRs merge, what Autopilot and agent sessions do, and where agents got stuck. The server computes them from data
 it already keeps; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool. The page that charts it is `/stats` ([The page](#the-page)).
 
 ## How it works
@@ -19,6 +19,8 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 - `series`: a **map by name** to `{ unit, values, total, previousTotal }`. `values` has one entry per bucket.
   `total` covers the whole period and `previousTotal` the period of equal length just before it
   (`previousFrom` to `from`), for "up or down on last time".
+- `breakdowns`: a **map by name** to `{ unit, items }`, the period split by a category rather than by week
+  ([Breakdowns](#breakdowns)).
 - `from`, `to`, `previousFrom`, `project`, `weeks`.
 
 Counts and costs are `0` in a quiet week. Durations and ratios are `null` when nothing in the week had one. A
@@ -45,9 +47,36 @@ appear only when that automation ran in the two periods.
 | `autopilot.runs.<automation>.<status>` | count | The same, per automation and final status | `autopilot_runs` |
 | `autopilot.retries` | count | Runs that followed a failed run of the same automation on the same task, both finished in the two periods; a retry of a failure from before the first week isn't counted | `autopilot_runs` |
 | `autopilot.cost_usd` | usd | `cost_usd` of those runs | `autopilot_runs` |
+| `friction.steps_blocked` | count | Plan steps whose status changed to blocked; a step blocked twice counts twice | `step_updated` |
+| `friction.steps_skipped` | count | Plan steps whose status changed to skipped | `step_updated` |
+| `friction.attention_requests` | count | Times an agent (or anyone) asked for the user's attention on a task, `request_attention` | `task_events` `attention_requested` |
+| `friction.autopilot_flags` | count | Real Autopilot runs that finished flagging their task as needing attention, in the week they finished | `autopilot_runs` |
+| `friction.stalls.stale` | count | Tasks Unstick found quiet for too long. A task counts once per week and kind, however often it was noticed | `autopilot_runs` |
+| `friction.stalls.waiting` | count | Tasks whose thread waited on input, from Unstick's runs and the inbox's `thread_waiting` notices, once per task and week | `autopilot_runs`, `notifications` |
+| `friction.runs_restarted` | count | Runs cut short by the board restarting (`BOARD_RESTARTED_ERROR`), in the week they were marked failed | `autopilot_runs` |
+
+A stall and a restart-cut run are read as `board_activity` reads them: `stallKind` and `wasRestarted` in
+`services/activity.ts` are the one definition. Friction isn't failure: a blocked step is often the agent working as
+intended, so the page shows these tiles neutrally, like counts of PRs or runs, rather than colouring a rise red.
 
 Series names are stable ids; the labels are the client's to write. A new metric is a new key, so adding one
 doesn't change the shape.
+
+### Breakdowns
+
+A breakdown splits the whole period by a category, not by week. Each is `{ unit, items }`, with an item per category
+`{ key, total, previousTotal }` (the period and the one before it), largest `total` first. A `null` key is the "none"
+category: a task without a label or a tier suggestion. All three are always present, with no items when nothing
+falls in them. They share the scope of the series: `projectId` limits them to one project.
+
+| Breakdown | What it counts | Source |
+| --------- | -------------- | ------ |
+| `completed_by_label` | Tasks finished (as in `tasks_completed`), by the labels they carry now. A task with several labels counts under each; one with none under `null` | `task_labels`, finish event |
+| `completed_by_tier` | The same tasks, by the model tier their plan suggested (`light`, `standard`, `deep`), `null` when none | `tasks.suggested_tier`, finish event |
+| `sessions_by_harness` | Agent sessions and T3 Code threads, by when first linked, counted once each as `agent_sessions_started` is. The key is the session's harness (`claude-code`, `copilot-cli`) or `t3_thread` for a T3 Code thread | `agent_session` and `t3_thread` links |
+
+Labels and tiers are read as they are now, not as they were when the task finished, since the board keeps no history
+of either.
 
 ## The page
 
@@ -60,7 +89,7 @@ and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links a
 and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
 loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
 
-The sections (Throughput, Cycle time, PRs and reviews, Autopilot, Sessions) are built in `StatsPage.tsx` from the series
+The sections (Throughput, Cycle time, PRs and reviews, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
 above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
 name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
 plainly better (tasks finished, cycle time, review rounds, findings, retries) colour the change. A series missing from
@@ -70,6 +99,9 @@ says nothing happened instead of drawing empty charts.
 The charts are hand-rolled SVG with no dependency:
 
 - `WeeklyBars` (grouped or stacked), `TrendLine` (a line per series; a week with no value breaks it) and `KpiTile`.
+  `SortedBars` draws a breakdown as horizontal bars, largest first, with the previous period's figure beside each; it
+  is a plain list with the values written out, so it has no tooltip. `breakdownRows` (in `stats.logic.ts`) keeps the
+  categories with something in the period and folds all past the eighth into "Other".
   `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
 - Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
   segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names
@@ -110,11 +142,13 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | ---- | ------------ |
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
 | `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
-| `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween` |
+| `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween`, `sessionsStartedBetween` |
+| `apps/server/src/services/activity.ts` | `stallKind`, `wasRestarted`: the stall and restart definitions the friction series share with `board_activity` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
 | `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers and the sections |
 | `apps/web/src/components/stats/{WeeklyBars,TrendLine,KpiTile,chartParts}.tsx` | The SVG charts and what they share |
+| `apps/web/src/components/stats/SortedBars.tsx` | The sorted horizontal bars for a breakdown |
 | `apps/web/src/components/stats/stats.logic.ts` | Scales, formatting, change against the previous period, run grouping |
 | `apps/web/src/state/queries.ts` (`useStats`) | The query |
 | `apps/server/src/dev/seeds.ts` (`stats`) | The sandbox seed with twelve weeks of history |

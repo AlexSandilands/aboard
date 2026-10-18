@@ -162,6 +162,28 @@ export function createLinksRepo(sql: Sql) {
         )
         .map((r) => ({ projectId: r.project_id, at: r.at }));
     },
+    /**
+     * Agent sessions and T3 threads first linked to a task in the window, with the task's project and what ran them:
+     * the session's harness, or `t3_thread`. Counted once each, where first linked, like `agentSessionsStartedBetween`.
+     */
+    sessionsStartedBetween(from: string, to: string): { projectId: string; at: string; harness: string }[] {
+      return sql
+        .all<{ project_id: string; at: string; harness: string }>(
+          `SELECT project_id, at, harness FROM (
+             SELECT t.project_id, l.created_at AS at,
+                    CASE l.kind WHEN 'agent_session' THEN COALESCE(json_extract(l.ref_json, '$.harness'), 'claude-code')
+                                ELSE 't3_thread' END AS harness,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY l.kind, COALESCE(json_extract(l.ref_json, '$.sessionId'), json_extract(l.ref_json, '$.threadId'), l.id)
+                      ORDER BY l.created_at, l.id
+                    ) AS n
+             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind IN ('agent_session', 't3_thread')
+           ) WHERE n = 1 AND at >= ? AND at < ? ORDER BY at`,
+          from,
+          to,
+        )
+        .map((r) => ({ projectId: r.project_id, at: r.at, harness: r.harness }));
+    },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);
     },

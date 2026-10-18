@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   axisLabelIndices,
+  breakdownRows,
   changeVsPrevious,
   formatDuration,
   formatStatsValue,
@@ -186,5 +187,37 @@ describe("runs by automation", () => {
     expect(
       runsInStatuses(row, ["succeeded"]) + runsInStatuses(row, ["failed"]) + runsInStatuses(row, ["queued", "running"]),
     ).toBe(row.total);
+  });
+});
+
+describe("breakdownRows", () => {
+  const item = (key: string | null, total: number, previousTotal = 0) => ({ key, total, previousTotal });
+  const name = (key: string) => key.toUpperCase();
+
+  it("keeps what has something in the period, largest first, and names the none category", () => {
+    const rows = breakdownRows(
+      { unit: "count", items: [item("a", 1, 4), item(null, 3), item("b", 0, 2), item("c", 3)] },
+      name,
+      "None",
+    );
+    expect(rows.map((r) => [r.label, r.value, r.previous])).toEqual([
+      ["C", 3, 0],
+      ["None", 3, 0],
+      ["A", 1, 4],
+    ]);
+  });
+
+  it("folds the tail past the limit into one Other row that adds up", () => {
+    const items = ["a", "b", "c", "d", "e"].map((key, i) => item(key, 5 - i, 1));
+    const rows = breakdownRows({ unit: "count", items }, name, "None", 3);
+    expect(rows.map((r) => [r.label, r.value, r.previous])).toEqual([
+      ["A", 5, 1],
+      ["B", 4, 1],
+      ["Other (3)", 6, 3],
+    ]);
+  });
+
+  it("is empty without a breakdown", () => {
+    expect(breakdownRows(undefined, name, "None")).toEqual([]);
   });
 });
