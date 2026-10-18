@@ -1,9 +1,11 @@
-import type { AutopilotRun, TaskDetail } from "@repo/contracts";
+import { canRetryRun, type AutopilotRun, type TaskDetail } from "@repo/contracts";
 import { ExternalLinkIcon } from "lucide-react";
 import { isWebUrl } from "~/components/task/links.logic";
 import { TaskSection } from "~/components/task/TaskSection";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
+import { useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
 import { automationTitle, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
 
@@ -32,7 +34,12 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
     >
       <ul className="flex flex-col gap-1 px-1.5">
         {runs.map((run) => (
-          <RunRow key={run.id} run={run} title={automationTitle(automations, run.automation)} />
+          <RunRow
+            key={run.id}
+            run={run}
+            title={automationTitle(automations, run.automation)}
+            retryable={canRetryRun(run, runs)}
+          />
         ))}
       </ul>
     </TaskSection>
@@ -42,7 +49,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
 /** Web URLs and T3 Code deep links; a runner's thread URL is shown as a link only if it is one of those. */
 const isOpenable = (url: string) => isWebUrl(url) || url.startsWith("t3code://");
 
-function RunRow({ run, title }: { run: AutopilotRun; title: string }) {
+function RunRow({ run, title, retryable }: { run: AutopilotRun; title: string; retryable: boolean }) {
   const cost = formatCost(run.costUsd);
   const at = run.finishedAt ?? run.startedAt ?? run.createdAt;
   return (
@@ -76,6 +83,7 @@ function RunRow({ run, title }: { run: AutopilotRun; title: string }) {
         ) : null}
         {cost ? <span className="tabular-nums">{cost}</span> : null}
         {run.exitCode !== null ? <span className="tabular-nums">exit {run.exitCode}</span> : null}
+        {retryable ? <RetryButton runId={run.id} /> : null}
       </div>
       {run.error ? <p className="text-xs text-destructive-foreground [overflow-wrap:anywhere]">{run.error}</p> : null}
       {run.detail ? (
@@ -89,5 +97,22 @@ function RunRow({ run, title }: { run: AutopilotRun; title: string }) {
         </details>
       ) : null}
     </li>
+  );
+}
+
+/** Frees the run's work for the engine's next pass, which acts again if there is still work to do. */
+function RetryButton({ runId }: { runId: string }) {
+  const retry = useRetryAutopilotRun();
+  return (
+    <Button
+      size="xs"
+      variant="ghost"
+      className="ms-auto"
+      disabled={retry.isPending}
+      title="Let Autopilot try this again on its next pass"
+      onClick={() => retry.mutate(runId)}
+    >
+      Retry
+    </Button>
   );
 }

@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   autopilotRunEventText,
   autopilotSessionName,
+  canRetryRun,
   describeInherited,
   inQuietHours,
   isAutopilotSessionName,
+  isSupersededRun,
   resolveAutopilot,
+  type AutopilotRun,
 } from "./autopilot.ts";
 
 const board = (mode: "inherit" | "on" | "off", config = {}) => ({ scopeKind: "board" as const, mode, config });
@@ -90,5 +93,46 @@ describe("Autopilot session names", () => {
     expect(isAutopilotSessionName("Implementing the cart")).toBe(false);
     expect(isAutopilotSessionName("Autopilot notes")).toBe(false);
     expect(isAutopilotSessionName(null)).toBe(false);
+  });
+});
+
+describe("canRetryRun", () => {
+  const run = (id: string, at: string, extra: Partial<AutopilotRun> = {}) =>
+    ({
+      id,
+      automation: "review_prs",
+      taskId: "t1",
+      projectId: "p1",
+      createdAt: at,
+      dryRun: false,
+      status: "failed",
+      dedupeKey: `k:${id}`,
+      ...extra,
+    }) as AutopilotRun;
+
+  it("retries a real failed or skipped run that nothing has superseded", () => {
+    const failed = run("a", "2026-10-18T01:00:00.000Z");
+    expect(canRetryRun(failed)).toBe(true);
+    expect(canRetryRun({ ...failed, status: "succeeded" })).toBe(false);
+    expect(canRetryRun({ ...failed, dryRun: true })).toBe(false);
+    expect(canRetryRun({ ...failed, dedupeKey: "retried:a:k" })).toBe(false);
+  });
+
+  it("refuses a run the same automation has made a real run on the task since", () => {
+    const failed = run("a", "2026-10-18T01:00:00.000Z");
+    const later = run("b", "2026-10-18T02:00:00.000Z", { status: "succeeded" });
+    expect(canRetryRun(failed, [later, failed])).toBe(false);
+    expect(canRetryRun(failed, [{ ...later, dryRun: true }])).toBe(true);
+    expect(canRetryRun(failed, [{ ...later, automation: "fix_prs" }])).toBe(true);
+    expect(canRetryRun(failed, [{ ...later, taskId: "t2" }])).toBe(true);
+    expect(isSupersededRun(later, [failed])).toBe(false);
+  });
+
+  it("goes by the list's order when two runs were made in the same millisecond", () => {
+    const at = "2026-10-18T01:00:00.000Z";
+    const failed = run("a", at);
+    const later = run("b", at, { status: "succeeded" });
+    expect(canRetryRun(failed, [later, failed])).toBe(false);
+    expect(isSupersededRun(later, [later, failed])).toBe(false);
   });
 });

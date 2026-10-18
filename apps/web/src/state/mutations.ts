@@ -7,6 +7,7 @@ import type {
   AutopilotConfig,
   AutopilotEngineSettings,
   AutopilotOverview,
+  AutopilotRun,
   AutopilotScopeEntry,
   AutopilotStatus,
   BoardSnapshot,
@@ -550,6 +551,10 @@ export function useSetAutopilotPaused() {
       }),
   });
 }
+
+/** Lets Autopilot try a failed or skipped run again; autopilot.changed refreshes the runs. */
+export const useRetryAutopilotRun = () =>
+  useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/retry`, { method: "POST" }));
 
 /** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
 export function useMarkNotificationRead() {

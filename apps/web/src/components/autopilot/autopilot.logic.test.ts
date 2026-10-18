@@ -236,6 +236,10 @@ describe("runs", () => {
     expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Dry run");
     expect(runStatusLabel({ status: "skipped", dryRun: false })).toBe("Skipped");
     expect(runStatusLabel({ status: "succeeded", dryRun: false })).toBe("Done");
+    expect(runStatusLabel({ status: "failed", dryRun: false, dedupeKey: "retried:r1:review:pr:l1:abc" })).toBe(
+      "Failed, retried",
+    );
+    expect(runStatusLabel({ status: "skipped", dryRun: false, dedupeKey: "retried:r1:start:t1:x" })).toBe("Retried");
   });
 
   it("formats cost, keeping sub-cent amounts visible", () => {

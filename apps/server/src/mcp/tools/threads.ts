@@ -57,10 +57,6 @@ const MAYBE_STARTED = new Set(["unreachable", "protocol-after-send"]);
 
 const sentence = (text: string) => text.replace(/[.\s]+$/, "");
 
-/** These tools serve an epic's orchestrator, which is what the user turned on; other tasks use the launch dialog. */
-const notInEpic = (number: number) =>
-  `#${number} isn't in an epic. Agents start threads only for an epic's tasks; the user can start one from the board.`;
-
 /** A branch name as git allows it, so the value can't be read as an option or a revision expression. */
 // oxlint-disable-next-line eslint/no-control-regex -- git refuses control characters in ref names, so must we
 const BRANCH = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)[^\s~^:?*[\\\x00-\x1f\x7f]+(?<![./]|\.lock)$/;
@@ -82,20 +78,20 @@ function launchSummary(launch: TaskThreadLaunch): string {
   return `Model ${launch.modelSelection.model}${skipped}, access ${access}, in ${where}.`;
 }
 
-/** T3 Code tools for an epic's orchestrator: start_task_thread and message_task_thread. */
+/** T3 Code tools for an orchestrating agent (an epic's, or Autopilot's Orchestrate): start_task_thread and message_task_thread. */
 export const registerThreadTools: ToolRegistrar = (server, { services, ctx, actor }) => {
   server.registerTool(
     "start_task_thread",
     {
       title: "Start a task in a new T3 Code thread",
       description:
-        "Start a new T3 Code thread working on one of an epic's tasks, with the task's hand-off prompt as its first " +
-        "message, and link it to the task. Use it when epic_overview says T3 Code is available. The " +
+        "Start a new T3 Code thread working on a task, with the task's hand-off prompt as its first message, and " +
+        "link it to the task. Use it when epic_overview (for an epic's tasks) says T3 Code is available. The " +
         "thread starts on T3's default model and access (the task's suggested model for work), in a new git " +
         "worktree branched from baseRef (default: the epic's integration branch when it has one, else the default " +
         "branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
-        "has a thread working on it (use message_task_thread), or when T3 Code can't take it.",
+        "has a thread working on it (use message_task_thread), is blocked by unfinished tasks, or when T3 Code can't take it.",
       inputSchema: {
         task: taskField,
         mode: z
@@ -124,7 +120,17 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const problem = handoffModeError(task, mode);
         if (problem) throw new AppError("VALIDATION", problem);
-        if (!task.parent) throw new AppError("VALIDATION", notInEpic(task.number));
+        // Like Start planned: a task waiting on unfinished blockers would build on work that isn't there yet.
+        if (task.blocked && mode === "work") {
+          const by = task.blockedBy
+            .filter((b) => b.status !== "done")
+            .map((b) => `#${b.number}`)
+            .join(", ");
+          throw new AppError(
+            "CONFLICT",
+            `#${task.number} is blocked by ${by}, which aren't Done yet. Start it once they are.`,
+          );
+        }
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
         const busy = busyThread(task);
@@ -167,7 +173,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         return textResult(
           `Started #${task.number} in a new T3 Code thread (${mode} prompt) and linked it: ${linkText(launch.link)}\n` +
             `${launchSummary(launch)}\n` +
-            `Follow it with epic_overview, or message it with message_task_thread(${ref}, ...).`,
+            `Follow it with ${task.parent ? "epic_overview" : "get_task"}, or message it with message_task_thread(${ref}, ...).`,
         );
       }),
   );
@@ -179,7 +185,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
       description:
         "Send a message into the T3 Code thread working on a task (else its newest one): T3 starts a turn, or " +
         "queues it behind the one running. It arrives marked as coming from the orchestrating agent. Use it to " +
-        "answer a blocked step or redirect a task started with start_task_thread. Only for T3 threads; for a " +
+        "answer a blocked step, nudge a stalled thread or redirect a task started with start_task_thread. Only for T3 threads; for a " +
         "session the user started, add_note on the task instead, which it reads on its next get_task.",
       inputSchema: {
         task: taskField,
@@ -189,7 +195,6 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     (args) =>
       run(async () => {
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
-        if (!task.parent) throw new AppError("VALIDATION", notInEpic(task.number));
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. Leave the session an add_note on the task instead.`);
         const thread = messageTarget(task);
@@ -200,7 +205,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
           );
         }
         // T3 shows it as the user's own message, so say who really sent it.
-        const text = `From the agent orchestrating this task's epic (sent through the board):\n\n${args.text}`;
+        const text = `From an orchestrating agent (sent through the board):\n\n${args.text}`;
         await ctx.integrations.messageT3Thread(thread, text);
         return textResult(`Sent to #${task.number}'s thread: ${linkText(thread)}`);
       }),

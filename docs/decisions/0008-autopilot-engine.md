@@ -48,6 +48,11 @@ scheduled agent run, or rules inside the server that start an agent only when an
   default (`into: "epic"`) still refuses the default branch. Headless runs keep their `gh pr merge` deny rule, so
   the tool is the only way, and the gate can't be skipped. The agent chooses which flagged PR to merge and when,
   since it can see the board and order merges so they don't conflict; the server decides whether it may.
+  Autopilot's **Orchestrate** automation (#138) is such an agent: its run reaches the default branch only through
+  that same tool, so only for flagged tasks, and its **May merge** setting off denies it the tool outright.
+- **Retrying a run is not a limit.** (#138.) `retry_autopilot_run` (and the panel's Retry) hands a failed or
+  skipped run back to the engine by retiring its dedupe key. The engine still decides, under the switches, pause and
+  caps, so agents may call it; it is the one Autopilot tool they get.
 - **Who can turn auto-merge On: any MCP caller, as with the Autopilot flag.** (#172, raised in #167's review.)
   `create_task`, `add_to_backlog` and `update_task` accept `autoMerge: "on"`, and only their descriptions say to do
   it when the user says so. Making On user-only isn't enforceable: MCP callers are anonymous (headless runs use

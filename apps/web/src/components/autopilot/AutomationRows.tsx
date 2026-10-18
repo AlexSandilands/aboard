@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_ORCHESTRATE,
   ReviewSkillRef,
   type AutopilotConfig,
   type AutopilotAutomation,
@@ -9,6 +10,7 @@ import { ChevronRightIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -18,7 +20,7 @@ import { FoldedSettingsSection, SettingsGroup, SettingsRow } from "~/components/
 import { cn } from "~/lib/utils";
 import { BlockedWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
+import { useAutopilotOverview, useAutopilotScope, useBoard, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import {
   entryFor,
@@ -30,6 +32,7 @@ import {
   withConfigValue,
 } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
+import { ScheduledRuns } from "./ScheduledRuns";
 import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
@@ -142,8 +145,23 @@ export function AutomationSections() {
               />
             </div>
           ))}
+          {automation.key === AUTOPILOT_ORCHESTRATE ? <OrchestrateRuns /> : null}
         </FoldedSettingsSection>
       ))}
+    </div>
+  );
+}
+
+/** Orchestrate's latest runs per project: what each did and the handover it left, since its runs have no task. */
+function OrchestrateRuns() {
+  const projects = useBoard().data?.projects.filter((p) => p.archivedAt === null) ?? [];
+  return (
+    <div className="flex flex-col gap-1.5 px-3 py-3 sm:px-4">
+      <p className="text-xs font-medium">Recent runs</p>
+      <p className="text-2xs text-muted-foreground/80">
+        What each run said it did, and the handover it left for the next run in that project.
+      </p>
+      <ScheduledRuns automation={AUTOPILOT_ORCHESTRATE} projects={projects} />
     </div>
   );
 }
@@ -301,6 +319,24 @@ function FieldControl({
     case "number":
       return <NumberField key={fieldText(value)} field={field} value={value} onSave={onSave} />;
     case "text":
+      if (field.multiline) {
+        return (
+          <Textarea
+            key={fieldText(value)}
+            aria-label={label}
+            size="sm"
+            className="sm:w-80"
+            placeholder={field.placeholder}
+            defaultValue={fieldText(value)}
+            onBlur={(event) => {
+              const input = event.currentTarget;
+              const next = input.value.trim();
+              if (next === fieldText(value)) return;
+              if (!onSave(next === "" ? undefined : next)) input.value = fieldText(value);
+            }}
+          />
+        );
+      }
       return (
         <Input
           key={fieldText(value)}
