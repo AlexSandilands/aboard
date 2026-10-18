@@ -71,6 +71,8 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
       );
     case "tasks":
       return <TasksContent />;
+    case "models":
+      return <ModelsContent />;
     case "autopilot":
       return (
         <>
@@ -88,7 +90,6 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
 }
 
 function TasksContent() {
-  const integrations = useIntegrationsStatus();
   return (
     <>
       <SettingsSubsection id="tasks.new-tasks">
@@ -101,12 +102,16 @@ function TasksContent() {
       <SettingsSubsection id="tasks.review">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
-      <SettingsSubsection id="tasks.models">
-        <WithSettings>
-          {(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}
-        </WithSettings>
-      </SettingsSubsection>
     </>
+  );
+}
+
+function ModelsContent() {
+  const integrations = useIntegrationsStatus();
+  return (
+    <SettingsSubsection id="models.tiers">
+      <WithSettings>{(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}</WithSettings>
+    </SettingsSubsection>
   );
 }
 

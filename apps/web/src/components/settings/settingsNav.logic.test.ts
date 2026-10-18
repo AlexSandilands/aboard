@@ -8,6 +8,7 @@ import {
   sectionOf,
   SETTINGS_GROUPS,
   settingsCrumbs,
+  settingsGroup,
   settingsPaletteEntries,
 } from "./settingsNav.logic";
 
@@ -118,6 +119,7 @@ describe("settingsPaletteEntries", () => {
     expect(entries.filter((e) => e.isGroup).map((e) => e.title)).toEqual([
       "Settings: Board",
       "Settings: Tasks",
+      "Settings: Model tiers",
       "Settings: Autopilot",
       "Settings: Integrations",
       "Settings: Project",
@@ -127,5 +129,14 @@ describe("settingsPaletteEntries", () => {
     expect(review?.searchTerms).toContain("Tasks");
     // No second "Settings: Autopilot" for the Autopilot page's own section.
     expect(entries.filter((e) => e.title === "Settings: Autopilot")).toHaveLength(1);
+    expect(entries.filter((e) => e.title === "Settings: Model tiers")).toHaveLength(1);
+  });
+
+  it("finds the Model tiers page by the old names for its settings", () => {
+    const group = settingsPaletteEntries().find((e) => e.target === "models");
+    expect(group?.isGroup).toBe(true);
+    expect(parseSettingsTarget("models.tiers.light")).toEqual({ group: "models", anchor: "models.tiers.light" });
+    expect(sectionOf("models.tiers.light")?.id).toBe("models.tiers");
+    expect(settingsGroup("models").sections[0]?.keywords).toEqual(expect.arrayContaining(["session model", "--model"]));
   });
 });
