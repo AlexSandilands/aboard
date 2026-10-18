@@ -25,6 +25,8 @@ export * from "./autopilot.ts";
 export * from "./prReview.ts";
 export * from "./recurring.ts";
 export * from "./customAutomations.ts";
+export * from "./automationBundle.ts";
+export * from "./automationExamples.ts";
 export * from "./digest.ts";
 export * from "./notifications.ts";
 export * from "./keybindings.ts";

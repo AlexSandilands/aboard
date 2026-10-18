@@ -1,6 +1,8 @@
 import {
   capHandover,
   customAgentPrompt,
+  customAllowedTools,
+  customBlockedReason,
   customAgentToolsNote,
   customArmedAt,
   customAutomationKey,
@@ -136,7 +138,12 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
   const handoverIn = (services: Services, projectId: string) =>
     services.autopilot.lastHandover(customAutomationKey(custom.id), projectId);
 
+  // A required tool slot nobody filled: the agent would start without what it needs.
+  const blocked = customBlockedReason(action);
+  const tools = customAllowedTools(action);
+
   const check = (ctx: CheckContext<Record<string, unknown>>): Candidate[] => {
+    if (blocked) return [];
     const { services, now } = ctx;
     const scoped = inScope(ctx);
     if (trigger.kind === "schedule") {
@@ -238,6 +245,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     background: !isAgent,
     // A schedule has no task, so an epic has nothing to switch.
     epicScope: trigger.kind !== "schedule",
+    blocked,
     schema: isAgent ? AgentConfig : z.object({}),
     fields: isAgent ? RUNNER_FIELDS : [],
     defaults: isAgent ? RUNNER_DEFAULTS : {},
@@ -261,7 +269,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
             prompt: customAgentPrompt(custom, values, null, null, project ? handoverIn(services, project.id) : null),
             tier: action.tier,
             options: { ...ctx.config, runner: "headless" },
-            ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
+            ...(tools.length > 0 ? { tools } : {}),
             repo: project?.workspaceRoot ?? null,
             // Its answer is the handover the next run of this agent in this project gets.
             outputSchema: SCHEDULED_AGENT_OUTPUT_SCHEMA,
@@ -293,7 +301,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
           tier: action.tier ?? task.suggestedModel?.tier ?? null,
           options: ctx.config,
           // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
-          ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
+          ...(tools.length > 0 ? { tools } : {}),
           ...(branch ? { workspace: { branch } } : {}),
         });
         const { result: _final, output: _output, ...patch } = result;

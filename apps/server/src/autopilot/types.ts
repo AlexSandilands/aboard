@@ -133,6 +133,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    * epic-scope setting for it.
    */
   epicScope?: boolean;
+  /**
+   * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
+   * switch it on, the UI says why, and its check finds nothing meanwhile.
+   */
+  blocked?: string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
@@ -181,6 +186,8 @@ export interface RunnerRequest {
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
   tools?: readonly string[];
+  /** Headless only: tools denied whatever else allows them, e.g. a board MCP tool the run may not call. */
+  deniedTools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
   /**
@@ -188,6 +195,11 @@ export interface RunnerRequest {
    * board tools, no MCP servers and no files outside its worktree.
    */
   untrustedInput?: boolean;
+  /**
+   * With `untrustedInput`, task-less runs only: the agent still gets this board's MCP server (and no other), for one
+   * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
+   */
+  boardTools?: boolean;
   /**
    * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
    * throws `WorktreeHeadError`.

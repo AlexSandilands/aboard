@@ -1,6 +1,8 @@
-import { useParams, useSearch } from "@tanstack/react-router";
+import { AUTOMATION_EXAMPLES } from "@repo/contracts";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
+import { CustomAutomationImportForm } from "~/components/autopilot/CustomAutomationImportForm";
 import { emptyCustomForm, formFromCustom } from "~/components/autopilot/customAutomations.logic";
 import { emptyRuleForm, formFromRule } from "~/components/recurring/recurring.logic";
 import { RuleEditorForm } from "~/components/recurring/RuleEditorForm";
@@ -12,7 +14,7 @@ import { useRecurringRules } from "~/state/recurring";
 import { EditorPage } from "../EditorFrame";
 import { SettingsLink } from "../settingsLayout";
 import type { SettingsGroupId } from "../settingsNav.logic";
-import { useLeaveEditor } from "../settingsNavigation";
+import { FROM_SETTINGS_LIST, useLeaveEditor } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 
 /** "new" in an editor's URL stands for one not saved yet. */
@@ -107,6 +109,29 @@ export function CustomAutomationEditorPage() {
       ) : (
         <EditorMessage>Loading automation...</EditorMessage>
       )}
+    </EditorShell>
+  );
+}
+
+/** Route component for `/settings/autopilot/custom/import`. */
+export function CustomAutomationImportPage() {
+  const leaveEditor = useLeaveEditor();
+  const navigate = useNavigate();
+  return (
+    <EditorShell group="autopilot" label="Import automation">
+      <CustomAutomationImportForm
+        examples={AUTOMATION_EXAMPLES}
+        onCancel={() => leaveEditor("autopilot")}
+        // Straight to the new automation: it comes in off, with its tools still to check.
+        onDone={(customId) =>
+          void navigate({
+            to: "/settings/autopilot/custom/$customId",
+            params: { customId },
+            replace: true,
+            state: FROM_SETTINGS_LIST,
+          })
+        }
+      />
     </EditorShell>
   );
 }
