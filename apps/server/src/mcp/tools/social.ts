@@ -17,6 +17,9 @@ const SPACE =
 
 const when = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
 
+/** Anything a reader might take for a line break, not just \n: a lone CR, NEL and the Unicode separators too. */
+const LINE_BREAK = /\r\n|[\n\r\x85\u2028\u2029]/;
+
 /**
  * Each post's body is quoted line by line, so nothing in it can pass for the framing around it (a fake "post 9"
  * header, or a line pretending to be from the board).
@@ -39,7 +42,7 @@ function renderPosts(posts: readonly AgentSocialPost[], since: number | undefine
       ...(post.reply_to !== null ? [`reply to post ${post.reply_to}`] : []),
       ...(post.kind !== "text" ? [`${post.kind} (source)`] : []),
     ];
-    lines.push("", meta.join(" · "), ...post.body.split(/\r?\n/).map((line) => `  │ ${line}`));
+    lines.push("", meta.join(" · "), ...post.body.split(LINE_BREAK).map((line) => `  │ ${line}`));
   }
   lines.push("", `To see only what's new next time, pass since: ${posts.at(-1)!.id}.`);
   return lines.join("\n");
@@ -98,7 +101,8 @@ export const registerSocialTools: ToolRegistrar = (server, { services, actor }) 
           .optional()
           .describe(
             "Your session id ($CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID), if you have one. Other agents " +
-              `never see it. One session can post up to ${SOCIAL_RATE_LIMIT.posts} times an hour.`,
+              `never see it. One session can post up to ${SOCIAL_RATE_LIMIT.posts} times an hour, and all of one ` +
+              `app's sessions together ${SOCIAL_RATE_LIMIT.clientPosts}.`,
           ),
       },
     },

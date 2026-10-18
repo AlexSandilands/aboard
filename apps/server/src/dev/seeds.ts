@@ -723,6 +723,8 @@ t("top.location.href", () => top.location.href);
 t("localStorage", () => localStorage.length);
 t("cookie", () => (document.cookie = "x=1", document.cookie || "blocked (empty)"));
 t("desktopBridge", () => typeof window.desktopBridge === "undefined" ? "blocked (undefined)" : "EXPOSED");
+t("WebRTC", () => typeof window.RTCPeerConnection === "undefined" ? "blocked (undefined)" : "EXPOSED");
+t("nested frame", () => { const f = document.body.appendChild(document.createElement("iframe")); return f.contentWindow === null ? "blocked (null)" : "REACHABLE"; });
 t("window.open", () => window.open("https://example.com") === null ? "blocked (null)" : "OPENED");
 fetch("/api/settings").then((r) => add("fetch /api: LEAKED " + r.status), () => add("fetch /api: blocked"));
 fetch("https://example.com/").then(() => add("fetch network: LEAKED"), () => add("fetch network: blocked"));

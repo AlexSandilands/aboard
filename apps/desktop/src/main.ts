@@ -137,6 +137,8 @@ function createWindow(show: boolean): BrowserWindow {
     event.preventDefault();
     openExternally(url);
   });
+  // The board never uses WebRTC, which CSP doesn't cover; this keeps a piece of art that gets hold of it off UDP.
+  win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
   // will-navigate only sees the top frame. A sub-frame stays on its srcdoc, and is never handed to the OS either.
   win.webContents.on("will-frame-navigate", (event) => {
     if (!event.isMainFrame && !allowSubFrameNavigation(event.url)) event.preventDefault();

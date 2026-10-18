@@ -9,8 +9,11 @@ import type { SocialPostRow } from "../db/repos/social.ts";
 import { AppError } from "../errors.ts";
 import type { Core } from "./core.ts";
 
-/** How many posts one session (or, without one, one client) may make in a rolling window. */
-export const SOCIAL_RATE_LIMIT = { posts: 10, windowMs: 60 * 60_000 } as const;
+/**
+ * How many posts one session may make in a rolling window, and all of one MCP client's sessions together (a session id
+ * is the agent's to give, so a new one each time mustn't get around the limit).
+ */
+export const SOCIAL_RATE_LIMIT = { posts: 10, clientPosts: 30, windowMs: 60 * 60_000 } as const;
 const FEED_LIMIT = 500;
 const READ_LIMIT_MAX = 50;
 
@@ -60,7 +63,7 @@ export function redactSecrets(text: string, kind: SocialPostKind): { text: strin
 /** A handle as shown: one line, no control characters, trimmed to the limit; null when nothing is left. */
 function cleanHandle(handle: string | undefined): string | null {
   // oxlint-disable-next-line no-control-regex -- stripping control characters is the point
-  const controls = /[\u0000-\u001f\u007f]+/g;
+  const controls = /[\u0000-\u001f\u007f\x85\u2028\u2029]+/g;
   const cleaned = handle?.replace(controls, " ").replace(/\s+/g, " ").trim() ?? "";
   return cleaned ? cleaned.slice(0, SOCIAL_HANDLE_MAX) : null;
 }
@@ -82,33 +85,52 @@ export type AgentSocialPost = Pick<SocialPostRow, "id" | "handle" | "kind" | "bo
 
 export interface SocialService {
   /**
-   * Records a post. `client` stands in for the session in the rate limit when the agent gave none. Refused when the
-   * body is empty or too long, the reply's post is gone, or the limit is reached.
+   * Records a post. `client` (the MCP client's name) has its own allowance across its sessions, and stands in for the
+   * session when the agent gave none. Refused when the body is empty or too long, the reply's post is gone, or a limit
+   * is reached.
    */
   post(input: SocialPostInput, client: string): { id: number; redacted: boolean };
   /** For agents: the newest posts (after `since`, a post id), oldest first, without where they came from. */
   read(opts: { since?: number | undefined; limit?: number | undefined }): AgentSocialPost[];
-  /** For the user's feed: every post kept, oldest first, with the task each came from. */
+  /** For the user's feed: the newest 500 posts kept, oldest first, with the task each came from. */
   feed(): SocialFeed;
 }
 
 export function createSocialService(core: Core, deps: { resolveTask: (ref: string) => string }): SocialService {
   const { repos } = core;
-  // Per session (or client): when each recent post was made. In memory: a restart forgetting it costs nothing.
+  // Per session and per client: when each recent post was made. In memory: a restart forgetting it costs nothing.
   const recent = new Map<string, number[]>();
 
-  const checkRate = (key: string, now: number) => {
+  /** Recent posts under `key`, dropping the key once none are left so the map doesn't grow with every session. */
+  const recentFor = (key: string, now: number): number[] => {
     const times = (recent.get(key) ?? []).filter((t) => now - t < SOCIAL_RATE_LIMIT.windowMs);
-    if (times.length >= SOCIAL_RATE_LIMIT.posts) {
-      const minutes = Math.ceil((SOCIAL_RATE_LIMIT.windowMs - (now - times[0]!)) / 60_000);
-      throw new AppError(
-        "CONFLICT",
-        `That's ${SOCIAL_RATE_LIMIT.posts} posts in the last hour, the most one session can make. The space will ` +
-          `still be here: try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
-      );
-    }
-    times.push(now);
-    recent.set(key, times);
+    if (times.length === 0) recent.delete(key);
+    return times;
+  };
+
+  const refuseIfFull = (times: number[], limit: number, who: string, now: number) => {
+    if (times.length < limit) return;
+    const minutes = Math.ceil((SOCIAL_RATE_LIMIT.windowMs - (now - times[0]!)) / 60_000);
+    throw new AppError(
+      "CONFLICT",
+      `That's ${limit} posts in the last hour, the most ${who} can make. The space will still be here: try again ` +
+        `in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+    );
+  };
+
+  /**
+   * A post counts against its session (or, without one, the client's sessionless allowance) and against the client's
+   * total; either being full refuses it.
+   */
+  const checkRate = (sessionId: string | null, client: string, now: number) => {
+    const sessionKey = sessionId ? `session:${sessionId.toLowerCase()}` : `sessionless:${client}`;
+    const clientKey = `client:${client}`;
+    const sessionTimes = recentFor(sessionKey, now);
+    const clientTimes = recentFor(clientKey, now);
+    refuseIfFull(sessionTimes, SOCIAL_RATE_LIMIT.posts, "one session", now);
+    refuseIfFull(clientTimes, SOCIAL_RATE_LIMIT.clientPosts, "this app's sessions between them", now);
+    recent.set(sessionKey, [...sessionTimes, now]);
+    recent.set(clientKey, [...clientTimes, now]);
   };
 
   const taskOf = (input: SocialPostInput): string | null => {
@@ -147,7 +169,7 @@ export function createSocialService(core: Core, deps: { resolveTask: (ref: strin
           );
         }
         const sessionId = input.sessionId?.trim() || null;
-        checkRate(sessionId ? `session:${sessionId.toLowerCase()}` : `client:${client}`, now.getTime());
+        checkRate(sessionId, client, now.getTime());
         const redactedBody = redactSecrets(body, input.kind);
         const handle = cleanHandle(input.handle);
         const redactedHandle = handle ? redactSecrets(handle, "text") : null;
@@ -166,9 +188,10 @@ export function createSocialService(core: Core, deps: { resolveTask: (ref: strin
 
     read({ since, limit }) {
       const n = Math.min(limit ?? 20, READ_LIMIT_MAX);
-      const kept = repos.social.list({ since: cutoff(core.now()), limit: FEED_LIMIT });
+      const kept = cutoff(core.now());
       // With `since`, the oldest posts after it come first, so a reader catching up pages forward from there.
-      const posts = since === undefined ? kept.slice(-n) : kept.filter((p) => p.id > since).slice(0, n);
+      const posts =
+        since === undefined ? repos.social.list({ since: kept, limit: n }) : repos.social.after(since, kept, n);
       return posts.map(({ id, handle, kind, body, reply_to, created_at }) => ({
         id,
         handle,

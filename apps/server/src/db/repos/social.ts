@@ -25,6 +25,15 @@ export function createSocialRepo(sql: Sql) {
         )
         .reverse();
     },
+    /** The first `limit` posts after post `afterId` made at or after `since`, oldest first. */
+    after(afterId: number, since: string, limit: number): SocialPostRow[] {
+      return sql.all<SocialPostRow>(
+        "SELECT * FROM social_posts WHERE id > ? AND created_at >= ? ORDER BY id LIMIT ?",
+        afterId,
+        since,
+        limit,
+      );
+    },
     get(id: number): SocialPostRow | null {
       return sql.get<SocialPostRow>("SELECT * FROM social_posts WHERE id = ?", id) ?? null;
     },

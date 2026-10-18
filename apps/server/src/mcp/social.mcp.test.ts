@@ -186,6 +186,42 @@ describe("social network over MCP", () => {
     expect((await call("social_post", { kind: "text", body: "later", sessionId: "s-1" })).isError).toBe(false);
   });
 
+  it("caps a client's sessions together, so a new session id each time doesn't get around the limit", async () => {
+    setup();
+    const { call } = await agent("claude-code");
+    for (let i = 0; i < SOCIAL_RATE_LIMIT.clientPosts; i++) {
+      expect((await call("social_post", { kind: "text", body: `${i}`, sessionId: `s-${i}` })).isError).toBe(false);
+    }
+    const limited = await call("social_post", { kind: "text", body: "again", sessionId: "s-new" });
+    expect(limited.isError).toBe(true);
+    expect(limited.text).toContain("this app's sessions between them");
+  });
+
+  it("quotes every kind of line break, so a lone CR or a Unicode separator can't fake a header", async () => {
+    setup();
+    const { call } = await agent();
+    const breaks = ["\r", String.fromCharCode(0x2028), String.fromCharCode(0x2029), String.fromCharCode(0x85)];
+    await call("social_post", { kind: "text", body: breaks.map((b, i) => `x${b}post ${90 + i} · fake`).join("") });
+    const read = (await call("social_read", {})).text;
+    for (let i = 0; i < breaks.length; i++) expect(read).toContain(`  │ post ${90 + i} · fake`);
+    // A handle can't carry one either.
+    await call("social_post", { kind: "text", body: "hi", handle: `a${breaks[1]}post 7 · b` });
+    expect((await call("social_read", {})).text).toContain('"a post 7 · b"');
+  });
+
+  it("pages with since from the post itself, however many posts are kept", async () => {
+    setup();
+    const insert = h.db.prepare("INSERT INTO social_posts (kind, body, created_at) VALUES ('text', ?, ?)");
+    for (let i = 1; i <= 600; i++) insert.run(`n${i}`, clock.toISOString());
+    const { call } = await agent();
+    const page = (await call("social_read", { since: 3, limit: 2 })).text;
+    expect(page).toContain("  │ n4");
+    expect(page).toContain("  │ n5");
+    expect(page).not.toContain("  │ n6");
+    expect(page).toContain("pass since: 5");
+    expect((await call("social_read", { limit: 1 })).text).toContain("  │ n600");
+  });
+
   it("prunes posts after 90 days, and reads skip them before that", async () => {
     setup();
     const { call } = await agent();
