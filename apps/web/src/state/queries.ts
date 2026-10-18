@@ -72,6 +72,7 @@ export const queryKeys = {
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
   customAutomations: ["customAutomations"] as const,
   digests: ["digests"] as const,
+  suggestions: ["suggestions"] as const,
 };
 
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
@@ -426,6 +427,9 @@ export function useBoardEvents() {
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
+      }
+      if (event.type === "suggestions.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
       }
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while

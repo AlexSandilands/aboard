@@ -94,7 +94,7 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     await fallbacks.idle();
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ cwd: "/wt/export", budgetUsd: 2, cli: null });
+    expect(jobs[0]).toMatchObject({ cwd: "/wt/export", budgetUsd: 2, cli: null, model: null });
     expect(jobs[0]!.prompt).toContain("#1 Export [Review]");
     expect(round()).toMatchObject({
       status: "submitted",
@@ -133,6 +133,25 @@ describe("review fallbacks", () => {
 
   it("doesn't, when the task already has a PR", async () => {
     expect(await cleanBoardReview(true)).toEqual([]);
+  });
+
+  it("runs the board's review on the chosen model: a typed one, or a tier's Claude Code model", async () => {
+    const run = async (headlessReviewModel: Parameters<ReturnType<typeof setup>["s"]["settings"]["update"]>[0]) => {
+      const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
+      s.settings.update({
+        ...headlessReviewModel,
+        modelTiers: { light: { description: null, t3: null, cli: { "claude-code": "haiku" } } },
+      });
+      s.tasks.move(task.id, { status: "review" }, "user");
+      await fallbacks.tick();
+      advance(PAST_GRACE);
+      await fallbacks.tick();
+      await fallbacks.idle();
+      return jobs[0]?.model;
+    };
+    expect(await run({ headlessReviewModel: { model: "sonnet" } })).toBe("sonnet");
+    expect(await run({ headlessReviewModel: { tier: "light" } })).toBe("haiku");
+    expect(await run({ headlessReviewModel: { tier: "deep" } })).toBeNull();
   });
 
   it("keeps ticking after a pass with nothing to do", async () => {

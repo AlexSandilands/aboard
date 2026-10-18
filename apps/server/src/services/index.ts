@@ -6,6 +6,8 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
+import { createActivityService } from "./activity.ts";
+import { createAttentionService } from "./attention.ts";
 import { createAutopilotService } from "./autopilot.ts";
 import { createAttachmentsService } from "./attachments.ts";
 import { createBackupService } from "./backup/index.ts";
@@ -24,6 +26,7 @@ import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSocialService } from "./social.ts";
+import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
@@ -43,6 +46,8 @@ export interface ServiceDeps {
   attachmentsDir: string;
   /** The clock for notifications (retention, quiet hours); tests swap in their own. */
   now?: () => Date;
+  /** The user's home folder, where global skills live; tests use a temp folder. */
+  userHome: string;
 }
 
 /** Builds the service layer over one database. */
@@ -89,6 +94,11 @@ export function createServices(deps: ServiceDeps): Services {
     polls: deps.prHostHoldsTasks ?? ((host) => host === "github.com"),
   });
   reviews = createReviewsService(core, { task: tasks.record, notifications });
+  const attention = createAttentionService(core, {
+    task: tasks.record,
+    summary: (id) => tasks.service.summary(id),
+    notifications,
+  });
 
   const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
   restartRecurring = (ids) => recurring.restart(ids);
@@ -112,6 +122,7 @@ export function createServices(deps: ServiceDeps): Services {
     templates,
     notifications,
     social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
+    attention,
     autopilot: createAutopilotService(core, {
       automations,
       notifications,
@@ -133,6 +144,16 @@ export function createServices(deps: ServiceDeps): Services {
     }),
     recurring,
     customAutomations,
+    suggestions: createSuggestionsService(core, {
+      settings,
+      projects,
+      customAutomations,
+      notifications,
+      userHome: deps.userHome,
+    }),
+    activity: createActivityService(core, {
+      automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
+    }),
     digests: createDigestsService(core, {
       notifications,
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,

@@ -82,6 +82,17 @@ export function createEventsRepo(sql: Sql) {
         )
         .map((r) => ({ ...toEvent(r), number: r.number, title: r.title, projectId: r.project_id }));
     },
+    /** Events of these types on these tasks, oldest first. */
+    ofTypes(taskIds: readonly string[], types: readonly string[]): TaskEvent[] {
+      return sql
+        .all<EventRow>(
+          `SELECT * FROM task_events
+           WHERE task_id IN (SELECT value FROM json_each(?)) AND type IN (SELECT value FROM json_each(?)) ORDER BY id`,
+          jsonList(taskIds),
+          jsonList(types),
+        )
+        .map(toEvent);
+    },
     /** Latest "note" event per task. */
     lastNotes(taskIds: readonly string[]): TaskEvent[] {
       return latestOfType(taskIds, ["note"]);

@@ -1,6 +1,18 @@
-import { resolveKeybindings, type KeybindingOverrides } from "@repo/contracts";
+import { DEFAULT_KEYBINDINGS, KeybindingCommand, resolveKeybindings, type KeybindingOverrides } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { describeConflict, triggersWhileTyping, withOverride, withoutOverride } from "./keybindings.logic";
+import { formatShortcut } from "~/components/layout/keyboard.logic";
+import {
+  describeConflict,
+  isCustomised,
+  keybindingGroups,
+  keybindingSectionId,
+  keybindingSections,
+  matchesKeybindingQuery,
+  triggersWhileTyping,
+  whenSummary,
+  withOverride,
+  withoutOverride,
+} from "./keybindings.logic";
 
 describe("withOverride", () => {
   it("stores a changed key", () => {
@@ -65,5 +77,96 @@ describe("triggersWhileTyping", () => {
     expect(flagged({ "palette.open": { key: "p", when: "!editableFocus" } })).toEqual([]);
     expect(flagged({ "palette.open": { key: "mod+p" } })).toEqual([]);
     expect(flagged({ "palette.open": { key: "escape" } })).toEqual([]);
+  });
+});
+
+describe("keybindingGroups", () => {
+  it("has a group per registry heading, in registry order, with a section id each", () => {
+    expect(keybindingGroups().map((group) => group.label)).toEqual(["General", "Navigation"]);
+    expect(keybindingGroups().map((group) => group.sectionId)).toEqual([
+      "keybindings.general",
+      "keybindings.navigation",
+    ]);
+    expect(keybindingGroups().map((group) => group.slug)).toEqual(["general", "navigation"]);
+  });
+
+  it("turns any heading into an id segment", () => {
+    expect(keybindingSectionId("Task panel & more")).toBe("keybindings.task-panel-more");
+  });
+});
+
+describe("keybindingSections", () => {
+  const label = (shortcut: string) => formatShortcut(shortcut, false);
+  const sections = (query: string, overrides: KeybindingOverrides = {}) =>
+    keybindingSections(resolveKeybindings(overrides), query, label).map((section) => [
+      section.label,
+      section.bindings.map((binding) => binding.command),
+    ]);
+
+  it("lists every command once, under its registry group", () => {
+    const listed = keybindingSections(resolveKeybindings(), "", label).flatMap((section) =>
+      section.bindings.map((binding) => binding.command),
+    );
+    expect([...listed].sort()).toEqual([...KeybindingCommand.options].sort());
+    for (const section of keybindingSections(resolveKeybindings(), "", label)) {
+      for (const binding of section.bindings) expect(DEFAULT_KEYBINDINGS[binding.command].group).toBe(section.label);
+    }
+  });
+
+  it("filters by title, shown key and condition, and drops groups left empty", () => {
+    expect(sections("palette")).toEqual([["General", ["palette.open"]]]);
+    expect(sections("ctrl+k")).toEqual([["General", ["palette.open"]]]);
+    expect(sections("canGoBack")).toEqual([["Navigation", ["back"]]]);
+    expect(sections("navigation")).toEqual([["Navigation", ["back"]]]);
+    expect(sections("nothing like this")).toEqual([]);
+  });
+
+  it("needs every word, in any order, and ignores case", () => {
+    expect(sections("PALETTE command")).toEqual([["General", ["palette.open"]]]);
+    expect(sections("settings palette")).toEqual([]);
+  });
+
+  it("matches a changed key or condition, and Always for an empty one", () => {
+    expect(sections("shift+q", { back: { key: "shift+q" } })).toEqual([["Navigation", ["back"]]]);
+    expect(sections("always")).toEqual([["General", ["palette.open"]]]);
+    expect(sections("canGoBack", { "idea.new": { when: "canGoBack" } })).toEqual([
+      ["General", ["idea.new"]],
+      ["Navigation", ["back"]],
+    ]);
+  });
+});
+
+describe("matchesKeybindingQuery", () => {
+  it("matches everything for a blank query", () => {
+    const [binding] = resolveKeybindings();
+    expect(matchesKeybindingQuery(binding!, "  ", "Ctrl+K")).toBe(true);
+  });
+});
+
+describe("isCustomised", () => {
+  it("is true only for a command with a stored override, which is never one equal to the default", () => {
+    expect(isCustomised({}, "back")).toBe(false);
+    expect(isCustomised(withOverride({}, "back", { key: "q" }), "back")).toBe(true);
+    expect(isCustomised(withOverride({}, "back", { key: DEFAULT_KEYBINDINGS.back.key }), "back")).toBe(false);
+    expect(
+      isCustomised(withOverride({ back: { key: "q" } }, "back", { key: DEFAULT_KEYBINDINGS.back.key }), "back"),
+    ).toBe(false);
+  });
+});
+
+describe("whenSummary", () => {
+  it("says Always for no condition, else the expression", () => {
+    expect(whenSummary("")).toBe("Always");
+    expect(whenSummary("  ")).toBe("Always");
+    expect(whenSummary("!editableFocus && !overlayOpen")).toBe("!editableFocus && !overlayOpen");
+  });
+});
+
+describe("editing a when-expression", () => {
+  it("stores a changed condition, and drops it again once it equals the default", () => {
+    const edited = withOverride({}, "palette.open", { when: " !overlayOpen " });
+    expect(edited).toEqual({ "palette.open": { when: "!overlayOpen" } });
+    expect(resolveKeybindings(edited).find((b) => b.command === "palette.open")?.when).toBe("!overlayOpen");
+    expect(withOverride(edited, "palette.open", { when: DEFAULT_KEYBINDINGS["palette.open"].when })).toEqual({});
   });
 });

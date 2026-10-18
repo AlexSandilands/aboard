@@ -1,6 +1,6 @@
 import {
   DEFAULT_KEYBINDINGS,
-  type KeybindingCommand,
+  KeybindingCommand,
   type KeybindingOverride,
   type KeybindingOverrides,
   type ResolvedKeybinding,
@@ -26,6 +26,80 @@ export function withOverride(
   };
   const others = withoutOverride(overrides, command);
   return Object.keys(next).length === 0 ? others : { ...others, [command]: next };
+}
+
+/** A registry group's name as an id segment: "General" → `general`. */
+function keybindingGroupSlug(group: string): string {
+  return group
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** The sub-section id of a registry group: `keybindings.<slug>`, so a new group gets a section without wiring. */
+export function keybindingSectionId(group: string): string {
+  return `keybindings.${keybindingGroupSlug(group)}`;
+}
+
+export interface KeybindingGroup {
+  /** The registry's heading for it: "General", "Navigation". */
+  label: string;
+  /** Its id segment, which its rows' ids are built on. */
+  slug: string;
+  /** The settings sub-section it is listed in. */
+  sectionId: string;
+}
+
+/** The registry's groups in the order their first command appears. */
+export function keybindingGroups(): KeybindingGroup[] {
+  const labels = [...new Set(KeybindingCommand.options.map((command) => DEFAULT_KEYBINDINGS[command].group))];
+  return labels.map((label) => ({ label, slug: keybindingGroupSlug(label), sectionId: keybindingSectionId(label) }));
+}
+
+/** True when the user has changed this command's key or condition (an override equal to the default is never stored). */
+export function isCustomised(overrides: KeybindingOverrides, command: KeybindingCommand): boolean {
+  return overrides[command] !== undefined;
+}
+
+/** What a row shows for its condition. */
+export function whenSummary(when: string): string {
+  return when.trim() === "" ? "Always" : when;
+}
+
+/**
+ * True when every word of `query` is found in the binding's title, group, key (as the board writes it and as it is
+ * shown), condition or command name. An empty query matches all.
+ */
+export function matchesKeybindingQuery(binding: ResolvedKeybinding, query: string, shortcutLabel: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const def = DEFAULT_KEYBINDINGS[binding.command];
+  const haystack = [def.title, def.group, binding.command, binding.key, shortcutLabel, whenSummary(binding.when)]
+    .join("\n")
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+export interface KeybindingSection extends KeybindingGroup {
+  bindings: ResolvedKeybinding[];
+}
+
+/** The bindings matching `query`, under their registry group in registry order. A group with none left is dropped. */
+export function keybindingSections(
+  bindings: readonly ResolvedKeybinding[],
+  query: string,
+  shortcutLabel: (shortcut: string) => string,
+): KeybindingSection[] {
+  return keybindingGroups()
+    .map((group) => ({
+      ...group,
+      bindings: bindings.filter(
+        (binding) =>
+          DEFAULT_KEYBINDINGS[binding.command].group === group.label &&
+          matchesKeybindingQuery(binding, query, shortcutLabel(binding.key)),
+      ),
+    }))
+    .filter((section) => section.bindings.length > 0);
 }
 
 /** The overrides without this command. */

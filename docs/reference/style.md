@@ -92,6 +92,7 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 
 ## 5. Key class strings (quick copy)
 
+- Settings row: title, one short `description` line, optional `info` (`InfoHover`: `InfoIcon` in a hover popover beside the title, for detail that would crowd the row) and `status` (`StatusLine`: badge + detail on one compact line under the description). The page column is `max-w-4xl`.
 - Card surface: `rounded-xl border border-border/60 bg-card/40` (settings group); plan card `rounded-3xl border border-border/80 bg-card/70`.
 - Sidebar row surface: `group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring` + idle `hover:bg-sidebar-row-hover`, selected `bg-sidebar-row-selected`.
 - Panel row: `h-8 min-w-0 rounded-lg border-transparent gap-2.5 px-2.5 text-left text-[13px] font-medium text-foreground/80 w-full justify-start` + hover `hover:!bg-black/[0.035] dark:hover:!bg-white/[0.08]`; icon `size-4 shrink-0 text-muted-foreground`.

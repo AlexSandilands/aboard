@@ -7,36 +7,24 @@ import { PanelControl, ROW_HOVER_ACTION_CLASS } from "~/components/task/PanelCon
 import { TaskSection } from "~/components/task/TaskSection";
 import { ReviewBadge } from "./ReviewBadge";
 import { Badge } from "~/components/ui/badge";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
-import { fetchReviewPrompt, useResolveFinding, useStartReview, useUpdateTask } from "~/state/mutations";
+import { fetchReviewPrompt, useResolveFinding, useStartReview } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
-import {
-  autoReviewChoice,
-  autoReviewOptions,
-  autoReviewValue,
-  findingLocation,
-  reviewBadgeVariant,
-  SEVERITY_VARIANT,
-  sortFindings,
-  visibleFindings,
-} from "./review.logic";
+import { findingLocation, reviewBadgeVariant, SEVERITY_VARIANT, sortFindings, visibleFindings } from "./review.logic";
 
 const STATUS_LABEL: Record<ReviewFinding["status"], string> = { open: "Open", fixed: "Fixed", wont_fix: "Won't fix" };
 
 /**
- * The task's local review: the per-task auto-review override, actions to run a review or copy the loop
+ * The task's local review: whether auto-review is on (set under Automation), actions to run a review or copy the loop
  * prompt, the latest round's findings and anything still open from earlier rounds.
  */
 export function ReviewSection({ task }: { task: TaskDetail }) {
   const settings = useSettings().data;
-  const { mutate: updateTask } = useUpdateTask();
   const { mutate: startReview, isPending: starting } = useStartReview();
   // Closed tasks only keep the section when there's a history to show.
   if (task.resolution && task.reviews.length === 0) return null;
 
-  const options = autoReviewOptions(settings?.autoReview ?? false);
   const latest = task.reviews.at(-1);
   const earlierOpen = task.reviews.slice(0, -1).flatMap((r) => visibleFindings(r, false));
   const effectiveOn = task.autoReview ?? settings?.autoReview ?? false;
@@ -47,25 +35,11 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
       summary={task.review && <ReviewBadge summary={task.review} />}
       actions={
         <>
-          <Select
-            items={options}
-            value={autoReviewChoice(task.autoReview)}
-            onValueChange={(value) => {
-              if (value) updateTask({ id: task.id, autoReview: autoReviewValue(value) });
-            }}
-          >
-            <SelectTrigger variant="ghost" size="xs" aria-label="Auto-review for this task">
-              <span className="text-muted-foreground">Auto:</span>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectPopup alignItemWithTrigger={false} matchTriggerWidth={false}>
-              {options.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
+          {task.resolution ? null : (
+            <span className="text-2xs text-muted-foreground">
+              Auto-review {effectiveOn ? "on" : "off"} (set under Automation)
+            </span>
+          )}
           <PanelControl
             part="meta"
             title="Copy the review loop prompt, to run it in any agent session"

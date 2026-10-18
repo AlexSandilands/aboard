@@ -101,6 +101,20 @@ export function createAutopilotRunsRepo(sql: Sql) {
         ) !== undefined
       );
     },
+    /**
+     * The newest real run of a scheduled agent in a project that succeeded and left an answer: the one whose handover
+     * the next run gets. A failed or skipped run leaves no answer to pick, so the one before it still counts.
+     */
+    lastScheduledAnswer(automation: string, projectId: string): AutopilotRun | null {
+      const row = sql.get<RunRow>(
+        `SELECT * FROM autopilot_runs WHERE automation = ? AND project_id = ? AND task_id IS NULL AND dry_run = 0
+         AND status = 'succeeded' AND json_extract(output_json, '$.kind') = 'scheduled_agent'
+         ORDER BY finished_at DESC, rowid DESC LIMIT 1`,
+        automation,
+        projectId,
+      );
+      return row ? toRun(row) : null;
+    },
     /** The run that made this headless session, if any. */
     forSession(sessionId: string): AutopilotRun | null {
       const row = sql.get<RunRow>(

@@ -22,6 +22,7 @@ import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/cu
 import { useBoard } from "~/state/queries";
 import {
   customFormToInput,
+  parseAllowedTools,
   previewAction,
   PR_EVENTS,
   sampleTask,
@@ -29,6 +30,7 @@ import {
   TRIGGER_KINDS,
   type CustomForm,
 } from "./customAutomations.logic";
+import { ScheduledRuns } from "./ScheduledRuns";
 
 function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -383,7 +385,9 @@ export function CustomAutomationEditorForm({
             {isSchedule ? (
               <p className="text-xs text-muted-foreground">
                 A scheduled agent has no task: it runs headless in an empty temporary folder, not the project&apos;s
-                own, and can use the board&apos;s tools to find its work. It doesn&apos;t run in T3 Code.
+                own, and can use the board&apos;s tools to find its work. It doesn&apos;t run in T3 Code. Each run ends
+                with a short handover that the next run in the same project is given, so it can remember what it held,
+                triggered or skipped.
               </p>
             ) : (
               <div className="flex items-start justify-between gap-4">
@@ -400,6 +404,37 @@ export function CustomAutomationEditorForm({
                 />
               </div>
             )}
+            <Field
+              label="Allowed tools"
+              hint={
+                <>
+                  Optional, one per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>) or one
+                  of its tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own
+                  tools are always allowed.
+                </>
+              }
+            >
+              <Textarea
+                aria-label="Allowed tools"
+                className="font-mono"
+                rows={3}
+                value={form.allowedTools}
+                placeholder={"mcp__issue-tracker\nmcp__issue-tracker__search_jira"}
+                onChange={(event) => patch({ allowedTools: event.currentTarget.value })}
+              />
+            </Field>
+            {parseAllowedTools(form.allowedTools).length > 0 ? (
+              <Alert variant="warning">
+                <AlertDescription>
+                  These tools run unattended: nobody is asked to approve a call, so the agent can use everything they
+                  offer, including anything that writes. Allow a single tool rather than a whole server when you can.
+                  The server must be one of your own (<code className="font-mono">claude mcp add --scope user</code>, a
+                  plugin or a connector): a server from a project&apos;s <code className="font-mono">.mcp.json</code>{" "}
+                  needs an approval nobody can give in an unattended run. An agent with extra tools runs headless, not
+                  in a T3 Code thread.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               The runner, budget and timeout are this automation&apos;s settings in the Autopilot list, per scope.
             </p>
@@ -469,6 +504,18 @@ export function CustomAutomationEditorForm({
             {preview ?? (result.ok ? "Nothing to preview." : result.error)}
           </pre>
         </Field>
+
+        {customId && isSchedule && form.actionKind === "agent" ? (
+          <Field
+            label="Recent runs"
+            hint="What each run said it did, and the handover it left for the next run in that project."
+          >
+            <ScheduledRuns
+              customId={customId}
+              projects={form.projectIds.length > 0 ? projects.filter((p) => form.projectIds.includes(p.id)) : projects}
+            />
+          </Field>
+        ) : null}
 
         {error ? (
           <p role="alert" className="text-xs text-destructive-foreground">

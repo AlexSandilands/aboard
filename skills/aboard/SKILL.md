@@ -16,6 +16,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
 1. **Orient.** At the start of meaningful work call `board_overview` (with `workspacePath`) or
    `list_tasks`. If the user's request matches an existing task, that's the one you're working on.
+   To look back over a period instead (how did the week go, what keeps failing or stalling), call
+   `board_activity(since: "7d")`: it lists what finished, review findings, Autopilot runs and failures,
+   stalls and notes, each section capped, with task numbers to open with `get_task`.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
@@ -132,8 +135,15 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
    archive these: archiving hides the card and loses why it was closed. `delete_task` is permanent and
    only works on archived tasks; use it only when the user asks for a task to be deleted.
-9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
-   exact next action. The next agent starts from `get_task`.
+9. **Ask for the user when you need them.** `request_attention(task, message)` flags a task under Needs
+   attention and sends the user a notification. Use it when you can't go on without them or they should look at
+   something: you are blocked, unsure, found a problem, or have work ready to review or approve (and when the user
+   has told you to, e.g. "after writing the plans, ask me to review them"). Say exactly what to look at and what you
+   need, in a sentence or two. Don't use it for progress (that is `add_note`) or when nothing is for them to act on:
+   every call interrupts them. A new request replaces the standing one; `request_attention(task, clear: true)`
+   takes it off once the problem is gone or the user has answered.
+10. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
+    exact next action. The next agent starts from `get_task`.
 
 ## Epics
 
@@ -188,6 +198,22 @@ hovering a card draws green lines to the tasks it unblocks and red lines to its 
   task: an archived blocker that isn't Done still blocks, so close it with `close_task` or remove the relation.
 - Record a dependency when you notice one while planning (the task needs another task's migration, API or
   decision), instead of only writing it in the plan.
+
+## Suggesting changes to prompts and skills
+
+The review and planning skills the user chose, and their custom automations' prompts, steer every agent the board
+starts. When you have evidence that one of them misleads agents or wastes their time (reviews missing the same kind of
+bug, a prompt that keeps sending agents the wrong way), suggest a change instead of editing it:
+
+1. `list_editable_prompts` lists what can be changed, each with a `target` key and where it is used.
+2. `get_editable_prompt(target)` returns the current text and its `hash`.
+3. `suggest_change(target, baseHash, proposed, rationale, evidence)`: `proposed` is the whole new text. Change
+   only what your evidence supports and prefer removing or tightening text to adding it; `rationale` says what
+   goes wrong and how the change fixes it; `evidence` lists task refs (`"#42"`) and URLs.
+
+The user reads the diff in Settings and accepts or rejects it; nothing changes until then. A `CONFLICT` means the
+text changed since you read it: read it again and rework your change. A newer suggestion for the same target
+replaces your open one. Never edit those skill files yourself, and never ask the user to accept a change unseen.
 
 ## Local review
 

@@ -4,6 +4,7 @@ import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
+import { HeadlessModel } from "./headlessModel.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
@@ -356,11 +357,22 @@ export const AttentionReason = z.object({
     "review_unattended",
     "import_failed",
     "autopilot",
+    "agent_request",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
 });
 export type AttentionReason = z.infer<typeof AttentionReason>;
+
+/** An agent's standing request for the user to look at a task (the request_attention tool). */
+export const AttentionRequest = z.object({
+  /** What the user should look at. */
+  message: z.string(),
+  /** Who asked: the agent's label. */
+  actor: z.string(),
+  requestedAt: IsoDate,
+});
+export type AttentionRequest = z.infer<typeof AttentionRequest>;
 
 export const CurrentStep = z.object({
   id: z.string(),
@@ -449,6 +461,8 @@ export const TaskSummary = z.object({
   currentStep: CurrentStep.nullable(),
   links: z.array(TaskLink),
   attention: z.array(AttentionReason),
+  /** The agent's request behind an `agent_request` attention reason; null when no agent has one standing. */
+  attentionRequest: AttentionRequest.nullable(),
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
@@ -534,6 +548,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   }),
   /** Notifications were read or removed (their task was deleted); the inbox refetches. */
   z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
+  /** A suggested change was made, accepted, rejected or went stale; Settings refetches. `open` counts the open ones. */
+  z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -734,10 +750,15 @@ export const AppSettings = z
     /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
     copilotCli: z.string().nullable(),
     headlessReviewBudgetUsd: z.number().positive().max(100),
+    /** The model the board reviewer runs; null keeps the CLI's own default. */
+    headlessReviewModel: HeadlessModel.nullable(),
     /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
-    /** The model `claude -p` runs for an import, as `--model` takes it (an alias like "haiku" or a full id). */
-    issueImportModel: z.string(),
+    /**
+     * The model `claude -p` runs for an import: a model tier, or a model as `--model` takes it (an alias like "haiku"
+     * or a full id). Saved as a bare string before tiers were an option; always returned in the object form.
+     */
+    issueImportModel: HeadlessModel,
     issueImportBudgetUsd: z.number().positive().max(100),
     /**
      * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
@@ -777,7 +798,9 @@ export const UpdateSettingsInput = z.object({
   copilotCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
-  issueImportModel: z.string().trim().min(1).optional(),
+  /** A tier, a model, or null for the CLI's default. A bare string is a model. */
+  headlessReviewModel: HeadlessModel.nullable().optional(),
+  issueImportModel: HeadlessModel.optional(),
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */

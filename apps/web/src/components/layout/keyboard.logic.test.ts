@@ -7,6 +7,7 @@ import {
   resolveCommand,
   runsImmediately,
   shortcutFromEvent,
+  shortcutParts,
   type KeyEventLike,
 } from "./keyboard.logic";
 
@@ -154,6 +155,14 @@ describe("shortcutFromEvent", () => {
     for (const event of events) {
       expect(matchesShortcut(event, shortcutFromEvent(event, false)!, false)).toBe(true);
     }
+  });
+});
+
+describe("shortcutParts", () => {
+  it("splits a shortcut into the keys to press", () => {
+    expect(shortcutParts("mod+k", false)).toEqual(["Ctrl", "K"]);
+    expect(shortcutParts("mod+shift+,", true)).toEqual(["⇧", "⌘", ","]);
+    expect(shortcutParts("escape", false)).toEqual(["Esc"]);
   });
 });
 

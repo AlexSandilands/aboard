@@ -682,8 +682,45 @@ const showcase: Scenario = (s, opts) => {
   const ie = addTask(s, docs.id, { title: "Support Internet Explorer", status: "backlog" });
   s.tasks.close(ie, { resolution: "wont_do" }, "user");
 
-  // The attention inbox: what the board has told you, newest last. The first two are read.
+  // A task as `#N Title`, for notification bodies and evidence.
   const label = (taskId: string) => `#${s.tasks.summary(taskId).number} ${s.tasks.summary(taskId).title}`;
+  // Suggested changes: one to a custom automation's prompt (accepting it only changes the database), one to the
+  // built-in review skill (accepting it writes a skill to the home folder, so try that one in tests only), and one
+  // already rejected.
+  const nudge = s.customAutomations.create({
+    name: "Nudge stale work",
+    trigger: { kind: "stale", status: "in_progress", hours: 48 },
+    action: {
+      kind: "agent",
+      prompt:
+        "Task #{{task.number}} has had no progress for two days.\nRead its plan and notes, then add a note saying what is left and what blocks it.",
+    },
+  });
+  const suggest = (target: string, edit: (text: string) => string, rationale: string, evidence: string[]) => {
+    const { text, hash } = s.suggestions.read(target);
+    return s.suggestions.suggest({ target, baseHash: hash, proposed: edit(text), rationale, evidence }, "improver");
+  };
+  suggest(
+    `automation:${nudge.id}`,
+    (text) => `${text}\nIf a step is blocked on the user, say what you need from them in one sentence.`,
+    "Notes left by this automation on blocked tasks didn't say what the user had to do, so the tasks stayed stuck.",
+    [label(refunds), label(biometric)],
+  );
+  const rejected = suggest(
+    "builtin:review",
+    (text) => text.replace("You are an independent reviewer.", "You are a strict, independent reviewer."),
+    "Reviews passed changes with missing tests.",
+    [label(webhooks)],
+  ).suggestion;
+  s.suggestions.reject(rejected.id, "user");
+  suggest(
+    "builtin:review",
+    (text) => `${text.trim()}\n\nFlag a changed code path with no test as a major finding.`,
+    "Two of the last five reviews passed a change whose new branch had no test, and both came back as bugs:\n\n- #3 shipped a rounding bug\n- the webhook retry missed a crash case",
+    [label(webhooks), "https://github.com/acme/shop/pull/7"],
+  );
+
+  // The attention inbox: what the board has told you, newest last. The first two are read.
   const inbox = [
     { kind: "review_finished", taskId: drawer, title: "Review round 1 finished", detail: "2 major, 1 nit" },
     { kind: "pr_changes_requested", taskId: crash, title: "Changes requested on PR #33", detail: "" },

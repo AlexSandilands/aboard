@@ -128,6 +128,6 @@ export function newSessionArgv(input: {
     : [cli, ...model, "--session-id", input.sessionId, "--name", input.name, "-i", input.prompt];
 }
 
-/** The model a harness's CLI runs for a tier, from Settings → Models, or null for the CLI's default. */
+/** The model a harness's CLI runs for a tier, from Settings → Model tiers, or null for the CLI's default. */
 export const tierCliModel = (tiers: ModelTiers, tier: ModelTier | null, harness: AgentHarness): string | null =>
   (tier && tiers[tier].cli?.[harness]?.trim()) || null;

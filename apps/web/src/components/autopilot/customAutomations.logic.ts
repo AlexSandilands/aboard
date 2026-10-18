@@ -2,6 +2,7 @@ import {
   checkCustomDefinition,
   CreateCustomAutomationInput,
   customAgentPrompt,
+  customAgentToolsNote,
   CUSTOM_MINUTES_MAX,
   CUSTOM_MINUTES_MIN,
   customTaskMatches,
@@ -17,6 +18,8 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+
+const NL = String.fromCharCode(10);
 
 /** A custom automation as the editor holds it: numbers as typed, every kind's fields kept while switching. */
 export interface CustomForm {
@@ -46,6 +49,8 @@ export interface CustomForm {
   /** "" takes the task's tier (a schedule has none, so the default one). */
   tier: ModelTier | "";
   onPrBranch: boolean;
+  /** One tool or server per line, as typed. */
+  allowedTools: string;
   command: string;
   timeoutSeconds: string;
 }
@@ -96,6 +101,7 @@ export function emptyCustomForm(): CustomForm {
     skill: "",
     tier: "",
     onPrBranch: false,
+    allowedTools: "",
     command: "",
     timeoutSeconds: "300",
   };
@@ -126,12 +132,25 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
   }
   const a = custom.action;
   if (a.kind === "agent") {
-    Object.assign(form, { prompt: a.prompt, skill: a.skill, tier: a.tier ?? "", onPrBranch: a.onPrBranch });
+    Object.assign(form, {
+      prompt: a.prompt,
+      skill: a.skill,
+      tier: a.tier ?? "",
+      onPrBranch: a.onPrBranch,
+      allowedTools: a.allowedTools.join("\n"),
+    });
   } else {
     Object.assign(form, { command: a.command, timeoutSeconds: String(a.timeoutSeconds) });
   }
   return form;
 }
+
+/** The tools typed in the field, one per line (a rule's specifier can hold a comma), blanks dropped. */
+export const parseAllowedTools = (text: string): string[] =>
+  text
+    .split(/\r?\n/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 
 const wholeNumber = (value: string): number | null => (/^\d+$/.test(value.trim()) ? Number(value) : null);
 
@@ -192,11 +211,17 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             tier: form.tier || null,
             // The switch is hidden on a schedule, which has no pull request.
             onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
+            allowedTools: parseAllowedTools(form.allowedTools),
           }
         : { kind: "shell", command: form.command, timeoutSeconds },
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
+    if (issue.path.includes("allowedTools")) {
+      const tool = issue.path.at(-1);
+      const named = typeof tool === "number" ? ` "${parseAllowedTools(form.allowedTools)[tool] ?? ""}"` : "";
+      return { ok: false, error: `Allowed tools:${named} ${issue.message}` };
+    }
     const field = String(issue.path[issue.path.length - 1] ?? issue.path[0] ?? "");
     const what: Record<string, string> = {
       name: "Give it a name",
@@ -240,9 +265,8 @@ export function previewAction(
   const scheduled = input.trigger.kind === "schedule";
   const values = customValues(def, project, scheduled ? null : task);
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
-  return scheduled
-    ? customAgentPrompt(def, values, null, null)
-    : task
-      ? customAgentPrompt(def, values, task, null)
-      : null;
+  if (!scheduled && !task) return null;
+  const prompt = customAgentPrompt(def, values, scheduled ? null : task, null);
+  const tools = customAgentToolsNote(def.action);
+  return tools ? `${prompt}${NL}${NL}${tools}` : prompt;
 }

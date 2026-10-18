@@ -7,6 +7,7 @@ import {
   type ModelTiers,
   type ModelTierSetting,
   type NotificationSettings,
+  parseHeadlessModel,
   type SavedViews,
   sanitizeKeybindingOverrides,
 } from "@repo/contracts";
@@ -32,8 +33,9 @@ const DEFAULTS: StoredSettings = {
   headlessReviewCli: null,
   copilotCli: null,
   headlessReviewBudgetUsd: 2,
+  headlessReviewModel: null,
   issueImportEnabled: true,
-  issueImportModel: "haiku",
+  issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
   issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
@@ -71,6 +73,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "headlessReviewCli",
     "copilotCli",
     "headlessReviewBudgetUsd",
+    "headlessReviewModel",
     "issueImportEnabled",
     "issueImportModel",
     "issueImportBudgetUsd",
@@ -124,6 +127,9 @@ export function loadSettings(repos: Repos): StoredSettings {
     ...(Object.fromEntries(
       (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
     ) as unknown as StoredSettings),
+    // Saved as a bare model name before tiers were an option.
+    headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
+    issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
   };
@@ -183,6 +189,9 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.copilotCli !== undefined) repos.settings.set("copilotCli", blankToNull(input.copilotCli));
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
+        }
+        if (input.headlessReviewModel !== undefined) {
+          repos.settings.set("headlessReviewModel", input.headlessReviewModel);
         }
         if (input.issueImportEnabled !== undefined) repos.settings.set("issueImportEnabled", input.issueImportEnabled);
         if (input.issueImportModel !== undefined) repos.settings.set("issueImportModel", input.issueImportModel);

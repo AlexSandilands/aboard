@@ -46,10 +46,13 @@ import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { CustomAutomationsService } from "./customAutomations.ts";
 import type { RecurringService } from "./recurring.ts";
+import type { ActivityService } from "./activity.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
+import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { SocialService } from "./social.ts";
+import type { SuggestionsService } from "./suggestions.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -76,8 +79,11 @@ export interface Services {
   recurring: RecurringService;
   customAutomations: CustomAutomationsService;
   digests: DigestsService;
+  activity: ActivityService;
   notifications: NotificationsService;
   social: SocialService;
+  suggestions: SuggestionsService;
+  attention: AttentionService;
 }
 
 export interface ProjectRef {

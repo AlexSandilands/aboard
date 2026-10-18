@@ -4,7 +4,9 @@ import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BlocksIcon,
+  CpuIcon,
   FolderIcon,
+  KeyboardIcon,
   ListTodoIcon,
   type LucideIcon,
   SquareKanbanIcon,
@@ -26,6 +28,7 @@ import {
   useSidebar,
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
+import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
 import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
@@ -41,7 +44,9 @@ import { useLeaveEditor, useLeaveSettings, useOpenSettings } from "./settingsNav
 
 const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
+  keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
+  models: CpuIcon,
   autopilot: ZapIcon,
   integrations: BlocksIcon,
   project: FolderIcon,
@@ -91,6 +96,9 @@ export function SettingsSidebar() {
   const openSettings = useOpenSettings();
   const leave = useLeaveSettings();
   const { isMobile, setOpenMobile } = useSidebar();
+  // Open suggestions wait on the user, so their section shows how many.
+  const openSuggestions = useSuggestions().data?.open ?? 0;
+  const countOf = (sectionId: string) => (sectionId === "tasks.suggestions" ? openSuggestions : 0);
 
   const go = (target: string, group: SettingsGroupId) => {
     if (isMobile) setOpenMobile(false);
@@ -146,6 +154,14 @@ export function SettingsSidebar() {
                             onClick={() => go(section.id, group.id)}
                           >
                             <span>{section.label}</span>
+                            {countOf(section.id) > 0 ? (
+                              <span
+                                aria-label={`${countOf(section.id)} open`}
+                                className="ms-auto rounded-full bg-info/15 px-1.5 text-[10px] leading-4 font-medium text-info-foreground tabular-nums"
+                              >
+                                {countOf(section.id)}
+                              </span>
+                            ) : null}
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
@@ -439,7 +455,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
 
   return (
     <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
-      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
+      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
     </div>
   );
 }

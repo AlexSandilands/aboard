@@ -57,7 +57,8 @@ export interface ImportJob {
   /** The Claude Code CLI; null looks up `claude` on PATH. */
   cli: string | null;
   cwd: string;
-  model: string;
+  /** As `--model` takes it; null keeps the CLI's default. */
+  model: string | null;
   budgetUsd: number;
   source: IssueSource;
   /** Labels in use on the board, so the model reuses them instead of inventing near-duplicates. */
@@ -101,8 +102,7 @@ export function importArgs(
     "json",
     "--json-schema",
     JSON.stringify(IMPORT_OUTPUT_SCHEMA),
-    "--model",
-    job.model,
+    ...(job.model ? ["--model", job.model] : []),
     // Anything not allowed below is denied, since nobody is there to answer a prompt.
     "--permission-mode",
     "dontAsk",

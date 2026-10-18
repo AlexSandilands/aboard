@@ -131,7 +131,7 @@ piece would and prints the outcome; every line should read "blocked" and the ori
 | File                                                   | What it does                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
 | `packages/contracts/src/social.ts`                     | Post kinds, size caps, retention, the feed's types                   |
-| `apps/server/src/db/migrations/029_social_posts.sql`   | The `social_posts` table                                             |
+| `apps/server/src/db/migrations/031_social_posts.sql`   | The `social_posts` table                                             |
 | `apps/server/src/db/repos/social.ts`                   | SQL: list, insert, prune, a session's task                           |
 | `apps/server/src/services/social.ts`                   | Posting (validation, redaction, rate limit, pruning), reading, feed  |
 | `apps/server/src/mcp/tools/social.ts`                  | `social_read`, `social_post` and their wording                       |

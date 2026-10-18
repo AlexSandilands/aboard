@@ -94,7 +94,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed`, `autopilot.changed`, `notification.created` and `notifications.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed` and `suggestions.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -128,12 +128,14 @@ ORM.
 | `autopilot_custom` | Custom automations: name, trigger, filters, action and when it was armed ([autopilot](features/autopilot.md#custom-automations)) |
 | `autopilot_runs`  | What Autopilot did or would do: automation, task, dedupe key, status, runner details, cost, error, needs attention             |
 | `autopilot_digests` | Digests of what changed: period, mode, Markdown body, cost, read state. The newest 30; not backed up ([autopilot](features/autopilot.md)) |
+| `suggestions`     | Agents' suggested changes to prompts and skills: target, base text and hash, proposed text, rationale, evidence, status ([suggestions](features/suggestions.md)) |
 | `notifications`   | The attention inbox: kind, task, title, body, dedupe key, read state. Pruned after 30 days, not backed up ([notifications](features/notifications.md)) |
 | `settings`        | Key/value JSON for app settings                                                                                               |
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
 task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
-attention, an epic's roll-up) are computed when summaries are built, never stored. The exception is an epic's
+attention, an epic's roll-up) are computed when summaries are built, never stored. The exceptions are an agent's
+request for attention (`attention_*` columns on the task, [notifications](features/notifications.md#agent-requests)) and an epic's
 status, derived from its tasks but stored so lists and filters treat it like any status
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 

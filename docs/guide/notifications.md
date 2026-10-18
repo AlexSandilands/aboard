@@ -8,7 +8,11 @@ The board tells you when something needs you, so you don't have to keep it open.
 - A linked pull request's **checks start failing**, or a reviewer **requests changes**.
 - A **local review round finishes**, with what it found.
 - An **Autopilot run fails** or gives up.
+- An **agent asks you to look at a task** (it is blocked, unsure, or has something ready to review). You decide when
+  your agents do this, in your prompts or custom instructions, e.g. "after writing the plans, ask me to review them".
+  The task also shows under **Needs attention** with what they asked, and a **Dismiss** button in its panel.
 - A new [digest of what changed](digest.md) is ready.
+- An agent **suggests a change** to one of your prompts or skills ([suggested changes](settings.md#suggested-changes)).
 
 Each change is announced once. A pull request or thread you link is not announced for the state it already
 has; only for what changes after.
