@@ -5,6 +5,7 @@ import { SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSide
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { useInSocial, useLeaveSocial } from "~/components/social/useSocialNavigation";
 import { useInStats, useLeaveStats, useOpenStats } from "~/components/stats/useOpenStats";
 
 function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
@@ -24,7 +25,7 @@ function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: 
   );
 }
 
-/** Bottom row of the sidebar: settings, stats and the light/dark theme flip; on the stats page, just Back. */
+/** Bottom row of the sidebar: settings, stats and the light/dark theme flip; on the stats and social pages, just Back. */
 export function SidebarFooterMenu() {
   const { resolvedTheme, setTheme } = useTheme();
   const openSettings = useOpenSettings();
@@ -32,8 +33,10 @@ export function SidebarFooterMenu() {
   const leaveStats = useLeaveStats();
   const { isMobile, setOpenMobile } = useSidebar();
   const inStats = useInStats();
+  const leaveSocial = useLeaveSocial();
+  const inSocial = useInSocial();
   const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
-  if (inStats)
+  if (inStats || inSocial)
     return (
       <SidebarFooter>
         <SidebarMenu>
@@ -41,7 +44,7 @@ export function SidebarFooterMenu() {
             <SidebarMenuButton
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
-                void leaveStats();
+                void (inStats ? leaveStats() : leaveSocial());
               }}
             >
               <ArrowLeftIcon />

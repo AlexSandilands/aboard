@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
 import { useInStats, useLeaveStats } from "~/components/stats/useOpenStats";
+import { useInSocial, useLeaveSocial } from "~/components/social/useSocialNavigation";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { useSidebar } from "~/components/ui/sidebar";
 import { AppShell } from "./AppShell";
@@ -20,11 +21,13 @@ export function AppFrame() {
   const inStats = useInStats();
   const settingsBack = useSettingsBack();
   const leaveStats = useLeaveStats();
+  const inSocial = useInSocial();
+  const leaveSocial = useLeaveSocial();
   return (
     <AppShell
       sidebar={inSettings ? <SettingsSidebar /> : <AppSidebar />}
       sidebarLabel={inSettings ? "Settings" : "Projects"}
-      onBack={inSettings ? settingsBack : inStats ? leaveStats : taskId ? closeTask : null}
+      onBack={inSettings ? settingsBack : inStats ? leaveStats : inSocial ? leaveSocial : taskId ? closeTask : null}
       // On the project settings page `?project=` is the project being configured, not the board's scope.
       newTaskProjectId={inSettings ? null : projectFilter}
     >
