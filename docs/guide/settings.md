@@ -77,6 +77,19 @@ kept in this browser, not on the server: another browser (or the desktop app) ha
   use the theme for both light and dark; click one of its two circles to use it for that appearance only (a sun or
   moon badge marks which circle is in use), so you can have, say, Grove in light and Iris in dark. Label, epic and PR
   colours stay the same in every theme.
+- **Create theme** opens a small editor in the corner that you can drag, resize and minimise; the whole board shows
+  your colours while you edit, so you can open the board and look. Name the theme, pick Light or Dark, and choose a
+  **Background** and an **Accent**: everything else is worked out from those two and kept readable. Turn on
+  **Advanced** to set each colour yourself (text, borders, surfaces, the sidebar, error and warning…). **Inspect**
+  lets you click anything on the board to jump to the colour that paints it, and clicking a colour's name lights up
+  everywhere it's used. Cancel puts your theme back. Saving a theme under the name of one you already have adds it as
+  that theme's other appearance, so a light and a dark theme become one.
+- Every theme card has **Duplicate** (start a new theme from it). Your own themes also have **Edit**, **Export**
+  (a `.json` file) and **Remove**.
+- **Add theme** finds open-source themes on Open VSX (the VS Code extension registry) and installs them, all of an
+  extension's variants on one card. You can also drop or choose theme files (several at once), or paste a theme's
+  JSON. Files exported from T3 Code or the board import as they are, and VS Code colour themes are converted. If a
+  theme is already installed you choose **Update existing** or **Keep both**.
 - **Contrast** (50–200 %) fades text and borders below 100 % and strengthens them above it.
 - **Glass opacity** (40–100 %) sets how see-through menus, dialogs and popovers are; 100 % makes them solid.
 - **Panel animations** (0–400 ms) sets how fast the sidebar and the task panel slide open; the preview beside it
