@@ -61,11 +61,12 @@ describe("MCP endpoint", () => {
       "request_attention",
       "link",
       "merge_task_pr",
+      "retry_autopilot_run",
     ]) {
       expect(names).toContain(name);
     }
     // Autopilot is REST only, so an agent can't switch it on or lift its limits (ADR 0008).
-    expect(names.filter((n) => /autopilot|pause|resume/i.test(n))).toEqual([]);
+    expect(names.filter((n) => /autopilot|pause|resume/i.test(n))).toEqual(["retry_autopilot_run"]);
     // An outputSchema makes structuredContent mandatory, which Claude Code would show instead of the text.
     expect(tools.filter((t) => t.outputSchema).map((t) => t.name)).toEqual([]);
     expect(client.getInstructions()).toContain("get_task");

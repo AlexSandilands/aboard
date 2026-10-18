@@ -433,6 +433,37 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.
 
+**Orchestrate** (`orchestrate`, #138; `automations/orchestrate.ts`). Needs an agent and is off until switched on.
+The built-in version of the T3 Code "babysitter" threads: a scheduled agent per project that keeps its work moving.
+
+- **When.** Every `everyMinutes` (default 30, 5 to 1440) from local midnight (`latestMinutesSlot`), per project it's
+  on in (`epicScope: false`: it has no task). Only the latest slot counts, so downtime catches up once, and switching it
+  on runs the current slot at once. The dedupe key is `orchestrate:<projectId>:<local slot stamp>`. A project with
+  nothing to look at (no unarchived task In Progress or Review, flagged for Autopilot in Planned, or under Needs
+  attention) gets no run, so an idle project costs nothing. One run at a time per project: while one is queued or
+  running, `check` returns nothing for it and the latest slot runs once it ends.
+- **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
+  push guard), with `access: "read-only"`: the read-only file and git list, the board's MCP tools, and the `gh`
+  reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
+  job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
+  for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. It counts against the caps and waits
+  out quiet hours like any agent run. Tier `standard`; `model`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
+  only runner options (the runner choice doesn't apply).
+- **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
+  prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
+  instructions. **May merge** (default on) off adds `mcp__<id>__merge_task_pr` to the run's denied tools
+  (`RunnerRequest.deniedTools`) and tells it to list ready tasks instead.
+- **The prompt** (`orchestratePrompt`) is adapted from the babysitter threads: ground rules (this project only, never
+  read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
+  PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when
+  none is working, retry a failed run instead of pushing an empty commit, re-run a flaky CI job once,
+  `request_attention` for what only the user can decide), merge one at a time and re-check the other PRs' checks after
+  each, and end with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
+- **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
+  `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
+  run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
+  and handover (`ScheduledRuns`).
+
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
 
@@ -664,7 +695,7 @@ with that error.
 - Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
   must work from its prompt alone.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
-  (`Bash(gh pr review *)`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
+  (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate with May merge off), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
   Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
   checkout settings, file tools limited to the worktree, only exact git commands) and **`expectHead`**, the commit the worktree must be at, checked before the
@@ -741,15 +772,17 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   candidate. Agent actions always go on in the background.
 - `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
-  UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry).
+  UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry,
+  and a text field's `multiline` makes it a text area).
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
   Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
   it runs. Return `needsAttention: true` for a failure the user should see.
 
-An automation must never merge into the default branch, close or delete tasks, force-push or push to the default
-branch. The only merge allowed is Merge into epic branch's, through `GithubIntegration.mergeIntoEpicBranch`.
+An automation must never merge into the default branch itself, close or delete tasks, force-push or push to the
+default branch. Its own merge is Merge into epic branch's, through `GithubIntegration.mergeIntoEpicBranch`; an
+agent it starts (Orchestrate's) reaches the default branch only through `merge_task_pr`, for flagged tasks.
 
 ### The UI
 
@@ -830,6 +863,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
+| `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, the tools it gets and `orchestratePrompt` |
+| `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run` |
 | `apps/server/src/autopilot/automations/unstick.ts` | Unstick stale tasks |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
