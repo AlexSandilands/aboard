@@ -173,7 +173,8 @@ export interface RunnerRequest {
   workspace?: { baseRef?: string | null; branch?: string | null; prBase?: string | null };
   /**
    * A task-less headless run only (it has no worktree): the project's checkout, whose default branch the run is told
-   * not to push to and is denied pushing to. The run itself works in an empty temporary folder, never here.
+   * not to push to and is denied pushing to. The run itself works in an empty temporary folder, never here. Null (a
+   * project with no folder) still gets the safety note, without a branch name; leaving it out adds neither.
    */
   repo?: string | null;
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */

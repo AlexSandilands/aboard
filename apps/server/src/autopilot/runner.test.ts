@@ -727,6 +727,13 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
       });
 
+      it("with a null repo, still tells the agent not to push to the default branch", async () => {
+        const { run, jobs, start } = setup({ t3: T3_UP });
+        await start({ run: { ...run, taskId: null }, tier: null, options: {}, repo: null });
+        expect(jobs[0]!.prompt).toContain("never push to the default branch");
+        expect(jobs[0]!.args.join(" ")).not.toContain("git push * main");
+      });
+
       it("never uses T3 Code or a nudge, and removes its folder when the agent fails", async () => {
         const { run, jobs, launches, start } = setup({
           t3: T3_UP,

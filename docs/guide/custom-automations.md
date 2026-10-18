@@ -28,7 +28,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
      skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
-     temporary folder, not the project's own, and is told the project's name and folder; it can use the board's
+     temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's
      tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
      branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
      branch. A new run waits until the last one for the project has finished, then the latest slot runs once.

@@ -299,6 +299,27 @@ describe("custom automations: triggers", () => {
       finish();
     });
 
+    it("holds back only the project and the automation that has a run going", async () => {
+      const { s, define, pass, agentRuns, project, other } = setup({ agent: () => new Promise(() => {}) });
+      s.autopilot.updateEngine({ maxConcurrent: 5 });
+      const watch = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: agent,
+      });
+      await pass(5 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha"]);
+      // Another automation on the same project isn't held by Watch's run.
+      define({ name: "Other", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(10 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha", "Other · Alpha"]);
+      // Watch's run in Alpha doesn't hold it back in Beta (and holds it back in Alpha still).
+      s.customAutomations.update(watch.id, { filters: { projectIds: [project.id, other.id] } });
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha", "Other · Alpha", "Watch · Beta"]);
+    });
+
     it("catches up once after downtime, not once per missed slot", async () => {
       const { define, pass, agentRuns, project } = setup();
       define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });

@@ -383,11 +383,13 @@ export function createAutopilotRunner(deps: {
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
     const defaultBranch = request.repo ? await defaultBranchOf(runGit, request.repo).catch(() => null) : null;
-    const prompt = request.repo
-      ? `${request.prompt}
+    // A scheduled agent passes `repo` (null when its project has no folder), so it always gets the note.
+    const prompt =
+      request.repo !== undefined
+        ? `${request.prompt}
 
 You are running unattended as ${BRAND.name} Autopilot, with no task and no worktree, in an empty temporary folder. ${SAFETY(defaultBranch)}`
-      : request.prompt;
+        : request.prompt;
     const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
     const sessionId = newSessionId();
     update({ runner: "headless", sessionId });

@@ -569,8 +569,9 @@ the automation. Runs stay, under the old key.
   (never in the project's checkout, which the board may be running from, so the runner option is ignored: it is always
   headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
   default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
-  read from, not edit. The tier is the action's, else the default for the runner's model tiers. One at a time per
-  project: while a run of the automation for the project is queued or running, `check` returns no candidate, so the
+  read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
+  folder gets the safety note without a branch name and the generic denials). The tier is the action's, else the default for the runner's model tiers. One at a time per
+  project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):

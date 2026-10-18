@@ -13,8 +13,6 @@ import {
   latestMinutesSlot,
   localStamp,
   customShellEnv,
-  AUTOPILOT_ACTIVE_STATUSES,
-  type AutopilotRun,
   type CustomAutomation,
   type CustomTrigger,
   type CustomData,
@@ -106,9 +104,6 @@ function taskEvents(
 
 const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
 
-const running = (run: AutopilotRun, customId: string) =>
-  run.automation === customAutomationKey(customId) && AUTOPILOT_ACTIVE_STATUSES.includes(run.status);
-
 /** The catalogue entry for a custom automation. */
 export function customAutomation(custom: CustomAutomation, deps: { runShell: RunShell }): Automation {
   const { trigger, filters, action } = custom;
@@ -129,6 +124,16 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     const scoped = inScope(ctx);
     if (trigger.kind === "schedule") {
       const s = trigger.schedule;
+      // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded), and
+      // the latest slot then runs once it ends. The runs in flight are asked for directly, not found in the history.
+      const busy = new Set(
+        isAgent
+          ? services.autopilot
+              .status()
+              .active.filter((r) => r.automation === customAutomationKey(custom.id))
+              .map((r) => r.projectId)
+          : [],
+      );
       return scoped.flatMap(({ project }): Candidate[] => {
         const armedAt = customArmedAt(custom, { projectId: project.id });
         const slot =
@@ -138,9 +143,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
               ? latestMinutesSlot(s.everyMinutes, now)
               : latestDue(s, now, localStamp(new Date(armedAt)));
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
-        // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded),
-        // and the latest slot then runs once it ends.
-        if (isAgent && services.autopilot.runsForProject(project.id, 500).some((r) => running(r, custom.id))) return [];
+        if (busy.has(project.id)) return [];
         const stamp = localStamp(slot);
         return [
           {
