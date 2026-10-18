@@ -599,8 +599,10 @@ export function createAutopilotService(
         const at = nowIso();
         for (const run of stranded) {
           const error = `${BOARD_RESTARTED_ERROR} while this run was going`;
-          // Only the PR automations are handed back: they redo their work safely (their keys follow the PR's head).
-          // An agent launch (Start planned, Orchestrate) may have started something, so it is flagged for the user.
+          // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that
+          // the work is still needed; a Fix PRs run killed after its agent pushed may leave a second session to push
+          // again, within its attempt cap). An agent launch (Start planned, Orchestrate) may have started something
+          // nothing re-checks, so it is flagged for the user.
           // The key is retired as by `retry`, unless this work was cut short before: a run that itself restarts the
           // board must not loop. Runs stranded together don't make each other history.
           if (

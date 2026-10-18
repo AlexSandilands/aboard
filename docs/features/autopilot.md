@@ -139,7 +139,9 @@ leave them out.
   `retried:<runId>:<key>`, no flag, no inbox notification) and the task logs an `autopilot_run` entry with status
   `retried` and reason `restart`, so the engine redoes the work on its next pass and the run no longer counts as a
   Review PRs round or a Fix PRs attempt. Every other automation is flagged as before: a Start planned or
-  Orchestrate run may have launched an agent, so redoing it could launch a second one. Retries stop at one: a run
+  Orchestrate run may have launched an agent, so redoing it could launch a second one. (A Fix PRs run killed after
+  its agent pushed can likewise leave the redo with a second session; the engine re-checks the PR first and the
+  attempt cap still applies.) Retries stop at one: a run
   whose work a restart already cut short (a retired run of the same automation and key that ended with that error)
   is flagged instead, so a run that itself restarts the board can't loop. A run a finished run of its automation
   has superseded is flagged too (runs stranded together don't supersede each other). Retired restart runs still
