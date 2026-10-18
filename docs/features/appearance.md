@@ -1,12 +1,13 @@
 # Appearance: themes, contrast, glass, motion and fonts
 
-Board task: #173 (epic #178). Verified against T3 Code at commit `812b7006f8` (October 2026).
+Board tasks: #173 and #179 (custom themes) (epic #178). Verified against T3 Code at commit `812b7006f8` (October 2026).
 
 Settings → Board → Appearance holds the same look-and-feel options as T3 Code's Appearance page, so the board
 and T3 Code look the same side by side. You pick an appearance mode (System, Light, Dark) and a theme: T3 Code
 (the default), T3 Chat, Grove, Ocean, Ember or Iris, for both appearances or just one. Below that are sliders
-for contrast, glass opacity and panel animations, and the interface and monospace fonts. Everything is kept in
-the browser; the server never sees it.
+for contrast, glass opacity and panel animations, and the interface and monospace fonts. You can also create,
+edit, export and import themes, from files, VS Code themes or Open VSX. Everything is kept in the browser; the server
+never sees it.
 
 ## How it works
 
@@ -32,8 +33,60 @@ keeps its theme and this side falls back to T3 Code (T3 Code's `assignHalf`). A 
 one appearance forces that appearance unless a half covers the one the mode asks for. All of this is pure
 logic in `theme/themeState.logic.ts`.
 
-Saved custom themes are read from `themes` (a list in T3 Code's stored shape, parsed leniently) and shown as
-cards. Nothing in this task writes that key: creating and importing themes is #179.
+Saved custom themes live in `themes` (a list in T3 Code's stored shape, parsed leniently) and are shown as cards
+after the built-ins; themes sharing a `collection` (an Open VSX extension) share one card. See
+[Custom themes](#custom-themes).
+
+### Custom themes
+
+**Colours.** Every saved colour is canonical `oklch(L C H)` (with `/ alpha` when translucent), as T3 Code saves it:
+`theme/color.ts` parses any CSS colour with culori and formats it, and holds T3 Code's OKLCH ↔ sRGB conversion,
+gamut mapping and WCAG contrast helpers. A theme file that leaves roles out is filled from **T3 Chat's** palette
+(`getDefaultThemeColors`), because that is what T3 Code does; the editor starts from T3 Code's own palette
+(`getStandardThemeColors`).
+
+**Deriving a palette** (`theme/derive.ts`, copied from T3 Code). `createVividThemeColors(appearance, background,
+accent)` steps surfaces away from the canvas in OKLCH lightness, tinted with the accent's hue; it solves text to 7:1
+on the canvas and every foreground to 4.6:1 on its surface by bisecting lightness, and takes the error and warning
+colours from T3 Code's, with surfaces tinted from the canvas. Whether the palette is dark is decided by the canvas's
+luminance, not the appearance asked for. `updateThemeColorFamily` sets one role in advanced mode and re-derives the
+roles that go with it (a surface's foreground, an action's hover, the toolbar and sidebar copies of text and
+borders).
+
+**The library.** `theme/themeLibrary.logic.ts` changes the saved list as pure functions: install, update in place,
+remove, and replace a collection in the place it held. Entries this version can't read are kept, and a saved value
+that isn't a list is refused rather than overwritten. `customThemeLibrary` in `useTheme.ts` wraps them with
+storage: each write re-applies the theme and rewrites the selection so it no longer names a removed theme.
+
+**The editor** (`ThemeEditorPanel.tsx`, opened through `themeEditorStore` and mounted by `ThemeEditorHost` in the app
+shell, so it stays open on the board). A session seeds from the theme being edited or duplicated, or T3 Code's
+palette. Simple mode edits background and accent and re-derives everything, and saves `managed: true`; a theme
+without `managed` opens in advanced mode so hand-tuned colours aren't re-derived away. Advanced mode lists T3 Code's
+colour families (Foundation, Brand & content, Search, Context, Status) with a filter. Typing the name of another
+custom theme switches the save to adding this palette as that theme's other appearance. While open, the draft is
+painted with `previewThemeColors` (`data-theme-id="__preview"`); it survives a re-apply from another tab or the OS,
+is never written to the paint snapshot, and `endThemePreview` restores the saved theme when the panel unmounts.
+
+**Inspect** (`themeInspector.ts`, copied from T3 Code). A role is found by setting its `--app-theme-*` variable to a
+probe colour and seeing which computed styles change, then restoring it before the browser paints
+(`html[data-theme-token-probe]` turns transitions off meanwhile). Tailwind classes that name a token (`bg-card`,
+`text-muted-foreground`) short-cut the probe. Selecting a colour spotlights every element it paints, refreshed at
+most twice a second while the board changes.
+
+**Import** (`ThemeImportDialog.tsx`). JSON is pasted into a highlighted editor or read from files, each refused
+above 256 KB before it is read. A file is a T3 Code theme file, or a VS Code colour theme (workbench colours with
+dotted keys, or `tokenColors`), converted by `theme/vscodeThemeImport.ts`: matching workbench colours are flattened
+onto what they sit on and kept only when readable, and the rest is derived. Several files at once pair "X Light" and
+"X Dark" into one theme. An id already installed offers Update existing (keeping its collection) or Keep both (the
+file's name, then "Name (1)"). Reserved ids (the built-ins and appearance keywords) are refused.
+
+**Open VSX** (`theme/openVsxThemes.ts`, `ThemeSearchSection.tsx`). The browser calls `open-vsx.org` directly: its
+API, files and CDN redirect all answer `Access-Control-Allow-Origin: *`, so there is no server proxy. Search keeps
+extensions with an allowed open-source licence, a theme contribution and a package under 20 MB. Installing
+downloads the `.vsix`, checks it against Open VSX's SHA-256, inspects the zip directory for bombs, ZIP64 and path
+escapes before JSZip opens it, checks the packaged manifest matches, resolves JSONC `include`s, keeps only the
+workbench colours the converter uses, and saves the themes as one collection with stable `ovx-theme-…` ids, so
+installing again updates them.
 
 ### Applying a theme
 
@@ -101,8 +154,9 @@ the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/font
 - **Web only.** The server never reads a theme, so nothing is in contracts except the desktop bridge method.
 - **A paint snapshot, not palettes in `index.html`.** Duplicating 61 roles × 10 palettes in the boot script
   would drift; the snapshot is whatever the app last applied, so custom themes work too.
-- **No colour library.** T3 Code canonicalises colours with culori. The board only needs to know a value is a
-  literal colour that can't escape its custom property, which a regex checks (`isThemeColor`).
+- **culori for colours**, as T3 Code. #173 checked colours with a regex; saving canonical oklch and deriving
+  palettes needs a real parser, and the same one keeps saved values identical to T3 Code's.
+- **Open VSX from the browser.** It allows any origin, and the integrity checks don't depend on where the code runs.
 - **A native range input**, as T3 Code uses, rather than Base UI's Slider.
 - **The mode key stays `theme`.** The old toggle's saves keep working; the theme id is a new key.
 - **Settings the board skips:** environment identification, composer context, chat width, diff colours, word
@@ -115,13 +169,22 @@ the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/font
 | Store theme choices in server settings                  | Per-browser like T3 Code's; the server has no use for them               |
 | A transition on the task panel's width                  | Dragging its edge would lag behind the pointer                           |
 | Inline the built-in palettes in the boot script          | Duplicated data that drifts, and no answer for custom themes             |
+| Proxy Open VSX through the server                       | Open VSX allows any origin; a proxy adds a route with nothing to guard   |
+| Keep T3 Code's palette as the fill for partial files    | T3 Code fills from T3 Chat's; a partial file would look different in each |
 
 ## Code map
 
 | File                                                        | What it does                                                         |
 | ----------------------------------------------------------- | -------------------------------------------------------------------- |
 | `apps/web/src/theme/palettes.ts`                            | Roles, types, T3 Code's colours, the five built-ins, role → variable |
-| `apps/web/src/theme/themeFile.ts`                           | T3 Code's theme file: parse, serialize, stored themes, colour check  |
+| `apps/web/src/theme/themeFile.ts`                           | T3 Code's theme file: parse, serialize, stored themes               |
+| `apps/web/src/theme/color.ts`, `derive.ts`                  | Colour parsing and contrast; deriving palettes and colour families   |
+| `apps/web/src/theme/themeLibrary.logic.ts`                  | Install, update, remove, replace a collection in the saved list      |
+| `apps/web/src/theme/vscodeThemeImport.ts`, `openVsxThemes.ts` | VS Code theme conversion; Open VSX search and install              |
+| `apps/web/src/components/settings/ThemeEditorPanel.tsx`, `ThemeEditorHost.tsx`, `themeEditorStore.ts`, `themeEditor.logic.ts` | The theme editor |
+| `apps/web/src/components/settings/ThemeColorPicker.tsx`, `components/ui/color-picker.tsx` | A colour row and its picker |
+| `apps/web/src/components/settings/themeInspector.ts`        | Inspect: which role paints an element, and the spotlight             |
+| `apps/web/src/components/settings/ThemeImportDialog.tsx`, `ThemeSearchSection.tsx`, `themeImport.logic.ts` | Add theme |
 | `apps/web/src/theme/themeState.logic.ts`                    | Resolving the appearance and theme, halves, the paint snapshot       |
 | `apps/web/src/theme/applyTheme.ts`                          | Writing a palette to `<html>`; colour → hex for the shell            |
 | `apps/web/src/hooks/useTheme.ts`                            | The theme store: storage, apply, tabs, OS changes, the shell         |
