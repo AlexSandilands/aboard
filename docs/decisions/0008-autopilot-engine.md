@@ -48,6 +48,17 @@ scheduled agent run, or rules inside the server that start an agent only when an
   default (`into: "epic"`) still refuses the default branch. Headless runs keep their `gh pr merge` deny rule, so
   the tool is the only way, and the gate can't be skipped. The agent chooses which flagged PR to merge and when,
   since it can see the board and order merges so they don't conflict; the server decides whether it may.
+- **Who can turn auto-merge On: any MCP caller, as with the Autopilot flag.** (#172, raised in #167's review.)
+  `create_task`, `add_to_backlog` and `update_task` accept `autoMerge: "on"`, and only their descriptions say to do
+  it when the user says so. Making On user-only isn't enforceable: MCP callers are anonymous (headless runs use
+  the user's own MCP config, and `actor` is whatever the caller writes, so "record who turned it on" can't be
+  trusted), and REST isn't a boundary either (an agent with Bash can `curl` without an Origin and be logged as
+  `user`, so "On only from the UI" would be a guard rail, not enforcement). Refusing headless runs would block the
+  intended caller, the Orchestrate automation. Rejected: MCP sets only Off/Default; record the actor and have
+  `merge_task_pr` refuse unless a non-agent set On; refuse the flag and the tool for headless runs. The risk is
+  limited by the gate above, read fresh at the checked head (so a prompt-injected agent can only merge a PR that is
+  in Review, cleanly reviewed, green and mergeable), by a Fix or Review run not being able to merge its own
+  task's PR while it runs, and by fork PRs being refused. Existing On flags stay valid.
 - **REST only.** Autopilot settings, pause and resume are REST routes for the UI. There is no MCP tool for
   them, so an agent can't turn Autopilot on, raise its limits or unpause it.
 - **The review watchdog stays separate.** `apps/server/src/integrations/reviewFallbacks.ts` is a fallback

@@ -11,9 +11,10 @@ import { registerLinkTools } from "./tools/links.ts";
 import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
+import { registerSuggestionTools } from "./tools/suggestions.ts";
 
 const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd).
-- Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task.
+- Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task. To look back over a period (what finished, failed or stalled), call board_activity(since: "7d").
 - The backlog is cheap: add_to_backlog mid-task for anything worth doing later (an idea, a follow-up, a Jira ticket), then carry on.
 - A task can't leave Backlog without a plan: set_plan (phases of 3-8 concrete, verifiable steps) before moving it to planned/in_progress. create_task makes a planned task in one call. When planning, also pass suggestedModel: the tier (light, standard or deep) the implementing session needs, judged by complexity and risk. If the result says the task has no labels, suggest 1-3 to the user (prefer labels already in use) and apply them with update_task once they agree.
 - Showing the user a draft plan: print it in full as its own message first, and only then ask your questions (a question dialog is never where the plan lives). Once it is saved, end the turn restating what was saved: some apps collapse everything but a turn's last message.
@@ -29,6 +30,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - An epic is delivered through pull requests to main (the default: each task's PR goes to the default branch and the user merges it) or an integration branch (its tasks start from epic/<number>-<slug> and open their PRs against it, Autopilot merges each one there once it is reviewed and green, and the user merges the epic's one PR into the default branch). When a result says "Epic delivery not chosen", ask the user which they want and set it with update_task(epic, delivery) only once they've answered; never choose unasked. In an integration epic, branch from its branch and open your PR against it, as get_task's Delivery line says, and don't merge it yourself. Autopilot never merges into the default branch.
 - Templates: the user keeps task templates (Bug, Spike, Feature, their own). list_templates shows them; pass template (a name) to add_to_backlog or create_task to start from one: its description, labels and plan fill in what you leave out, and what you pass wins. A template with a plan makes create_task's own plan optional. You can't create or edit templates.
 - Tasks can block each other, across projects: pass blockedBy on create_task/add_to_backlog, or addBlockedBy / removeBlockedBy on update_task. A task is blocked while any blocker isn't Done (get_task lists "Blocked by" and "Blocks", list_tasks and epic_overview show "blocked by #N"). Don't start a blocked task: tell the user what it waits on, or work a blocker. Cycles are refused.
+- Suggested changes: when you have evidence that one of the prompts or skills the board runs agents with (the review and planning skills, custom automations' prompts) misleads agents or wastes their time, list_editable_prompts, read it with get_editable_prompt and propose a rewrite with suggest_change, passing its hash and your evidence. The user accepts or rejects it in Settings; never edit those files yourself.
 - Already delivered by another task, a duplicate, or no longer wanted? close_task (no plan needed) instead of archiving.
 - request_attention(task, message) flags a task for the user (Needs attention plus a notification) when you can't go on without them or they should look at something: you are blocked, unsure, found a problem, or have work ready to review. Say exactly what to look at. It interrupts them, so don't use it for progress (add_note) or when nothing is for them to act on; clear: true removes it once resolved.
 - End each session with add_note: a handover of what's done, what's left and the next action.
@@ -65,6 +67,7 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerMergeTools(server, tc);
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
+  registerSuggestionTools(server, tc);
   return server;
 }
 

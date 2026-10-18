@@ -22,7 +22,6 @@ export function AppearanceSection() {
       <SettingsRow
         id="board.appearance.theme"
         title="Theme"
-        description="Follow the system, or pick light or dark."
         control={
           <ToggleGroup
             aria-label="Theme"
@@ -61,7 +60,7 @@ function ScrollToTaskRow() {
     <SettingsRow
       id="board.appearance.scroll-to-task"
       title="Scroll to a task when opening it"
-      description="Opening a task from search, a link or a notification slides the board to its card. Off, only the panel opens."
+      description="Slide the board to the card. Off, only the panel opens."
       control={<Switch checked={scroll} onCheckedChange={setScroll} aria-label="Scroll to a task when opening it" />}
     />
   );
@@ -74,7 +73,7 @@ function PriorityLaneRow() {
     <SettingsRow
       id="board.appearance.priority-lane"
       title="Priority lane"
-      description="Gathers the tasks marked as priority, from every project, in a lane above the projects. Off, they stay in their own lanes."
+      description="Priority tasks from every project, in a lane above the projects."
       control={<Switch checked={show} onCheckedChange={setShow} aria-label="Priority lane" />}
     />
   );
@@ -87,7 +86,7 @@ function BannerRow() {
     <SettingsRow
       id="board.appearance.banner"
       title="Sidebar banner"
-      description="The art behind the name in the top-left corner."
+      description="The art behind the name in the sidebar."
     >
       <div role="radiogroup" aria-label="Sidebar banner" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {STAGE_BANNERS.map((option) => (

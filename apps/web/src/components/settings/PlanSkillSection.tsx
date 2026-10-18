@@ -20,7 +20,8 @@ export function PlanSkillSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="tasks.planning.skill"
         title="Planning skill"
-        description="What a session started with Plan tasks… follows to plan the tasks you picked with you. Skills installed for Claude Code, Copilot or Codex are listed; a project can pick one of its own on its settings page."
+        description="What a Plan tasks… session follows to plan the tasks you picked."
+        info="Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own on its settings page."
         control={
           <ReviewSkillSelect
             ariaLabel="Planning skill"
@@ -49,9 +50,10 @@ export function ProjectPlanSkillSection({ project }: { project: Project }) {
         title="Planning skill"
         description={
           project.workspaceRoot
-            ? "Skills in the project's .claude/skills, .github/skills or .agents/skills folders are listed first."
-            : "Set a workspace folder to pick a skill from the project's own folders."
+            ? "The project's own skills are listed first."
+            : "Set a workspace folder to pick one of the project's own skills."
         }
+        info="Skills in the project's .claude/skills, .github/skills or .agents/skills folders."
         control={
           <ReviewSkillSelect
             ariaLabel="Planning skill for this project"

@@ -23,6 +23,7 @@ import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
+import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
 import { TerminalSection } from "../TerminalSection";
@@ -60,17 +61,18 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           <SettingsSubsection id="board.notifications">
             <WithSettings>{(settings) => <NotificationsSection settings={settings} />}</WithSettings>
           </SettingsSubsection>
-          <SettingsSubsection id="board.keybindings">
-            <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>
-          </SettingsSubsection>
           <SettingsSubsection id="board.data">
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />
           </SettingsSubsection>
         </>
       );
+    case "keybindings":
+      return <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>;
     case "tasks":
       return <TasksContent />;
+    case "models":
+      return <ModelsContent />;
     case "autopilot":
       return (
         <>
@@ -88,7 +90,6 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
 }
 
 function TasksContent() {
-  const integrations = useIntegrationsStatus();
   return (
     <>
       <SettingsSubsection id="tasks.new-tasks">
@@ -101,12 +102,19 @@ function TasksContent() {
       <SettingsSubsection id="tasks.review">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
-      <SettingsSubsection id="tasks.models">
-        <WithSettings>
-          {(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}
-        </WithSettings>
+      <SettingsSubsection id="tasks.suggestions">
+        <SuggestionsSection />
       </SettingsSubsection>
     </>
+  );
+}
+
+function ModelsContent() {
+  const integrations = useIntegrationsStatus();
+  return (
+    <SettingsSubsection id="models.tiers">
+      <WithSettings>{(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}</WithSettings>
+    </SettingsSubsection>
   );
 }
 

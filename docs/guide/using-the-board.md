@@ -105,21 +105,21 @@ start a blocked task.
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
-each tier means in **Settings → Tasks → Models**; copied prompts name it, and new T3 Code threads start on it.
+each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it.
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.
 
 ## Autopilot flag
 
-Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+Each task has an **Autopilot** setting in the panel's Automation section: Default, On or Off. Autopilot only
 starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
 project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
 flag tasks but never change Autopilot's own settings.
 
 ## Priority
 
-Star a task on its card (the star shows when you hover it), or choose **Mark as priority** in the panel's More menu, and
+Star a task on its card (the star shows when you hover it), choose **Mark as priority** in the panel's More menu, or turn on **Priority** in the panel's Automation section, and
 it moves to a **Priority** lane at the top of the board, above every project, whatever you are filtering. The lane
 shows priority tasks from all projects in their usual columns, each with its project's name; drag a card between
 columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
@@ -163,7 +163,7 @@ says to open its pull request against it, and the T3 dialog opens on a new workt
 When Claude Code or Copilot CLI is installed (on your PATH, or at the path set in **Settings → Integrations**),
 **New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt
 already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
-suggested tier, see **Session models** under each CLI in Settings) and choose where it runs: a new git worktree
+suggested tier, set in **Settings → Model tiers**) and choose where it runs: a new git worktree
 from a branch you pick (the default), or the project's own folder. The board links the session to the task straight
 away. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
 opening a session that is still running brings that window back to the front. On Windows a prompt with a `%` in it,
@@ -197,8 +197,10 @@ sections of the task panel. Your layout is saved per browser.
 | `N`          | New task             |
 | `Esc`        | Close the task panel, or leave Settings |
 
-These are the defaults. Change any of them, or say when one applies, under **Settings → Board → Keybindings**:
-click a key and press the new combination, and use **Reset** to go back. A **When** condition combines
+These are the defaults. Change any of them, or say when one applies, under **Settings → Keybindings**
+(it has a search box):
+click a key and press the new combination, and use **Reset** (shown once a shortcut differs from its default) to go
+back. Click the **When** line under a shortcut to edit its condition; it combines
 `editableFocus` (typing in a text field), `popupFocus` (inside a menu or dialog), `overlayOpen`, `paletteOpen`,
 `dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack` with `!`, `&&` and `||`. For example, `!editableFocus` on
 the palette stops **Ctrl/Cmd K** from firing while you type in a description. Two commands on one key, where both can

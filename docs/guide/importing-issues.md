@@ -35,7 +35,8 @@ it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
   them. That is a check by name, not a sandbox.
 
 Both run the Claude Code CLI, the one named under **Settings → Integrations → Claude Code** (it's `claude` from your PATH
-unless you set another), on a small model (Haiku by default).
+unless you set another), on a small model (Haiku by default). The model can be one of your **Model tiers**
+instead: set it once there and pick the tier here.
 
 ## Settings
 

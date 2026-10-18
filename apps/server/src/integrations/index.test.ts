@@ -65,6 +65,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
     t3Status: () => integrations.t3Status(),
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     attachmentsDir: mkdtempSync(join(tmpdir(), "attachments-")),
+    userHome: "/nonexistent",
   });
   return { services, integrations, events };
 }

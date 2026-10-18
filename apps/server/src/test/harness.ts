@@ -23,6 +23,7 @@ export function createTestHarness(
     webPort?: number;
     token?: string;
     sessionDirs?: SessionDirs;
+    /** The user's home folder, where global skills are found and built-in ones are forked to. */
     userHome?: string;
     worktreesDir?: string;
     integrations?: IntegrationOverrides;

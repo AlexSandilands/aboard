@@ -60,13 +60,15 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.pause-all"
         title="Pause all"
-        description="Stops every new Autopilot run, whatever the switches say. Runs already going finish. A backup restore never lifts it."
+        description="Stops every new Autopilot run, whatever the switches say."
+        info="Runs already going finish. A backup restore never lifts it."
         control={<Switch aria-label="Pause all" checked={paused} onCheckedChange={(next) => setPaused.mutate(next)} />}
       />
       <SettingsRow
         id="autopilot.engine.dry-run"
         title="Dry run"
-        description="Records what each automation would do as a skipped run and does nothing. Turn it on to watch a new automation before trusting it."
+        description="Records what each automation would do as a skipped run, and does nothing."
+        info="Turn it on to watch a new automation before trusting it."
         control={
           <Switch aria-label="Dry run" checked={engine.dryRun} onCheckedChange={(next) => save({ dryRun: next })} />
         }
@@ -74,7 +76,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.max-concurrent"
         title="Agent runs at once"
-        description="How many automations that start an agent can run at the same time."
+        description="How many agent runs can go at the same time."
         control={
           <LimitInput
             label="Agent runs at once"
@@ -90,7 +92,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.daily-run-cap"
         title="Daily run cap"
-        description="The most agent runs to start per day (local time). Leave empty for no cap."
+        description="The most agent runs to start per day (local time). Empty is no cap."
         control={
           <LimitInput
             label="Daily run cap"
@@ -106,7 +108,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.daily-spend-cap"
         title="Daily spend cap"
-        description="No more agent runs start once today's runs have cost this much. Leave empty for no cap."
+        description="No more agent runs start once today's have cost this much (local time). Empty is no cap."
         control={
           <LimitInput
             label="Daily spend cap"
@@ -122,7 +124,8 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.quiet-hours"
         title="Quiet hours"
-        description="No agent runs start in this window (local time, and it may cross midnight). Automations that only change the board still run."
+        description="No agent runs start in this window (local time)."
+        info="The window may cross midnight. Automations that only change the board still run."
         control={
           <>
             <TimeInput
@@ -149,7 +152,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.pr-review-rounds"
         title="PR review rounds"
-        description="How many review rounds the PR review automation runs on a pull request."
+        description="How many review rounds the PR review automation runs."
         control={
           <LimitInput
             label="PR review rounds"
@@ -166,7 +169,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.pr-fix-threshold"
         title="PR fix threshold"
-        description="The lowest severity of finding the PR automations ask an agent to fix."
+        description="The lowest severity the PR automations ask an agent to fix."
         control={
           <Select
             items={FIX_THRESHOLDS}
@@ -191,7 +194,8 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.worktree-retention"
         title="Worktree retention"
-        description="How long a finished headless run's worktree is kept when its PR hasn't merged. Worktrees with uncommitted changes are always kept."
+        description="How long a finished headless run's worktree is kept while its PR is unmerged."
+        info="Worktrees with uncommitted changes are always kept."
         control={
           <LimitInput
             label="Worktree retention"

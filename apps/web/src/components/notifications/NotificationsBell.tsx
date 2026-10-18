@@ -2,6 +2,7 @@ import { NOTIFICATION_KINDS, type InboxNotification, type NotificationKind } fro
 import { BellIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useOpenTask } from "~/components/board/boardNavigation";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -64,6 +65,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
   const openTask = useOpenTask();
+  const openSettings = useOpenSettings();
   const items = inbox.data?.items;
   const unread = inbox.data?.unread ?? 0;
   const present = useMemo(() => kindsPresent(items ?? []), [items]);
@@ -74,6 +76,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
   const open = (n: InboxNotification) => {
     if (!n.readAt) markRead.mutate(n.id);
     if (n.taskId) void openTask(n.taskId);
+    else if (n.kind === "suggestion") openSettings("tasks.suggestions");
     onClose();
   };
 

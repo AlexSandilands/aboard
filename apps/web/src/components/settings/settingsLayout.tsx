@@ -1,9 +1,10 @@
 // Adapted from T3 Code (apps/web/src/components/settings/SettingsGroup.tsx, settingsLayout.tsx,
 // FoldedSettingsSection.tsx), MIT — see NOTICE.
-import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, CopyIcon, InfoIcon } from "lucide-react";
 import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useSettingsNav } from "~/state/ui";
@@ -54,6 +55,41 @@ export function StatusDot({ tone, label, className }: { tone: StatusTone; label:
   );
 }
 
+/**
+ * Detail that matters but would crowd a row (setup steps, how something is matched), behind an info button next to
+ * the row's title. Opens on hover, and on click or Enter, so it works from the keyboard and on touch.
+ */
+export function InfoHover({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={200}
+        aria-label={label}
+        className="inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <InfoIcon className="size-3.5" />
+      </PopoverTrigger>
+      <PopoverPopup side="top" className="max-w-80 text-xs leading-relaxed">
+        {children}
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
+/**
+ * A row's status details on one compact line under its title: an optional badge, then the detail (a version, a path,
+ * a scope). Long text wraps inside the line instead of pushing the control.
+ */
+export function StatusLine({ badge, children }: { badge?: ReactNode; children?: ReactNode }) {
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 break-words">
+      {badge}
+      {children ? <span className="min-w-0 break-all">{children}</span> : null}
+    </span>
+  );
+}
+
 /** A titled group of settings rows. Muted headings have no descriptions; copy belongs to rows. */
 export function SettingsSection({
   id,
@@ -85,13 +121,17 @@ export function SettingsSection({
 }
 
 /**
- * One setting: title + description on the left, the control on the right (stacked on
- * narrow widths). `children` render full-width below, e.g. an inline folder browser.
+ * One setting: title + one short description on the left, the control on the right (stacked on
+ * narrow widths). Detail that matters goes in `info` (an info button beside the title) and status
+ * details in `status` (a compact line under the description). `children` render full-width below,
+ * e.g. an inline folder browser.
  * Controls use `size="sm"` buttons/inputs/selects, per T3's settings tiers.
  */
 export function SettingsRow({
   title,
   description,
+  info,
+  infoLabel,
   status,
   control,
   children,
@@ -100,6 +140,10 @@ export function SettingsRow({
 }: Omit<ComponentPropsWithoutRef<"div">, "title"> & {
   title: ReactNode;
   description?: ReactNode;
+  /** Longer detail shown in an info popover beside the title. */
+  info?: ReactNode;
+  /** The info button's accessible name; defaults to "More about <title>" for a string title. */
+  infoLabel?: string;
   status?: ReactNode;
   control?: ReactNode;
   children?: ReactNode;
@@ -118,11 +162,16 @@ export function SettingsRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
+            {info ? (
+              <InfoHover label={infoLabel ?? (typeof title === "string" ? `More about ${title}` : "More info")}>
+                {info}
+              </InfoHover>
+            ) : null}
           </div>
           {description ? (
             <p className="max-w-xl text-xs leading-normal text-muted-foreground/80">{description}</p>
           ) : null}
-          {status ? <div className="pt-0.5 text-xs text-muted-foreground">{status}</div> : null}
+          {status ? <div className="min-w-0 pt-0.5 text-xs text-muted-foreground">{status}</div> : null}
         </div>
         {control ? (
           <div className="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">
