@@ -9,12 +9,37 @@ import {
   type FindingSeverity,
   type FindingStatus,
   type PrReviewRunOutput,
+  type TaskEvent,
   type TaskStatus,
 } from "@repo/contracts";
 import type { Core } from "./core.ts";
 
 /** The statuses a task waits in before Done, in column order. */
 export const OPEN_STATUSES = ["backlog", "planned", "in_progress", "review"] as const satisfies readonly TaskStatus[];
+
+/** One stretch a task spent in a status; `until` is null for the one it is still in. */
+export interface StatusStay {
+  status: TaskStatus;
+  since: string;
+  until: string | null;
+}
+
+/**
+ * Where a task was and when, rebuilt from its moves (`status_changed` and `closed` events, oldest first). It started in
+ * the status its first move left, or in `current` when it never moved; a close carries no `to` and means Done.
+ */
+export function statusStays(createdAt: string, moves: readonly TaskEvent[], current: TaskStatus): StatusStay[] {
+  let status = moves[0] ? (moves[0].payload.from as TaskStatus) : current;
+  let since = createdAt;
+  const stays: StatusStay[] = [];
+  for (const move of moves) {
+    stays.push({ status, since, until: move.at });
+    status = move.payload.to === undefined ? "done" : (move.payload.to as TaskStatus);
+    since = move.at;
+  }
+  stays.push({ status, since, until: null });
+  return stays;
+}
 
 export interface ActivityTask {
   number: number;
@@ -158,15 +183,12 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         const done = lastFinish.get(id)!;
         const mine = history.filter((e) => e.taskId === id && e.at <= done.at);
         const moves = mine.filter((e) => e.type !== "step_updated");
-        // It started in the status its first move left, and spent the time up to each move in the one it left.
-        let status = moves[0] ? (moves[0].payload.from as TaskStatus) : "backlog";
-        let since = task.createdAt;
         const inStatus: FinishedTask["inStatus"] = {};
-        for (const move of moves) {
-          const open = OPEN_STATUSES.find((s) => s === status);
-          if (open) inStatus[open] = (inStatus[open] ?? 0) + Math.max(0, Date.parse(move.at) - Date.parse(since));
-          status = move.payload.to === undefined ? "done" : (move.payload.to as TaskStatus);
-          since = move.at;
+        for (const stay of statusStays(task.createdAt, moves, "backlog")) {
+          const open = OPEN_STATUSES.find((s) => s === stay.status);
+          if (open && stay.until) {
+            inStatus[open] = (inStatus[open] ?? 0) + Math.max(0, Date.parse(stay.until) - Date.parse(stay.since));
+          }
         }
         const steps = mine.filter((e) => e.type === "step_updated");
         const prRounds = repos.autopilotRuns

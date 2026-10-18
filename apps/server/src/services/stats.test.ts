@@ -254,6 +254,218 @@ describe("stats.weekly", () => {
     expect(await values("autopilot.cost_usd")).toMatchObject({ unit: "usd", total: 0.75 });
   });
 
+  it("averages and takes the median of the time spent in each status, in the week the stay ended", async () => {
+    const { s, alpha, clock, task, finish, values } = setup();
+    clock(at(12, 9));
+    const a = task(alpha.id, "A");
+    const b = task(alpha.id, "B");
+    clock(at(12, 10));
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    clock(at(12, 11));
+    s.tasks.move(b.id, { status: "in_progress" }, "agent");
+    clock(at(12, 13));
+    s.tasks.move(a.id, { status: "review" }, "agent");
+    clock(at(12, 14));
+    finish(a.id);
+
+    // A waited one hour in Planned and B two; the stays ended in this week.
+    expect(await values("time_in_status.planned.average")).toEqual({
+      unit: "ms",
+      values: [null, null, null, 1.5 * HOUR],
+      total: 1.5 * HOUR,
+      previousTotal: null,
+    });
+    expect((await values("time_in_status.planned.median")).total).toBe(1.5 * HOUR);
+    expect((await values("time_in_status.in_progress.median")).total).toBe(3 * HOUR);
+    expect((await values("time_in_status.review.average")).total).toBe(HOUR);
+    // B is still in progress and nothing has left Backlog: neither has a finished stay.
+    expect((await values("time_in_status.backlog.average")).total).toBeNull();
+  });
+
+  it("uses the median, not the mean, for the median series", async () => {
+    const { s, alpha, clock, task, values } = setup();
+    clock(at(12, 9));
+    const ids = [task(alpha.id, "A"), task(alpha.id, "B"), task(alpha.id, "C")].map((t) => t.id);
+    // Stays of 1h, 2h and 9h in Planned.
+    for (const [i, hours] of [1, 2, 9].entries()) {
+      clock(at(12, 9 + hours));
+      s.tasks.move(ids[i]!, { status: "in_progress" }, "agent");
+    }
+    expect((await values("time_in_status.planned.median")).total).toBe(2 * HOUR);
+    expect((await values("time_in_status.planned.average")).total).toBe(4 * HOUR);
+  });
+
+  it("counts the open tasks in each status as of every week's end, and as of now for the current week", async () => {
+    const { s, alpha, clock, task, values } = setup();
+    clock(at(5, 9));
+    task(alpha.id, "A");
+    const b = task(alpha.id, "B");
+    const done = task(alpha.id, "Done");
+    const archived = task(alpha.id, "Archived");
+    s.tasks.create({ projectId: alpha.id, title: "Epic", kind: "epic" });
+    clock(at(6, 9));
+    s.tasks.move(done.id, { status: "done" }, "agent");
+    clock(at(7, 9));
+    s.tasks.move(b.id, { status: "in_progress" }, "agent");
+    clock(at(13, 9));
+    s.tasks.update(archived.id, { archived: true }, "user");
+    task(alpha.id, "C");
+    clock(at(14, 12));
+
+    // As of Sep 28, Oct 5 (nothing yet), Oct 12 (the archived one still open) and now (Wed Oct 14).
+    expect(await values("open_tasks.planned")).toEqual({
+      unit: "count",
+      values: [0, 0, 2, 2],
+      total: 2,
+      previousTotal: 0,
+    });
+    expect(await values("open_tasks.in_progress")).toMatchObject({ values: [0, 0, 1, 1], total: 1 });
+    expect((await values("open_tasks.review")).values).toEqual([0, 0, 0, 0]);
+  });
+
+  it("compares the open tasks with where the previous period ended", async () => {
+    const { clock, task, alpha, values } = setup();
+    clock(at(1, 9, 8)); // 2026-09-01, before the 4 weeks shown and inside the 4 before them
+    task(alpha.id, "Old");
+    clock(at(14, 12));
+    expect(await values("open_tasks.planned")).toMatchObject({ total: 1, previousTotal: 1 });
+  });
+
+  it("takes how long merged PRs were open, and Autopilot's rounds and attempts on them", async () => {
+    const { db, s, alpha, clock, task, values } = setup();
+    const repos = createRepos(db);
+    const t = task(alpha.id, "Work");
+    const link = (url: string, linked: Date, merged: Date) => {
+      clock(linked);
+      const l = s.links.add(t.id, { value: url, kind: "pr" }, "agent");
+      repos.links.setPrChanges(l.id, { merged: merged.toISOString() });
+      return l;
+    };
+    const first = link("https://github.com/acme/app/pull/1", at(8, 10), at(13, 10));
+    link("https://github.com/acme/app/pull/2", at(13, 8), at(13, 10));
+    link("https://github.com/acme/app/pull/3", at(13, 9), at(13, 10));
+    let minute = 0;
+    const run = (
+      automation: string,
+      key: string,
+      extra: { status?: "succeeded" | "skipped"; output?: Record<string, unknown> } = {},
+    ) => {
+      clock(new Date(2026, 9, 13, 12, ++minute));
+      const recorded = s.autopilot.record({
+        automation,
+        candidate: { dedupeKey: key, summary: "do it", projectId: alpha.id, taskId: t.id },
+        dryRun: false,
+      })!;
+      s.autopilot.start(recorded.id);
+      s.autopilot.finish(recorded.id, {
+        status: extra.status ?? "succeeded",
+        ...(extra.output ? { output: extra.output } : {}),
+      });
+    };
+    const review = (round: number, handoff: "fix" | "gave_up") => ({
+      kind: "pr_review",
+      linkId: first.id,
+      prUrl: first.url,
+      headOid: "h",
+      round,
+      maxRounds: 2,
+      reviewUrl: "r",
+      reviewId: null,
+      counts: { blocking: 0, major: 1, minor: 0, nit: 0 },
+      fyi: 0,
+      threshold: "minor",
+      actionable: 1,
+      handoff,
+    });
+    run("review_prs", `review:pr:${first.id}:a`, { output: review(1, "fix") });
+    run("review_prs", `review:pr:${first.id}:b`, { output: review(2, "gave_up") });
+    run("fix_prs", `fix:pr:${first.id}:a:checks@a`);
+    run("fix_prs", `fix:pr:${first.id}:b:conflict@b`); // conflict-only attempts count too
+    run("fix_prs", `fix:pr:${first.id}:c:checks@c`, { status: "skipped" }); // did nothing
+    run("fix_prs", `fix:gave_up:${first.id}`);
+    clock(at(14, 12));
+
+    // Open for five days, two hours and one hour: the median is the middle one.
+    expect(await values("pr_open_to_merged")).toEqual({
+      unit: "ms",
+      values: [null, null, null, 2 * HOUR],
+      total: 2 * HOUR,
+      previousTotal: null,
+    });
+    // Three PRs: the first went two review rounds and two fix attempts, the others none.
+    expect(await values("autopilot.pr_review_rounds_per_pr")).toMatchObject({ unit: "ratio", total: 2 / 3 });
+    expect(await values("autopilot.fix_attempts_per_pr")).toMatchObject({ unit: "ratio", total: 2 / 3 });
+    expect(await values("autopilot.gave_up")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
+    expect((await values("autopilot.gave_up.review_prs")).total).toBe(1);
+    expect((await values("autopilot.gave_up.fix_prs")).total).toBe(1);
+  });
+
+  it("counts a PR linked to two tasks once, open from its first link, with Autopilot's work on both", async () => {
+    const { db, s, alpha, clock, task, values } = setup();
+    const repos = createRepos(db);
+    const url = "https://github.com/acme/app/pull/9";
+    const [a, b] = [task(alpha.id, "A"), task(alpha.id, "B")];
+    clock(at(8, 10));
+    const first = s.links.add(a.id, { value: url, kind: "pr" }, "agent");
+    clock(at(12, 10));
+    const second = s.links.add(b.id, { value: url, kind: "pr" }, "agent");
+    for (const l of [first, second]) repos.links.setPrChanges(l.id, { merged: at(13, 10).toISOString() });
+    let minute = 0;
+    const run = (taskId: string, automation: string, key: string, output?: Record<string, unknown>) => {
+      clock(new Date(2026, 9, 13, 12, ++minute));
+      const recorded = s.autopilot.record({
+        automation,
+        candidate: { dedupeKey: key, summary: "do it", projectId: alpha.id, taskId },
+        dryRun: false,
+      })!;
+      s.autopilot.start(recorded.id);
+      s.autopilot.finish(recorded.id, { status: "succeeded", ...(output ? { output } : {}) });
+    };
+    const review = (linkId: string, round: number) => ({
+      kind: "pr_review",
+      linkId,
+      prUrl: url,
+      headOid: "h",
+      round,
+      maxRounds: 3,
+      reviewUrl: "r",
+      reviewId: null,
+      counts: { blocking: 0, major: 0, minor: 0, nit: 0 },
+      fyi: 0,
+      threshold: "minor",
+      actionable: 0,
+      handoff: "clean",
+    });
+    run(a.id, "review_prs", `review:pr:${first.id}:a`, review(first.id, 1));
+    run(a.id, "review_prs", `review:pr:${first.id}:b`, review(first.id, 2));
+    run(b.id, "review_prs", `review:pr:${second.id}:a`, review(second.id, 1));
+    run(a.id, "fix_prs", `fix:pr:${first.id}:a:checks@a`);
+    run(b.id, "fix_prs", `fix:pr:${second.id}:a:checks@a`);
+    clock(at(14, 12));
+
+    expect((await values("prs_merged")).total).toBe(1);
+    // Open from the first link (Oct 8 10:00) to the merge (Oct 13 10:00).
+    expect((await values("pr_open_to_merged")).total).toBe(5 * 24 * HOUR);
+    // Two reviews of one link and one of the other; one fix attempt on each.
+    expect((await values("autopilot.pr_review_rounds_per_pr")).total).toBe(3);
+    expect((await values("autopilot.fix_attempts_per_pr")).total).toBe(2);
+  });
+
+  it("limits the flow series to one project", async () => {
+    const { clock, task, alpha, beta, s, values } = setup();
+    clock(at(12, 9));
+    const a = task(alpha.id, "A");
+    task(beta.id, "B");
+    clock(at(12, 11));
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    clock(at(14, 12));
+
+    expect((await values("time_in_status.planned.average", 4, alpha.id)).total).toBe(2 * HOUR);
+    expect((await values("time_in_status.planned.average", 4, beta.id)).total).toBeNull();
+    expect((await values("open_tasks.planned", 4, beta.id)).total).toBe(1);
+    expect((await values("open_tasks.planned")).total).toBe(1);
+  });
+
   it("limits everything to one project when asked, and rejects an unknown one", async () => {
     const { s, alpha, beta, clock, task, finish, stats, values } = setup();
     clock(at(12, 9));

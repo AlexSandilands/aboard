@@ -25,8 +25,14 @@ such as PRs merged or runs are shown neutrally, since more or fewer isn't good o
   duplicate or won't do.
 - **Cycle time**: the median time from starting a task (its first move to In Progress) to finishing it, and
   from creating it to finishing it. A gap in the line is a week where nothing finished.
+- **Flow**: where work waits. The median and average time tasks spent in Backlog, Planned, In progress and
+  Review before moving on, counted in the week the stay ended (so a long wait shows up when the task finally
+  moves), and how many tasks were open in each status at the end of each week.
 - **PRs and reviews**: pull requests the board saw merge, review rounds per finished task, and review findings
   by severity.
+- **PR flow**: for the PRs that merged, how long they were open (from when the PR was linked to a task to when the
+  board saw it merge), how many rounds of Autopilot review and how many Autopilot fix attempts they took, and how
+  often Autopilot gave up on a PR.
 - **Autopilot**: runs by outcome, by automation, and what they cost.
 - **Sessions**: agent sessions, by the week they were first linked to a task.
 

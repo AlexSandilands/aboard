@@ -171,6 +171,19 @@ const FINDING_SEVERITIES = [
   ["nit", "Nit", SERIES_COLORS.muted],
 ] as const;
 
+// The statuses a task waits in before Done, in column order, with the series each is read from.
+const OPEN_STATUSES = [
+  ["backlog", "Backlog", SERIES_COLORS.muted],
+  ["planned", "Planned", SERIES_COLORS.info],
+  ["in_progress", "In progress", SERIES_COLORS.primary],
+  ["review", "Review", SERIES_COLORS.warning],
+] as const;
+
+const GAVE_UP = [
+  ["review_prs", "Review PRs", SERIES_COLORS.warning],
+  ["fix_prs", "Fix PRs", SERIES_COLORS.error],
+] as const;
+
 // Every status a run can end in the series, so the columns and bar segments add up to the Runs total; a run still
 // queued or running is bucketed by its last update.
 const RUN_STATUSES = [
@@ -264,6 +277,60 @@ function StatsSections({ data }: { data: StatsResponse }) {
       </StatsSection>
 
       <StatsSection
+        title="Flow"
+        description="Where work waits: how long tasks sat in each status before moving on, by the week the stay ended, and how many were open at each week's end."
+      >
+        <Tiles>
+          {kpi("Time in Planned", "time_in_status.planned.median", "down")}
+          {kpi("Time in progress", "time_in_status.in_progress.median", "down")}
+          {kpi("Time in review", "time_in_status.review.median", "down")}
+          {kpi(
+            "Open tasks now",
+            "open_tasks.planned",
+            undefined,
+            sumTotals(
+              data,
+              OPEN_STATUSES.map(([status]) => `open_tasks.${status}`),
+            ),
+          )}
+        </Tiles>
+        <ChartCard title="Median time in each status">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label="Median time tasks spent in each status, per week"
+            durations
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `time_in_status.${status}.median`, label, color),
+            )}
+          />
+        </ChartCard>
+        <ChartCard title="Average time in each status">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label="Average time tasks spent in each status, per week"
+            durations
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `time_in_status.${status}.average`, label, color),
+            )}
+          />
+        </ChartCard>
+        <ChartCard title="Open tasks at each week's end">
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label="Open tasks at the end of each week, by status"
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `open_tasks.${status}`, label, color, { zeros: true }),
+            )}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
         title="PRs, commits and reviews"
         description="Pull requests the board saw merge, commits that landed on each project's default branch, and how often local reviews looped."
       >
@@ -315,6 +382,50 @@ function StatsSections({ data }: { data: StatsResponse }) {
               chartSeries(data, `review_findings.${severity}`, label, color, {
                 zeros: true,
               }),
+            )}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        title="PR flow"
+        description="How merged PRs got there, by the week the board saw them merge: how long they were open, and how much Autopilot had to review and fix."
+      >
+        <Tiles>
+          {kpi("Open to merged", "pr_open_to_merged", "down")}
+          {kpi("Autopilot reviews per PR", "autopilot.pr_review_rounds_per_pr", "down")}
+          {kpi("Fix attempts per PR", "autopilot.fix_attempts_per_pr", "down")}
+          {kpi("Autopilot gave up", "autopilot.gave_up", "down")}
+        </Tiles>
+        <ChartCard title="Median time from PR open to merged">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label="Median time from a PR being linked to its merge, per week"
+            durations
+            series={[chartSeries(data, "pr_open_to_merged", "Open to merged", SERIES_COLORS.primary)]}
+          />
+        </ChartCard>
+        <ChartCard title="Autopilot rounds per merged PR">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ratio")}
+            label="Average Autopilot review rounds and fix attempts per merged PR, per week"
+            series={[
+              chartSeries(data, "autopilot.pr_review_rounds_per_pr", "Review rounds", SERIES_COLORS.info),
+              chartSeries(data, "autopilot.fix_attempts_per_pr", "Fix attempts", SERIES_COLORS.warning),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="Autopilot gave up">
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label="Times Autopilot gave up on a PR per week, by automation"
+            series={GAVE_UP.map(([automation, label, color]) =>
+              chartSeries(data, `autopilot.gave_up.${automation}`, label, color, { zeros: true }),
             )}
           />
         </ChartCard>

@@ -129,11 +129,25 @@ export function createLinksRepo(sql: Sql) {
       );
       return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
-    /** PR links whose merge the board saw at or after `from` and before `to`, with the task's project. */
-    prsMergedBetween(from: string, to: string): { url: string; projectId: string; at: string }[] {
+    /**
+     * PR links whose merge the board saw at or after `from` and before `to`, with the task and its project, and when
+     * the link was added (`openedAt`: the nearest the board has to when the PR was opened).
+     */
+    prsMergedBetween(
+      from: string,
+      to: string,
+    ): { url: string; linkId: string; taskId: string; projectId: string; at: string; openedAt: string }[] {
       return sql
-        .all<{ url: string; project_id: string; at: string }>(
-          `SELECT l.url, t.project_id, json_extract(l.pr_changes_json, '$.merged') AS at
+        .all<{
+          url: string;
+          link_id: string;
+          task_id: string;
+          project_id: string;
+          at: string;
+          opened_at: string;
+        }>(
+          `SELECT l.url, l.id AS link_id, l.task_id, t.project_id, l.created_at AS opened_at,
+                  json_extract(l.pr_changes_json, '$.merged') AS at
            FROM task_links l JOIN tasks t ON t.id = l.task_id
            WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL
              AND json_extract(l.pr_changes_json, '$.merged') >= ? AND json_extract(l.pr_changes_json, '$.merged') < ?
@@ -141,7 +155,14 @@ export function createLinksRepo(sql: Sql) {
           from,
           to,
         )
-        .map((r) => ({ url: r.url, projectId: r.project_id, at: r.at }));
+        .map((r) => ({
+          url: r.url,
+          linkId: r.link_id,
+          taskId: r.task_id,
+          projectId: r.project_id,
+          at: r.at,
+          openedAt: r.opened_at,
+        }));
     },
     /**
      * Agent sessions first linked to a task at or after `from` and before `to`, with that task's project. A session

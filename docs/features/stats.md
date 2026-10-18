@@ -1,6 +1,6 @@
 # Stats
 
-Board tasks: #64 (the API), #190 (the page) and #191 (commits), epic #189.
+Board tasks: #64 (the API), #190 (the page), #191 (commits) and #192 (flow and PR flow), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
 reviews loop, how many PRs merge, and what Autopilot and agent sessions do. The server computes them from data
@@ -24,8 +24,9 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
   repository. Empty when there is nothing to say.
 
 Counts and costs are `0` in a quiet week. Durations and ratios are `null` when nothing in the week had one. A
-count's total is the sum, a duration's the median over the period, and a ratio's the mean over the period (not
-the mean of the weekly means).
+count's total is the sum, a duration's the median over the period (the mean for the `.average` series), and a
+ratio's the mean over the period (not the mean of the weekly means). The one exception is `open_tasks.<status>`, a
+level rather than events: its total is where the period ended, and its `previousTotal` where the previous one did.
 
 ### Series
 
@@ -48,6 +49,12 @@ appear only when that automation ran in the two periods.
 | `autopilot.retries` | count | Runs that followed a failed run of the same automation on the same task, both finished in the two periods; a retry of a failure from before the first week isn't counted | `autopilot_runs` |
 | `autopilot.cost_usd` | usd | `cost_usd` of those runs | `autopilot_runs` |
 | `commits` | count | Non-merge commits on each project's default branch, by committer time, summed over the projects in scope ([Commits](#commits)) | `git log` in each project's folder |
+| `time_in_status.<status>.average`, `.median` | ms | How long tasks stayed in `backlog`, `planned`, `in_progress` or `review` before moving on, attributed to the week the stay ended. A task still in a status has no finished stay yet. Epics are left out | `status_changed`, `closed` |
+| `open_tasks.<status>` | count, level | Tasks in each of those statuses at the end of each week (at now for the current week). Archived tasks stop counting when they were archived | `status_changed`, `closed`, `tasks` |
+| `pr_open_to_merged` | ms, median | From the PR link being added to the board to the board seeing the merge, per merged PR, in the week of the merge. A PR linked to two tasks counts once, from its first link | `task_links.created_at`, `pr_changes_json` |
+| `autopilot.pr_review_rounds_per_pr` | ratio, mean | The highest Review PRs round reached on each merged PR (0 when Autopilot never reviewed it), in the week it merged. A PR linked to several tasks sums its links', since Autopilot reviews each link on its own | `autopilot_runs` |
+| `autopilot.fix_attempts_per_pr` | ratio, mean | Fix PRs attempts on each merged PR, conflict-only ones included and skipped ones left out (0 when none), in the week it merged. Runs are matched to the PR by their `fix:pr:<link>:` dedupe key. Only a task's newest 2000 runs are read | `autopilot_runs` |
+| `autopilot.gave_up`, `.review_prs`, `.fix_prs` | count | Times Autopilot gave up on a PR, in the week of the run: a Review PRs verdict that handed off as `gave_up`, or a Fix PRs run recorded under a `fix:gave_up:` key | `autopilot_runs` |
 
 Series names are stable ids; the labels are the client's to write. A new metric is a new key, so adding one
 doesn't change the shape.
@@ -82,12 +89,14 @@ and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links a
 and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
 loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
 
-The sections (Throughput, Cycle time, PRs, commits and reviews, Autopilot, Sessions) are built in `StatsPage.tsx` from the series
+The sections (Throughput, Cycle time, Flow, PRs, commits and reviews, PR flow, Autopilot, Sessions) are built in `StatsPage.tsx` from the series
 above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
 name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
-plainly better (tasks finished, cycle time, review rounds, findings, retries) colour the change. A series missing from
+plainly better (tasks finished, cycle time, time in a status, PR time to merge, review rounds, findings, retries, fix
+attempts, Autopilot giving up) colour the change. A series missing from
 the response (a per-automation one that didn't run) reads as quiet. When every series is zero in both periods the page
-says nothing happened instead of drawing empty charts.
+says nothing happened instead of drawing empty charts; `open_tasks.*` doesn't count, since tasks sitting open aren't
+something that happened.
 
 The charts are hand-rolled SVG with no dependency:
 
@@ -115,6 +124,15 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
   duplicate or won't-do isn't delivered work, so it doesn't count.
 - **Local weeks, built by calendar date.** Boundaries come from `new Date(y, m, d + 7n)`, not by adding 168 hours,
   so a week with a clock change still starts at midnight.
+- **Time in a status is rebuilt from the moves, with the activity report's code.** `statusStays` in
+  `services/activity.ts` turns a task's `status_changed` and `closed` events into stays, and both the report's
+  "time in each status" and these series read it, so the two can't disagree. A stay counts in the week it ended, so a
+  long wait shows up when the task finally moves.
+- **Open tasks are a level, replayed from the same stays.** There is no stored snapshot, so history from before this
+  existed is still answered. The one inexactness: archiving isn't an event, so a task archived and later unarchived
+  is missing for the weeks it was archived.
+- **PR open time is when the board first saw the PR.** GitHub's own creation time isn't kept, and agents link a PR
+  as soon as they open it, so the link's creation stands in for it. A PR linked long after it opened reads short.
 - **Merge time is when the board saw it.** GitHub's own merge time isn't kept; `pr_changes_json` stamps the poll
   that saw the PR merged. A PR merged while the board was off lands in the week the board next polled.
 
@@ -133,7 +151,8 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
 | `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
 | `apps/server/src/integrations/commitLog.ts` | The `git log` reader for a project's default branch |
-| `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween` |
+| `apps/server/src/db/repos/links.ts` | `prsMergedBetween` (with the link and its creation), `agentSessionsStartedBetween` |
+| `apps/server/src/services/activity.ts` | `statusStays`, shared with the activity report |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
 | `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers and the sections |
