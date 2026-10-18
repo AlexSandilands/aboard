@@ -75,7 +75,8 @@ export function formatStatsValue(value: number | null, unit: StatsUnit): string 
     case "usd":
       return value < 10 ? `$${value.toFixed(2)}` : `$${Math.round(value).toLocaleString("en-US")}`;
     case "ratio":
-      return value.toFixed(value < 10 ? 1 : 0);
+      // Up to two decimals, so small axis steps (0.05) stay distinct; 1.5 stays "1.5".
+      return value < 10 ? String(Number(value.toFixed(2))) : String(Math.round(value));
     case "count":
       return Math.round(value).toLocaleString("en-US");
   }

@@ -75,6 +75,9 @@ describe("formatStatsValue", () => {
     expect(formatStatsValue(1.25, "usd")).toBe("$1.25");
     expect(formatStatsValue(1250, "usd")).toBe("$1,250");
     expect(formatStatsValue(1.5, "ratio")).toBe("1.5");
+    expect(formatStatsValue(0.05, "ratio")).toBe("0.05");
+    expect(formatStatsValue(0, "ratio")).toBe("0");
+    expect(formatStatsValue(12.4, "ratio")).toBe("12");
     expect(formatStatsValue(5_400_000, "ms")).toBe("1h 30m");
   });
 });
