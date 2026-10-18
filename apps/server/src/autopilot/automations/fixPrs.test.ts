@@ -509,7 +509,7 @@ describe("fix PRs: limits", () => {
   });
 
   it("gives up even while the caps hold agent runs back, since it starts no agent", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
+    const { requests, setPr, pass, turnOn, runs, engineSettings, s } = setup();
     turnOn();
     setPr({ checks: "failing" });
     await pass();
@@ -527,6 +527,8 @@ describe("fix PRs: limits", () => {
     await pass();
     expect(requests).toHaveLength(2);
     expect(runs()[0]!.summary).toContain("Autopilot gave up on PR #7");
+    // The give-up didn't use a slot of the daily cap, or hold a concurrency slot.
+    expect(s.autopilot.usage([AUTOPILOT_FIX_PRS], new Date(0).toISOString())).toMatchObject({ started: 2, active: 0 });
   });
 
   it("gives up once the PR's rounds are used, failed attempts included and skipped ones not", async () => {

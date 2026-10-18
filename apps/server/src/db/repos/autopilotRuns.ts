@@ -2,6 +2,7 @@ import {
   AUTOPILOT_ACTOR,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
+  FIX_GAVE_UP_KEY_PREFIX,
   type AutopilotRun,
   type AutopilotRunStatus,
 } from "@repo/contracts";
@@ -194,14 +195,15 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
-    /** Real runs of these automations that started at or after `since`. */
+    /** Real runs of these automations that started at or after `since`, leaving out Fix PRs give-ups (no agent). */
     startedSince(automations: readonly string[], since: string): number {
       return (
         sql.get<{ n: number }>(
           `SELECT COUNT(*) AS n FROM autopilot_runs WHERE dry_run = 0 AND started_at >= ?
-           AND automation IN (SELECT value FROM json_each(?))`,
+           AND automation IN (SELECT value FROM json_each(?)) AND dedupe_key NOT LIKE ?`,
           since,
           jsonList(automations),
+          `${FIX_GAVE_UP_KEY_PREFIX}%`,
         )?.n ?? 0
       );
     },

@@ -97,7 +97,7 @@ so they need no hook of their own. Events published while the engine itself writ
 5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
-   isn't held: it starts no agent, so the caps and quiet hours don't apply to it.
+   isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
 7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
    `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
    after another.
