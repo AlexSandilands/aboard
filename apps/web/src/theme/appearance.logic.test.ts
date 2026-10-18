@@ -60,8 +60,8 @@ describe("cssFontFamilies", () => {
 describe("appearancePaint", () => {
   it("leaves the stylesheet's defaults alone for default prefs", () => {
     expect(appearancePaint(DEFAULT_APPEARANCE_PREFS, false)).toEqual({
-      style: { "--panel-animation-duration": "0ms" },
-      data: { "panel-animations": "false" },
+      style: { "--panel-animation-duration": "150ms" },
+      data: { "panel-animations": "true" },
     });
   });
 

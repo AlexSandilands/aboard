@@ -131,7 +131,7 @@ These are prefs in the `useAppearance` store (`state/ui.ts`, persisted under `ap
 | ---------------- | ----------- | ------- | ------------------------------------------------------------------------------------------------- |
 | Contrast         | 50–200 %    | 100 %   | `--appearance-contrast-base/boost/border-boost`, read by the `--contrast-*` block                 |
 | Glass opacity    | 40–100 %    | 80 %    | `--glass-opacity`; at 100 % also `--glass-blur: 0px`                                              |
-| Panel animations | 0–400 ms    | 0 ms    | `--panel-animation-duration` and `data-panel-animations` (`false` under reduced motion)           |
+| Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration` and `data-panel-animations` (`false` under reduced motion)           |
 | Interface font   | name; 12–20 px | system, 16 px | `--font-sans`; the size is the root font size, so every rem scales                         |
 | Monospace font   | name        | system  | `--font-mono`                                                                                     |
 
@@ -141,8 +141,8 @@ variables are defined on `:root` and again on `[data-app-sidebar]`, and Tailwind
 colours read them (`@theme inline`), so every `text-foreground`, `text-muted-foreground` and `border` follows.
 
 **Panel animations**: the ported sidebar primitive already transitions when an ancestor has
-`data-panel-animations="true"`. The task panel grows in from its edge with the `.panel-enter` keyframe;
-closing it is instant.
+`data-panel-animations="true"`. The task panel grows in from its edge with the `.panel-enter` keyframe and
+shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
 
 **Fonts** are typed by name and applied on Enter or blur, only if the browser can draw the family (and, for
 the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/fonts.ts`.

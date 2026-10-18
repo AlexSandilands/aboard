@@ -47,8 +47,21 @@ const EPIC_HIDDEN_SECTIONS: ReadonlyArray<SectionId> = ["plan", "review", "autom
  */
 let handledPlanEditorRequest = 0;
 
-/** Docked, resizable task detail panel for `?task=<id>`. */
-export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+/**
+ * Docked, resizable task detail panel for `?task=<id>`. `closing` plays the slide-out, after which
+ * `onClosed` lets the parent unmount it.
+ */
+export function TaskPanel({
+  taskId,
+  closing = false,
+  onClose,
+  onClosed,
+}: {
+  taskId: string;
+  closing?: boolean;
+  onClose: () => void;
+  onClosed?: () => void;
+}) {
   const maxWidth = Math.max(MIN_WIDTH, Math.round((typeof window === "undefined" ? 1600 : window.innerWidth) * 0.7));
   const { width, handlers } = useResizableWidth({
     storageKey: storageKey("panel-width"),
@@ -61,7 +74,12 @@ export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => 
   return (
     <aside
       aria-label="Task details"
-      className="panel-enter @container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+      aria-hidden={closing || undefined}
+      inert={closing}
+      onAnimationEnd={(event) => {
+        if (closing && event.target === event.currentTarget) onClosed?.();
+      }}
+      className={`${closing ? "panel-exit" : "panel-enter"} @container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background`}
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />

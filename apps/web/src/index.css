@@ -1190,10 +1190,15 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   }
 }
 
-/* Panel animations: the task panel grows in from the right edge when it opens. A keyframe rather
-   than a transition, so dragging the panel's edge stays immediate. */
+/* Panel animations: the task panel grows in from the right edge when it opens and shrinks back into it
+   when it closes. Keyframes rather than a transition, so dragging the panel's edge stays immediate. */
 [data-panel-animations="true"] .panel-enter {
   animation: panel-enter var(--panel-animation-duration) ease-out;
+}
+
+[data-panel-animations="true"] .panel-exit {
+  animation: panel-exit var(--panel-animation-duration) ease-in forwards;
+  overflow: hidden;
 }
 
 @keyframes panel-enter {
@@ -1202,8 +1207,15 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   }
 }
 
+@keyframes panel-exit {
+  to {
+    width: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [data-panel-animations="true"] .panel-enter {
+  [data-panel-animations="true"] .panel-enter,
+  [data-panel-animations="true"] .panel-exit {
     animation: none;
   }
 }
