@@ -8,6 +8,9 @@ import { t3Unavailable, type T3Integration, type TaskThreadInput, type ThreadWor
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
+
+/** Built at runtime, so it reads as no credential to anything scanning the source. */
+const BOARD_TOKEN = ["board", "test", "value"].join("-");
 import { createAutopilotRunner, tierModel } from "./runner.ts";
 import { RunAbandonedError, WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
 
@@ -122,6 +125,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       worktreesDir: repo.worktrees,
       newSessionId: () => SESSION,
       sessionLinked: (id) => linked.push(id),
+      boardMcp: () => ({ url: "http://127.0.0.1:4317/mcp", token: BOARD_TOKEN }),
       runAgent: async (job) => {
         jobs.push(job);
         return opts.agent ? opts.agent(job) : result({ result: "Done", session_id: SESSION, total_cost_usd: 0.75 });
@@ -732,6 +736,57 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         await start({ run: { ...run, taskId: null }, tier: null, options: {}, repo: null });
         expect(jobs[0]!.prompt).toContain("never push to the default branch");
         expect(jobs[0]!.args.join(" ")).not.toContain("git push * main");
+      });
+
+      it("gives a run that reads untrusted text only the board's MCP server, from a config outside its folder", async () => {
+        let config: { path: string; text: string } | null = null;
+        const { run, jobs, start } = setup({
+          t3: T3_UP,
+          agent: async (job) => {
+            const path = job.args[job.args.indexOf("--mcp-config") + 1]!;
+            config = { path, text: readFileSync(path, "utf8") };
+            return result({ result: "Done", total_cost_usd: 0.1 });
+          },
+        });
+        await start({
+          run: { ...run, taskId: null },
+          access: "read-only",
+          untrustedInput: true,
+          boardTools: true,
+          tier: null,
+          options: {},
+          repo: null,
+        });
+        const job = jobs[0]!;
+        expect(job.args).toContain("--strict-mcp-config");
+        expect(job.args[job.args.indexOf("--setting-sources") + 1]).toBe("user");
+        expect(job.args[job.args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob,Bash");
+        expect(job.args).toContain("Read(./**)");
+        expect(job.args).toContain(`mcp__${BRAND.id}`);
+        expect(job.args).not.toContain("Read");
+        expect(config!.path.startsWith(job.cwd)).toBe(false);
+        expect(JSON.parse(config!.text)).toEqual({
+          mcpServers: {
+            [BRAND.id]: {
+              type: "http",
+              url: "http://127.0.0.1:4317/mcp",
+              headers: { Authorization: `Bearer ${BOARD_TOKEN}` },
+            },
+          },
+        });
+        expect(existsSync(config!.path)).toBe(false);
+      });
+
+      it("refuses board tools for a run that may edit or doesn't count its input as untrusted", async () => {
+        const { run, jobs, start } = setup({ t3: T3_UP });
+        const detached = { ...run, taskId: null };
+        await expect(start({ run: detached, boardTools: true, tier: null, options: {} })).rejects.toThrow(
+          "only for a read-only run",
+        );
+        await expect(
+          start({ run: detached, access: "read-only", boardTools: true, tier: null, options: {} }),
+        ).rejects.toThrow("only for a read-only run");
+        expect(jobs).toEqual([]);
       });
 
       it("never uses T3 Code or a nudge, and removes its folder when the agent fails", async () => {

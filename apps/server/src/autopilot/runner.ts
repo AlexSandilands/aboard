@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,7 +12,13 @@ import {
 } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
-import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "../integrations/headlessAgent.ts";
+import {
+  agentArgs,
+  boardMcpConfig,
+  parseAgentOutput,
+  runHeadlessAgent,
+  type RunAgent,
+} from "../integrations/headlessAgent.ts";
 import { latestThread } from "../integrations/reviewFallbacks.ts";
 import {
   isT3Unavailable,
@@ -121,6 +127,8 @@ export function createAutopilotRunner(deps: {
   newSessionId?: () => string;
   /** A headless session was just linked to its task, so the board can read its state at once. */
   sessionLinked?: (sessionId: string) => void;
+  /** This board's MCP endpoint and API token, for a run that gets only the board's server (`boardTools`). */
+  boardMcp?: () => { url: string; token: string | null };
   log?: Logger;
 }): Runner {
   // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
@@ -392,9 +400,21 @@ export function createAutopilotRunner(deps: {
 You are running unattended as ${BRAND.name} Autopilot, with no task and no worktree, in an empty temporary folder. ${SAFETY(defaultBranch)}`
         : request.prompt;
     const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
+    // The board's MCP config carries its token, so it sits outside the folder the agent may read.
+    const mcpDir = request.boardTools ? await mkdtemp(join(tmpdir(), `${BRAND.id}-mcp-`)) : null;
     const sessionId = newSessionId();
     update({ runner: "headless", sessionId });
     try {
+      let mcpConfig: string | null = null;
+      if (mcpDir) {
+        if (!request.untrustedInput || request.access !== "read-only") {
+          throw new Error("Board tools in a task-less run are only for a read-only run that reads untrusted input");
+        }
+        const board = deps.boardMcp?.();
+        if (!board) throw new Error("The board's MCP endpoint isn't known to the runner");
+        mcpConfig = join(mcpDir, "mcp.json");
+        await writeFile(mcpConfig, boardMcpConfig(board.url, board.token), { mode: 0o600 });
+      }
       const stdout = await runAgent({
         cli: settings.headlessReviewCli,
         cwd,
@@ -409,6 +429,8 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
           defaultBranch,
           ...(request.tools ? { tools: request.tools } : {}),
           ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
+          ...(request.untrustedInput ? { untrusted: true } : {}),
+          ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}),
           ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
         }),
       });
@@ -423,9 +445,12 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         ...(request.outputSchema ? { output: outcome.output } : {}),
       };
     } finally {
-      await rm(cwd, { recursive: true, force: true }).catch((error: unknown) => {
-        log.warn(`[autopilot] couldn't remove ${cwd}: ${messageOf(error)}`);
-      });
+      for (const dir of [cwd, mcpDir]) {
+        if (!dir) continue;
+        await rm(dir, { recursive: true, force: true }).catch((error: unknown) => {
+          log.warn(`[autopilot] couldn't remove ${dir}: ${messageOf(error)}`);
+        });
+      }
     }
   };
 

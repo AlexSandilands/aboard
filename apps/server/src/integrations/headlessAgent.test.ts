@@ -1,6 +1,6 @@
 import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { agentArgs, parseAgentOutput, pushDenyRules } from "./headlessAgent.ts";
+import { agentArgs, boardMcpConfig, parseAgentOutput, pushDenyRules } from "./headlessAgent.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
@@ -71,6 +71,36 @@ describe("headless agent", () => {
     expect(args).toEqual(expect.arrayContaining(["Bash(git diff *)", "Bash(gh pr review *)"]));
     expect(args.slice(args.indexOf("--disallowedTools") + 1).slice(0, 3)).toEqual(["Edit", "Write", "NotebookEdit"]);
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
+  });
+
+  it("gives an untrusted agent with a board config that board's server and nothing more", () => {
+    const args = agentArgs({
+      access: "read-only",
+      budgetUsd: 1,
+      sessionId: SESSION,
+      model: null,
+      defaultBranch: null,
+      untrusted: true,
+      boardMcpConfig: "/tmp/board-mcp.json",
+      tools: ["Bash(gh pr view *)"],
+    });
+    expect(after(args, "--mcp-config")).toBe("/tmp/board-mcp.json");
+    expect(args).toContain("--strict-mcp-config");
+    expect(after(args, "--setting-sources")).toBe("user");
+    expect(after(args, "--tools")).toBe("Read,Grep,Glob,Bash");
+    expect(args).toEqual(expect.arrayContaining(["Read(./**)", `mcp__${BRAND.id}`, "Bash(gh pr view *)"]));
+    expect(args).not.toContain("Read");
+    expect(args).not.toContain("Bash(git diff *)");
+  });
+
+  it("builds a board-only MCP config, with the token only when there is one", () => {
+    expect(JSON.parse(boardMcpConfig("http://127.0.0.1:1/mcp", null))).toEqual({
+      mcpServers: { [BRAND.id]: { type: "http", url: "http://127.0.0.1:1/mcp" } },
+    });
+    const token = ["t", "1"].join("");
+    expect(JSON.parse(boardMcpConfig("http://127.0.0.1:1/mcp", token)).mcpServers[BRAND.id].headers).toEqual({
+      Authorization: `Bearer ${token}`,
+    });
   });
 
   it("denies the tools it is told to, after --disallowedTools and before the budget", () => {

@@ -82,6 +82,8 @@ describe("Orchestrate", () => {
     expect(request).toMatchObject({
       label: "Orchestrate · Alpha",
       access: "read-only",
+      untrustedInput: true,
+      boardTools: true,
       repo: "/work/alpha",
       options: { runner: "headless", everyMinutes: 15 },
     });

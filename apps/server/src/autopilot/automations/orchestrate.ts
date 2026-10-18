@@ -256,6 +256,10 @@ export const orchestrate = defineAutomation({
       options: { ...config, runner: "headless" },
       repo: project.workspaceRoot ?? null,
       access: "read-only",
+      // It reads PR and CI text anyone can write: no other MCP server, no checkout settings, files only in its own
+      // folder and only the built-in tools it needs, but still this board's server, narrowed below.
+      untrustedInput: true,
+      boardTools: true,
       tools: ORCHESTRATE_TOOLS,
       deniedTools: config.mayMerge
         ? ORCHESTRATE_DENIED_TOOLS

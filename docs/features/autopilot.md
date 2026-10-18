@@ -102,7 +102,9 @@ key that should act again changes (`review:pr:<headSha>`, `start:<taskId>:<statu
 **Retrying by hand.** A real run that ended `failed` or `skipped` can be handed back to the engine
 (`AutopilotService.retry`): the Autopilot section's **Retry** on the run, `POST /api/autopilot/runs/:id/retry`, or
 the MCP tool `retry_autopilot_run(task, automation?)` (the task's newest such run, optionally of one automation by key
-or title) that the same automation hasn't run again since (a newer run supersedes it). The run stays as history, but its dedupe key is retired to `retried:<runId>:<old key>` (`RETRIED_PREFIX`,
+or title). A run the same automation has made a real run since (on the same task, or for a task-less run in the
+same project) is superseded (`isSupersededRun`): the service refuses it with a `CONFLICT` and the panel shows no Retry on
+it, since retrying would redo nothing yet drop it from the rounds and attempts. The run stays as history, but its dedupe key is retired to `retried:<runId>:<old key>` (`RETRIED_PREFIX`,
 `canRetryRun` in contracts) and its attention flag is lifted, and the task logs an `autopilot_run` entry with status
 `retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
 under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
@@ -444,8 +446,12 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
   running, `check` returns nothing for it and the latest slot runs once it ends.
 - **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
-  push guard), with `access: "read-only"`: the read-only file and git list, the board's MCP tools, and the `gh`
-  reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
+  push guard), with `access: "read-only"` and `untrustedInput`, since it reads PR and CI text anyone can write: file
+  tools only in its own folder, no settings from a checkout (`--setting-sources user`), only the built-in tools it
+  needs (`--tools Read,Grep,Glob,Bash`, so a global WebFetch allow rule finds no tool) and no MCP server but this
+  board's. `boardTools` makes the runner write an MCP config naming only the board (`boardMcpConfig`, with its API
+  token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
+  `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
   job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the

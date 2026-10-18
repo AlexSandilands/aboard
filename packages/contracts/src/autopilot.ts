@@ -299,9 +299,40 @@ export const RETRIED_PREFIX = "retried:";
 
 export const isRetried = (dedupeKey: string): boolean => dedupeKey.startsWith(RETRIED_PREFIX);
 
-/** Whether a run can be retried: a real run that ended failed or skipped and hasn't been retried already. */
-export const canRetryRun = (run: Pick<AutopilotRun, "dryRun" | "status" | "dedupeKey">): boolean =>
-  !run.dryRun && (run.status === "failed" || run.status === "skipped") && !isRetried(run.dedupeKey);
+/**
+ * Whether the same automation has made a real run on the same task (or, for a task-less run, in the same project)
+ * since this one. A superseded run's work is history: retrying it would redo nothing, yet drop it from the rounds and
+ * attempts its automation counts.
+ */
+export function isSupersededRun(
+  run: Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "createdAt">,
+  others: readonly Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "dryRun" | "createdAt">[],
+): boolean {
+  return others.some(
+    (o) =>
+      o.id !== run.id &&
+      !o.dryRun &&
+      o.automation === run.automation &&
+      (run.taskId ? o.taskId === run.taskId : o.taskId === null && o.projectId === run.projectId) &&
+      o.createdAt > run.createdAt,
+  );
+}
+
+/**
+ * Whether a run can be retried: a real run that ended failed or skipped, hasn't been retried already and, given the
+ * runs around it, hasn't been superseded by a later run of its automation.
+ */
+export const canRetryRun = (
+  run: Pick<
+    AutopilotRun,
+    "id" | "automation" | "taskId" | "projectId" | "createdAt" | "dryRun" | "status" | "dedupeKey"
+  >,
+  others: Parameters<typeof isSupersededRun>[1] = [],
+): boolean =>
+  !run.dryRun &&
+  (run.status === "failed" || run.status === "skipped") &&
+  !isRetried(run.dedupeKey) &&
+  !isSupersededRun(run, others);
 
 /** The activity line for an `autopilot_run` event (after the actor), shared by the panel and MCP results. */
 export function autopilotRunEventText(payload: Record<string, unknown>): string {

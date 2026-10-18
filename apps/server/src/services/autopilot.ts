@@ -7,6 +7,7 @@ import {
   capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
   isRetried,
+  isSupersededRun,
   resolveAutopilot,
   RETRIED_PREFIX,
   ScheduledAgentRunOutput,
@@ -502,6 +503,14 @@ export function createAutopilotService(
           "CONFLICT",
           run.status === "succeeded" ? "This run succeeded, so there is nothing to retry" : "This run is still going",
         );
+      }
+      const around = run.taskId
+        ? repos.autopilotRuns.forTask(run.taskId, 500)
+        : run.projectId
+          ? repos.autopilotRuns.forProject(run.projectId, 500)
+          : [];
+      if (isSupersededRun(run, around)) {
+        throw new AppError("CONFLICT", "The automation has run again since, so this run's work is history");
       }
       const retired: AutopilotRun = {
         ...run,

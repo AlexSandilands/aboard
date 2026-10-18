@@ -105,5 +105,13 @@ describe("retrying an Autopilot run", () => {
     })!;
     expect((await h.request(`/api/autopilot/runs/${dry.id}/retry`, { method: "POST" })).status).toBe(400);
     expect((await h.request("/api/autopilot/runs/nope/retry", { method: "POST" })).status).toBe(404);
+
+    // A run the automation has run again since is history, over REST too.
+    const old = endedRun(AUTOPILOT_START_PLANNED, "start:old", "failed");
+    await new Promise((r) => setTimeout(r, 5));
+    endedRun(AUTOPILOT_START_PLANNED, "start:new", "succeeded");
+    const superseded = await h.request(`/api/autopilot/runs/${old.id}/retry`, { method: "POST" });
+    expect(superseded.status).toBe(409);
+    expect(h.services.autopilot.runsForTask(taskId).find((r) => r.id === old.id)?.dedupeKey).toBe("start:old");
   });
 });

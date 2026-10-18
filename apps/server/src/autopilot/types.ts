@@ -191,6 +191,11 @@ export interface RunnerRequest {
    */
   untrustedInput?: boolean;
   /**
+   * With `untrustedInput`, task-less runs only: the agent still gets this board's MCP server (and no other), for one
+   * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
+   */
+  boardTools?: boolean;
+  /**
    * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
    * throws `WorktreeHeadError`.
    */

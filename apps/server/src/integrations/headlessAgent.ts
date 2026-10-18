@@ -100,6 +100,21 @@ export interface AgentArgsInput {
    * that reach only its own worktree. Read-only agents only.
    */
   untrusted?: boolean;
+  /**
+   * With `untrusted`: an MCP config file naming only this board's server, which the agent then gets (and no other
+   * server: `--strict-mcp-config` still applies). For a read-only agent that reads untrusted text but works through the
+   * board (Orchestrate). The caller narrows the board's own tools with `deniedTools`.
+   */
+  boardMcpConfig?: string;
+}
+
+/**
+ * An MCP config with only this board's server, for `--mcp-config`. It carries the board's API token when one is set,
+ * so it goes in a file of the runner's, not on the command line.
+ */
+export function boardMcpConfig(url: string, token: string | null): string {
+  const server = { type: "http", url, ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) };
+  return JSON.stringify({ mcpServers: { [BRAND.id]: server } });
 }
 
 /** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
@@ -120,7 +135,11 @@ export function agentArgs(input: AgentArgsInput): string[] {
       ? []
       : [
           "--allowedTools",
-          ...(readOnly ? (input.untrusted ? UNTRUSTED_TOOLS : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]) : EDIT_TOOLS),
+          ...(readOnly
+            ? input.untrusted
+              ? [...UNTRUSTED_TOOLS, ...(input.boardMcpConfig ? [`mcp__${BRAND.id}`] : [])]
+              : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]
+            : EDIT_TOOLS),
           ...(input.tools ?? []),
         ]),
     "--disallowedTools",
@@ -130,8 +149,16 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
     // anything or run hooks, for anyone who can push to it. The user's own settings stay (some set up the login), so
     // only the built-in tools it needs are available: a global allow rule for WebFetch or the like finds no tool.
+    // With a board config, that board's server is the one MCP server it gets.
     ...(readOnly && input.untrusted
-      ? ["--strict-mcp-config", "--setting-sources", "user", "--tools", "Read,Grep,Glob,Bash"]
+      ? [
+          "--strict-mcp-config",
+          ...(input.boardMcpConfig ? ["--mcp-config", input.boardMcpConfig] : []),
+          "--setting-sources",
+          "user",
+          "--tools",
+          "Read,Grep,Glob,Bash",
+        ]
       : []),
     "--max-budget-usd",
     String(input.budgetUsd),
