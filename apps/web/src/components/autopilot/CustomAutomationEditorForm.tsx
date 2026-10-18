@@ -30,6 +30,7 @@ import {
   TRIGGER_KINDS,
   type CustomForm,
 } from "./customAutomations.logic";
+import { ScheduledRuns } from "./ScheduledRuns";
 
 function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -384,7 +385,9 @@ export function CustomAutomationEditorForm({
             {isSchedule ? (
               <p className="text-xs text-muted-foreground">
                 A scheduled agent has no task: it runs headless in an empty temporary folder, not the project&apos;s
-                own, and can use the board&apos;s tools to find its work. It doesn&apos;t run in T3 Code.
+                own, and can use the board&apos;s tools to find its work. It doesn&apos;t run in T3 Code. Each run ends
+                with a short handover that the next run in the same project is given, so it can remember what it held,
+                triggered or skipped.
               </p>
             ) : (
               <div className="flex items-start justify-between gap-4">
@@ -501,6 +504,18 @@ export function CustomAutomationEditorForm({
             {preview ?? (result.ok ? "Nothing to preview." : result.error)}
           </pre>
         </Field>
+
+        {customId && isSchedule && form.actionKind === "agent" ? (
+          <Field
+            label="Recent runs"
+            hint="What each run said it did, and the handover it left for the next run in that project."
+          >
+            <ScheduledRuns
+              customId={customId}
+              projects={form.projectIds.length > 0 ? projects.filter((p) => form.projectIds.includes(p.id)) : projects}
+            />
+          </Field>
+        ) : null}
 
         {error ? (
           <p role="alert" className="text-xs text-destructive-foreground">

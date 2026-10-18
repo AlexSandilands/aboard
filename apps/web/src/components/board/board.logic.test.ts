@@ -62,6 +62,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     currentStep: null,
     links: [],
     attention: [],
+    attentionRequest: null,
     lastNote: null,
     autoReview: null,
     autopilot: null,

@@ -1,4 +1,12 @@
-import type { EpicDelivery, ModelTier, SuggestedModel, TaskKind, TaskResolution, TaskStatus } from "@repo/contracts";
+import type {
+  AttentionRequest,
+  EpicDelivery,
+  ModelTier,
+  SuggestedModel,
+  TaskKind,
+  TaskResolution,
+  TaskStatus,
+} from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
 /** A tasks row in domain shape. */
@@ -29,6 +37,8 @@ export interface TaskRecord {
   autoMerge: boolean | null;
   /** Shows in the priority lane above every project. */
   priority: boolean;
+  /** An agent's standing request for the user's attention; null when none. */
+  attentionRequest: AttentionRequest | null;
   suggestedModel: SuggestedModel | null;
   /** The template it was created from; null for none, or once that template is deleted. */
   templateId: string | null;
@@ -60,6 +70,9 @@ interface TaskRow {
   autopilot: number | null;
   auto_merge: number | null;
   priority: number;
+  attention_message: string | null;
+  attention_actor: string | null;
+  attention_requested_at: string | null;
   suggested_tier: ModelTier | null;
   suggested_reason: string | null;
   template_id: string | null;
@@ -89,6 +102,10 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   autopilot: r.autopilot === null ? null : r.autopilot !== 0,
   autoMerge: r.auto_merge === null ? null : r.auto_merge !== 0,
   priority: r.priority !== 0,
+  attentionRequest:
+    r.attention_message !== null && r.attention_actor !== null && r.attention_requested_at !== null
+      ? { message: r.attention_message, actor: r.attention_actor, requestedAt: r.attention_requested_at }
+      : null,
   suggestedModel: r.suggested_tier ? { tier: r.suggested_tier, reason: r.suggested_reason } : null,
   templateId: r.template_id,
   delivery: r.delivery,
@@ -117,6 +134,9 @@ const toRow = (t: TaskRecord): TaskRow => ({
   autopilot: t.autopilot === null ? null : t.autopilot ? 1 : 0,
   auto_merge: t.autoMerge === null ? null : t.autoMerge ? 1 : 0,
   priority: t.priority ? 1 : 0,
+  attention_message: t.attentionRequest?.message ?? null,
+  attention_actor: t.attentionRequest?.actor ?? null,
+  attention_requested_at: t.attentionRequest?.requestedAt ?? null,
   suggested_tier: t.suggestedModel?.tier ?? null,
   suggested_reason: t.suggestedModel?.reason ?? null,
   template_id: t.templateId,

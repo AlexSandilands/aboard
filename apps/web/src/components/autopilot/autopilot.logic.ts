@@ -1,5 +1,6 @@
 import {
   describeInherited,
+  ScheduledAgentRunOutput,
   type AutopilotActiveRun,
   type AutopilotAutomation,
   type AutopilotConfig,
@@ -220,6 +221,24 @@ export function automationTitle(
   key: string,
 ): string {
   return automations.find((a) => a.key === key)?.title ?? key;
+}
+
+/**
+ * The runs of one scheduled agent (task-less, so never in a task's panel), newest first, as many as `limit`. A run that
+ * left no answer still counts: its failure or its bad answer is part of the story.
+ */
+export function scheduledAgentRuns(
+  runs: ReadonlyArray<AutopilotRun> | undefined,
+  automationKey: string,
+  limit: number,
+): AutopilotRun[] {
+  return (runs ?? []).filter((r) => r.automation === automationKey && !r.dryRun && r.taskId === null).slice(0, limit);
+}
+
+/** The summary and handover a scheduled agent run left, or null when it left none. */
+export function scheduledAnswerOf(run: Pick<AutopilotRun, "output">): ScheduledAgentRunOutput | null {
+  const parsed = ScheduledAgentRunOutput.safeParse(run.output);
+  return parsed.success ? parsed.data : null;
 }
 
 /** The Autopilot section's collapsed summary. */

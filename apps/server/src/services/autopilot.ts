@@ -3,8 +3,10 @@ import {
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_ACTOR,
   AutopilotEngineSettings,
+  capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
   resolveAutopilot,
+  ScheduledAgentRunOutput,
   type AutopilotAutomation,
   type AutopilotOverview,
   type AutopilotRun,
@@ -116,6 +118,11 @@ export interface AutopilotService {
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
+  /**
+   * The handover the last successful run of a scheduled agent left in a project, for its next run; null when it has
+   * none yet. A failed run leaves none, so the one before it is passed on.
+   */
+  lastHandover(automation: string, projectId: string): string | null;
   /** The run that made this headless session; null when Autopilot didn't. */
   runForSession(sessionId: string): AutopilotRun | null;
   /** When the board's setting for an automation (its switch or config) last changed; null when it has none. */
@@ -421,6 +428,12 @@ export function createAutopilotService(
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
+    lastHandover(automation, projectId) {
+      const parsed = ScheduledAgentRunOutput.safeParse(
+        repos.autopilotRuns.lastScheduledAnswer(automation, projectId)?.output,
+      );
+      return parsed.success && parsed.data.handover ? capHandover(parsed.data.handover) : null;
+    },
     runForSession: (sessionId) => repos.autopilotRuns.forSession(sessionId),
     settingChangedAt: (automation) =>
       repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??

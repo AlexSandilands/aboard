@@ -115,6 +115,12 @@ export const useRetryImport = (opts?: MutationOpts) =>
     (taskId: string) => api<TaskSummary>(`/api/tasks/${enc(taskId)}/import/retry`, { method: "POST", body: {} }),
     opts,
   );
+/** Dismisses an agent's request for attention; the server's events take it off the card. */
+export const useDismissAttentionRequest = (opts?: MutationOpts) =>
+  useApiMutation(
+    (taskId: string) => api<TaskSummary>(`/api/tasks/${enc(taskId)}/attention-request`, { method: "DELETE" }),
+    opts,
+  );
 export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>

@@ -32,6 +32,11 @@ and keeps to the same pause, dry run, caps and quiet hours.
      tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
      branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
      branch. A new run waits until the last one for the project has finished, then the latest slot runs once.
+     Each scheduled run ends with a short **handover**: a note of what the next run needs to know, such as items it is
+     holding or waiting on, what it triggered, and what it already triaged or skipped. The next run of the same
+     automation in the same project is given it (cut off at 4,000 characters), so the agent remembers between
+     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's Recent runs lists each
+     run's summary and handover.
 
      Under **Allowed tools** you can list tools the agent may use besides the board's own, one per line: a whole MCP
      server (`mcp__issue-tracker`) or a single tool (`mcp__issue-tracker__search_jira`). Nobody is there to approve a call

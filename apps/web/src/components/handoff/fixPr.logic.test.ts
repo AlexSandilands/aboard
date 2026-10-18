@@ -63,6 +63,7 @@ describe("prAutopilotState", () => {
     task: { links: [] as TaskLink[] },
     linkId: "link-1",
     attention: [],
+    attentionRequest: null,
     prNumber: 7,
     at: NOW,
   };
