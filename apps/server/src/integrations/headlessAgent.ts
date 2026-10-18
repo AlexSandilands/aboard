@@ -90,6 +90,8 @@ export interface AgentArgsInput {
   defaultBranch: string | null;
   /** Allowed on top of the access's own list, e.g. `Bash(gh pr review *)` for a read-only reviewer. */
   tools?: readonly string[];
+  /** Denied on top of the push rules, e.g. one of the board's MCP tools the run may not use. */
+  deniedTools?: readonly string[];
   /** A JSON schema the agent's final answer must match (`--json-schema`). */
   outputSchema?: object | null;
   /**
@@ -124,6 +126,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
     "--disallowedTools",
     ...(readOnly ? ["Edit", "Write", "NotebookEdit"] : []),
     ...pushDenyRules(input.defaultBranch),
+    ...(input.deniedTools ?? []),
     // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
     // anything or run hooks, for anyone who can push to it. The user's own settings stay (some set up the login), so
     // only the built-in tools it needs are available: a global allow rule for WebFetch or the like finds no tool.

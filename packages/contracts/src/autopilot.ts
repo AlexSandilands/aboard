@@ -12,6 +12,9 @@ export const AUTOPILOT_START_PLANNED = "start_planned";
 /** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
 export const AUTOPILOT_UNSTICK = "unstick";
 
+/** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
+export const AUTOPILOT_ORCHESTRATE = "orchestrate";
+
 /** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
@@ -119,7 +122,13 @@ export const AutopilotField = z.discriminatedUnion("kind", [
     /** Shown after the input, e.g. "days" or "USD". */
     unit: z.string().optional(),
   }),
-  z.object({ ...FieldBase, kind: z.literal("text"), placeholder: z.string().optional() }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("text"),
+    placeholder: z.string().optional(),
+    /** Several lines of text (instructions), edited in a text area. */
+    multiline: z.boolean().optional(),
+  }),
   z.object({
     ...FieldBase,
     kind: z.literal("select"),

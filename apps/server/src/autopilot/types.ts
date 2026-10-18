@@ -181,6 +181,8 @@ export interface RunnerRequest {
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
   tools?: readonly string[];
+  /** Headless only: tools denied whatever else allows them, e.g. a board MCP tool the run may not call. */
+  deniedTools?: readonly string[];
   /** Headless only: a JSON schema the agent's answer must match, returned as `output`. */
   outputSchema?: object | null;
   /**

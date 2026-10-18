@@ -3,6 +3,7 @@ import { autoArchive } from "./autoArchive.ts";
 import { digest } from "./digest.ts";
 import { fixPrs } from "./fixPrs.ts";
 import { mergeEpicPrs } from "./mergeEpicPrs.ts";
+import { orchestrate } from "./orchestrate.ts";
 import { recurring } from "./recurring.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 import { startPlanned } from "./startPlanned.ts";
@@ -22,5 +23,6 @@ export const AUTOMATIONS: readonly Automation[] = [
   reviewPrs,
   fixPrs,
   mergeEpicPrs,
+  orchestrate,
   digest,
 ];

@@ -55,6 +55,22 @@ describe("headless agent", () => {
     expect(JSON.parse(after(args, "--json-schema")!)).toEqual({ type: "object" });
   });
 
+  it("denies the tools it is told to, after --disallowedTools and before the budget", () => {
+    const merge = `mcp__${BRAND.id}__merge_task_pr`;
+    const args = agentArgs({
+      access: "read-only",
+      budgetUsd: 1,
+      sessionId: SESSION,
+      model: null,
+      defaultBranch: "main",
+      deniedTools: [merge],
+    });
+    const denied = args.slice(args.indexOf("--disallowedTools") + 1, args.indexOf("--max-budget-usd"));
+    expect(denied).toContain(merge);
+    expect(denied).toContain("Bash(gh pr merge*)");
+    expect(args.indexOf(merge)).toBeGreaterThan(args.indexOf("--disallowedTools"));
+  });
+
   it("keeps a read-only agent that reads untrusted text to its worktree, away from MCP servers", () => {
     const base = { access: "read-only", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: null } as const;
     const open = agentArgs(base);

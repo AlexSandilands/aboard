@@ -356,6 +356,7 @@ export function createAutopilotRunner(deps: {
         name: autopilotSessionName(request.label),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
+        ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
         ...(request.untrustedInput ? { untrusted: true } : {}),
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       }),
@@ -407,6 +408,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
           name: autopilotSessionName(request.label),
           defaultBranch,
           ...(request.tools ? { tools: request.tools } : {}),
+          ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
           ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
         }),
       });
@@ -435,7 +437,10 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       const options = readRunnerOptions(request.options);
       // A T3 thread can't be held to read-only, given tools or asked for structured output.
       const headlessOnly =
-        (request.access ?? "edit") !== "edit" || (request.tools?.length ?? 0) > 0 || Boolean(request.outputSchema);
+        (request.access ?? "edit") !== "edit" ||
+        (request.tools?.length ?? 0) > 0 ||
+        (request.deniedTools?.length ?? 0) > 0 ||
+        Boolean(request.outputSchema);
       if (headlessOnly) {
         if (options.runner === "t3")
           throw new Error("This action needs a headless run, but the automation runs only in T3 Code");
