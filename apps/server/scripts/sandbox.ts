@@ -370,6 +370,7 @@ async function start(argv: string[]): Promise<void> {
   // Never inherit the user's own board settings: a token would lock the sandbox out, a home would share data.
   delete env[brandEnv("TOKEN")];
   delete env[brandEnv("HOME")];
+  delete env[brandEnv("USER_HOME")];
   env[brandEnv("PORT")] = String(serverPort);
   env[brandEnv("WEB_PORT")] = String(webPort);
 
@@ -419,6 +420,8 @@ async function start(argv: string[]): Promise<void> {
     env[brandEnv("POLLERS")] = "0";
     // A folder that doesn't exist: no T3 Code install is detected, so nothing reaches the user's T3 threads.
     env.T3CODE_HOME = join(home, "no-t3");
+    // A home of its own: installing or syncing skills writes `<home>/.claude/skills`, never the user's.
+    env[brandEnv("USER_HOME")] = join(home, "user");
     // Vite serves the UI; a stale build in apps/web/dist would only confuse.
     env[brandEnv("WEB_DIST")] = join(home, "no-web-dist");
     // `tsx watch` rather than `node --watch`, which also restarts when a file is only read (NTFS last-access).

@@ -297,4 +297,5 @@ copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
 code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```
 
-Install this skill by copying the folder to `~/.claude/skills/aboard/`.
+Install this skill from the board's Settings (Board skill, under Claude Code, Copilot or Codex), which keeps it
+in step with the app, or copy the folder to `~/.claude/skills/aboard/`.

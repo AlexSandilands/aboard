@@ -19,6 +19,7 @@ import { queryKeys, useAgentIntegrations } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { agentDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
 import { CommandSnippet, SettingsRow, SettingsSection, StatusDot, StatusLine } from "./settingsLayout";
+import { AgentsSnippetRow, BoardSkillRow } from "./SkillSyncRows";
 import { useOpenSettings } from "./settingsNavigation";
 
 const Dot = ({ dot }: { dot: IntegrationDot }) => <StatusDot tone={dot.tone} label={dot.label} />;
@@ -357,7 +358,7 @@ function McpStatus({ mcp }: { mcp: AgentIntegrationStatus["mcp"] | undefined }) 
 }
 
 /**
- * Claude Code: register the MCP server, install the skill, and the CLI the board runs headless (the board reviewer
+ * Claude Code: register the MCP server, keep the board skill installed, and the CLI the board runs headless (the board reviewer
  * and issue import).
  */
 export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
@@ -383,16 +384,7 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
           <CommandSnippet command={`claude mcp add --scope user --transport http ${BRAND.id} ${url}`} />
         </div>
       </SettingsRow>
-      <SettingsRow
-        id="integrations.claude-code.skill"
-        title="Skill"
-        description={`Copy skills/${BRAND.id} from this repo to:`}
-        info="Teaches Claude Code when to add to the backlog, write plans and update steps."
-      >
-        <div className="mt-2">
-          <CommandSnippet command={`~/.claude/skills/${BRAND.id}`} />
-        </div>
-      </SettingsRow>
+      <BoardSkillRow id="integrations.claude-code.skill" harness="claude" title="Claude Code" />
       <SettingsRow
         id="integrations.claude-code.cli-path"
         title="Claude Code CLI"
@@ -484,6 +476,7 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
           <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
         </div>
       </SettingsRow>
+      <BoardSkillRow id="integrations.copilot.skill" harness="copilot" title="Copilot" />
       <SettingsRow
         id="integrations.copilot.cli-path"
         title="Copilot CLI path"
@@ -529,6 +522,8 @@ export function CodexSection() {
           <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${mcpUrl()}`} />
         </div>
       </SettingsRow>
+      <BoardSkillRow id="integrations.codex.skill" harness="codex" title="Codex" />
+      <AgentsSnippetRow id="integrations.codex.snippet" />
     </SettingsSection>
   );
 }

@@ -45,6 +45,8 @@ export async function startServer(config: Config): Promise<RunningServer> {
   ctx.services.autopilot.recover();
   ctx.services.attachments.sweep();
   ctx.services.projects.ensureGeneral();
+  // After an update, installed copies of the board skill catch up with the app.
+  ctx.services.skillSync.syncAll();
   if (runtime.pollers) ctx.integrations.start();
   ctx.integrations.resumeImports();
   const url = `http://${runtime.host}:${runtime.port}`;

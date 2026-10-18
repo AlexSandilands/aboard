@@ -81,9 +81,12 @@ Add the MCP server once for your user (Claude Code shown; [other agents](docs/gu
 claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp
 ```
 
-Then teach it the workflow: copy [`skills/aboard`](skills/aboard) to `~/.claude/skills/aboard`, or paste
-[`AGENTS-snippet.md`](skills/aboard/AGENTS-snippet.md) into your `AGENTS.md`. Agents identify the project
-by their working directory, so there's nothing to set up per repo.
+Then teach it the workflow: in **Settings → Integrations**, turn on **Board skill** for Claude Code, Copilot or
+Codex. The board installs [`skills/aboard`](skills/aboard) into that agent's skills folder and keeps it updated
+with the app, without overwriting a copy you edited. Other agents: copy the
+[`AGENTS-snippet.md`](skills/aboard/AGENTS-snippet.md) into your `AGENTS.md` (Settings has a Copy button that
+tells you when it changes). Agents identify the project by their working directory, so there's nothing to set up
+per repo.
 
 ## Learn more
 
