@@ -59,7 +59,6 @@ export function AutopilotPill({ project }: { project: Project }) {
   const overview = useAutopilotOverview();
   const status = useAutopilotStatus();
   const scope = useAutopilotScope(project.id);
-  const boardScope = useAutopilotScope(null);
   const set = useSetAutopilotScope(project.id);
   const hasWork = useProjectHasOrchestrateWork(project.id);
   const showTimer = useBoardView((s) => s.showAutopilotTimer);
@@ -101,13 +100,7 @@ export function AutopilotPill({ project }: { project: Project }) {
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="start" width="lg" padding="compact">
-        <ScopePopover
-          title={project.title}
-          entries={scope.data}
-          parentEntries={boardScope.data}
-          set={set}
-          projectId={project.id}
-        />
+        <ScopePopover title={project.title} entries={scope.data} set={set} projectId={project.id} error={scope.error} />
       </PopoverPopup>
     </Popover>
   );
