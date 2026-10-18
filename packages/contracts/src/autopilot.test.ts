@@ -127,4 +127,12 @@ describe("canRetryRun", () => {
     expect(canRetryRun(failed, [{ ...later, taskId: "t2" }])).toBe(true);
     expect(isSupersededRun(later, [failed])).toBe(false);
   });
+
+  it("goes by the list's order when two runs were made in the same millisecond", () => {
+    const at = "2026-10-18T01:00:00.000Z";
+    const failed = run("a", at);
+    const later = run("b", at, { status: "succeeded" });
+    expect(canRetryRun(failed, [later, failed])).toBe(false);
+    expect(isSupersededRun(later, [later, failed])).toBe(false);
+  });
 });

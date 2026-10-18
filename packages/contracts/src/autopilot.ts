@@ -302,19 +302,21 @@ export const isRetried = (dedupeKey: string): boolean => dedupeKey.startsWith(RE
 /**
  * Whether the same automation has made a real run on the same task (or, for a task-less run, in the same project)
  * since this one. A superseded run's work is history: retrying it would redo nothing, yet drop it from the rounds and
- * attempts its automation counts.
+ * attempts its automation counts. `others` is newest first, as the board lists runs: when it holds the run, the runs
+ * before it are the later ones, since two runs made in one millisecond share a `createdAt` and only the list's order
+ * (rowid) tells them apart. A run not in the list is compared by time.
  */
 export function isSupersededRun(
   run: Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "createdAt">,
   others: readonly Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "dryRun" | "createdAt">[],
 ): boolean {
-  return others.some(
+  const at = others.findIndex((o) => o.id === run.id);
+  const later = at >= 0 ? others.slice(0, at) : others.filter((o) => o.createdAt > run.createdAt);
+  return later.some(
     (o) =>
-      o.id !== run.id &&
       !o.dryRun &&
       o.automation === run.automation &&
-      (run.taskId ? o.taskId === run.taskId : o.taskId === null && o.projectId === run.projectId) &&
-      o.createdAt > run.createdAt,
+      (run.taskId ? o.taskId === run.taskId : o.taskId === null && o.projectId === run.projectId),
   );
 }
 
