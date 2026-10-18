@@ -13,6 +13,11 @@ export function isDesktopTheme(value: unknown): value is DesktopTheme {
   return DESKTOP_THEMES.has(value);
 }
 
+/** The page's background colour as the board sends it: `#rrggbb` only, lower-cased. */
+export function parseBackgroundColor(value: unknown): string | null {
+  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value.toLowerCase() : null;
+}
+
 /** Schemes we hand to the OS. Anything else (file:, javascript:, ms-* handlers…) is dropped. */
 const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "t3code:"]);
 

@@ -38,7 +38,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     id: "board",
     label: "Board",
     sections: [
-      section("board.appearance", "Appearance", ["theme", "dark", "light", "banner"]),
+      section("board.appearance", "Appearance", ["theme", "dark", "light", "banner", "contrast", "font"]),
       section("board.notifications", "Notifications", ["pop-ups", "alerts", "quiet hours"]),
       section("board.data", "Data", ["backup", "git", "archived projects", "restore"]),
     ],

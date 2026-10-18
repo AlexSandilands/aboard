@@ -1,6 +1,6 @@
 // Adapted from T3 Code (apps/web/src/components/settings/SettingsGroup.tsx, settingsLayout.tsx,
 // FoldedSettingsSection.tsx), MIT — see NOTICE.
-import { CheckIcon, ChevronRightIcon, CopyIcon, InfoIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, CopyIcon, InfoIcon, Undo2Icon } from "lucide-react";
 import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
@@ -134,6 +134,7 @@ export function SettingsRow({
   infoLabel,
   status,
   control,
+  resetAction,
   children,
   className,
   ...rowProps
@@ -146,6 +147,8 @@ export function SettingsRow({
   infoLabel?: string;
   status?: ReactNode;
   control?: ReactNode;
+  /** A SettingResetButton beside the title, shown while the setting differs from its default. */
+  resetAction?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -167,6 +170,9 @@ export function SettingsRow({
                 {info}
               </InfoHover>
             ) : null}
+            {resetAction ? (
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">{resetAction}</span>
+            ) : null}
           </div>
           {description ? (
             <p className="max-w-xl text-xs leading-normal text-muted-foreground/80">{description}</p>
@@ -181,6 +187,30 @@ export function SettingsRow({
       </div>
       {children}
     </div>
+  );
+}
+
+/** Puts a setting back to its default; sits beside a row's title (SettingsRow's `resetAction`). */
+export function SettingResetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            size="icon-micro"
+            variant="ghost-muted"
+            aria-label={`Reset ${label} to default`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClick();
+            }}
+          >
+            <Undo2Icon className="size-3" />
+          </Button>
+        }
+      />
+      <TooltipPopup side="top">Reset to default</TooltipPopup>
+    </Tooltip>
   );
 }
 

@@ -61,6 +61,7 @@ files under each app.
 - [MCP](features/mcp.md): the agent API, its tools and how they're written
 - [Live sync](features/live-sync.md): server-sent events and the web app's cache
 - [Labels](features/labels.md): task labels, colours, filtering, and asking agents to suggest them
+- [Appearance](features/appearance.md): themes (T3 Code's palettes), contrast, glass, panel animations, fonts, the boot paint
 - [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards, the settings page
 - [Board filters and saved views](features/saved-views.md): filters as URL params, matching, named views kept on the server
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts

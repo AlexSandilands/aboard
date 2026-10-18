@@ -65,7 +65,9 @@ The window is frameless with Windows' native controls painted over the page (`ti
 - Top bars carry `.drag-region`; buttons and inputs inside them opt out of dragging.
 - The web app reports its theme through `window.desktopBridge.setTheme` (`DesktopBridge` in
   `packages/contracts/src/desktop.ts`, exposed by `preload.ts`). The main process checks the sender's
-  origin, sets `nativeTheme` and recolours the overlay. In a plain browser `desktopBridge` is absent.
+  origin, sets `nativeTheme` and recolours the overlay. It also sends the theme's background as `#rrggbb` through
+  `setBackgroundColor` (optional on the bridge, as older shells lack it), which the shell paints the window and the
+  overlay with instead of its default ([appearance.md](appearance.md)). In a plain browser `desktopBridge` is absent.
 
 ### Building and packaging
 

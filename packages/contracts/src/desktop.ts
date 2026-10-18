@@ -26,6 +26,11 @@ export interface DesktopBadge {
 /** API the desktop shell's preload exposes as `window.desktopBridge`. Absent in a plain browser. */
 export interface DesktopBridge {
   setTheme(theme: DesktopTheme): void;
+  /**
+   * The page's background as `#rrggbb`, so the window behind it and the title bar match the board's theme. Optional:
+   * a shell from before themes has no such method, and the page can be newer than the shell it runs in.
+   */
+  setBackgroundColor?(color: string): void;
   /** Shows an OS notification. Clicking it brings the window forward and calls the `onNotificationClick` listeners. */
   notify(notification: DesktopNotification): void;
   setBadge(badge: DesktopBadge): void;
