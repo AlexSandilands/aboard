@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_ACTOR,
+  AUTOPILOT_FIX_PRS,
+  AUTOPILOT_REVIEW_PRS,
   BOARD_RESTARTED_ERROR,
   AutopilotEngineSettings,
   capHandover,
@@ -11,6 +13,7 @@ import {
   resolveAutopilot,
   RETRIED_PREFIX,
   ScheduledAgentRunOutput,
+  unretiredKey,
   type AutopilotAutomation,
   type AutopilotOverview,
   type AutopilotRun,
@@ -162,7 +165,12 @@ export interface AutopilotService {
   update(runId: string, patch: RunPatch): AutopilotRun;
   /** Ends a run with the action's result, logging it on the task. */
   finish(runId: string, result: ActionResult): AutopilotRun;
-  /** Fails and flags the runs a restart left queued or running. Returns how many. */
+  /**
+   * Ends the runs a restart left queued or running as failed. A Review PRs or Fix PRs run is retried once, as by
+   * `retry` (its key retired, no flag), so the engine redoes the work; a run whose work a restart already cut short
+   * is flagged instead, which stops a loop when the run itself restarts the board. Any other run is flagged, since
+   * redoing it could launch an agent twice. Returns how many.
+   */
   recover(): number;
   /**
    * Asks for a run of an automation in a project now (Orchestrate's Run now), publishing autopilot.changed so the
@@ -178,6 +186,9 @@ export interface AutopilotService {
 const RUN_LIMIT = 50;
 /** How long a Run now request waits for the engine before it is dropped. */
 export const RUN_REQUEST_TTL_MS = 60 * 60_000;
+
+/** The automations whose run a restart cut short is retried once (see `recover`). */
+const RETRIED_AFTER_RESTART: ReadonlySet<string> = new Set([AUTOPILOT_REVIEW_PRS, AUTOPILOT_FIX_PRS]);
 
 export function createAutopilotService(
   core: Core,
@@ -354,6 +365,27 @@ export function createAutopilotService(
       dedupeKey: `autopilot:${run.id}`,
     });
   };
+
+  /** The runs on the same task (or, without one, in the same project), newest first. */
+  const runsAround = (run: AutopilotRun): AutopilotRun[] =>
+    run.taskId
+      ? repos.autopilotRuns.forTask(run.taskId, 500)
+      : run.projectId
+        ? repos.autopilotRuns.forProject(run.projectId, 500)
+        : [];
+
+  const retiredKey = (run: AutopilotRun) => `${RETRIED_PREFIX}${run.id}:${run.dedupeKey}`;
+
+  /** Whether a restart already cut short an earlier run of the same work (same automation and key). */
+  const restartedBefore = (run: AutopilotRun): boolean =>
+    runsAround(run).some(
+      (o) =>
+        o.automation === run.automation &&
+        !o.dryRun &&
+        isRetried(o.dedupeKey) &&
+        unretiredKey(o.dedupeKey) === run.dedupeKey &&
+        (o.error ?? "").startsWith(BOARD_RESTARTED_ERROR),
+    );
 
   const save = (run: AutopilotRun, opts: { log?: boolean } = {}): AutopilotRun => {
     core.write((fx) => {
@@ -549,17 +581,12 @@ export function createAutopilotService(
           run.status === "succeeded" ? "This run succeeded, so there is nothing to retry" : "This run is still going",
         );
       }
-      const around = run.taskId
-        ? repos.autopilotRuns.forTask(run.taskId, 500)
-        : run.projectId
-          ? repos.autopilotRuns.forProject(run.projectId, 500)
-          : [];
-      if (isSupersededRun(run, around)) {
+      if (isSupersededRun(run, runsAround(run))) {
         throw new AppError("CONFLICT", "The automation has run again since, so this run's work is history");
       }
       const retired: AutopilotRun = {
         ...run,
-        dedupeKey: `${RETRIED_PREFIX}${run.id}:${run.dedupeKey}`,
+        dedupeKey: retiredKey(run),
         needsAttention: false,
         updatedAt: nowIso(),
       };
@@ -628,13 +655,50 @@ export function createAutopilotService(
     recover() {
       const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES);
       if (stranded.length === 0) return 0;
+      const strandedIds = new Set(stranded.map((r) => r.id));
       core.write((fx) => {
         const at = nowIso();
         for (const run of stranded) {
+          const error = `${BOARD_RESTARTED_ERROR} while this run was going`;
+          // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that
+          // the work is still needed; a Fix PRs run killed after its agent pushed may leave a second session to push
+          // again, within its attempt cap). An agent launch (Start planned, Orchestrate) may have started something
+          // nothing re-checks, so it is flagged for the user.
+          // The key is retired as by `retry`, unless this work was cut short before: a run that itself restarts the
+          // board must not loop. Runs stranded together don't make each other history.
+          if (
+            RETRIED_AFTER_RESTART.has(run.automation) &&
+            !run.dryRun &&
+            !isSupersededRun(
+              run,
+              runsAround(run).filter((o) => o.id === run.id || !strandedIds.has(o.id)),
+            ) &&
+            !restartedBefore(run)
+          ) {
+            repos.autopilotRuns.update({
+              ...run,
+              status: "failed",
+              error,
+              dedupeKey: retiredKey(run),
+              needsAttention: false,
+              finishedAt: at,
+              updatedAt: at,
+            });
+            if (run.taskId) {
+              fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
+                automation: run.automation,
+                title: titleOf(run.automation),
+                status: "retried",
+                reason: "restart",
+                summary: run.summary,
+              });
+            }
+            continue;
+          }
           const failed: AutopilotRun = {
             ...run,
             status: "failed",
-            error: `${BOARD_RESTARTED_ERROR} while this run was going`,
+            error,
             needsAttention: run.taskId !== null,
             finishedAt: at,
             updatedAt: at,

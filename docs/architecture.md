@@ -29,7 +29,8 @@ data dir and the REST actor header (`ACTOR_HEADER`) are all derived from it.
 
 ## Processes and ports
 
-- `pnpm dev`: the server on **4317** (`node --watch --import tsx`) and Vite on **5317**. Vite proxies
+- `pnpm dev`: the server on **4317** (`tsx watch`, which restarts on edits but not on a file merely being read, unlike `node --watch` on
+  NTFS) and Vite on **5317**. Vite proxies
   `/api`, `/mcp` and `/events` to the server.
 - `pnpm start`: builds the web app; the server serves `apps/web/dist` on 4317 after its API, SSE and MCP
   routes, with an `index.html` fallback for client routes.
@@ -167,7 +168,7 @@ on independent timers:
   [local-review.md](features/local-review.md).
 - **Autopilot:** a rule engine in `apps/server/src/autopilot/`, passing over the board after board events and
   every 60 seconds, and acting where an automation is switched on ([ADR 0008](decisions/0008-autopilot-engine.md),
-  [autopilot.md](features/autopilot.md)). Runs a restart left going are failed at startup, pollers or not.
+  [autopilot.md](features/autopilot.md)). Runs a restart left going are failed and retried once at startup, pollers or not.
 
 ## Testing
 

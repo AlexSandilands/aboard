@@ -8,6 +8,7 @@ import {
   isAutopilotSessionName,
   isSupersededRun,
   resolveAutopilot,
+  unretiredKey,
   type AutopilotRun,
 } from "./autopilot.ts";
 
@@ -78,6 +79,17 @@ describe("autopilotRunEventText", () => {
     expect(autopilotRunEventText({ ...base, status: "skipped", summary: "Would archive #4", dryRun: true })).toBe(
       "Archive (dry run): Would archive #4",
     );
+    expect(autopilotRunEventText({ ...base, status: "retried" })).toBe("asked Archive to try again: archive #4");
+    expect(autopilotRunEventText({ ...base, status: "retried", reason: "restart" })).toBe(
+      "Archive will try again, since the board restarted while it was going: archive #4",
+    );
+  });
+});
+
+describe("unretiredKey", () => {
+  it("gives back the key a retired one had, and leaves other keys alone", () => {
+    expect(unretiredKey("retried:6f1c-2:review:pr:l1:abc")).toBe("review:pr:l1:abc");
+    expect(unretiredKey("review:pr:l1:abc")).toBe("review:pr:l1:abc");
   });
 });
 

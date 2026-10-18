@@ -595,18 +595,92 @@ describe("failures and attention", () => {
     expect(kinds()).not.toContain("autopilot");
   });
 
-  it("fails and flags runs a restart left going", () => {
-    const { s, task } = setup();
-    const run = s.autopilot.record({
-      automation: "agent",
-      candidate: { dedupeKey: "k", summary: "start it", taskId: task.id, projectId: task.projectId },
-      dryRun: false,
-    })!;
-    s.autopilot.start(run.id);
-    expect(s.autopilot.recover()).toBe(1);
-    expect(s.autopilot.runsForTask(task.id)).toMatchObject([{ status: "failed", needsAttention: true }]);
-    expect(s.autopilot.status().active).toEqual([]);
-    expect(s.autopilot.recover()).toBe(0);
+  describe("runs a restart left going", () => {
+    const strand = (
+      s: ReturnType<typeof setup>["s"],
+      task: { id: string; projectId: string },
+      dedupeKey: string,
+      automation = "review_prs",
+    ) => {
+      const run = s.autopilot.record({
+        automation,
+        candidate: { dedupeKey, summary: "start it", taskId: task.id, projectId: task.projectId },
+        dryRun: false,
+      })!;
+      s.autopilot.start(run.id);
+      return run;
+    };
+
+    it("are failed and retried once: key retired, no flag, the work free for the engine", () => {
+      const { s, task } = setup();
+      const run = strand(s, task, "k");
+      expect(s.autopilot.recover()).toBe(1);
+      expect(s.autopilot.runsForTask(task.id)).toMatchObject([
+        {
+          status: "failed",
+          dedupeKey: `retried:${run.id}:k`,
+          needsAttention: false,
+          error: "The board restarted while this run was going",
+        },
+      ]);
+      expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+      expect(
+        s.tasks.detail(task.id).events.find((e) => e.type === "autopilot_run" && e.payload.status === "retried"),
+      ).toMatchObject({ actor: "autopilot", payload: { reason: "restart" } });
+      expect(s.autopilot.status().active).toEqual([]);
+      expect(s.autopilot.recover()).toBe(0);
+      // The key is free again, so the engine acts on the work once more.
+      expect(strand(s, task, "k").dedupeKey).toBe("k");
+    });
+
+    it("are flagged when a restart already cut the same work short", () => {
+      const { s, task } = setup();
+      strand(s, task, "k");
+      s.autopilot.recover();
+      const again = strand(s, task, "k");
+      expect(s.autopilot.recover()).toBe(1);
+      expect(s.autopilot.runsForTask(task.id)[0]).toMatchObject({
+        id: again.id,
+        status: "failed",
+        dedupeKey: "k",
+        needsAttention: true,
+      });
+      expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).toContain("autopilot");
+      // Other work on the task is not capped by it.
+      strand(s, task, "other");
+      s.autopilot.recover();
+      expect(s.autopilot.runsForTask(task.id)[0]).toMatchObject({ needsAttention: false });
+    });
+
+    it("are flagged, not retried, once a later run of the automation has made them history", () => {
+      const { s, task } = setup();
+      const old = strand(s, task, "old");
+      const newer = strand(s, task, "newer");
+      s.autopilot.finish(newer.id, {});
+      s.autopilot.recover();
+      expect(s.autopilot.runsForTask(task.id).find((r) => r.id === old.id)).toMatchObject({
+        dedupeKey: "old",
+        needsAttention: true,
+      });
+    });
+
+    it("are all retried when several were stranded together", () => {
+      const { s, task } = setup();
+      const a = strand(s, task, "a");
+      const b = strand(s, task, "b");
+      expect(s.autopilot.recover()).toBe(2);
+      expect(s.autopilot.runsForTask(task.id)).toMatchObject([
+        { dedupeKey: `retried:${b.id}:b`, needsAttention: false },
+        { dedupeKey: `retried:${a.id}:a`, needsAttention: false },
+      ]);
+    });
+
+    it("are flagged, not retried, unless they redo their work safely (an agent launch may have started)", () => {
+      const { s, task } = setup();
+      strand(s, task, "start:t", "start_planned");
+      s.autopilot.recover();
+      expect(s.autopilot.runsForTask(task.id)[0]).toMatchObject({ dedupeKey: "start:t", needsAttention: true });
+    });
   });
 
   it("acts again on a failed run once it is retried, clearing its flag", async () => {
