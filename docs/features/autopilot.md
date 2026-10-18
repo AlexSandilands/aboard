@@ -394,10 +394,21 @@ to fix a pull request linked to a task.
   for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
   (it may start an attempt of its own on the branch while one is at work).
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
-  attempt that wasn't skipped. When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
+  attempt that wasn't skipped or conflict-only (below). When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
   per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
   it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A new head
   commit starts the per-head count again.
+
+  An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
+  counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict
+  it again, so conflicts must not use up the attempts review points and failing checks need. Conflict-only attempts
+  have a budget of their own, `CONFLICT_ATTEMPTS_PER_PR` (5, a constant) for the life of the PR, which guards against
+  a merge that keeps failing or a PR that never stops conflicting; failed and successful ones count, skipped ones
+  don't. When only a conflict is fresh, only that budget applies, so a PR
+  that used up its rounds is still kept merged; past it, a gave-up run `fix:gave_up:<linkId>:conflicts` says "N
+  conflict-only attempts used, still to fix: merge conflicts". A mixed attempt (`checks+conflict`) counts as a normal
+  round. Conflict-only runs are labelled "conflict attempt N of 5" in the summary and the prompt. An integration
+  epic's PR, fixed for conflicts only, uses only this budget.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
   a nudge. Conflicts are fixed with a merge, never a rebase. Only trusted authors' comments start a fix, and the

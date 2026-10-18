@@ -42,6 +42,13 @@ export { AUTOPILOT_FIX_PRS };
 /** Fix attempts on one head commit before Autopilot gives up on it. */
 export const ATTEMPTS_PER_HEAD = 2;
 
+/**
+ * Conflict-only fix attempts on one PR before Autopilot gives up on its conflicts. Merging the base branch in says
+ * nothing about the PR's own code, and every merge into the base can conflict it again, so these don't use up
+ * `prReviewRounds`; this only guards against a merge that keeps failing.
+ */
+export const CONFLICT_ATTEMPTS_PER_PR = 5;
+
 const shortSha = (sha: string) => sha.slice(0, 7);
 
 /** What can send Autopilot to fix a PR. Each has its own switch. */
@@ -64,9 +71,13 @@ interface FixData {
   title: string;
   headRef: string;
   headOid: string;
-  /** This PR's fix attempts so far, this one included, and the most there may be. */
+  /**
+   * This PR's fix attempts so far, this one included, and the most there may be. A conflict-only attempt counts
+   * against its own budget (`CONFLICT_ATTEMPTS_PER_PR`), not the PR's rounds.
+   */
   round: number;
   maxRounds: number;
+  conflictOnly: boolean;
   /** Fix attempts on this head commit, this one included. */
   attempt: number;
   triggers: FixTrigger[];
@@ -96,6 +107,14 @@ export function parseFixKey(dedupeKey: string, linkId: string): { headOid: strin
 }
 
 const kindOf = (key: string) => key.slice(0, key.indexOf("@")) as FixTriggerKind;
+
+/** Whether an attempt was given nothing but merge conflicts. */
+const isConflictOnly = ({ triggers }: { triggers: readonly string[] }): boolean =>
+  triggers.length > 0 && triggers.every((key) => key.startsWith("conflict@"));
+
+/** "attempt 2 of 3", or "conflict attempt 2 of 5" for one that only merges the base branch in. */
+const describeAttempt = ({ round, maxRounds, conflictOnly }: Pick<FixData, "round" | "maxRounds" | "conflictOnly">) =>
+  `${conflictOnly ? "conflict attempt" : "attempt"} ${round} of ${maxRounds}`;
 
 /** The highest comment id an earlier attempt was given, so only newer comments count as new. */
 const newestHandledComment = (handled: ReadonlySet<string>): number =>
@@ -187,6 +206,8 @@ export interface FixPromptInput {
   /** Autopilot's attempt on the PR; left out for a fix the user started by hand (`manual`). */
   round?: number;
   maxRounds?: number;
+  /** The attempt only merges conflicts, which have an attempt budget of their own. */
+  conflictOnly?: boolean;
   triggers: readonly FixTrigger[];
   stillOpen: readonly FixTriggerKind[];
   skill: ReviewSkillRef;
@@ -203,6 +224,7 @@ export function fixPrompt({
   pr,
   round,
   maxRounds,
+  conflictOnly = false,
   triggers,
   stillOpen,
   skill,
@@ -214,7 +236,7 @@ export function fixPrompt({
   const lines = [
     manual
       ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`
-      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is fix attempt ${round} of at most ${maxRounds} on this PR.`,
+      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${conflictOnly ? "conflict-only fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
     "",
     "## What needs fixing",
     "",
@@ -371,7 +393,8 @@ const isActive = (run: AutopilotRun) => run.status === "queued" || run.status ==
  * requesting changes, new review comments, and Autopilot's own review handing off. The task's live T3 thread is
  * nudged; otherwise a fix session starts on the PR's branch. Triggers that fire together go into one attempt, and each
  * trigger fires once. At most two attempts per head commit and `prReviewRounds` per PR; past either, Autopilot gives
- * up and says so on the card.
+ * up and says so on the card. Attempts that only merge conflicts count against neither: they have their own budget,
+ * `CONFLICT_ATTEMPTS_PER_PR`.
  */
 export const fixPrs = defineAutomation({
   key: AUTOPILOT_FIX_PRS,
@@ -426,7 +449,12 @@ export const fixPrs = defineAutomation({
           const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
           if (fresh.length === 0) return [];
 
-          const atHead = used.filter((f) => f.headOid === snapshot.headOid).length;
+          // Attempts that only merged the base branch in have a budget of their own: main moving under the PR isn't
+          // the PR's doing, and shouldn't leave no attempts for review points and failing checks.
+          const conflictUsed = used.filter(isConflictOnly).length;
+          const counted = used.filter((f) => !isConflictOnly(f));
+          const atHead = counted.filter((f) => f.headOid === snapshot.headOid).length;
+          const conflictOnly = fresh.every((t) => t.kind === "conflict");
           const gaveUp = (dedupeKey: string, reason: string): Candidate[] => [
             {
               dedupeKey,
@@ -435,13 +463,19 @@ export const fixPrs = defineAutomation({
               data: { gaveUp: true, number: ref.number, reason } satisfies GaveUpData,
             },
           ];
-          if (used.length >= engine.prReviewRounds) {
+          if (conflictOnly) {
+            if (conflictUsed >= CONFLICT_ATTEMPTS_PER_PR) {
+              return gaveUp(
+                `fix:gave_up:${link.id}:conflicts`,
+                `${conflictUsed} conflict-only attempt${conflictUsed === 1 ? "" : "s"} used, still to fix: ${describeTriggers(["conflict"])}`,
+              );
+            }
+          } else if (counted.length >= engine.prReviewRounds) {
             return gaveUp(
               `fix:gave_up:${link.id}`,
-              `${used.length} fix attempt${used.length === 1 ? "" : "s"} used, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
+              `${counted.length} fix attempt${counted.length === 1 ? "" : "s"} used, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
             );
-          }
-          if (atHead >= ATTEMPTS_PER_HEAD) {
+          } else if (atHead >= ATTEMPTS_PER_HEAD) {
             return gaveUp(
               `fix:gave_up:${link.id}:${snapshot.headOid}`,
               `${atHead} fix attempts at ${shortSha(snapshot.headOid)} didn't change the PR, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
@@ -456,8 +490,9 @@ export const fixPrs = defineAutomation({
             title: snapshot.title,
             headRef,
             headOid: snapshot.headOid,
-            round: used.length + 1,
-            maxRounds: engine.prReviewRounds,
+            round: (conflictOnly ? conflictUsed : counted.length) + 1,
+            maxRounds: conflictOnly ? CONFLICT_ATTEMPTS_PER_PR : engine.prReviewRounds,
+            conflictOnly,
             attempt: atHead + 1,
             triggers: fresh,
             stillOpen: [...new Set(active.filter((t) => handled.has(t.key)).map((t) => t.kind))],
@@ -465,7 +500,7 @@ export const fixPrs = defineAutomation({
           return [
             {
               dedupeKey: fixDedupeKey(link.id, snapshot.headOid, fresh),
-              summary: `fix PR #${ref.number} at ${shortSha(snapshot.headOid)}: ${describeTriggers(fresh.map((t) => t.kind))} (attempt ${data.round} of ${engine.prReviewRounds})`,
+              summary: `fix PR #${ref.number} at ${shortSha(snapshot.headOid)}: ${describeTriggers(fresh.map((t) => t.kind))} (${describeAttempt(data)})`,
               taskId: task.id,
               data,
             },
@@ -495,6 +530,7 @@ export const fixPrs = defineAutomation({
       pr: data,
       round: data.round,
       maxRounds: data.maxRounds,
+      conflictOnly: data.conflictOnly,
       triggers: data.triggers,
       stillOpen: data.stillOpen,
       skill: config.skill,
@@ -563,7 +599,7 @@ export const fixPrs = defineAutomation({
           : "Ran a headless fix of";
     return {
       ...patch,
-      summary: `${how} PR #${data.number} at ${shortSha(data.headOid)}: ${what} (attempt ${data.round} of ${data.maxRounds})`,
+      summary: `${how} PR #${data.number} at ${shortSha(data.headOid)}: ${what} (${describeAttempt(data)})`,
       output: { ...output },
     };
   },
