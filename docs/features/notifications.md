@@ -96,7 +96,7 @@ permission state, and what the quiet-hours window is.
 Any agent can flag any task for the user with `request_attention(task, message)`: when it is blocked, unsure, or has
 something to look at, such as plans ready for approval. The board decides nothing about when; users tell their agents
 (in a prompt or custom instructions). The request is stored on the task (`attention_message`, `attention_actor`,
-`attention_requested_at`, `028_task_attention_request.sql`, in backups) because attention is otherwise derived from
+`attention_requested_at`, `029_task_attention_request.sql`, in backups) because attention is otherwise derived from
 board state. It becomes an `agent_request` attention reason (the agent's message), so the card, the **Needs
 attention** list and the `attentionOnly` filters show it, and the same write sends the `agent_request` notification.
 

@@ -60,6 +60,7 @@ describe("MCP endpoint", () => {
       "add_note",
       "request_attention",
       "link",
+      "merge_task_pr",
     ]) {
       expect(names).toContain(name);
     }

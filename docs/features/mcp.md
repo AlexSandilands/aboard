@@ -26,6 +26,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`, `request_attention` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
+| `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for an epic's tasks (see [epics.md](epics.md#t3-code-threads)) |
 
@@ -44,6 +45,11 @@ changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-f
 `add_to_backlog`, `create_task` and `update_task` take `priority: true | false`, which puts the task in the board's
 priority lane and makes Autopilot start it first ([board-layout.md](board-layout.md#the-priority-lane)). Agents set it
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
+
+`add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
+which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so.
+`get_task` shows an "Auto-merge:" line when it is set. An epic can't have it. See
+[github-prs.md](github-prs.md#merge_task_pr).
 
 `add_to_backlog`, `create_task` and `update_task` take `epic: "#N"` (`update_task` takes `null` to take the
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the

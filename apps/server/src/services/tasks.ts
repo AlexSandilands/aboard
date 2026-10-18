@@ -38,6 +38,7 @@ import type {
 const DETAIL_EVENT_LIMIT = 100;
 const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
 const EPIC_PRIORITY_MESSAGE = "An epic has no card to put in the priority lane; mark its tasks instead";
+const EPIC_AUTO_MERGE_MESSAGE = "An epic has no pull request of its own to merge; flag its tasks instead";
 
 /** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
@@ -89,8 +90,11 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
     position: positionAmong(lane, {}),
     updatedAt: now,
     statusChangedAt: statusChangeTime(repos, epicId, now),
+    // A finished epic no longer asks, the same as a finished task (move and close clear it).
+    ...(status === "done" ? { attentionRequest: null } : {}),
   });
   fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
+  if (status === "done" && epic.attentionRequest) fx.log(epicId, actor, "attention_cleared", { finished: true });
 }
 
 /** Task cards: creation, updates, moves between columns, notes. */
@@ -270,6 +274,7 @@ export function createTasksService(
         if (kind === "epic" && input.epicId) throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
         if (kind === "epic" && input.autopilot != null) throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
         if (kind === "epic" && input.priority) throw new AppError("VALIDATION", EPIC_PRIORITY_MESSAGE);
+        if (kind === "epic" && input.autoMerge != null) throw new AppError("VALIDATION", EPIC_AUTO_MERGE_MESSAGE);
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
         }
@@ -360,6 +365,7 @@ export function createTasksService(
           resolvedByTaskId: null,
           autoReview: null,
           autopilot: input.autopilot ?? null,
+          autoMerge: input.autoMerge ?? null,
           priority: input.priority ?? false,
           attentionRequest: null,
           suggestedModel: null,
@@ -422,7 +428,9 @@ export function createTasksService(
                   ? "it has an Autopilot flag"
                   : task.priority
                     ? "it is a priority"
-                    : null;
+                    : task.autoMerge !== null
+                      ? "it has an auto-merge flag"
+                      : null;
         if (reason) return reason;
         repos.tasks.update({ ...task, kind: "epic", updatedAt: nowIso() });
         fx.log(id, actor, "became_epic", {});
@@ -470,6 +478,13 @@ export function createTasksService(
         if (input.priority !== undefined && input.priority !== current.priority) {
           next.priority = input.priority;
           changed.push("priority");
+        }
+        if (current.kind === "epic" && input.autoMerge != null) {
+          throw new AppError("VALIDATION", EPIC_AUTO_MERGE_MESSAGE);
+        }
+        if (input.autoMerge !== undefined && input.autoMerge !== current.autoMerge) {
+          next.autoMerge = input.autoMerge;
+          changed.push("autoMerge");
         }
         const movedProject = input.projectId !== undefined && input.projectId !== current.projectId;
         if (movedProject) {

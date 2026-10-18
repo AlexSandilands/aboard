@@ -97,6 +97,14 @@ export const autopilotField = z
       "Autopilot's own settings.",
   );
 
+export const autoMergeField = z
+  .enum(["default", "on", "off"])
+  .describe(
+    "Whether merge_task_pr may merge this task's pull request into the default branch once it is reviewed and green. " +
+      "on: allow it. default and off: it never merges, and the user merges it. Set it only when the user has said so; " +
+      "ask first, never on your own.",
+  );
+
 export const priorityField = z
   .boolean()
   .describe(
@@ -114,7 +122,7 @@ export const deliveryField = z
       "ask first, never on your own. Back to main only while none of the epic's tasks has started.",
   );
 
-/** The task's stored flag (null is Default) for a tool's `autopilot` argument. */
+/** The task's stored flag (null is Default) for a tool's `autopilot` or `autoMerge` argument. */
 export const autopilotValue = (choice: z.infer<typeof autopilotField>): boolean | null =>
   choice === "default" ? null : choice === "on";
 

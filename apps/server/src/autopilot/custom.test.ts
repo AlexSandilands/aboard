@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { AUTOPILOT_BACKGROUND_MAX, createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
-import type { RunnerRequest } from "./types.ts";
+import type { RunnerRequest, RunnerResult } from "./types.ts";
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const HOUR = 3_600_000;
@@ -22,7 +22,13 @@ afterEach(() => {
   for (const engine of engines.splice(0)) engine.stop();
 });
 
-function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<ShellResult> } = {}) {
+function setup(
+  opts: {
+    shell?: (request: ShellRequest) => ShellResult | Promise<ShellResult>;
+    /** What an agent run returns; it ends when this does. */
+    agent?: () => Promise<RunnerResult>;
+  } = {},
+) {
   let offsetMs = 0;
   const shellRuns: ShellRequest[] = [];
   const h = createTestHarness({
@@ -41,7 +47,9 @@ function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<
     runner: {
       start: (request) => {
         agentRuns.push(request);
-        return Promise.resolve({ runner: "t3", threadUrl: "t3code://threads/env/t1", result: null });
+        return opts.agent
+          ? opts.agent()
+          : Promise.resolve({ runner: "t3", threadUrl: "t3code://threads/env/t1", result: null });
       },
     },
     now: () => new Date(Date.now() + offsetMs),
@@ -60,10 +68,10 @@ function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<
     if (mode) s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode });
     return custom;
   };
-  const pass = async (laterMs = 0) => {
+  const pass = async (laterMs = 0, { wait = true } = {}) => {
     offsetMs = laterMs;
     await engine.pass();
-    await engine.idle();
+    if (wait) await engine.idle();
   };
   const runsOf = (projectId = project.id) => s.autopilot.runsForProject(projectId);
   const shell = (command = "./notify.sh") => ({ kind: "shell" as const, command, timeoutSeconds: 30 });
@@ -212,6 +220,125 @@ describe("custom automations: triggers", () => {
     expect(runsOf()[0]).toMatchObject({ automation: customAutomationKey(custom.id), taskId: null });
     expect(runsOf(other.id)).toHaveLength(0);
     expect(s.autopilot.runsForProject(project.id)[0]!.dedupeKey).toMatch(/^schedule:/);
+  });
+
+  describe("an agent on a schedule", () => {
+    const minutes = (everyMinutes: number) => ({
+      kind: "schedule" as const,
+      schedule: { kind: "minutes" as const, everyMinutes },
+    });
+    const agent = { kind: "agent" as const, prompt: "Check on {{project.name}}", skill: "orchestrate" };
+
+    it("starts one task-less run per slot, with a project footer", async () => {
+      const { define, pass, agentRuns, runsOf, project, other } = setup();
+      const custom = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: agent,
+      });
+      await pass();
+      // Nothing before the automation was armed, whatever slot it is.
+      expect(agentRuns).toHaveLength(0);
+      await pass(5 * 60_000);
+      await pass(5 * 60_000);
+      expect(agentRuns).toHaveLength(1);
+      const request = agentRuns[0]!;
+      expect(request.label).toBe("Watch · Alpha");
+      expect(request.prompt).toContain("Use the orchestrate skill.");
+      expect(request.prompt).toContain("Check on Alpha");
+      expect(request.prompt).toContain("Project folder: /work/alpha");
+      expect(request.prompt).toContain("This run has no task");
+      expect(request.prompt).not.toContain("get_task");
+      expect(request.run.taskId).toBeNull();
+      expect(request.workspace).toBeUndefined();
+      // Headless whatever the automation's runner option says, with the push guard aimed at the project's checkout.
+      expect(request.options).toMatchObject({ runner: "headless" });
+      expect(request.repo).toBe("/work/alpha");
+      expect(request.tier).toBeNull();
+      expect(runsOf()[0]).toMatchObject({
+        automation: customAutomationKey(custom.id),
+        taskId: null,
+        status: "succeeded",
+      });
+      expect(runsOf()[0]!.dedupeKey).toMatch(/^schedule:/);
+      expect(runsOf(other.id)).toHaveLength(0);
+    });
+
+    it("passes the action's tier, and starts headless even when the runner option says T3 only", async () => {
+      const { s, define, pass, agentRuns, project } = setup();
+      const custom = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: { ...agent, tier: "light" },
+      });
+      s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on", config: { runner: "t3" } });
+      await pass(5 * 60_000);
+      expect(agentRuns[0]).toMatchObject({ tier: "light", options: { runner: "headless" } });
+    });
+
+    it("doesn't start another run while the last one is going, and runs the latest slot once it ends", async () => {
+      let finish = () => {};
+      const { define, pass, agentRuns, project, engine } = setup({
+        agent: () =>
+          new Promise((resolve) => {
+            finish = () => resolve({ runner: "headless", result: null });
+          }),
+      });
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(5 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(1);
+      await pass(10 * 60_000, { wait: false });
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(1);
+      finish();
+      await engine.idle();
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(2);
+      finish();
+    });
+
+    it("holds back only the project and the automation that has a run going", async () => {
+      const { s, define, pass, agentRuns, project, other } = setup({ agent: () => new Promise(() => {}) });
+      s.autopilot.updateEngine({ maxConcurrent: 5 });
+      const watch = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: agent,
+      });
+      await pass(5 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha"]);
+      // Another automation on the same project isn't held by Watch's run.
+      define({ name: "Other", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(10 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha", "Other · Alpha"]);
+      // Watch's run in Alpha doesn't hold it back in Beta (and holds it back in Alpha still).
+      s.customAutomations.update(watch.id, { filters: { projectIds: [project.id, other.id] } });
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns.map((r) => r.label)).toEqual(["Watch · Alpha", "Other · Alpha", "Watch · Beta"]);
+    });
+
+    it("catches up once after downtime, not once per missed slot", async () => {
+      const { define, pass, agentRuns, project } = setup();
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(60 * 60_000);
+      // One run, though twelve slots passed.
+      expect(agentRuns).toHaveLength(1);
+      await pass(60 * 60_000);
+      expect(agentRuns).toHaveLength(1);
+    });
+
+    it("shows the prompt in a dry run and starts nothing", async () => {
+      const { s, define, pass, agentRuns, runsOf, project } = setup();
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      s.autopilot.updateEngine({ dryRun: true });
+      await pass(5 * 60_000);
+      expect(agentRuns).toHaveLength(0);
+      expect(runsOf()[0]).toMatchObject({ dryRun: true, status: "skipped" });
+      expect(runsOf()[0]!.detail).toContain("Check on Alpha");
+    });
   });
 
   it("runs a schedule's slot in every project it is on in, not just the first", async () => {
@@ -646,7 +773,7 @@ describe("custom automations: definitions", () => {
     const schedule = { kind: "schedule" as const, schedule: { kind: "hourly" as const, everyHours: 2 } };
     expect(() =>
       s.customAutomations.create({ name: "A", trigger: schedule, action: { kind: "agent", prompt: "x" } }),
-    ).toThrow(/no task for an agent/);
+    ).not.toThrow();
     expect(() =>
       s.customAutomations.create({
         name: "B",

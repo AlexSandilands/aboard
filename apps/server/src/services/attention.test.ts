@@ -92,4 +92,14 @@ describe("request attention", () => {
     s.tasks.move(task.id, { status: "review" }, "user");
     expect(s.tasks.summary(task.id).attentionRequest).toBeNull();
   });
+
+  it("drops an epic's request when its last task finishes and the epic rolls up to Done", () => {
+    const { s, task, project } = setup();
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Feature" }, [task.id], "agent");
+    s.attention.request(epic.id, "Look at the epic", "claude-code");
+    expect(s.tasks.summary(epic.id).attention).toHaveLength(1);
+    s.tasks.close(task.id, { resolution: "wont_do" }, "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", attention: [], attentionRequest: null });
+    expect(s.tasks.detail(epic.id).events.map((e) => e.type)).toContain("attention_cleared");
+  });
 });

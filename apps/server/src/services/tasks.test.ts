@@ -440,6 +440,32 @@ describe("priority", () => {
   });
 });
 
+describe("auto-merge flag", () => {
+  it("starts as Default, is set on create, and logs a change once", () => {
+    const { s, project } = setup();
+    const plain = s.tasks.create({ projectId: project.id, title: "Plain" });
+    expect(plain.autoMerge).toBeNull();
+    expect(s.tasks.create({ projectId: project.id, title: "On", autoMerge: true }).autoMerge).toBe(true);
+
+    expect(s.tasks.update(plain.id, { autoMerge: true }, "user").autoMerge).toBe(true);
+    const again = s.tasks.update(plain.id, { autoMerge: true }, "user");
+    expect(again.events.filter((e) => e.type === "updated").map((e) => e.payload)).toEqual([{ fields: ["autoMerge"] }]);
+    expect(s.tasks.update(plain.id, { autoMerge: false }, "user").autoMerge).toBe(false);
+    expect(s.tasks.update(plain.id, { autoMerge: null }, "user").autoMerge).toBeNull();
+  });
+
+  it("is refused on epics, which have no PR of their own to merge", () => {
+    const { s, project } = setup();
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "E", kind: "epic", autoMerge: true }),
+      "VALIDATION",
+    );
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { autoMerge: false }, "user"), "VALIDATION");
+    expect(s.tasks.update(epic.id, { autoMerge: null }, "user").autoMerge).toBeNull();
+  });
+});
+
 describe("autopilot flag", () => {
   it("starts as Default, is set on create, and logs a change once", () => {
     const { s, project } = setup();

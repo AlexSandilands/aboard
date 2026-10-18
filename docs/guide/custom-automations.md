@@ -15,8 +15,10 @@ and keeps to the same pause, dry run, caps and quiet hours.
      it has a merge conflict, or it's merged. Needs the GitHub poller, which fills in the PR's state.
    - **A task sits in a column too long**: N hours in In Progress, say. Once per stay in the column.
    - **A task's last blocker finishes**.
-   - **On a schedule**: weekdays at a time, or every N hours from midnight (local time). It runs once in each
-     project it's on in, with no task, so it can only run a command.
+   - **On a schedule**: weekdays at a time, or every N minutes (5 to 1440) or hours (1 to 24) from midnight
+     (local time), so every 15 minutes runs at 00:00, 00:15, 00:30 and so on. It runs once in each project it's on
+     in, with no task, so it can only filter by project. If the board was off, it runs once when it's back, not
+     once for each slot it missed.
 2. **Only in these projects**, **with any of these labels**, **in the epic**: narrow it down. Leave them empty
    for every task.
 3. **Do**: one of these.
@@ -25,7 +27,11 @@ and keeps to the same pause, dry run, caps and quiet hours.
      `{{automation.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
      skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
-     ([Autopilot](autopilot.md#runners)).
+     ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
+     temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's
+     tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
+     branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
+     branch. A new run waits until the last one for the project has finished, then the latest slot runs once.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.

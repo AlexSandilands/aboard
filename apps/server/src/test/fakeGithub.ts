@@ -107,6 +107,7 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
               state: pr.state,
               headRefOid: pr.headRefOid,
               baseRefName: pr.baseRefName ?? "main",
+              mergeStateStatus: pr.mergeStateStatus ?? "CLEAN",
             },
           },
         },
