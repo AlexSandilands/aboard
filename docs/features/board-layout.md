@@ -210,29 +210,36 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   is on for the project) is dim; on and idle is a calm ring; paused is warning-coloured with a pause icon; while
   a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
   in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
-  even under Pause all. Clicking it opens a popover with Inherit / On / Off for each automation at the project,
-  each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
-  "Recurring tasks…" link opens the project's settings at that section. The chosen **On** is the app's info blue
-  (`ModeSwitch`), and an Inherit that resolves to On shows its note in the same blue.
-  - **Orchestrate** is pinned above the other rows in a highlighted section of its own (`OrchestrateSection`): its
-    switch, then "Next check in 12:34" ticking every second (`useNow`; the slot is counted in the browser with
+  even under Pause all. Clicking it opens a popover (`ScopePopover`) with a header ("Autopilot" and a cog button,
+  tooltip "Autopilot settings", that closes it and opens Settings → Autopilot) and one on/off switch per automation at
+  the project. Every row is a `ScopeRow` in a `ScopeCard`: the name (its description is the name's tooltip) and a
+  switch. The stored Inherit / On / Off model is unchanged; only the control is. A switch that follows the board (or
+  the built-in default) is faded, and its tooltip says where the state comes from (`scopeRowModel`, from the entry's
+  already resolved `enabled` and `source`: "On, following the board"). A click saves an explicit On or Off; once the
+  project sets it the switch is solid and a ↺ button saves Inherit again. An automation that can't be turned on
+  (`blocked`, an empty required tool slot) shows a ⚠ with the reason as its tooltip and its switch can only be
+  turned off. Under Recurring tasks a calendar icon button opens the project's settings at that section. Paused is a
+  one-line `Alert` with a **Resume** button (`PausedNotice`). The rows wait behind a skeleton until the scope loads (a failed load shows its error instead), so
+  no switch shows a made-up Off, and a long list scrolls in a `ScrollArea`.
+  - **Orchestrate** is pinned above, in a card of its own (`OrchestrateSection`): its row, then one line with
+    "Next check in 12:34" (hover it for the latest run, `lastRunText`) ticking every second (`useNow`; the slot is counted in the browser with
     `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
-    hours until their end, today's cap, idle), "Last ran 17m ago · Done" (`lastRunText`), a **▶ Run now** button
+    hours until their end, today's cap, idle), beside a **History** button (`RunHistoryLink`, not marked as opened from
+    Settings) that opens the run history page filtered to the project and a **▶ Run now** button
     (`useRunOrchestrateNow`; disabled with a spinner while a run is going or asked for, a refusal is a toast with the
-    server's reason) the switch for the pill's countdown and a **View history** button (`RunHistoryLink`, not marked as opened from
-    Settings) that opens the run history page filtered to the project. It reads `useOrchestrateState`, refetched on
+    server's reason). It reads `useOrchestrateState`, refetched on
     `autopilot.changed`, on task changes and every minute. Epic popovers don't have it (Orchestrate has no epic scope).
+    The rest of the automations follow under an "Automations" label.
   - **The pill's countdown.** While Orchestrate is on in the project the pill reads `Autopilot · 12m`
     (`pillTimerAt`, `formatPillCountdown`): only when a slot would run, so not while paused, while its run is going,
     with nothing to look at (`useProjectHasOrchestrateWork`, from the snapshot with the server's rule) or in quiet hours
     at the slot. The daily caps are left to the popover. One display preference, `showAutopilotTimer` in
-    `useBoardView` (default on), is switched both in the popover and in Settings → Appearance (**Orchestrate countdown
-    on lanes**).
+    `useBoardView` (default on), is switched in Settings → Autopilot, in Orchestrate's card (**Countdown on lanes**).
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
-  run), and opens the same popover (`ScopePopover`) for the epic. Its Inherit labels read the project's entries,
-  which already resolve through the board ("Inherit (Off from project)"). Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
+  run), and opens the same popover (`ScopePopover`) for the epic. Its faded switches follow the project, whose state already
+  resolves through the board ("Off, following the project"). The epic's delivery control is a card of its own below the automations. Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
   tasks, whether the epic or its project says so. It isn't shown for an archived epic.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
@@ -341,7 +348,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   bottom). The list highlights that section.
 - **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
-  popover (its Settings link, and Recurring tasks… for the project's rules).
+  popover (its settings cog, and the icon beside Recurring tasks for the project's rules).
 - **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
   default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
   leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that

@@ -329,7 +329,7 @@ this automation's own switch decides whether a project's rules run. It has no co
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
   example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
   The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings ("Recurring tasks…", `useOpenSettings()("project.recurring", { project })`), scrolled to the section.
+  these settings with an icon button beside Recurring tasks (`useOpenSettings()("project.recurring", { project })`), scrolled to the section.
 
 #### Recurring rules API
 
@@ -1000,7 +1000,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
 - **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
-  Automations heading: its board switch and config (the same `AutomationField` rows) and a **View
+  Automations heading: its board switch and config (the same `AutomationField` rows), the **Countdown on lanes** switch for the lane pill's timer
+  (`showAutopilotTimer`, a per-browser display preference) and a **View
   all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
   heading has an **All runs** link to the history of every automation.
 - **Automations** (`AutomationSections`): one folded section per other automation with its On / Off switch at
@@ -1008,7 +1009,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
   it has one, such as the digest's own skill). A project's settings page shows them as rows
-  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. Config set at a scope is sent whole (the server replaces it), so editing one
+  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces it), so editing one
   key sends the scope's other keys with it; the reset button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`

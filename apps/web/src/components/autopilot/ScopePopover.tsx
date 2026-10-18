@@ -1,114 +1,141 @@
 import { AUTOPILOT_ORCHESTRATE, AUTOPILOT_RECURRING, type AutopilotScopeEntry } from "@repo/contracts";
+import { CalendarClockIcon, SettingsIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { Button } from "~/components/ui/button";
 import { PopoverClose } from "~/components/ui/popover";
-import { cn } from "~/lib/utils";
-import type { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotOverview } from "~/state/queries";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { entryFor, inheritLabel, parentEntry, scopeAutomations } from "./autopilot.logic";
-import { ModeSwitch } from "./ModeSwitch";
+import { useSetAutopilotPaused, type useSetAutopilotScope } from "~/state/mutations";
+import { useAutopilotOverview } from "~/state/queries";
+import { entryFor, scopeAutomations, scopeRowModel } from "./autopilot.logic";
 import { OrchestrateSection } from "./OrchestrateSection";
+import { PausedNotice, ScopeCard, ScopeRow, ScopeSectionLabel, ScopeSkeleton } from "./ScopeRow";
 
 /**
- * The popover behind the lane pill and the epic button: Inherit / On / Off per automation for one scope, each saying
- * what Inherit would be. `parentEntries` are the scope above's (the board's for a project, the project's for an epic).
- * A project's popover pins Orchestrate in a section of its own at the top (OrchestrateSection).
+ * The popover behind the lane pill and the epic button: an on/off switch per automation for one scope, faded while it
+ * follows the scope above (the board for a project, the project for an epic) and solid once this scope sets it.
+ * A project's popover pins Orchestrate in a card of its own at the top (OrchestrateSection). `children` are further
+ * cards under the automations (an epic's delivery).
  */
 export function ScopePopover({
   title,
   entries,
-  parentEntries,
   set,
   projectId,
   epic = false,
+  error,
+  children,
 }: {
   /** The project's or epic's name, for the switches' labels. */
   title: string;
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined;
-  parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   set: ReturnType<typeof useSetAutopilotScope>;
-  /** Set for a project's popover: under Recurring tasks a link opens the project's settings page at that section. */
+  /** Set for a project's popover: Recurring tasks gets a link to the project's settings page at that section. */
   projectId?: string;
   /** An epic's popover: leaves out the automations that don't apply to epics. */
   epic?: boolean;
+  /** The scope query's error, so a failed load shows a message instead of a skeleton for good. */
+  error?: Error | null;
+  children?: ReactNode;
 }) {
   const overview = useAutopilotOverview();
   const openSettings = useOpenSettings();
+  const resume = useSetAutopilotPaused();
   const paused = overview.data?.paused ?? false;
   const automations = scopeAutomations(overview.data?.automations ?? [], epic);
   const pinned = projectId && !epic ? automations.find((a) => a.key === AUTOPILOT_ORCHESTRATE) : undefined;
+  const scope = epic ? "epic" : "project";
+  // The switches would show a made-up Off until the scope arrives, so rows wait for it.
+  const loading = !overview.data || !entries;
+  const loadError = error ?? overview.error;
   return (
     <div className="flex w-full flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Autopilot</h3>
-        <PopoverClose
-          className="cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => openSettings("autopilot")}
-        >
-          Settings
-        </PopoverClose>
-      </div>
-      {paused ? (
-        <p className="rounded-md bg-warning/8 px-2 py-1 text-2xs text-warning-foreground">
-          Paused: no new runs start. Runs already going finish.
-        </p>
-      ) : null}
-      {pinned && projectId ? (
-        <OrchestrateSection
-          automation={pinned}
-          entry={entryFor(entries, pinned)}
-          parent={parentEntry(parentEntries, pinned.key)}
-          title={title}
-          projectId={projectId}
-          set={set}
-        />
-      ) : null}
-      <ul className="flex flex-col divide-y divide-border/50">
-        {automations
-          .filter((automation) => automation !== pinned)
-          .map((automation) => {
-            const entry = entryFor(entries, automation);
-            const parent = parentEntry(parentEntries, automation.key);
-            return (
-              <li key={automation.key} className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium">{automation.title}</p>
-                  <p className="line-clamp-2 text-2xs text-muted-foreground">{automation.description}</p>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <ModeSwitch
-                    label={`${automation.title} in ${title}`}
-                    value={entry.mode}
-                    disabled={set.isPending}
-                    blocked={automation.blocked}
-                    onChange={(mode) => set.mutate({ automation: automation.key, mode })}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <PopoverClose
+                render={
+                  <Button
+                    size="icon-xs"
+                    variant="ghost-muted"
+                    aria-label="Autopilot settings"
+                    onClick={() => openSettings("autopilot")}
                   />
-                  <span
-                    className={cn(
-                      "min-w-0 truncate text-2xs",
-                      entry.mode === "inherit" && parent?.enabled ? "text-info-foreground" : "text-muted-foreground",
-                    )}
-                    title="What Inherit resolves to"
-                  >
-                    {inheritLabel(parent)}
-                  </span>
-                </div>
-                {automation.blocked ? (
-                  <p className="rounded-md bg-warning/8 px-2 py-1 text-2xs text-warning-foreground">
-                    {automation.blocked}
-                  </p>
-                ) : null}
-                {projectId && automation.key === AUTOPILOT_RECURRING ? (
-                  <PopoverClose
-                    className="w-fit cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => openSettings("project.recurring", { project: projectId })}
-                  >
-                    Recurring tasks…
-                  </PopoverClose>
-                ) : null}
-              </li>
-            );
-          })}
-      </ul>
+                }
+              />
+            }
+          >
+            <SettingsIcon />
+          </TooltipTrigger>
+          <TooltipPopup>Autopilot settings</TooltipPopup>
+        </Tooltip>
+      </div>
+      {paused ? <PausedNotice disabled={resume.isPending} onResume={() => resume.mutate(false)} /> : null}
+      {loading && loadError ? (
+        <p role="alert" className="text-2xs text-destructive-foreground">
+          Couldn't load Autopilot: {loadError.message}
+        </p>
+      ) : loading ? (
+        <ScopeSkeleton />
+      ) : (
+        <>
+          {pinned && projectId ? (
+            <OrchestrateSection
+              automation={pinned}
+              entry={entryFor(entries, pinned)}
+              title={title}
+              projectId={projectId}
+              set={set}
+            />
+          ) : null}
+          <ScopeSectionLabel>Automations</ScopeSectionLabel>
+          <ScrollArea scrollFade className="max-h-72">
+            <ScopeCard>
+              {automations
+                .filter((automation) => automation !== pinned)
+                .map((automation) => (
+                  <ScopeRow
+                    key={automation.key}
+                    name={automation.title}
+                    description={automation.description}
+                    label={`${automation.title} in ${title}`}
+                    model={scopeRowModel(entryFor(entries, automation), automation.blocked, scope)}
+                    scope={scope}
+                    disabled={set.isPending}
+                    onChange={(mode) => set.mutate({ automation: automation.key, mode })}
+                    trailing={
+                      projectId && automation.key === AUTOPILOT_RECURRING ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <PopoverClose
+                                render={
+                                  <Button
+                                    size="icon-micro"
+                                    variant="ghost-muted"
+                                    aria-label="Recurring tasks settings"
+                                    onClick={() => openSettings("project.recurring", { project: projectId })}
+                                  />
+                                }
+                              />
+                            }
+                          >
+                            <CalendarClockIcon />
+                          </TooltipTrigger>
+                          <TooltipPopup side="top">Recurring tasks</TooltipPopup>
+                        </Tooltip>
+                      ) : null
+                    }
+                  />
+                ))}
+            </ScopeCard>
+          </ScrollArea>
+        </>
+      )}
+      {children}
     </div>
   );
 }

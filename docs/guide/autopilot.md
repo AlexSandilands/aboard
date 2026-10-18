@@ -10,11 +10,13 @@ for that task.
 ## Switching automations on
 
 Each project's lane has an **Autopilot** pill. It's dim when nothing is on for the project, a calm ring when
-something is on, and animated while a run is going. Click it to see every automation with an **Inherit / On /
-Off** switch. Inherit follows the board, and the switch says what that means ("Inherit (On from board)").
+something is on, and animated while a run is going. Click it to see every automation with an on/off switch. A
+faded switch is following the board: hover it to see what that means ("On, following the board"). Flip it and the
+switch turns solid, meaning this project sets it itself; the **↺** button beside it goes back to following the board.
+To pin the value the board has now, flip the switch twice. The cog at the top opens **Settings → Autopilot**.
 
 An **epic** has the same switch, in a small round **Autopilot** button on its band and in its panel's top bar. It
-covers only the tasks in that epic, and Inherit follows the project ("Inherit (On from project)"). So you can
+covers only the tasks in that epic, and a faded switch follows the project ("On, following the project"). So you can
 switch an automation on for one epic in a project that has it off, or off for one epic in a project that has it
 on. The button looks like the pill: dim, a ring, or animated while one of the epic's tasks is being worked on.
 An epic only lists the automations that work on tasks in an epic (not Recurring tasks or the Digest, for
@@ -27,7 +29,7 @@ the epic's own switch and days decide.
 **Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the
-board to inherit from, so an automation you haven't switched on is off); only projects and epics have **Inherit**.
+board to inherit from, so an automation you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button).
 
 ## Remind me about stuck tasks
 
@@ -202,14 +204,13 @@ Orchestrate has its own area in **Settings → Autopilot**, above the other auto
 its [run history](#run-history). What is per project is set in the project's own settings; its next check and
 **Run now** are in the lane's popover (below).
 
-Orchestrate sits at the top of the lane's Autopilot popover, in a section of its own. It shows when the next check
-is ("Next check in 12:34") and when it last ran. A check is a look, not a promise of a run: when the next one won't
+Orchestrate sits at the top of the lane's Autopilot popover, in a card of its own. It shows when the next check
+is ("Next check in 12:34"). A check is a look, not a promise of a run: when the next one won't
 run, the section says why instead (idle with nothing to check, paused, quiet hours, today's cap reached). **▶ Run
 now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
 it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
-the next check too (`Autopilot · 12m`). Switch that off in the popover or under **Settings → Appearance →
-Orchestrate countdown on lanes**. **View history** in the popover's section opens the run history filtered to that
-project.
+the next check too (`Autopilot · 12m`). Switch that off under **Settings → Autopilot → Orchestrate → Countdown on
+lanes**. **History** in the popover's card opens the run history filtered to that project.
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 

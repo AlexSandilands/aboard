@@ -1,5 +1,7 @@
 import { AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { Switch } from "~/components/ui/switch";
+import { useBoardView } from "~/state/ui";
 import { AutomationField, useScopeAutomations } from "./AutomationRows";
 import { BOARD_MODES, boardModeToSave, boardSummary, boardSwitchValue } from "./autopilot.logic";
 import { BlockedWarning } from "./InputsAndSlots";
@@ -13,6 +15,8 @@ import { RunHistoryLink } from "./RunHistoryLink";
  */
 export function OrchestrateSettings() {
   const { items, pending = false, rejected = 0 } = useScopeAutomations(null);
+  const showTimer = useBoardView((s) => s.showAutopilotTimer);
+  const setShowTimer = useBoardView((s) => s.setShowAutopilotTimer);
   const item = items.find((i) => i.automation.key === AUTOPILOT_ORCHESTRATE);
   // While the catalogue loads (or fails) the Automations list below says so; there is nothing to show here yet.
   if (!item) return null;
@@ -51,6 +55,12 @@ export function OrchestrateSettings() {
           onConfig={onConfig}
         />
       ))}
+      <SettingsRow
+        id="autopilot.engine.orchestrate.countdown"
+        title="Countdown on lanes"
+        description="The lane's Autopilot pill counts down to Orchestrate's next check (Autopilot · 12m) while it is on in the project."
+        control={<Switch checked={showTimer} onCheckedChange={setShowTimer} aria-label="Countdown on lanes" />}
+      />
       <SettingsRow
         title="Run history"
         description="Every run, with what it said it did and the handover it left. Searchable, and runs can be deleted there."
