@@ -177,9 +177,10 @@ export function ThemeImportDialog({ open, onOpenChange }: { open: boolean; onOpe
       }
     }
     if (installed.length > 0) announce(installed, false);
+    // Conflicts are offered even when other files failed, so none is dropped without a word.
     if (failures.length > 0) setError(failures.join(" — "));
-    else if (conflicting.length > 0) setConflicts(conflicting);
-    else if (installed.length > 0) onOpenChange(false);
+    if (conflicting.length > 0) setConflicts(conflicting);
+    else if (failures.length === 0 && installed.length > 0) onOpenChange(false);
   };
 
   const readFiles = (files: ReadonlyArray<File>) => {
@@ -346,7 +347,15 @@ export function ThemeImportDialog({ open, onOpenChange }: { open: boolean; onOpe
                 <label className="text-sm font-medium" htmlFor="theme-json-editor">
                   Theme JSON
                 </label>
-                <ThemeJsonEditor id="theme-json-editor" onChange={setJson} value={json} />
+                <ThemeJsonEditor
+                  id="theme-json-editor"
+                  onChange={(value) => {
+                    setJson(value);
+                    // Edited by hand, the JSON no longer is the file, so Keep both shouldn't name the copy after it.
+                    setFileName(null);
+                  }}
+                  value={json}
+                />
               </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="ghost" onClick={() => onOpenChange(false)}>
