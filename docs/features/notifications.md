@@ -23,6 +23,7 @@ write that made the change, so the change and its notification commit together.
 | `pr_changes_requested` | An open or draft PR's review decision becomes `changes_requested`               | `changes:<linkId>:<updatedAt>`          |
 | `review_finished`      | A local review round is submitted (`reviews.submit`)                            | `review:<reviewId>`                     |
 | `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded | `autopilot:<runId>`     |
+| `agent_request`        | An agent calls `request_attention` on a task (`services/attention.ts`)         | `request:<taskId>:<requestedAt>`        |
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
@@ -90,6 +91,23 @@ where a pop-up belongs:
 per kind and `muteInQuietHours`, both on by default. **Settings → Board → Notifications** shows them, the browser
 permission state, and what the quiet-hours window is.
 
+### Agent requests
+
+Any agent can flag any task for the user with `request_attention(task, message)`: when it is blocked, unsure, or has
+something to look at, such as plans ready for approval. The board decides nothing about when; users tell their agents
+(in a prompt or custom instructions). The request is stored on the task (`attention_message`, `attention_actor`,
+`attention_requested_at`, `028_task_attention_request.sql`, in backups) because attention is otherwise derived from
+board state. It becomes an `agent_request` attention reason (the agent's message), so the card, the **Needs
+attention** list and the `attentionOnly` filters show it, and the same write sends the `agent_request` notification.
+
+- A new request replaces the standing one, and notifies again (a new `requestedAt` is a new dedupe key).
+- It stands until the user dismisses it (**Dismiss** in the task panel, `DELETE /api/tasks/:id/attention-request`) or
+  an agent calls `request_attention(task, clear: true)`. Opening the panel marks the notification read but leaves the
+  flag, so a glance doesn't lose it.
+- With the kind's switch off the flag still shows; only the notification is skipped.
+- A Done task doesn't ask (its request is hidden, like a finished task's review), and one can't be made on it.
+- The task's activity log has `attention_requested` and `attention_cleared`.
+
 ## Decisions
 
 - **A switch off means not recorded.** The inbox is a list of things to act on, so a kind you don't want
@@ -117,6 +135,8 @@ permission state, and what the quiet-hours window is.
 
 | File | What it does |
 | ---- | ------------ |
+| `apps/server/src/services/attention.ts`, `mcp/tools/tasks.ts` | `request_attention`: the request, its notification, clearing it |
+| `apps/web/src/components/task/AttentionRequestCallout.tsx` | The panel's callout with Dismiss |
 | `packages/contracts/src/notifications.ts` | Kinds, `InboxNotification`, settings, `badgeText` |
 | `apps/server/src/db/migrations/014_notifications.sql` | The table |
 | `apps/server/src/db/repos/notifications.ts` | SQL |

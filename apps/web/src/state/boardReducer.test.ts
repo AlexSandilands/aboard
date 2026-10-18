@@ -29,6 +29,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     currentStep: null,
     links: [],
     attention: [],
+    attentionRequest: null,
     lastNote: null,
     autoReview: null,
     autopilot: null,

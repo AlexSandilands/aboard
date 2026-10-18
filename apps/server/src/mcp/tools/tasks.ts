@@ -84,7 +84,7 @@ function templateFor(
 
 /**
  * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
- * add_note.
+ * add_note, request_attention.
  */
 export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor }) => {
   server.registerTool(
@@ -497,6 +497,52 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
         return textResult(`Note added to #${summary.number}.`);
+      }),
+  );
+
+  server.registerTool(
+    "request_attention",
+    {
+      title: "Ask the user to look at a task",
+      description:
+        "Flag a task for the user: it shows under Needs attention on the board and sends them a notification (inbox, " +
+        "desktop pop-up, badge). Use it when you can't go on without them or they should look at something: you " +
+        "are blocked, unsure, found a problem, or have work ready for them to review or approve. Say exactly what " +
+        'to look at and what you need from them, in a sentence or two; "needs review" alone is not enough. It ' +
+        "is not for progress updates (use add_note) and not a replacement for a step you can mark blocked with a " +
+        "note. A new request replaces the one standing. The user dismisses it from the task; if the problem goes " +
+        "away or the user has answered, remove it with clear: true. Do not use it unless there is something for " +
+        "the user to act on, because every call interrupts them.",
+      inputSchema: {
+        task: taskField,
+        message: z
+          .string()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("What the user should look at and what you need from them. Required unless clear is true."),
+        clear: z
+          .boolean()
+          .optional()
+          .describe("True takes the standing request off the task instead of making one. Don't pass a message."),
+        actor: actorField,
+      },
+    },
+    (args) =>
+      run(() => {
+        const id = services.tasks.resolveId(args.task);
+        if (args.clear) {
+          if (args.message) throw new AppError("VALIDATION", "Pass either message or clear: true, not both.");
+          const { cleared, task } = services.attention.clear(id, actor(args.actor));
+          return textResult(
+            cleared
+              ? `Cleared the request for attention on #${task.number}.`
+              : `#${task.number} had no request for attention to clear.`,
+          );
+        }
+        if (!args.message) throw new AppError("VALIDATION", "Pass a message saying what the user should look at.");
+        const summary = services.attention.request(id, args.message, actor(args.actor));
+        return textResult(`Flagged #${summary.number} for the user. It shows under Needs attention until dismissed.`);
       }),
   );
 };

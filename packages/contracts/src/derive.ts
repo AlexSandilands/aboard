@@ -2,6 +2,7 @@ import type { TaskReviewSummary } from "./reviews.ts";
 import {
   TaskStatus,
   type AttentionReason,
+  type AttentionRequest,
   type CurrentStep,
   type EpicRollup,
   type PlanPhase,
@@ -75,8 +76,11 @@ export function deriveAttention(
   issueImport: TaskImport | null = null,
   /** Why an Autopilot run on the task needs the user (see the autopilot_runs repo); null when none does. */
   autopilot: string | null = null,
+  /** An agent's standing request for the user (request_attention); null when none. */
+  request: AttentionRequest | null = null,
 ): AttentionReason[] {
   const reasons: AttentionReason[] = [];
+  if (request) reasons.push({ kind: "agent_request", severity: "warning", message: request.message });
   if (autopilot) reasons.push({ kind: "autopilot", severity: "warning", message: autopilot });
   if (issueImport?.status === "failed") {
     reasons.push({

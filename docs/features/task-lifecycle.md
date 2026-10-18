@@ -109,13 +109,14 @@ task to another project is an explicit edit (`projectId`, or MCP `moveToProjectI
 
 ### Attention
 
-Derived when cards are built (`deriveAttention` in `packages/contracts/src/derive.ts`), never stored. A
-task needs attention when it has:
+Derived when cards are built (`deriveAttention` in `packages/contracts/src/derive.ts`) from board state, except an
+agent's request, which is stored on the task. A task needs attention when it has:
 
 - a blocked step;
 - an open or draft PR with failing checks, changes requested, or conflicts;
 - a T3 thread waiting for input or approval, or failed;
-- a local review that stalled, got stuck, failed, or was reviewed by the board with nobody fixing it.
+- a local review that stalled, got stuck, failed, or was reviewed by the board with nobody fixing it;
+- a standing request from an agent (`request_attention`, see [notifications](notifications.md#agent-requests)).
 
 These drive the card's ring and the sidebar's **Needs attention** list.
 

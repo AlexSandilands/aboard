@@ -361,6 +361,7 @@ export function createTasksService(
           autoReview: null,
           autopilot: input.autopilot ?? null,
           priority: input.priority ?? false,
+          attentionRequest: null,
           suggestedModel: null,
           templateId: template?.id ?? null,
           delivery: null,

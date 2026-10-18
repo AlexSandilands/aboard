@@ -125,8 +125,15 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
    archive these: archiving hides the card and loses why it was closed. `delete_task` is permanent and
    only works on archived tasks; use it only when the user asks for a task to be deleted.
-9. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
-   exact next action. The next agent starts from `get_task`.
+9. **Ask for the user when you need them.** `request_attention(task, message)` flags a task under Needs
+   attention and sends the user a notification. Use it when you can't go on without them or they should look at
+   something: you are blocked, unsure, found a problem, or have work ready to review or approve (and when the user
+   has told you to, e.g. "after writing the plans, ask me to review them"). Say exactly what to look at and what you
+   need, in a sentence or two. Don't use it for progress (that is `add_note`) or when nothing is for them to act on:
+   every call interrupts them. A new request replaces the standing one; `request_attention(task, clear: true)`
+   takes it off once the problem is gone or the user has answered.
+10. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
+    exact next action. The next agent starts from `get_task`.
 
 ## Epics
 
