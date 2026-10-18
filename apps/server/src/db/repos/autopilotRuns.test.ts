@@ -32,6 +32,7 @@ function setup() {
       exitCode: null,
       error: null,
       needsAttention: false,
+      dismissedAt: null,
       output: { kind: "pr_review", handoff, counts: { blocking: 0, major: 0, minor: 0, nit: 0, ...counts } },
       createdAt: "2026-01-01T10:00:00.000Z",
       startedAt: "2026-01-01T10:00:00.000Z",

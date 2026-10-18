@@ -557,6 +557,10 @@ export function useSetAutopilotPaused() {
 export const useRetryAutopilotRun = () =>
   useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/retry`, { method: "POST" }));
 
+/** Dismisses a run's needs-attention flag without redoing its work; autopilot.changed refreshes the runs and cards. */
+export const useDismissAutopilotRun = () =>
+  useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/dismiss`, { method: "POST" }));
+
 /**
  * Orchestrate's Run now in a project. The reply is the new state, written into the cache so the button shows the
  * request at once; autopilot.changed brings the run. A refusal (off, paused, quiet hours, a cap) is the toast.

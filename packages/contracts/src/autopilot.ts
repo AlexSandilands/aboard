@@ -257,6 +257,8 @@ export const AutopilotRun = z.object({
   exitCode: z.number().int().nullable(),
   error: z.string().nullable(),
   needsAttention: z.boolean(),
+  /** When the user dismissed the flag; the run stays flagged but no longer counts as attention. Null when not. */
+  dismissedAt: z.string().nullable(),
   /** A structured result the action left for later automations to read (the PR review's verdict); null when none. */
   output: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string(),
@@ -394,6 +396,8 @@ export function autopilotRunEventText(payload: Record<string, unknown>): string 
       return `${title} failed: ${text("error") ?? summary}`;
     case "retried":
       return `asked ${title} to try again: ${summary}`;
+    case "dismissed":
+      return `dismissed the ${title} flag: ${summary}`;
     default:
       return payload.dryRun === true ? `${title} (dry run): ${summary}` : `skipped ${title}: ${summary}`;
   }
