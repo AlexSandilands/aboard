@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   axisLabelIndices,
+  bucketLabel,
+  bucketTitle,
+  periodLabel,
+  previousPeriodLabel,
   breakdownRows,
   changeVsPrevious,
   formatDuration,
@@ -126,8 +130,36 @@ describe("axisLabelIndices", () => {
   });
 });
 
+describe("day buckets", () => {
+  // Local midnight on Monday 2026-10-12, as the server sends a day's start.
+  const monday = { start: new Date(2026, 9, 12).toISOString(), end: new Date(2026, 9, 13).toISOString() };
+
+  it("labels a day by its weekday and date, and a week by its start", () => {
+    expect(bucketLabel(monday, "day")).toBe("Mon 12");
+    expect(bucketLabel(monday)).toBe("Oct 12");
+  });
+
+  it("titles a bucket for the tooltip, marking the current one", () => {
+    expect(bucketTitle(monday, 0, 7, "day")).toBe("Mon, Oct 12");
+    expect(bucketTitle(monday, 6, 7, "day")).toBe("Mon, Oct 12 (so far)");
+    expect(bucketTitle(monday, 3, 12, "week")).toBe("Week of Oct 12");
+  });
+
+  it("labels every day of a 7-day chart when asked to", () => {
+    expect(axisLabelIndices(7, 7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("names the period and what it is compared with", () => {
+    expect(previousPeriodLabel({ bucket: "day", weeks: 1 })).toBe("previous week");
+    expect(previousPeriodLabel({ bucket: "week", weeks: 12 })).toBe("previous 12 weeks");
+    expect(periodLabel({ bucket: "day", weeks: 1 })).toBe("the last 7 days");
+    expect(periodLabel({ bucket: "week", weeks: 4 })).toBe("the last 4 weeks");
+  });
+});
+
 describe("parseStatsPeriod", () => {
   it("accepts the API's periods and defaults otherwise", () => {
+    expect(parseStatsPeriod("1")).toBe(1);
     expect(parseStatsPeriod("4")).toBe(4);
     expect(parseStatsPeriod(52)).toBe(52);
     expect(parseStatsPeriod("7")).toBe(12);

@@ -50,6 +50,9 @@ changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-f
 priority lane and makes Autopilot start it first ([board-layout.md](board-layout.md#the-priority-lane)). Agents set it
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
 
+`update_task` takes `dueDate` (`YYYY-MM-DD`, `null` clears it; [board-layout.md](board-layout.md#the-due-date)). Agents set it
+only when the user gives a date. `get_task` shows a "Due:" line and `list_tasks` lines "due YYYY-MM-DD", only when set.
+
 `add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
 which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so; the server can't enforce that
 ([why](../decisions/0008-autopilot-engine.md)).

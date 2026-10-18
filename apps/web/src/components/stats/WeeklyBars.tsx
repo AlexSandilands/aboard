@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
   useChartCursor,
-  weekTitle,
+  useBucketTitle,
   yFor,
   type ChartSeries,
 } from "./chartParts";
@@ -25,7 +25,7 @@ function barPath(x: number, y: number, width: number, height: number, radius: nu
 const MAX_BAR_WIDTH = 28;
 
 /**
- * Weekly bars, one slot per week. `grouped` puts a series' bars side by side; `stacked` piles them in series order.
+ * Bars, one slot per bucket (a week, or a day). `grouped` puts a series' bars side by side; `stacked` piles them in series order.
  * Hover uses a slot-wide hit area, so a tiny bar is as easy to point at as a tall one.
  */
 export function WeeklyBars({
@@ -46,6 +46,7 @@ export function WeeklyBars({
   label: string;
 }) {
   const cursor = useChartCursor(buckets.length);
+  const bucketTitle = useBucketTitle();
   const n = buckets.length;
   const totals = buckets.map((_, i) =>
     mode === "stacked"
@@ -68,7 +69,7 @@ export function WeeklyBars({
         cursor.active !== null && active ? (
           <ChartTooltip
             x={centers[cursor.active]!}
-            title={weekTitle(active, cursor.active, n)}
+            title={bucketTitle(active, cursor.active, n)}
             rows={series.map((s) => ({
               key: s.key,
               label: s.label,

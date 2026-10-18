@@ -76,7 +76,8 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.max-concurrent"
         title="Agent runs at once"
-        description="How many agent runs can go at the same time."
+        description="How many of Autopilot's agent runs can be open at once. Not a limit on your machine."
+        info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
         control={
           <LimitInput
             label="Agent runs at once"

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-// Weekly trends over the board's history (docs/features/stats.md).
+// Weekly trends over the board's history, or daily for a single week (docs/features/stats.md).
 
-/** The periods the stats view offers, in weeks. */
-export const STATS_PERIODS = [4, 12, 52] as const;
+/** The periods the stats view offers, in weeks. One week is charted by day, the others by week. */
+export const STATS_PERIODS = [1, 4, 12, 52] as const;
 export type StatsPeriod = (typeof STATS_PERIODS)[number];
 
 /** `GET /api/stats` query: the period in weeks and, optionally, one project. */
@@ -23,18 +23,25 @@ export type StatsQuery = z.infer<typeof StatsQuery>;
 export const StatsUnit = z.enum(["count", "ms", "usd", "ratio"]);
 export type StatsUnit = z.infer<typeof StatsUnit>;
 
-/** One calendar week, Monday 00:00 to the next Monday 00:00 in the server's local time, as instants. */
+/**
+ * One calendar week, Monday 00:00 to the next Monday 00:00 in the server's local time, as instants; or one day, midnight
+ * to midnight, when the response's `bucket` is "day".
+ */
 export const StatsBucket = z.object({
   start: z.string(),
   end: z.string(),
 });
 export type StatsBucket = z.infer<typeof StatsBucket>;
 
+/** What a bucket spans: a calendar week, or a day for the one-week period. */
+export const StatsBucketKind = z.enum(["day", "week"]);
+export type StatsBucketKind = z.infer<typeof StatsBucketKind>;
+
 export const StatsSeries = z.object({
   unit: StatsUnit,
   /**
-   * One value per bucket, oldest first. Counts and costs are 0 in a quiet week; durations and ratios are null when
-   * nothing in the week had one.
+   * One value per bucket, oldest first. Counts and costs are 0 in a quiet bucket; durations and ratios are null when
+   * nothing in the bucket had one.
    */
   values: z.array(z.number().nullable()),
   /**
@@ -56,7 +63,7 @@ export const StatsBreakdownItem = z.object({
 });
 export type StatsBreakdownItem = z.infer<typeof StatsBreakdownItem>;
 
-/** A count split by a category over the whole period (not per week), largest first. */
+/** A count split by a category over the whole period (not per bucket), largest first. */
 export const StatsBreakdown = z.object({
   unit: StatsUnit,
   items: z.array(StatsBreakdownItem),
@@ -64,13 +71,15 @@ export const StatsBreakdown = z.object({
 export type StatsBreakdown = z.infer<typeof StatsBreakdown>;
 
 /**
- * Weekly stats. `series` is a map by name, so a new metric is a new key and never a change to the shape. Names are
+ * Stats by week, or by day for a one-week period. `series` is a map by name, so a new metric is a new key and never a change to the shape. Names are
  * stable ids (`tasks_completed`, `autopilot.runs.<automation>.<status>`); labels are the client's to write. Fixed
  * series are always present; per-automation ones only when the automation ran in the two periods. `breakdowns` is
  * the same idea for splits of the period by category (`completed_by_label`), also keyed by stable name.
  */
 export const StatsResponse = z.object({
   weeks: z.number().int(),
+  /** What a bucket is: a calendar week, or a day when `weeks` is 1 (then 7 buckets, the last 7 days ending today). */
+  bucket: StatsBucketKind,
   /** The period as instants: the first bucket's start to the last bucket's end. */
   from: z.string(),
   to: z.string(),

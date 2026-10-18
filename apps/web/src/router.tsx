@@ -153,5 +153,7 @@ declare module "@tanstack/react-router" {
   interface HistoryState {
     /** Set when a settings editor sub-page was opened from its list (see `useLeaveEditor`). */
     settingsEditorFromList?: boolean;
+    /** Set when the social feed was opened from Settings (see `useLeaveSocial`). */
+    socialFromSettings?: boolean;
   }
 }

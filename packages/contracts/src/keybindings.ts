@@ -20,7 +20,7 @@ export const KEYBINDING_CONTEXT_KEYS = [
   "settingsOpen",
   /** The task detail panel is open. */
   "panelOpen",
-  /** Escape has somewhere to go back to: the task panel is open, or Settings is showing. */
+  /** Escape has somewhere to go back to: the task panel is open, or Settings or Stats is showing. */
   "canGoBack",
 ] as const;
 export type KeybindingContextKey = (typeof KEYBINDING_CONTEXT_KEYS)[number];
@@ -47,7 +47,7 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
   "idea.new": { title: "New task", group: "General", key: "n", when: NO_FOCUS_CLAIM },
   "settings.open": { title: "Open Settings", group: "General", key: "mod+,", when: "!overlayOpen" },
   back: {
-    title: "Back: close the panel or leave Settings",
+    title: "Back: close the panel, or leave Settings or Stats",
     group: "Navigation",
     key: "escape",
     when: `canGoBack && ${NO_FOCUS_CLAIM}`,

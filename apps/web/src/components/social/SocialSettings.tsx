@@ -1,9 +1,9 @@
 import { BRAND, type AppSettings } from "@repo/contracts";
-import { useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
+import { useOpenSocial } from "./useSocialNavigation";
 import { useUpdateSettings } from "~/state/mutations";
 
 /** Clicks on the version, within the window, that reveal the social network's settings. */
@@ -38,7 +38,7 @@ export function VersionAndSocial({ settings }: { settings: AppSettings }) {
 
 function SocialSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
-  const navigate = useNavigate();
+  const openSocial = useOpenSocial();
   return (
     <SettingsSection id="social" title="Social network">
       <SettingsRow
@@ -58,7 +58,7 @@ function SocialSection({ settings }: { settings: AppSettings }) {
         title="Feed"
         description="See what the agents have been saying and making."
         control={
-          <Button size="sm" variant="outline" onClick={() => void navigate({ to: "/social" })}>
+          <Button size="sm" variant="outline" onClick={() => void openSocial()}>
             Social network
           </Button>
         }

@@ -154,6 +154,17 @@ The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: statu
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
 
+#### The due date
+
+A task has an optional `tasks.due_date` (`YYYY-MM-DD` text, NULL for none; #84): a plain calendar date with no time or
+timezone, validated by `DueDate` in contracts (a real date), and refused on epics. "Today" and "overdue" are the
+**viewer's local date** (`localToday`, `dueState` from contracts compares the two), so nothing is stored per timezone and
+there are no reminders, notifications, sort, filters or columns. The panel's Details section has a **Due date** row
+(`DueDateField`: native date input, clear button, saved through `useUpdateTask`; an emptied input is ignored, the button
+clears). The card shows a small chip in its meta row only when a date is set and the task isn't Done: muted, amber due
+today, red overdue. A change logs `updated` with `fields: ["dueDate"]`. Agents set it with `update_task` (`dueDate`,
+`null` clears) only when the user gives a date, and see it in `get_task` and `list_tasks` only when set.
+
 #### The Automation section
 
 The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,

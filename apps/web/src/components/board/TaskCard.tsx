@@ -10,6 +10,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUpdateTask } from "~/state/mutations";
 import { useBoardPick } from "~/state/ui";
 import { importPendingLabel } from "~/components/task/import.logic";
+import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "~/components/task/dueDate.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
 import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
@@ -111,6 +112,7 @@ export const TaskCardContent = memo(function TaskCardContent({
             <span className="sr-only">{ATTENTION_LABELS[attention.kind]}</span>
           </span>
         ) : null}
+        {task.dueDate && task.status !== "done" ? <DueChip dueDate={task.dueDate} /> : null}
         <span
           className="ml-auto shrink-0 tabular-nums text-secondary-label"
           title={new Date(task.updatedAt).toLocaleString()}
@@ -136,6 +138,20 @@ export const TaskCardContent = memo(function TaskCardContent({
     </div>
   );
 });
+
+/** The due date, only when one is set: muted until it is due today (amber) or overdue (red). Never on Done cards. */
+function DueChip({ dueDate }: { dueDate: string }) {
+  const state = dueStateOf(dueDate);
+  return (
+    <span
+      title={`${dueStateText(state)}: ${dueDate}`}
+      className={cn("shrink-0 tabular-nums text-2xs", dueStateClassName(state), state !== "later" && "font-medium")}
+    >
+      <span className="sr-only">{dueStateText(state)} </span>
+      {dueDateLabel(dueDate)}
+    </span>
+  );
+}
 
 /** Cards show this many labels; the rest collapse into "+N". */
 const CARD_LABEL_LIMIT = 3;

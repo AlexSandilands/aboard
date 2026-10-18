@@ -7,7 +7,7 @@ import { createRepos } from "../db/repos/index.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
-import { weekBoundaries } from "./stats.ts";
+import { dayBoundaries, weekBoundaries } from "./stats.ts";
 
 // Local time throughout, as the weeks are: 2026-10-12 is a Monday.
 const at = (day: number, hour = 9, month = 9) => new Date(2026, month, day, hour);
@@ -27,8 +27,8 @@ function setup() {
   const clock = (when: Date) => vi.setSystemTime(when);
   const task = (projectId: string, title: string) => s.tasks.create({ projectId, title, plan });
   const finish = (id: string) => s.tasks.move(id, { status: "done" }, "agent");
-  const stats = (weeks: 4 | 12 | 52 = 4, projectId?: string) => s.stats.weekly(weeks, projectId);
-  const values = async (name: string, weeks: 4 | 12 | 52 = 4, projectId?: string) =>
+  const stats = (weeks: 1 | 4 | 12 | 52 = 4, projectId?: string) => s.stats.weekly(weeks, projectId);
+  const values = async (name: string, weeks: 1 | 4 | 12 | 52 = 4, projectId?: string) =>
     (await stats(weeks, projectId)).series[name]!;
   return { ...h, s, alpha, beta, clock, task, finish, stats, values };
 }
@@ -57,6 +57,33 @@ describe("weekBoundaries", () => {
   it("puts a Sunday night in the week that ends, and Monday midnight in the one that starts", () => {
     expect(weekBoundaries(at(18, 23), 1)).toEqual([new Date(2026, 9, 12), new Date(2026, 9, 19)]);
     expect(weekBoundaries(at(19, 0), 1)).toEqual([new Date(2026, 9, 19), new Date(2026, 9, 26)]);
+  });
+});
+
+describe("dayBoundaries", () => {
+  it("starts each day at local midnight, ending after today", () => {
+    const bounds = dayBoundaries(at(14, 12), 3);
+    expect(bounds).toEqual([
+      new Date(2026, 9, 12),
+      new Date(2026, 9, 13),
+      new Date(2026, 9, 14),
+      new Date(2026, 9, 15),
+    ]);
+  });
+
+  it("starts every day at midnight across a clock change", () => {
+    const zone = process.env.TZ;
+    try {
+      // New York puts its clocks back on 2026-11-01, so that day has 25 hours.
+      process.env.TZ = "America/New_York";
+      const bounds = dayBoundaries(new Date(2026, 10, 3, 12), 14);
+      expect(bounds.some((d) => d.getTimezoneOffset() !== bounds[0]!.getTimezoneOffset())).toBe(true);
+      expect(bounds.every((d) => d.getHours() === 0)).toBe(true);
+      expect(bounds.map((d) => d.getDate())).toEqual([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 1, 2, 3, 4]);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
   });
 });
 
@@ -106,6 +133,41 @@ describe("stats.weekly", () => {
       total: 2,
       previousTotal: 1,
     });
+  });
+
+  it("shows one week by day: the last 7 days ending today, against the 7 before", async () => {
+    const { alpha, clock, task, finish, stats, values } = setup();
+    clock(at(1, 9, 8)); // 2026-09-01, before both periods
+    finish(task(alpha.id, "Old").id);
+    clock(at(5, 10)); // Monday the 5th, the first day of the previous period
+    finish(task(alpha.id, "Previous").id);
+    clock(at(8, 10)); // Thursday the 8th, the last 7 days start on the 8th
+    finish(task(alpha.id, "First day").id);
+    clock(at(14, 9)); // today
+    finish(task(alpha.id, "Today a").id);
+    finish(task(alpha.id, "Today b").id);
+    clock(at(14, 12));
+
+    const week = await stats(1);
+    expect(week.bucket).toBe("day");
+    expect(week.weeks).toBe(1);
+    expect(week.buckets).toHaveLength(7);
+    expect(week.buckets[0]).toEqual({
+      start: new Date(2026, 9, 8).toISOString(),
+      end: new Date(2026, 9, 9).toISOString(),
+    });
+    expect(week.buckets[6]).toEqual({
+      start: new Date(2026, 9, 14).toISOString(),
+      end: new Date(2026, 9, 15).toISOString(),
+    });
+    expect(week.previousFrom).toBe(new Date(2026, 9, 1).toISOString());
+    expect(await values("tasks_completed", 1)).toEqual({
+      unit: "count",
+      values: [1, 0, 0, 0, 0, 0, 2],
+      total: 3,
+      previousTotal: 1,
+    });
+    expect((await stats(4)).bucket).toBe("week");
   });
 
   it("leaves epics, closed duplicates and won't-dos out of throughput", async () => {

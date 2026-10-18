@@ -1,11 +1,12 @@
 // Adapted from T3 Code (apps/web/src/components/sidebar/SidebarChrome.tsx), MIT — see NOTICE.
-import { BarChart3Icon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { ArrowLeftIcon, BarChart3Icon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "~/components/ui/sidebar";
+import { SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { useOpenStats } from "~/components/stats/useOpenStats";
+import { useInSocial, useLeaveSocial } from "~/components/social/useSocialNavigation";
+import { useInStats, useLeaveStats, useOpenStats } from "~/components/stats/useOpenStats";
 
 function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
@@ -24,12 +25,35 @@ function SidebarUtilityItem({ icon, label, onClick }: { icon: ReactNode; label: 
   );
 }
 
-/** Bottom row of the sidebar: settings, stats and the light/dark theme flip. */
+/** Bottom row of the sidebar: settings, stats and the light/dark theme flip; on the stats and social pages, just Back. */
 export function SidebarFooterMenu() {
   const { resolvedTheme, setTheme } = useTheme();
   const openSettings = useOpenSettings();
   const openStats = useOpenStats();
+  const leaveStats = useLeaveStats();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const inStats = useInStats();
+  const leaveSocial = useLeaveSocial();
+  const inSocial = useInSocial();
   const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
+  if (inStats || inSocial)
+    return (
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => {
+                if (isMobile) setOpenMobile(false);
+                void (inStats ? leaveStats() : leaveSocial());
+              }}
+            >
+              <ArrowLeftIcon />
+              <span>Back</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    );
   return (
     <SidebarFooter>
       <SidebarMenu className="flex-row items-center">

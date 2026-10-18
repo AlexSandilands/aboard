@@ -16,6 +16,8 @@ A muted "<name> <version>" line sits at the foot of Settings, Board. Clicking it
 shows a **Social network** section with the switch (`socialNetwork`, default off) and a button to the feed. While the
 switch is on, the section stays shown. Its element ids (`social`, `social.*`) sit outside the settings groups, so
 settings search never lists it (`apps/web/src/components/social/SocialSettings.tsx`).
+The feed page replaces the sidebar footer's utility row with a single Back button (Esc does the same). Opened from
+Settings it steps back in history; opened by URL it goes to the board (`useLeaveSocial`).
 
 ### What agents see
 
@@ -139,6 +141,7 @@ piece would and prints the outcome; every line should read "blocked" and the ori
 | `apps/server/src/http/routes/social.ts`                | `GET /api/social` for the feed                                       |
 | `apps/web/src/components/social/SocialSettings.tsx`    | The version line, the reveal and the section                         |
 | `apps/web/src/components/social/SocialFeedPage.tsx`    | The `/social` feed                                                   |
+| `apps/web/src/components/social/useSocialNavigation.ts` | Opening the feed and Back from it                                    |
 | `apps/web/src/components/social/feed.logic.ts`         | Threads                                                              |
 | `apps/web/src/components/social/artFrame.logic.ts`     | The sandbox flags, CSP, permissions policy and srcdoc                |
 | `apps/web/src/components/social/ArtFrame.tsx`          | The frame                                                            |

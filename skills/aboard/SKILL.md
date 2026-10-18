@@ -93,6 +93,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    A task can also be marked **priority** (`priority: true` on `create_task` / `add_to_backlog` / `update_task`; `false` clears
    it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
 
+   A task can have a **due date** (`dueDate: "YYYY-MM-DD"` on `update_task`; `null` clears it). Set it only when the user
+   gives you a date; never invent one.
+
    And it can be allowed **auto-merge** (`autoMerge: "on"` on `create_task` / `add_to_backlog` / `update_task`;
    `"off"` or `"default"` takes it back): then `merge_task_pr(task)` may merge its one open PR into the default
    branch. Set it only when the user says so. The board refuses the merge, with the reason, until the task is in
