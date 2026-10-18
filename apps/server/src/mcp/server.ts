@@ -8,6 +8,7 @@ import { registerReadTools } from "./tools/read.ts";
 import { registerTaskTools } from "./tools/tasks.ts";
 import { registerPlanTools } from "./tools/plans.ts";
 import { registerLinkTools } from "./tools/links.ts";
+import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
 
@@ -19,6 +20,7 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - To plan several of a project's tasks with the user in one session, follow the prompt get_handoff_prompt(tasks: ["#3", "#4"]) returns; the board starts such sessions from a lane's Plan tasks.
 - Autopilot can start flagged Planned tasks by itself. When a planning result says the Autopilot flag isn't set, ask the user whether to flag the task, then apply their answer with update_task(autopilot: "on" | "off"); never set it unasked. You can only flag tasks: Autopilot's own settings are the user's alone, and no tool changes them.
 - Priority tasks show in a lane above every project, and Autopilot starts them first. Set it with update_task(priority: true | false), or priority on create_task / add_to_backlog, only when the user has asked for it.
+- merge_task_pr merges a task's PR into the default branch, only for a task flagged with update_task(autoMerge: "on"), which you set only when the user says so. The board refuses, with the reason, until the PR is reviewed, green and mergeable; fix what it names or wait, and never merge with gh or git instead.
 - set_plan REPLACES the whole plan: steps you don't pass back with their id are deleted with their status and notes. Use it to write or deliberately rewrite a plan. To change an existing plan, use update_plan (several changes at once: notes, moves, phase renames, statuses that really changed together), update_step (one step) or add_steps (append).
 - Keep steps current with update_step (in_progress when you start, done when finished): update each step the moment it changes, one call per step, and never save the updates for the end of a phase. If steps can only be verified together, still mark each in_progress as you start it and done once it is written, with testing as its own step. Results point out when no step is in progress or the plan has gone stale. Before asking the user a question and waiting for the answer, mark the current step blocked with a note saying what you need; set it back to in_progress once answered. move_task to review when the work is done (with auto-review on, finish the review loop first, then always open the PR, or push to the one already linked), link PRs when opened; done when merged/verified.
 - Link the Jira issue at creation: pass its key in links (create_task/add_to_backlog) or call link. Keys in the title are linked automatically. Task results list any "Missing links"; act on them.
@@ -59,6 +61,7 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerTaskTools(server, tc);
   registerPlanTools(server, tc);
   registerLinkTools(server, tc);
+  registerMergeTools(server, tc);
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
   return server;

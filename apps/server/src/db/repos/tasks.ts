@@ -25,6 +25,8 @@ export interface TaskRecord {
   autoReview: boolean | null;
   /** Autopilot flag: null is Default, which never auto-starts the task. */
   autopilot: boolean | null;
+  /** Auto-merge flag: null is Default, which, like false, never lets merge_task_pr merge the task's PR. */
+  autoMerge: boolean | null;
   /** Shows in the priority lane above every project. */
   priority: boolean;
   suggestedModel: SuggestedModel | null;
@@ -56,6 +58,7 @@ interface TaskRow {
   resolved_by_task_id: string | null;
   auto_review: number | null;
   autopilot: number | null;
+  auto_merge: number | null;
   priority: number;
   suggested_tier: ModelTier | null;
   suggested_reason: string | null;
@@ -84,6 +87,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   resolvedByTaskId: r.resolved_by_task_id,
   autoReview: r.auto_review === null ? null : r.auto_review !== 0,
   autopilot: r.autopilot === null ? null : r.autopilot !== 0,
+  autoMerge: r.auto_merge === null ? null : r.auto_merge !== 0,
   priority: r.priority !== 0,
   suggestedModel: r.suggested_tier ? { tier: r.suggested_tier, reason: r.suggested_reason } : null,
   templateId: r.template_id,
@@ -111,6 +115,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   resolved_by_task_id: t.resolvedByTaskId,
   auto_review: t.autoReview === null ? null : t.autoReview ? 1 : 0,
   autopilot: t.autopilot === null ? null : t.autopilot ? 1 : 0,
+  auto_merge: t.autoMerge === null ? null : t.autoMerge ? 1 : 0,
   priority: t.priority ? 1 : 0,
   suggested_tier: t.suggestedModel?.tier ?? null,
   suggested_reason: t.suggestedModel?.reason ?? null,

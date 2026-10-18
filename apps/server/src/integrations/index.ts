@@ -16,6 +16,7 @@ import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessio
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createGithubIntegration, messageOf } from "./github.ts";
+import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
@@ -223,6 +224,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     async mergePr(linkId, input) {
       await github.merge(deps.services().links.get(linkId), input);
     },
+    mergeTaskPr: (taskId, input, actor) => mergeTaskPr({ services: deps.services(), github }, taskId, input, actor),
     async setEpicDelivery(epicId, delivery, actor) {
       const s = deps.services();
       const epic = s.tasks.summary(epicId);

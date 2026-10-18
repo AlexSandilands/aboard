@@ -8,6 +8,7 @@ import type {
   ConnectT3Result,
   GithubStatus,
   LinkInput,
+  MergeMethod,
   MergePrInput,
   Project,
   ResumeCommand,
@@ -31,6 +32,7 @@ import type {
   TerminalInfo,
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
+import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
 /** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
@@ -53,6 +55,11 @@ export interface Integrations {
   refreshLink(linkId: string): Promise<void>;
   /** Merges a Review task's GitHub PR, or turns auto-merge on or off, then refreshes its snapshot. */
   mergePr(linkId: string, input: MergePrInput): Promise<void>;
+  /**
+   * merge_task_pr: merges a task flagged for auto-merge's one open PR into the default branch once the merge gate
+   * passes, then moves it to Done. Throws AppError with the reason it won't (see mergeTaskPr.ts).
+   */
+  mergeTaskPr(taskId: string, input: { method?: MergeMethod | undefined }, actor: string): Promise<MergeTaskPrResult>;
   /**
    * Sets an epic's delivery. Switching to integration first makes sure its branch (`epic/<n>-<slug>`) is on origin,
    * creating it from origin's default branch and pushing it; a git failure refuses the switch.
