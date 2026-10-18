@@ -83,6 +83,24 @@ describe("issue import", () => {
     });
   });
 
+  it("runs a tier's Claude Code model, and the CLI's default while the tier has none", async () => {
+    const { s, create, run, jobs } = setup();
+    const tier = (cli?: Record<string, string>) => ({ description: null, t3: null, ...(cli ? { cli } : {}) });
+    s.settings.update({
+      issueImportModel: { tier: "light" },
+      modelTiers: {
+        light: tier({ "claude-code": "sonnet", "copilot-cli": "gpt-5-mini" }),
+        standard: tier({ "copilot-cli": "x" }),
+      },
+    });
+    await run(create(GH_URL).id);
+    expect(jobs.at(-1)?.model).toBe("sonnet");
+
+    s.settings.update({ issueImportModel: { tier: "standard" } });
+    await run(create("https://github.com/acme/app/issues/46").id);
+    expect(jobs.at(-1)?.model).toBeNull();
+  });
+
   it("falls back to the issue as written when the model can't run", async () => {
     const { create, run, warnings } = setup({ runImport: () => Promise.reject(new Error("claude not found")) });
     const done = await run(create(GH_URL).id);

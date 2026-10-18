@@ -2,6 +2,7 @@ import type { AppSettings } from "@repo/contracts";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
+import { HeadlessModelRow } from "./HeadlessModelRow";
 import { parseToolList } from "./issueImport.logic";
 import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
@@ -34,22 +35,17 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
       />
       {settings.issueImportEnabled ? (
         <>
-          <SettingsRow
+          <HeadlessModelRow
             id="tasks.new-tasks.import-model"
             title="Model"
-            description="Passed to claude --model: an alias such as haiku, or a full name."
-            control={
-              <BlurInput
-                aria-label="Import model"
-                size="sm"
-                className="sm:w-40"
-                placeholder="haiku"
-                value={settings.issueImportModel}
-                onSave={(next) => {
-                  if (next.trim()) updateSettings.mutate({ issueImportModel: next.trim() });
-                }}
-              />
-            }
+            description="A model tier, or a model passed to claude --model: an alias such as haiku, or a full name."
+            label="Import model"
+            tiers={settings.modelTiers}
+            value={settings.issueImportModel}
+            allowDefault={false}
+            onChange={(next) => {
+              if (next) updateSettings.mutate({ issueImportModel: next });
+            }}
           />
           <SettingsRow
             id="tasks.new-tasks.import-budget"

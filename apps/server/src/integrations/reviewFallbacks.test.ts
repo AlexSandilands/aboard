@@ -94,7 +94,7 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     await fallbacks.idle();
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ cwd: "/wt/export", budgetUsd: 2, cli: null });
+    expect(jobs[0]).toMatchObject({ cwd: "/wt/export", budgetUsd: 2, cli: null, model: null });
     expect(jobs[0]!.prompt).toContain("#1 Export [Review]");
     expect(round()).toMatchObject({
       status: "submitted",

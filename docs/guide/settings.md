@@ -53,6 +53,10 @@ and a click tries again.
   CLI's default); each of T3 Code, Claude Code and GitHub Copilot has a **Models per tier** row that opens it.
   A provider's field shows there once it is set up: T3 Code connected, or the CLI found (a value already saved
   stays visible).
+- The issue import and the board reviewer can run on a tier too: their **Model** rows take a tier (Light, Standard
+  or Deep) or a model you type. A tier runs its Claude Code model from the Model tiers page; if it has none, the
+  CLI's default runs, and the row says so with a link to the tier. The board reviewer's default is the CLI's own
+  model.
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
 - On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it

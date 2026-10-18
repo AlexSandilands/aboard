@@ -49,11 +49,12 @@ export const READ_ONLY_TOOLS = [
   "Bash(git rev-parse *)",
 ];
 
-export function headlessArgs(budgetUsd: number): string[] {
+export function headlessArgs(budgetUsd: number, model: string | null = null): string[] {
   return [
     "-p",
     "--output-format",
     "json",
+    ...(model ? ["--model", model] : []),
     "--json-schema",
     JSON.stringify(REVIEW_OUTPUT_SCHEMA),
     "--permission-mode",
@@ -133,10 +134,14 @@ export interface HeadlessJob {
   cwd: string;
   prompt: string;
   budgetUsd: number;
+  /** As `--model` takes it; null keeps the CLI's default. */
+  model: string | null;
 }
 
 export type RunHeadless = (job: HeadlessJob) => Promise<HeadlessReview>;
 
 /** Runs one headless review. */
-export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd }) =>
-  parseHeadlessOutput(await runClaude({ cli, cwd, prompt, args: headlessArgs(budgetUsd), timeoutMs: RUN_TIMEOUT_MS }));
+export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model }) =>
+  parseHeadlessOutput(
+    await runClaude({ cli, cwd, prompt, args: headlessArgs(budgetUsd, model), timeoutMs: RUN_TIMEOUT_MS }),
+  );

@@ -2,6 +2,7 @@ import type { AppSettings } from "@repo/contracts";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
+import { HeadlessModelRow } from "./HeadlessModelRow";
 import { SettingsLink, SettingsRow } from "./settingsLayout";
 
 /**
@@ -32,26 +33,38 @@ export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
         }
       />
       {settings.headlessReviewEnabled ? (
-        <SettingsRow
-          id="tasks.review.budget"
-          title="Budget per review"
-          description="The most one board review may spend, in US dollars."
-          control={
-            <BlurInput
-              aria-label="Budget per review in US dollars"
-              size="sm"
-              className="sm:w-24"
-              inputMode="decimal"
-              value={String(settings.headlessReviewBudgetUsd)}
-              onSave={(next) => {
-                const amount = Number(next);
-                if (Number.isFinite(amount) && amount > 0 && amount <= 100) {
-                  updateSettings.mutate({ headlessReviewBudgetUsd: amount });
-                }
-              }}
-            />
-          }
-        />
+        <>
+          <HeadlessModelRow
+            id="tasks.review.model"
+            title="Board reviewer model"
+            description="A model tier, a model passed to claude --model, or the CLI's default."
+            label="Board reviewer model"
+            tiers={settings.modelTiers}
+            value={settings.headlessReviewModel}
+            allowDefault
+            onChange={(next) => updateSettings.mutate({ headlessReviewModel: next })}
+          />
+          <SettingsRow
+            id="tasks.review.budget"
+            title="Budget per review"
+            description="The most one board review may spend, in US dollars."
+            control={
+              <BlurInput
+                aria-label="Budget per review in US dollars"
+                size="sm"
+                className="sm:w-24"
+                inputMode="decimal"
+                value={String(settings.headlessReviewBudgetUsd)}
+                onSave={(next) => {
+                  const amount = Number(next);
+                  if (Number.isFinite(amount) && amount > 0 && amount <= 100) {
+                    updateSettings.mutate({ headlessReviewBudgetUsd: amount });
+                  }
+                }}
+              />
+            }
+          />
+        </>
       ) : null}
     </>
   );

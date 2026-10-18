@@ -197,8 +197,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.new-tasks.import-model",
     "Import model",
-    "Passed to claude --model: an alias such as haiku, or a full model name.",
-    ["model", "issue import", "haiku", "claude model"],
+    "A model tier, or a model passed to claude --model: an alias such as haiku, or a full model name.",
+    ["model", "issue import", "haiku", "claude model", "tier", "light", "standard", "deep"],
   ),
   draft(
     "tasks.new-tasks.import-budget",
@@ -243,6 +243,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Board reviewer",
     "When no agent reviews a round, the board runs Claude Code headless to review it.",
     ["local review", "headless", "claude", "fallback", "automatic"],
+  ),
+  draft(
+    "tasks.review.model",
+    "Board reviewer model",
+    "A model tier, a model passed to claude --model, or the CLI's default.",
+    ["board reviewer", "headless", "claude model", "tier", "light", "standard", "deep", "--model"],
   ),
   draft(
     "tasks.review.budget",
