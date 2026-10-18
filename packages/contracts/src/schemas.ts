@@ -356,11 +356,22 @@ export const AttentionReason = z.object({
     "review_unattended",
     "import_failed",
     "autopilot",
+    "agent_request",
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
 });
 export type AttentionReason = z.infer<typeof AttentionReason>;
+
+/** An agent's standing request for the user to look at a task (the request_attention tool). */
+export const AttentionRequest = z.object({
+  /** What the user should look at. */
+  message: z.string(),
+  /** Who asked: the agent's label. */
+  actor: z.string(),
+  requestedAt: IsoDate,
+});
+export type AttentionRequest = z.infer<typeof AttentionRequest>;
 
 export const CurrentStep = z.object({
   id: z.string(),
@@ -449,6 +460,8 @@ export const TaskSummary = z.object({
   currentStep: CurrentStep.nullable(),
   links: z.array(TaskLink),
   attention: z.array(AttentionReason),
+  /** The agent's request behind an `agent_request` attention reason; null when no agent has one standing. */
+  attentionRequest: AttentionRequest.nullable(),
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),

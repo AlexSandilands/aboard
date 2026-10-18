@@ -143,6 +143,10 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     }
     case "note":
       return line("note", "left a note", str(p.text));
+    case "attention_requested":
+      return line("note", "asked for your attention", str(p.message));
+    case "attention_cleared":
+      return line("other", "cleared the request for attention");
     case "plan_set": {
       const steps = num(p.steps);
       const phases = num(p.phases);

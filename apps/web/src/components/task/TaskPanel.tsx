@@ -14,6 +14,7 @@ import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
+import { AttentionRequestCallout } from "./AttentionRequestCallout";
 import { AutomationSection } from "./AutomationSection";
 import { LinksSection } from "./LinksSection";
 import { DetailsSection } from "./DetailsSection";
@@ -189,6 +190,7 @@ function TaskPanelBody({
         <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} actions={titleActions} />
       </div>
       <div className="flex flex-col gap-2 px-3 pb-3">
+        <AttentionRequestCallout task={task} />
         <ImportCallout task={task} />
         <ResolutionCallout task={task} />
         {task.kind === "epic" ? (

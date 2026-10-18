@@ -70,6 +70,11 @@ describe("describeEvent", () => {
       text: "reviewed round 2: 1 blocking, 2 nit",
     });
     expect(text("review_submitted", { round: 3, findings: { blocking: 0 } }).icon).toBe("review_clean");
+    expect(text("attention_requested", { message: "Review the plans" })).toMatchObject({
+      text: "asked for your attention",
+      quote: "Review the plans",
+    });
+    expect(text("attention_cleared", { requestedBy: "claude-code" }).text).toBe("cleared the request for attention");
     expect(text("finding_resolved", { finding: "R1.2", status: "wont_fix", note: "By design" })).toEqual({
       icon: "review",
       text: "marked R1.2 won't fix",

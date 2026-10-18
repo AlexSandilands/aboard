@@ -61,7 +61,9 @@ and other URLs. Like the other sections, each can be collapsed, moved or hidden 
 three sessions, **Show N more** reveals the rest. When the task has one T3 thread, its Claude Code sessions are in
 the thread's ⌄ menu instead of rows of their own.
 
-Failing checks, requested changes and blocked steps show up under **Needs attention** in the sidebar.
+Failing checks, requested changes, blocked steps and requests from agents ("please review the plans") show up under
+**Needs attention** in the sidebar. An agent's request stays until you press **Dismiss** in the task panel (or the
+agent clears it).
 Agents are told which Jira issue, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 

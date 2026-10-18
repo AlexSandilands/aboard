@@ -575,6 +575,21 @@ the automation. Runs stay, under the old key.
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
+
+  **Handover.** A scheduled run has no memory of the last one, so it is asked for `{summary, handover}`
+  (`SCHEDULED_AGENT_OUTPUT_SCHEMA`, `outputSchema` on the runner request) and keeps it in `output`
+  (`ScheduledAgentRunOutput`, `kind: "scheduled_agent"`, the handover cut to `HANDOVER_MAX_CHARS` = 4000 by
+  `capHandover`). The prompt's footer (`customAgentPrompt` with a null task) says what a handover is for (what the next
+  run needs, not a log; it replaces the last one) and, when there is one, passes on the last run's under "Handover from
+  the last run", inside `<handover>` tags and labelled as data (the agent reads external text, so it may echo some),
+  not instructions. `AutopilotService.lastHandover(automation,
+  projectId)` reads it from the newest real, succeeded, task-less run of the same automation in the same project that
+  has such an output (`lastScheduledAnswer`): a failed run leaves none, so the one before it carries on. A run
+  with no structured answer fails (the runner's `outputSchema` handling), and what it did isn't carried over, so the
+  next run may repeat it; an answer of the wrong shape that got through anyway keeps no `output`. Other
+  projects and other automations never see it. A dry run's preview includes it. The custom automation editor lists
+  the latest runs per project (`ScheduledRuns`) with their summary and handover, since a task-less run has no task
+  panel to show in.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values
