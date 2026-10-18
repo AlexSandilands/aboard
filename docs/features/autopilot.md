@@ -177,6 +177,8 @@ one exception is `retry_autopilot_run`, which only frees a run's work for the en
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
+| `GET /api/autopilot/orchestrate/:projectId`     | Orchestrate in one project: next slot, what holds it, Run now, the latest run |
+| `POST /api/autopilot/orchestrate/:projectId/run` | Orchestrate's Run now (202), or 409 with why it can't start |
 
 ### Automations
 
@@ -473,7 +475,28 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, or under
   Needs attention (a failed Start planned run included), leaving out tasks waiting on the user (an `agent_request` or
   a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
-  running, `check` returns nothing for it and the latest slot runs once it ends.
+  running, `check` returns nothing for it and the latest slot runs once it ends. The rule is
+  `orchestrateNeedsLooking` in contracts, so the board's lane pill reads it the same way. `nextMinutesSlot` gives the
+  next slot (local midnight when the step doesn't fit in what is left of the day; it steps past wall times a DST change
+  repeats).
+- **Run now.** The first run-now path in Autopilot. `POST /api/autopilot/orchestrate/:projectId/run`
+  (`requestOrchestrateRun`) puts a request for the project in `AutopilotService.requestRun`, an in-memory map (a
+  restart drops it), publishes `autopilot.changed` and starts a pass at once (`Integrations.autopilotPass`, when the
+  pollers run). `check` turns the request into a candidate keyed `orchestrate:<projectId>:manual:<requested at>` that
+  skips the nothing-to-look-at gate, since the user asked; the first pass that finds the key has a run clears it. A
+  slot that began before a manual run in it doesn't run again (`ranManuallySince`), so Run now doesn't double the
+  next look. One run at a time still holds, and so do the engine's limits: the request is refused (`CONFLICT`, with the
+  reason) when Orchestrate is off in the project, Autopilot is paused, a run is already going there, in quiet hours or
+  at a daily cap (checked apart from concurrency, so a full run slot doesn't hide it); at the concurrency cap it waits
+  for a free slot like any candidate. Asking again while one waits keeps the first. A request is dropped when
+  Orchestrate goes off in the project, and after an hour without a run (`RUN_REQUEST_TTL_MS`), so it never starts out
+  of the blue later.
+- **State.** `GET /api/autopilot/orchestrate/:projectId` (`orchestrateState`, `OrchestrateState`) gives the switch,
+  `everyMinutes`, `nextSlotAt`, `hold` (why that slot won't run, the first that applies: `off`, `paused`,
+  `quiet_hours` at the slot, `daily_cap`, `idle`), `running`, `requestedAt` and `lastRun` (the latest real run,
+  retried ones left out). Its section of the lane popover reads it (see
+  [board-layout.md](board-layout.md#autopilot-on-the-board)). The quiet-hours and cap checks are the engine's
+  (`agentHold` in `autopilot/limits.ts`).
 - **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
   push guard), with `access: "read-only"` and `untrustedInput`, since it reads PR and CI text anyone can write: file
   tools only in its own folder, no settings from a checkout (`--setting-sources user`), only the built-in tools it
@@ -481,7 +504,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   board's. `boardTools` makes the runner write an MCP config naming only the board (`boardMcpConfig`, with its API
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
   `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
-  job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
+  job). The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
   thread tools, `retry_autopilot_run`, `merge_task_pr`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
@@ -972,12 +995,13 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
 | `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
-| `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
+| `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
+| `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
-| `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, the tools it gets and `orchestratePrompt` |
+| `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run` |
 | `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |

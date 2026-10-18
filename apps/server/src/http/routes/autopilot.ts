@@ -2,6 +2,7 @@ import { UpdateAutopilotEngineInput, UpdateAutopilotSettingInput } from "@repo/c
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
+import { orchestrateState, requestOrchestrateRun } from "../../autopilot/automations/orchestrate.ts";
 import { AppError } from "../../errors.ts";
 import { actorOf, handle, idParam, parseBody, parseQuery } from "../respond.ts";
 
@@ -54,6 +55,21 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
         autopilot.setScope("project", idParam(c), automationParam(c), await parseBody(c, UpdateAutopilotSettingInput)),
       ),
     ),
+  );
+
+  // Orchestrate in one project, and Run now. The request publishes autopilot.changed, which starts a pass a second
+  // later; the pass started here doesn't wait for that.
+  app.get(
+    "/api/autopilot/orchestrate/:id",
+    handle((c) => c.json(orchestrateState(services, idParam(c), new Date()))),
+  );
+  app.post(
+    "/api/autopilot/orchestrate/:id/run",
+    handle((c) => {
+      const state = requestOrchestrateRun(services, idParam(c), new Date());
+      integrations.autopilotPass();
+      return c.json(state, 202);
+    }),
   );
 
   // The digest of what changed (docs/features/autopilot.md#automations). Registered before /:id/read.

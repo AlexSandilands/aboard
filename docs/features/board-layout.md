@@ -201,6 +201,19 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
   "Recurring tasks…" link opens the project's settings at that section. The chosen **On** is the app's info blue
   (`ModeSwitch`), and an Inherit that resolves to On shows its note in the same blue.
+  - **Orchestrate** is pinned above the other rows in a highlighted section of its own (`OrchestrateSection`): its
+    switch, then "Next check in 12:34" ticking every second (`useNow`; the slot is counted in the browser with
+    `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
+    hours until their end, today's cap, idle), "Last ran 17m ago · Done" (`lastRunText`), a **▶ Run now** button
+    (`useRunOrchestrateNow`; disabled with a spinner while a run is going or asked for, a refusal is a toast with the
+    server's reason) and the switch for the pill's countdown. It reads `useOrchestrateState`, refetched on
+    `autopilot.changed`, on task changes and every minute. Epic popovers don't have it (Orchestrate has no epic scope).
+  - **The pill's countdown.** While Orchestrate is on in the project the pill reads `Autopilot · 12m`
+    (`pillTimerAt`, `formatPillCountdown`): only when a slot would run, so not while paused, while its run is going,
+    with nothing to look at (`useProjectHasOrchestrateWork`, from the snapshot with the server's rule) or in quiet hours
+    at the slot. The daily caps are left to the popover. One display preference, `showAutopilotTimer` in
+    `useBoardView` (default on), is switched both in the popover and in Settings → Appearance (**Orchestrate countdown
+    on lanes**).
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active

@@ -1,8 +1,9 @@
-import { AUTOPILOT_ACTOR, inQuietHours, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
+import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import { messageOf } from "../integrations/github.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
+import { agentHold } from "./limits.ts";
 import {
   NO_GITHUB,
   NO_RUNNER,
@@ -37,9 +38,6 @@ export interface AutopilotEngine {
   /** Stops new passes; actions already going finish. */
   stop(): void;
 }
-
-/** Local midnight of `now`, for the daily caps. */
-const startOfDay = (now: Date): string => new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
 /**
  * Runs the Autopilot automations (docs/features/autopilot.md): after board events and every minute, each automation
@@ -93,20 +91,6 @@ export function createAutopilotEngine(deps: {
       debounce = null;
       void pass();
     }, deps.debounceMs ?? AUTOPILOT_DEBOUNCE_MS);
-  };
-
-  /** Why an agent run can't start now, or null when it can. */
-  const held = (s: Services, engine: AutopilotEngineSettings, at: Date): string | null => {
-    if (inQuietHours(engine.quietHours, at.getHours() * 60 + at.getMinutes())) return "quiet hours";
-    const agents = s.autopilot
-      .automations()
-      .filter((a) => a.needsAgent)
-      .map((a) => a.key);
-    const usage = s.autopilot.usage(agents, startOfDay(at));
-    if (usage.active >= engine.maxConcurrent) return "concurrency";
-    if (engine.dailyRunCap !== null && usage.started >= engine.dailyRunCap) return "daily run cap";
-    if (engine.dailySpendCapUsd !== null && usage.spendUsd >= engine.dailySpendCapUsd) return "daily spend cap";
-    return null;
   };
 
   /** Tells the listener, which must never change how the run ended. */
@@ -230,7 +214,7 @@ export function createAutopilotEngine(deps: {
       }
       if (s.autopilot.hasRun(automation.key, candidate.dedupeKey, false)) continue;
       // Held candidates aren't recorded: a later pass picks them up once there is room.
-      if (automation.needsAgent && held(s, engine, at)) continue;
+      if (automation.needsAgent && agentHold(s, engine, at)) continue;
       if (automation.background && !automation.needsAgent && background >= AUTOPILOT_BACKGROUND_MAX) continue;
       const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;

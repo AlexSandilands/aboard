@@ -33,9 +33,12 @@ import { DEFAULT_APPEARANCE_PREFS, normalizeAppearancePrefs, type AppearancePref
 interface BoardViewState extends CollapseState {
   /** Priority tasks gather in a lane above the projects. Off, they stay in their own lanes. */
   showPriorityLane: boolean;
+  /** The lane's Autopilot pill counts down to Orchestrate's next check while it is on in the project. */
+  showAutopilotTimer: boolean;
   /** Epic bands folded to their header, by epic id. */
   collapsedEpics: Record<string, true>;
   setShowPriorityLane: (value: boolean) => void;
+  setShowAutopilotTimer: (value: boolean) => void;
   /** `mixed`: some shown project differs from the column, so the header collapses them all. */
   toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
   /** `rowId`: a project id for its loose cards, or an epic id for its band. */
@@ -49,9 +52,11 @@ export const useBoardView = create<BoardViewState>()(
   persist(
     (set) => ({
       showPriorityLane: true,
+      showAutopilotTimer: true,
       collapsedEpics: {},
       ...DEFAULT_COLLAPSE,
       setShowPriorityLane: (showPriorityLane) => set({ showPriorityLane }),
+      setShowAutopilotTimer: (showAutopilotTimer) => set({ showAutopilotTimer }),
       toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
       toggleCellCollapsed: (rowId, status) => set((s) => toggleCell(s, rowId, status)),
       toggleEpicCollapsed: (epicId) =>
@@ -70,8 +75,9 @@ export const useBoardView = create<BoardViewState>()(
       name: storageKey("board-view"),
       version: 2,
       migrate: migrateBoardView,
-      partialize: ({ showPriorityLane, collapsedEpics, collapsedColumns, cellOverrides }) => ({
+      partialize: ({ showPriorityLane, showAutopilotTimer, collapsedEpics, collapsedColumns, cellOverrides }) => ({
         showPriorityLane,
+        showAutopilotTimer,
         collapsedEpics,
         collapsedColumns,
         cellOverrides,

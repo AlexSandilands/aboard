@@ -24,9 +24,9 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   // Weekly trends: `weeks` is 4, 12 (default) or 52; `projectId` limits them to one project.
   app.get(
     "/api/stats",
-    handle((c) => {
+    handle(async (c) => {
       const { weeks, projectId } = parseQuery(c, StatsQuery);
-      return c.json(services.stats.weekly(weeks, projectId));
+      return c.json(await services.stats.weekly(weeks, projectId));
     }),
   );
 

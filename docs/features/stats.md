@@ -1,10 +1,10 @@
 # Stats
 
-Board tasks: #64 (the API) and #190 (the page), epic #189.
+Board tasks: #64 (the API), #190 (the page) and #191 (commits), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
 reviews loop, how many PRs merge, what Autopilot and agent sessions do, and where agents got stuck. The server computes them from data
-it already keeps; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool. The page that charts it is `/stats` ([The page](#the-page)).
+it already keeps, and from git for commits; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool. The page that charts it is `/stats` ([The page](#the-page)).
 
 ## How it works
 
@@ -22,6 +22,8 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 - `breakdowns`: a **map by name** to `{ unit, items }`, the period split by a category rather than by week
   ([Breakdowns](#breakdowns)).
 - `from`, `to`, `previousFrom`, `project`, `weeks`.
+- `notes`: sentences about the numbers, e.g. a project whose commits weren't counted because its folder isn't a git
+  repository. Empty when there is nothing to say.
 
 Counts and costs are `0` in a quiet week. Durations and ratios are `null` when nothing in the week had one. A
 count's total is the sum, a duration's the median over the period, and a ratio's the mean over the period (not
@@ -47,6 +49,7 @@ appear only when that automation ran in the two periods.
 | `autopilot.runs.<automation>.<status>` | count | The same, per automation and final status | `autopilot_runs` |
 | `autopilot.retries` | count | Runs that followed a failed run of the same automation on the same task, both finished in the two periods; a retry of a failure from before the first week isn't counted | `autopilot_runs` |
 | `autopilot.cost_usd` | usd | `cost_usd` of those runs | `autopilot_runs` |
+| `commits` | count | Non-merge commits on each project's default branch, by committer time, summed over the projects in scope ([Commits](#commits)) | `git log` in each project's folder |
 | `friction.steps_blocked` | count | Plan steps whose status changed to blocked; a step blocked twice counts twice | `step_updated` |
 | `friction.steps_skipped` | count | Plan steps whose status changed to skipped | `step_updated` |
 | `friction.attention_requests` | count | Times an agent (or anyone) asked for the user's attention on a task, `request_attention` | `task_events` `attention_requested` |
@@ -78,6 +81,25 @@ falls in them. They share the scope of the series: `projectId` limits them to on
 Labels and tiers are read as they are now, not as they were when the task finished, since the board keeps no history
 of either.
 
+### Commits
+
+The only series read from outside the database. For each project in scope with a folder (`workspaceRoot`; archived
+projects too, like every other series), `defaultBranchCommits` (`apps/server/src/integrations/commitLog.ts`) runs
+`git log <ref> --no-merges --since=<start of the previous period> --format=%cI` through the same `RunGit` Autopilot's
+worktrees use, so the arguments are never a shell string. `<ref>` is `origin/<default branch>` when the checkout has
+it, else the local branch; the default branch is found as Autopilot finds it (`defaultBranchOf`: origin's HEAD, else
+`main` or `master`). Only what reached the default branch counts, not work on other branches, and a merge commit isn't
+counted (the commits it brought are). Commit times are bucketed like every other series.
+
+- Projects that point at one repository (a folder inside it, or a second clone) share its commits: the board-wide sum
+  counts each commit hash once.
+- A project without a folder is skipped. When it is the one asked for, a note says so.
+- Git failing (no folder on disk, not a repository, no default branch, a timeout) gives that project no commits and a
+  note in `notes`, never an error, so the other series still load.
+- Times are cached per project, folder and period start for 10 minutes, in memory (a restart clears them); a failed
+  read is kept for 30 seconds only, as a timeout or a lock may pass. A new commit can take that long to show, and nothing is fetched for it: `origin/<branch>` is as fresh as the
+  last fetch.
+
 ## The page
 
 `/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like
@@ -89,7 +111,7 @@ and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links a
 and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
 loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
 
-The sections (Throughput, Cycle time, PRs and reviews, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
+The sections (Throughput, Cycle time, PRs, commits and reviews, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
 above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
 name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
 plainly better (tasks finished, cycle time, review rounds, findings, retries) colour the change. A series missing from
@@ -99,10 +121,10 @@ says nothing happened instead of drawing empty charts.
 The charts are hand-rolled SVG with no dependency:
 
 - `WeeklyBars` (grouped or stacked), `TrendLine` (a line per series; a week with no value breaks it) and `KpiTile`.
-  `SortedBars` draws a breakdown as horizontal bars, largest first, with the previous period's figure beside each; it
+  `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
+- `SortedBars` draws a breakdown as horizontal bars, largest first, with the previous period's figure beside each; it
   is a plain list with the values written out, so it has no tooltip. `breakdownRows` (in `stats.logic.ts`) keeps the
   categories with something in the period and folds all past the seventh into one "Other" row, drawn muted because it adds several categories and can be the longest.
-  `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
 - Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
   segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names
   each series and the tooltip repeats the names.
@@ -142,6 +164,7 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | ---- | ------------ |
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
 | `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
+| `apps/server/src/integrations/commitLog.ts` | The `git log` reader for a project's default branch |
 | `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween`, `sessionsStartedBetween` |
 | `apps/server/src/services/activity.ts` | `stallKind`, `wasRestarted`: the stall and restart definitions the friction series share with `board_activity` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |

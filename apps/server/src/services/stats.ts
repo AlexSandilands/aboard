@@ -1,5 +1,6 @@
 import type {
   AutopilotRun,
+  Project,
   StatsBreakdown,
   StatsPeriod,
   StatsResponse,
@@ -8,13 +9,29 @@ import type {
   TaskEvent,
 } from "@repo/contracts";
 import { notFound } from "../errors.ts";
+import { defaultBranchCommits, type DefaultBranchCommit } from "../integrations/commitLog.ts";
+import type { RunGit } from "../integrations/backup.ts";
 import { stallKind, wasRestarted } from "./activity.ts";
 import type { Core } from "./core.ts";
 
-/** Weekly trends over the board's history, read from the activity log, reviews, Autopilot runs and links. */
+/**
+ * Weekly trends over the board's history, read from the activity log, reviews, Autopilot runs and links, and from git
+ * for commits.
+ */
 export interface StatsService {
   /** The last `weeks` calendar weeks, ending with the current one, and the same number before them, for comparison. */
-  weekly(weeks: StatsPeriod, projectId?: string): StatsResponse;
+  weekly(weeks: StatsPeriod, projectId?: string): Promise<StatsResponse>;
+}
+
+/** How long a project's commit times are reused: reading them is a git process per project. */
+const COMMITS_TTL_MS = 10 * 60_000;
+/** The same for a read that failed. */
+const FAILED_TTL_MS = 30_000;
+
+interface ProjectCommits {
+  /** Empty when git couldn't be read. */
+  commits: DefaultBranchCommit[];
+  note: string | null;
 }
 
 type Aggregate = "sum" | "median" | "mean";
@@ -53,6 +70,7 @@ const COUNT_SERIES = [
   "friction.stalls.stale",
   "friction.stalls.waiting",
   "friction.runs_restarted",
+  "commits",
 ];
 
 /**
@@ -81,11 +99,39 @@ function reduce(aggregate: Aggregate, xs: readonly number[]): number | null {
   return median(xs);
 }
 
-export function createStatsService(core: Core): StatsService {
+export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsService {
   const { repos } = core;
 
+  // Keyed by project, folder and period start, so a moved folder or a new week reads again.
+  const commitCache = new Map<string, { expires: number; commits: Promise<ProjectCommits> }>();
+  const commitsOf = (project: Project & { workspaceRoot: string }, since: Date): Promise<ProjectCommits> => {
+    const now = core.now().getTime();
+    for (const [key, entry] of commitCache) if (entry.expires <= now) commitCache.delete(key);
+    const key = `${project.id}\0${project.workspaceRoot}\0${since.getTime()}`;
+    let entry = commitCache.get(key);
+    if (!entry) {
+      const created: { expires: number; commits: Promise<ProjectCommits> } = {
+        expires: now + COMMITS_TTL_MS,
+        commits: Promise.resolve({ commits: [], note: null }),
+      };
+      // A folder git can't read is an empty series with a note, never an error: stats still answer. A failure may be
+      // a timeout or a lock that passes, so it is asked again sooner than a success.
+      created.commits = defaultBranchCommits(deps.runGit, project.workspaceRoot, since).then(
+        (commits): ProjectCommits => ({ commits, note: null }),
+        (error: unknown): ProjectCommits => {
+          created.expires = core.now().getTime() + FAILED_TTL_MS;
+          const why = error instanceof Error ? error.message : String(error);
+          return { commits: [], note: `Commits in ${project.title} weren't counted: ${why}` };
+        },
+      );
+      entry = created;
+      commitCache.set(key, entry);
+    }
+    return entry.commits;
+  };
+
   return {
-    weekly(weeks, projectId) {
+    async weekly(weeks, projectId) {
       const project = projectId ? repos.projects.get(projectId) : null;
       if (projectId && !project) throw notFound("Project", projectId);
 
@@ -269,6 +315,24 @@ export function createStatsService(core: Core): StatsService {
             .map((s) => ({ key: s.harness, at: Date.parse(s.at) })),
         ),
       };
+      // Commits that reached each project's default branch, by when they landed. A project without a folder has no
+      // history to read (said so only when it is the one asked for; on the whole board it is just not counted).
+      const notes: string[] = [];
+      const inFolders = (project ? [project] : repos.projects.list(true)).filter(
+        (p): p is Project & { workspaceRoot: string } => p.workspaceRoot !== null,
+      );
+      if (project && inFolders.length === 0)
+        notes.push(`${project.title} has no folder, so its commits aren't counted`);
+      // Projects on one repository (another folder in it, or a second clone) share its commits: each counts once.
+      const seenCommits = new Set<string>();
+      for (const commits of await Promise.all(inFolders.map((p) => commitsOf(p, bounds[0]!)))) {
+        for (const commit of commits.commits) {
+          if (seenCommits.has(commit.hash)) continue;
+          seenCommits.add(commit.hash);
+          count("commits", commit.at);
+        }
+        if (commits.note) notes.push(commits.note);
+      }
 
       const out: Record<string, StatsSeries> = {};
       for (const [name, s] of [...built].sort(([a], [b]) => a.localeCompare(b))) {
@@ -292,6 +356,7 @@ export function createStatsService(core: Core): StatsService {
         buckets: shown.slice(0, -1).map((from, i) => ({ start: from, end: shown[i + 1]! })),
         series: out,
         breakdowns,
+        notes,
       };
     },
   };

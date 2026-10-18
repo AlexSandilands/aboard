@@ -146,6 +146,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["star", "urgent", "pinned", "top", "hide"],
   ),
   draft(
+    "board.appearance.autopilot-timer",
+    "Orchestrate countdown on lanes",
+    "The lane's Autopilot pill counts down to Orchestrate's next check (Autopilot · 12m) while it is on in the project. Also switchable from the pill's popover.",
+    ["autopilot", "timer", "next run", "pill", "clock", "orchestrate"],
+  ),
+  draft(
     "board.appearance.scroll-to-task",
     "Scroll to a task when opening it",
     "Opening a task from search, a link or a notification slides the board to its card. Off, only the panel opens.",

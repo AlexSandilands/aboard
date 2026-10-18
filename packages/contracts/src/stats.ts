@@ -78,5 +78,7 @@ export const StatsResponse = z.object({
   buckets: z.array(StatsBucket),
   series: z.record(z.string(), StatsSeries),
   breakdowns: z.record(z.string(), StatsBreakdown),
+  /** Things a reader should know about the numbers, e.g. a project whose git history couldn't be read. */
+  notes: z.array(z.string()),
 });
 export type StatsResponse = z.infer<typeof StatsResponse>;
