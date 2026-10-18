@@ -70,7 +70,7 @@ export type CustomFilters = z.infer<typeof CustomFilters>;
 /**
  * A tool an agent action is allowed to call without asking, as Claude Code's `--allowedTools` takes it: a whole MCP
  * server (`mcp__issue-tracker`), one of its tools (`mcp__issue-tracker__search_jira`, or `mcp__issue-tracker__search_*`), or a
- * built-in tool with an optional specifier (`WebFetch(domain:example.com)`). A `*` is only allowed in the tool part of
+ * built-in tool with an optional specifier (`Skill(name)`). A `*` is only allowed in the tool part of
  * an MCP rule: Claude Code skips one in the server part.
  */
 const MCP_TOOL_RULE = /^mcp__[A-Za-z0-9_-]+(?:__[A-Za-z0-9_*-]+)?$/;

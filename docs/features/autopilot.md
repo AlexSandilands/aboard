@@ -566,7 +566,8 @@ the automation. Runs stay, under the old key.
   set to the PR's head branch. Its config is the shared runner options, per scope.
   - **Allowed tools** (`allowedTools`, `CustomToolRule` in contracts): extra tools the agent may call unattended,
     such as the user's own MCP servers, as `mcp__<server>`, `mcp__<server>__<tool>` (a `*` only in the tool part) or a
-    built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`WebFetch(domain:example.com)`); at most 20,
+    built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`Skill(name)`); a built-in rule only adds a tool, it never narrows one the run already
+    has (an edit run allows all of them but Agent and Skill); at most 20,
     200 characters each, deduped. The shell tools (Bash, PowerShell) are refused: the push and merge deny rules are
     `Bash(...)` patterns, so another shell tool would sidestep them, and an edit run has Bash anyway. `act` passes the
     rules as `RunnerRequest.tools`, which `agentArgs` appends to `--allowedTools`. They make the run
