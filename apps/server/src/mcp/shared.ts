@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AUTOPILOT_START_PLANNED,
   deliveryHintApplies,
+  DueDate,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -112,6 +113,11 @@ export const autoMergeField = z
       "on: allow it. default and off: it never merges, and the user merges it. Set it only when the user has said so; " +
       "ask first, never on your own.",
   );
+
+export const dueDateField = DueDate.describe(
+  "The due date as YYYY-MM-DD, with no time or timezone. Set it only when the user gives you a date; never invent one. " +
+    "Pass null on update_task to clear it.",
+);
 
 export const priorityField = z
   .boolean()

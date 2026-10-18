@@ -461,6 +461,7 @@ describe("restore", () => {
           parent_id: _p,
           autopilot: _f,
           priority: _pr,
+          due_date: _dd,
           auto_merge: _am,
           template_id: _m,
           delivery: _d,

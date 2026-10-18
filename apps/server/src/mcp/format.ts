@@ -150,6 +150,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
     parts.push("no plan");
   }
   if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
+  if (task.dueDate) parts.push(`due ${task.dueDate}`);
   if (task.blocked)
     parts.push(
       `blocked by ${openBlockers(task)
@@ -639,6 +640,7 @@ export function renderTaskDetail(
     lines.push(`Auto-merge: ${task.autoMerge ? "on (merge_task_pr may merge its PR)" : "off"}`);
   }
   if (task.priority) lines.push("Priority: yes (shown in the priority lane)");
+  if (task.dueDate) lines.push(`Due: ${task.dueDate}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
     const c = task.currentStep;

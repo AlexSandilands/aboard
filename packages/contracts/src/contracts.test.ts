@@ -9,6 +9,8 @@ import {
   deriveCurrentStep,
   deriveProgress,
   deriveProjectIdentity,
+  dueState,
+  DueDate,
   findJiraKeys,
   normalizeWorkspaceKey,
   parseIssueSource,
@@ -53,6 +55,26 @@ describe("deriveCurrentStep", () => {
   it("returns null for an empty or fully complete plan", () => {
     expect(deriveCurrentStep([])).toBeNull();
     expect(deriveCurrentStep(phases(["done", "skipped"]))).toBeNull();
+  });
+});
+
+describe("dueState", () => {
+  it("compares calendar dates, across month and year edges", () => {
+    expect(dueState("2026-11-01", "2026-11-02")).toBe("overdue");
+    expect(dueState("2026-11-02", "2026-11-02")).toBe("today");
+    expect(dueState("2026-11-03", "2026-11-02")).toBe("later");
+    expect(dueState("2026-12-31", "2027-01-01")).toBe("overdue");
+    expect(dueState("2027-01-01", "2026-12-31")).toBe("later");
+    expect(dueState("2026-02-28", "2026-03-01")).toBe("overdue");
+  });
+});
+
+describe("DueDate", () => {
+  it("accepts real calendar dates only", () => {
+    expect(DueDate.safeParse("2028-02-29").success).toBe(true);
+    for (const bad of ["2026-02-30", "2026-13-01", "2026-1-1", "11/02/2026", "2026-11-02T00:00:00Z", ""]) {
+      expect(DueDate.safeParse(bad).success).toBe(false);
+    }
   });
 });
 

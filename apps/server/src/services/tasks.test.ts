@@ -440,6 +440,26 @@ describe("priority", () => {
   });
 });
 
+describe("due date", () => {
+  it("starts empty, is set and cleared, and logs a change once", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "Plain" });
+    expect(task.dueDate).toBeNull();
+
+    expect(s.tasks.update(task.id, { dueDate: "2026-11-02" }, "user").dueDate).toBe("2026-11-02");
+    const again = s.tasks.update(task.id, { dueDate: "2026-11-02" }, "user");
+    expect(again.events.filter((e) => e.type === "updated").map((e) => e.payload)).toEqual([{ fields: ["dueDate"] }]);
+    expect(s.tasks.update(task.id, { dueDate: null }, "user").dueDate).toBeNull();
+  });
+
+  it("is refused on epics", () => {
+    const { s, project } = setup();
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { dueDate: "2026-11-02" }, "user"), "VALIDATION");
+    expect(s.tasks.update(epic.id, { dueDate: null }, "user").dueDate).toBeNull();
+  });
+});
+
 describe("auto-merge flag", () => {
   it("starts as Default, is set on create, and logs a change once", () => {
     const { s, project } = setup();

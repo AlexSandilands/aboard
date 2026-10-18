@@ -17,6 +17,7 @@ import {
   autopilotField,
   autopilotValue,
   priorityField,
+  dueDateField,
   blockedByField,
   deliveryField,
   epicField,
@@ -390,9 +391,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, or archive/unarchive it. " +
+        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, due date, or archive/unarchive it. " +
         "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr merge its PR " +
-        "into the default branch, so set either only after the user has said so. To move the task to a different " +
+        "into the default branch, so set either only after the user has said so, and dueDate (YYYY-MM-DD, null clears it) only when the user gives a date. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +
@@ -430,6 +431,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         autopilot: autopilotField.optional(),
         autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
+        dueDate: dueDateField.nullable().optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
         removeBlockedBy: blockedByField.optional().describe("Blockers to remove; one that isn't a blocker is ignored."),
@@ -461,6 +463,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
             ...(args.autoMerge !== undefined ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
             ...(args.priority !== undefined ? { priority: args.priority } : {}),
+            ...(args.dueDate !== undefined ? { dueDate: args.dueDate } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
             ...(args.addBlockedBy?.length ? { addBlockedBy: args.addBlockedBy } : {}),
             ...(args.removeBlockedBy?.length ? { removeBlockedBy: args.removeBlockedBy } : {}),

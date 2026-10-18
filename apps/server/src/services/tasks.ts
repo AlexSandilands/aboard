@@ -37,6 +37,7 @@ import type {
 
 const DETAIL_EVENT_LIMIT = 100;
 const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
+const EPIC_DUE_DATE_MESSAGE = "An epic has no due date; set it on its tasks instead";
 const EPIC_PRIORITY_MESSAGE = "An epic has no card to put in the priority lane; mark its tasks instead";
 const EPIC_AUTO_MERGE_MESSAGE = "An epic has no pull request of its own to merge; flag its tasks instead";
 
@@ -367,6 +368,7 @@ export function createTasksService(
           autopilot: input.autopilot ?? null,
           autoMerge: input.autoMerge ?? null,
           priority: input.priority ?? false,
+          dueDate: null,
           attentionRequest: null,
           suggestedModel: null,
           templateId: template?.id ?? null,
@@ -428,9 +430,11 @@ export function createTasksService(
                   ? "it has an Autopilot flag"
                   : task.priority
                     ? "it is a priority"
-                    : task.autoMerge !== null
-                      ? "it has an auto-merge flag"
-                      : null;
+                    : task.dueDate
+                      ? "it has a due date"
+                      : task.autoMerge !== null
+                        ? "it has an auto-merge flag"
+                        : null;
         if (reason) return reason;
         repos.tasks.update({ ...task, kind: "epic", updatedAt: nowIso() });
         fx.log(id, actor, "became_epic", {});
@@ -478,6 +482,11 @@ export function createTasksService(
         if (input.priority !== undefined && input.priority !== current.priority) {
           next.priority = input.priority;
           changed.push("priority");
+        }
+        if (current.kind === "epic" && input.dueDate) throw new AppError("VALIDATION", EPIC_DUE_DATE_MESSAGE);
+        if (input.dueDate !== undefined && input.dueDate !== current.dueDate) {
+          next.dueDate = input.dueDate;
+          changed.push("dueDate");
         }
         if (current.kind === "epic" && input.autoMerge != null) {
           throw new AppError("VALIDATION", EPIC_AUTO_MERGE_MESSAGE);

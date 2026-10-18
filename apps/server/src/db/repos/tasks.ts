@@ -37,6 +37,8 @@ export interface TaskRecord {
   autoMerge: boolean | null;
   /** Shows in the priority lane above every project. */
   priority: boolean;
+  /** `YYYY-MM-DD`, no time or timezone; null for none. */
+  dueDate: string | null;
   /** An agent's standing request for the user's attention; null when none. */
   attentionRequest: AttentionRequest | null;
   suggestedModel: SuggestedModel | null;
@@ -70,6 +72,7 @@ interface TaskRow {
   autopilot: number | null;
   auto_merge: number | null;
   priority: number;
+  due_date: string | null;
   attention_message: string | null;
   attention_actor: string | null;
   attention_requested_at: string | null;
@@ -102,6 +105,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   autopilot: r.autopilot === null ? null : r.autopilot !== 0,
   autoMerge: r.auto_merge === null ? null : r.auto_merge !== 0,
   priority: r.priority !== 0,
+  dueDate: r.due_date,
   attentionRequest:
     r.attention_message !== null && r.attention_actor !== null && r.attention_requested_at !== null
       ? { message: r.attention_message, actor: r.attention_actor, requestedAt: r.attention_requested_at }
@@ -134,6 +138,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   autopilot: t.autopilot === null ? null : t.autopilot ? 1 : 0,
   auto_merge: t.autoMerge === null ? null : t.autoMerge ? 1 : 0,
   priority: t.priority ? 1 : 0,
+  due_date: t.dueDate,
   attention_message: t.attentionRequest?.message ?? null,
   attention_actor: t.attentionRequest?.actor ?? null,
   attention_requested_at: t.attentionRequest?.requestedAt ?? null,

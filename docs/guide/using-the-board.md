@@ -141,6 +141,13 @@ tasks first. Turn the lane off in Settings → Board → Appearance; priority ta
 
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
 
+## Due dates
+
+A task can have an optional due date: pick one in the panel's Details section (the **Due date** row; the **×** clears it).
+It is only a date, with no time, reminders or notifications. A card shows it only when one is set, in muted text, amber on
+the day and red once it has passed, using your computer's date. Done cards hide it. Epics don't have one. Agents can set
+it with `update_task`, but only when you give them a date.
+
 ## Finding a task on the board
 
 Open a task from search, the Needs attention list, a notification, a relation, an epic's tasks or a `#42` in a task's
