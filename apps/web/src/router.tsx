@@ -12,6 +12,7 @@ import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 import {
   CustomAutomationEditorPage,
+  CustomAutomationImportPage,
   RuleEditorPage,
   TemplateEditorPage,
 } from "./components/settings/pages/EditorPages.tsx";
@@ -76,6 +77,13 @@ export const templateEditorRoute = createRoute({
   component: TemplateEditorPage,
 });
 
+// A static path wins over `$customId`, so "import" never reads as an automation's id.
+export const customAutomationImportRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "autopilot/custom/import",
+  component: CustomAutomationImportPage,
+});
+
 export const customAutomationEditorRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "autopilot/custom/$customId",
@@ -108,6 +116,7 @@ export const router = createRouter({
         settingsIndexRoute,
         settingsGroupRoute,
         templateEditorRoute,
+        customAutomationImportRoute,
         customAutomationEditorRoute,
         ruleEditorRoute,
       ]),

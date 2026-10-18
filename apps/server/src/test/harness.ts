@@ -23,6 +23,7 @@ export function createTestHarness(
     webPort?: number;
     token?: string;
     sessionDirs?: SessionDirs;
+    userHome?: string;
     worktreesDir?: string;
     integrations?: IntegrationOverrides;
   } = {},

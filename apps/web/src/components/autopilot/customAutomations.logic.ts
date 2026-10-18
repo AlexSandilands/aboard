@@ -9,6 +9,7 @@ import {
   customValues,
   describeShellRun,
   normalizeLabels,
+  type AutomationInputType,
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
@@ -20,6 +21,24 @@ import {
 } from "@repo/contracts";
 
 const NL = String.fromCharCode(10);
+
+/** A declared input as the editor holds it: the value as typed. */
+export interface FormInput {
+  name: string;
+  label: string;
+  type: AutomationInputType;
+  value: string;
+  /** Kept as saved, so exporting can still say what the author started from. */
+  default: string;
+}
+
+/** A required tool slot as the editor holds it: its tools as typed, one per line. */
+export interface FormSlot {
+  name: string;
+  label: string;
+  description: string;
+  tools: string;
+}
 
 /** A custom automation as the editor holds it: numbers as typed, every kind's fields kept while switching. */
 export interface CustomForm {
@@ -51,6 +70,8 @@ export interface CustomForm {
   onPrBranch: boolean;
   /** One tool or server per line, as typed. */
   allowedTools: string;
+  inputs: FormInput[];
+  slots: FormSlot[];
   command: string;
   timeoutSeconds: string;
 }
@@ -102,6 +123,8 @@ export function emptyCustomForm(): CustomForm {
     tier: "",
     onPrBranch: false,
     allowedTools: "",
+    inputs: [],
+    slots: [],
     command: "",
     timeoutSeconds: "300",
   };
@@ -138,6 +161,19 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
       tier: a.tier ?? "",
       onPrBranch: a.onPrBranch,
       allowedTools: a.allowedTools.join("\n"),
+      inputs: a.inputs.map(({ name, label, type, value, default: fallback }) => ({
+        name,
+        label,
+        type,
+        value,
+        default: fallback,
+      })),
+      slots: a.slots.map(({ name, label, description, tools }) => ({
+        name,
+        label,
+        description,
+        tools: tools.join("\n"),
+      })),
     });
   } else {
     Object.assign(form, { command: a.command, timeoutSeconds: String(a.timeoutSeconds) });
@@ -212,6 +248,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             // The switch is hidden on a schedule, which has no pull request.
             onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
             allowedTools: parseAllowedTools(form.allowedTools),
+            inputs: form.inputs,
+            slots: form.slots.map((slot) => ({ ...slot, tools: parseAllowedTools(slot.tools) })),
           }
         : { kind: "shell", command: form.command, timeoutSeconds },
   });
@@ -221,6 +259,15 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
       const tool = issue.path.at(-1);
       const named = typeof tool === "number" ? ` "${parseAllowedTools(form.allowedTools)[tool] ?? ""}"` : "";
       return { ok: false, error: `Allowed tools:${named} ${issue.message}` };
+    }
+    // Declared inputs and slots are numbered as the editor lists them.
+    for (const [key, what] of [
+      ["inputs", "Input"],
+      ["slots", "Tool slot"],
+    ] as const) {
+      const at = issue.path.indexOf(key);
+      const n = at >= 0 ? issue.path[at + 1] : undefined;
+      if (typeof n === "number") return { ok: false, error: `${what} ${n + 1}: ${issue.message}` };
     }
     const field = String(issue.path[issue.path.length - 1] ?? issue.path[0] ?? "");
     const what: Record<string, string> = {
@@ -236,6 +283,13 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
   const problem = checkCustomDefinition(parsed.data);
   return problem ? { ok: false, error: problem } : { ok: true, input: parsed.data };
 }
+
+export const blankInput = (): FormInput => ({ name: "", label: "", type: "text", value: "", default: "" });
+export const blankSlot = (): FormSlot => ({ name: "", label: "", description: "", tools: "" });
+
+/** The tool slots in the editor with no tools yet: the automation can't be switched on until they have. */
+export const emptyFormSlots = (form: Pick<CustomForm, "slots">): FormSlot[] =>
+  form.slots.filter((slot) => parseAllowedTools(slot.tools).length === 0);
 
 /** A task to preview the action with: the newest one the filters let through, in a project they allow. */
 export function sampleTask(input: Pick<CreateInput, "filters">, tasks: readonly TaskSummary[]): TaskSummary | null {

@@ -1,5 +1,5 @@
-import type { SkillInfo } from "@repo/contracts";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import type { BundleSkill, InstalledSkill, SkillInfo } from "@repo/contracts";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -49,4 +49,47 @@ export function discoverSkills(opts: { homeDir: string; workspaceRoot?: string |
     : [];
   const byName = (a: SkillInfo, b: SkillInfo) => a.name.localeCompare(b.name) || a.root.localeCompare(b.root);
   return [...project.sort(byName), ...global.sort(byName)];
+}
+
+const SKILL_FILE = "SKILL.md";
+/** Where an imported skill is written: the one folder every harness we ship skills for reads. */
+const INSTALL_ROOT = ".claude/skills";
+
+/** The text of an installed skill (its folder or its frontmatter name) from the user's own skills, or null. */
+export function readInstalledSkill(homeDir: string, name: string): string | null {
+  const found = discoverSkills({ homeDir }).find((s) => s.name === name);
+  if (!found) return null;
+  try {
+    return readFileSync(found.path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** Sets the `name:` of a skill's frontmatter, so a skill saved under another folder name still answers to it. */
+function renameInFrontmatter(body: string, name: string): string {
+  return body.replace(/^(---\r?\n[\s\S]*?)^name:[ \t]*.*$/m, `$1name: ${name}`);
+}
+
+/**
+ * Writes a skill into `~/.claude/skills/<name>/SKILL.md`. A name that is already taken by an installed skill (by its
+ * folder or its frontmatter name, in any of the user's skill folders) gets `-2`, `-3` and so on instead, so an import
+ * never overwrites a skill of the user's.
+ */
+export function installSkill(homeDir: string, skill: BundleSkill): InstalledSkill {
+  const taken = new Set(discoverSkills({ homeDir }).map((s) => s.name.toLowerCase()));
+  const folders = (() => {
+    try {
+      return new Set(readdirSync(join(homeDir, INSTALL_ROOT)).map((f) => f.toLowerCase()));
+    } catch {
+      return new Set<string>();
+    }
+  })();
+  let name = skill.name;
+  for (let n = 2; taken.has(name.toLowerCase()) || folders.has(name.toLowerCase()); n++) name = `${skill.name}-${n}`;
+  const dir = join(homeDir, INSTALL_ROOT, name);
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, SKILL_FILE);
+  writeFileSync(path, name === skill.name ? skill.body : renameInFrontmatter(skill.body, name), { flag: "wx" });
+  return { name, path, renamed: name !== skill.name };
 }

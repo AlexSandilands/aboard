@@ -3,10 +3,15 @@ import { brandEnv } from "./brand.ts";
 import { nextPrChanges, type PrSnapshot } from "./schemas.ts";
 import {
   checkCustomDefinition,
+  customAgentPrompt,
+  customAgentToolsNote,
+  customAllowedTools,
   CustomAction,
+  customBlockedReason,
   CUSTOM_TOOLS_MAX,
   customShellEnv,
   CustomTrigger,
+  customValues,
   describeCustomTrigger,
   describeShellRun,
   latestHourlySlot,
@@ -50,7 +55,7 @@ describe("custom automation templates", () => {
 describe("checkCustomDefinition", () => {
   const filters = { projectIds: [], labels: [], epicId: null };
   const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60 };
-  const agent = { kind: "agent" as const, prompt: "Go", skill: "", tier: null, onPrBranch: false, allowedTools: [] };
+  const agent = CustomAction.parse({ kind: "agent", prompt: "Go" }) as Extract<CustomAction, { kind: "agent" }>;
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 4 } });
 
   it("allows a schedule with a shell command or an agent, and project filters only", () => {
@@ -90,6 +95,81 @@ describe("checkCustomDefinition", () => {
   it("refuses a status change from and to the same column", () => {
     const trigger = CustomTrigger.parse({ kind: "status_change", from: "review", to: "review" });
     expect(checkCustomDefinition({ trigger, filters, action: shell })).toMatch(/different column/);
+  });
+});
+
+describe("inputs and tool slots", () => {
+  const agent = (extra: Record<string, unknown> = {}) => CustomAction.parse({ kind: "agent", prompt: "Go", ...extra });
+  const filters = { projectIds: [], labels: [], epicId: null };
+  const trigger = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } });
+  const check = (action: CustomAction) => checkCustomDefinition({ trigger, filters, action });
+  const jira = { name: "jira", label: "Jira tools", description: "search issues by JQL" };
+
+  it("default to none, so an action saved before they existed still parses", () => {
+    expect(agent()).toMatchObject({ inputs: [], slots: [] });
+  });
+
+  it("fills {{inputs.name}} from the declared values, and leaves undeclared ones", () => {
+    const action = agent({
+      prompt: "Run {{inputs.jql}} for {{ inputs.look_back }} days {{inputs.nope}}",
+      inputs: [
+        { name: "jql", label: "JQL", value: "type = Bug" },
+        { name: "look_back", label: "Days", type: "number", default: "14" },
+      ],
+    });
+    if (action.kind !== "agent") throw new Error("agent");
+    expect(action.inputs[1]).toMatchObject({ value: "14", default: "14" });
+    expect(customValues({ name: "x", action }, null, null).inputs).toEqual({ jql: "type = Bug", look_back: "14" });
+    expect(renderCustomPrompt(action.prompt, customValues({ name: "x", action }, null, null))).toBe(
+      "Run type = Bug for 14 days {{inputs.nope}}",
+    );
+    // A value that looks like a placeholder is data, not filled in again.
+    expect(renderCustomPrompt("{{inputs.a}}", { automation: "x", inputs: { a: "{{task.title}}" } })).toBe(
+      "{{task.title}}",
+    );
+  });
+
+  it("refuses a prompt that names an input nobody declared, repeats and values that don't fit", () => {
+    expect(check(agent({ prompt: "{{inputs.jql}}" }))).toMatch(/no input is called jql/);
+    const inputs = [{ name: "a", label: "A", value: "1" }];
+    expect(check(agent({ prompt: "{{inputs.a}}", inputs }))).toBeNull();
+    expect(check(agent({ inputs: [...inputs, ...inputs] }))).toMatch(/declared twice/);
+    expect(check(agent({ slots: [jira, jira] }))).toMatch(/declared twice/);
+    expect(check(agent({ inputs: [{ name: "n", label: "N", type: "number", value: "soon" }] }))).toMatch(
+      /enter a number/,
+    );
+    expect(check(agent({ inputs: [{ name: "b", label: "B", type: "boolean", value: "maybe" }] }))).toMatch(/yes or no/);
+    expect(check(agent({ inputs: [{ name: "b", label: "B", type: "boolean", value: "false" }] }))).toBeNull();
+    expect(
+      CustomAction.safeParse({ kind: "agent", prompt: "Go", inputs: [{ name: "Bad Name", label: "x" }] }).success,
+    ).toBe(false);
+  });
+
+  it("gives a run the tools filling its slots, and tells the prompt about the filled ones", () => {
+    const action = agent({
+      allowedTools: ["WebFetch"],
+      slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira", "WebFetch"] }],
+    });
+    expect(customAllowedTools(action)).toEqual(["WebFetch", "mcp__issue-tracker__search_jira"]);
+    expect(customAgentToolsNote(action)).toContain("mcp__issue-tracker__search_jira");
+    const prompt = customAgentPrompt({ name: "x", action }, { automation: "x" }, null, null);
+    expect(prompt).toContain("- Jira tools (search issues by JQL): mcp__issue-tracker__search_jira, WebFetch");
+    const empty = agent({ slots: [jira] });
+    expect(customAgentPrompt({ name: "x", action: empty }, { automation: "x" }, null, null)).not.toContain(
+      "Jira tools",
+    );
+    expect(customAllowedTools(CustomAction.parse({ kind: "shell", command: "make" }))).toEqual([]);
+  });
+
+  it("says what is missing while a slot is empty", () => {
+    expect(customBlockedReason(agent())).toBeNull();
+    expect(
+      customBlockedReason(agent({ slots: [jira, { ...jira, name: "b", label: "Chat", tools: ["mcp__chat"] }] })),
+    ).toBe("Won't work until you fill in: Jira tools");
+    expect(customBlockedReason(agent({ slots: [{ ...jira, tools: ["mcp__j"] }] }))).toBeNull();
+    expect(CustomAction.safeParse({ kind: "agent", prompt: "Go", slots: [{ ...jira, tools: ["Bash"] }] }).success).toBe(
+      false,
+    );
   });
 });
 

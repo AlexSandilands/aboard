@@ -145,6 +145,8 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */
+  blocked: z.string().nullable().default(null),
   fields: z.array(AutopilotField),
   /** Every field's value when no scope sets it. */
   defaults: AutopilotConfig,

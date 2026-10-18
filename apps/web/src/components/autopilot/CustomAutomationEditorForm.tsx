@@ -22,6 +22,7 @@ import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/cu
 import { useBoard } from "~/state/queries";
 import {
   customFormToInput,
+  emptyFormSlots,
   parseAllowedTools,
   previewAction,
   PR_EVENTS,
@@ -30,6 +31,7 @@ import {
   TRIGGER_KINDS,
   type CustomForm,
 } from "./customAutomations.logic";
+import { BlockedWarning, InputsField, SlotsField } from "./InputsAndSlots";
 import { ScheduledRuns } from "./ScheduledRuns";
 
 function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
@@ -345,6 +347,11 @@ export function CustomAutomationEditorForm({
                       <code className="font-mono">{`{{${p.key}}}`}</code>
                     </span>
                   ))}
+                  {form.inputs.map((input) => (
+                    <span key={input.name}>
+                      , <code className="font-mono">{`{{inputs.${input.name}}}`}</code>
+                    </span>
+                  ))}
                   .{" "}
                   {isSchedule
                     ? "The project's name and folder are added after it."
@@ -434,6 +441,25 @@ export function CustomAutomationEditorForm({
                   in a T3 Code thread.
                 </AlertDescription>
               </Alert>
+            ) : null}
+            <Field
+              label="Inputs"
+              hint="Optional. Values the prompt reads as {{inputs.name}}. A shared file asks whoever imports it to fill them in, so they never edit the prompt."
+            >
+              <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
+            </Field>
+            <Field
+              label="Required tools"
+              hint="Optional. Tools the automation needs but can't name, since people use different MCP servers: Jira search, say. The prompt is told which tools fill each slot. Sharing it leaves the tools out."
+            >
+              <SlotsField slots={form.slots} onChange={(slots) => patch({ slots })} />
+            </Field>
+            {emptyFormSlots(form).length > 0 ? (
+              <BlockedWarning
+                reason={`Won't work until you fill in: ${emptyFormSlots(form)
+                  .map((slot) => slot.label || slot.name || "a tool slot")
+                  .join(", ")}`}
+              />
             ) : null}
             <p className="text-xs text-muted-foreground">
               The runner, budget and timeout are this automation&apos;s settings in the Autopilot list, per scope.

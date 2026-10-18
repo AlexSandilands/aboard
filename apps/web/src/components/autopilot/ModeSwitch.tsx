@@ -9,11 +9,14 @@ export function ModeSwitch({
   onChange,
   label,
   disabled,
+  blocked,
 }: {
   value: AutopilotMode;
   onChange: (mode: AutopilotMode) => void;
   label: string;
   disabled?: boolean;
+  /** Why it can't be On (an empty required tool slot); the On button is disabled, and the others still work. */
+  blocked?: string | null;
 }) {
   return (
     <ToggleGroup
@@ -30,6 +33,8 @@ export function ModeSwitch({
         <Toggle
           key={mode.value}
           value={mode.value}
+          disabled={mode.value === "on" && Boolean(blocked)}
+          title={mode.value === "on" && blocked ? blocked : undefined}
           className={cn(
             mode.value === "on" &&
               "data-pressed:bg-info/16 data-pressed:text-info-foreground dark:data-pressed:bg-info/24",
