@@ -53,7 +53,7 @@ describe("suggestion tools", () => {
     const read = await call("get_editable_prompt", { target: "builtin:review" });
     const hash = /^hash: (\w+)$/m.exec(read.text)?.[1];
     expect(hash).toBeTruthy();
-    expect(read.text).toContain("----- current text -----\n# Local review");
+    expect(read.text).toContain("earlier suggestions: none\n\n----- current text -----\n# Local review");
 
     const stale = await call("suggest_change", {
       target: "builtin:review",
@@ -79,6 +79,11 @@ describe("suggestion tools", () => {
       evidence: ["#3"],
       status: "open",
     });
+
+    // The next read shows what became of it, so a later agent doesn't propose a rejected change again.
+    h.services.suggestions.reject(h.services.suggestions.list().items[0]!.id, "user");
+    const again = await call("get_editable_prompt", { target: "builtin:review" });
+    expect(again.text).toMatch(/\nearlier suggestions \(newest first\):\n- \d{4}-\d{2}-\d{2} rejected: Shorter\.\n/);
 
     const unknown = await call("get_editable_prompt", { target: "skill:/etc/passwd" });
     expect(unknown.text).toMatch(/^NOT_FOUND: .*\nlist_editable_prompts lists the targets you can use\.$/);

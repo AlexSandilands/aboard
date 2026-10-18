@@ -125,6 +125,8 @@ export interface AutopilotService {
   runsForTask(taskId: string, limit?: number): AutopilotRun[];
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
+  /** One automation's runs in a project, newest first. */
+  automationRunsForProject(automation: string, projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
   /**
    * The handover the last successful run of a scheduled agent left in a project, for its next run; null when it has
@@ -151,6 +153,12 @@ export interface AutopilotService {
    * pause, quiet hours and the caps apply as usual.
    */
   retry(runId: string, actor: string): AutopilotRun;
+  /**
+   * Lifts the needs-attention flag the user has dealt with, without redoing anything: the run stays as it was (failed
+   * or skipped, dedupe key kept), so the engine doesn't act on it again. Covers every flagged run of the task, so an
+   * older flag doesn't surface in its place. Only a flagged run on a task, whose flag still stands, can be dismissed; dismissing again changes nothing.
+   */
+  dismiss(runId: string, actor: string): AutopilotRun;
   /** queued → running. */
   start(runId: string): AutopilotRun;
   /** Runner details on a run in flight. */
@@ -164,9 +172,20 @@ export interface AutopilotService {
    * redoing it could launch an agent twice. Returns how many.
    */
   recover(): number;
+  /**
+   * Asks for a run of an automation in a project now (Orchestrate's Run now), publishing autopilot.changed so the
+   * engine looks at once. The automation's `check` turns it into a candidate and clears it. Kept in memory: a restart
+   * drops it. Returns when it was asked for; asking again while one is waiting keeps the first.
+   */
+  requestRun(automation: string, projectId: string): string;
+  /** When a run was asked for and not yet cleared; null when none is waiting or it is older than RUN_REQUEST_TTL_MS. */
+  runRequest(automation: string, projectId: string): string | null;
+  clearRunRequest(automation: string, projectId: string): void;
 }
 
 const RUN_LIMIT = 50;
+/** How long a Run now request waits for the engine before it is dropped. */
+export const RUN_REQUEST_TTL_MS = 60 * 60_000;
 
 /** The automations whose run a restart cut short is retried once (see `recover`). */
 const RETRIED_AFTER_RESTART: ReadonlySet<string> = new Set([AUTOPILOT_REVIEW_PRS, AUTOPILOT_FIX_PRS]);
@@ -192,6 +211,21 @@ export function createAutopilotService(
   },
 ): AutopilotService {
   const { repos } = core;
+  /** Run now requests by `automation:projectId`, with when they were made. */
+  const requests = new Map<string, string>();
+  const requestKey = (automation: string, projectId: string) => `${automation}:${projectId}`;
+  const runRequest = (automation: string, projectId: string): string | null => {
+    const key = requestKey(automation, projectId);
+    const at = requests.get(key);
+    if (!at) return null;
+    // A request the engine couldn't act on for this long (no free slot all that time) is dropped rather than started
+    // out of the blue later.
+    if (Date.now() - new Date(at).getTime() > RUN_REQUEST_TTL_MS) {
+      requests.delete(key);
+      return null;
+    }
+    return at;
+  };
   const find = (key: string) => deps.automations().find((a) => a.key === key);
   const titleOf = (key: string) => find(key)?.title ?? key;
 
@@ -446,7 +480,10 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
-      const started = enabledProjects(key).filter((enabledId) => !before.has(enabledId));
+      const enabledNow = new Set(enabledProjects(key));
+      // Run now requests where the automation just went off are dropped, not kept for when it's back on.
+      for (const wasOn of before) if (!enabledNow.has(wasOn)) requests.delete(requestKey(key, wasOn));
+      const started = [...enabledNow].filter((enabledId) => !before.has(enabledId));
       if (started.length > 0) deps.onEnabled?.(key, started);
       const gainedOwn = epicsWithOwnSetting(automation).filter((epicId) => !ownBefore.has(epicId));
       if (gainedOwn.length > 0) deps.onEpicOwnSetting?.(key, gainedOwn);
@@ -475,6 +512,8 @@ export function createAutopilotService(
     },
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
+    automationRunsForProject: (automation, projectId, limit = RUN_LIMIT) =>
+      repos.autopilotRuns.forProjectAutomation(projectId, automation, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
     lastHandover(automation, projectId) {
       const parsed = ScheduledAgentRunOutput.safeParse(
@@ -517,6 +556,7 @@ export function createAutopilotService(
         exitCode: null,
         error: null,
         needsAttention: false,
+        dismissedAt: null,
         output: null,
         createdAt: at,
         startedAt: null,
@@ -563,6 +603,27 @@ export function createAutopilotService(
         fx.autopilot();
       });
       return retired;
+    },
+    dismiss(runId, actor) {
+      const run = runOf(runId);
+      // Dismissing twice (a second tab, a double click) already did what was asked.
+      if (run.dismissedAt) return run;
+      if (!run.taskId || !run.needsAttention) throw new AppError("CONFLICT", "This run isn't flagged for attention");
+      if (!repos.autopilotRuns.attentionFor([run.taskId]).has(run.taskId)) {
+        throw new AppError("CONFLICT", "This run's flag no longer stands, so there is nothing to dismiss");
+      }
+      const at = nowIso();
+      core.write((fx) => {
+        repos.autopilotRuns.dismissFlagged(run.taskId!, at);
+        fx.log(run.taskId!, actor, "autopilot_run", {
+          automation: run.automation,
+          title: titleOf(run.automation),
+          status: "dismissed",
+          summary: run.summary,
+        });
+        fx.autopilot();
+      });
+      return runOf(runId);
     },
     start(runId) {
       const run = runOf(runId);
@@ -649,6 +710,19 @@ export function createAutopilotService(
         fx.autopilot();
       });
       return stranded.length;
+    },
+    requestRun(automation, projectId) {
+      const key = requestKey(automation, projectId);
+      const waiting = runRequest(automation, projectId);
+      if (waiting) return waiting;
+      const at = nowIso();
+      requests.set(key, at);
+      core.write((fx) => fx.autopilot());
+      return at;
+    },
+    runRequest,
+    clearRunRequest(automation, projectId) {
+      requests.delete(requestKey(automation, projectId));
     },
   };
 }

@@ -7,6 +7,7 @@ import type {
   AutopilotRun,
   AutopilotScopeEntry,
   AutopilotStatus,
+  OrchestrateState,
   BackupStatus,
   BoardEvent,
   BoardSnapshot,
@@ -17,6 +18,8 @@ import type {
   NotificationList,
   SkillInfo,
   SocialFeed,
+  StatsPeriod,
+  StatsResponse,
   SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -29,9 +32,10 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
+import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
-import { api, eventsUrl } from "~/lib/api";
+import { ApiError, api, eventsUrl } from "~/lib/api";
 import { applyBoardEvent } from "./boardReducer";
 
 export const queryKeys = {
@@ -45,6 +49,7 @@ export const queryKeys = {
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
+  stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -60,6 +65,8 @@ export const queryKeys = {
   autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
   autopilotRunsAll: ["autopilotRuns"] as const,
+  autopilotOrchestrateAll: ["autopilotOrchestrate"] as const,
+  autopilotOrchestrate: (projectId: string) => ["autopilotOrchestrate", projectId] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
   agentClis: ["agentClis"] as const,
@@ -127,6 +134,20 @@ export function useAutopilotRuns(scope: AutopilotRunsScope | null) {
   });
 }
 
+/**
+ * Orchestrate in one project, for its section of the lane popover. Refetched on autopilot.changed and on task changes
+ * (they decide whether it is idle) while open, and once a minute for what moves with the clock (quiet hours, caps).
+ */
+export function useOrchestrateState(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotOrchestrate(projectId),
+    queryFn: ({ signal }) =>
+      api<OrchestrateState>(`/api/autopilot/orchestrate/${encodeURIComponent(projectId)}`, { signal }),
+    enabled,
+    refetchInterval: 60_000,
+  });
+}
+
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
 export function useSkills(projectId: string | null, enabled = true) {
   return useQuery({
@@ -151,6 +172,13 @@ const boardQuery = {
 /** Pause and the runs in flight, from the board snapshot; re-renders only when they change. */
 export function useAutopilotStatus(): AutopilotStatus | undefined {
   return useQuery({ ...boardQuery, select: (board) => board.autopilot }).data;
+}
+
+/** Whether the project has a task Orchestrate would look at, for the lane pill's timer. */
+export function useProjectHasOrchestrateWork(projectId: string): boolean {
+  return (
+    useQuery({ ...boardQuery, select: (board) => projectHasOrchestrateWork(board.tasks, projectId) }).data ?? false
+  );
 }
 
 /** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
@@ -374,6 +402,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: ["task"] });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
@@ -400,11 +429,14 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         // A rule's "last task" line follows that task (done, archived).
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
+        // Whether Orchestrate has anything to look at follows the project's tasks.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
         void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });
@@ -461,5 +493,26 @@ export function useSocialFeed() {
     queryKey: queryKeys.socialFeed,
     queryFn: ({ signal }) => api<SocialFeed>("/api/social", { signal }),
     refetchInterval: 30_000,
+  });
+}
+
+/**
+ * Weekly stats for the stats page. No event covers them, so they are read when the page opens, when the period or
+ * project changes (a new key) and when the window regains focus, instead of being pushed.
+ */
+export function useStats(weeks: StatsPeriod, projectId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stats(weeks, projectId),
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({ weeks: String(weeks) });
+      if (projectId) query.set("projectId", projectId);
+      return api<StatsResponse>(`/api/stats?${query}`, { signal });
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: "always",
+    // A project that no longer exists answers 404 for good; one retry is for everything else.
+    retry: (failures, error) => !(error instanceof ApiError && error.status === 404) && failures < 1,
+    // Keeps the old charts up (dimmed by the page) while another period or project loads.
+    placeholderData: (previous) => previous,
   });
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FindingSeverity } from "./reviews.ts";
+import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
 
@@ -256,6 +257,8 @@ export const AutopilotRun = z.object({
   exitCode: z.number().int().nullable(),
   error: z.string().nullable(),
   needsAttention: z.boolean(),
+  /** When the user dismissed the flag; the run stays flagged but no longer counts as attention. Null when not. */
+  dismissedAt: z.string().nullable(),
   /** A structured result the action left for later automations to read (the PR review's verdict); null when none. */
   output: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string(),
@@ -292,6 +295,47 @@ export const AutopilotOverview = z.object({
   automations: z.array(AutopilotAutomation),
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
+
+/**
+ * Why Orchestrate's next slot in a project won't start a run, the first that applies: switched off there, Pause all,
+ * quiet hours at the slot, a daily cap reached, or nothing to look at.
+ */
+export const OrchestrateHold = z.enum(["off", "paused", "quiet_hours", "daily_cap", "idle"]);
+export type OrchestrateHold = z.infer<typeof OrchestrateHold>;
+
+/** Attention that is the user's to answer: an orchestrator can only wait on it. */
+const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
+
+/**
+ * A task Orchestrate has a reason to look at: work going on, something wrong with it (a failed start included), or a
+ * Review task it may merge. One waiting on the user isn't, nor a Review task with nothing wrong that only the user
+ * merges, or a project whose work all waits on them would start a paid run every slot. Planned tasks are Start
+ * planned's to start, so they count only once flagged. A project with none of these is idle: its slots don't run.
+ */
+export const orchestrateNeedsLooking = (
+  t: Pick<TaskSummary, "archivedAt" | "status" | "attention" | "autoMerge">,
+): boolean =>
+  t.archivedAt === null &&
+  t.status !== "done" &&
+  !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
+  (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
+
+/** `GET /api/autopilot/orchestrate/:projectId`: Orchestrate in one project, for its section of the lane popover. */
+export const OrchestrateState = z.object({
+  enabled: z.boolean(),
+  everyMinutes: z.number().int(),
+  /** The next slot (`nextMinutesSlot`): when the next check is due, not a promise of a run. */
+  nextSlotAt: z.string(),
+  /** Why that slot won't run; null when it will, if there is still something to look at by then. */
+  hold: OrchestrateHold.nullable(),
+  /** A run is queued or running in the project. */
+  running: z.boolean(),
+  /** When Run now was asked for, until its run is recorded; null when there is no request. */
+  requestedAt: z.string().nullable(),
+  /** The project's latest real Orchestrate run, finished or not. */
+  lastRun: AutopilotRun.nullable(),
+});
+export type OrchestrateState = z.infer<typeof OrchestrateState>;
 
 /**
  * A retried run keeps its row as history under this prefix plus its id, so its old dedupe key is free for the
@@ -358,6 +402,8 @@ export function autopilotRunEventText(payload: Record<string, unknown>): string 
       return payload.reason === "restart"
         ? `${title} will try again, since the board restarted while it was going: ${summary}`
         : `asked ${title} to try again: ${summary}`;
+    case "dismissed":
+      return `dismissed the ${title} flag: ${summary}`;
     default:
       return payload.dryRun === true ? `${title} (dry run): ${summary}` : `skipped ${title}: ${summary}`;
   }

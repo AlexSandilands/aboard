@@ -4,6 +4,7 @@ import {
   MergePrInput,
   ResumeMode,
   ResumeSessionInput,
+  StatsQuery,
   UpdateSettingsInput,
 } from "@repo/contracts";
 import type { Hono } from "hono";
@@ -18,6 +19,15 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   app.get(
     "/api/board",
     handle((c) => c.json(services.board.snapshot())),
+  );
+
+  // Weekly trends: `weeks` is 4, 12 (default) or 52; `projectId` limits them to one project.
+  app.get(
+    "/api/stats",
+    handle(async (c) => {
+      const { weeks, projectId } = parseQuery(c, StatsQuery);
+      return c.json(await services.stats.weekly(weeks, projectId));
+    }),
   );
 
   app.delete(

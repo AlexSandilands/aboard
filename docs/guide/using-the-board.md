@@ -135,6 +135,11 @@ not shown: the panel opens and your filters stay as they are. Clicking a card on
 sliding off in Settings → Board → Appearance (**Scroll to a task when opening it**); with reduced motion on in your
 system, the board jumps instead.
 
+To get back to the card of the task that is open, use **Jump to card** in the panel's header (also first in its **⋯**
+menu, where the pin icon moves it in or out of the header) or press `J`. It always moves the board, whatever the
+setting above says. If the card isn't on the board, a message says why: a filter may hide it (your filters stay as they
+are), or it is archived and **Show archived** is off.
+
 ## Filters and saved views
 
 The filter button in the board's top bar narrows the board by status, model tier, Autopilot flag, epic and labels
@@ -195,6 +200,7 @@ sections of the task panel. Your layout is saved per browser.
 | `Ctrl/Cmd K` | Command palette      |
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
+| `J`          | Jump to the open task's card on the board |
 | `Esc`        | Close the task panel, or leave Settings |
 
 These are the defaults. Change any of them, or say when one applies, under **Settings → Keybindings**

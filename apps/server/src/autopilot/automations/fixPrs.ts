@@ -8,6 +8,7 @@ import {
   describeCounts,
   isReviewOfLink,
   prReviewMarker,
+  FIX_GAVE_UP_KEY_PREFIX,
   fixGaveUpPrefix,
   fixRunKeyPrefix,
   prProblems,
@@ -466,18 +467,18 @@ export const fixPrs = defineAutomation({
           if (conflictOnly) {
             if (conflictUsed >= CONFLICT_ATTEMPTS_PER_PR) {
               return gaveUp(
-                `fix:gave_up:${link.id}:conflicts`,
+                `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:conflicts`,
                 `${conflictUsed} conflict-only attempt${conflictUsed === 1 ? "" : "s"} used, still to fix: ${describeTriggers(["conflict"])}`,
               );
             }
           } else if (counted.length >= engine.prReviewRounds) {
             return gaveUp(
-              `fix:gave_up:${link.id}`,
+              `${FIX_GAVE_UP_KEY_PREFIX}${link.id}`,
               `${counted.length} fix attempt${counted.length === 1 ? "" : "s"} used, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
             );
           } else if (atHead >= ATTEMPTS_PER_HEAD) {
             return gaveUp(
-              `fix:gave_up:${link.id}:${snapshot.headOid}`,
+              `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:${snapshot.headOid}`,
               `${atHead} fix attempts at ${shortSha(snapshot.headOid)} didn't change the PR, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
             );
           }

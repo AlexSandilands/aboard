@@ -75,6 +75,7 @@ describe("autopilotRunEventText", () => {
     expect(autopilotRunEventText({ ...base, status: "running" })).toBe("started Archive: archive #4");
     expect(autopilotRunEventText({ ...base, status: "succeeded" })).toBe("finished Archive: archive #4");
     expect(autopilotRunEventText({ ...base, status: "failed", error: "boom" })).toBe("Archive failed: boom");
+    expect(autopilotRunEventText({ ...base, status: "dismissed" })).toBe("dismissed the Archive flag: archive #4");
     expect(autopilotRunEventText({ ...base, status: "skipped", summary: "Would archive #4", dryRun: true })).toBe(
       "Archive (dry run): Would archive #4",
     );

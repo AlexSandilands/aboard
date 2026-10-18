@@ -101,6 +101,17 @@ describe("resolveCommand", () => {
     expect(resolveCommand(key("Escape"), { ...open, overlayOpen: true }, false)).toBeNull();
   });
 
+  it("jumps to the task's card on j only with the panel open and nothing claiming the focus", () => {
+    const open = { ...idle, panelOpen: true, canGoBack: true };
+    expect(resolveCommand(key("j"), open, false)).toBe("task.reveal");
+    expect(resolveCommand(key("j"), idle, false)).toBeNull();
+    expect(resolveCommand(key("j"), { ...open, settingsOpen: true }, false)).toBeNull();
+    expect(resolveCommand(key("j"), { ...open, editableFocus: true }, false)).toBeNull();
+    expect(resolveCommand(key("j"), { ...open, popupFocus: true }, false)).toBeNull();
+    expect(resolveCommand(key("j"), { ...open, overlayOpen: true }, false)).toBeNull();
+    expect(resolveCommand(key("j", { ctrlKey: true }), open, false)).toBeNull();
+  });
+
   it("lets the last matching binding win", () => {
     const bindings = resolveKeybindings({ back: { key: "n", when: "canGoBack" } });
     expect(resolveCommand(key("n"), idle, false, bindings)).toBe("idea.new");

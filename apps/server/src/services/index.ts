@@ -5,6 +5,7 @@ import { createRepos } from "../db/repos/index.ts";
 import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
+import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
 import { createActivityService } from "./activity.ts";
 import { createAttentionService } from "./attention.ts";
@@ -26,6 +27,7 @@ import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSocialService } from "./social.ts";
+import { createStatsService } from "./stats.ts";
 import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
@@ -42,6 +44,8 @@ export interface ServiceDeps {
   automations?: readonly Automation[];
   /** Runs custom automations' shell commands; tests swap in a fake. */
   runShell?: RunShell;
+  /** Reads each project's git history for the stats' commits; tests swap in a fake. */
+  runGit?: RunGit;
   /** Where pasted images are stored: `<data dir>/attachments`; tests use a temp folder. */
   attachmentsDir: string;
   /** The clock for notifications (retention, quiet hours); tests swap in their own. */
@@ -154,6 +158,7 @@ export function createServices(deps: ServiceDeps): Services {
     activity: createActivityService(core, {
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),
+    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
     digests: createDigestsService(core, {
       notifications,
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,

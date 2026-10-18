@@ -129,6 +129,73 @@ export function createLinksRepo(sql: Sql) {
       );
       return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
+    /**
+     * PR links whose merge the board saw at or after `from` and before `to`, with the task and its project, and when
+     * the link was added (`openedAt`: the nearest the board has to when the PR was opened).
+     */
+    prsMergedBetween(
+      from: string,
+      to: string,
+    ): { url: string; linkId: string; taskId: string; projectId: string; at: string; openedAt: string }[] {
+      return sql
+        .all<{
+          url: string;
+          link_id: string;
+          task_id: string;
+          project_id: string;
+          at: string;
+          opened_at: string;
+        }>(
+          `SELECT l.url, l.id AS link_id, l.task_id, t.project_id, l.created_at AS opened_at,
+                  json_extract(l.pr_changes_json, '$.merged') AS at
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL
+             AND json_extract(l.pr_changes_json, '$.merged') >= ? AND json_extract(l.pr_changes_json, '$.merged') < ?
+           ORDER BY at, l.id`,
+          from,
+          to,
+        )
+        .map((r) => ({
+          url: r.url,
+          linkId: r.link_id,
+          taskId: r.task_id,
+          projectId: r.project_id,
+          at: r.at,
+          openedAt: r.opened_at,
+        }));
+    },
+    /**
+     * Agent sessions first linked to a task at or after `from` and before `to`, with that task's project. A session
+     * linked again later, or to other tasks, counts only where it was first linked. T3 threads aren't agent sessions.
+     */
+    agentSessionsStartedBetween(from: string, to: string): { projectId: string; at: string }[] {
+      // One dedupe rule for both, so `agent_sessions_started` and the by-harness breakdown can't drift apart.
+      return this.sessionsStartedBetween(from, to)
+        .filter((s) => s.harness !== "t3_thread")
+        .map(({ projectId, at }) => ({ projectId, at }));
+    },
+    /**
+     * Agent sessions and T3 threads first linked to a task in the window, with the task's project and what ran them:
+     * the session's harness, or `t3_thread`. Counted once each, where first linked, like `agentSessionsStartedBetween`.
+     */
+    sessionsStartedBetween(from: string, to: string): { projectId: string; at: string; harness: string }[] {
+      return sql
+        .all<{ project_id: string; at: string; harness: string }>(
+          `SELECT project_id, at, harness FROM (
+             SELECT t.project_id, l.created_at AS at,
+                    CASE l.kind WHEN 'agent_session' THEN COALESCE(json_extract(l.ref_json, '$.harness'), 'claude-code')
+                                ELSE 't3_thread' END AS harness,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY l.kind, COALESCE(json_extract(l.ref_json, '$.sessionId'), json_extract(l.ref_json, '$.threadId'), l.id)
+                      ORDER BY l.created_at, l.id
+                    ) AS n
+             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind IN ('agent_session', 't3_thread')
+           ) WHERE n = 1 AND at >= ? AND at < ? ORDER BY at`,
+          from,
+          to,
+        )
+        .map((r) => ({ projectId: r.project_id, at: r.at, harness: r.harness }));
+    },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);
     },

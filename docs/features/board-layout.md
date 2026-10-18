@@ -74,16 +74,25 @@ An override equal to its column's setting is pruned, so any override present mea
 ### Revealing a task
 
 Opening a task from anywhere but a board card scrolls the board to its card. `useOpenTask` (`boardNavigation.ts`) sets a
-reveal request in `useReveal` (`state/ui.ts`: `{ taskId, nonce, at }`, not persisted) once the navigation has landed;
+reveal request in `useReveal` (`state/ui.ts`: `{ taskId, nonce, at, explicit }`, not persisted) once the navigation has landed;
 `reveal: false` opts out, which the board's own card clicks do (`BoardContext.openTask`; `revealTask` is for a link on a
 card that leads to another task). The request is made only when the `scrollToTask` appearance setting (browser-local,
 on by default) is on.
 
+The task panel's **Jump to card** action and the `j` shortcut (`task.reveal`) make an *explicit* request instead
+(`useJumpToTask` in `boardNavigation.ts`, `requestReveal(taskId, { explicit: true })`): it ignores `scrollToTask`, and
+when the card isn't on the board it says why in a toast (`revealHiddenMessage`: "The filters hide #N." for a task in the
+board snapshot, else a neutral "This task isn't on the board" that points at Show archived, since a task missing from
+the snapshot may be archived or just not loaded yet). Filters are never changed. Requests made when a task opens stay
+silent. The action is `jump` in `PINNABLE_ACTIONS`: first in the More menu and pinned by default. It is offered for
+archived tasks too: with Show archived on their card is on the board, and the reveal decides.
+
 `BoardContent` acts on the request as the board changes, one step at a time (`revealStep` in `reveal.logic.ts`):
 expand the project lane or folded epic band hiding the card (each once per request), wait for the task to be the open
 one (which keeps its card in a collapsed column), then `revealCard` scrolls the board's scroll box to it. A card in no
-lane (filtered out, archived) ends the request: the panel opens, nothing scrolls, the filters stay. A request nobody
-fulfils expires after `REVEAL_EXPIRY_MS`. The decisions are `advanceReveal` (pure, tested). A request that ends is
+lane (filtered out, archived) ends the request (`drop` with reason `hidden`): the panel opens, nothing scrolls, the
+filters stay. A request nobody fulfils expires after `REVEAL_EXPIRY_MS` (`drop` with reason `expired`, always
+silent). The decisions are `advanceReveal` (pure, tested). A request that ends is
 cleared from the store (`consumeReveal`), so a board that remounts doesn't act on it again.
 
 `revealScrollTarget` centres the card on each axis it isn't fully visible on, allowing for the sticky column header, and
@@ -192,6 +201,19 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   each with what Inherit resolves to (`inheritLabel`, e.g. "Inherit (On from board)"). Under Recurring tasks a
   "Recurring tasks…" link opens the project's settings at that section. The chosen **On** is the app's info blue
   (`ModeSwitch`), and an Inherit that resolves to On shows its note in the same blue.
+  - **Orchestrate** is pinned above the other rows in a highlighted section of its own (`OrchestrateSection`): its
+    switch, then "Next check in 12:34" ticking every second (`useNow`; the slot is counted in the browser with
+    `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
+    hours until their end, today's cap, idle), "Last ran 17m ago · Done" (`lastRunText`), a **▶ Run now** button
+    (`useRunOrchestrateNow`; disabled with a spinner while a run is going or asked for, a refusal is a toast with the
+    server's reason) and the switch for the pill's countdown. It reads `useOrchestrateState`, refetched on
+    `autopilot.changed`, on task changes and every minute. Epic popovers don't have it (Orchestrate has no epic scope).
+  - **The pill's countdown.** While Orchestrate is on in the project the pill reads `Autopilot · 12m`
+    (`pillTimerAt`, `formatPillCountdown`): only when a slot would run, so not while paused, while its run is going,
+    with nothing to look at (`useProjectHasOrchestrateWork`, from the snapshot with the server's rule) or in quiet hours
+    at the slot. The daily caps are left to the popover. One display preference, `showAutopilotTimer` in
+    `useBoardView` (default on), is switched both in the popover and in Settings → Appearance (**Orchestrate countdown
+    on lanes**).
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
@@ -315,7 +337,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
 ### Keyboard shortcuts
 
 The app-wide shortcuts are a registry in `packages/contracts/src/keybindings.ts`: each command (`palette.open`,
-`idea.new`, `settings.open`, `back`) has a title, a group, a default key and a default `when`. Shaped like T3
+`idea.new`, `settings.open`, `back`, `task.reveal`) has a title, a group, a default key and a default `when`. Shaped like T3
 Code's keybindings: a command, a key and a `when`, and when several match a key event the later one wins.
 
 - **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
@@ -375,7 +397,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 - `appearance` holds the sidebar banner, `scrollToTask`, and the contrast, glass, panel animation and font prefs
   ([appearance.md](appearance.md); the theme itself has its own keys there).
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
-  which validates it and keeps it referentially stable.
+  which validates it and keeps it referentially stable. It is at version 1: `migrateTaskPanelPrefs` pins `jump` for
+  saves from before it existed. New browsers start with `["jump"]` (`DEFAULT_PINS`); unpinning it sticks.
 
 ## Decisions
 

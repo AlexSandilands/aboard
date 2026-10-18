@@ -54,6 +54,7 @@ export interface IntegrationOverrides {
   runHeadless?: RunHeadless;
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
+  /** Git for reading project folders: session launch, and the stats' commits (read by the services, see createContext). */
   runGit?: RunGit;
   /** What the agent integration checks run: the CLIs and the MCP config files. */
   agentIntegrationProbes?: Partial<AgentIntegrationProbes>;
@@ -292,6 +293,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
     startPlanningSession: (projectId, input, actor) => sessionLaunch.startPlanning(projectId, input, actor),
+    autopilotPass() {
+      if (started) void autopilot.pass();
+    },
     generateDigest: () => digests.generate(),
     digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),

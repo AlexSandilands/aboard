@@ -151,6 +151,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       exitCode: null,
       error: null,
       needsAttention: false,
+      dismissedAt: null,
       output: null,
       createdAt: "2026-10-17T00:00:00.000Z",
       startedAt: "2026-10-17T00:00:00.000Z",

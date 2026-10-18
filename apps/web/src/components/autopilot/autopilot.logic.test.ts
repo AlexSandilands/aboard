@@ -7,6 +7,7 @@ import {
   boardModeToSave,
   boardSummary,
   boardSwitchValue,
+  dismissableRun,
   entryFor,
   hasEpicAutomations,
   scopeAutomations,
@@ -292,6 +293,36 @@ describe("runs", () => {
         { status: "failed", needsAttention: true },
       ]),
     ).toBe("2 runs · 1 running · 1 needs attention");
+  });
+});
+
+describe("dismissableRun", () => {
+  const flaggedRun = (id: string, patch: Partial<AutopilotRun> = {}) => ({
+    id,
+    needsAttention: true,
+    dismissedAt: null,
+    dryRun: false,
+    ...patch,
+  });
+  const flagged = [{ kind: "autopilot" }];
+
+  it("offers the newest flagged run while the task still carries an Autopilot flag", () => {
+    expect(dismissableRun([flaggedRun("new"), flaggedRun("old")], flagged)?.id).toBe("new");
+  });
+
+  it("offers nothing once the flag has cleared, even if a run is still marked flagged", () => {
+    expect(dismissableRun([flaggedRun("a")], [])).toBeNull();
+    expect(dismissableRun([flaggedRun("a")], [{ kind: "attention_request" }])).toBeNull();
+  });
+
+  it("skips runs that are dismissed, unflagged or dry", () => {
+    const runs = [
+      flaggedRun("dismissed", { dismissedAt: "2026-10-18T00:00:00.000Z" }),
+      flaggedRun("plain", { needsAttention: false }),
+      flaggedRun("dry", { dryRun: true }),
+    ];
+    expect(dismissableRun(runs, flagged)).toBeNull();
+    expect(dismissableRun([...runs, flaggedRun("live")], flagged)?.id).toBe("live");
   });
 });
 

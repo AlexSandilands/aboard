@@ -40,6 +40,7 @@ export function AppearanceSection() {
         <GlassOpacityRow />
         <BannerRow />
         <PriorityLaneRow />
+        <AutopilotTimerRow />
         <ScrollToTaskRow />
       </SettingsSection>
       <SettingsSection title="Motion">
@@ -284,6 +285,19 @@ function PriorityLaneRow() {
       title="Priority lane"
       description="Priority tasks from every project, in a lane above the projects."
       control={<Switch checked={show} onCheckedChange={setShow} aria-label="Priority lane" />}
+    />
+  );
+}
+
+function AutopilotTimerRow() {
+  const show = useBoardView((s) => s.showAutopilotTimer);
+  const setShow = useBoardView((s) => s.setShowAutopilotTimer);
+  return (
+    <SettingsRow
+      id="board.appearance.autopilot-timer"
+      title="Orchestrate countdown on lanes"
+      description="The lane's Autopilot pill counts down to Orchestrate's next check while it is on there."
+      control={<Switch checked={show} onCheckedChange={setShow} aria-label="Orchestrate countdown on lanes" />}
     />
   );
 }

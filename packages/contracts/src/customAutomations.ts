@@ -607,3 +607,18 @@ export function latestMinutesSlot(everyMinutes: number, now: Date): Date {
   const minute = Math.floor((now.getHours() * 60 + now.getMinutes()) / everyMinutes) * everyMinutes;
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, minute);
 }
+
+/**
+ * The first slot after `now` of an every-N-minutes schedule: the one `latestMinutesSlot` reaches next, so local
+ * midnight when the step doesn't fit in what is left of the day. Steps past wall times that a DST change repeats,
+ * so the slot is always later than `now`.
+ */
+export function nextMinutesSlot(everyMinutes: number, now: Date): Date {
+  const day = [now.getFullYear(), now.getMonth(), now.getDate()] as const;
+  const latest = Math.floor((now.getHours() * 60 + now.getMinutes()) / everyMinutes) * everyMinutes;
+  for (let minute = latest + everyMinutes; minute < 24 * 60; minute += everyMinutes) {
+    const slot = new Date(...day, 0, minute);
+    if (slot > now) return slot;
+  }
+  return new Date(day[0], day[1], day[2] + 1);
+}

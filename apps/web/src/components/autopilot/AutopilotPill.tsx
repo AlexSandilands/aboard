@@ -1,11 +1,19 @@
-import type { Project } from "@repo/contracts";
+import { AUTOPILOT_ORCHESTRATE, type Project } from "@repo/contracts";
 import { PauseIcon, ZapIcon } from "lucide-react";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotOverview, useAutopilotScope, useAutopilotStatus } from "~/state/queries";
+import { useNow } from "~/hooks/useNow";
+import {
+  useAutopilotOverview,
+  useAutopilotScope,
+  useAutopilotStatus,
+  useProjectHasOrchestrateWork,
+} from "~/state/queries";
+import { useBoardView } from "~/state/ui";
 import { pillState, pillTooltip, projectActiveRuns, type PillState } from "./autopilot.logic";
+import { formatPillCountdown, pillTimerAt } from "./orchestrate.logic";
 import { ScopePopover } from "./ScopePopover";
 
 /** Border, fill and text per state; the epic button wears them too. */
@@ -32,12 +40,13 @@ export function PillIcon({ state }: { state: PillState }) {
   );
 }
 
-/** The pill's icon and label. */
-export function PillLabel({ state }: { state: PillState }) {
+/** The pill's icon and label, with Orchestrate's countdown after it when there is one ("Autopilot · 12m"). */
+export function PillLabel({ state, timer }: { state: PillState; timer?: string | null }) {
   return (
     <>
       <PillIcon state={state} />
       Autopilot
+      {timer ? <span className="text-muted-foreground tabular-nums">· {timer}</span> : null}
     </>
   );
 }
@@ -52,10 +61,29 @@ export function AutopilotPill({ project }: { project: Project }) {
   const scope = useAutopilotScope(project.id);
   const boardScope = useAutopilotScope(null);
   const set = useSetAutopilotScope(project.id);
+  const hasWork = useProjectHasOrchestrateWork(project.id);
+  const showTimer = useBoardView((s) => s.showAutopilotTimer);
+  const orchestrateOn =
+    showTimer && Boolean(scope.data?.some((e) => e.automation === AUTOPILOT_ORCHESTRATE && e.enabled));
+  // Minutes are all the pill shows, so a few ticks a minute keep it close enough.
+  const now = useNow(15_000, orchestrateOn);
   if (!overview.data || overview.data.automations.length === 0) return null;
 
   const state = pillState(status, project.id, scope.data);
-  const active = projectActiveRuns(status, project.id).length;
+  const activeRuns = projectActiveRuns(status, project.id);
+  const active = activeRuns.length;
+  const timerAt = orchestrateOn
+    ? pillTimerAt({
+        entries: scope.data,
+        paused: status?.paused,
+        running: activeRuns.some((r) => r.automation === AUTOPILOT_ORCHESTRATE),
+        engine: overview.data.engine,
+        hasWork,
+        now,
+      })
+    : null;
+  const timer = timerAt ? formatPillCountdown(timerAt.getTime() - now.getTime()) : null;
+  const tooltip = pillTooltip(state, active) + (timer ? ` · Orchestrate's next check in ${timer}` : "");
   return (
     <Popover>
       <Tooltip>
@@ -63,14 +91,14 @@ export function AutopilotPill({ project }: { project: Project }) {
           render={
             <PopoverTrigger
               data-autopilot-state={state}
-              aria-label={`Autopilot for ${project.title}: ${pillTooltip(state, active)}`}
+              aria-label={`Autopilot for ${project.title}: ${tooltip}`}
               className={pillClassName(state)}
             />
           }
         >
-          <PillLabel state={state} />
+          <PillLabel state={state} timer={timer} />
         </TooltipTrigger>
-        <TooltipPopup>{pillTooltip(state, active)}</TooltipPopup>
+        <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="start" width="lg" padding="compact">
         <ScopePopover

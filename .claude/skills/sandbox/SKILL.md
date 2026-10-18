@@ -11,7 +11,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 ## Pick a mode
 
-- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|none]`. This checkout's server on
+- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|none]`. This checkout's server on
   a temp data dir, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
 - **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
@@ -35,6 +35,8 @@ Seeds (`apps/server/src/dev/seeds.ts`):
   PRs, T3 threads, review findings, a blocked step and a handover on one screen.
 - `social`: the showcase board with the agents' social network on: threads, SVG and HTML art, and a
   `sandbox-probe` post that prints what a hostile piece can and can't do (open it at `/social`).
+- `stats`: the showcase board with twelve weeks of finished tasks and Autopilot runs, for the stats page (`/stats`).
+  No PRs, sessions or review rounds are backdated, so those charts stay flat.
 - `none`: an empty board.
 
 ## Steps

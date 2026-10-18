@@ -76,6 +76,29 @@ describe("seed scenarios", () => {
     expect(new Set(findings.map((f) => f.status))).toEqual(new Set(["open", "fixed", "wont_fix"]));
   });
 
+  it("stats spreads finished tasks and runs over the weeks", async () => {
+    const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-seed-`));
+    dirs.push(dir);
+    const dbPath = join(dir, "data.sqlite");
+    seedDatabase(dbPath, "stats", { workspaceRoot: dir });
+    const ctx = createContext({
+      dbPath,
+      port: 0,
+      webPort: 0,
+      token: null,
+      t3Home: "/nonexistent",
+      pollers: false,
+      userHome: "/nonexistent",
+      sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
+    });
+    const stats = await ctx.services.stats.weekly(12);
+    ctx.db.close();
+    const completed = stats.series.tasks_completed!;
+    expect(completed.values.filter((n) => (n ?? 0) > 0).length).toBeGreaterThan(8);
+    expect(stats.series["cycle_time.in_progress_to_done"]!.total).toBeGreaterThan(0);
+    expect(stats.series["autopilot.runs"]!.total).toBeGreaterThan(40);
+  });
+
   it("threads stores PR and T3 thread snapshots", () => {
     const links = seeded("threads").details.flatMap((t) => t.links);
     const snapshotStates = links.flatMap((l) =>

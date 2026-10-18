@@ -20,6 +20,8 @@ import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage
 import { SettingsShell } from "./components/settings/SettingsShell.tsx";
 import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
 import { SocialFeedPage } from "./components/social/SocialFeedPage.tsx";
+import { StatsPage } from "./components/stats/StatsPage.tsx";
+import { parseStatsPeriod } from "./components/stats/stats.logic.ts";
 
 /**
  * Board search params: `task` opens the detail panel, and the rest are the board's filters (`BoardFilterParams`:
@@ -74,6 +76,19 @@ export const settingsGroupRoute = createRoute({
 // The agents' social network's feed, reached only from the hidden section in Settings (docs/features/social.md).
 const socialRoute = createRoute({ getParentRoute: () => appRoute, path: "/social", component: SocialFeedPage });
 
+/** `?project=` (a project id; none is the whole board) and `?weeks=` (4, 12 or 52) on the stats page. */
+const StatsSearch = z.object({
+  project: z.string().min(1).optional().catch(undefined),
+  weeks: z.unknown().optional().transform(parseStatsPeriod),
+});
+
+const statsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/stats",
+  validateSearch: (search) => StatsSearch.parse(search),
+  component: StatsPage,
+});
+
 // Editors are sub-pages; "new" stands for one not saved yet.
 export const templateEditorRoute = createRoute({
   getParentRoute: () => settingsRoute,
@@ -117,6 +132,7 @@ export const router = createRouter({
     appRoute.addChildren([
       boardRoute,
       socialRoute,
+      statsRoute,
       settingsRoute.addChildren([
         settingsIndexRoute,
         settingsGroupRoute,

@@ -106,6 +106,7 @@ describe("resolveKeybindings", () => {
     expect(by["palette.open"]!.key).toBe("mod+k");
     expect(by["palette.open"]!.when).toBe("!editableFocus");
     expect(by["back"]!.key).toBe("escape");
+    expect(by["task.reveal"]!.key).toBe("j");
   });
 
   it("lets an empty when mean always", () => {

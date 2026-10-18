@@ -11,6 +11,7 @@ import type {
   AutopilotScopeEntry,
   AutopilotStatus,
   BoardSnapshot,
+  OrchestrateState,
   CloseTaskInput,
   CreateTaskInput,
   CreateTemplateInput,
@@ -555,6 +556,29 @@ export function useSetAutopilotPaused() {
 /** Lets Autopilot try a failed or skipped run again; autopilot.changed refreshes the runs. */
 export const useRetryAutopilotRun = () =>
   useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/retry`, { method: "POST" }));
+
+/** Dismisses a run's needs-attention flag without redoing its work; autopilot.changed refreshes the runs and cards. */
+export const useDismissAutopilotRun = () =>
+  useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/dismiss`, { method: "POST" }));
+
+/**
+ * Orchestrate's Run now in a project. The reply is the new state, written into the cache so the button shows the
+ * request at once; autopilot.changed brings the run. A refusal (off, paused, quiet hours, a cap) is the toast.
+ */
+export function useRunOrchestrateNow(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<OrchestrateState>(`/api/autopilot/orchestrate/${enc(projectId)}/run`, { method: "POST" }),
+    onSuccess: (state) => queryClient.setQueryData(queryKeys.autopilotOrchestrate(projectId), state),
+    onError: (error) => {
+      toastManager.add({
+        type: "warning",
+        title: "Orchestrate didn't start",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
 
 /** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
 export function useMarkNotificationRead() {

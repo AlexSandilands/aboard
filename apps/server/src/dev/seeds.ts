@@ -8,6 +8,7 @@ import {
   type TaskStatus,
 } from "@repo/contracts";
 import { createContext } from "../context.ts";
+import type { Db } from "../db/database.ts";
 import type { Services } from "../services/types.ts";
 
 /**
@@ -828,7 +829,79 @@ let t = 0;
   post({ kind: "html", handle: "sandbox-probe", body: SANDBOX_PROBE });
 };
 
-export const SCENARIOS = { basic, review, threads, showcase, social } satisfies Record<string, Scenario>;
+/** The showcase board plus plenty of finished work, which `spreadOverWeeks` then ages across the last twelve weeks. */
+const stats: Scenario = (s, opts) => {
+  showcase(s, opts);
+  const project = s.projects.list()[0];
+  if (!project) return;
+  for (let i = 0; i < 48; i++) {
+    // Through In Progress, so the tasks have a cycle time.
+    const id = addTask(s, project.id, { title: `Finished task ${i + 1}`, status: "in_progress" });
+    s.tasks.move(id, { status: "done" }, AGENT);
+  }
+};
+
+/**
+ * Gives a freshly seeded board a history: each task's events are moved back in time (the first furthest, so the task
+ * took a few days to finish) and Autopilot runs are added across the weeks, so the stats page has trends to draw.
+ * Rows are rewritten directly because the services stamp everything with the current time.
+ */
+function spreadOverWeeks(db: Db): void {
+  const DAY = 86_400_000;
+  const back = (iso: string, ms: number) => new Date(Date.parse(iso) - ms).toISOString();
+  const tasks = db.prepare("SELECT id, project_id AS projectId FROM tasks ORDER BY number").all() as {
+    id: string;
+    projectId: string;
+  }[];
+  const events = db.prepare("SELECT id, at FROM task_events WHERE task_id = ? ORDER BY id");
+  const setEvent = db.prepare("UPDATE task_events SET at = ? WHERE id = ?");
+  const setTask = db.prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?");
+  tasks.forEach((task, i) => {
+    // Uneven but steady, and deterministic: a task finishes 0 to 83 days ago and took one to six days.
+    const finishedAgo = ((i * 37) % 84) * DAY;
+    const took = (((i * 13) % 6) + 1) * DAY;
+    const rows = events.all(task.id) as { id: number; at: string }[];
+    rows.forEach((row, j) => {
+      const ago = finishedAgo + (rows.length > 1 ? took * (1 - j / (rows.length - 1)) : 0);
+      setEvent.run(back(row.at, ago), row.id);
+    });
+    const first = rows[0];
+    if (first) {
+      const created = back(first.at, finishedAgo + took);
+      setTask.run(created, created, task.id);
+    }
+  });
+
+  const insertRun = db.prepare(
+    `INSERT INTO autopilot_runs (id, automation, task_id, project_id, dedupe_key, status, summary, dry_run, cost_usd,
+       created_at, started_at, finished_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+  );
+  const automations = ["review_prs", "fix_failing_checks", "start_planned"];
+  const statuses = ["succeeded", "succeeded", "succeeded", "failed", "skipped"] as const;
+  for (let i = 0; i < 90 && tasks.length > 0; i++) {
+    const task = tasks[(i * 7) % tasks.length]!;
+    const finished = new Date(Date.now() - ((i * 11) % 84) * DAY - (i % 9) * 3_600_000).toISOString();
+    const started = back(finished, (2 + (i % 7)) * 60_000);
+    const status = statuses[i % statuses.length]!;
+    insertRun.run(
+      `seed-run-${i}`,
+      automations[i % automations.length]!,
+      task.id,
+      task.projectId,
+      `seed-${i}`,
+      status,
+      `Seeded ${status} run`,
+      status === "skipped" ? null : Math.round((0.2 + (i % 5) * 0.35) * 100) / 100,
+      started,
+      started,
+      finished,
+      finished,
+    );
+  }
+}
+
+export const SCENARIOS = { basic, review, threads, showcase, social, stats } satisfies Record<string, Scenario>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
 export const isScenarioName = (name: string): name is ScenarioName => Object.hasOwn(SCENARIOS, name);
@@ -850,6 +923,7 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
   });
   try {
     SCENARIOS[scenario](ctx.services, opts);
+    if (scenario === "stats") spreadOverWeeks(ctx.db);
   } finally {
     ctx.db.close();
   }

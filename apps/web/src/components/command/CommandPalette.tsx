@@ -20,6 +20,7 @@ import {
   SearchIcon,
   SettingsIcon,
   SunMoonIcon,
+  BarChart3Icon,
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
@@ -41,6 +42,7 @@ import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { useOpenStats } from "~/components/stats/useOpenStats";
 import {
   boardSearchFrom,
   useApplyFilterParams,
@@ -240,6 +242,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
   const openSettingsPage = useOpenSettings();
+  const openStats = useOpenStats();
   const newTaskShortcut = useShortcutLabel("idea.new");
   const settingsShortcut = useShortcutLabel("settings.open");
   const setDigestOpen = useDialogs((s) => s.setDigestOpen);
@@ -618,6 +621,16 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                 } satisfies PaletteItem,
               ]
             : []),
+          {
+            value: "action:open-stats",
+            title: "Open stats",
+            searchTerms: ["stats", "charts", "trends", "weekly", "throughput", "cycle time", "metrics"],
+            icon: <BarChart3Icon className={ITEM_ICON_CLASS} />,
+            run: () => {
+              closePalette();
+              void openStats();
+            },
+          },
           {
             value: "action:toggle-theme",
             title: "Toggle theme",

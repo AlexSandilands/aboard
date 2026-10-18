@@ -117,7 +117,7 @@ describe("keybindingSections", () => {
     expect(sections("palette")).toEqual([["General", ["palette.open"]]]);
     expect(sections("ctrl+k")).toEqual([["General", ["palette.open"]]]);
     expect(sections("canGoBack")).toEqual([["Navigation", ["back"]]]);
-    expect(sections("navigation")).toEqual([["Navigation", ["back"]]]);
+    expect(sections("navigation")).toEqual([["Navigation", ["back", "task.reveal"]]]);
     expect(sections("nothing like this")).toEqual([]);
   });
 

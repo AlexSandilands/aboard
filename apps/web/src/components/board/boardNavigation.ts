@@ -60,6 +60,14 @@ export function useOpenTask() {
   );
 }
 
+/**
+ * Brings the open task's card into view on the board, from the panel's jump action or its shortcut. Unlike the reveal
+ * made when a task opens, it ignores the scroll setting and says why when the card can't be shown.
+ */
+export function useJumpToTask() {
+  return useCallback((taskId: string) => useReveal.getState().requestReveal(taskId, { explicit: true }), []);
+}
+
 export function useCloseTask() {
   const navigate = useNavigate();
   return useCallback(
