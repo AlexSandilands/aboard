@@ -28,6 +28,8 @@ export interface Candidate {
   data?: unknown;
   /** What the action would run (a filled prompt, a command): kept on a dry run's record. */
   preview?: string;
+  /** The action starts no agent (Fix PRs giving up), so an agent automation's quiet hours and caps don't hold it. */
+  startsNoAgent?: boolean;
 }
 
 /** One project where the automation is on, with its effective config there. */

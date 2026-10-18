@@ -8,6 +8,7 @@ import {
   AutopilotEngineSettings,
   capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
+  FIX_GAVE_UP_KEY_PREFIX,
   isRetried,
   isSupersededRun,
   resolveAutopilot,
@@ -533,7 +534,8 @@ export function createAutopilotService(
         spendUsd: repos.autopilotRuns.spendSince(since),
         active: repos.autopilotRuns
           .withStatus(AUTOPILOT_ACTIVE_STATUSES)
-          .filter((r) => !r.dryRun && agents.has(r.automation)).length,
+          .filter((r) => !r.dryRun && agents.has(r.automation) && !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX))
+          .length,
       };
     },
     record({ automation, candidate, dryRun }) {

@@ -214,7 +214,7 @@ export function createAutopilotEngine(deps: {
       }
       if (s.autopilot.hasRun(automation.key, candidate.dedupeKey, false)) continue;
       // Held candidates aren't recorded: a later pass picks them up once there is room.
-      if (automation.needsAgent && agentHold(s, engine, at)) continue;
+      if (automation.needsAgent && !candidate.startsNoAgent && agentHold(s, engine, at)) continue;
       if (automation.background && !automation.needsAgent && background >= AUTOPILOT_BACKGROUND_MAX) continue;
       const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;
