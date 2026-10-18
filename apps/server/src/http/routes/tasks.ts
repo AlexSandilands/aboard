@@ -151,7 +151,17 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       const link: AddLinkResult = services.links.add(id, input, actorOf(c));
       // A session's status is a local file read; show it now rather than at the next poll.
       if (link.kind === "agent_session") void integrations.refreshLink(link.id).catch(() => {});
+      // Likewise a PR: its state is one query away, so don't leave the link blank until the next poll.
+      if (link.kind === "pr") integrations.prLinked(link.id);
       return c.json(warning ? { ...link, warning } : link, 201);
+    }),
+  );
+  // The task panel is open: read the task's PRs now if they are stale, and poll them hot while it keeps asking.
+  app.post(
+    "/api/tasks/:id/view",
+    handle(async (c) => {
+      await integrations.taskViewed(taskId(c));
+      return noContent(c);
     }),
   );
   app.post(

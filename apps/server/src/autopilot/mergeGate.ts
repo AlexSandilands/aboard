@@ -44,7 +44,10 @@ const reviewPrsOn = (services: Services, task: TaskSummary): boolean => {
  * - Review PRs, when it is on for the task, reviewed this head and found nothing at or above the fix threshold;
  * - no review or fix of the task's PRs is running, and no reviewer requested changes on GitHub;
  * - its checks pass, or none has reported for NO_CHECKS_WAIT_MS since the head was first seen (GitHub reports none
- *   for a moment after a push), and GitHub says it merges cleanly.
+ *   for a moment after a push), and GitHub says it merges cleanly. With required checks, `checks` is their verdict
+ *   alone (an optional check that is still running or failing is in `optionalChecks` and doesn't hold a merge back,
+ *   as in GitHub's merge box); with none required, every check counts. GitHub's own `mergeState` backs that up: blocked
+ *   (a required check not reported yet, say) holds the merge back unless it is only a required review.
  */
 export function notMergeable(
   services: Services,
@@ -85,6 +88,12 @@ export function notMergeable(
   if (snapshot.checks !== "passing" && snapshot.checks !== "none") return `its checks are ${snapshot.checks}`;
   if (snapshot.checks === "none" && !(timing.now - timing.headSince >= NO_CHECKS_WAIT_MS)) {
     return `no checks have reported on PR #${link.ref.number} yet`;
+  }
+  // A required check that hasn't reported yet isn't in the rollup, so `checks` can read passing while GitHub's merge box
+  // is blocked. A required review is the other usual cause and is the reviewer's to give, not a check, so it's left to
+  // GitHub's own refusal at merge time.
+  if (snapshot.mergeState === "blocked" && snapshot.reviewDecision !== "review_required") {
+    return `GitHub says PR #${link.ref.number} is blocked: a required check or rule isn't met yet`;
   }
   if (snapshot.mergeable !== "mergeable") {
     return snapshot.mergeable === "conflicting"

@@ -148,7 +148,8 @@ Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](feat
 All optional, all in `apps/server/src/integrations/`, started together by `createIntegrations().start()`
 on independent timers:
 
-- **GitHub:** batched GraphQL every 2 minutes for PR links on GitHub hosts, with the token `gh` holds,
+- **GitHub:** batched GraphQL for PR links on GitHub hosts (every 20 seconds for PRs that are changing, down to
+  every 30 minutes for finished ones), with the token `gh` holds,
   and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
   [github-prs.md](features/github-prs.md).
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status

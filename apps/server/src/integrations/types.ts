@@ -54,6 +54,13 @@ export interface Integrations {
   importT3Projects(t3ProjectIds: string[]): Promise<Project[]>;
   /** Re-fetches one link's snapshot now (PR via GitHub's API, T3 thread via shell API). */
   refreshLink(linkId: string): Promise<void>;
+  /** A PR link was just added: reads it now (when GitHub polling is on) instead of at the next poll. */
+  prLinked(linkId: string): void;
+  /**
+   * A task's panel is open: its PR links are read now when older than 15 s, and polled every 20 s while the panel
+   * keeps calling this. Resolves once they are read.
+   */
+  taskViewed(taskId: string): Promise<void>;
   /** Merges a Review task's GitHub PR, or turns auto-merge on or off, then refreshes its snapshot. */
   mergePr(linkId: string, input: MergePrInput): Promise<void>;
   /**

@@ -236,3 +236,16 @@ export function threadDetails(snapshot: T3ThreadSnapshot | null, { showModel }: 
     showModel ? (snapshot.model ?? null) : null,
   ].filter((part): part is string => part !== null);
 }
+
+/** How old a PR's last read is, as the row shows it: "checked 23s ago". Nothing for a link that was never read. */
+export function checkedAgoLabel(syncedAt: string | null, nowMs: number): string | null {
+  const at = syncedAt ? Date.parse(syncedAt) : Number.NaN;
+  if (Number.isNaN(at)) return null;
+  const seconds = Math.max(0, Math.floor((nowMs - at) / 1000));
+  if (seconds < 5) return "checked just now";
+  if (seconds < 60) return `checked ${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `checked ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `checked ${hours}h ago` : `checked ${Math.floor(hours / 24)}d ago`;
+}

@@ -1,6 +1,7 @@
 import { classifyLink, type T3ThreadSnapshot, type TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  checkedAgoLabel,
   describeLinkInput,
   groupLinks,
   orderLinks,
@@ -274,5 +275,24 @@ describe("previewRows", () => {
 
   it("shows everything once expanded", () => {
     expect(previewRows(rows, true)).toEqual({ shown: rows, hidden: 0 });
+  });
+});
+
+describe("checkedAgoLabel", () => {
+  const now = Date.parse("2026-10-18T12:00:00Z");
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+
+  it("says how long ago a PR was last read", () => {
+    expect(checkedAgoLabel(ago(2_000), now)).toBe("checked just now");
+    expect(checkedAgoLabel(ago(23_000), now)).toBe("checked 23s ago");
+    expect(checkedAgoLabel(ago(5 * 60_000), now)).toBe("checked 5m ago");
+    expect(checkedAgoLabel(ago(3 * 3600_000), now)).toBe("checked 3h ago");
+    expect(checkedAgoLabel(ago(2 * 86400_000), now)).toBe("checked 2d ago");
+  });
+
+  it("says nothing for a link never read, and never goes negative", () => {
+    expect(checkedAgoLabel(null, now)).toBeNull();
+    expect(checkedAgoLabel("not a date", now)).toBeNull();
+    expect(checkedAgoLabel(ago(-10_000), now)).toBe("checked just now");
   });
 });

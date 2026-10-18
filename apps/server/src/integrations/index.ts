@@ -230,6 +230,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       if (await sessions.refresh(link)) return;
       await t3.refresh(link);
     },
+    prLinked(linkId) {
+      void github.pollLink(linkId);
+    },
+    taskViewed: (taskId) => github.viewTask(taskId),
     async mergePr(linkId, input) {
       await github.merge(deps.services().links.get(linkId), input);
     },

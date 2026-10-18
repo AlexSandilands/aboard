@@ -208,10 +208,38 @@ export const PrReviewCommentInfo = z.object({
 });
 export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
 
+/** GitHub's `mergeStateStatus`, lowercased: what its merge box says about the PR right now. */
+export const PrMergeState = z.enum([
+  "clean",
+  "unstable",
+  "has_hooks",
+  "blocked",
+  "behind",
+  "dirty",
+  "draft",
+  "unknown",
+]);
+export type PrMergeState = z.infer<typeof PrMergeState>;
+
+/** Checks that aren't required to merge and haven't passed, kept out of `checks` once some are required. */
+export const PrOptionalChecks = z.object({
+  pending: z.number().int().nonnegative(),
+  failing: z.number().int().nonnegative(),
+});
+export type PrOptionalChecks = z.infer<typeof PrOptionalChecks>;
+
 export const PrSnapshot = z.object({
   state: z.enum(["open", "draft", "merged", "closed"]),
   title: z.string(),
+  /**
+   * The verdict on the head commit's checks. When the base branch requires some, only those count (as in GitHub's
+   * merge box) and the rest are in `optionalChecks`; with none required, every check counts.
+   */
   checks: z.enum(["passing", "failing", "pending", "none"]),
+  /** Optional checks still running or failing, when some other checks are required. Absent when there are none. */
+  optionalChecks: PrOptionalChecks.optional(),
+  /** What GitHub's merge box says. Optional so snapshots stored before it was read still parse. */
+  mergeState: PrMergeState.optional(),
   reviewDecision: z.enum(["approved", "changes_requested", "review_required"]).nullable(),
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   headRef: z.string().nullable(),
