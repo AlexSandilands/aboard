@@ -8,12 +8,15 @@ export function ModeSwitch({
   value,
   onChange,
   label,
+  modes = AUTOPILOT_MODES,
   disabled,
   blocked,
 }: {
   value: AutopilotMode;
   onChange: (mode: AutopilotMode) => void;
   label: string;
+  /** The choices to offer; the board has no Inherit. */
+  modes?: ReadonlyArray<{ value: AutopilotMode; label: string }>;
   disabled?: boolean;
   /** Why it can't be On (an empty required tool slot); the On button is disabled, and the others still work. */
   blocked?: string | null;
@@ -28,7 +31,7 @@ export function ModeSwitch({
         if (mode === "inherit" || mode === "on" || mode === "off") onChange(mode);
       }}
     >
-      {AUTOPILOT_MODES.map((mode) => (
+      {modes.map((mode) => (
         // On is the one state that does something, so it wears the app's blue (as the "Auto-merge on" badge does).
         <Toggle
           key={mode.value}

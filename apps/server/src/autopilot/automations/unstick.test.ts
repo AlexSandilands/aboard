@@ -119,30 +119,49 @@ describe("unstick stale tasks", () => {
     expect(runs()).toHaveLength(0);
   });
 
-  it("nudges the live thread only when switched on", async () => {
-    const { working, withThread, pass, turnOn, nudges, runs } = setup();
-    const task = working();
-    withThread(task.id, "input");
-    turnOn();
-    await pass(45 * MINUTE_MS);
+  it("only reminds: it never posts into the thread", async () => {
+    const { working, withThread, pass, turnOn, nudges, runs, notices } = setup();
+    withThread(working().id, "input");
+    turnOn({ staleHours: 1 });
+    await pass(2 * HOUR_MS);
+    expect(runs()).toHaveLength(2);
+    expect(notices()).toHaveLength(2);
     expect(nudges).toHaveLength(0);
-
-    const other = working("Other");
-    withThread(other.id, "input", 2);
-    turnOn({ nudge: true, nudgeMessage: "Report in" });
-    await pass(46 * MINUTE_MS);
-    expect(nudges).toMatchObject([{ kind: "nudge", prompt: "Report in" }]);
-    expect(runs().find((r) => r.taskId === other.id)?.summary).toContain("nudged the thread");
   });
 
-  it("says so when there is no thread to nudge, and still notifies", async () => {
-    const { working, pass, turnOn, nudges, runs, notices } = setup();
+  it("ignores a `nudge` key left in stored config, and drops it on the next save", async () => {
+    const { s, db, project, working, pass, runs } = setup();
     working();
-    turnOn({ staleHours: 1, nudge: true });
+    // What the old Nudge options left behind.
+    db.exec(
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+       VALUES ('project', '${project.id}', '${AUTOPILOT_UNSTICK}', 'on',
+       '{"staleHours":1,"nudge":true,"nudgeMessage":"Report in"}', '2026-01-01T00:00:00.000Z')`,
+    );
+    const entry = () => s.autopilot.scope("project", project.id).find((e) => e.automation === AUTOPILOT_UNSTICK)!;
+    expect(entry().effectiveConfig).toEqual({ staleHours: 1, waitingMinutes: 30 });
     await pass(2 * HOUR_MS);
-    expect(nudges).toHaveLength(0);
-    expect(runs()[0]?.summary).toContain("couldn't nudge: it has no live T3 Code thread");
-    expect(notices()).toHaveLength(1);
+    expect(runs()).toHaveLength(1);
+
+    // Sending the whole stored config back, stale keys included, as the forms do, is not rejected.
+    s.autopilot.setScope("project", project.id, AUTOPILOT_UNSTICK, {
+      config: { staleHours: 2, nudge: true, nudgeMessage: "Report in" },
+    });
+    expect(entry().config).toEqual({ staleHours: 2 });
+    // A key that is not stored is an error, even one the automation used to have.
+    expect(() =>
+      s.autopilot.setScope("project", project.id, AUTOPILOT_UNSTICK, { config: { staleHours: 2, nudge: true } }),
+    ).toThrow(/no setting nudge/);
+    expect(() =>
+      s.autopilot.setScope("project", project.id, AUTOPILOT_UNSTICK, { config: { constructor: 1 } }),
+    ).toThrow(/no setting constructor/);
+
+    // Changing the mode alone, with a stale key still stored, works too and drops it.
+    db.exec(
+      `UPDATE autopilot_settings SET config_json = '{"staleHours":1,"nudge":true}' WHERE automation = '${AUTOPILOT_UNSTICK}'`,
+    );
+    s.autopilot.setScope("project", project.id, AUTOPILOT_UNSTICK, { mode: "off" });
+    expect(entry().config).toEqual({ staleHours: 1 });
   });
 
   it("only previews in dry-run", async () => {

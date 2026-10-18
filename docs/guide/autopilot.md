@@ -24,9 +24,25 @@ Auto-archive Done on an epic works on the epic as a whole: once the epic is fini
 Done for the set days, it is archived together with its tasks. A task in an epic is never archived on its own, and
 the epic's own switch and days decide.
 
-**Settings → Autopilot** has the same switches for the whole board, and under each automation a **Settings**
+**Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
-project can override those in its own settings.
+project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the
+board to inherit from, so an automation you haven't switched on is off); only projects and epics have **Inherit**.
+
+## Remind me about stuck tasks
+
+**Remind me about stuck tasks** tells you when an In Progress task needs a look. It needs no agent, so it costs
+nothing and isn't held back by quiet hours or the run limits, and it changes nothing on the task. You get a note on
+the task and a notification when:
+
+- the task has had no activity for **No activity for** hours (24 by default): it also shows under **Needs attention**
+  until someone touches the task;
+- its T3 Code thread has been waiting on you for **Thread waiting for** minutes (30 by default).
+
+Each is reported once. It doesn't get anything moving again: that's [Orchestrate](#orchestrate). The two go well
+together, because Orchestrate leaves a thread that's waiting for you alone, and a thread stuck waiting holds one of
+your concurrency slots until you answer. This automation used to be called **Unstick stale tasks** and could also
+post a nudge into the thread; that option is gone (Orchestrate does it), and a leftover setting is ignored.
 
 ## Review PRs
 

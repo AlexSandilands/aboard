@@ -23,6 +23,10 @@ import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useBoard, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import {
+  BOARD_MODES,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
   entryFor,
   fieldText,
   inheritLabel,
@@ -74,9 +78,9 @@ function useScopeAutomations(projectId: string | null) {
 }
 
 /**
- * One row per automation at a scope: its Inherit / On / Off switch, and a form for its config generated from the
- * automation's field descriptors. `projectId` null is the board. Config set here applies at this scope only; a key
- * left alone inherits (from the board, for a project; from the automation's default, for the board).
+ * One row per automation at a scope: its Inherit / On / Off switch (On / Off at the board), and a form for its config
+ * generated from the automation's field descriptors. `projectId` null is the board. Config set here applies at this
+ * scope only; a key left alone inherits (from the board, for a project; from the automation's default, for the board).
  */
 export function AutomationRows({ projectId }: { projectId: string | null }) {
   const { message, items, pending = false, rejected = 0 } = useScopeAutomations(projectId);
@@ -98,7 +102,7 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
 
 /**
  * The board's automations as folded sections, for the Autopilot settings page: the header has the automation's
- * Inherit / On / Off switch and what it resolves to; opening it shows what it does and its config.
+ * On / Off switch and what it is set to; opening it shows what it does and its config.
  */
 export function AutomationSections() {
   const { message, items, pending = false, rejected = 0 } = useScopeAutomations(null);
@@ -116,14 +120,15 @@ export function AutomationSections() {
           key={automation.key}
           id={`autopilot.engine.automation-${automation.key}`}
           title={automation.title}
-          summary={entry.mode === "inherit" ? inheritLabel(null) : `Set to ${entry.mode} for the board`}
+          summary={boardSummary(entry.mode)}
           control={
             <ModeSwitch
               label={`${automation.title} for the board`}
-              value={entry.mode}
+              modes={BOARD_MODES}
+              value={boardSwitchValue(entry.mode)}
               disabled={pending}
               blocked={automation.blocked}
-              onChange={onMode}
+              onChange={(mode) => onMode(boardModeToSave(mode))}
             />
           }
         >
@@ -187,18 +192,26 @@ function AutomationRow({
 }) {
   const [open, setOpen] = useState(false);
   const where = projectId ? "this project" : "the board";
+  const board = projectId === null;
   return (
     <SettingsRow
       title={automation.title}
       description={automation.description}
-      status={entry.mode === "inherit" ? inheritLabel(inherited) : `Set to ${entry.mode} for ${where}`}
+      status={
+        board
+          ? boardSummary(entry.mode)
+          : entry.mode === "inherit"
+            ? inheritLabel(inherited)
+            : `Set to ${entry.mode} for ${where}`
+      }
       control={
         <ModeSwitch
           label={`${automation.title} for ${where}`}
-          value={entry.mode}
+          modes={board ? BOARD_MODES : undefined}
+          value={board ? boardSwitchValue(entry.mode) : entry.mode}
           disabled={pending}
           blocked={automation.blocked}
-          onChange={onMode}
+          onChange={board ? (mode) => onMode(boardModeToSave(mode)) : onMode}
         />
       }
     >

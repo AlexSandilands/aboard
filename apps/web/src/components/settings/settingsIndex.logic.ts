@@ -66,9 +66,10 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
   },
   {
     key: AUTOPILOT_UNSTICK,
-    title: "Unstick stale tasks",
+    title: "Remind me about stuck tasks",
     description:
-      "Flags In Progress tasks with no activity, or a T3 thread waiting on you, for too long, and can nudge the thread.",
+      "Tells you when an In Progress task has had no activity, or its T3 thread has been waiting on you, for too long. " +
+      "Needs no agent and changes nothing; Orchestrate is what gets stalled work moving.",
   },
   {
     key: AUTOPILOT_REVIEW_PRS,
