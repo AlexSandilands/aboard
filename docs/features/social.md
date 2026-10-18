@@ -84,6 +84,9 @@ piece runs in its own frame (`ArtFrame.tsx`, `artFrame.logic.ts`):
   own script, which inherits the inline-script permission) would have fresh copies and isn't stopped by `frame-src`,
   so the guard also keeps nested frames out: `createElement` refuses frame tags, an observer on the document removes
   any that are inserted (markup, `innerHTML`, `document.write`), and `contentWindow`/`contentDocument` return null.
+  The observer can't see into shadow DOM, so that's refused too: `attachShadow`, `setHTMLUnsafe` and
+  `parseHTMLUnsafe` throw, and `shadowrootmode` attributes (declarative shadow DOM) in the piece's source and in what
+  it passes to `document.write` become a plain `data-` attribute.
   This is best effort, not a guarantee: a script that inserts a frame with `innerHTML` and reads `window[0]` in the
   same breath reaches it before the observer runs, and no page script can close that; it needs the browser to put
   WebRTC under CSP. The desktop shell also sets WebRTC to `disable_non_proxied_udp`, which keeps it off UDP there.

@@ -62,10 +62,21 @@ describe("art frame", () => {
     const ObjectEl = function ObjectEl() {} as unknown as new () => { contentDocument: unknown };
     Object.defineProperty(Frame.prototype, "contentWindow", { get: () => ({}), configurable: true });
     const win: Record<string, unknown> = { RTCPeerConnection: () => {}, RTCDataChannel: () => {} };
-    const Doc = function Doc() {} as unknown as { prototype: Record<string, (...args: string[]) => unknown> };
+    type Methods = Record<string, (...args: string[]) => unknown>;
+    const Doc = function Doc() {} as unknown as { prototype: Methods; parseHTMLUnsafe: () => unknown };
     Doc.prototype.createElement = (name: string) => ({ localName: name });
     Doc.prototype.createElementNS = (_ns: string, name: string) => ({ localName: name });
-    const doc = Object.create(Doc.prototype) as Record<string, (...args: string[]) => unknown>;
+    const written: string[] = [];
+    Doc.prototype.write = (...html: string[]) => written.push(...html);
+    Doc.prototype.writeln = (...html: string[]) => written.push(...html);
+    Doc.parseHTMLUnsafe = () => ({});
+    const doc = Object.create(Doc.prototype) as Methods;
+    const El = function El() {} as unknown as { prototype: Methods };
+    El.prototype.attachShadow = () => ({});
+    El.prototype.setHTMLUnsafe = () => {};
+    const Shadow = function Shadow() {} as unknown as { prototype: Methods };
+    Shadow.prototype.setHTMLUnsafe = () => {};
+    win.ShadowRoot = Shadow;
     type Added = {
       nodeType: number;
       localName: string;
@@ -93,9 +104,11 @@ describe("art frame", () => {
       "DOMException",
       "MutationObserver",
       "document",
+      "Element",
+      "ShadowRoot",
       ART_FRAME_GUARD,
     );
-    guard(win, Frame, ObjectEl, undefined, Doc, Error, Observer, doc);
+    guard(win, Frame, ObjectEl, undefined, Doc, Error, Observer, doc, El, Shadow);
 
     expect(win.RTCPeerConnection).toBeUndefined();
     expect(win.webkitRTCPeerConnection).toBeUndefined();
@@ -124,6 +137,27 @@ describe("art frame", () => {
     expect(frame.removed).toBe(true);
     expect(nested.removed).toBe(true);
     expect(wrapper.removed).toBeUndefined();
+
+    // Shadow DOM, which the observer can't see into, is refused, by script and through document.write.
+    expect(() => El.prototype.attachShadow!()).toThrow("Shadow roots");
+    expect(() => El.prototype.setHTMLUnsafe!()).toThrow("Shadow roots");
+    expect(() => Shadow.prototype.setHTMLUnsafe!()).toThrow("Shadow roots");
+    expect(() => Doc.parseHTMLUnsafe()).toThrow("Shadow roots");
+    doc.write!('<div><template shadowrootmode="open"><iframe></iframe></template></div>');
+    doc.writeln!("<template SHADOWROOT=closed></template>");
+    expect(written.join("")).not.toMatch(/ shadowroot/i);
+    expect(written.join("")).toContain('data-shadowrootmode="open"');
+  });
+
+  it("turns declarative shadow roots in an HTML piece into a plain attribute", () => {
+    const doc = artDocument(
+      "html",
+      '<div><template shadowrootmode="closed"><iframe srcdoc="x"></iframe></template></div>',
+    );
+    expect(doc).toContain('<template data-shadowrootmode="closed">');
+    expect(doc.slice(doc.indexOf("<body>"))).not.toMatch(/ shadowroot/i);
+    // Script reading a property of the same name is left alone.
+    expect(artDocument("html", "<script>el.shadowRoot</script>")).toContain("el.shadowRoot");
   });
 
   it("shows SVG through the same document, sized to the frame and without the script guard", () => {

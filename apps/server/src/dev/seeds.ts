@@ -713,6 +713,7 @@ const showcase: Scenario = (s, opts) => {
  */
 const SANDBOX_PROBE = `<pre id="o" style="font:12px monospace;margin:0;padding:8px;white-space:pre-wrap"></pre>
 <iframe srcdoc="&lt;script&gt;window.RTCPeerConnection&amp;&amp;parent.postMessage(1,'*')&lt;/script&gt;"></iframe>
+<div id="host"><template shadowrootmode="open"><iframe srcdoc="&lt;script&gt;window.RTCPeerConnection&amp;&amp;parent.postMessage(1,'*')&lt;/script&gt;"></iframe></template></div>
 <script>
 const o = document.getElementById("o");
 const add = (line) => { o.textContent += line + "\\n"; };
@@ -727,6 +728,8 @@ t("cookie", () => (document.cookie = "x=1", document.cookie || "blocked (empty)"
 t("desktopBridge", () => typeof window.desktopBridge === "undefined" ? "blocked (undefined)" : "EXPOSED");
 t("WebRTC", () => typeof window.RTCPeerConnection === "undefined" ? "blocked (undefined)" : "EXPOSED");
 t("nested frame", () => { document.body.appendChild(document.createElement("iframe")); return "CREATED"; });
+t("attachShadow", () => { document.body.attachShadow({ mode: "open" }); return "ATTACHED"; });
+t("declarative shadow root", () => document.getElementById("host").shadowRoot === null ? "blocked (none)" : "ATTACHED");
 setTimeout(() => t("nested srcdoc frame", () => document.querySelector("iframe") === null ? "blocked (removed)" : "PRESENT"), 300);
 t("window.open", () => window.open("https://example.com") === null ? "blocked (null)" : "OPENED");
 fetch("/api/settings").then((r) => add("fetch /api: LEAKED " + r.status), () => add("fetch /api: blocked"));

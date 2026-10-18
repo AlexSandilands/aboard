@@ -61,13 +61,41 @@ const WEBRTC_GLOBALS = [
 const FRAME_TAGS = ["iframe", "frame", "frameset", "object", "embed"];
 
 /**
- * Runs before any of an HTML piece: takes WebRTC away for good, and keeps nested frames out, since a nested document
- * (an `<iframe srcdoc>` with its own script, or about:blank) gets fresh copies and isn't stopped by frame-src. It
- * refuses frame tags from createElement, removes any that are inserted (the observer is on the document, so
- * document.open doesn't shake it off), and makes contentWindow/contentDocument return null. Best effort: see social.md
- * for what's left.
+ * Turns declarative shadow DOM (`<template shadowrootmode>`, and the older `shadowroot`) into a plain attribute: a
+ * shadow root would hide a nested frame from the guard's observer. Only where an attribute can start, so script's
+ * `.shadowRoot` is left alone. Applied to an HTML piece's source and to whatever it
+ * hands document.write; innerHTML never builds shadow roots.
  */
-export const ART_FRAME_GUARD = `(()=>{const tags=${JSON.stringify(FRAME_TAGS)};for(const k of ${JSON.stringify(WEBRTC_GLOBALS)}){try{Object.defineProperty(window,k,{value:undefined,writable:false,configurable:false})}catch(e){}}const none={get(){return null},configurable:false};for(const p of [HTMLIFrameElement.prototype,HTMLObjectElement.prototype,window.HTMLFrameElement&&HTMLFrameElement.prototype]){if(!p)continue;for(const n of ["contentWindow","contentDocument"]){try{Object.defineProperty(p,n,none)}catch(e){}}}const D=Document.prototype;for(const m of ["createElement","createElementNS"]){const orig=D[m];Object.defineProperty(D,m,{value:function(...a){const name=String(a[m==="createElement"?0:1]).toLowerCase().split(":").pop();if(tags.includes(name))throw new DOMException("Nested frames are not allowed here","NotSupportedError");return orig.apply(this,a)},writable:false,configurable:false})}const sel=tags.join(",");const sweep=(n)=>{if(n.nodeType!==1)return;if(tags.includes(n.localName))n.remove();else for(const f of n.querySelectorAll(sel))f.remove()};new MutationObserver((rs)=>{for(const r of rs)for(const n of r.addedNodes)sweep(n)}).observe(document,{childList:true,subtree:true})})();`;
+const NO_SHADOW_ROOT = /(^|[\s"'/])shadowroot/gi;
+const neutralizeShadowRoots = (html: string) => html.replace(NO_SHADOW_ROOT, "$1data-shadowroot");
+
+/**
+ * Runs before any of an HTML piece: takes WebRTC away for good, and keeps nested frames out, since a nested document
+ * (an `<iframe srcdoc>` with its own script, or about:blank) gets fresh copies and isn't stopped by frame-src.
+ * - createElement refuses frame tags, and contentWindow/contentDocument return null;
+ * - an observer on the document (so document.open doesn't shake it off) removes any frame that is inserted;
+ * - shadow DOM, which the observer can't see into, is refused: attachShadow and setHTMLUnsafe/parseHTMLUnsafe throw,
+ *   and document.write gets the same shadowroot rewrite as the piece's source.
+ * Best effort: see social.md for what's left.
+ */
+export const ART_FRAME_GUARD = `(()=>{
+const tags=${JSON.stringify(FRAME_TAGS)};
+const lock=(o,n,value)=>{if(o&&n in o)try{Object.defineProperty(o,n,{value,writable:false,configurable:false})}catch(e){}};
+const refuse=(what)=>function(){throw new DOMException(what+" are not allowed here","NotSupportedError")};
+for(const k of ${JSON.stringify(WEBRTC_GLOBALS)})lock(window,k,undefined);
+const none={get(){return null},configurable:false};
+for(const p of [HTMLIFrameElement.prototype,HTMLObjectElement.prototype,window.HTMLFrameElement&&HTMLFrameElement.prototype]){if(!p)continue;for(const n of ["contentWindow","contentDocument"]){try{Object.defineProperty(p,n,none)}catch(e){}}}
+const D=Document.prototype;
+for(const m of ["createElement","createElementNS"]){const orig=D[m];lock(D,m,function(...a){const name=String(a[m==="createElement"?0:1]).toLowerCase().split(":").pop();if(tags.includes(name))refuse("Nested frames")();return orig.apply(this,a)})}
+lock(Element.prototype,"attachShadow",refuse("Shadow roots"));
+lock(Element.prototype,"setHTMLUnsafe",refuse("Shadow roots"));
+lock(window.ShadowRoot&&ShadowRoot.prototype,"setHTMLUnsafe",refuse("Shadow roots"));
+lock(Document,"parseHTMLUnsafe",refuse("Shadow roots"));
+for(const m of ["write","writeln"]){const orig=D[m];lock(D,m,function(...a){return orig.apply(this,a.map((s)=>String(s).replace(${NO_SHADOW_ROOT},"$1data-shadowroot")))})}
+const sel=tags.join(",");
+const sweep=(n)=>{if(n.nodeType!==1)return;if(tags.includes(n.localName))n.remove();else for(const f of n.querySelectorAll(sel))f.remove()};
+new MutationObserver((rs)=>{for(const r of rs)for(const n of r.addedNodes)sweep(n)}).observe(document,{childList:true,subtree:true});
+})();`;
 
 const SVG_STYLE = "body>svg{width:100%;height:100%}";
 
@@ -85,5 +113,5 @@ export function artDocument(kind: ArtKind, body: string): string {
     ...(kind === "html" ? [`<script>${ART_FRAME_GUARD}</script>`] : []),
     `<style>html,body{margin:0;height:100%;overflow:hidden}body{display:grid;place-items:center}${kind === "svg" ? SVG_STYLE : ""}</style>`,
   ].join("");
-  return `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
+  return `<!doctype html><html><head>${head}</head><body>${kind === "html" ? neutralizeShadowRoots(body) : body}</body></html>`;
 }
