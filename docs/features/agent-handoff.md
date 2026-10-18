@@ -124,8 +124,9 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   "Sonnet 5.5, medium effort") for any harness; when T3 Code is connected, a T3 model with its effort and fast
   mode; and a `--model` for each CLI found (Claude Code, Copilot CLI; `modelTiers[tier].cli`). A provider that
   isn't set up has no field, unless a value is already saved for it. The T3 model's label is saved with it, so
-  prompts can name it without asking T3. An edit sends only its own tier (`tierUpdate`), so quick edits to two
-  tiers can't overwrite each other. The T3 Code, Claude Code and Copilot integration sections each have a
+  prompts can name it without asking T3. An edit sends only its own tier, so quick edits to two tiers can't
+  overwrite each other; the server replaces a whole tier, so a second edit within a tier builds on the one still
+  saving rather than on the cache (`createTierEdits`). The T3 Code, Claude Code and Copilot integration sections each have a
   **Models per tier** row that opens the page.
 - **Copied work prompts** get one line: `Suggested model: standard (Sonnet 5.5, medium effort): <reason>.
   Switch your session's model if it differs.` The tier is named by its description, else its T3 label, else

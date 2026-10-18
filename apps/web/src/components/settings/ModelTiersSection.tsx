@@ -9,14 +9,14 @@ import {
   type ModelTierSetting,
 } from "@repo/contracts";
 import { XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ModelPicker, TraitsPicker } from "~/components/handoff/T3LaunchPickers";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { Button } from "~/components/ui/button";
 import { useUpdateSettings } from "~/state/mutations";
 import { useAgentIntegrations, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { tierUpdate, visibleTierProviders, type TierChange, type TierProvider } from "./modelTiers.logic";
+import { createTierEdits, visibleTierProviders, type TierChange, type TierProvider } from "./modelTiers.logic";
 import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
@@ -39,7 +39,11 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   const cliFound: Partial<Record<AgentHarness, boolean>> = {};
   for (const harness of agents.data?.harnesses ?? []) cliFound[harness.harness] = harness.cli.found;
   const shown = new Set<TierProvider>(visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }));
-  const save = (tier: ModelTier, change: TierChange) => updateSettings.mutate(tierUpdate(settings, tier, change));
+  const edits = useRef(createTierEdits()).current;
+  const save = (tier: ModelTier, change: TierChange) => {
+    const next = edits.compose(settings.modelTiers[tier], tier, change);
+    updateSettings.mutate({ modelTiers: { [tier]: next } }, { onSettled: () => edits.settle(tier) });
+  };
 
   return (
     <SettingsSection id="models.tiers.list" title="Model tiers">
@@ -93,7 +97,8 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
           </SettingsRow>
         );
       })}
-      {shown.size < 3 ? (
+      {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
+      {shown.size < 3 && !agents.isPending ? (
         <p className="px-3 py-3 text-xs text-muted-foreground/80 sm:px-4">
           A provider's model shows here once it is set up. See{" "}
           <SettingsLink to="integrations">Integrations</SettingsLink>.
