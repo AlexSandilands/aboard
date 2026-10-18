@@ -2,16 +2,20 @@
 # Only fast commit-time checks live here. CI runs `pnpm check` (typecheck, test, knip, ...) and commitlint
 # on every PR, so there is no pre-push hook; run `pnpm check` yourself before pushing.
 
+# The format and lint jobs call the tools in node_modules/.bin directly, not through `pnpm exec`. Lefthook splits
+# {staged_files} into chunks that fit the OS limit, but on Windows `pnpm exec` goes through pnpm.cmd and cmd.exe
+# (8191 characters), so a big merge fails with "The command line is too long". The .bin shims are sh scripts,
+# which run under the Git sh that lefthook uses on every platform.
 pre-commit:
   parallel: true
   jobs:
     - name: format
       glob: "*.{ts,tsx,js,mjs,json,jsonc,md,css,html,yml,yaml}"
-      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      run: node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     - name: lint
       glob: "*.{ts,tsx,js,mjs}"
-      run: pnpm exec oxlint --fix --deny-warnings {staged_files}
+      run: node_modules/.bin/oxlint --fix --deny-warnings {staged_files}
       stage_fixed: true
 
 commit-msg:
