@@ -17,6 +17,8 @@ import type {
   NotificationList,
   SkillInfo,
   SocialFeed,
+  StatsPeriod,
+  StatsResponse,
   SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -45,6 +47,7 @@ export const queryKeys = {
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
+  stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -155,7 +158,10 @@ export function useAutopilotStatus(): AutopilotStatus | undefined {
 
 /** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
 export function useTaskActiveRun(taskId: string): AutopilotActiveRun | undefined {
-  return useQuery({ ...boardQuery, select: (board) => taskActiveRun(board.autopilot, taskId) }).data;
+  return useQuery({
+    ...boardQuery,
+    select: (board) => taskActiveRun(board.autopilot, taskId),
+  }).data;
 }
 
 /**
@@ -276,7 +282,10 @@ export function useSessionLaunchOptions(taskId: string | null) {
 export function usePrFix(linkId: string | null) {
   return useQuery({
     queryKey: queryKeys.prFix(linkId ?? ""),
-    queryFn: ({ signal }) => api<PrFixInfo>(`/api/links/${encodeURIComponent(linkId!)}/fix`, { signal }),
+    queryFn: ({ signal }) =>
+      api<PrFixInfo>(`/api/links/${encodeURIComponent(linkId!)}/fix`, {
+        signal,
+      }),
     enabled: !!linkId,
     staleTime: 0,
     gcTime: 0,
@@ -343,7 +352,10 @@ export function useT3ModelCatalog(enabled: boolean) {
 export function useFsBrowse(path: string, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.fsBrowse(path),
-    queryFn: ({ signal }) => api<FsBrowseResult>(`/api/fs/browse?path=${encodeURIComponent(path)}`, { signal }),
+    queryFn: ({ signal }) =>
+      api<FsBrowseResult>(`/api/fs/browse?path=${encodeURIComponent(path)}`, {
+        signal,
+      }),
     enabled,
     staleTime: 10_000,
     retry: false,
@@ -370,12 +382,20 @@ export function useBoardEvents() {
       failures = 0;
       if (connectedOnce) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.archivedTasks,
+        });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.autopilotScopeAll,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.autopilotRunsAll,
+        });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications,
+        });
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
       connectedOnce = true;
@@ -387,27 +407,41 @@ export function useBoardEvents() {
       );
       // The server pairs every task.upserted with a task.detail_changed, so detail only listens to the latter.
       if (event.type === "task.detail_changed") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.task(event.taskId) });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.task(event.taskId),
+        });
       }
       // Reset rather than invalidate: a failed refetch keeps stale data, and an open panel should show not found.
       if (event.type === "task.deleted") {
-        void queryClient.resetQueries({ queryKey: queryKeys.task(event.taskId) });
+        void queryClient.resetQueries({
+          queryKey: queryKeys.task(event.taskId),
+        });
         // Its notifications went with it, read or not.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications,
+        });
       }
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.archivedTasks,
+        });
         // A rule's "last task" line follows that task (done, archived).
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.autopilotScopeAll,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.autopilotRunsAll,
+        });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.customAutomations,
+        });
         // A digest is made, read or dropped.
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }
@@ -417,16 +451,22 @@ export function useBoardEvents() {
             list ? withCreated(list, event.notification, event.unread) : list,
           );
         } else {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.notifications,
+          });
         }
         deliverNotification(event.notification, event.popup);
       }
       // Read elsewhere (another window, the REST API), or removed with their task.
       if (event.type === "notifications.changed") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications,
+        });
       }
       if (event.type === "integrations.changed") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.integrations,
+        });
       }
       if (event.type === "suggestions.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
@@ -461,5 +501,24 @@ export function useSocialFeed() {
     queryKey: queryKeys.socialFeed,
     queryFn: ({ signal }) => api<SocialFeed>("/api/social", { signal }),
     refetchInterval: 30_000,
+  });
+}
+
+/**
+ * Weekly stats for the stats page. No event covers them, so they are read when the page opens, when the period or
+ * project changes (a new key) and when the window regains focus, instead of being pushed.
+ */
+export function useStats(weeks: StatsPeriod, projectId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stats(weeks, projectId),
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({ weeks: String(weeks) });
+      if (projectId) query.set("projectId", projectId);
+      return api<StatsResponse>(`/api/stats?${query}`, { signal });
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: "always",
+    // Keeps the old charts up (dimmed by the page) while another period or project loads.
+    placeholderData: (previous) => previous,
   });
 }

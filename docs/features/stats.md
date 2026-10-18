@@ -1,10 +1,10 @@
 # Stats
 
-Board task: #64 (epic #189).
+Board tasks: #64 (the API) and #190 (the page), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
 reviews loop, how many PRs merge, and what Autopilot and agent sessions do. The server computes them from data
-it already keeps; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool.
+it already keeps; nothing is recorded for the purpose. The API is `GET /api/stats`; there is no MCP tool. The page that charts it is `/stats` ([The page](#the-page)).
 
 ## How it works
 
@@ -49,6 +49,39 @@ appear only when that automation ran in the two periods.
 Series names are stable ids; the labels are the client's to write. A new metric is a new key, so adding one
 doesn't change the shape.
 
+## The page
+
+`/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like
+`/social`. It is reached from the Stats icon in the sidebar footer and the command palette's "Open stats"
+(`useOpenStats`, which carries over the project the board is on). `?project=` (a project id; none is the whole board)
+and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links and reloads keep it.
+
+`useStats(weeks, projectId)` reads `GET /api/stats`. Nothing is pushed over SSE for stats, so it is stale at once
+and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
+loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
+
+The sections (Throughput, Cycle time, PRs and reviews, Autopilot, Sessions) are built in `StatsPage.tsx` from the series
+above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
+name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
+plainly better (tasks finished, cycle time, review rounds, findings, retries) colour the change. A series missing from
+the response (a per-automation one that didn't run) reads as quiet. When every series is zero in both periods the page
+says nothing happened instead of drawing empty charts.
+
+The charts are hand-rolled SVG with no dependency:
+
+- `WeeklyBars` (grouped or stacked), `TrendLine` (a line per series; a week with no value breaks it) and `KpiTile`.
+  `chartParts.tsx` has what they share: the drawing box, axes, legend, tooltip, and the frame.
+- Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
+  segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names
+  each series and the tooltip repeats the names.
+- A week's values show in a tooltip on hover, or with the arrow keys once the chart has focus. Each chart also
+  renders an `sr-only` table. Nothing animates in; the dim while loading is `motion-reduce:transition-none`.
+- Axis ticks come from `niceScale`, or `niceDurationScale` for durations (ticks on 30m, 2h, 1d, 1w and so on).
+  The logic is in `stats.logic.ts` and tested in `stats.logic.test.ts`.
+
+To try it with a history, run `pnpm sandbox --seed stats` (the showcase board plus twelve weeks of finished tasks and
+runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
+
 ## Decisions
 
 - **A map of series, not fixed fields.** The stats page and later metrics (commits, flow, friction) add
@@ -80,3 +113,8 @@ doesn't change the shape.
 | `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
+| `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers and the sections |
+| `apps/web/src/components/stats/{WeeklyBars,TrendLine,KpiTile,chartParts}.tsx` | The SVG charts and what they share |
+| `apps/web/src/components/stats/stats.logic.ts` | Scales, formatting, change against the previous period, run grouping |
+| `apps/web/src/state/queries.ts` (`useStats`) | The query |
+| `apps/server/src/dev/seeds.ts` (`stats`) | The sandbox seed with twelve weeks of history |
