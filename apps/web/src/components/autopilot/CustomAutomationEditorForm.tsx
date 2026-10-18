@@ -33,7 +33,7 @@ import {
   type CustomForm,
 } from "./customAutomations.logic";
 import { BlockedWarning, InputsField, SlotsField } from "./InputsAndSlots";
-import { ScheduledRuns } from "./ScheduledRuns";
+import { RunHistoryLink } from "./RunHistoryLink";
 
 function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -534,13 +534,12 @@ export function CustomAutomationEditorForm({
 
         {customId && isSchedule && form.actionKind === "agent" ? (
           <Field
-            label="Recent runs"
+            label="Run history"
             hint="What each run said it did, and the handover it left for the next run in that project."
           >
-            <ScheduledRuns
-              automation={customAutomationKey(customId)}
-              projects={form.projectIds.length > 0 ? projects.filter((p) => form.projectIds.includes(p.id)) : projects}
-            />
+            <div>
+              <RunHistoryLink automation={customAutomationKey(customId)} />
+            </div>
           </Field>
         ) : null}
 

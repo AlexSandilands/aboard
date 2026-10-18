@@ -1,20 +1,22 @@
-import { AUTOMATION_EXAMPLES } from "@repo/contracts";
+import { AUTOMATION_EXAMPLES, AUTOPILOT_ALL_RUNS } from "@repo/contracts";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
 import { CustomAutomationImportForm } from "~/components/autopilot/CustomAutomationImportForm";
+import { automationTitle } from "~/components/autopilot/autopilot.logic";
 import { emptyCustomForm, formFromCustom } from "~/components/autopilot/customAutomations.logic";
+import { RunHistory } from "~/components/autopilot/RunHistory";
 import { emptyRuleForm, formFromRule } from "~/components/recurring/recurring.logic";
 import { RuleEditorForm } from "~/components/recurring/RuleEditorForm";
 import { TemplateEditorForm } from "~/components/templates/TemplateEditorForm";
 import { emptyForm, formFromTemplate } from "~/components/templates/templates.logic";
 import { useCustomAutomations } from "~/state/customAutomations";
-import { useBoard, useTemplates } from "~/state/queries";
+import { useAutopilotOverview, useBoard, useTemplates } from "~/state/queries";
 import { useRecurringRules } from "~/state/recurring";
 import { EditorPage } from "../EditorFrame";
 import { SettingsLink } from "../settingsLayout";
 import type { SettingsGroupId } from "../settingsNav.logic";
-import { FROM_SETTINGS_LIST, useLeaveEditor } from "../settingsNavigation";
+import { FROM_SETTINGS_LIST, useLeaveEditor, useLeaveRunHistory } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 
 /** "new" in an editor's URL stands for one not saved yet. */
@@ -109,6 +111,36 @@ export function CustomAutomationEditorPage() {
       ) : (
         <EditorMessage>Loading automation...</EditorMessage>
       )}
+    </EditorShell>
+  );
+}
+
+/** Route component for `/settings/autopilot/runs/$automation`: the run history, filtered by the search params. */
+export function AutopilotRunsPage() {
+  const { automation } = useParams({ from: "/_app/settings/autopilot/runs/$automation" });
+  const search = useSearch({ from: "/_app/settings/autopilot/runs/$automation" });
+  const navigate = useNavigate();
+  const leave = useLeaveRunHistory(automation);
+  const automations = useAutopilotOverview().data?.automations;
+  const title = automation === AUTOPILOT_ALL_RUNS ? "all automations" : automationTitle(automations ?? [], automation);
+  return (
+    <EditorShell group="autopilot" label={`Run history: ${title}`}>
+      <RunHistory
+        key={automation}
+        automation={automation}
+        search={search}
+        onSearch={(next) =>
+          void navigate({
+            to: "/settings/autopilot/runs/$automation",
+            params: { automation },
+            search: next,
+            replace: true,
+            // Keeps the "opened from the list" mark, so Back still steps out of the history page in one go.
+            state: (prev) => prev,
+          })
+        }
+        onBack={leave}
+      />
     </EditorShell>
   );
 }

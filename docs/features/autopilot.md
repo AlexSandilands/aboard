@@ -152,6 +152,44 @@ leave them out.
   server under `tsx watch`, which restarts on edits but not on a file being read: `node --watch` also restarts
   on an NTFS last-access change, so an agent merely reading a server file would restart the board.
 
+### Run history
+
+The Run history page (`/settings/autopilot/runs/$automation`, `RunHistory`) lists every run of one automation, newest
+first, or of all of them with `all`. Orchestrate's area, a custom automation's editor and the Automations heading link to
+it. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
+
+- **The list.** `GET /api/autopilot/runs/history` (`ListAutopilotRunsQuery`, `AutopilotRunPage` in
+  `packages/contracts/src/autopilotRunHistory.ts`) takes `automation` (a key or `all`) and optionally `projectId`,
+  `since` (included) and `until` (excluded) as ISO times on `created_at`, `q`, `cursor` and `limit` (default 50,
+  at most 100). `q` is a case-insensitive text search over the run id, its project's title, its summary, the
+  summary and handover of a scheduled agent's answer and, for a query that is just `#N`, the task with that number
+  (`%` and `_` are taken literally). A bad time, cursor or limit is a `VALIDATION` error. The old
+  `GET /api/autopilot/runs` is unchanged for its callers.
+- **Paging.** Keyset, on (`created_at`, `id`) newest first, so runs made while someone scrolls never shift a page.
+  `nextCursor` is an opaque base64url of the last row's pair, null on the last page. Migration 034 indexes
+  (`automation`, `created_at`, `id`). The page uses an infinite query (`useAutopilotRunHistory`) loading the next page
+  as the end of the list comes into view. `autopilot.changed` refetches it, and a refetch takes each cursor from the page
+  before it, so a new run moves the pages along instead of dropping a run between two.
+- **Filters in the URL.** Search params `project`, `range` (`24h`, `7d`, `30d` or `custom`), `since` and `until`
+  (local calendar days, both included, only with `custom`) and `q` (`RunHistorySearch`, `runHistoryFilter` in
+  `runHistory.logic.ts`), so a filtered page can be linked to. A preset counts from when it was chosen.
+- **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. The page
+  can delete the ticked runs, or every run the filters match (**Delete all matching…**, which with no filter is the
+  automation's whole history, so with a time range it clears, say, everything before a date).
+  `POST /api/autopilot/runs/delete` takes `{ ids }` or `{ filter }` (the same filter as the list, without paging) and
+  `preview`. A preview counts and deletes nothing, which is what the confirm dialog shows before it asks; a real delete
+  weighs the runs again and removes them in one transaction, then publishes `autopilot.changed`. The reply is
+  `{ preview, deleted, kept, keptReasons }`. Runs aren't in backups ([backup.md](backup.md)), so there is no way back,
+  and the dialog says so.
+- **What is always kept.** Runs are more than history: the engine reads them. A delete leaves a run alone, with the
+  first of these as the reason, when it is: **queued or running**; one whose **worktree is still on disk** (the
+  worktree cleanup finds worktrees through the row); **on a task that isn't done or archived**, since dedupe keys
+  (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge into epic branch tries and the attention flag read the task's
+  runs; the **latest succeeded answer of a scheduled agent** in its project (`lastScheduledAnswer`, what the next run is
+  handed); or **less than a day old** (`RUN_DELETE_MIN_AGE_MS`), so deleting a just-finished run can't free a slot's
+  dedupe key (Orchestrate would run the slot again) or make a notice repeat. Everything else, including every older run
+  of a Done task, can go. `keptReasons` has each reason with its count (`KEPT_REASON_TEXT`).
+
 ### Needs attention
 
 A flagged run puts an `autopilot` attention reason on its task, with the run's error. It isn't cleared by a
@@ -203,6 +241,8 @@ one exception is `retry_autopilot_run`, which only frees a run's work for the en
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
+| `GET /api/autopilot/runs/history`               | One automation's runs (or `automation=all`), filtered, a page at a time (see [Run history](#run-history)) |
+| `POST /api/autopilot/runs/delete`               | Deletes runs by hand, or with `preview` counts what would go (see [Run history](#run-history)) |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
 | `POST /api/autopilot/runs/:id/dismiss`          | Dismisses a flagged run's attention flag (see [Needs attention](#needs-attention)) |
 | `GET /api/autopilot/orchestrate/:projectId`     | Orchestrate in one project: next slot, what holds it, Run now, the latest run |
@@ -555,7 +595,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
 - **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
-  and handover (`ScheduledRuns`).
+  and handover ([run history](#run-history)).
 
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
@@ -724,9 +764,9 @@ the automation. Runs stay, under the old key.
   has such an output (`lastScheduledAnswer`): a failed run leaves none, so the one before it carries on. A run
   with no structured answer fails (the runner's `outputSchema` handling), and what it did isn't carried over, so the
   next run may repeat it; an answer of the wrong shape that got through anyway keeps no `output`. Other
-  projects and other automations never see it. A dry run's preview includes it. The custom automation editor lists
-  the latest runs per project (`ScheduledRuns`) with their summary and handover, since a task-less run has no task
-  panel to show in.
+  projects and other automations never see it. A dry run's preview includes it. The editor links to the automation's
+  [run history](#run-history), which lists its runs with their summary and handover, since a task-less run has no
+  task panel to show in.
   - **Allowed tools** (`allowedTools`, `CustomToolRule` in contracts): extra tools the agent may call unattended,
     such as the user's own MCP servers, as `mcp__<server>`, `mcp__<server>__<tool>` (a `*` only in the tool part) or a
     built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`Skill(name)`); a built-in rule only adds a tool, it never narrows one the run already
@@ -959,7 +999,12 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 - **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Automations** (`AutomationSections`): one folded section per automation with its On / Off switch at
+- **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
+  Automations heading: its board switch and config (the same `FieldRow`s), a line per project with the next check, the
+  last run and **Run now** (`orchestrateLine`, `lastRunText`, the lane popover's logic and endpoints), and a **View
+  all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
+  heading has an **All runs** link to the history of every automation.
+- **Automations** (`AutomationSections`): one folded section per other automation with its On / Off switch at
   the board in the header (no Inherit; see [Switches and scopes](#switches-and-scopes)); opening it shows what it does and a form generated from its `fields`: a switch, number, text, 24-hour time
   or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
@@ -1053,4 +1098,9 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
 | `apps/web/src/components/recurring/` | The rule list, editor and examples on the project settings page |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
+| `packages/contracts/src/autopilotRunHistory.ts` | The run history's filter, query and page, and the delete's input, result and kept reasons |
+| `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |
+| `apps/web/src/components/autopilot/RunHistory.tsx`, `RunHistoryRow.tsx`, `runHistory.logic.ts` | The run history page, a run's row, and the URL-to-filter logic |
+| `apps/web/src/components/autopilot/OrchestrateSettings.tsx` | Orchestrate's area in Settings → Autopilot |
+| `apps/web/src/state/autopilotRunHistory.ts` | The history's infinite query, the delete preview and the delete |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

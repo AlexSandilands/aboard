@@ -82,6 +82,14 @@ describe("settingsIndex", () => {
     for (const entry of folded) expect(entry.foldedIn).toBe(entry.id);
   });
 
+  it("indexes Orchestrate's own area as a card, not a folded section", () => {
+    expect(entries.find((entry) => entry.id === "autopilot.engine.orchestrate")).toMatchObject({
+      title: "Orchestrate",
+      kind: "card",
+      foldedIn: null,
+    });
+  });
+
   it("names the built-in automations as the server does", () => {
     const server = sourceFiles(SERVER_AUTOMATIONS, ".ts")
       .map((file) => readFileSync(file, "utf8"))
