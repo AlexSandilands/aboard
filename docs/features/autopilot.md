@@ -68,7 +68,7 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 
 | Setting                | Default         | Meaning                                                              |
 | ---------------------- | --------------- | -------------------------------------------------------------------- |
-| `maxConcurrent`        | 1               | Agent runs going at once                                             |
+| `maxConcurrent`        | 1               | Autopilot's open agent runs at once (not a machine-wide limit)       |
 | `dailyRunCap`          | none            | Agent runs started per local day                                    |
 | `dailySpendCapUsd`     | none            | What agent runs created today may cost before no more start          |
 | `quietHours`           | off, 22:00–07:00 | No agent runs start in the window (local time; may wrap midnight; equal ends are no window) |
@@ -96,7 +96,8 @@ so they need no hook of their own. Events published while the engine itself writ
    dedupe key already has a run.
 5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
-   candidates aren't recorded, so a later pass picks them up.
+   candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
+   isn't held: it starts no agent, so the caps and quiet hours don't apply to it.
 7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
    `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
    after another.
@@ -435,7 +436,8 @@ to fix a pull request linked to a task.
   attempt that wasn't skipped or conflict-only (below). When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
   per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
   it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A new head
-  commit starts the per-head count again.
+  commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency cap, a
+  daily cap or quiet hours don't hold it back.
 
   An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
   counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict

@@ -310,7 +310,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "autopilot.engine.max-concurrent",
     "Agent runs at once",
-    "How many automations that start an agent can run at the same time.",
+    "How many of Autopilot's agent runs can be open at once. Not a limit on your machine. Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count.",
     ["concurrency", "parallel", "limit", "simultaneous"],
   ),
   draft(

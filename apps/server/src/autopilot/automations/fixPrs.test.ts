@@ -508,6 +508,27 @@ describe("fix PRs: limits", () => {
     expect(requests).toHaveLength(3);
   });
 
+  it("gives up even while the caps hold agent runs back, since it starts no agent", async () => {
+    const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
+    turnOn();
+    setPr({ checks: "failing" });
+    await pass();
+    setPr({ checks: "failing", reviewComments: [comment(1)] });
+    await pass();
+    expect(requests).toHaveLength(2);
+    // Both of today's runs are used: a third attempt would be held.
+    engineSettings({ dailyRunCap: 2 });
+    setPr({ checks: "failing", headOid: SHA_B });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(runs()).toHaveLength(2);
+    // Giving up isn't held.
+    setPr({ checks: "failing", reviewComments: [comment(1), comment(2)], headOid: SHA_A });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(runs()[0]!.summary).toContain("Autopilot gave up on PR #7");
+  });
+
   it("gives up once the PR's rounds are used, failed attempts included and skipped ones not", async () => {
     const { requests, setPr, pass, turnOn, runs, engineSettings, failRunner } = setup();
     engineSettings({ prReviewRounds: 2 });

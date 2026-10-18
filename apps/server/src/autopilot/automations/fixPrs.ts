@@ -461,6 +461,7 @@ export const fixPrs = defineAutomation({
               dedupeKey,
               summary: `give up on PR #${ref.number}: ${reason}`,
               taskId: task.id,
+              startsNoAgent: true,
               data: { gaveUp: true, number: ref.number, reason } satisfies GaveUpData,
             },
           ];

@@ -133,7 +133,8 @@ suggested tier. Its settings:
   delivered through an integration branch always starts from that branch, and opens its pull request against it.
 - **Start grace period** (15 minutes): the agent moves the task to In Progress itself.
 
-**Agent runs at once** limits how many of its agents are working: a T3 Code thread keeps its place until it goes
+**Agent runs at once** limits how many agent runs Autopilot has open, not what your machine runs: threads you start
+yourself never count. A T3 Code thread Autopilot started counts only against Start planned: it keeps its place until it goes
 idle or finishes, is archived or settled, or its task is Done or moves back to Backlog. A thread waiting
 for your answer still holds its place, so answer it, or the next task won't start. A thread the board can no longer
 see (T3 Code closed, the thread deleted) stops holding it after ten minutes.
