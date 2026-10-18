@@ -29,6 +29,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
+| `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
 | `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
 | `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)) |
 | `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
@@ -100,6 +101,9 @@ text when both are present.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)).
+- `get_session_transcript` returns a header with the session's totals, then one page of up to 20,000 characters of
+  one-line entries and the `offset` to call again with when more follows (`renderTranscript`). Credential-shaped text
+  is redacted first ([agent-sessions.md](agent-sessions.md#transcripts)).
 - `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
   the board open the next round (under the limit), and the result says so and points to `start_review` for its
   brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.
@@ -215,7 +219,7 @@ the workflow, update both, plus `INSTRUCTIONS`.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `apps/server/src/mcp/server.ts`       | `registerMcp`, transport, `INSTRUCTIONS`, actor resolution           |
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
-| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint` |
+| `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint`, `renderTranscript` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |

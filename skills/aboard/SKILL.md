@@ -275,6 +275,9 @@ link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", c
   (harness `"copilot-cli"`). Read it with the shell (`echo $CLAUDE_CODE_SESSION_ID`); never guess it.
 - `cwd` is the absolute path you are working in.
 - Inside T3 Code, link it as well as your thread: it lets the user continue in a terminal.
+- To audit how a task went (what was asked, what ran, where it went wrong), `get_session_transcript(task)` reads a
+  condensed, redacted transcript of the newest Claude Code session linked to it, a page at a time (pass `offset`
+  for the next page, `session` for another one).
 
 ## Setup
 
