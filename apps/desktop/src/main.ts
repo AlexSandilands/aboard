@@ -16,12 +16,19 @@ import {
   shell,
 } from "electron";
 import { appIcon, trayIcon } from "./icon.ts";
-import { NOTIFICATION_CLICK_CHANNEL, NOTIFY_CHANNEL, SET_BADGE_CHANNEL, SET_THEME_CHANNEL } from "./ipc.ts";
+import {
+  NOTIFICATION_CLICK_CHANNEL,
+  NOTIFY_CHANNEL,
+  SET_BACKGROUND_CHANNEL,
+  SET_BADGE_CHANNEL,
+  SET_THEME_CHANNEL,
+} from "./ipc.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
 import {
   allowSubFrameNavigation,
   decideNavigation,
   isDesktopTheme,
+  parseBackgroundColor,
   parseDesktopBadge,
   parseDesktopNotification,
 } from "./shell.logic.ts";
@@ -69,6 +76,8 @@ const shown = new Set<Notification>();
 const MAX_SHOWN = 50;
 /** Tray clicks and second launches before the server is ready; the window opens once it is. */
 let showRequested = false;
+/** The board's theme background, reported by the page; null until it does (the default theme's is used). */
+let pageBackground: string | null = null;
 
 function parsePort(value: string | undefined): number {
   const parsed = Number(value);
@@ -99,7 +108,7 @@ function createWindow(show: boolean): BrowserWindow {
     title: productName,
     icon: appIcon(),
     autoHideMenuBar: true,
-    ...titleBarOptions(nativeTheme.shouldUseDarkColors),
+    ...titleBarOptions(nativeTheme.shouldUseDarkColors, pageBackground),
     // The preload (and its desktopBridge) runs in the top frame only; sub-frames are agents' sandboxed art.
     webPreferences: {
       sandbox: true,
@@ -112,7 +121,7 @@ function createWindow(show: boolean): BrowserWindow {
   // Restyling the overlay before the window's first show leaves the page's
   // navigator.windowControlsOverlay stuck at visible=false (Electron 44), so the board would lay out
   // as if there were no title bar. The page reports its theme while loading, so apply it on show.
-  win.on("show", () => syncTitleBar(win, nativeTheme.shouldUseDarkColors));
+  win.on("show", () => syncTitleBar(win, nativeTheme.shouldUseDarkColors, pageBackground));
   // The page sets the title; keep "Sandbox" on it so the taskbar and Alt+Tab tell the two shells apart.
   if (sandbox) {
     win.on("page-title-updated", (event, title) => {
@@ -275,13 +284,20 @@ if (app.requestSingleInstanceLock()) {
     toast.on("failed", () => shown.delete(toast));
     toast.show();
   });
+  ipcMain.on(SET_BACKGROUND_CHANNEL, (event, value: unknown) => {
+    const color = parseBackgroundColor(value);
+    if (!color || !fromBoard(event) || color === pageBackground) return;
+    pageBackground = color;
+    // Hidden windows catch up on "show" (see createWindow).
+    if (window?.isVisible()) syncTitleBar(window, nativeTheme.shouldUseDarkColors, pageBackground);
+  });
   ipcMain.on(SET_BADGE_CHANNEL, (event, value: unknown) => {
     const next = parseDesktopBadge(value);
     if (next && fromBoard(event)) applyBadge(next);
   });
   nativeTheme.on("updated", () => {
     // Hidden windows catch up on "show" (see createWindow).
-    if (window?.isVisible()) syncTitleBar(window, nativeTheme.shouldUseDarkColors);
+    if (window?.isVisible()) syncTitleBar(window, nativeTheme.shouldUseDarkColors, pageBackground);
   });
   app.on("before-quit", (event) => {
     quitting = true;

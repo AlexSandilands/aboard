@@ -258,7 +258,9 @@ rule editor take `?project=`; without it the page shows the project the board wa
   (setup steps, how Jira tools are matched, what a CLI path is used for). Status details (Found / version /
   path, Registered / scope, Connected) go in `status`, a compact line under the description built with
   `StatusLine`, so they never squeeze beside the control. The search index has its own descriptions and keywords,
-  so text moved behind an info button is still found.
+  so text moved behind an info button is still found. A setting with a default can pass `resetAction`: a
+  `SettingResetButton` beside the title, shown while the value differs from the default (the Appearance sliders and
+  fonts, see [appearance.md](appearance.md)).
 - **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
   `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
@@ -370,6 +372,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
   default). The filters aren't here: they are the board's URL params ([saved-views.md](saved-views.md)). It is at
   version 2: `migrateBoardView` drops the filters older versions stored and version 0's per-lane `expandedDone`, which
   has no per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
+- `appearance` holds the sidebar banner, `scrollToTask`, and the contrast, glass, panel animation and font prefs
+  ([appearance.md](appearance.md); the theme itself has its own keys there).
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
   which validates it and keeps it referentially stable.
 

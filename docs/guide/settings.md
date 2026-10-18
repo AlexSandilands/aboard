@@ -33,7 +33,7 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, Data (backup to git, archived projects) |
+| **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI) |
@@ -66,6 +66,39 @@ and a click tries again.
 
 Editing a template, a custom automation or a recurring rule opens it as a page of its own; the top bar shows where
 you are (**Settings / Tasks / Template: Bug**), and **Esc** or **Cancel** goes back to the list.
+
+## Appearance
+
+The look matches T3 Code's Appearance page, so the board and T3 Code can look the same side by side. All of it is
+kept in this browser, not on the server: another browser (or the desktop app) has its own.
+
+- **Colors & themes.** Pick **System** (follow your computer), **Light** or **Dark**, then a theme: **T3 Code** (the
+  default), **T3 Chat**, **Grove**, **Ocean**, **Ember** or **Iris**, the same palettes as T3 Code. Click a card to
+  use the theme for both light and dark; click one of its two circles to use it for that appearance only (a sun or
+  moon badge marks which circle is in use), so you can have, say, Grove in light and Iris in dark. Label, epic and PR
+  colours stay the same in every theme.
+- **Create theme** opens a small editor in the corner that you can drag, resize and minimise; the whole board shows
+  your colours while you edit, so you can open the board and look. Name the theme, pick Light or Dark, and choose a
+  **Background** and an **Accent**: everything else is worked out from those two and kept readable. Turn on
+  **Advanced** to set each colour yourself (text, borders, surfaces, the sidebar, error and warning…). **Inspect**
+  lets you click anything on the board to jump to the colour that paints it, and clicking a colour's name lights up
+  everywhere it's used. Cancel puts your theme back. Saving a theme under the name of one you already have adds it as
+  that theme's other appearance, so a light and a dark theme become one.
+- Every theme card has **Duplicate** (start a new theme from it). Your own themes also have **Edit**, **Export**
+  (a `.json` file) and **Remove**.
+- **Add theme** finds open-source themes on Open VSX (the VS Code extension registry) and installs them, all of an
+  extension's variants on one card. You can also drop or choose theme files (several at once), or paste a theme's
+  JSON. Files exported from T3 Code or the board import as they are, and VS Code colour themes are converted. If a
+  theme is already installed you choose **Update existing** or **Keep both**.
+- **Contrast** (50–200 %) fades text and borders below 100 % and strengthens them above it.
+- **Glass opacity** (40–100 %) sets how see-through menus, dialogs and popovers are; 100 % makes them solid.
+- **Panel animations** (0–400 ms) sets how fast the sidebar and the task panel slide open; the preview beside it
+  replays when clicked. The default is 150 ms; 0 ms turns them off, and they stay off when your system asks for reduced
+  motion.
+- **Interface font** and its size (12–20 px) change the text everywhere; the size scales the whole board. **Monospace
+  font** is for code, ids and shortcuts and only takes monospaced fonts. Type a font installed on your computer and
+  press Enter; a name the browser can't find is marked and not used. Leave it empty for the system font.
+- A setting you've changed has a reset button beside its name.
 
 ## Suggested changes
 

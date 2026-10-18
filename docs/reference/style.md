@@ -23,7 +23,7 @@ Copy these blocks (line numbers approximate):
 |---|---|---|
 | `@custom-variant dark/light/any-hover` | top | `dark` = `.dark` class on `<html>` |
 | `:root` layout vars (`--control-radius`, `--glass-*`, `--workspace-topbar-height: 52px`, scrollbar vars, sidebar insets, `--command-*-inset`) | 89–149 | |
-| `@theme inline` color + radius mapping, `--text-2xs/3xs`, `--color-zinc-25`, inset shadows, `--ease-drawer` | 172–282 | Map `--color-foreground` etc. to **raw** tokens (we drop the `--contrast-*` layer) |
+| `@theme inline` color + radius mapping, `--text-2xs/3xs`, `--color-zinc-25`, inset shadows, `--ease-drawer` | 172–282 | Foregrounds and borders map to `--contrast-*` (the Contrast setting, [appearance.md](../features/appearance.md)) |
 | `@utility` glass: `surface-glass`, `dropdown-glass`, `dialog-glass`, `dialog-backdrop` | ~395–436 | |
 | `@layer base` | 638–708 | `* { border-border outline-ring/50 }`, body bg `--app-chrome-background` |
 | `:root` color tokens + `@variant dark` | 1087–1196 | The default T3 Code look (it's the *unthemed* set) |
@@ -88,6 +88,8 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 | dnd-kit usage | `W/components/LegacySidebar.tsx` ~2925–3470, `W/components/settings/EnvironmentRoutesList.tsx` |
 | Empty states | `W/components/ui/empty.tsx`, `NoProjectsHero.tsx` |
 | Theme boot (no flash) | `C:\Code\t3code\apps\web\index.html`, `W/hooks/useTheme.ts` |
+| Themes, palettes, `html[data-theme-id]` mapping | `C:\Code\t3code\packages\shared\src\themePalettes.ts`, `W/themePalette.ts`, `W/index.css` ~1252–1317 |
+| Appearance settings (theme cards, sliders, fonts) | `W/components/settings/ThemeSettings.tsx`, `ThemePreviewCircles.tsx`, `ThemeWireframe.tsx`, `SettingsPanels.tsx` ~1066–1432 |
 | Sidebar night-sky art | `W/components/SidebarStageBackdrop.tsx` |
 
 ## 5. Key class strings (quick copy)

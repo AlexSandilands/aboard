@@ -75,6 +75,7 @@ and to this table.
 | SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
 | Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
 | Column collapse, panel sections, card links, the settings page | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
+| Themes, contrast, glass, panel animations, fonts               | [docs/features/appearance.md](docs/features/appearance.md)                          |
 | Board filters, URL params, saved views                         | [docs/features/saved-views.md](docs/features/saved-views.md)                        |
 | PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
 | Creating tasks from Jira or GitHub issue URLs                  | [docs/features/issue-import.md](docs/features/issue-import.md)                      |

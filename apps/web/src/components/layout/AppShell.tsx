@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useEffectEvent } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
+import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 import { useBoardEvents } from "~/state/queries";
@@ -60,6 +61,7 @@ export function AppShell({
       <SidebarInset className="min-h-0 flex-row overflow-hidden">{children}</SidebarInset>
       <CommandPalette />
       <AppDialogs />
+      <ThemeEditorHost />
     </SidebarProvider>
   );
 }

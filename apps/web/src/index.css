@@ -2,9 +2,8 @@
  * Adapted from T3 Code (apps/web/src/index.css), MIT — see NOTICE.
  *
  * Design-system port: tokens, glass utilities, grain, scrollbars, markdown prose.
- * Dropped vs T3: the `--contrast-*` accessibility layer (tokens map straight to the
- * raw values), the theme-palette bridge, and terminal/diff/composer/chat-timeline/
- * browser-preview rules. Electron keeps only the title bar overlay and drag region. Prose class is `.markdown` (T3: `.chat-markdown`).
+ * Includes T3's theme-palette bridge (html[data-theme-id]) and the `--contrast-*` layer behind
+ * the Contrast setting. Dropped vs T3: terminal/diff/composer/chat-timeline/browser-preview rules. Electron keeps only the title bar overlay and drag region. Prose class is `.markdown` (T3: `.chat-markdown`).
  */
 @import "tailwindcss";
 
@@ -24,6 +23,11 @@
 
 :root {
   --app-scrollbar-width: 6px;
+  /* The Contrast setting (theme/appearance.ts writes these inline; 100% leaves colours as they are). */
+  --appearance-contrast-base: 100%;
+  --appearance-contrast-boost: 0%;
+  --appearance-contrast-border-boost: 0%;
+  --appearance-contrast-target: black;
   --app-scrollbar-thumb: rgb(217 217 217);
   --app-scrollbar-thumb-hover: rgb(191 191 191);
   /*
@@ -33,7 +37,7 @@
   --control-radius: 0.5rem;
   --sidebar-content-inset: 0.5rem;
   --sidebar-control-gap: 0.5rem;
-  --sidebar-icon-color: color-mix(in srgb, var(--sidebar-muted-foreground) 60%, var(--sidebar));
+  --sidebar-icon-color: color-mix(in srgb, var(--contrast-sidebar-muted-foreground) 60%, var(--sidebar));
   --sidebar-row-content-inset: 0.625rem;
   --command-shell-inset: 0.5rem;
   --command-content-inset: 1rem;
@@ -53,6 +57,7 @@
   }
 
   @variant dark {
+    --appearance-contrast-target: white;
     --app-scrollbar-thumb: rgb(255 255 255 / 8%);
     --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
     --glass-blur: 16px;
@@ -139,37 +144,37 @@
   --color-info: var(--info);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
+  --color-input: var(--contrast-input);
+  --color-border: var(--contrast-border);
   --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-foreground: var(--contrast-accent-foreground);
   --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground: var(--contrast-muted-foreground);
   --color-muted: var(--muted);
-  --color-placeholder: var(--placeholder);
-  --color-secondary-label: var(--secondary-label);
-  --color-icon-muted: var(--icon-muted);
-  --color-secondary-foreground: var(--secondary-foreground);
+  --color-placeholder: var(--contrast-placeholder);
+  --color-secondary-label: var(--contrast-secondary-label);
+  --color-icon-muted: var(--contrast-icon-muted);
+  --color-secondary-foreground: var(--contrast-secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
+  --color-popover-foreground: var(--contrast-popover-foreground);
   --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+  --color-card-foreground: var(--contrast-card-foreground);
   --color-card: var(--card);
   --color-code: var(--code-background);
   --color-code-foreground: var(--code-foreground);
-  --color-foreground: var(--foreground);
+  --color-foreground: var(--contrast-foreground);
   --color-background: var(--background);
   --color-surface-raised: var(--surface-raised);
   --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-foreground: var(--contrast-sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--contrast-sidebar-muted-foreground);
   --color-sidebar-control-surface: var(--sidebar-control-surface);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-active: var(--sidebar-row-active);
   --color-sidebar-row-selected: var(--sidebar-row-selected);
-  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-border: var(--contrast-sidebar-border);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -485,6 +490,160 @@
     --stage-mono-ink: #fff;
   }
 
+  /* Each built-in theme gives the sidebar banner art its own material (from T3 Code): rose
+     vellum, forest drafting paper, marine cyanotype, copper, and violet ink.
+     These colors stay deliberately deep at the top edge so the white stage
+     wordmark and controls retain contrast in both appearance modes. */
+  html[data-theme-id="t3-chat"] {
+    --stage-art-top: oklch(0.760675 0.141361 348.019);
+    --stage-art-mid: oklch(0.588093 0.188832 353.138);
+    --stage-art-bottom: oklch(0.383959 0.135096 348.656);
+    --stage-art-highlight: oklch(0.949689 0.034241 339.171);
+    --stage-art-secondary: oklch(0.763402 0.163836 352.525);
+    --stage-art-tertiary: oklch(0.70819 0.180285 311.949);
+    --stage-art-line: oklch(0.952158 0.034194 336.179);
+
+    @variant dark {
+      --stage-art-top: oklch(0.540689 0.143665 347.587);
+      --stage-art-mid: oklch(0.396586 0.126592 347.6);
+      --stage-art-bottom: oklch(0.249959 0.079694 340.523);
+      --stage-art-highlight: oklch(0.921297 0.051708 343.229);
+      --stage-art-secondary: oklch(0.667398 0.165674 352.549);
+      --stage-art-tertiary: oklch(0.609315 0.163722 306.315);
+      --stage-art-line: oklch(0.945349 0.036045 341.433);
+    }
+  }
+
+  html[data-theme-id="grove"] {
+    --stage-art-top: oklch(0.751465 0.112731 157.313);
+    --stage-art-mid: oklch(0.567105 0.11099 158.859);
+    --stage-art-bottom: oklch(0.367918 0.067635 160.558);
+    --stage-art-highlight: oklch(0.976387 0.034353 161.456);
+    --stage-art-secondary: oklch(0.80968 0.117071 158.817);
+    --stage-art-tertiary: oklch(0.784102 0.108047 88.516);
+    --stage-art-line: oklch(0.981098 0.027812 158.718);
+    --stage-night-top: oklch(0.45805 0.079616 160.092);
+    --stage-night-mid: oklch(0.368483 0.065631 162.719);
+    --stage-night-bottom: oklch(0.264797 0.044397 168.088);
+    --stage-night-highlight: oklch(0.912563 0.055173 158.974);
+    --stage-night-secondary: oklch(0.665652 0.109731 156.599);
+    --stage-night-tertiary: oklch(0.698651 0.103024 89.828);
+    --stage-night-line: oklch(0.945336 0.041923 157.222);
+
+    @variant dark {
+      --stage-art-top: oklch(0.58719 0.09869 157.426);
+      --stage-art-mid: oklch(0.454979 0.079031 159.756);
+      --stage-art-bottom: oklch(0.297856 0.050355 161.167);
+      --stage-art-highlight: oklch(0.952407 0.053872 158.44);
+      --stage-art-secondary: oklch(0.732591 0.120606 155.853);
+      --stage-art-tertiary: oklch(0.716282 0.116547 80.563);
+      --stage-art-line: oklch(0.961577 0.035285 157.03);
+      --stage-night-top: oklch(0.398632 0.065534 158.601);
+      --stage-night-mid: oklch(0.290561 0.049694 160.456);
+      --stage-night-bottom: oklch(0.210147 0.03173 169.818);
+      --stage-night-highlight: oklch(0.866303 0.057526 156.796);
+      --stage-night-secondary: oklch(0.586553 0.093722 157.365);
+      --stage-night-tertiary: oklch(0.6364 0.101769 82.985);
+      --stage-night-line: oklch(0.913292 0.035718 156.976);
+    }
+  }
+
+  html[data-theme-id="ocean"] {
+    --stage-art-top: oklch(0.792993 0.088072 220.421);
+    --stage-art-mid: oklch(0.590296 0.116841 243.184);
+    --stage-art-bottom: oklch(0.409123 0.093718 247.98);
+    --stage-art-highlight: oklch(0.971217 0.023008 213.615);
+    --stage-art-secondary: oklch(0.788391 0.090856 215.684);
+    --stage-art-tertiary: oklch(0.76441 0.099607 187.893);
+    --stage-art-line: oklch(0.976025 0.019647 212.543);
+
+    @variant dark {
+      --stage-art-top: oklch(0.59663 0.089167 233.427);
+      --stage-art-mid: oklch(0.461094 0.084904 243.478);
+      --stage-art-bottom: oklch(0.294818 0.05947 250.526);
+      --stage-art-highlight: oklch(0.952907 0.032224 221.27);
+      --stage-art-secondary: oklch(0.732079 0.09296 224.414);
+      --stage-art-tertiary: oklch(0.720885 0.095495 190.903);
+      --stage-art-line: oklch(0.961039 0.027355 219.756);
+    }
+  }
+
+  html[data-theme-id="ember"] {
+    --stage-art-top: oklch(0.782439 0.118806 52.569);
+    --stage-art-mid: oklch(0.62863 0.15922 39.401);
+    --stage-art-bottom: oklch(0.404251 0.117664 30.424);
+    --stage-art-highlight: oklch(0.962469 0.02774 70.95);
+    --stage-art-secondary: oklch(0.815735 0.11904 53.659);
+    --stage-art-tertiary: oklch(0.69361 0.159346 24.787);
+    --stage-art-line: oklch(0.970313 0.02052 67.583);
+    --stage-night-top: oklch(0.470236 0.102322 39.355);
+    --stage-night-mid: oklch(0.345367 0.080697 33.217);
+    --stage-night-bottom: oklch(0.227386 0.056077 27.437);
+    --stage-night-highlight: oklch(0.903891 0.059281 56.181);
+    --stage-night-secondary: oklch(0.641705 0.126508 44.376);
+    --stage-night-tertiary: oklch(0.538694 0.129931 25.865);
+    --stage-night-line: oklch(0.926348 0.046029 58.73);
+
+    @variant dark {
+      --stage-art-top: oklch(0.597533 0.120694 43.455);
+      --stage-art-mid: oklch(0.437763 0.101287 34.86);
+      --stage-art-bottom: oklch(0.264269 0.055858 26.548);
+      --stage-art-highlight: oklch(0.929214 0.042638 55.801);
+      --stage-art-secondary: oklch(0.705592 0.137369 43.176);
+      --stage-art-tertiary: oklch(0.629583 0.158322 24.088);
+      --stage-art-line: oklch(0.945058 0.033906 58.824);
+      --stage-night-top: oklch(0.392352 0.081287 36.444);
+      --stage-night-mid: oklch(0.271305 0.056352 31.135);
+      --stage-night-bottom: oklch(0.182126 0.028154 27.774);
+      --stage-night-highlight: oklch(0.851007 0.061294 53.805);
+      --stage-night-secondary: oklch(0.560789 0.10645 42.953);
+      --stage-night-tertiary: oklch(0.476228 0.106656 24.165);
+      --stage-night-line: oklch(0.884931 0.046607 56.556);
+    }
+  }
+
+  html[data-theme-id="iris"] {
+    --stage-art-top: oklch(0.738305 0.113454 298.926);
+    --stage-art-mid: oklch(0.551826 0.159189 294.531);
+    --stage-art-bottom: oklch(0.37147 0.133317 289.999);
+    --stage-art-highlight: oklch(0.949472 0.029204 303.081);
+    --stage-art-secondary: oklch(0.745085 0.125892 298.647);
+    --stage-art-tertiary: oklch(0.73066 0.167815 340.964);
+    --stage-art-line: oklch(0.960278 0.024064 306.969);
+
+    @variant dark {
+      --stage-art-top: oklch(0.57297 0.145973 295.185);
+      --stage-art-mid: oklch(0.419499 0.13752 292.131);
+      --stage-art-bottom: oklch(0.274235 0.095798 286.608);
+      --stage-art-highlight: oklch(0.916698 0.047206 300.224);
+      --stage-art-secondary: oklch(0.670994 0.13095 296.689);
+      --stage-art-tertiary: oklch(0.679357 0.165376 340.439);
+      --stage-art-line: oklch(0.940582 0.032921 299.076);
+    }
+  }
+
+  :is(html[data-theme-id="t3-chat"], html[data-theme-id="ocean"], html[data-theme-id="iris"]) {
+    --stage-night-top: color-mix(in oklch, var(--stage-art-top) 38%, var(--stage-night-base-top));
+    --stage-night-mid: color-mix(in oklch, var(--stage-art-mid) 38%, var(--stage-night-base-mid));
+    --stage-night-bottom: color-mix(in oklch, var(--stage-art-bottom) 38%, var(--stage-night-base-bottom));
+    --stage-night-highlight: var(--stage-art-highlight);
+    --stage-night-secondary: color-mix(in oklch, var(--stage-art-secondary) 55%, var(--stage-night-mid));
+    --stage-night-tertiary: color-mix(in oklch, var(--stage-art-tertiary) 60%, var(--stage-night-top));
+    --stage-night-line: color-mix(in oklch, var(--stage-art-line) 82%, oklch(1 0 0));
+  }
+
+  :is(
+    html[data-theme-id="t3-chat"],
+    html[data-theme-id="grove"],
+    html[data-theme-id="ocean"],
+    html[data-theme-id="ember"],
+    html[data-theme-id="iris"]
+  ) {
+    --stage-night-glow-highlight: var(--stage-night-highlight);
+    --stage-night-glow-secondary: var(--stage-night-secondary);
+    --stage-night-sparkle: var(--stage-night-line);
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
@@ -673,6 +832,398 @@
     --sidebar-border: var(--border);
     --sidebar-stage-fade: var(--card);
   }
+}
+
+/* Themes (see src/theme/): a theme's colour roles arrive as inline --app-theme-* variables on <html>
+   and are mapped onto the board's tokens here. Success, info, label, epic and PR colours stay as
+   they are; error, warning and update follow the theme. The non-empty marker outranks the root
+   dark variant. Terminal and composer roles have nothing to map onto in the board. */
+html[data-theme-id]:not([data-theme-id=""]) {
+  --background: var(--app-theme-canvas);
+  --app-chrome-background: var(--app-theme-chrome);
+  --surface-raised: var(--app-theme-surface-raised);
+  --foreground: var(--app-theme-text);
+  --card: var(--app-theme-surface);
+  --card-foreground: var(--app-theme-text);
+  --popover: var(--app-theme-surface-overlay);
+  --popover-foreground: var(--app-theme-text);
+  /* Solid controls share the theme's action colour (as in T3 Code); the accent drives surfaces,
+     selection and focus. */
+  --primary: var(--app-theme-message-action);
+  --primary-foreground: var(--app-theme-message-action-foreground);
+  --secondary: var(--app-theme-secondary);
+  --secondary-foreground: var(--app-theme-secondary-foreground);
+  --muted: var(--app-theme-muted);
+  --muted-foreground: var(--app-theme-muted-foreground);
+  --placeholder: var(--app-theme-placeholder);
+  --secondary-label: var(--app-theme-secondary-label);
+  --icon-muted: var(--app-theme-icon-muted);
+  --accent: var(--app-theme-accent-surface);
+  --accent-foreground: var(--app-theme-accent-surface-foreground);
+  --error: var(--app-theme-error);
+  --error-foreground: var(--app-theme-error-foreground);
+  --tool-error-icon: var(--error-foreground);
+  --error-surface: var(--app-theme-error-surface);
+  --destructive: var(--error);
+  --destructive-foreground: var(--error-foreground);
+  --warning: var(--app-theme-warning);
+  --warning-foreground: var(--app-theme-warning-foreground);
+  --warning-surface: var(--app-theme-warning-surface);
+  --update: var(--app-theme-update);
+  --update-foreground: var(--app-theme-update-foreground);
+  --update-surface: var(--app-theme-update-surface);
+  --border: var(--app-theme-border);
+  --input: var(--app-theme-input);
+  --ring: var(--app-theme-focus);
+  --sidebar: var(--app-theme-sidebar);
+  --sidebar-foreground: var(--app-theme-sidebar-foreground);
+  --sidebar-muted-foreground: var(--app-theme-sidebar-muted-foreground);
+  --sidebar-control-surface: var(--app-theme-sidebar-control-surface);
+  --sidebar-row-hover: var(--app-theme-sidebar-row-hover);
+  --sidebar-row-active: var(--app-theme-sidebar-row-active);
+  --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
+  --sidebar-border: var(--app-theme-sidebar-border);
+  --sidebar-stage-fade: var(--app-theme-sidebar);
+  --code-background: var(--app-theme-code-background);
+  --code-foreground: var(--app-theme-code-foreground);
+}
+
+/* The theme editor's Inspect mode (components/settings/themeInspector.ts), copied from T3 Code. */
+/* Theme-token dependency probes are restored synchronously, before paint. Keep
+   transitions from observing the temporary sentinel color in between. */
+html[data-theme-token-probe],
+html[data-theme-token-probe] *,
+html[data-theme-token-probe] *::before,
+html[data-theme-token-probe] *::after {
+  transition: none !important;
+}
+
+#theme-inspector-spotlight {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-slot="popover-positioner"]:has([data-theme-editor-panel]),
+[data-slot="tooltip-positioner"]:has([data-theme-editor-panel]) {
+  z-index: 120;
+}
+
+.theme-inspector-spotlight-dimmer {
+  fill: rgb(2 3 8 / 54%);
+}
+
+.theme-inspector-spotlight-glow {
+  fill: color-mix(in oklab, var(--ring) 9%, transparent);
+  stroke: color-mix(in oklab, var(--ring) 72%, white);
+  stroke-width: 2px;
+  opacity: 0.92;
+  vector-effect: non-scaling-stroke;
+}
+
+#theme-inspector-hover {
+  position: fixed;
+  z-index: 101;
+  pointer-events: none;
+  background: color-mix(in oklab, var(--ring) 7%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ring) 70%, white);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--ring) 16%, transparent),
+    0 0 18px color-mix(in oklab, var(--ring) 38%, transparent);
+}
+
+#theme-inspector-hover [data-theme-inspector-hover-label] {
+  position: absolute;
+  left: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid color-mix(in oklab, var(--ring) 48%, var(--contrast-border));
+  border-radius: 0.4rem;
+  background: var(--popover);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
+  color: var(--contrast-popover-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#theme-inspector-hover[data-placement="above"] [data-theme-inspector-hover-label] {
+  bottom: calc(100% + 0.35rem);
+}
+
+#theme-inspector-hover[data-placement="below"] [data-theme-inspector-hover-label] {
+  top: calc(100% + 0.35rem);
+}
+
+/* The sidebar sets its own palette above; a theme replaces it too. */
+html[data-theme-id] [data-app-sidebar] {
+  --background: var(--app-theme-canvas);
+  --foreground: var(--app-theme-text);
+  --card: var(--app-theme-surface);
+  --card-foreground: var(--app-theme-text);
+  --accent: var(--app-theme-accent-surface);
+  --accent-foreground: var(--app-theme-accent-surface-foreground);
+  --muted: var(--app-theme-muted);
+  --muted-foreground: var(--app-theme-muted-foreground);
+  --border: var(--app-theme-border);
+  --input: var(--app-theme-input);
+  --sidebar: var(--app-theme-sidebar);
+  --sidebar-foreground: var(--app-theme-sidebar-foreground);
+  --sidebar-muted-foreground: var(--app-theme-sidebar-muted-foreground);
+  --sidebar-control-surface: var(--app-theme-sidebar-control-surface);
+  --sidebar-row-hover: var(--app-theme-sidebar-row-hover);
+  --sidebar-row-active: var(--app-theme-sidebar-row-active);
+  --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
+  --sidebar-border: var(--app-theme-sidebar-border);
+  --sidebar-stage-fade: var(--app-theme-sidebar);
+  border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 10%, transparent);
+
+  @variant dark {
+    border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 8%, transparent);
+  }
+}
+
+/* T3 Chat's panel divider is deliberately pink. */
+html[data-theme-id="t3-chat"] [data-app-sidebar] {
+  @variant dark {
+    border-color: var(--contrast-sidebar-border);
+  }
+}
+
+/* The Contrast setting, from T3 Code: below 100% text and borders fade toward their surface; above
+   it they move toward black or white (borders a quarter as fast). Recomputed wherever a subtree
+   sets its own palette. Tailwind's colour utilities read these (see @theme inline). */
+:root,
+[data-app-sidebar] {
+  --contrast-input: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--input) var(--appearance-contrast-base), transparent),
+    var(--foreground) var(--appearance-contrast-border-boost)
+  );
+  --contrast-border: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--border) var(--appearance-contrast-base), transparent),
+    var(--foreground) var(--appearance-contrast-border-boost)
+  );
+  --contrast-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--foreground) var(--appearance-contrast-base), var(--background)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-muted-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--muted-foreground) var(--appearance-contrast-base), var(--background)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-placeholder: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--placeholder) var(--appearance-contrast-base), var(--background)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-secondary-label: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--secondary-label) var(--appearance-contrast-base), var(--background)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-icon-muted: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--icon-muted) var(--appearance-contrast-base), var(--background)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-card-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--card-foreground) var(--appearance-contrast-base), var(--card)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-popover-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--popover-foreground) var(--appearance-contrast-base), var(--popover)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-accent-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--accent-foreground) var(--appearance-contrast-base), var(--accent)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-secondary-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--secondary-foreground) var(--appearance-contrast-base), var(--secondary)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-sidebar-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--sidebar-foreground) var(--appearance-contrast-base), var(--sidebar)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-sidebar-muted-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--sidebar-muted-foreground) var(--appearance-contrast-base), var(--sidebar)),
+    var(--appearance-contrast-target) var(--appearance-contrast-boost)
+  );
+  --contrast-sidebar-border: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--sidebar-border) var(--appearance-contrast-base), transparent),
+    var(--sidebar-foreground) var(--appearance-contrast-border-boost)
+  );
+}
+
+/* Range inputs on the settings page (components/ui/slider.tsx), from T3 Code. The filled part of
+   the track comes from --settings-slider-progress, which the component sets. */
+@layer components {
+  .settings-slider {
+    --settings-slider-progress: 0%;
+    --settings-slider-fill-offset: 0.5rem;
+    --settings-slider-fill-position: calc(var(--settings-slider-progress) + var(--settings-slider-fill-offset));
+    appearance: none;
+    height: 1.5rem;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .settings-slider::-webkit-slider-runnable-track {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      var(--primary) 0 var(--settings-slider-fill-position),
+      color-mix(in srgb, var(--contrast-muted-foreground) 22%, transparent) var(--settings-slider-fill-position) 100%
+    );
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--contrast-border) 55%, transparent);
+  }
+
+  .settings-slider::-moz-range-track {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--contrast-muted-foreground) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--contrast-border) 55%, transparent);
+  }
+
+  .settings-slider::-moz-range-progress {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--primary);
+  }
+
+  .settings-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -0.3125rem;
+    border: 2px solid var(--primary);
+    border-radius: 9999px;
+    background: var(--background);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--contrast-foreground) 12%, transparent);
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .settings-slider::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--primary);
+    border-radius: 9999px;
+    background: var(--background);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--contrast-foreground) 12%, transparent);
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .settings-slider:hover::-webkit-slider-thumb {
+    transform: scale(1.08);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--contrast-foreground) 20%, transparent);
+  }
+
+  .settings-slider:hover::-moz-range-thumb {
+    transform: scale(1.08);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--contrast-foreground) 20%, transparent);
+  }
+
+  .settings-slider:active::-webkit-slider-thumb {
+    transform: scale(0.94);
+  }
+
+  .settings-slider:active::-moz-range-thumb {
+    transform: scale(0.94);
+  }
+
+  .settings-slider:focus-visible {
+    outline: none;
+  }
+
+  .settings-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      inset 0 0 0 1px var(--background),
+      inset 0 0 0 3px var(--ring);
+  }
+
+  .settings-slider:focus-visible::-moz-range-thumb {
+    box-shadow:
+      inset 0 0 0 1px var(--background),
+      inset 0 0 0 3px var(--ring);
+  }
+
+  @media (forced-colors: active) {
+    .settings-slider {
+      appearance: auto;
+      accent-color: Highlight;
+    }
+
+    .settings-slider::-webkit-slider-runnable-track,
+    .settings-slider::-webkit-slider-thumb {
+      all: revert;
+    }
+
+    .settings-slider::-moz-range-track,
+    .settings-slider::-moz-range-progress,
+    .settings-slider::-moz-range-thumb {
+      all: revert;
+    }
+  }
+}
+
+/* Panel animations: the task panel grows in from the right edge when it opens and shrinks back into it
+   when it closes. Keyframes rather than a transition, so dragging the panel's edge stays immediate. */
+[data-panel-animations="true"] .panel-enter {
+  animation: panel-enter var(--panel-animation-duration) ease-out;
+}
+
+[data-panel-animations="true"] .panel-exit {
+  animation: panel-exit var(--panel-animation-duration) ease-in forwards;
+  overflow: hidden;
+}
+
+@keyframes panel-enter {
+  from {
+    width: 0;
+  }
+}
+
+@keyframes panel-exit {
+  to {
+    width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-panel-animations="true"] .panel-enter,
+  [data-panel-animations="true"] .panel-exit {
+    animation: none;
+  }
+}
+
+/* T3 Chat's texture: a 128px tile at T3 Chat's strength, as in T3 Code. */
+html[data-theme-id="t3-chat"] {
+  --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02745'/%3E%3C/svg%3E");
+  --surface-grain-size: 128px 128px;
 }
 
 body {

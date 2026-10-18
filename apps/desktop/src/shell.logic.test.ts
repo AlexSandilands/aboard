@@ -6,6 +6,7 @@ import {
   decideNavigation,
   isDesktopTheme,
   isOwnHealth,
+  parseBackgroundColor,
   parseDesktopBadge,
   parseDesktopNotification,
 } from "./shell.logic.ts";
@@ -59,6 +60,15 @@ describe("LogTail", () => {
     tail.push("one\ntw");
     tail.push("o\r\nthree\nfou");
     expect(tail.toString()).toBe("two\nthree\nfou");
+  });
+});
+
+describe("parseBackgroundColor", () => {
+  it("accepts only #rrggbb, lower-cased", () => {
+    expect(parseBackgroundColor("#0A0A0A")).toBe("#0a0a0a");
+    expect(parseBackgroundColor("#fff")).toBeNull();
+    expect(parseBackgroundColor("oklch(0.2 0.02 300)")).toBeNull();
+    expect(parseBackgroundColor(42)).toBeNull();
   });
 });
 
