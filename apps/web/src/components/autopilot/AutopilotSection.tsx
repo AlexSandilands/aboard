@@ -1,13 +1,15 @@
-import { canRetryRun, type AutopilotRun, type TaskDetail } from "@repo/contracts";
-import { ExternalLinkIcon } from "lucide-react";
+import { canRetryRun, type AttentionReason, type AutopilotRun, type TaskDetail } from "@repo/contracts";
+import { ExternalLinkIcon, XIcon } from "lucide-react";
+import { AttentionIcon } from "~/components/board/attention";
 import { isWebUrl } from "~/components/task/links.logic";
 import { TaskSection } from "~/components/task/TaskSection";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
-import { useRetryAutopilotRun } from "~/state/mutations";
+import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
-import { automationTitle, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
+import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
 
 /**
  * The runs Autopilot has made on this task, newest first: what it did, how it ran, where to follow it and what it
@@ -18,7 +20,9 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
   const automations = useAutopilotOverview().data?.automations ?? [];
   if (!runs?.length) return null;
   // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
-  const shown = runs.find((run) => run.needsAttention) ?? runs[0]!;
+  const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0]!;
+  const flag = dismissableRun(runs, task.attention);
+  const flagged = task.attention.find((a) => a.kind === "autopilot");
   return (
     <TaskSection
       title="Autopilot"
@@ -32,6 +36,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
         </Badge>
       }
     >
+      {flag && flagged ? <FlagNotice runId={flag.id} reason={flagged} /> : null}
       <ul className="flex flex-col gap-1 px-1.5">
         {runs.map((run) => (
           <RunRow
@@ -43,6 +48,30 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
         ))}
       </ul>
     </TaskSection>
+  );
+}
+
+/**
+ * The flag Autopilot put on the task, with a Dismiss for when the user has dealt with it. Unlike Retry it redoes
+ * nothing: the run stays as it was, so it can't repeat an action that already took effect.
+ */
+function FlagNotice({ runId, reason }: { runId: string; reason: AttentionReason }) {
+  const { mutate: dismiss, isPending } = useDismissAutopilotRun();
+  return (
+    <div className="mx-1.5 mb-1.5 flex min-w-0 items-start gap-2 rounded-md border border-border/60 bg-card/40 p-2 text-xs">
+      <AttentionIcon severity={reason.severity} className="mt-0.5" />
+      <span className="min-w-0 flex-1 text-muted-foreground [overflow-wrap:anywhere]">{reason.message}</span>
+      <Button
+        size="xs"
+        variant="outline"
+        disabled={isPending}
+        title="Clear this flag without retrying: nothing is redone"
+        onClick={() => dismiss(runId)}
+      >
+        {isPending ? <Spinner /> : <XIcon />}
+        Dismiss
+      </Button>
+    </div>
   );
 }
 

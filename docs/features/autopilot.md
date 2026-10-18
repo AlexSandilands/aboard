@@ -137,6 +137,17 @@ A flagged run puts an `autopilot` attention reason on its task, with the run's e
 write: `autopilotRuns.attentionFor` stops reporting it once the task changes status after the run, or a later
 real run of the same automation on the task succeeds.
 
+**Dismissing.** The user can also lift a flag they have dealt with, with **Dismiss** in the Autopilot section of the
+task panel (a notice with the flag's message, shown while the task carries the `autopilot` reason; `dismissableRun` in
+`autopilot.logic.ts`) or `POST /api/autopilot/runs/:id/dismiss` (`AutopilotService.dismiss`). Unlike retry it redoes
+nothing: the run stays as it was (`failed` or `skipped`, `needs_attention` still 1, dedupe key kept, so the engine
+doesn't act on it again) and only gets `dismissed_at` (migration 032). `attentionFor` and `latestFlaggedAt` skip runs
+with it set. The service dismisses every flagged run of the task, so an older flag doesn't surface in the dismissed
+one's place; a run flagged afterwards raises the flag again. It refuses a run that isn't flagged or was already
+dismissed (`CONFLICT`), logs an `autopilot_run` entry with status `dismissed` under the user's actor, and publishes
+`autopilot.changed` and the task so open boards refresh. REST only, no MCP tool: it is the user saying they dealt with it.
+Backups leave runs out, so the column is not in the dump.
+
 "After" is decided by stored times, so a status change never ties with a flag: `statusChangeTime` in
 `services/tasks.ts` stores a time a millisecond past the task's latest flagged run when the move would otherwise
 land in the same millisecond. A flag raised after a move stands, except in the rare case the move had to step
@@ -172,6 +183,7 @@ one exception is `retry_autopilot_run`, which only frees a run's work for the en
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
+| `POST /api/autopilot/runs/:id/dismiss`          | Dismisses a flagged run's attention flag (see [Needs attention](#needs-attention)) |
 
 ### Automations
 

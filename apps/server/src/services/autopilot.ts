@@ -148,6 +148,12 @@ export interface AutopilotService {
    * pause, quiet hours and the caps apply as usual.
    */
   retry(runId: string, actor: string): AutopilotRun;
+  /**
+   * Lifts the needs-attention flag the user has dealt with, without redoing anything: the run stays as it was (failed
+   * or skipped, dedupe key kept), so the engine doesn't act on it again. Covers every flagged run of the task, so an
+   * older flag doesn't surface in its place. Only a flagged run on a task can be dismissed.
+   */
+  dismiss(runId: string, actor: string): AutopilotRun;
   /** queued → running. */
   start(runId: string): AutopilotRun;
   /** Runner details on a run in flight. */
@@ -482,6 +488,7 @@ export function createAutopilotService(
         exitCode: null,
         error: null,
         needsAttention: false,
+        dismissedAt: null,
         output: null,
         createdAt: at,
         startedAt: null,
@@ -533,6 +540,23 @@ export function createAutopilotService(
         fx.autopilot();
       });
       return retired;
+    },
+    dismiss(runId, actor) {
+      const run = runOf(runId);
+      if (!run.taskId || !run.needsAttention) throw new AppError("CONFLICT", "This run isn't flagged for attention");
+      if (run.dismissedAt) throw new AppError("CONFLICT", "This run's flag has already been dismissed");
+      const at = nowIso();
+      core.write((fx) => {
+        repos.autopilotRuns.dismissFlagged(run.taskId!, at);
+        fx.log(run.taskId!, actor, "autopilot_run", {
+          automation: run.automation,
+          title: titleOf(run.automation),
+          status: "dismissed",
+          summary: run.summary,
+        });
+        fx.autopilot();
+      });
+      return runOf(runId);
     },
     start(runId) {
       const run = runOf(runId);

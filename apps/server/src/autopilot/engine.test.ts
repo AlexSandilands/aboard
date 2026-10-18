@@ -615,6 +615,89 @@ describe("failures and attention", () => {
     await engine.idle();
     expect(() => s.autopilot.retry(started[1]!.run.id, "user")).toThrow("succeeded");
   });
+
+  describe("dismissing a flag", () => {
+    it("lifts the flag but keeps the run as it was, so the engine doesn't act on it again", async () => {
+      const { s, engine, task, runs, started } = setup();
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      started[0]!.reject(new Error("no runner today"));
+      await engine.idle();
+      const failed = runs("agent")[0]!;
+      const kinds = () => s.tasks.summary(task.id).attention.map((a) => a.kind);
+      expect(kinds()).toContain("autopilot");
+
+      const dismissed = s.autopilot.dismiss(failed.id, "user");
+      expect(dismissed).toMatchObject({ status: "failed", needsAttention: true, dedupeKey: failed.dedupeKey });
+      expect(dismissed.dismissedAt).not.toBeNull();
+      expect(kinds()).not.toContain("autopilot");
+      expect(
+        s.tasks.detail(task.id).events.find((e) => e.type === "autopilot_run" && e.payload.status === "dismissed"),
+      ).toMatchObject({ actor: "user" });
+
+      // Not a retry: the dedupe key still has its run.
+      await settle(engine);
+      expect(started).toHaveLength(1);
+      expect(runs("agent")).toHaveLength(1);
+    });
+
+    it("lets a later flagged run raise the flag again", async () => {
+      const { s, engine, task, started } = setup();
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      started[0]!.reject(new Error("boom"));
+      await engine.idle();
+      s.autopilot.dismiss(s.autopilot.runsForTask(task.id)[0]!.id, "user");
+      const kinds = () => s.tasks.summary(task.id).attention.map((a) => a.kind);
+      expect(kinds()).not.toContain("autopilot");
+
+      const again = s.autopilot.record({
+        automation: "agent",
+        candidate: { dedupeKey: "agent:again", summary: "start it", taskId: task.id, projectId: task.projectId },
+        dryRun: false,
+      })!;
+      s.autopilot.start(again.id);
+      s.autopilot.finish(again.id, { status: "failed", error: "again", needsAttention: true });
+      expect(s.tasks.summary(task.id).attention).toContainEqual({
+        kind: "autopilot",
+        severity: "warning",
+        message: "again",
+      });
+    });
+
+    it("lifts every flagged run of the task, so an older one doesn't take the dismissed one's place", () => {
+      const { s, task } = setup();
+      const flagged = (key: string, error: string) => {
+        const run = s.autopilot.record({
+          automation: "agent",
+          candidate: { dedupeKey: key, summary: "start it", taskId: task.id, projectId: task.projectId },
+          dryRun: false,
+        })!;
+        s.autopilot.start(run.id);
+        return s.autopilot.finish(run.id, { status: "failed", error, needsAttention: true });
+      };
+      flagged("older", "first");
+      const latest = flagged("newer", "second");
+      expect(s.tasks.summary(task.id).attention).toContainEqual(expect.objectContaining({ message: "second" }));
+
+      s.autopilot.dismiss(latest.id, "user");
+      expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
+    });
+
+    it("refuses a run that isn't flagged, or whose flag was already dismissed", async () => {
+      const { s, engine, task, started } = setup();
+      s.autopilot.setScope("board", null, "agent", { mode: "on" });
+      await engine.pass();
+      const running = started[0]!.run;
+      expect(() => s.autopilot.dismiss(running.id, "user")).toThrow("isn't flagged");
+      started[0]!.reject(new Error("boom"));
+      await engine.idle();
+      const failed = s.autopilot.runsForTask(task.id)[0]!;
+      s.autopilot.dismiss(failed.id, "user");
+      expect(() => s.autopilot.dismiss(failed.id, "user")).toThrow("already been dismissed");
+      expect(() => s.autopilot.dismiss("nope", "user")).toThrow("not found");
+    });
+  });
 });
 
 describe("events", () => {

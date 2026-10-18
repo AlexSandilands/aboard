@@ -183,6 +183,11 @@ and what it passed on. Switch it on per project or for the board; it counts agai
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 
+When Autopilot has flagged a task under Needs attention and you have dealt with it yourself, click **Dismiss** in the
+same section. It clears the flag and nothing else: the run stays as it was and Autopilot doesn't try it again, so
+unlike Retry it can't repeat something that already took effect (such as posting a second review). A new problem on
+the task flags it again.
+
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).
 

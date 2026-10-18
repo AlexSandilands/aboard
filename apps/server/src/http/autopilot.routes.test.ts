@@ -243,6 +243,30 @@ describe("Autopilot REST routes", () => {
     expect(((await byProject.json()) as AutopilotRun[]).length).toBe(1);
     expect((await h.request("/api/autopilot/runs")).status).toBe(400);
   });
+
+  it("dismisses a flagged run once, and refuses an unflagged or unknown one", async () => {
+    const h = setup();
+    const task = h.services.tasks.create({ projectId: h.project.id, title: "T" });
+    const run = (key: string, flagged: boolean) => {
+      const made = h.services.autopilot.record({
+        automation: "archive",
+        candidate: { dedupeKey: key, summary: key, taskId: task.id, projectId: h.project.id },
+        dryRun: false,
+      })!;
+      h.services.autopilot.start(made.id);
+      return h.services.autopilot.finish(made.id, flagged ? { status: "failed", needsAttention: true } : {});
+    };
+    const fine = run("fine", false);
+    const flagged = run("flagged", true);
+    const dismiss = (id: string) => h.request(`/api/autopilot/runs/${id}/dismiss`, { method: "POST" });
+
+    expect((await dismiss(fine.id)).status).toBe(409);
+    expect((await dismiss("nope")).status).toBe(404);
+    const done = await dismiss(flagged.id);
+    expect(done.status).toBe(200);
+    expect(((await done.json()) as AutopilotRun).dismissedAt).not.toBeNull();
+    expect((await dismiss(flagged.id)).status).toBe(409);
+  });
 });
 
 describe("Digest REST routes", () => {

@@ -20,6 +20,7 @@ interface RunRow {
   exit_code: number | null;
   error: string | null;
   needs_attention: number;
+  dismissed_at: string | null;
   output_json: string | null;
   created_at: string;
   started_at: string | null;
@@ -45,6 +46,7 @@ const toRun = (r: RunRow): AutopilotRun => ({
   exitCode: r.exit_code,
   error: r.error,
   needsAttention: r.needs_attention === 1,
+  dismissedAt: r.dismissed_at,
   output: parseJson<Record<string, unknown>>(r.output_json),
   createdAt: r.created_at,
   startedAt: r.started_at,
@@ -70,6 +72,7 @@ const toRow = (r: AutopilotRun) => ({
   exit_code: r.exitCode,
   error: r.error,
   needs_attention: r.needsAttention ? 1 : 0,
+  dismissed_at: r.dismissedAt,
   output_json: r.output ? JSON.stringify(r.output) : null,
   created_at: r.createdAt,
   started_at: r.startedAt,
@@ -194,18 +197,29 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )?.total ?? 0
       );
     },
-    /** When the task's latest run flagged needs_attention was last written, if it has one. */
+    /** When the task's latest run flagged needs_attention (and not dismissed) was last written, if it has one. */
     latestFlaggedAt(taskId: string): string | null {
       return (
         sql.get<{ at: string | null }>(
-          "SELECT MAX(updated_at) AS at FROM autopilot_runs WHERE task_id = ? AND needs_attention = 1",
+          "SELECT MAX(updated_at) AS at FROM autopilot_runs WHERE task_id = ? AND needs_attention = 1 AND dismissed_at IS NULL",
           taskId,
         )?.at ?? null
       );
     },
     /**
-     * Per task, the message of its latest run flagged needs_attention, while it stands: no real run of the same
-     * automation on the task has succeeded since, and the task hasn't changed status since.
+     * Marks every flagged run of the task as dismissed, so none of them stands any more: an older flagged run must
+     * not resurface once the latest is dismissed. The runs themselves stay as they were.
+     */
+    dismissFlagged(taskId: string, at: string): void {
+      sql.run(
+        "UPDATE autopilot_runs SET dismissed_at = ? WHERE task_id = ? AND needs_attention = 1 AND dismissed_at IS NULL",
+        at,
+        taskId,
+      );
+    },
+    /**
+     * Per task, the message of its latest run flagged needs_attention, while it stands: the user hasn't dismissed it,
+     * no real run of the same automation on the task has succeeded since, and the task hasn't changed status since.
      * A flagged Unstick run also clears when anyone but Autopilot has logged activity on the task since.
      */
     attentionFor(taskIds: readonly string[]): Map<string, string> {
@@ -213,7 +227,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
         `SELECT r.task_id, COALESCE(r.error, r.summary) AS message
          FROM autopilot_runs r JOIN tasks t ON t.id = r.task_id
          WHERE r.task_id IN (SELECT value FROM json_each(?)) AND r.needs_attention = 1
-           AND r.updated_at >= t.status_changed_at
+           AND r.dismissed_at IS NULL AND r.updated_at >= t.status_changed_at
            AND NOT (r.automation = ? AND EXISTS (
              SELECT 1 FROM task_events e WHERE e.task_id = r.task_id AND e.actor <> ? AND e.at > r.updated_at
            ))

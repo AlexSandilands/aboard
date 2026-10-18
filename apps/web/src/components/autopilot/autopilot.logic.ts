@@ -244,6 +244,19 @@ export function scheduledAnswerOf(run: Pick<AutopilotRun, "output">): ScheduledA
   return parsed.success ? parsed.data : null;
 }
 
+/**
+ * The run whose flag the Dismiss button lifts: the newest flagged run that wasn't dismissed, shown only while the task
+ * still carries an Autopilot attention reason (a status change or a later success clears the flag by itself, and
+ * leaves a flagged run behind that must not offer a Dismiss). `runs` is newest first.
+ */
+export function dismissableRun<T extends Pick<AutopilotRun, "needsAttention" | "dismissedAt" | "dryRun">>(
+  runs: readonly T[],
+  attention: ReadonlyArray<{ kind: string }>,
+): T | null {
+  if (!attention.some((a) => a.kind === "autopilot")) return null;
+  return runs.find((r) => r.needsAttention && r.dismissedAt === null && !r.dryRun) ?? null;
+}
+
 /** The Autopilot section's collapsed summary. */
 export function runsSummary(runs: ReadonlyArray<Pick<AutopilotRun, "status" | "needsAttention">>): string {
   if (runs.length === 0) return "No runs";

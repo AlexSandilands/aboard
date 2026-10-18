@@ -12,6 +12,7 @@ const epicParam = (c: Context): string => c.req.param("epicId") ?? "";
  * /api/autopilot: engine settings, pause, per-scope switches and run history. REST only: there is deliberately no
  * MCP tool for any of this, so agents can't turn Autopilot on or lift its limits (docs/decisions/0008-autopilot-engine.md).
  * Retrying a run is the exception (retry_autopilot_run): it lifts no limit, since the engine still decides.
+ * Dismissing a run's flag is REST only: it is the user's call that they have dealt with it.
  */
 export function registerAutopilotRoutes(app: Hono, { services, integrations }: AppContext): void {
   const autopilot = services.autopilot;
@@ -118,5 +119,9 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
   app.post(
     "/api/autopilot/runs/:id/retry",
     handle((c) => c.json(autopilot.retry(idParam(c), actorOf(c)))),
+  );
+  app.post(
+    "/api/autopilot/runs/:id/dismiss",
+    handle((c) => c.json(autopilot.dismiss(idParam(c), actorOf(c)))),
   );
 }

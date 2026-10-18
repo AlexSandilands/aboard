@@ -556,6 +556,10 @@ export function useSetAutopilotPaused() {
 export const useRetryAutopilotRun = () =>
   useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/retry`, { method: "POST" }));
 
+/** Dismisses a run's needs-attention flag without redoing its work; autopilot.changed refreshes the runs and cards. */
+export const useDismissAutopilotRun = () =>
+  useApiMutation((id: string) => api<AutopilotRun>(`/api/autopilot/runs/${enc(id)}/dismiss`, { method: "POST" }));
+
 /** Marks one notification read. The server's notifications.changed event refreshes the inbox. */
 export function useMarkNotificationRead() {
   return useApiMutation(
