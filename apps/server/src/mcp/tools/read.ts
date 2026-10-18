@@ -53,7 +53,8 @@ function parseActivityTime(text: string, field: string, now: number): Date {
     return new Date(now - Number(relative[1]) * unit);
   }
   // A time without an offset would be read as the server's local time; the report says UTC.
-  const at = new Date(/T\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(text.trim()) ? `${text.trim()}Z` : text);
+  const bare = /^(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d(:\d\d(\.\d+)?)?)$/.exec(text.trim());
+  const at = new Date(bare ? `${bare[1]}T${bare[2]}Z` : text);
   if (Number.isNaN(at.getTime())) {
     throw new AppError(
       "VALIDATION",

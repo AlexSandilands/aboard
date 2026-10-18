@@ -2,6 +2,7 @@ import {
   AUTOPILOT_ACTOR,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
+  type AutopilotRunStatus,
   prReviewOutput,
   type FindingSeverity,
   type FindingStatus,
@@ -64,7 +65,7 @@ export interface AutomationActivity {
   succeeded: number;
   failed: number;
   skipped: number;
-  /** Runs of the automation on a task that already had one in the window: it was tried again. */
+  /** Runs that followed a failed run of the same automation on the same task in the window. */
   retries: number;
   /** Runs that ended by saying Autopilot gave up. */
   gaveUp: number;
@@ -201,7 +202,9 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
 
       // Autopilot runs count in the period they finished in, so a long one that fails later is reported then.
       const byAutomation = new Map<string, AutomationActivity>();
-      const seenOnTask = new Set<string>();
+      // The last status of each automation's run on a task: a run that follows a failed one is a retry. Review and fix
+      // rounds run on a task again and again by design, and aren't.
+      const lastOnTask = new Map<string, AutopilotRunStatus>();
       const pr: PrReviewActivity[] = [];
       const stalls = new Map<string, Stall>();
       const addStall = (stall: Stall & { taskId: string }) => {
@@ -241,8 +244,8 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         if (/gave up/i.test(run.summary)) group.gaveUp += 1;
         if (run.taskId) {
           const key = `${run.automation}:${run.taskId}`;
-          if (seenOnTask.has(key)) group.retries += 1;
-          seenOnTask.add(key);
+          if (lastOnTask.get(key) === "failed") group.retries += 1;
+          lastOnTask.set(key, run.status);
         }
         const review = run.automation === AUTOPILOT_REVIEW_PRS ? prReviewOutput(run) : null;
         if (review && ref) {
@@ -280,9 +283,13 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
           });
       }
 
+      // The latest note of each task, newest first: a task's handover is its last note, and a busy task's progress
+      // notes would otherwise crowd the others out.
       const notes: NoteActivity[] = [];
-      for (const e of repos.events.between(["note"], start, end)) {
-        if (e.actor === AUTOPILOT_ACTOR || (projectId && e.projectId !== projectId)) continue;
+      const noted = new Set<string>();
+      for (const e of repos.events.between(["note"], start, end).reverse()) {
+        if (e.actor === AUTOPILOT_ACTOR || (projectId && e.projectId !== projectId) || noted.has(e.taskId)) continue;
+        noted.add(e.taskId);
         notes.push({
           number: e.number,
           title: e.title,
@@ -308,7 +315,7 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         },
         runs,
         stalls: [...stalls.values()].sort((a, b) => a.at.localeCompare(b.at)),
-        notes: notes.reverse(),
+        notes,
       };
     },
   };

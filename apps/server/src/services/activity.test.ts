@@ -202,73 +202,52 @@ describe("activity.between", () => {
     const { s, alpha, task, clock, run, week } = setup();
     const t = task(alpha.id, "Flaky");
     clock(at(13));
-    run({
-      projectId: alpha.id,
-      taskId: t.id,
-      key: "1",
-      status: "failed",
-      error: "gh timed out",
-    });
+    run({ projectId: alpha.id, taskId: t.id, key: "1", status: "failed", error: "gh timed out" });
+    clock(at(13, 9, 1));
     run({ projectId: alpha.id, taskId: t.id, key: "2" });
     run({ projectId: alpha.id, key: "3", status: "skipped" });
+    // Review rounds on one task are not retries, however many there are.
+    clock(at(13, 9, 2));
+    run({ projectId: alpha.id, taskId: t.id, key: "4", automation: AUTOPILOT_REVIEW_PRS });
+    clock(at(13, 9, 3));
     run({
       projectId: alpha.id,
       taskId: t.id,
-      key: "4",
+      key: "5",
       automation: AUTOPILOT_REVIEW_PRS,
       summary: "Autopilot gave up on PR #7 after 3 review rounds",
     });
     // A run still going when the board restarts is failed by recover().
+    clock(at(13, 9, 4));
     const stranded = s.autopilot.record({
       automation: "auto_archive",
-      candidate: {
-        dedupeKey: "5",
-        summary: "x",
-        projectId: alpha.id,
-        taskId: t.id,
-      },
+      candidate: { dedupeKey: "6", summary: "x", projectId: alpha.id, taskId: t.id },
       dryRun: false,
     })!;
     s.autopilot.start(stranded.id);
+    clock(at(13, 9, 5));
     s.autopilot.recover();
 
     const runs = week().runs;
     const archive = runs.find((r) => r.key === "auto_archive")!;
-    expect(archive).toMatchObject({
-      total: 4,
-      succeeded: 1,
-      failed: 2,
-      skipped: 1,
-      retries: 2,
-      gaveUp: 0,
-    });
-    // Both finish in the same millisecond of the frozen clock, so their order isn't fixed.
-    expect(archive.failures).toHaveLength(2);
-    expect(archive.failures).toEqual(
-      expect.arrayContaining([
-        {
-          task: { number: t.number, title: "Flaky" },
-          reason: "gh timed out",
-          restarted: false,
-        },
-        {
-          task: { number: t.number, title: "Flaky" },
-          reason: "The board restarted while this run was going",
-          restarted: true,
-        },
-      ]),
-    );
-    expect(runs.find((r) => r.key === AUTOPILOT_REVIEW_PRS)).toMatchObject({
-      total: 1,
-      gaveUp: 1,
-    });
+    // The second run came after the failed first one; the stranded run, after a success.
+    expect(archive).toMatchObject({ total: 4, succeeded: 1, failed: 2, skipped: 1, retries: 1, gaveUp: 0 });
+    expect(archive.failures).toEqual([
+      { task: { number: t.number, title: "Flaky" }, reason: "gh timed out", restarted: false },
+      {
+        task: { number: t.number, title: "Flaky" },
+        reason: "The board restarted while this run was going",
+        restarted: true,
+      },
+    ]);
+    expect(runs.find((r) => r.key === AUTOPILOT_REVIEW_PRS)).toMatchObject({ total: 2, retries: 0, gaveUp: 1 });
     // Most failures first.
     expect(runs[0]!.key).toBe("auto_archive");
 
     const text = renderActivity(week());
     expect(text).toContain("failed #" + t.number + " (board restarted) — The board restarted while this run was going");
     expect(text).toContain("failed #" + t.number + " — gh timed out");
-    expect(text).toContain("2 retries");
+    expect(text).toContain("1 retry");
   });
 
   it("groups findings by severity and area, and keeps PR review verdicts apart", () => {
@@ -324,6 +303,20 @@ describe("activity.between", () => {
     expect(text).toContain(`#${t.number} round 1/3: 2 major, 1 minor, 1 FYI (fix)`);
   });
 
+  it("reports findings submitted in the window for a round opened before it", () => {
+    const { s, alpha, task, clock, week } = setup();
+    const t = task(alpha.id, "Slow review");
+    clock(at(11, 23, 50));
+    s.reviews.openRound(t.id, { trigger: "manual", actor: "agent" });
+    clock(at(12, 0, 20));
+    s.reviews.submit(t.id, { findings: [{ severity: "major", title: "Late finding", file: "src/a.ts" }] }, "reviewer");
+
+    const text = renderActivity(week());
+    expect(text).not.toContain("Review findings:\n  none");
+    expect(text).toContain("1 finding: 1 major (1 open)");
+    expect(text).toContain("Late finding");
+  });
+
   it("lists stalls once per task and kind, and the notes agents left", () => {
     const { s, alpha, task, clock, run, week } = setup();
     const t = task(alpha.id, "Quiet");
@@ -349,12 +342,14 @@ describe("activity.between", () => {
       body: "",
       dedupeKey: "w1",
     });
+    s.tasks.addNote(t.id, "Progress: step 1 done", "claude-code");
+    clock(at(13, 9, 5));
     s.tasks.addNote(t.id, "Handover: next step is 2.1", "claude-code");
     s.tasks.addNote(t.id, "Stale: no activity for 5h", "autopilot");
 
     const { stalls, notes } = week();
     expect(stalls.map((x) => x.kind).sort()).toEqual(["stale", "waiting"]);
-    // Autopilot's own notes are what the stall section already says.
+    // One note per task (its last), and not Autopilot's own: those are what the stall section already says.
     expect(notes.map((n) => n.text)).toEqual(["Handover: next step is 2.1"]);
   });
 
@@ -392,7 +387,7 @@ describe("activity.between", () => {
     expect(text).toContain("  (3 more)");
     expect(text).toContain("    (2 more)");
     expect(text).toContain("    (4 more)");
-    expect(text).toContain(`Notes (${tasks.length}, newest first):`);
+    expect(text).toContain(`Latest note per task (${tasks.length}, newest first):`);
     expect(text).toContain(`(${tasks.length - ACTIVITY_CAPS.notes} more)`);
   });
 
@@ -403,6 +398,6 @@ describe("activity.between", () => {
     expect(text).toContain("Review findings:\n  none");
     expect(text).toContain("Autopilot runs:\n  none");
     expect(text).toContain("Stalls (0):\n  none");
-    expect(text).toContain("Notes (0, newest first):\n  none");
+    expect(text).toContain("Latest note per task (0, newest first):\n  none");
   });
 });

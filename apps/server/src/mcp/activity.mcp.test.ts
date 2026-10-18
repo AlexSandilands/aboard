@@ -101,6 +101,13 @@ describe("board_activity over MCP", () => {
     expect(unknown.text).toContain("no such project");
   });
 
+  it("reads a date-time without an offset as UTC, with a T or a space", async () => {
+    for (const since of ["2026-10-12T09:00", "2026-10-12 09:00"]) {
+      const { text } = await call(agent, { since, until: "2026-10-13" });
+      expect(text).toContain("Board activity 2026-10-12 09:00 to 2026-10-13 00:00 UTC");
+    }
+  });
+
   it("rejects a period it can't read or that runs backwards", async () => {
     const bad = await call(agent, { since: "last week" });
     expect(bad.isError).toBe(true);

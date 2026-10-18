@@ -67,7 +67,7 @@ function tally<T>(items: readonly T[], key: (item: T) => string): Array<[string,
 function findingLines(activity: BoardActivity): string[] {
   const { rounds, local, pr } = activity.reviews;
   const lines: string[] = [];
-  if (rounds.total === 0 && pr.length === 0) return ["  none"];
+  if (rounds.total === 0 && local.length === 0 && pr.length === 0) return ["  none"];
 
   if (rounds.total > 0) {
     const trouble = [
@@ -159,7 +159,7 @@ export function renderActivity(activity: BoardActivity): string {
   }
   lines.push(...more(ACTIVITY_CAPS.stalls, activity.stalls.length, "  "));
 
-  lines.push("", `Notes (${activity.notes.length}, newest first):`);
+  lines.push("", `Latest note per task (${activity.notes.length}, newest first):`);
   if (activity.notes.length === 0) lines.push("  none");
   for (const n of activity.notes.slice(0, ACTIVITY_CAPS.notes)) {
     lines.push(`  ${ref(n)} ${stamp(n.at)} ${n.actor}: ${cut(n.text, NOTE_LENGTH)}`);

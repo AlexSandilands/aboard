@@ -149,15 +149,16 @@ read-only text over a window `[since, until)`, for the improvement automation, a
 - **Tasks finished:** tasks moved to Done or closed in the window (epics follow their tasks and are left out),
   with the time each spent in Backlog, Planned, In Progress and Review, its local review rounds, Autopilot PR
   review rounds, and steps that went blocked or skipped.
-- **Review findings:** local rounds opened in the window (failed and stalled counted), the findings they raised by
+- **Review findings:** local rounds opened in the window (failed and stalled counted), the findings raised in it by
   severity, status and directory, the most severe titles, and each Autopilot PR review's counts (its run only
   keeps counts, not titles).
-- **Autopilot runs:** real runs that finished in the window, per automation: outcomes, retries (another run on a
-  task the automation already ran on), "gave up", and failures with their reason. A run the board's restart
-  failed is marked `(board restarted)`.
+- **Autopilot runs:** real runs that finished in the window, per automation: outcomes, retries (a run right after a
+  failed run of the same automation on the same task; review and fix rounds are not), "gave up", and failures with
+  their reason. A run the board's restart failed is marked `(board restarted)`.
 - **Stalls:** Unstick's stale and waiting runs and `thread_waiting` notifications, once per task and kind.
-- **Notes:** notes anyone but Autopilot wrote, newest first. Notes have no "needs the user" flag; what needs the
-  user shows as a run's `needsAttention` or an attention reason on the task.
+- **Latest note per task:** the last note anyone but Autopilot wrote on each task, newest first (usually its
+  handover). Notes have no "needs the user" flag; what needs the user shows as a run's `needsAttention` or an
+  attention reason on the task.
 
 Task refs (`#42`) let the agent open one with `get_task`.
 
