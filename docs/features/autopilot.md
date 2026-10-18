@@ -439,9 +439,9 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
 - **When.** Every `everyMinutes` (default 30, 5 to 1440) from local midnight (`latestMinutesSlot`), per project it's
   on in (`epicScope: false`: it has no task). Only the latest slot counts, so downtime catches up once, and switching it
   on runs the current slot at once. The dedupe key is `orchestrate:<projectId>:<local slot stamp>`. A project with
-  nothing to look at (no unarchived task In Progress or Review, flagged for Autopilot in Planned, or under Needs
-  attention, leaving out tasks waiting on the user: an `agent_request` or a thread asking for input) gets no run, so
-  an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
+  nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, or under
+  Needs attention (a failed Start planned run included), leaving out tasks waiting on the user (an `agent_request` or
+  a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
   running, `check` returns nothing for it and the latest slot runs once it ends.
 - **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
   push guard), with `access: "read-only"`: the read-only file and git list, the board's MCP tools, and the `gh`

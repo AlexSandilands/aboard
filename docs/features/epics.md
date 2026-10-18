@@ -232,7 +232,8 @@ ready, is only found out at launch. If it can:
 
   The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
 - Both tools work on any task, in an epic or not, so Autopilot's Orchestrate (and any orchestrating agent) can
-  restart or nudge loose tasks too. The user's **Let agents start threads** setting still gates them. `baseRef` must look like
+  restart or nudge loose tasks too. The user's **Let agents start threads** setting still gates them, and `start_task_thread` refuses a
+  task (in work mode) whose blockers aren't Done, as Start planned does. `baseRef` must look like
   a branch name (no leading `-`, `..`, spaces or the characters git refuses).
 - The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
   included, so removing a link never brings an old id back). A retry after a timeout or an

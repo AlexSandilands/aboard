@@ -91,7 +91,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         "worktree branched from baseRef (default: the epic's integration branch when it has one, else the default " +
         "branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
-        "has a thread working on it (use message_task_thread), or when T3 Code can't take it.",
+        "has a thread working on it (use message_task_thread), is blocked by unfinished tasks, or when T3 Code can't take it.",
       inputSchema: {
         task: taskField,
         mode: z
@@ -120,6 +120,17 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const problem = handoffModeError(task, mode);
         if (problem) throw new AppError("VALIDATION", problem);
+        // Like Start planned: a task waiting on unfinished blockers would build on work that isn't there yet.
+        if (task.blocked && mode === "work") {
+          const by = task.blockedBy
+            .filter((b) => b.status !== "done")
+            .map((b) => `#${b.number}`)
+            .join(", ");
+          throw new AppError(
+            "CONFLICT",
+            `#${task.number} is blocked by ${by}, which aren't Done yet. Start it once they are.`,
+          );
+        }
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
         const busy = busyThread(task);

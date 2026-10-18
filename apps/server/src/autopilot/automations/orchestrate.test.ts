@@ -125,6 +125,19 @@ describe("Orchestrate", () => {
     expect(agentRuns).toEqual([]);
   });
 
+  it("leaves out Review tasks only the user merges, and Planned tasks Start planned hasn't failed on", async () => {
+    const { s, project, pass, on, agentRuns } = setup();
+    const review = s.tasks.create({ projectId: project.id, title: "Mine to merge", plan });
+    s.tasks.move(review.id, { status: "review" }, "agent");
+    s.tasks.create({ projectId: project.id, title: "Waiting to start", plan, autopilot: true });
+    on();
+    await pass();
+    expect(agentRuns).toEqual([]);
+    s.tasks.update(review.id, { autoMerge: true }, "user");
+    await pass(30 * MINUTE);
+    expect(agentRuns).toHaveLength(1);
+  });
+
   it("waits for a run still going in the project, and leaves other projects alone", async () => {
     const { s, other, busyTask, pass, on, agentRuns } = setup({ agent: () => new Promise(() => {}) });
     s.autopilot.updateEngine({ maxConcurrent: 5 });

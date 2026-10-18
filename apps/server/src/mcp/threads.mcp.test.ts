@@ -179,6 +179,19 @@ describe("T3 threads for a task over MCP", () => {
     expect(messages).toHaveLength(1);
   });
 
+  it("refuses to start a task whose blockers aren't Done", async () => {
+    const { launches } = fakeT3();
+    const blocked = h.services.tasks.create({
+      projectId: h.services.tasks.summary(taskId).projectId,
+      title: "Waits",
+      plan,
+      blockedBy: [taskId],
+    });
+    const refused = await call(agent, "start_task_thread", { task: `#${blocked.number}` });
+    expect(refused.text).toContain(`#${blocked.number} is blocked by #${h.services.tasks.summary(taskId).number}`);
+    expect(launches).toEqual([]);
+  });
+
   it("takes only a branch name as baseRef", async () => {
     const { launches } = fakeT3();
     for (const baseRef of ["--upload-pack=x", "main..evil", "a b", "feat/x.lock"]) {

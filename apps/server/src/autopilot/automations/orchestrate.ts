@@ -57,17 +57,16 @@ const defaults: OrchestrateConfig = {
 const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
 
 /**
- * A task an orchestrator has a reason to look at: work going on, waiting to start, or something wrong with it. One
- * that is waiting on the user isn't, or a project whose work all waits on them would start a paid run every slot.
+ * A task an orchestrator has a reason to look at: work going on, something wrong with it (a failed start included),
+ * or a Review task it may merge. One waiting on the user isn't, nor a Review task with nothing wrong that only the user
+ * merges, or a project whose work all waits on them would start a paid run every slot. Planned tasks are Start
+ * planned's to start, so they count only once flagged.
  */
 const needsLooking = (t: TaskSummary): boolean =>
   t.archivedAt === null &&
   t.status !== "done" &&
   !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
-  (t.status === "in_progress" ||
-    t.status === "review" ||
-    (t.status === "planned" && t.autopilot === true) ||
-    t.attention.length > 0);
+  (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
 
 /**
  * Board tools an Orchestrate run never gets, whatever else allows them. It reads text anyone can write (PR comments,
