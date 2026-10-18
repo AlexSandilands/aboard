@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUILTIN_REVIEW_SKILL_BODY } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { promptHash } from "./suggestions.ts";
 
@@ -88,6 +88,18 @@ describe("suggestions", () => {
     const { text, hash } = h.s.suggestions.read(h.key);
     expect(() =>
       h.s.suggestions.suggest({ target: h.key, baseHash: hash, proposed: text, rationale: "x" }, "agent"),
+    ).toThrow(/same as the current text/);
+  });
+
+  it("refuses a change to a CRLF file that only changes its line endings", () => {
+    const h = setup({ crlf: true });
+    const { text, hash } = h.s.suggestions.read(h.key);
+    expect(text).toContain("\r\n");
+    expect(() =>
+      h.s.suggestions.suggest(
+        { target: h.key, baseHash: hash, proposed: text.replace(/\r\n/g, "\n"), rationale: "x" },
+        "agent",
+      ),
     ).toThrow(/same as the current text/);
   });
 
@@ -184,6 +196,23 @@ describe("suggestions", () => {
     const ref = { source: "global", name: "aboard-review-custom-2", path };
     expect(h.s.settings.get().reviewSkill).toEqual(ref);
     expect(h.s.projects.get(project.id).reviewSkill).toEqual(ref);
+  });
+
+  it("removes the saved copy of a built-in skill when switching Settings to it fails, and keeps the suggestion open", () => {
+    const h = setup();
+    h.s.settings.update({ reviewSkill: { source: "builtin" } });
+    const { suggestion } = suggestFor(h, "builtin:review", "# Local review\n\nBe brief.");
+    const update = vi.spyOn(h.s.settings, "update").mockImplementation(() => {
+      throw new Error("settings are read-only");
+    });
+    expect(() => h.s.suggestions.accept(suggestion.id, "user")).toThrow(/read-only/);
+    update.mockRestore();
+    expect(existsSync(join(h.home, ".claude/skills/aboard-review-custom"))).toBe(false);
+    expect(h.s.suggestions.get(suggestion.id).status).toBe("open");
+
+    // The next try takes the same folder, not `-custom-2` beside an orphan.
+    h.s.suggestions.accept(suggestion.id, "user");
+    expect(h.s.settings.get().reviewSkill).toMatchObject({ name: "aboard-review-custom" });
   });
 
   it("is reached over REST: list, accept and reject", async () => {

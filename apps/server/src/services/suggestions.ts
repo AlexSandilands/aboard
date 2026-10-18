@@ -274,8 +274,9 @@ export function createSuggestionsService(
 
   /** Why `proposed` can't be saved to the target, or null. */
   const problemWith = (prompt: EditablePrompt, current: string, proposed: string): string | null => {
-    if (proposed === current || proposed.trim() === current.trim())
-      return "The proposed text is the same as the current text";
+    // Line endings don't count: accepting keeps the target's, and the diff the user sees ignores them.
+    const normal = (text: string) => text.replace(/\r\n/g, "\n").trim();
+    if (normal(proposed) === normal(current)) return "The proposed text is the same as the current text";
     if (prompt.target.kind !== "automation") return null;
     const custom = deps.customAutomations.get(prompt.target.automationId);
     if (custom.action.kind !== "agent") return null;
