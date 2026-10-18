@@ -248,6 +248,10 @@ describe("importing a custom automation", () => {
     const noName = { ...bundle, name: "NoName", skill: { name: "nn", body: "---\ndescription: d\n---\nT" } };
     await post(s, { bundle: noName, installSkill: true }, ORIGIN);
     expect(readFileSync(join(s.skillDir("nn"), "SKILL.md"), "utf8")).toBe("---\nname: nn\ndescription: d\n---\nT");
+    // An empty frontmatter block is filled in, not followed by a second one.
+    const empty = { ...bundle, name: "Empty", skill: { name: "em", body: "---\n---\nBody\n---\nmore" } };
+    await post(s, { bundle: empty, installSkill: true }, ORIGIN);
+    expect(readFileSync(join(s.skillDir("em"), "SKILL.md"), "utf8")).toBe("---\nname: em\n---\nBody\n---\nmore");
   });
 
   it("takes a shell command only from the board's page", async () => {

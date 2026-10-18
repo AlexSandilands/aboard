@@ -72,12 +72,14 @@ export function readInstalledSkill(homeDir: string, name: string): string | null
  * whatever the file brought. Only the frontmatter block is edited, never a `name:` line in the body.
  */
 function withFrontmatterName(body: string, name: string): string {
-  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(body);
+  // The empty block (`---` straight after `---`) is tried first, so it isn't read as running on to a later `---`.
+  const block = /^---\r?\n(?:---(?=\r?\n|$)|([\s\S]*?)\r?\n---(?=\r?\n|$))/.exec(body);
   if (!block) return `---\nname: ${name}\n---\n${body}`;
+  const inside = block[1] ?? "";
   const nameLine = /^name:[ \t]*.*$/m;
-  const fields = nameLine.test(block[1]!)
-    ? block[1]!.replace(nameLine, `name: ${name}`)
-    : `name: ${name}\n${block[1]!}`;
+  const fields = nameLine.test(inside)
+    ? inside.replace(nameLine, `name: ${name}`)
+    : `name: ${name}${inside ? `\n${inside}` : ""}`;
   return body.replace(block[0], () => `---\n${fields}\n---`);
 }
 
