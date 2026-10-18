@@ -18,9 +18,10 @@ export function ProjectReviewSection({ project }: { project: Project }) {
         title="Review skill"
         description={
           project.workspaceRoot
-            ? "Skills in the project's .claude/skills, .github/skills or .agents/skills folders are listed first."
-            : "Set a workspace folder to pick a skill from the project's own folders."
+            ? "The project's own skills are listed first."
+            : "Set a workspace folder to pick one of the project's own skills."
         }
+        info="Skills in the project's .claude/skills, .github/skills or .agents/skills folders."
         control={
           <ReviewSkillSelect
             ariaLabel="Review skill for this project"

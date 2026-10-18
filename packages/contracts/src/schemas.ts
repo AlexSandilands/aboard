@@ -4,6 +4,7 @@ import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
+import { HeadlessModel } from "./headlessModel.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
@@ -747,10 +748,15 @@ export const AppSettings = z
     /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
     copilotCli: z.string().nullable(),
     headlessReviewBudgetUsd: z.number().positive().max(100),
+    /** The model the board reviewer runs; null keeps the CLI's own default. */
+    headlessReviewModel: HeadlessModel.nullable(),
     /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
-    /** The model `claude -p` runs for an import, as `--model` takes it (an alias like "haiku" or a full id). */
-    issueImportModel: z.string(),
+    /**
+     * The model `claude -p` runs for an import: a model tier, or a model as `--model` takes it (an alias like "haiku"
+     * or a full id). Saved as a bare string before tiers were an option; always returned in the object form.
+     */
+    issueImportModel: HeadlessModel,
     issueImportBudgetUsd: z.number().positive().max(100),
     /**
      * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
@@ -788,7 +794,9 @@ export const UpdateSettingsInput = z.object({
   copilotCli: z.string().trim().nullable().optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
-  issueImportModel: z.string().trim().min(1).optional(),
+  /** A tier, a model, or null for the CLI's default. A bare string is a model. */
+  headlessReviewModel: HeadlessModel.nullable().optional(),
+  issueImportModel: HeadlessModel.optional(),
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */

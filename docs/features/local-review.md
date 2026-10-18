@@ -134,6 +134,9 @@ else the project folder. One review runs at a time.
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
 - **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,
   because the shim expands them again; the schema and paths with spaces survive intact.
+- **Model:** `headlessReviewModel`, a `HeadlessModel` like the issue import's (a tier or a typed model, see
+  [issue import](issue-import.md#settings)); `null` (the default) leaves `--model` off, so the CLI's default runs.
+  A tier with no Claude Code model set under Model tiers does the same.
 - **Capped:** `--max-budget-usd` (Settings, default $2) and a 20-minute timeout. `--no-session-persistence`
   keeps these runs out of your session history.
 

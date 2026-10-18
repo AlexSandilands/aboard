@@ -15,6 +15,7 @@ import {
   MODEL_TIERS,
   NOTIFICATION_KINDS,
 } from "@repo/contracts";
+import { keybindingSectionId } from "./keybindings.logic";
 import { SETTINGS_GROUPS, sectionOf, type SettingsGroupId } from "./settingsNav.logic";
 
 export interface SettingsIndexEntry {
@@ -92,6 +93,7 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 ];
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
+const MODELS_PER_TIER = "The model each suggested tier starts a new session on is set on the Model tiers page.";
 
 const WRITTEN: ReadonlyArray<Draft> = [
   // Board › Appearance
@@ -196,8 +198,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.new-tasks.import-model",
     "Import model",
-    "Passed to claude --model: an alias such as haiku, or a full model name.",
-    ["model", "issue import", "haiku", "claude model"],
+    "A model tier, or a model passed to claude --model: an alias such as haiku, or a full model name.",
+    ["model", "issue import", "haiku", "claude model", "tier", "light", "standard", "deep"],
   ),
   draft(
     "tasks.new-tasks.import-budget",
@@ -242,6 +244,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Board reviewer",
     "When no agent reviews a round, the board runs Claude Code headless to review it.",
     ["local review", "headless", "claude", "fallback", "automatic"],
+  ),
+  draft(
+    "tasks.review.model",
+    "Board reviewer model",
+    "A model tier, a model passed to claude --model, or the CLI's default.",
+    ["board reviewer", "headless", "claude model", "tier", "light", "standard", "deep", "--model"],
   ),
   draft(
     "tasks.review.budget",
@@ -311,6 +319,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Whether the board can reach the T3 Code app on this machine.",
     ["status", "detected", "running"],
   ),
+  draft("integrations.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
+    "model tier",
+    "light",
+    "standard",
+    "deep",
+    "t3 code model",
+    "effort",
+  ]),
   draft(
     "integrations.t3-code.open-links-in",
     "Open thread links in",
@@ -348,12 +364,15 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
     ["claude path", "executable", "binary", "headless", "session"],
   ),
-  draft(
-    "integrations.claude-code.session-models",
-    "Claude Code session models",
-    "The model a new Claude Code session from a task's hand-off menu starts on, by the task's suggested tier.",
-    ["model tier", "light", "standard", "deep", "--model", "new session"],
-  ),
+  draft("integrations.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
+    "model tier",
+    "light",
+    "standard",
+    "deep",
+    "--model",
+    "session model",
+    "new session",
+  ]),
   // Integrations › GitHub Copilot, Codex
   draft("integrations.copilot.cli", "Copilot CLI", `${MCP} In ~/.copilot/mcp-config.json.`, [
     "add mcp",
@@ -373,12 +392,16 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH.",
     ["github copilot", "executable", "binary", "session"],
   ),
-  draft(
-    "integrations.copilot.session-models",
-    "Copilot session models",
-    "The model a new Copilot CLI session from a task's hand-off menu starts on, by the task's suggested tier.",
-    ["github copilot", "model tier", "light", "standard", "deep", "--model", "new session"],
-  ),
+  draft("integrations.copilot.models", "Copilot models per tier", MODELS_PER_TIER, [
+    "github copilot",
+    "model tier",
+    "light",
+    "standard",
+    "deep",
+    "--model",
+    "session model",
+    "new session",
+  ]),
   draft("integrations.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
   // Integrations › GitHub, Jira
   draft(
@@ -501,20 +524,28 @@ function generated(): Draft[] {
     ),
     ...KeybindingCommand.options.map((command) =>
       draft(
-        `board.keybindings.${command}`,
+        `${keybindingSectionId(DEFAULT_KEYBINDINGS[command].group)}.${command}`,
         DEFAULT_KEYBINDINGS[command].title,
         `The shortcut for this, and when it applies. Default ${DEFAULT_KEYBINDINGS[command].key}.`,
         ["keybinding", "shortcut", "hotkey", "key", "rebind", "when"],
       ),
     ),
     draft(
-      "tasks.models.tiers",
+      "models.tiers.list",
       "Model tiers",
-      "What light, standard and deep mean for you: a description, and optionally a T3 Code model.",
+      "What light, standard and deep mean for you: a description, and the model each provider starts a session on.",
       ["light", "standard", "deep", "suggested model", "claude", "effort"],
     ),
     ...MODEL_TIERS.map(({ value, label, description }) =>
-      draft(`tasks.models.${value}`, `${label} model`, description, ["model tier", "suggested model", "t3 code model"]),
+      draft(`models.tiers.${value}`, `${label} model`, description, [
+        "model tier",
+        "suggested model",
+        "t3 code model",
+        "claude code model",
+        "copilot model",
+        "--model",
+        "session model",
+      ]),
     ),
     ...AUTOMATION_ENTRIES.map(({ key, title, description }) => ({
       ...draft(`autopilot.engine.automation-${key}`, title, description, [
@@ -551,7 +582,7 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "board.data.archived-projects",
   "tasks.new-tasks.templates",
   "tasks.new-tasks.issue-import",
-  "tasks.models.tiers",
+  "models.tiers.list",
   "project.autopilot.automations",
   "project.recurring.rules",
   "project.recurring.examples",

@@ -71,11 +71,7 @@ export function TemplatesSection() {
       {list.length === 0 ? (
         <SettingsRow
           title={templates.error ? "Couldn't load templates" : "No templates"}
-          description={
-            templates.error
-              ? templates.error.message
-              : "A template pre-fills a new task: title, description, labels and a starting plan. Agents can use them too."
-          }
+          description={templates.error ? templates.error.message : "A template pre-fills a new task."}
         />
       ) : (
         list.map((template) => (

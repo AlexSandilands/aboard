@@ -388,7 +388,7 @@ function Composer({
             <span className="font-medium text-foreground">Suggested model: {modelTierLabel(options.tier)}</span>
             {options.models[harness]
               ? null
-              : ` · no ${harnessLabel(harness)} model is set for this tier in Settings → Integrations`}
+              : ` · no ${harnessLabel(harness)} model is set for this tier in Settings → Model tiers`}
           </span>
         ) : null}
         {options.namedWindow

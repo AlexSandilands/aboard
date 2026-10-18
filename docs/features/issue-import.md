@@ -33,7 +33,8 @@ combined with a plan.
 `integrations/issueImport.ts` runs up to three imports at once, in the server process.
 
 - **GitHub.** `gh issue view` reads the issue (`GithubIntegration.fetchIssue`), and its state is stored as
-  the `issue` link's snapshot. Claude Code headless (`claude -p`, `--model`, default `haiku`) then turns it
+  the `issue` link's snapshot. Claude Code headless (`claude -p`, `--model`, default `haiku`, or a model tier,
+  see [Settings](#settings)) then turns it
   into a concise title, a summary and labels. The issue text goes in the prompt, so the run has no tools and
   no MCP servers. If the model can't run (import turned off, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
@@ -162,9 +163,17 @@ cache; nothing polls an issue, so a restored `issue` link shows no open/closed b
 | Setting                | Default | What it does                                                                |
 | ---------------------- | ------- | --------------------------------------------------------------------------- |
 | `issueImportEnabled`   | on      | Run the model. Off: GitHub issues import as written, Jira issues fail       |
-| `issueImportModel`     | `haiku` | `claude --model`                                                            |
+| `issueImportModel`     | `haiku` | A `HeadlessModel`: a tier or a model for `claude --model`, see below        |
 | `issueImportBudgetUsd` | 0.5     | `claude --max-budget-usd` for one import                                    |
 | `issueImportJiraTools` | none    | Jira tools a run may call; empty looks for the common ones on each server   |
+
+`issueImportModel` is a `HeadlessModel` (`packages/contracts/src/headlessModel.ts`): `{ tier }` or `{ model }`.
+A bare string, which is how it was saved before tiers were an option, parses as `{ model }`, and the settings
+service normalizes a stored string on read (a value that is neither falls back to `haiku`). A tier runs the
+`claude-code` model of that tier in Settings → Model tiers (`resolveHeadlessModel`); a tier with none leaves
+`--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be and
+links to the tier. The board reviewer's model (`headlessReviewModel`, see
+[local review](local-review.md#the-board-reviewer)) is the same type.
 
 ## Decisions
 

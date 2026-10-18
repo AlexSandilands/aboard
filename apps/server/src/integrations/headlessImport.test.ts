@@ -40,6 +40,12 @@ describe("import arguments", () => {
     expect(JSON.parse(args[args.indexOf("--json-schema") + 1]!)).toEqual(IMPORT_OUTPUT_SCHEMA);
   });
 
+  it("leaves --model off to run the CLI's default", () => {
+    const args = importArgs({ model: null, budgetUsd: 0.5, source: github, settingsPath: null });
+    expect(args).not.toContain("--model");
+    expect(args[args.indexOf("--tools") + 1]).toBe("");
+  });
+
   it("lets a Jira run use the user's MCP servers, with its permissions in a settings file", () => {
     const args = importArgs({
       model: "haiku",
