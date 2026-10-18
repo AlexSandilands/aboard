@@ -124,6 +124,7 @@ describe("merge_task_pr", () => {
       { pr: { reviewDecision: "CHANGES_REQUESTED" }, reason: /requested changes/ },
       { pr: { reviewDecision: "REVIEW_REQUIRED" }, reason: /still needs an approving review/ },
       { pr: { isDraft: true }, reason: /isn't open and ready for review/ },
+      { pr: { isCrossRepository: true }, reason: /comes from a fork/ },
     ];
     for (const { pr, reason } of cases) {
       const task = await reviewTask({ autoMerge: true, pr });

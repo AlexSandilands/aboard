@@ -126,7 +126,7 @@ the default branch, for tasks the user allowed to be merged that way ([ADR 0008]
   only once the user has said so. Epics can't have it. The task detail shows `Auto-merge:` when set.
 - **Refused** (a `VALIDATION` error with the reason, `mergeTaskPr` in `integrations/mergeTaskPr.ts`) for an epic, a
   task without the flag On, a task in an epic delivered through an integration branch (Autopilot merges those), a
-  task with no PR, or more than one, not merged or closed, and whenever `notMergeable`
+  task with no PR, or more than one, not merged or closed, a PR from a fork, and whenever `notMergeable`
   ([Autopilot's gate](autopilot.md#merge-into-epic-branch)) gives a reason: not in Review, PR not open or a draft,
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
   clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable. Also when

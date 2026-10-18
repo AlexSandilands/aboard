@@ -52,6 +52,13 @@ export async function mergeTaskPr(
   }
   const link = unfinished[0]!;
   const snapshot = link.snapshot;
+  // Someone outside the repository controls a fork's head; the board merges none anywhere, least of all here.
+  if (snapshot?.isCrossRepository === true) {
+    throw refuse(
+      task,
+      `PR #${link.ref.number} comes from a fork; merge_task_pr only merges branches from the repository itself`,
+    );
+  }
   // The gate's base check is GitHub's here: mergeIntoDefaultBranch refuses any base but the default branch.
   const timing = { now: Date.now(), headSince: headSeenSince(link, services.links.prChanges([link.id]).get(link.id)) };
   const reason = notMergeable(
