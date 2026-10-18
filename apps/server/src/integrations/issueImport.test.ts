@@ -147,6 +147,16 @@ describe("issue import", () => {
     expect(jobs[0]!.denyTools).toEqual(expect.arrayContaining(["mcp__jira__create*", "mcp__slack__post*"]));
   });
 
+  it("runs a Jira import on the chosen tier's model too", async () => {
+    const { s, create, run, jobs } = setup();
+    s.settings.update({
+      issueImportModel: { tier: "deep" },
+      modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus" } } },
+    });
+    await run(create("PROJ-8").id);
+    expect(jobs[0]).toMatchObject({ source: { kind: "jira" }, model: "opus" });
+  });
+
   it("asks which servers are connected once for several imports", async () => {
     const { create, run, listed } = setup();
     await run(create("PROJ-7").id);

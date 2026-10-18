@@ -40,6 +40,8 @@ export function HeadlessModelRow({
 }) {
   // Custom was picked but no name typed yet: nothing to save, so the field shows empty until there is one.
   const [typing, setTyping] = useState(false);
+  // Bumped when typed text is refused, to remount the field with the saved value.
+  const [rejected, setRejected] = useState(0);
   const option = headlessModelOption(value, typing);
   const items = headlessModelItems(allowDefault);
   const run = headlessModelRun(tiers, value);
@@ -86,7 +88,7 @@ export function HeadlessModelRow({
           </Select>
           {option === "custom" ? (
             <BlurInput
-              key={value && "model" in value ? value.model : "typing"}
+              key={`${value && "model" in value ? value.model : "typing"}-${rejected}`}
               aria-label={label}
               size="sm"
               className="sm:w-40"
@@ -94,7 +96,11 @@ export function HeadlessModelRow({
               value={value && "model" in value ? value.model : ""}
               onSave={(next) => {
                 const typed = typedHeadlessModel(next);
-                if (!typed) return;
+                if (!typed) {
+                  // Not a model `--model` can take: show what is saved again instead of leaving the bad text.
+                  setRejected((n) => n + 1);
+                  return;
+                }
                 setTyping(false);
                 onChange(typed);
               }}
