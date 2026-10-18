@@ -228,8 +228,11 @@ describe("stats.weekly", () => {
       s.autopilot.start(recorded.id);
       s.autopilot.finish(recorded.id, { status, ...(costUsd ? { costUsd } : {}) });
     };
+    // Runs are ordered by when they finished, and a tie falls to a random id, so each gets its own minute.
     run("1", "failed", 0.25);
+    clock(at(13, 10));
     run("2", "succeeded", 0.5);
+    clock(at(13, 11));
     run("3", "succeeded");
 
     expect(values("autopilot.runs")).toMatchObject({ values: [0, 0, 0, 3], total: 3 });
