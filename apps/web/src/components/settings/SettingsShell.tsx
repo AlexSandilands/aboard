@@ -28,6 +28,7 @@ import {
   useSidebar,
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
+import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
 import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
@@ -95,6 +96,9 @@ export function SettingsSidebar() {
   const openSettings = useOpenSettings();
   const leave = useLeaveSettings();
   const { isMobile, setOpenMobile } = useSidebar();
+  // Open suggestions wait on the user, so their section shows how many.
+  const openSuggestions = useSuggestions().data?.open ?? 0;
+  const countOf = (sectionId: string) => (sectionId === "tasks.suggestions" ? openSuggestions : 0);
 
   const go = (target: string, group: SettingsGroupId) => {
     if (isMobile) setOpenMobile(false);
@@ -150,6 +154,14 @@ export function SettingsSidebar() {
                             onClick={() => go(section.id, group.id)}
                           >
                             <span>{section.label}</span>
+                            {countOf(section.id) > 0 ? (
+                              <span
+                                aria-label={`${countOf(section.id)} open`}
+                                className="ms-auto rounded-full bg-info/15 px-1.5 text-[10px] leading-4 font-medium text-info-foreground tabular-nums"
+                              >
+                                {countOf(section.id)}
+                              </span>
+                            ) : null}
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}

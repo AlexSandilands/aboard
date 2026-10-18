@@ -548,6 +548,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   }),
   /** Notifications were read or removed (their task was deleted); the inbox refetches. */
   z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
+  /** A suggested change was made, accepted, rejected or went stale; Settings refetches. `open` counts the open ones. */
+  z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 

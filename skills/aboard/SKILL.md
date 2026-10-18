@@ -203,6 +203,22 @@ hovering a card draws green lines to the tasks it unblocks and red lines to its 
 - Record a dependency when you notice one while planning (the task needs another task's migration, API or
   decision), instead of only writing it in the plan.
 
+## Suggesting changes to prompts and skills
+
+The review and planning skills the user chose, and their custom automations' prompts, steer every agent the board
+starts. When you have evidence that one of them misleads agents or wastes their time (reviews missing the same kind of
+bug, a prompt that keeps sending agents the wrong way), suggest a change instead of editing it:
+
+1. `list_editable_prompts` lists what can be changed, each with a `target` key and where it is used.
+2. `get_editable_prompt(target)` returns the current text and its `hash`.
+3. `suggest_change(target, baseHash, proposed, rationale, evidence)`: `proposed` is the whole new text. Change
+   only what your evidence supports and prefer removing or tightening text to adding it; `rationale` says what
+   goes wrong and how the change fixes it; `evidence` lists task refs (`"#42"`) and URLs.
+
+The user reads the diff in Settings and accepts or rejects it; nothing changes until then. A `CONFLICT` means the
+text changed since you read it: read it again and rework your change. A newer suggestion for the same target
+replaces your open one. Never edit those skill files yourself, and never ask the user to accept a change unseen.
+
 ## Local review
 
 The user can turn on automatic local review (globally, or per task). Then moving a task to `review`

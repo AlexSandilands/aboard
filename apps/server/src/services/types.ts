@@ -51,6 +51,7 @@ import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { SuggestionsService } from "./suggestions.ts";
 
 /**
  * The service layer. REST routes, MCP tools and pollers all go through these — never
@@ -79,6 +80,7 @@ export interface Services {
   digests: DigestsService;
   activity: ActivityService;
   notifications: NotificationsService;
+  suggestions: SuggestionsService;
   attention: AttentionService;
 }
 

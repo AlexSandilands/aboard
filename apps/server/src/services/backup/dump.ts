@@ -59,6 +59,7 @@ export function dumpBoard(db: Db): BoardDump {
       "SELECT * FROM autopilot_recurring ORDER BY project_id, created_at, id",
     );
     const custom = rowsOf(db, "autopilot_custom", "SELECT * FROM autopilot_custom ORDER BY created_at, id");
+    const suggestions = rowsOf(db, "suggestions", "SELECT * FROM suggestions ORDER BY created_at, id");
     const tasks = rowsOf(db, "tasks", "SELECT * FROM tasks ORDER BY number");
     const events = rowsOf(db, "task_events", "SELECT * FROM task_events ORDER BY id");
 
@@ -87,6 +88,7 @@ export function dumpBoard(db: Db): BoardDump {
       autopilot_settings: autopilot.length,
       autopilot_recurring: recurring.length,
       autopilot_custom: custom.length,
+      suggestions: suggestions.length,
       tasks: tasks.length,
       task_events: events.length,
     };
@@ -113,6 +115,7 @@ export function dumpBoard(db: Db): BoardDump {
       autopilot_settings: autopilot,
       autopilot_recurring: recurring,
       autopilot_custom: custom,
+      suggestions,
       tasks: [...bundles.values()],
       task_events: events,
     };

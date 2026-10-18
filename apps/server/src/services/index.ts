@@ -25,6 +25,7 @@ import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
@@ -44,6 +45,8 @@ export interface ServiceDeps {
   attachmentsDir: string;
   /** The clock for notifications (retention, quiet hours); tests swap in their own. */
   now?: () => Date;
+  /** The user's home folder, where global skills live; tests use a temp folder. */
+  userHome: string;
 }
 
 /** Builds the service layer over one database. */
@@ -139,6 +142,13 @@ export function createServices(deps: ServiceDeps): Services {
     }),
     recurring,
     customAutomations,
+    suggestions: createSuggestionsService(core, {
+      settings,
+      projects,
+      customAutomations,
+      notifications,
+      userHome: deps.userHome,
+    }),
     activity: createActivityService(core, {
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),

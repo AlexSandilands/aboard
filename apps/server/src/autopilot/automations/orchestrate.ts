@@ -109,6 +109,9 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "start_review",
   "submit_review",
   "resolve_finding",
+  "list_editable_prompts",
+  "get_editable_prompt",
+  "suggest_change",
 ] as const;
 
 export const ORCHESTRATE_DENIED_TOOLS = ORCHESTRATE_DENIED_BOARD_TOOLS.map((tool) => `mcp__${BRAND.id}__${tool}`);

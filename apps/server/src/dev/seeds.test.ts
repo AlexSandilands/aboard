@@ -29,8 +29,9 @@ function seeded(scenario: ScenarioName) {
   const tasks = ctx.services.tasks.summaries({ includeArchived: true });
   const details = tasks.map((t) => ctx.services.tasks.detail(t.id));
   const runs = tasks.flatMap((t) => ctx.services.autopilot.runsForTask(t.id));
+  const suggestions = ctx.services.suggestions.list();
   ctx.db.close();
-  return { tasks, details, runs };
+  return { tasks, details, runs, suggestions };
 }
 
 describe("seed scenarios", () => {
@@ -131,6 +132,16 @@ describe("seed scenarios", () => {
     const kinds = details.flatMap((t) => t.links.map((l) => l.kind));
     expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "jira"]));
     expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
+  });
+
+  it("showcase has suggested changes waiting for the user, and one already rejected", () => {
+    const { suggestions } = seeded("showcase");
+    expect(suggestions.open).toBe(2);
+    expect(suggestions.items.map((i) => [i.target.kind, i.status, i.current])).toEqual([
+      ["automation", "open", "same"],
+      ["builtin", "open", "same"],
+      ["builtin", "rejected", null],
+    ]);
   });
 
   it("showcase has Autopilot history: a finished run, a failed one that needs attention, and a dry run", () => {

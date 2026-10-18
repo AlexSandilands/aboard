@@ -23,6 +23,7 @@ import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
+import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
 import { TerminalSection } from "../TerminalSection";
@@ -100,6 +101,9 @@ function TasksContent() {
       </SettingsSubsection>
       <SettingsSubsection id="tasks.review">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="tasks.suggestions">
+        <SuggestionsSection />
       </SettingsSubsection>
     </>
   );

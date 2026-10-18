@@ -30,6 +30,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
 | `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)) |
+| `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
@@ -48,7 +49,8 @@ priority lane and makes Autopilot start it first ([board-layout.md](board-layout
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
 
 `add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
-which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so.
+which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so; the server can't enforce that
+([why](../decisions/0008-autopilot-engine.md)).
 `get_task` shows an "Auto-merge:" line when it is set. An epic can't have it. See
 [github-prs.md](github-prs.md#merge_task_pr).
 
