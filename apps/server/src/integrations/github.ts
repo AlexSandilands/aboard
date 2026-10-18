@@ -924,6 +924,9 @@ ${link.ref.repo.toLowerCase()}`;
     if (!pr.success || !repo.success) throw new Error("GitHub returned an unexpected PR shape");
     deps.services().links.setSnapshot(link.id, mapPrSnapshot(pr.data, repo.data));
     loggedErrors.delete(link.id);
+    // A read that worked ends any back-off, so an open panel polls the PR again.
+    failedAt.delete(link.id);
+    failedAt.delete(`host:${link.ref.host}`);
   };
 
   /** A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. */
