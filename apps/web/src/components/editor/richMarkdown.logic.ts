@@ -613,6 +613,17 @@ export function markdownToSlice(schema: Schema, markdown: string): Slice {
   return new Slice(doc.content, open(doc.firstChild), open(doc.lastChild));
 }
 
+/** The language VS Code reports for copied text (its `vscode-editor-data` JSON), or null when absent or unreadable. */
+export function vscodePasteMode(data: string | null | undefined): string | null {
+  if (!data) return null;
+  try {
+    const mode = (JSON.parse(data) as { mode?: unknown } | null)?.mode;
+    return typeof mode === "string" ? mode : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The Markdown for a copied selection. A slice holds only the content of the blocks its ends share, so
  * items and quote lines arrive without the list or quote that writes their markers: those are put back.

@@ -16,8 +16,12 @@ the editor is a view of it that must never change text the person didn't edit.
   Tab moves the focus, as in a textarea, so the palette's Tab order still works.
 - **Keys:** the callers keep their own: Ctrl/⌘+Enter saves (or creates the task), Esc cancels, leaving the box
   saves. The editor passes keys to them through `MarkdownInput`'s `onKey`; while an IME is composing it passes none.
-- **Clipboard:** pasted text is read as Markdown (inside a code block it stays code). Copying writes Markdown,
-  with the list and quote markers of the lines copied.
+- **Clipboard:** pasted text, from any app, is read as Markdown (inside a code block it stays code). The slice
+  is built with the editor's own schema (`view.state.schema`), never `richMarkdownSchema`: the editor adds
+  Placeholder, so that is another instance and ProseMirror silently drops a slice from it. Code copied from VS Code
+  (it tags the paste with `vscode-editor-data`) becomes a fenced code block; when VS Code reports the language
+  `markdown`, `handlePaste` reads it as Markdown instead. Copying writes Markdown, with the list and quote markers
+  of the lines copied.
 - **Images:** see [attachments.md](attachments.md#how-it-works). An upload is a pill node until it is done.
 
 ### The document model

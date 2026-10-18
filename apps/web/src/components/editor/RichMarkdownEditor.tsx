@@ -12,7 +12,7 @@ import { type Ref, useEffect, useImperativeHandle, useRef } from "react";
 import { AttachmentPill } from "~/components/attachments/AttachmentPill";
 import { imageFiles } from "~/lib/attachments.logic";
 import { cn } from "~/lib/utils";
-import { AttachmentNode, richMarkdownExtensions, richMarkdownSchema } from "./richMarkdown.extensions";
+import { AttachmentNode, richMarkdownExtensions } from "./richMarkdown.extensions";
 import {
   docToMarkdown,
   markdownToDocJson,
@@ -20,6 +20,7 @@ import {
   normalizeLineEndings,
   parseAttachmentToken,
   selectionToMarkdown,
+  vscodePasteMode,
 } from "./richMarkdown.logic";
 
 export interface RichMarkdownEditorHandle {
@@ -107,10 +108,29 @@ export function RichMarkdownEditor({
         if (view.composing || event.isComposing) return false;
         return props.current.onKeyDown?.(event) ?? false;
       },
-      handlePaste: (_, event) => {
+      handlePaste: (view, event) => {
         const files = imageFiles(event.clipboardData?.files ?? []);
-        if (files.length === 0) return false;
-        props.current.onImages(files);
+        if (files.length > 0) {
+          props.current.onImages(files);
+          return true;
+        }
+        // TipTap's code block takes any paste VS Code tags (`vscode-editor-data`) as code; Markdown copied
+        // from VS Code is read as Markdown instead, like text from any other app.
+        const text = event.clipboardData?.getData("text/plain");
+        if (
+          !text ||
+          vscodePasteMode(event.clipboardData?.getData("vscode-editor-data")) !== "markdown" ||
+          view.state.selection.$from.parent.type.spec.code
+        ) {
+          return false;
+        }
+        view.dispatch(
+          view.state.tr
+            .replaceSelection(markdownToSlice(view.state.schema, normalizeLineEndings(text)))
+            .scrollIntoView()
+            .setMeta("paste", true)
+            .setMeta("uiEvent", "paste"),
+        );
         return true;
       },
       handleDrop: (view, event, _, moved) => {
@@ -121,8 +141,10 @@ export function RichMarkdownEditor({
         props.current.onImages(files);
         return true;
       },
-      // Pasted text is read as Markdown (ProseMirror keeps it as it is inside a code block).
-      clipboardTextParser: (text) => markdownToSlice(richMarkdownSchema, text),
+      // Pasted text is read as Markdown (ProseMirror keeps it as it is inside a code block). The slice
+      // must come from the editor's own schema (it adds Placeholder, so `richMarkdownSchema` is another
+      // instance): ProseMirror silently drops a slice built from a different one.
+      clipboardTextParser: (text, _, __, view) => markdownToSlice(view.state.schema, text),
       clipboardTextSerializer: (_, view) =>
         selectionToMarkdown(view.state.doc, view.state.selection.from, view.state.selection.to),
     },
