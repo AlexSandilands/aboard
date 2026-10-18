@@ -72,14 +72,19 @@ const KEY_LABELS: Record<string, string> = {
   tab: "Tab",
 };
 
-/** `mod+k` as people read it: `Ctrl+K`, or `⌘K` on macOS. */
-export function formatShortcut(shortcut: string, isMac: boolean): string {
+/** `mod+k` as the keys to press, one label each: `["Ctrl", "K"]`, or `["⌘", "K"]` on macOS. */
+export function shortcutParts(shortcut: string, isMac: boolean): string[] {
   const { key, mod, shift, alt } = parseShortcut(shortcut);
   const label = KEY_LABELS[key] ?? key.toUpperCase();
   const parts = isMac
     ? [alt && "⌥", shift && "⇧", mod && "⌘", label]
     : [mod && "Ctrl", alt && "Alt", shift && "Shift", label];
-  return parts.filter(Boolean).join(isMac ? "" : "+");
+  return parts.filter((part): part is string => Boolean(part));
+}
+
+/** `mod+k` as people read it: `Ctrl+K`, or `⌘K` on macOS. */
+export function formatShortcut(shortcut: string, isMac: boolean): string {
+  return shortcutParts(shortcut, isMac).join(isMac ? "" : "+");
 }
 
 const DEFAULT_BINDINGS = resolveKeybindings();

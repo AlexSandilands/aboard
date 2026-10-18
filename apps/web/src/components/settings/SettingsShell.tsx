@@ -6,6 +6,7 @@ import {
   BlocksIcon,
   CpuIcon,
   FolderIcon,
+  KeyboardIcon,
   ListTodoIcon,
   type LucideIcon,
   SquareKanbanIcon,
@@ -42,6 +43,7 @@ import { useLeaveEditor, useLeaveSettings, useOpenSettings } from "./settingsNav
 
 const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
+  keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
   models: CpuIcon,
   autopilot: ZapIcon,

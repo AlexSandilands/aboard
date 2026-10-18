@@ -33,7 +33,8 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
+| **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, Data (backup to git, archived projects) |
+| **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md) |
 | **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
