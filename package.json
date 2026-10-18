@@ -21,6 +21,7 @@
     "format:check": "oxfmt --check",
     "knip": "knip",
     "docs:check": "node scripts/check-doc-links.ts",
+    "skill:embed": "node scripts/embed-board-skill.ts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm docs:check && pnpm test",
     "prepare": "lefthook install"
   },

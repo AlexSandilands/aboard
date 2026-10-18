@@ -17,6 +17,7 @@ import type {
   SettingsAskStatus,
   NotificationList,
   SkillInfo,
+  SkillSyncStatus,
   SocialFeed,
   StatsPeriod,
   StatsResponse,
@@ -47,6 +48,7 @@ export const queryKeys = {
   /** Whether the settings Ask can run, per Claude Code CLI setting: changing the path asks again. */
   settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
+  skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
   stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
@@ -313,6 +315,16 @@ export function usePrFix(linkId: string | null) {
 }
 
 /** The last git backup run. Polled while shown, quickly while a run is in progress. */
+/** The board skill's install state per harness. Read on focus too: the user edits the files outside the board. */
+export function useSkillSync() {
+  return useQuery({
+    queryKey: queryKeys.skillSync,
+    queryFn: ({ signal }) => api<SkillSyncStatus>("/api/skill-sync", { signal }),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useBackupStatus() {
   return useQuery({
     queryKey: queryKeys.backupStatus,

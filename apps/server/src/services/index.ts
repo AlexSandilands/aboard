@@ -26,6 +26,7 @@ import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
+import { createSkillSyncService } from "./skillSync.ts";
 import { createSocialService } from "./social.ts";
 import { createStatsService } from "./stats.ts";
 import { createSuggestionsService } from "./suggestions.ts";
@@ -155,6 +156,7 @@ export function createServices(deps: ServiceDeps): Services {
       notifications,
       userHome: deps.userHome,
     }),
+    skillSync: createSkillSyncService(core, { userHome: deps.userHome }),
     activity: createActivityService(core, {
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),

@@ -1,4 +1,9 @@
-import { BUILTIN_PLAN_SKILL_BODY, BUILTIN_REVIEW_SKILL_BODY } from "@repo/contracts";
+import {
+  BOARD_AGENTS_SNIPPET,
+  boardSkillFile,
+  BUILTIN_PLAN_SKILL_BODY,
+  BUILTIN_REVIEW_SKILL_BODY,
+} from "@repo/contracts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,5 +53,14 @@ describe("skills", () => {
     const file = readFileSync(new URL("../../../skills/aboard-plan/SKILL.md", import.meta.url), "utf8");
     const body = file.replace(/\r\n/g, "\n").replace(/^---\n[\s\S]*?\n---\n\n/, "");
     expect(body).toBe(BUILTIN_PLAN_SKILL_BODY);
+  });
+
+  // The server installs and syncs the board skill from contracts; the repo ships the same files. After editing
+  // skills/aboard, `pnpm skill:embed` regenerates contracts' copy.
+  it("keeps skills/aboard/SKILL.md and AGENTS-snippet.md identical to the embedded text", () => {
+    const read = (name: string) =>
+      readFileSync(new URL(`../../../skills/aboard/${name}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    expect(read("SKILL.md")).toBe(boardSkillFile());
+    expect(read("AGENTS-snippet.md")).toBe(BOARD_AGENTS_SNIPPET);
   });
 });

@@ -95,6 +95,9 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
 const MODELS_PER_TIER = "The model each suggested tier starts a new session on is set on the Model tiers page.";
+const BOARD_SKILL =
+  "Install the board's skill, which teaches agents the workflow, and keep it updated with the app. A copy you edited is never overwritten without asking.";
+const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow"];
 
 const WRITTEN: ReadonlyArray<Draft> = [
   // Board › Appearance
@@ -391,9 +394,9 @@ const WRITTEN: ReadonlyArray<Draft> = [
   ]),
   draft(
     "integrations.claude-code.skill",
-    "Claude Code skill",
-    "Teaches Claude Code when to add to the backlog, write plans and update steps.",
-    ["install", "agents", "instructions"],
+    "Claude Code board skill",
+    `${BOARD_SKILL} In ~/.claude/skills.`,
+    BOARD_SKILL_KEYWORDS,
   ),
   draft(
     "integrations.claude-code.cli-path",
@@ -423,6 +426,10 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Add the MCP server to your VS Code user profile, or to .vscode/mcp.json.",
     ["github copilot", "mcp.json", "editor", "servers"],
   ),
+  draft("integrations.copilot.skill", "Copilot board skill", `${BOARD_SKILL} In ~/.copilot/skills.`, [
+    "github copilot",
+    ...BOARD_SKILL_KEYWORDS,
+  ]),
   draft(
     "integrations.copilot.cli-path",
     "Copilot CLI path",
@@ -440,6 +447,16 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "new session",
   ]),
   draft("integrations.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
+  draft("integrations.codex.skill", "Codex board skill", `${BOARD_SKILL} In ~/.codex/skills.`, [
+    "openai",
+    ...BOARD_SKILL_KEYWORDS,
+  ]),
+  draft(
+    "integrations.codex.snippet",
+    "AGENTS.md snippet",
+    "Copy the board's instructions for your AGENTS.md, for agents that don't read skills. Says when it changed since you copied it.",
+    ["agents.md", "instructions", "copy", "other agents", "workflow"],
+  ),
   // Integrations › GitHub, Jira
   draft(
     "integrations.github.cli",

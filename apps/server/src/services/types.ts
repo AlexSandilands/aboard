@@ -52,6 +52,7 @@ import type { StatsService } from "./stats.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { SkillSyncService } from "./skillSync.ts";
 import type { SocialService } from "./social.ts";
 import type { SuggestionsService } from "./suggestions.ts";
 
@@ -85,6 +86,7 @@ export interface Services {
   notifications: NotificationsService;
   social: SocialService;
   suggestions: SuggestionsService;
+  skillSync: SkillSyncService;
   attention: AttentionService;
 }
 

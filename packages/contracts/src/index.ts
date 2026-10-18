@@ -4,6 +4,8 @@ export * from "./labels.ts";
 export * from "./reviews.ts";
 export * from "./reviewPrompt.ts";
 export * from "./planPrompt.ts";
+export * from "./boardSkill.ts";
+export * from "./skillSync.ts";
 export * from "./derive.ts";
 export * from "./identity.ts";
 export * from "./links.ts";

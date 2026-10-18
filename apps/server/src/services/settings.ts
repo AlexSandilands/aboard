@@ -54,8 +54,8 @@ const DEFAULTS: StoredSettings = {
 
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
- * someone decides otherwise. Left out: the T3 token, and the terminal and backup settings, which describe this
- * machine; and the social network's switch, which goes with its posts (never backed up). A forced restore keeps them
+ * someone decides otherwise. Left out: the T3 token, and the terminal, backup and skill sync (services/skillSync.ts)
+ * settings, which describe this machine; and the social network's switch, which goes with its posts (never backed up). A forced restore keeps them
  * from the database it replaces. Autopilot's engine settings are stored beside
  * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
  */

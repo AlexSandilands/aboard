@@ -55,6 +55,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
+| `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder |
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
 | `CLAUDE_CONFIG_DIR`       | `~/.claude`                 | Where Claude Code keeps running sessions, for session status        |
 | `COPILOT_HOME`            | `~/.copilot`                | The same for Copilot CLI                                            |

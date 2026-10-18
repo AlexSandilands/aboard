@@ -53,7 +53,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
-    userHome: homedir(),
+    // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
+    userHome: env[brandEnv("USER_HOME")] || homedir(),
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),
     sessionDirs: {
