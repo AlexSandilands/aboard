@@ -23,7 +23,7 @@ import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { AttachmentsService } from "./attachments.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
-import type { LinksModule } from "./links.ts";
+import { classifyLinkInput, type LinksModule } from "./links.ts";
 import type { RelationsModule } from "./relations.ts";
 import type {
   CloseInput,
@@ -404,7 +404,13 @@ export function createTasksService(
           deps.links().service.add(task.id, { value: source.url }, actor);
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
         }
-        for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
+        for (const link of input.links ?? []) {
+          // No agent works on a manual task, so the session or thread creating it isn't linked (links.add refuses
+          // one). Agents in T3 Code pass their thread on every create, a manual to-do for the user included.
+          const linkKind = manual ? classifyLinkInput(link, deps.settings.get().jiraBaseUrl).kind : null;
+          if (linkKind === "t3_thread" || linkKind === "agent_session") continue;
+          deps.links().service.add(task.id, link, actor);
+        }
         linkTitleKeys(task.id, task.title, actor);
         // Images pasted into the new-task box were uploaded before the task existed.
         deps.attachments.claim(task.id, description);
@@ -498,6 +504,13 @@ export function createTasksService(
           }
           next.manual = manual;
           changed.push("manual");
+          // A round still waiting for a reviewer would wait forever: nothing reviews a manual task.
+          const round = manual ? repos.reviews.latest(id) : null;
+          if (round && (round.status === "pending" || round.status === "running")) {
+            const error = "The task became a manual task";
+            repos.reviews.update({ ...round, status: "failed", error, updatedAt: now, completedAt: now });
+            fx.log(id, actor, "review_status", { round: round.round, status: "failed", error });
+          }
           // Agents and Autopilot leave a manual task alone, so its flags for them go.
           if (manual && current.autopilot !== null) {
             next.autopilot = null;

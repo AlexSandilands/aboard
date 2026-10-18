@@ -82,7 +82,8 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     expect(sent).toEqual([]);
     expect(jobs).toEqual([]);
-    expect(round()?.status).toBe("pending");
+    expect(round()).toMatchObject({ status: "failed", error: "The task became a manual task" });
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
   });
 
   it("nudges the T3 thread at once when the user moved the card, then reviews headless if it stays quiet", async () => {

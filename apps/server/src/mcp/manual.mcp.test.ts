@@ -92,6 +92,15 @@ describe("manual tasks over MCP", () => {
     }
   });
 
+  it("creates one from a T3 thread without linking the thread to it", async () => {
+    const t3Thread = { environmentId: "env", threadId: "thread-9" };
+    await call("add_to_backlog", { title: "Ask for access", workspacePath, manual: true, t3Thread });
+    await call("create_task", { title: "Sign off", workspacePath, manual: true, t3Thread });
+    for (const ref of ["#1", "#2"]) {
+      expect(h.services.tasks.summary(h.services.tasks.resolveId(ref)).links).toEqual([]);
+    }
+  });
+
   it("refuses the Autopilot flag", async () => {
     const { text, error } = await raw("add_to_backlog", { title: "M", workspacePath, manual: true, autopilot: "on" });
     expect(error).toBe(true);
