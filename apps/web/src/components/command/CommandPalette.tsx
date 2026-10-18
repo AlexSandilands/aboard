@@ -279,11 +279,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const [query, setQuery] = useState(() => initialQueryFor(view));
   const [description, setDescription] = useState("");
   // An image pasted here has no task yet; creating the task claims the ones its description refers to.
-  const descriptionInput = useMarkdownInput({
-    taskId: null,
-    value: description,
-    onChange: setDescription,
-  });
+  const descriptionInput = useMarkdownInput({ taskId: null, value: description, onChange: setDescription });
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selectedImports, setSelectedImports] = useState<ReadonlySet<string>>(() => new Set());
@@ -379,19 +375,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         onError: (error) => {
           // Only an active project can conflict now; archived ones are restored instead.
           if (error instanceof ApiError && error.code === "CONFLICT") {
-            toastManager.add({
-              type: "info",
-              title: "Already on the board",
-              description: error.message,
-            });
+            toastManager.add({ type: "info", title: "Already on the board", description: error.message });
             closePalette();
             return;
           }
-          toastManager.add({
-            type: "error",
-            title: "Couldn't add project",
-            description: error.message,
-          });
+          toastManager.add({ type: "error", title: "Couldn't add project", description: error.message });
         },
       },
     );
@@ -404,19 +392,11 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       { title },
       {
         onSuccess: (project) => {
-          toastManager.add({
-            type: "success",
-            title: "Project added",
-            description: project.title,
-          });
+          toastManager.add({ type: "success", title: "Project added", description: project.title });
           closePalette();
         },
         onError: (error) =>
-          toastManager.add({
-            type: "error",
-            title: "Couldn't add project",
-            description: error.message,
-          }),
+          toastManager.add({ type: "error", title: "Couldn't add project", description: error.message }),
       },
     );
   }
@@ -437,10 +417,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         // Blank text is sent as "" with a template, so clearing its pre-filled description sticks.
         ...(issue
           ? { sourceUrl: issue.sourceUrl }
-          : {
-              title,
-              description: normalizeDescription(description) ?? (template ? "" : undefined),
-            }),
+          : { title, description: normalizeDescription(description) ?? (template ? "" : undefined) }),
         ...(flow === "epic" ? { kind: "epic" as const } : {}),
         ...(epicId ? { epicId } : {}),
         ...templateFields,
@@ -450,10 +427,9 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           setLastProjectId(projectId);
           if (flow === "planned") {
             closePalette();
-            void navigate({
-              to: "/",
-              search: (prev) => ({ ...boardSearchFrom(prev), task: task.id }),
-            }).then(() => (planFromTemplate ? undefined : usePanel.getState().requestPlanEditor()));
+            void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: task.id }) }).then(() =>
+              planFromTemplate ? undefined : usePanel.getState().requestPlanEditor(),
+            );
             return;
           }
           toastManager.add({
@@ -537,11 +513,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         // The in-progress filter looks across every project, so jumping to one ends it.
         void navigate({
           to: "/",
-          search: (prev) => ({
-            ...boardSearchFrom(prev),
-            project: project.id,
-            inprogress: undefined,
-          }),
+          search: (prev) => ({ ...boardSearchFrom(prev), project: project.id, inprogress: undefined }),
         });
       },
     };
@@ -682,13 +654,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
               run: () => openSettings(entry.target),
             })),
         ];
-        const groups: PaletteGroup[] = [
-          {
-            value: "actions",
-            label: "Actions",
-            items: filterItems(actions, query),
-          },
-        ];
+        const groups: PaletteGroup[] = [{ value: "actions", label: "Actions", items: filterItems(actions, query) }];
         const current = activeView(savedViews, filterParams);
         const viewItems = savedViews.map((saved): PaletteItem => ({
           value: `view:${saved.id}`,
@@ -696,27 +662,16 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           searchTerms: ["view", "saved", "filters"],
           icon: <BookmarkIcon className={ITEM_ICON_CLASS} />,
           ...(saved.id === current?.id
-            ? {
-                trailing: <CheckIcon className="ms-auto size-4 shrink-0 text-primary" />,
-              }
+            ? { trailing: <CheckIcon className="ms-auto size-4 shrink-0 text-primary" /> }
             : {}),
           run: () => {
             closePalette();
             void applyFilterParams(saved.filters);
           },
         }));
-        if (viewItems.length > 0)
-          groups.push({
-            value: "views",
-            label: "Views",
-            items: filterItems(viewItems, query),
-          });
+        if (viewItems.length > 0) groups.push({ value: "views", label: "Views", items: filterItems(viewItems, query) });
         if (query.trim()) {
-          groups.push({
-            value: "tasks",
-            label: "Tasks",
-            items: filterItems(tasks.map(taskItem), query).slice(0, 8),
-          });
+          groups.push({ value: "tasks", label: "Tasks", items: filterItems(tasks.map(taskItem), query).slice(0, 8) });
           groups.push({
             value: "projects",
             label: "Projects",
@@ -756,13 +711,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             run: () => pushView({ kind: "no-folder" }),
           },
         ];
-        return [
-          {
-            value: "sources",
-            label: "Add project",
-            items: filterItems(items, query),
-          },
-        ];
+        return [{ value: "sources", label: "Add project", items: filterItems(items, query) }];
       }
       case "browse": {
         const listing = browse.listing;
@@ -850,20 +799,9 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       }
       case "go-to-task": {
         const limit = (items: PaletteItem[]) => (query.trim() ? items : items.slice(0, 50));
-        const groups = [
-          {
-            value: "tasks",
-            label: "Tasks",
-            items: limit(filterItems(tasks.map(taskItem), query)),
-          },
-        ];
+        const groups = [{ value: "tasks", label: "Tasks", items: limit(filterItems(tasks.map(taskItem), query)) }];
         const archived = limit(filterItems((archivedTasks ?? []).map(taskItem), query));
-        if (archived.length > 0)
-          groups.push({
-            value: "archived-tasks",
-            label: "Archived tasks",
-            items: archived,
-          });
+        if (archived.length > 0) groups.push({ value: "archived-tasks", label: "Archived tasks", items: archived });
         return groups;
       }
       case "go-to-project": {
@@ -876,24 +814,12 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LayersIcon className={ITEM_ICON_CLASS} />,
             run: () => {
               closePalette();
-              void navigate({
-                to: "/",
-                search: (prev) => ({
-                  ...boardSearchFrom(prev),
-                  project: undefined,
-                }),
-              });
+              void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), project: undefined }) });
             },
           });
         }
         items.push(...projects.map(projectJumpItem));
-        return [
-          {
-            value: "projects",
-            label: "Projects",
-            items: filterItems(items, query),
-          },
-        ];
+        return [{ value: "projects", label: "Projects", items: filterItems(items, query) }];
       }
       case "title":
       case "no-folder":

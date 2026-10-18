@@ -5,6 +5,7 @@ import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { ApiError } from "~/lib/api";
 import { useBoard, useStats } from "~/state/queries";
 import { SERIES_COLORS, type ChartSeries } from "./chartParts";
 import { KpiTile } from "./KpiTile";
@@ -39,7 +40,7 @@ export function StatsPage() {
   const stats = useStats(weeks, projectId);
   const projects = useBoard().data?.projects ?? [];
   // A project that was deleted or archived since the link was made: the API says 404, so say so and offer the whole board.
-  const unknownProject = stats.isError && projectId !== null;
+  const unknownProject = stats.error instanceof ApiError && stats.error.status === 404 && projectId !== null;
 
   const setSearch = (patch: { project?: string | undefined; weeks?: StatsPeriod }) =>
     void navigate({
@@ -225,6 +226,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
         <ChartCard title="Created and finished per week">
           <WeeklyBars
             buckets={data.buckets}
+            integer
             format={count}
             label="Tasks created and finished per week"
             series={[
@@ -269,6 +271,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
         <ChartCard title="PRs merged per week">
           <WeeklyBars
             buckets={data.buckets}
+            integer
             format={count}
             label="PRs merged per week"
             series={[chartSeries(data, "prs_merged", "PRs merged", SERIES_COLORS.primary, { zeros: true })]}
@@ -286,6 +289,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <WeeklyBars
             buckets={data.buckets}
             mode="stacked"
+            integer
             format={count}
             label="Review findings raised per week, by severity"
             series={FINDING_SEVERITIES.map(([severity, label, color]) =>
@@ -307,6 +311,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <WeeklyBars
             buckets={data.buckets}
             mode="stacked"
+            integer
             format={count}
             label="Autopilot runs per week, by outcome"
             series={statusSeries}
@@ -328,6 +333,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
         <ChartCard title="Sessions started per week">
           <WeeklyBars
             buckets={data.buckets}
+            integer
             format={count}
             label="Agent sessions started per week"
             series={[chartSeries(data, "agent_sessions_started", "Sessions", SERIES_COLORS.primary, { zeros: true })]}

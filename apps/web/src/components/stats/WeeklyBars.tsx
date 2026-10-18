@@ -32,12 +32,15 @@ export function WeeklyBars({
   buckets,
   series,
   mode = "grouped",
+  integer = false,
   format,
   label,
 }: {
   buckets: ReadonlyArray<StatsBucket>;
   series: ReadonlyArray<ChartSeries>;
   mode?: "grouped" | "stacked";
+  /** Values are counts, so the axis only ticks on whole numbers. */
+  integer?: boolean;
   format: (value: number | null) => string;
   /** What the chart shows, for assistive tech: "Tasks created and completed per week". */
   label: string;
@@ -49,7 +52,7 @@ export function WeeklyBars({
       ? series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0)
       : Math.max(0, ...series.map((s) => s.values[i] ?? 0)),
   );
-  const { max, ticks } = niceScale(Math.max(0, ...totals));
+  const { max, ticks } = niceScale(Math.max(0, ...totals), 4, integer);
   const slot = n > 0 ? PLOT_WIDTH / n : PLOT_WIDTH;
   const groupWidth = Math.min(slot * 0.72, MAX_BAR_WIDTH * (mode === "grouped" ? series.length : 1));
   const centers = buckets.map((_, i) => CHART.left + slot * i + slot / 2);

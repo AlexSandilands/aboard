@@ -20,6 +20,15 @@ describe("niceScale", () => {
   it("keeps an axis for an all-zero series", () => {
     expect(niceScale(0)).toEqual({ max: 1, ticks: [0, 1] });
   });
+  it("keeps whole-number ticks for counts", () => {
+    expect(niceScale(1, 4, true).ticks).toEqual([0, 1]);
+    expect(niceScale(2, 4, true).ticks).toEqual([0, 1, 2]);
+    expect(niceScale(3, 4, true).ticks).toEqual([0, 1, 2, 3]);
+    for (const max of [1, 2, 3, 4, 5, 7, 11]) {
+      const { ticks } = niceScale(max, 4, true);
+      expect(ticks.every(Number.isInteger)).toBe(true);
+    }
+  });
   it("has no float drift on fractions", () => {
     expect(niceScale(0.3).ticks).toEqual([0, 0.1, 0.2, 0.3]);
   });

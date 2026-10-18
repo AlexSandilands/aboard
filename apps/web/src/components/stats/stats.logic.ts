@@ -13,12 +13,14 @@ export function parseStatsPeriod(value: unknown): StatsPeriod {
  * Round tick values from 0 up to a "nice" ceiling at or above `max`, about `count` of them. A flat zero series still
  * gets a scale so its chart has an axis.
  */
-export function niceScale(max: number, count = 4): { max: number; ticks: number[] } {
+export function niceScale(max: number, count = 4, integer = false): { max: number; ticks: number[] } {
   if (!Number.isFinite(max) || max <= 0) return { max: 1, ticks: [0, 1] };
   const rough = max / count;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const residual = rough / magnitude;
-  const step = (residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10) * magnitude;
+  const nice = (residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10) * magnitude;
+  // Counts are whole, so a step below 1 would label 0.5 as "1" twice.
+  const step = integer ? Math.max(1, nice) : nice;
   const top = Number((Math.ceil(max / step - 1e-9) * step).toPrecision(12));
   const ticks: number[] = [];
   // Counting steps rather than adding to a float keeps 0.1 + 0.2 style drift out of the labels.
