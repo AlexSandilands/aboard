@@ -198,9 +198,9 @@ the board's layout for me to check"): they're added to its prompt and win where 
 handover for the next, so it remembers what it's waiting on. Switch it on per project or for the board; it counts
 against the agent limits below.
 
-Orchestrate has its own area in **Settings → Autopilot**, above the other automations: its switch and settings, a line
-for each project with when it next checks, when it last ran and a **Run now** button, and **View all runs**, which opens
-its [run history](#run-history).
+Orchestrate has its own area in **Settings → Autopilot**, above the other automations: its switch and settings, and **View all runs**, which opens
+its [run history](#run-history). What is per project is set in the project's own settings; its next check and
+**Run now** are in the lane's popover (below).
 
 Orchestrate sits at the top of the lane's Autopilot popover, in a section of its own. It shows when the next check
 is ("Next check in 12:34") and when it last ran. A check is a look, not a promise of a run: when the next one won't
@@ -208,7 +208,8 @@ run, the section says why instead (idle with nothing to check, paused, quiet hou
 now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
 it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
 the next check too (`Autopilot · 12m`). Switch that off in the popover or under **Settings → Appearance →
-Orchestrate countdown on lanes**.
+Orchestrate countdown on lanes**. **View history** in the popover's section opens the run history filtered to that
+project.
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 

@@ -1000,8 +1000,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
 - **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
-  Automations heading: its board switch and config (the same `FieldRow`s), a line per project with the next check, the
-  last run and **Run now** (`orchestrateLine`, `lastRunText`, the lane popover's logic and endpoints), and a **View
+  Automations heading: its board switch and config (the same `FieldRow`s) and a **View
   all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
   heading has an **All runs** link to the history of every automation.
 - **Automations** (`AutomationSections`): one folded section per other automation with its On / Off switch at

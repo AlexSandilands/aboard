@@ -219,7 +219,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
     `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
     hours until their end, today's cap, idle), "Last ran 17m ago · Done" (`lastRunText`), a **▶ Run now** button
     (`useRunOrchestrateNow`; disabled with a spinner while a run is going or asked for, a refusal is a toast with the
-    server's reason) and the switch for the pill's countdown. It reads `useOrchestrateState`, refetched on
+    server's reason) the switch for the pill's countdown and a **View history** button (`RunHistoryLink`, not marked as opened from
+    Settings) that opens the run history page filtered to the project. It reads `useOrchestrateState`, refetched on
     `autopilot.changed`, on task changes and every minute. Epic popovers don't have it (Orchestrate has no epic scope).
   - **The pill's countdown.** While Orchestrate is on in the project the pill reads `Autopilot · 12m`
     (`pillTimerAt`, `formatPillCountdown`): only when a slot would run, so not while paused, while its run is going,

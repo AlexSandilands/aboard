@@ -11,6 +11,7 @@ import { useBoardView } from "~/state/ui";
 import { inheritLabel } from "./autopilot.logic";
 import { ModeSwitch } from "./ModeSwitch";
 import { lastRunText, orchestrateLine } from "./orchestrate.logic";
+import { RunHistoryLink } from "./RunHistoryLink";
 
 /**
  * Orchestrate's pinned section at the top of a project's Autopilot popover: its switch, the next check (or why there
@@ -44,9 +45,12 @@ export function OrchestrateSection({
       aria-label={`${automation.title} in ${title}`}
       className="flex flex-col gap-1.5 rounded-lg border border-primary/30 bg-primary/6 p-2"
     >
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium">{automation.title}</p>
-        <p className="line-clamp-2 text-2xs text-muted-foreground">{automation.description}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">{automation.title}</p>
+          <p className="line-clamp-2 text-2xs text-muted-foreground">{automation.description}</p>
+        </div>
+        <RunHistoryLink automation={automation.key} project={projectId} fromSettings={false} label="View history" />
       </div>
       <div className="flex items-center justify-between gap-2">
         <ModeSwitch

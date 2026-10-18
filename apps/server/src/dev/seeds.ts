@@ -899,6 +899,94 @@ function spreadOverWeeks(db: Db): void {
       finished,
     );
   }
+
+  // Scheduled agents have no task: Orchestrate checks each project every few hours and a custom automation runs on
+  // its own, each leaving a summary and a handover, so the run history page has rows to search, filter and delete.
+  const projects = db.prepare("SELECT id, title FROM projects ORDER BY position").all() as {
+    id: string;
+    title: string;
+  }[];
+  const custom = db.prepare("SELECT id FROM autopilot_custom ORDER BY created_at LIMIT 1").get() as
+    | { id: string }
+    | undefined;
+  const insertAgentRun = db.prepare(
+    `INSERT INTO autopilot_runs (id, automation, task_id, project_id, dedupe_key, status, summary, dry_run, cost_usd,
+       error, output_json, created_at, started_at, finished_at, updated_at)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertAgent = (
+    i: number,
+    automation: string,
+    project: { id: string; title: string },
+    ago: number,
+    status: "succeeded" | "failed",
+    summary: string,
+    answer: { summary: string; handover: string },
+  ) => {
+    const finished = new Date(Date.now() - ago).toISOString();
+    const started = back(finished, (3 + (i % 5)) * 60_000);
+    insertAgentRun.run(
+      `seed-agent-run-${automation}-${i}`,
+      automation,
+      project.id,
+      `${automation}:${project.id}:${i}`,
+      status,
+      summary,
+      status === "failed" ? null : Math.round((0.15 + (i % 4) * 0.2) * 100) / 100,
+      status === "failed" ? "The agent hit its turn limit before answering" : null,
+      status === "failed" ? null : JSON.stringify({ kind: "scheduled_agent", ...answer }),
+      started,
+      started,
+      finished,
+      finished,
+    );
+  };
+  const orchestrateNotes = [
+    "Moved the stale review on #2 along and left a note on the blocked step of #5.",
+    "Nothing needed doing: every planned task already has a thread or is waiting on a blocker.",
+    "Started the two planned tasks with a plan and flagged #7, whose plan has no steps.",
+    "Found the PR for #3 failing on lint; asked its thread to fix it and left a note.",
+  ];
+  const handovers = [
+    "Last pass: #5 is blocked on the payments sandbox keys.\nNext: check whether #5 is unblocked before touching #7.",
+    "Nothing outstanding. Next pass: look at tasks that went quiet for over a day.",
+    "Watching #3 (lint failing). If still red next pass, message its thread again.",
+  ];
+  for (let i = 0; i < 36; i++) {
+    const project = projects[i % Math.max(projects.length, 1)];
+    if (!project) break;
+    const failed = i % 11 === 7;
+    insertAgent(
+      i,
+      "orchestrate",
+      project,
+      i * 4 * 3_600_000 + (i % 3) * 600_000,
+      failed ? "failed" : "succeeded",
+      `Looked over ${project.title}`,
+      {
+        summary: orchestrateNotes[i % orchestrateNotes.length]!,
+        handover: handovers[i % handovers.length]!,
+      },
+    );
+  }
+  if (custom) {
+    for (let i = 0; i < 14; i++) {
+      const project = projects[i % projects.length];
+      if (!project) break;
+      insertAgent(
+        i,
+        `custom:${custom.id}`,
+        project,
+        (i * 9 + 2) * 3_600_000,
+        "succeeded",
+        `Nudged stale work in ${project.title}`,
+        {
+          summary: `Left a note on ${(i % 3) + 1} stale task${i % 3 === 0 ? "" : "s"} saying what is left.`,
+          handover: "Tasks nudged this pass are listed in their notes; skip them next time unless they changed.",
+        },
+      );
+    }
+  }
 }
 
 export const SCENARIOS = { basic, review, threads, showcase, social, stats } satisfies Record<string, Scenario>;
