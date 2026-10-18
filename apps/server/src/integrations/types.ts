@@ -116,6 +116,8 @@ export interface Integrations {
   settingsAskStatus(): SettingsAskStatus;
   /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */
   askSettings(input: AskSettingsInput): Promise<AskSettingsResult>;
+  /** Starts an Autopilot pass now, when the engine runs (pollers on); for Run now, so it doesn't wait for the tick. */
+  autopilotPass(): void;
   /** Makes a digest of what changed now; a summarised one is written in the background (see DigestGenerator). */
   generateDigest(): Promise<DigestStart>;
   /** Resolves when no digest is being written. */

@@ -7,6 +7,7 @@ import type {
   AutopilotRun,
   AutopilotScopeEntry,
   AutopilotStatus,
+  OrchestrateState,
   BackupStatus,
   BoardEvent,
   BoardSnapshot,
@@ -31,6 +32,7 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
+import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
@@ -63,6 +65,8 @@ export const queryKeys = {
   autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
   autopilotRunsAll: ["autopilotRuns"] as const,
+  autopilotOrchestrateAll: ["autopilotOrchestrate"] as const,
+  autopilotOrchestrate: (projectId: string) => ["autopilotOrchestrate", projectId] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
   agentClis: ["agentClis"] as const,
@@ -130,6 +134,20 @@ export function useAutopilotRuns(scope: AutopilotRunsScope | null) {
   });
 }
 
+/**
+ * Orchestrate in one project, for its section of the lane popover. Refetched on autopilot.changed and on task changes
+ * (they decide whether it is idle) while open, and once a minute for what moves with the clock (quiet hours, caps).
+ */
+export function useOrchestrateState(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotOrchestrate(projectId),
+    queryFn: ({ signal }) =>
+      api<OrchestrateState>(`/api/autopilot/orchestrate/${encodeURIComponent(projectId)}`, { signal }),
+    enabled,
+    refetchInterval: 60_000,
+  });
+}
+
 /** Skills on disk a reviewer can follow: the user's, plus the project's when given. Re-read when a picker opens. */
 export function useSkills(projectId: string | null, enabled = true) {
   return useQuery({
@@ -154,6 +172,13 @@ const boardQuery = {
 /** Pause and the runs in flight, from the board snapshot; re-renders only when they change. */
 export function useAutopilotStatus(): AutopilotStatus | undefined {
   return useQuery({ ...boardQuery, select: (board) => board.autopilot }).data;
+}
+
+/** Whether the project has a task Orchestrate would look at, for the lane pill's timer. */
+export function useProjectHasOrchestrateWork(projectId: string): boolean {
+  return (
+    useQuery({ ...boardQuery, select: (board) => projectHasOrchestrateWork(board.tasks, projectId) }).data ?? false
+  );
 }
 
 /** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
@@ -377,6 +402,7 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: ["task"] });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
@@ -403,11 +429,14 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
         // A rule's "last task" line follows that task (done, archived).
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
+        // Whether Orchestrate has anything to look at follows the project's tasks.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
         void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });

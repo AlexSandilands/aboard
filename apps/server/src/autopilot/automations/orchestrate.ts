@@ -2,16 +2,24 @@ import {
   AUTOPILOT_ORCHESTRATE,
   BRAND,
   capHandover,
+  inQuietHours,
+  isRetried,
   latestMinutesSlot,
   localStamp,
+  nextMinutesSlot,
+  orchestrateNeedsLooking,
   ScheduledAgentAnswer,
   scheduledHandoverParts,
   SCHEDULED_AGENT_OUTPUT_SCHEMA,
+  type OrchestrateHold,
+  type OrchestrateState,
   type Project,
   type ScheduledAgentRunOutput,
-  type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
+import { AppError } from "../../errors.ts";
+import type { Services } from "../../services/types.ts";
+import { agentHold, dailyCapHold } from "../limits.ts";
 import { RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
@@ -53,20 +61,16 @@ const defaults: OrchestrateConfig = {
   model: "",
 };
 
-/** Attention that is the user's to answer: an orchestrator can only wait on it. */
-const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
+/** Run now's dedupe key: its own per request, apart from the slots' `orchestrate:<projectId>:<slot stamp>`. */
+const manualKey = (projectId: string, requestedAt: string) => `orchestrate:${projectId}:manual:${requestedAt}`;
 
-/**
- * A task an orchestrator has a reason to look at: work going on, something wrong with it (a failed start included),
- * or a Review task it may merge. One waiting on the user isn't, nor a Review task with nothing wrong that only the user
- * merges, or a project whose work all waits on them would start a paid run every slot. Planned tasks are Start
- * planned's to start, so they count only once flagged.
- */
-const needsLooking = (t: TaskSummary): boolean =>
-  t.archivedAt === null &&
-  t.status !== "done" &&
-  !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
-  (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
+/** Whether a Run now in the project was recorded at or after `since`. */
+function ranManuallySince(services: Services, projectId: string, since: Date, dryRun: boolean): boolean {
+  const prefix = `orchestrate:${projectId}:manual:`;
+  return services.autopilot
+    .automationRunsForProject(AUTOPILOT_ORCHESTRATE, projectId, 20)
+    .some((r) => r.dryRun === dryRun && r.dedupeKey.startsWith(prefix) && new Date(r.createdAt) >= since);
+}
 
 /**
  * The board tools an Orchestrate run uses: reading the board, notes, asking the user, and the unstick and merge tools.
@@ -216,7 +220,7 @@ export const orchestrate = defineAutomation({
     ),
   ],
   defaults,
-  check: ({ services, projects, now }) => {
+  check: ({ services, projects, engine, now }) => {
     // One run at a time per project: a run that outlasts the interval holds the next slot back (unrecorded), and the
     // latest slot runs once it ends.
     const busy = new Set(
@@ -225,22 +229,44 @@ export const orchestrate = defineAutomation({
         .active.filter((r) => r.automation === AUTOPILOT_ORCHESTRATE)
         .map((r) => r.projectId),
     );
+    // A request in a project Orchestrate has since been switched off in is dropped, not kept for when it's back on.
+    const on = new Set(projects.map(({ project }) => project.id));
+    for (const project of services.projects.list()) {
+      if (!on.has(project.id)) services.autopilot.clearRunRequest(AUTOPILOT_ORCHESTRATE, project.id);
+    }
     return projects.flatMap(({ project, config }): Candidate[] => {
       if (busy.has(project.id)) return [];
+      const preview = () =>
+        orchestratePrompt({
+          project,
+          mayMerge: config.mayMerge,
+          instructions: config.instructions,
+          handover: services.autopilot.lastHandover(AUTOPILOT_ORCHESTRATE, project.id),
+        });
+      // Run now: the user asked, so it runs even with nothing to look at. Its key is its own, so it leaves the slot's
+      // alone; once the engine has recorded it, the request is done.
+      const requested = services.autopilot.runRequest(AUTOPILOT_ORCHESTRATE, project.id);
+      if (requested) {
+        const dedupeKey = manualKey(project.id, requested);
+        if (!services.autopilot.hasRun(AUTOPILOT_ORCHESTRATE, dedupeKey, engine.dryRun)) {
+          return [
+            { dedupeKey, summary: `look over ${project.title} (run now)`, projectId: project.id, preview: preview() },
+          ];
+        }
+        services.autopilot.clearRunRequest(AUTOPILOT_ORCHESTRATE, project.id);
+      }
       // Nothing going on is nothing to orchestrate: no run, no spend.
-      if (!services.tasks.summaries({ projectId: project.id }).some(needsLooking)) return [];
-      const stamp = localStamp(latestMinutesSlot(config.everyMinutes, now));
+      if (!services.tasks.summaries({ projectId: project.id }).some(orchestrateNeedsLooking)) return [];
+      const slot = latestMinutesSlot(config.everyMinutes, now);
+      // A Run now since the slot began has looked already; the next slot is the next look.
+      if (ranManuallySince(services, project.id, slot, engine.dryRun)) return [];
+      const stamp = localStamp(slot);
       return [
         {
           dedupeKey: `orchestrate:${project.id}:${stamp}`,
           summary: `look over ${project.title} (${stamp.replace("T", " ").slice(0, 16)})`,
           projectId: project.id,
-          preview: orchestratePrompt({
-            project,
-            mayMerge: config.mayMerge,
-            instructions: config.instructions,
-            handover: services.autopilot.lastHandover(AUTOPILOT_ORCHESTRATE, project.id),
-          }),
+          preview: preview(),
         },
       ];
     });
@@ -288,3 +314,88 @@ export const orchestrate = defineAutomation({
     };
   },
 });
+
+/** Orchestrate as the catalogue has it (a test catalogue may leave it out). */
+function orchestrateIn(services: Services) {
+  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_ORCHESTRATE);
+  if (!automation) throw new AppError("NOT_FOUND", "Orchestrate isn't installed");
+  return automation;
+}
+
+/** Why the slot at `slot` won't start a run, or null when it will (see OrchestrateHold). */
+function holdAt(
+  services: Services,
+  projectId: string,
+  enabled: boolean,
+  slot: Date,
+  now: Date,
+): OrchestrateHold | null {
+  if (!enabled) return "off";
+  if (services.autopilot.status().paused) return "paused";
+  const engine = services.autopilot.engine();
+  if (inQuietHours(engine.quietHours, slot.getHours() * 60 + slot.getMinutes())) return "quiet_hours";
+  // The caps as they stand now; a slot after midnight starts a new day, so they don't hold it.
+  if (slot.getDate() === now.getDate() && dailyCapHold(services, engine, now)) return "daily_cap";
+  if (!services.tasks.summaries({ projectId }).some(orchestrateNeedsLooking)) return "idle";
+  return null;
+}
+
+/** Orchestrate in one project: its switch, the next slot and what holds it back, Run now and the latest run. */
+export function orchestrateState(services: Services, projectId: string, now: Date): OrchestrateState {
+  const project = services.projects.get(projectId);
+  const resolved = services.autopilot.resolve(orchestrateIn(services), project.id);
+  const config = schema.safeParse(resolved.config);
+  const everyMinutes = config.success ? config.data.everyMinutes : defaults.everyMinutes;
+  const next = nextMinutesSlot(everyMinutes, now);
+  const requested = resolved.enabled ? services.autopilot.runRequest(AUTOPILOT_ORCHESTRATE, project.id) : null;
+  const { dryRun } = services.autopilot.engine();
+  const lastRun =
+    services.autopilot
+      .automationRunsForProject(AUTOPILOT_ORCHESTRATE, project.id, 20)
+      .find((r) => !r.dryRun && !isRetried(r.dedupeKey)) ?? null;
+  return {
+    enabled: resolved.enabled,
+    everyMinutes,
+    nextSlotAt: next.toISOString(),
+    hold: holdAt(services, project.id, resolved.enabled, next, now),
+    running: services.autopilot
+      .status()
+      .active.some((r) => r.automation === AUTOPILOT_ORCHESTRATE && r.projectId === project.id),
+    // A request is cleared by the pass after its run; until then the run stands for it.
+    requestedAt:
+      requested && !services.autopilot.hasRun(AUTOPILOT_ORCHESTRATE, manualKey(project.id, requested), dryRun)
+        ? requested
+        : null,
+    lastRun,
+  };
+}
+
+/**
+ * Run now: asks the engine for an Orchestrate run in the project at once, whether or not it has anything to look at.
+ * Refused with the reason where no run could start: switched off, paused, already going, quiet hours or a daily cap.
+ * At the concurrency cap it waits for a free slot like any run.
+ */
+export function requestOrchestrateRun(services: Services, projectId: string, now: Date): OrchestrateState {
+  const project = services.projects.get(projectId);
+  const state = orchestrateState(services, project.id, now);
+  const refusal = ((): string | null => {
+    if (!state.enabled) return `Orchestrate is off in ${project.title}`;
+    if (services.autopilot.status().paused) return "Autopilot is paused: resume it to run Orchestrate";
+    if (state.running) return `Orchestrate is already running in ${project.title}`;
+    const engine = services.autopilot.engine();
+    // Concurrency only makes the request wait, so the caps are checked on their own.
+    switch (agentHold(services, engine, now) === "quiet hours" ? "quiet hours" : dailyCapHold(services, engine, now)) {
+      case "quiet hours":
+        return `It's quiet hours: no agent runs start until ${engine.quietHours.end}`;
+      case "daily run cap":
+        return "Today's Autopilot run cap is reached";
+      case "daily spend cap":
+        return "Today's Autopilot spend cap is reached";
+      default:
+        return null;
+    }
+  })();
+  if (refusal) throw new AppError("CONFLICT", refusal);
+  services.autopilot.requestRun(AUTOPILOT_ORCHESTRATE, project.id);
+  return orchestrateState(services, project.id, now);
+}

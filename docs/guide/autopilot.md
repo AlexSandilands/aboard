@@ -197,6 +197,14 @@ the board's layout for me to check"): they're added to its prompt and win where 
 handover for the next, so it remembers what it's waiting on; **Recent runs** in its settings shows what each run did
 and what it passed on. Switch it on per project or for the board; it counts against the agent limits below.
 
+Orchestrate sits at the top of the lane's Autopilot popover, in a section of its own. It shows when the next check
+is ("Next check in 12:34") and when it last ran. A check is a look, not a promise of a run: when the next one won't
+run, the section says why instead (idle with nothing to check, paused, quiet hours, today's cap reached). **▶ Run
+now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
+it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
+the next check too (`Autopilot · 12m`). Switch that off in the popover or under **Settings → Appearance →
+Orchestrate countdown on lanes**.
+
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
 
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
