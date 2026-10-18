@@ -133,6 +133,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    * epic-scope setting for it.
    */
   epicScope?: boolean;
+  /**
+   * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
+   * switch it on, the UI says why, and its check finds nothing meanwhile.
+   */
+  blocked?: string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

@@ -1,4 +1,11 @@
-import type { CreateCustomAutomationInput, CustomAutomation, UpdateCustomAutomationInput } from "@repo/contracts";
+import type {
+  AutomationBundle,
+  CreateCustomAutomationInput,
+  CustomAutomation,
+  ImportAutomationInput,
+  ImportedAutomation,
+  UpdateCustomAutomationInput,
+} from "@repo/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "~/lib/api";
 import { toastManager } from "~/components/ui/toast";
@@ -40,6 +47,15 @@ export const useUpdateCustomAutomation = () =>
   useCustomMutation(({ id, ...input }: UpdateCustomAutomationInput & { id: string }) =>
     api<CustomAutomation>(`/api/autopilot/custom/${enc(id)}`, { method: "PATCH", body: input }),
   );
+
+export const useImportCustomAutomation = () =>
+  useCustomMutation((input: ImportAutomationInput) =>
+    api<ImportedAutomation>("/api/autopilot/custom/import", { body: input }),
+  );
+
+/** The file for an automation: what it shares, without its projects and the tools filling its slots. */
+export const useExportCustomAutomation = () =>
+  useCustomMutation((id: string) => api<AutomationBundle>(`/api/autopilot/custom/${enc(id)}/export`));
 
 export const useDeleteCustomAutomation = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/custom/${enc(id)}`, { method: "DELETE" }));

@@ -18,6 +18,7 @@ import { skillOptions } from "~/components/review/review.logic";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
 import { FoldedSettingsSection, SettingsGroup, SettingsRow } from "~/components/settings/settingsLayout";
 import { cn } from "~/lib/utils";
+import { BlockedWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useBoard, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
@@ -121,11 +122,17 @@ export function AutomationSections() {
               label={`${automation.title} for the board`}
               value={entry.mode}
               disabled={pending}
+              blocked={automation.blocked}
               onChange={onMode}
             />
           }
         >
           <p className="px-3 py-3 text-xs leading-normal text-muted-foreground/80 sm:px-4">{automation.description}</p>
+          {automation.blocked ? (
+            <div className="px-3 pb-3 sm:px-4">
+              <BlockedWarning reason={automation.blocked} />
+            </div>
+          ) : null}
           {automation.fields.map((field) => (
             <div key={field.key} className="@container/settings-row px-3 sm:px-4">
               <FieldRow
@@ -190,10 +197,16 @@ function AutomationRow({
           label={`${automation.title} for ${where}`}
           value={entry.mode}
           disabled={pending}
+          blocked={automation.blocked}
           onChange={onMode}
         />
       }
     >
+      {automation.blocked ? (
+        <div className="mt-2">
+          <BlockedWarning reason={automation.blocked} />
+        </div>
+      ) : null}
       {automation.fields.length ? (
         <div className="mt-1">
           <button

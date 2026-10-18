@@ -63,6 +63,7 @@ export function ScopePopover({
                   label={`${automation.title} in ${title}`}
                   value={entry.mode}
                   disabled={set.isPending}
+                  blocked={automation.blocked}
                   onChange={(mode) => set.mutate({ automation: automation.key, mode })}
                 />
                 <span
@@ -75,6 +76,11 @@ export function ScopePopover({
                   {inheritLabel(parent)}
                 </span>
               </div>
+              {automation.blocked ? (
+                <p className="rounded-md bg-warning/8 px-2 py-1 text-2xs text-warning-foreground">
+                  {automation.blocked}
+                </p>
+              ) : null}
               {projectId && automation.key === AUTOPILOT_RECURRING ? (
                 <PopoverClose
                   className="w-fit cursor-pointer rounded-sm text-2xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
