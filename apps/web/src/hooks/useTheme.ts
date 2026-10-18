@@ -169,24 +169,35 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
+function onSystem() {
+  applyCurrent(true);
+  emit();
+}
+
+function onStorage(event: StorageEvent) {
+  if (event.key !== null && !KEYS.has(event.key)) return;
+  applyCurrent(true);
+  emit();
+}
+
+// The window listeners are shared: one per subscriber would re-apply (and write storage, and message the shell)
+// once for every component using the hook.
+let systemQuery: MediaQueryList | null = null;
+
 function subscribe(listener: () => void) {
+  if (listeners.length === 0) {
+    systemQuery = window.matchMedia(MEDIA_QUERY);
+    systemQuery.addEventListener("change", onSystem);
+    window.addEventListener("storage", onStorage);
+  }
   listeners.push(listener);
-  const mq = window.matchMedia(MEDIA_QUERY);
-  const onSystem = () => {
-    applyCurrent(true);
-    emit();
-  };
-  const onStorage = (event: StorageEvent) => {
-    if (event.key !== null && !KEYS.has(event.key)) return;
-    applyCurrent(true);
-    emit();
-  };
-  mq.addEventListener("change", onSystem);
-  window.addEventListener("storage", onStorage);
   return () => {
     listeners = listeners.filter((l) => l !== listener);
-    mq.removeEventListener("change", onSystem);
-    window.removeEventListener("storage", onStorage);
+    if (listeners.length === 0) {
+      systemQuery?.removeEventListener("change", onSystem);
+      systemQuery = null;
+      window.removeEventListener("storage", onStorage);
+    }
   };
 }
 

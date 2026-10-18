@@ -118,7 +118,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "board.appearance.panel-animations",
     "Panel animations",
-    "How fast the sidebar and the task panel open and close. 0 ms turns the animation off.",
+    "How fast the sidebar opens and closes and the task panel opens. 0 ms turns the animation off.",
     ["motion", "speed", "transition", "duration", "reduced motion"],
   ),
   draft(
