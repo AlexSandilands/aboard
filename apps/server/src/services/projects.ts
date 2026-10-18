@@ -30,6 +30,12 @@ export function repositoryRootOf(path: string): string {
   }
 }
 
+/** The settings key holding the id of the General project (see `ProjectsService.general`). */
+export const GENERAL_PROJECT_KEY = "generalProjectId";
+
+/** A plain word, not the product name, so it reads right whatever the app is called. */
+const GENERAL_TITLE = "General";
+
 /** Projects: lanes on the board, optionally bound to a workspace folder. */
 export function createProjectsService(
   core: Core,
@@ -53,9 +59,50 @@ export function createProjectsService(
     }
   };
 
+  const storedGeneralId = (): string | null => {
+    const id = repos.settings.all().get(GENERAL_PROJECT_KEY);
+    return typeof id === "string" ? id : null;
+  };
+
+  /**
+   * Where a new lane goes: the end, except that the General lane stays last while it is still there, so projects
+   * added later don't push it into the middle. A user who moved it keeps it wherever they put it.
+   */
+  const nextPosition = (): string => {
+    const last = repos.projects.lastPosition();
+    const generalId = storedGeneralId();
+    const general = generalId ? repos.projects.get(generalId) : null;
+    if (general && general.position === last) {
+      return generateKeyBetween(repos.projects.positionBefore(general.position), general.position);
+    }
+    return generateKeyBetween(last, null);
+  };
+
   const service: ProjectsService = {
     list: (opts) => repos.projects.list(opts?.includeArchived ?? false),
     get,
+
+    general() {
+      return core.write(() => {
+        const id = storedGeneralId();
+        const existing = id ? repos.projects.get(id) : null;
+        if (existing) return existing.archivedAt ? service.update(existing.id, { archived: false }) : existing;
+        // Never stored, or deleted since.
+        const created = service.create({ title: GENERAL_TITLE });
+        repos.settings.set(GENERAL_PROJECT_KEY, created.id);
+        return created;
+      });
+    },
+
+    findGeneral() {
+      const id = storedGeneralId();
+      return (id && repos.projects.get(id)) || null;
+    },
+
+    ensureGeneral() {
+      // Stored once and never checked again: a General the user archived or deleted stays that way.
+      if (!storedGeneralId()) service.general();
+    },
 
     resolve(ref, opts) {
       if (ref.projectId) return get(ref.projectId);
@@ -96,7 +143,7 @@ export function createProjectsService(
           t3ProjectId: input.t3ProjectId ?? null,
           reviewSkill: null,
           planSkill: null,
-          position: generateKeyBetween(repos.projects.lastPosition(), null),
+          position: nextPosition(),
           collapsed: false,
           archivedAt: null,
           createdAt: now,

@@ -16,7 +16,7 @@ import { registerSocialTools } from "./tools/social.ts";
 import { registerSuggestionTools } from "./tools/suggestions.ts";
 import { registerTranscriptTools } from "./tools/transcripts.ts";
 
-const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd).
+const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd). Work that belongs to no code project (a document to update, something to review) goes in the General project: pass general: true to add_to_backlog or create_task instead of workspacePath. Never use it for work in a repo.
 - Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task. To look back over a period (what finished, failed or stalled), call board_activity(since: "7d").
 - The backlog is cheap: add_to_backlog mid-task for anything worth doing later (an idea, a follow-up, a Jira ticket), then carry on.
 - A task can't leave Backlog without a plan: set_plan (phases of 3-8 concrete, verifiable steps) before moving it to planned/in_progress. create_task makes a planned task in one call. When planning, also pass suggestedModel: the tier (light, standard or deep) the implementing session needs, judged by complexity and risk. If the result says the task has no labels, suggest 1-3 to the user (prefer labels already in use) and apply them with update_task once they agree.

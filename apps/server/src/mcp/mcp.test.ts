@@ -393,6 +393,46 @@ describe("MCP endpoint", () => {
     expect(text(await client.callTool({ name: "get_task", arguments: { task: ref } }))).toMatch(/^NOT_FOUND: /);
   });
 
+  it("files work that belongs to no code project in General, only when asked", async () => {
+    // Neither a path nor general: still refused, so repo work never lands in General by accident.
+    const neither = await client.callTool({ name: "add_to_backlog", arguments: { title: "Stray" } });
+    expect(neither.isError).toBe(true);
+    expect(text(neither)).toMatch(/^VALIDATION: .*general: true/);
+    const both = await client.callTool({
+      name: "add_to_backlog",
+      arguments: { title: "Both", general: true, workspacePath: "C:/Fake/proj" },
+    });
+    expect(both.isError).toBe(true);
+    expect(h.services.projects.list()).toEqual([]);
+
+    const added = await client.callTool({
+      name: "add_to_backlog",
+      arguments: { title: "Update the deck", general: true },
+    });
+    expect(added.isError).toBeFalsy();
+    expect(text(added)).toContain("to Backlog in General");
+    const general = h.services.projects.general();
+    expect(general.workspaceRoot).toBeNull();
+    expect(h.services.tasks.summaries({ projectId: general.id }).map((t) => t.title)).toEqual(["Update the deck"]);
+
+    // An archived General comes back; a deleted one is made again, and create_task works the same way.
+    h.services.projects.update(general.id, { archived: true });
+    const planned = await client.callTool({
+      name: "create_task",
+      arguments: {
+        title: "Review the proposal",
+        general: true,
+        markdown: "## Read\n- [ ] Read it\n- [ ] Reply",
+      },
+    });
+    expect(planned.isError).toBeFalsy();
+    expect(h.services.projects.get(general.id).archivedAt).toBeNull();
+    h.services.projects.delete(general.id);
+    const again = await client.callTool({ name: "add_to_backlog", arguments: { title: "Once more", general: true } });
+    expect(again.isError).toBeFalsy();
+    expect(h.services.projects.list().map((p) => p.title)).toEqual(["General"]);
+  });
+
   it("treats an unknown workspace as empty for read-only tools", async () => {
     const result = await client.callTool({ name: "list_tasks", arguments: { workspacePath: "C:\\Nowhere" } });
     expect(result.isError).toBeFalsy();

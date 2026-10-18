@@ -79,7 +79,10 @@ Every tool validates its input with zod and calls a service; none holds rules of
 
 Project-scoped tools take `projectId` or `workspacePath` (the agent's cwd). Write tools need one of them.
 Read tools treat an unknown path as an empty project rather than an error. `add_to_backlog` and
-`create_task` create the project when the path is new. See [task-lifecycle.md](task-lifecycle.md#creating).
+`create_task` create the project when the path is new. For work that belongs to no code project they take
+`general: true` instead, which files the task in the [General project](task-lifecycle.md#creating) (unarchived or
+made again if needed). It is refused together with a path or id, and omitting both still errors. See
+[task-lifecycle.md](task-lifecycle.md#creating).
 
 ### Who did it
 

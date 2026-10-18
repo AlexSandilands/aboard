@@ -172,6 +172,20 @@ describe("REST", () => {
     expect(await errorCode(svg)).toBe("VALIDATION");
   });
 
+  it("hands out the General project, made again when it was deleted", async () => {
+    const h = await setup();
+    const first = await h.request("/api/projects/general", { method: "POST", json: {} });
+    expect(first.status).toBe(200);
+    const general = (await first.json()) as Project;
+    expect(general).toMatchObject({ title: "General", workspaceRoot: null });
+    const same = (await (await h.request("/api/projects/general", { method: "POST", json: {} })).json()) as Project;
+    expect(same.id).toBe(general.id);
+
+    await h.request(`/api/projects/${general.id}`, { method: "DELETE" });
+    const again = (await (await h.request("/api/projects/general", { method: "POST", json: {} })).json()) as Project;
+    expect(again.id).not.toBe(general.id);
+  });
+
   it("validates PR merges before reaching GitHub", async () => {
     const h = await setup();
     const link = h.services.links.add(h.task.id, { value: "https://github.com/o/r/pull/1" }, "user");

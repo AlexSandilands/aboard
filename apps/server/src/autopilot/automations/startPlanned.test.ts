@@ -137,6 +137,18 @@ describe("start planned tasks: eligibility", () => {
     expect(runs()).toEqual([]);
   });
 
+  it("leaves a flagged task in a project with no folder, instead of failing a run for it", async () => {
+    const { s, pass, runs, requests, project } = setup();
+    const general = s.projects.create({ title: "General" });
+    s.tasks.create({ projectId: general.id, title: "Update the deck", plan, autopilot: true });
+    s.autopilot.setScope("project", general.id, AUTOPILOT_START_PLANNED, { mode: "on" });
+    await pass();
+    expect(requests).toEqual([]);
+    expect(runs()).toEqual([]);
+    expect(s.autopilot.runsForProject(general.id)).toEqual([]);
+    expect(project.workspaceRoot).not.toBeNull();
+  });
+
   it("starts a task once its last blocker is Done", async () => {
     const { s, task, pass, runs, turnOn } = setup();
     const blocker = task("Blocker", { autopilot: false });

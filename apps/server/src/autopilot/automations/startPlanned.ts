@@ -181,10 +181,13 @@ export const startPlanned = defineAutomation({
     // Priority tasks first, whatever their project; then project order, then board position.
     const candidates = projects
       .flatMap(({ project }, projectIndex) =>
-        services.tasks
-          .summaries({ projectId: project.id, status: "planned" })
-          .filter((task) => notStartable(task) === null)
-          .map((task) => ({ task, projectIndex })),
+        // A lane with no folder (General) has nothing to check out, and no T3 project to start a thread in.
+        !project.workspaceRoot && !project.t3ProjectId
+          ? []
+          : services.tasks
+              .summaries({ projectId: project.id, status: "planned" })
+              .filter((task) => notStartable(task) === null)
+              .map((task) => ({ task, projectIndex })),
       )
       .sort(
         (a, b) =>

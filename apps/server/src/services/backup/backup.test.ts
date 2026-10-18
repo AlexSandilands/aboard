@@ -33,6 +33,7 @@ function seed() {
   const h = createTestHarness();
   const s = h.services;
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+  s.projects.ensureGeneral();
   const a = s.tasks.create({
     projectId: project.id,
     title: "Feature",
@@ -271,6 +272,10 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
+      // Which project is General goes with the board, so the next start doesn't make a second one.
+      const general = s.projects.findGeneral();
+      expect(general).not.toBeNull();
+      expect(createRepos(restored).settings.all().get("generalProjectId")).toBe(general!.id);
       // The Autopilot and auto-merge flags survive: On, Off, and Default (null) for the tasks that never had one.
       expect(restored.prepare("SELECT autopilot, auto_merge FROM tasks ORDER BY number").all()).toEqual([
         { autopilot: 1, auto_merge: 1 },

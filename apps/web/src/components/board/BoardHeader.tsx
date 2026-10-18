@@ -2,10 +2,11 @@ import { TASK_STATUSES, type Project } from "@repo/contracts";
 import { useMemo } from "react";
 import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { DigestButton } from "~/components/digest/DigestButton";
+import { useNewGeneralTask } from "~/components/command/useNewGeneralTask";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
-import { BookmarkIcon, GroupIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { BookmarkIcon, GroupIcon, InboxIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { NotificationsBell } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
@@ -65,6 +66,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const setLabelFilter = useSetLabelFilter();
   const filtered = activeFilterCount(filters) > 0;
   const setProjectFilter = useSetProjectFilter();
+  const newGeneralTask = useNewGeneralTask();
   // With the task panel closed this header reaches the window's right edge and the native controls.
   const atRightEdge = useSelectedTaskId() === null;
 
@@ -103,6 +105,22 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       <ActiveEpicFilter />
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
       <div className="ms-auto flex items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost-muted"
+                size="icon-sm"
+                aria-label="New general task"
+                disabled={newGeneralTask.pending}
+                onClick={newGeneralTask.start}
+              />
+            }
+          >
+            <InboxIcon />
+          </TooltipTrigger>
+          <TooltipPopup>New general task</TooltipPopup>
+        </Tooltip>
         <PauseAllButton />
         <DigestButton />
         <NotificationsBell />

@@ -23,6 +23,11 @@ export function registerProjectRoutes(app: Hono, { services, integrations }: App
     "/api/projects",
     handle(async (c) => c.json(services.projects.create(await parseBody(c, CreateProjectInput)), 201)),
   );
+  // The lane for work with no code project; brought back if it was archived or deleted.
+  app.post(
+    "/api/projects/general",
+    handle((c) => c.json(services.projects.general())),
+  );
   app.post(
     "/api/projects/reorder",
     handle(async (c) => {

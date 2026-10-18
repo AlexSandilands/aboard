@@ -97,6 +97,9 @@ export const useUpdateProject = (opts?: MutationOpts) =>
       api<Project>(`/api/projects/${enc(id)}`, { method: "PATCH", body: input }),
     opts,
   );
+/** The General project, unarchived or made again when needed. */
+export const useGeneralProject = (opts?: MutationOpts) =>
+  useApiMutation(() => api<Project>("/api/projects/general", { method: "POST", body: {} }), opts);
 export const useReorderProjects = (opts?: MutationOpts) =>
   useApiMutation((ids: string[]) => api<void>("/api/projects/reorder", { body: { ids } }), opts);
 export const useDeleteProject = (opts?: MutationOpts) =>

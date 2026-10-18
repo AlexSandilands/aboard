@@ -247,6 +247,10 @@ export function createAutopilotRunner(deps: {
     const branch = request.workspace?.branch ?? null;
     const prBase = branch ? null : (request.workspace?.prBase ?? null);
     const project = deps.services().projects.get(task.projectId);
+    // T3 Code needs a folder or a T3 project to put the thread in; a folderless lane (General) has neither.
+    if (!project.workspaceRoot && !project.t3ProjectId) {
+      throw new Error(`${project.title} has neither a workspace folder nor a T3 project to start a thread in`);
+    }
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
     const launchThread = () =>
       deps.t3.launchTaskThread(

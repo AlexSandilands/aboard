@@ -45,6 +45,75 @@ describe("projects", () => {
     expect(codeOf(() => s.projects.create({ workspaceRoot: "d:\\repos\\API\\" }))).toBe("CONFLICT");
   });
 
+  it("creates a project from a title alone, with no folder to resolve it by", () => {
+    const { services: s } = createTestHarness();
+    const general = s.projects.create({ title: "General" });
+    expect(general).toMatchObject({ title: "General", workspaceRoot: null, workspaceKey: null });
+    // Two folderless projects never conflict, and no workspace path resolves to either.
+    expect(s.projects.create({ title: "Other" }).workspaceKey).toBeNull();
+    expect(codeOf(() => s.projects.resolve({ workspacePath: "/home/me/proj" }))).toBe("NOT_FOUND");
+    expect(codeOf(() => s.projects.create({}))).toBe("VALIDATION");
+  });
+
+  describe("General", () => {
+    it("is made once on start, with no folder, and a second start keeps it", () => {
+      const { services: s } = createTestHarness();
+      expect(s.projects.list()).toEqual([]);
+      s.projects.ensureGeneral();
+      const [general, ...rest] = s.projects.list();
+      expect(rest).toEqual([]);
+      expect(general).toMatchObject({ title: "General", workspaceRoot: null, archivedAt: null });
+      s.projects.ensureGeneral();
+      expect(s.projects.list().map((p) => p.id)).toEqual([general!.id]);
+      expect(s.projects.general().id).toBe(general!.id);
+    });
+
+    it("keeps a rename, and an archive or delete is not undone by the next start", () => {
+      const { services: s } = createTestHarness();
+      s.projects.ensureGeneral();
+      const general = s.projects.general();
+      s.projects.update(general.id, { title: "Inbox" });
+      s.projects.ensureGeneral();
+      expect(s.projects.list().map((p) => p.title)).toEqual(["Inbox"]);
+
+      s.projects.update(general.id, { archived: true });
+      s.projects.ensureGeneral();
+      expect(s.projects.list()).toEqual([]);
+      expect(s.projects.list({ includeArchived: true })).toHaveLength(1);
+
+      s.projects.delete(general.id);
+      s.projects.ensureGeneral();
+      expect(s.projects.list({ includeArchived: true })).toEqual([]);
+    });
+
+    it("is brought back by general() when archived, and made again when deleted", () => {
+      const { services: s } = createTestHarness();
+      s.projects.ensureGeneral();
+      const general = s.projects.general();
+      s.projects.update(general.id, { archived: true });
+      expect(s.projects.general()).toMatchObject({ id: general.id, archivedAt: null });
+
+      s.projects.delete(general.id);
+      const again = s.projects.general();
+      expect(again).toMatchObject({ title: "General", workspaceRoot: null });
+      expect(again.id).not.toBe(general.id);
+      expect(s.projects.general().id).toBe(again.id);
+    });
+
+    it("stays the last lane while projects are added, until the user moves it", () => {
+      const { services: s } = createTestHarness();
+      s.projects.ensureGeneral();
+      const a = s.projects.create({ title: "a" });
+      const b = s.projects.create({ title: "b" });
+      const general = s.projects.general();
+      expect(s.projects.list().map((p) => p.title)).toEqual(["a", "b", "General"]);
+
+      s.projects.reorder([general.id, a.id, b.id]);
+      const c = s.projects.create({ title: "c" });
+      expect(s.projects.list().map((p) => p.id)).toEqual([general.id, a.id, b.id, c.id]);
+    });
+  });
+
   it("unarchives an archived project when its folder is re-added or auto-resolved", () => {
     const { services: s } = createTestHarness();
     const project = s.projects.create({ workspaceRoot: "D:/Repos/api" });

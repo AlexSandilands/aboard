@@ -55,6 +55,20 @@ describe("startServer", { timeout: 20_000 }, () => {
     await server.close();
   });
 
+  it("starts every board with a General project, once across restarts", async () => {
+    const config = testConfig();
+    const projectsOf = async (url: string) =>
+      (await (await fetch(`${url}/api/projects`)).json()) as Array<{ id: string; title: string }>;
+    const first = await startServer(config);
+    const before = await projectsOf(first.url);
+    expect(before.map((p) => p.title)).toEqual(["General"]);
+    await first.close();
+
+    const second = await startServer(config);
+    expect(await projectsOf(second.url)).toEqual(before);
+    await second.close();
+  });
+
   it("rejects when the port is taken and releases the database", async () => {
     const first = await startServer(testConfig());
     const config = testConfig({ port: first.port });

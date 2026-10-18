@@ -108,6 +108,15 @@ export interface ProjectsService {
    */
   create(input: CreateProjectInput): Project;
   update(id: string, input: UpdateProjectInput): Project;
+  /**
+   * The General project, a lane with no folder for work that belongs to no code project. Unarchives it, and
+   * creates it again when it was deleted (or never made).
+   */
+  general(): Project;
+  /** The General project as it is now (null when it was never made or is gone), changing nothing. */
+  findGeneral(): Project | null;
+  /** Server start: makes the General project the first time only, so one the user archived or deleted stays so. */
+  ensureGeneral(): void;
   /** Sets lane order to the given id order. */
   reorder(ids: string[]): void;
   /** Hard delete, cascading to tasks. */

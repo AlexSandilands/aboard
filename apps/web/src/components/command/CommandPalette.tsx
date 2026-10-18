@@ -12,6 +12,7 @@ import {
   FolderPlusIcon,
   GroupIcon,
   ImportIcon,
+  InboxIcon,
   LayersIcon,
   LayoutTemplateIcon,
   LightbulbIcon,
@@ -72,6 +73,7 @@ import {
   taskSearchTerms,
 } from "./palette.logic";
 import { useAddProject, useFolderBrowse } from "./useFolderBrowse";
+import { useNewGeneralTask } from "./useNewGeneralTask";
 
 /** Where the new task lands: Backlog with just a title, Planned via the plan editor, or a new epic. */
 type TaskFlow = "backlog" | "planned" | "epic";
@@ -288,6 +290,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const [applied, setApplied] = useState({ title: "", description: "" });
 
   const addProject = useAddProject();
+  const newGeneralTask = useNewGeneralTask();
   const createTask = useCreateTask();
   const templates = useTemplates().data;
   const importProjects = useImportT3Projects();
@@ -531,6 +534,13 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
             icon: <LightbulbIcon className={ITEM_ICON_CLASS} />,
             submenu: true,
             run: () => pushView({ kind: "pick-project", flow: "backlog" }),
+          },
+          {
+            value: "action:new-general-task",
+            title: "New general task",
+            searchTerms: ["create", "add", "general", "inbox", "no project", "idea", "todo"],
+            icon: <InboxIcon className={ITEM_ICON_CLASS} />,
+            run: newGeneralTask.start,
           },
           {
             value: "action:new-planned-task",

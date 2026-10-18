@@ -71,6 +71,12 @@ export function createProjectsRepo(sql: Sql) {
     lastPosition(): string | null {
       return sql.get<{ p: string | null }>("SELECT MAX(position) AS p FROM projects")?.p ?? null;
     },
+    /** The highest position below `position`, or null when it is the first. */
+    positionBefore(position: string): string | null {
+      return (
+        sql.get<{ p: string | null }>("SELECT MAX(position) AS p FROM projects WHERE position < ?", position)?.p ?? null
+      );
+    },
     insert(p: Project): void {
       sql.insert("projects", { ...toRow(p) });
     },

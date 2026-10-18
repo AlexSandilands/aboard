@@ -5,6 +5,16 @@ Done**. Agents move tasks along over MCP; you can do everything they can from th
 
 ![A task in Review with its labels, a PR with changes requested, review findings and its plan](../../.github/assets/task-panel.png)
 
+## The General project
+
+Not everything you track belongs to a code project: a presentation to update, something a colleague sent you to
+review. Every board starts with a **General** lane, a project with no folder, for these. Click the inbox button in the
+board's top bar, or choose _New general task_ in the command palette, to add a task to it. Agents file a task there
+when they pass `general: true`. General is an ordinary project: rename it, archive it or delete it in its settings,
+and when a task turns into real work, move it into the right project with _Move to project_ in the task panel.
+Projects you add later appear before General, so it stays the last lane until you reorder it. Since it has no
+folder, you can't start a terminal session or a T3 Code thread from a General task.
+
 ## Plans
 
 A backlog task can be rough (an idea, a to-do, a Jira ticket), but it can't leave Backlog until it has a plan. A plan is a list of phases, each

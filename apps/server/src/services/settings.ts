@@ -15,6 +15,7 @@ import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
+import { GENERAL_PROJECT_KEY } from "./projects.ts";
 import type { SettingsService } from "./types.ts";
 
 type StoredSettings = Omit<AppSettings, "t3TokenSet"> & { t3Token: string | null };
@@ -60,6 +61,8 @@ const DEFAULTS: StoredSettings = {
  */
 export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
   AUTOPILOT_ENGINE_KEY,
+  // Goes with the projects, so a restore doesn't make a second General.
+  GENERAL_PROJECT_KEY,
   ...([
     "jiraBaseUrl",
     "githubPolling",

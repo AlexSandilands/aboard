@@ -37,6 +37,17 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
   path, deepest first. `add_to_backlog` and `create_task` create a project for an unknown path (at the
   nearest folder with a `.git`, else the path itself) and unarchive an archived match. Other write tools
   return `NOT_FOUND` for an unknown path; read tools treat it as an empty project.
+- **The General project** is a lane with no folder, for work that belongs to no code project. `startServer`
+  (not `createContext`, so tests and seeds start empty) calls `projects.ensureGeneral()`, which makes it the
+  first time only and stores its id under the `generalProjectId` setting (exported in backups, so a restore
+  doesn't make a second one; a dump from before General existed has no such id, so restoring one gives the board a new General). The user can rename, archive or delete it; later starts never bring it back.
+  `projects.general()` does: it returns the stored project, unarchiving it, or makes it again when it was
+  deleted. It is what `POST /api/projects/general` (the "New general task" button and palette action) and the
+  `general: true` argument of `add_to_backlog` and `create_task` call. `general: true` is refused together with
+  `workspacePath` or `projectId`, and leaving all three out still fails, so work in a repo never lands there by
+  accident. A new project is placed before General while General is the last lane, so it stays last until the
+  user moves it. A task moves out of General like between any two projects (below). General has no folder, so
+  hand-off to a T3 thread or terminal and Autopilot runs that need a checkout refuse with a clear message.
 
 ### The plan gate
 

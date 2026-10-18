@@ -9,6 +9,9 @@ The user keeps a local kanban board of their work across projects. Columns: **Ba
 Progress → Review → Done**, one swimlane per project. You read and update it through the `aboard`
 MCP server; the board updates live in the user's browser. Identify the project by passing
 `workspacePath` = your current working directory. Unknown paths create the project automatically.
+Work that belongs to no code project (a document to update, something to review) goes in the **General**
+project: pass `general: true` to `add_to_backlog` / `create_task` instead of `workspacePath`. Leaving the
+path out never defaults to it, and work in a repo belongs in the repo's project.
 
 Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 

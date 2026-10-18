@@ -21,6 +21,7 @@ import {
   deliveryField,
   epicField,
   findProject,
+  generalField,
   hasProjectRef,
   labelsField,
   suggestedModelField,
@@ -30,13 +31,15 @@ import {
   projectFields,
   projectRef,
   requireProjectRef,
+  requireWritingProject,
   run,
   t3ThreadField,
   taskField,
   taskResult,
   textResult,
-  type ProjectRefArgs,
   type ToolRegistrar,
+  type WritingProjectArgs,
+  writingProject,
 } from "../shared.ts";
 
 const PLAN_REQUIRED_HINT =
@@ -60,11 +63,14 @@ function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef
  */
 function templateFor(
   services: Services,
-  args: ProjectRefArgs & { template?: string | undefined; title?: string | undefined },
+  args: WritingProjectArgs & { template?: string | undefined; title?: string | undefined },
   opts: { needsPlan?: boolean; hasPlan?: boolean } = {},
 ) {
   const template = args.template
-    ? services.templates.resolve(args.template, findProject(services, args)?.id ?? "")
+    ? services.templates.resolve(
+        args.template,
+        (args.general ? services.projects.findGeneral() : findProject(services, args))?.id ?? "",
+      )
     : null;
   if (!args.title && !template?.titlePattern) {
     throw new AppError(
@@ -97,7 +103,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
-        "created automatically if the board doesn't know it yet. Pass the Jira key in links if there is one, " +
+        "created automatically if the board doesn't know it yet. For work that belongs to no code project (a " +
+        "document to update, something to review), pass general: true instead: it files the task in the General " +
+        "project. Pass the Jira key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
         "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
         "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
@@ -114,6 +122,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           .optional()
           .describe("Markdown: what and why, enough context for someone picking it up later."),
         ...projectFields,
+        general: generalField,
         epic: epicField.optional(),
         template: templateField.optional(),
         blockedBy: blockedByField.optional(),
@@ -128,9 +137,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     },
     (args) =>
       run(() => {
-        requireProjectRef(args);
+        requireWritingProject(args);
         const template = templateFor(services, args);
-        const project = services.projects.resolve(projectRef(args), { autoCreate: true });
+        const project = writingProject(services, args);
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,
@@ -164,7 +173,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
-        "blockedBy when other tasks must be Done first. When the result asks about the Autopilot flag, ask the user " +
+        "blockedBy when other tasks must be Done first. For work that belongs to no code project, pass general: true " +
+        "instead of workspacePath. When the result asks about the Autopilot flag, ask the user " +
         "before setting autopilot; set autoMerge and priority only if the user has asked for them. With template (a name from list_templates, such as Bug or Spike) the plan is " +
         "optional: the template's plan is copied, and a plan you give replaces it. " +
         "For something you are not doing now, use add_to_backlog instead.",
@@ -176,6 +186,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           .describe("Short imperative title. Optional when the template has a title pattern."),
         description: z.string().optional().describe("Markdown: what and why."),
         ...projectFields,
+        general: generalField,
         epic: epicField.optional(),
         template: templateField.optional(),
         blockedBy: blockedByField.optional(),
@@ -191,10 +202,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     },
     (args) =>
       run(() => {
-        requireProjectRef(args);
+        requireWritingProject(args);
         const plan = planFromArgs(args);
         const template = templateFor(services, args, { needsPlan: true, hasPlan: plan !== null });
-        const project = services.projects.resolve(projectRef(args), { autoCreate: true });
+        const project = writingProject(services, args);
         const links = linkInputs(args);
         const task = services.tasks.create({
           projectId: project.id,

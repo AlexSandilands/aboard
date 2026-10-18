@@ -392,6 +392,30 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(headless.launches).toHaveLength(0);
     });
 
+    it("refuses a project with no folder: no worktree to make, no T3 thread to start", async () => {
+      const t3 = setup({ t3: T3_UP });
+      t3.h.services.projects.update(t3.project.id, { workspaceRoot: null });
+      await expect(t3.start({ options: { runner: "t3" } })).rejects.toThrow(
+        "neither a workspace folder nor a T3 project",
+      );
+      expect(t3.launches).toHaveLength(0);
+
+      // A T3 project is enough for a thread (T3 makes the worktree), though a headless run still needs the folder.
+      const bound = setup({ t3: T3_UP });
+      bound.h.db
+        .prepare(
+          "UPDATE projects SET workspace_root = NULL, workspace_key = NULL, t3_project_id = 't3-p1' WHERE id = ?",
+        )
+        .run(bound.project.id);
+      expect((await bound.start({ options: { runner: "t3" } })).runner).toBe("t3");
+      expect(bound.launches).toHaveLength(1);
+
+      const headless = setup({ t3: T3_DOWN });
+      headless.h.services.projects.update(headless.project.id, { workspaceRoot: null });
+      await expect(headless.start({ options: { runner: "headless" } })).rejects.toThrow("has no workspace folder");
+      expect(headless.jobs).toHaveLength(0);
+    });
+
     it("looks at T3 again before choosing, so a stale status doesn't send a run headless or refuse it", async () => {
       const auto = setup({ t3: T3_DOWN, t3AfterLook: T3_UP });
       expect((await auto.start({ options: { runner: "auto" } })).runner).toBe("t3");

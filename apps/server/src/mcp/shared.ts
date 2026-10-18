@@ -41,6 +41,14 @@ export const projectFields = {
     .describe("Absolute path of the repo/workspace you are working in (your cwd). Identifies the project."),
 };
 
+export const generalField = z
+  .boolean()
+  .optional()
+  .describe(
+    "File the task in the General project instead: for work that belongs to no code project (a document to " +
+      "update, something to review). Use it instead of workspacePath and projectId, never with them.",
+  );
+
 export const taskField = z.string().min(1).describe('Task reference: "#42", "42", or the task uuid.');
 
 export const epicField = z
@@ -193,6 +201,11 @@ export interface ProjectRefArgs {
   workspacePath?: string | undefined;
 }
 
+/** What a tool that adds a task takes to name its project: a path or id, or `general`. */
+export interface WritingProjectArgs extends ProjectRefArgs {
+  general?: boolean | undefined;
+}
+
 export function hasProjectRef(args: ProjectRefArgs): boolean {
   return Boolean(args.projectId || args.workspacePath);
 }
@@ -208,6 +221,29 @@ export function requireProjectRef(args: ProjectRefArgs): void {
   if (!hasProjectRef(args)) {
     throw new AppError("VALIDATION", "Pass workspacePath (your cwd) or projectId to identify the project.");
   }
+}
+
+/** For the tools that take `general`: a path or id, or `general: true`, never both and never neither. */
+export function requireWritingProject(args: WritingProjectArgs): void {
+  if (args.general) {
+    if (hasProjectRef(args)) {
+      throw new AppError("VALIDATION", "Pass general: true instead of workspacePath or projectId, not with them.");
+    }
+    return;
+  }
+  // Not defaulting to General: a task that belongs to a repo shouldn't land there because the path was left out.
+  if (!hasProjectRef(args)) {
+    throw new AppError(
+      "VALIDATION",
+      "Pass workspacePath (your cwd) or projectId to identify the project, or general: true for work that " +
+        "belongs to no code project.",
+    );
+  }
+}
+
+/** The project a new task goes to: General, or the one the path or id names, made if the board doesn't know it. */
+export function writingProject(services: Services, args: WritingProjectArgs) {
+  return args.general ? services.projects.general() : services.projects.resolve(projectRef(args), { autoCreate: true });
 }
 
 /** Read-only lookup: an unknown project is "no tasks yet", not an error. */
