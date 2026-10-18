@@ -48,7 +48,8 @@ priority lane and makes Autopilot start it first ([board-layout.md](board-layout
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
 
 `add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
-which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so.
+which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so; the server can't enforce that
+([why](../decisions/0008-autopilot-engine.md)).
 `get_task` shows an "Auto-merge:" line when it is set. An epic can't have it. See
 [github-prs.md](github-prs.md#merge_task_pr).
 
