@@ -189,6 +189,8 @@ one exception is `retry_autopilot_run`, which only frees a run's work for the en
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
 | `POST /api/autopilot/runs/:id/dismiss`          | Dismisses a flagged run's attention flag (see [Needs attention](#needs-attention)) |
+| `GET /api/autopilot/orchestrate/:projectId`     | Orchestrate in one project: next slot, what holds it, Run now, the latest run |
+| `POST /api/autopilot/orchestrate/:projectId/run` | Orchestrate's Run now (202), or 409 with why it can't start |
 
 ### Automations
 
@@ -340,9 +342,13 @@ as comments only.
   `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
   the run is skipped, and the new head is reviewed next as the same round. GitHub refuses a whole review over one
   comment on a line outside the diff, so it then posts again with the inline comments in the body; a body is cut to
-  what GitHub takes. The agent doesn't post itself because Claude Code's permission rules can't scope `gh api`
-  writes to a review (and can't see an `event` inside a heredoc), it refuses a JSON payload in a heredoc, and
-  `gh api -f` can't build the inline comments reliably.
+  what GitHub takes. GitHub can also create the review and answer with an error ("An internal error occurred, please
+  try again"): after such a transient error `postReview` first reads the account's own reviews on the PR
+  (`findPostedReview`) and, when one at that head starts with `prReviewHeader`, counts it as posted instead of failing
+  or posting twice. The inline fallback runs only for a refusal that isn't transient. Its errors are prefixed "GitHub
+  couldn't post the review: …", so a card doesn't read like an Aboard or Claude failure. The agent doesn't post
+  itself because Claude Code's permission rules can't scope `gh api` writes to a review (and can't see an `event`
+  inside a heredoc), it refuses a JSON payload in a heredoc, and `gh api -f` can't build the inline comments reliably.
 - **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** (engine
   setting, default major) are the actionable ones.
 - **Anti-spiral.** From round 2 the prompt carries the round ("round 2 of 3"), the earlier Autopilot reviews with
@@ -353,8 +359,13 @@ as comments only.
 - **What the board keeps.** The task gets a note "Autopilot reviewed PR #N at `<sha>` (round R of M): review on
   GitHub", linking the review, and the run gets its verdict in `output` (`PrReviewRunOutput`: review URL and id, the
   head commit in full, round, counts, FYI count, threshold, actionable count and `handoff`). An answer that isn't a
-  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too. A run is never retried, so there is one review per head
-  commit even when posting failed.
+  review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too, and so does an agent
+  that failed (its text is the run's error: for an API error, such as a 403, `claudeFailure` says that text
+  rather than only the subtype). GitHub failing in passing (`isTransientGithubError`: "try again", "internal error",
+  `HTTP 5xx`, a timeout or the network) while posting ends the run `skipped` ("will retry"), not a round used, with
+  `output.retry`; each try is a full review, as the agent runs again. The next pass reviews the same head again under the key `review:pr:<linkId>:<headOid>:<n>`, up to
+  `REVIEW_ATTEMPTS` (3) tries, after which it fails, flagged. Any other failed run is never retried, so there is one
+  review per head commit even when posting failed.
 - **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
   (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
   gave up…", which shows under Needs attention and sends an `autopilot_failed` notification). The fix automation
@@ -476,7 +487,28 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, or under
   Needs attention (a failed Start planned run included), leaving out tasks waiting on the user (an `agent_request` or
   a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
-  running, `check` returns nothing for it and the latest slot runs once it ends.
+  running, `check` returns nothing for it and the latest slot runs once it ends. The rule is
+  `orchestrateNeedsLooking` in contracts, so the board's lane pill reads it the same way. `nextMinutesSlot` gives the
+  next slot (local midnight when the step doesn't fit in what is left of the day; it steps past wall times a DST change
+  repeats).
+- **Run now.** The first run-now path in Autopilot. `POST /api/autopilot/orchestrate/:projectId/run`
+  (`requestOrchestrateRun`) puts a request for the project in `AutopilotService.requestRun`, an in-memory map (a
+  restart drops it), publishes `autopilot.changed` and starts a pass at once (`Integrations.autopilotPass`, when the
+  pollers run). `check` turns the request into a candidate keyed `orchestrate:<projectId>:manual:<requested at>` that
+  skips the nothing-to-look-at gate, since the user asked; the first pass that finds the key has a run clears it. A
+  slot that began before a manual run in it doesn't run again (`ranManuallySince`), so Run now doesn't double the
+  next look. One run at a time still holds, and so do the engine's limits: the request is refused (`CONFLICT`, with the
+  reason) when Orchestrate is off in the project, Autopilot is paused, a run is already going there, in quiet hours or
+  at a daily cap (checked apart from concurrency, so a full run slot doesn't hide it); at the concurrency cap it waits
+  for a free slot like any candidate. Asking again while one waits keeps the first. A request is dropped when
+  Orchestrate goes off in the project, and after an hour without a run (`RUN_REQUEST_TTL_MS`), so it never starts out
+  of the blue later.
+- **State.** `GET /api/autopilot/orchestrate/:projectId` (`orchestrateState`, `OrchestrateState`) gives the switch,
+  `everyMinutes`, `nextSlotAt`, `hold` (why that slot won't run, the first that applies: `off`, `paused`,
+  `quiet_hours` at the slot, `daily_cap`, `idle`), `running`, `requestedAt` and `lastRun` (the latest real run,
+  retried ones left out). Its section of the lane popover reads it (see
+  [board-layout.md](board-layout.md#autopilot-on-the-board)). The quiet-hours and cap checks are the engine's
+  (`agentHold` in `autopilot/limits.ts`).
 - **The run.** Task-less and headless (`startDetached`: an empty temporary folder, `repo` for the default branch's
   push guard), with `access: "read-only"` and `untrustedInput`, since it reads PR and CI text anyone can write: file
   tools only in its own folder, no settings from a checkout (`--setting-sources user`), only the built-in tools it
@@ -763,7 +795,14 @@ and shows the prompt, command, allowed tools and skill text in full, as untruste
 files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Dispatch** is an hourly scheduled agent with the inputs `jql`,
 `look_back_days`, `max_issues` and `require_approval` and a `jira` slot. It uses `list_tasks(query: KEY)` to skip keys
 already on the board, `add_to_backlog` and `set_plan`, then `request_attention` or the Autopilot flag, and keeps triaged
-and skipped keys in its handover. It never merges.
+and skipped keys in its handover. It never merges. **Improve prompts and skills** (#134) is a weekly (Monday 07:00)
+scheduled agent on the `deep` tier with the inputs `look_back_days`, `max_suggestions` and `targets`, `allowedTools:
+["Skill"]` (a headless run is denied the Skill tool otherwise) and its own skill, `<brand id>-improve`, in the file.
+The skill holds the method and the rules that keep suggestions lean (evidence from at least two tasks or one costly
+one, one behaviour each, rewrite or delete rather than add, no growth without a stated reason); the prompt holds the
+inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
+`suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
+target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
 
 ### Runners
 
@@ -968,12 +1007,13 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
 | `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
-| `apps/server/src/autopilot/engine.ts` | The pass, the limits, the event and tick wiring |
+| `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
+| `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
 | `apps/server/src/db/migrations/022_autopilot_run_output.sql` | `autopilot_runs.output_json`, an action's structured result |
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
-| `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, the tools it gets and `orchestratePrompt` |
+| `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run` |
 | `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |

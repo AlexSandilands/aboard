@@ -11,7 +11,7 @@ import type {
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
-import { EPIC_BRANCH_PREFIX } from "@repo/contracts";
+import { EPIC_BRANCH_PREFIX, prReviewHeader } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService, TasksService } from "../services/types.ts";
@@ -20,6 +20,7 @@ import {
   createGhTokens,
   createGithubApi,
   GithubApiError,
+  isTransientGithubError,
   parseGhAuthStatus,
   type GithubApi,
   type GraphqlError,
@@ -298,6 +299,36 @@ const PostedReviewData = z.object({
   }),
 });
 
+/** The signed-in account's own submitted reviews on a PR, newest last, to tell whether a post that errored landed. */
+const VIEWER_REVIEWS_QUERY = `query PullRequestViewerReviews($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviews(last: 30) { nodes { databaseId url state submittedAt viewerDidAuthor body commit { oid } } }
+    }
+  }
+}`;
+const ViewerReviews = z.object({
+  repository: z.object({
+    pullRequest: z.object({
+      reviews: z.object({
+        nodes: z.array(
+          z
+            .object({
+              databaseId: z.number().nullish(),
+              url: z.string(),
+              state: z.string(),
+              submittedAt: z.string().nullish(),
+              viewerDidAuthor: z.boolean().nullish(),
+              body: z.string().nullish(),
+              commit: z.object({ oid: z.string() }).nullish(),
+            })
+            .nullable(),
+        ),
+      }),
+    }),
+  }),
+});
+
 /** An inline comment on a line of the PR's diff. */
 export interface ReviewComment {
   path: string;
@@ -320,6 +351,9 @@ export interface PostedReview {
   /** Inline comments GitHub refused (a line outside the diff) and that went into the body instead. */
   folded: number;
 }
+
+/** How far GitHub's clock may differ from ours when a landed review is told by its time. */
+const CLOCK_SKEW_MS = 2 * 60_000;
 
 /** GitHub refuses a review body past 65536 characters. */
 const MAX_REVIEW_BODY = 60_000;
@@ -788,6 +822,33 @@ export function createGithubIntegration(deps: {
     loggedErrors.delete(link.id);
   };
 
+  /**
+   * The newest submitted review the signed-in account left on the PR at this head with Autopilot's header, submitted
+   * since `since` (an older one at the same head isn't the post that failed), or null. It is how a post that GitHub
+   * answered with an error is told apart from one that never happened.
+   */
+  const findPostedReview = async (
+    ref: PrRef,
+    headOid: string,
+    since: number,
+  ): Promise<{ id: number | null; url: string; body: string } | null> => {
+    const [owner, name] = splitRepo(ref.repo);
+    const raw = await api.graphql(ref.host, VIEWER_REVIEWS_QUERY, { owner, name, number: ref.number });
+    const parsed = ViewerReviews.safeParse(raw);
+    if (!parsed.success) return null;
+    const header = prReviewHeader();
+    const found = parsed.data.repository.pullRequest.reviews.nodes.findLast(
+      (r) =>
+        r !== null &&
+        r.viewerDidAuthor === true &&
+        r.state.toUpperCase() !== "PENDING" &&
+        r.commit?.oid.toLowerCase() === headOid.toLowerCase() &&
+        (r.body ?? "").startsWith(header) &&
+        Date.parse(r.submittedAt ?? "") >= since - CLOCK_SKEW_MS,
+    );
+    return found ? { id: found.databaseId ?? null, url: found.url, body: found.body ?? "" } : null;
+  };
+
   /** A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. */
   const mergeChecked = async (
     link: TaskLink,
@@ -1044,16 +1105,44 @@ export function createGithubIntegration(deps: {
                 : {}),
             },
           });
+        // GitHub can create the review and still answer with an error ("internal error, try again"): a review that is
+        // there counts as posted, or the retry would review the same commit twice. Only after an error that may be
+        // that: a clear refusal posted nothing, and an older review at this head must not stand in for it.
+        const landed = async (error: unknown, folded: number): Promise<PostedReview | null> => {
+          if (!isTransientGithubError(error)) return null;
+          try {
+            const found = await findPostedReview(ref, head, startedAt);
+            return found ? { id: found.id, url: found.url, headOid: head, folded } : null;
+          } catch {
+            // The lookup failing says nothing: the original error is the one to report.
+            return null;
+          }
+        };
+        const startedAt = Date.now();
         let data: unknown;
         let folded = 0;
         try {
           data = await post(input.comments, input.body);
         } catch (error) {
-          // One comment on a line the diff doesn't touch refuses the whole review: say it in the body instead.
-          if (!(error instanceof GithubApiError) || error.kind !== "response" || input.comments.length === 0) {
+          const already = await landed(error, 0);
+          if (already) return already;
+          // One comment on a line the diff doesn't touch refuses the whole review: say it in the body instead. A
+          // failure that may pass (GitHub's own error, the network) is retried as it was, not changed.
+          if (
+            !(error instanceof GithubApiError) ||
+            error.kind !== "response" ||
+            isTransientGithubError(error) ||
+            input.comments.length === 0
+          ) {
             throw error;
           }
-          data = await post([], foldReviewComments(input.body, input.comments));
+          try {
+            data = await post([], foldReviewComments(input.body, input.comments));
+          } catch (retryError) {
+            const foldedReview = await landed(retryError, input.comments.length);
+            if (foldedReview) return foldedReview;
+            throw retryError;
+          }
           folded = input.comments.length;
         }
         const posted = PostedReviewData.safeParse(data);
@@ -1062,7 +1151,11 @@ export function createGithubIntegration(deps: {
         return { id: review.databaseId ?? null, url: review.url, headOid: head, folded };
       } catch (error) {
         if (error instanceof AppError) throw error;
-        throw new AppError("VALIDATION", messageOf(error));
+        // Say whose failure it is: the card would otherwise read like one of ours. The kind stays, so a caller can tell a
+        // failure that may pass from one that won't.
+        const message = `GitHub couldn't post the review: ${messageOf(error)}`;
+        if (error instanceof GithubApiError) throw new GithubApiError(error.kind, error.host, message);
+        throw new AppError("VALIDATION", message);
       }
     },
     start() {

@@ -16,6 +16,7 @@ import {
   describeShellRun,
   latestHourlySlot,
   latestMinutesSlot,
+  nextMinutesSlot,
   placeholdersIn,
   renderCustomPrompt,
   type CustomValues,
@@ -253,6 +254,30 @@ describe("triggers", () => {
     expect(latestMinutesSlot(7, new Date(2026, 9, 17, 0, 20))).toEqual(new Date(2026, 9, 17, 0, 14));
     expect(latestMinutesSlot(90, new Date(2026, 9, 17, 4, 0))).toEqual(new Date(2026, 9, 17, 3, 0));
     expect(latestMinutesSlot(1440, new Date(2026, 9, 17, 23, 59))).toEqual(new Date(2026, 9, 17, 0, 0));
+  });
+
+  it("finds the next minute slot, restarting at midnight", () => {
+    expect(nextMinutesSlot(15, new Date(2026, 9, 17, 13, 44, 59))).toEqual(new Date(2026, 9, 17, 13, 45));
+    expect(nextMinutesSlot(15, new Date(2026, 9, 17, 13, 45))).toEqual(new Date(2026, 9, 17, 14, 0));
+    expect(nextMinutesSlot(7, new Date(2026, 9, 17, 23, 55))).toEqual(new Date(2026, 9, 18, 0, 0));
+    expect(nextMinutesSlot(30, new Date(2026, 9, 17, 23, 45))).toEqual(new Date(2026, 9, 18, 0, 0));
+    expect(nextMinutesSlot(1440, new Date(2026, 9, 17, 0, 0))).toEqual(new Date(2026, 9, 18, 0, 0));
+    expect(nextMinutesSlot(30, new Date(2026, 11, 31, 23, 59))).toEqual(new Date(2027, 0, 1, 0, 0));
+  });
+
+  it("puts the next minute slot after now and on the latest-slot grid, across DST changes", () => {
+    // Every quarter hour over the days the clocks change in Europe and the US, in whatever zone the tests run in.
+    for (const day of [new Date(2026, 2, 8), new Date(2026, 2, 29), new Date(2026, 9, 25), new Date(2026, 10, 1)]) {
+      for (let at = day.getTime(); at < day.getTime() + 26 * 3_600_000; at += 7 * 60_000) {
+        const now = new Date(at);
+        for (const every of [5, 30, 45, 90]) {
+          const next = nextMinutesSlot(every, now);
+          expect(next.getTime()).toBeGreaterThan(at);
+          expect(next.getTime() - at).toBeLessThanOrEqual((every + 60) * 60_000);
+          expect(latestMinutesSlot(every, next)).toEqual(next);
+        }
+      }
+    }
   });
 
   it("describes a minutes schedule", () => {

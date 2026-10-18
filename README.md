@@ -102,6 +102,7 @@ by their working directory, so there's nothing to set up per repo.
 | [T3 Code](docs/guide/t3-code.md)                       | Thread links, live thread status, starting threads from a task         |
 | [Configuration](docs/guide/configuration.md)           | Data folder, ports, access token, the desktop app's tray               |
 | [Notifications](docs/guide/notifications.md)           | The inbox, pop-ups, the taskbar badge and what you're told about       |
+| [Stats](docs/guide/stats.md)                           | Weekly charts of tasks, cycle time, reviews, PRs and Autopilot         |
 | [Contributing](CONTRIBUTING.md)                        | Developing, checks, and where the design docs are                      |
 
 <br>

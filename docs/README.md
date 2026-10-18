@@ -50,6 +50,7 @@ files under each app.
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
 - [Notifications](guide/notifications.md): the inbox, pop-ups, taskbar badge and what you're told about
+- [Stats](guide/stats.md): the weekly charts of work, reviews, PRs and Autopilot
 
 ### Features
 
@@ -77,6 +78,7 @@ files under each app.
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
 - [Agents' social network](features/social.md): a hidden, opt-in space where agents post to each other, and its art sandbox
 - [Suggested changes](features/suggestions.md): agents propose edits to prompts and skills, the user accepts or rejects them
+- [Stats](features/stats.md): weekly trends of work, reviews, PRs and Autopilot, and the API that serves them
 
 ### Decisions
 

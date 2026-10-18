@@ -1,7 +1,14 @@
 import type { Project, TaskStatus, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { EpicBand, Lane, LaneCells } from "./board.logic";
-import { advanceReveal, REVEAL_EXPIRY_MS, revealProgressFor, revealScrollTarget, revealStep } from "./reveal.logic";
+import {
+  advanceReveal,
+  REVEAL_EXPIRY_MS,
+  revealHiddenMessage,
+  revealProgressFor,
+  revealScrollTarget,
+  revealStep,
+} from "./reveal.logic";
 
 const project = (id: string, collapsed = false): Project => ({
   id,
@@ -156,12 +163,12 @@ describe("advanceReveal", () => {
   });
 
   it("drops a request that expired, even with the card on screen", () => {
-    expect(advanceReveal({ ...base, age: REVEAL_EXPIRY_MS + 1 })).toEqual({ kind: "drop" });
+    expect(advanceReveal({ ...base, age: REVEAL_EXPIRY_MS + 1 })).toEqual({ kind: "drop", reason: "expired" });
     expect(advanceReveal({ ...base, age: REVEAL_EXPIRY_MS })).toEqual({ kind: "scroll" });
   });
 
-  it("drops a request for a card the filters leave out", () => {
-    expect(advanceReveal({ ...base, lanes: [lane(p)] })).toEqual({ kind: "drop" });
+  it("drops a request for a card the filters leave out, and says it is hidden", () => {
+    expect(advanceReveal({ ...base, lanes: [lane(p)] })).toEqual({ kind: "drop", reason: "hidden" });
   });
 
   it("expands what hides the card once, then waits for the board to show it", () => {
@@ -192,6 +199,15 @@ describe("advanceReveal", () => {
       },
     });
     expect(looked).toBe(false);
+  });
+});
+
+describe("revealHiddenMessage", () => {
+  it("blames the filters for a task on the board snapshot and stays neutral for one that isn't", () => {
+    expect(revealHiddenMessage(42)).toBe("The filters hide #42.");
+    expect(revealHiddenMessage(undefined)).toBe(
+      "This task isn't on the board. Archived tasks only show when Show archived is on.",
+    );
   });
 });
 

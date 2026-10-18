@@ -3,7 +3,7 @@ import { z } from "zod";
 // User-configurable shortcuts (docs/features/board-layout.md#keyboard-shortcuts). Shaped like t3code's keybindings:
 // a command, a key and a `when` expression over a few context flags; the last matching binding wins.
 
-export const KeybindingCommand = z.enum(["palette.open", "idea.new", "settings.open", "back"]);
+export const KeybindingCommand = z.enum(["palette.open", "idea.new", "settings.open", "back", "task.reveal"]);
 export type KeybindingCommand = z.infer<typeof KeybindingCommand>;
 
 /** What a `when` expression can name. The web app builds one per key event from its stores and the event target. */
@@ -51,6 +51,12 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
     group: "Navigation",
     key: "escape",
     when: `canGoBack && ${NO_FOCUS_CLAIM}`,
+  },
+  "task.reveal": {
+    title: "Jump to the task on the board",
+    group: "Navigation",
+    key: "j",
+    when: `panelOpen && !settingsOpen && ${NO_FOCUS_CLAIM}`,
   },
 };
 

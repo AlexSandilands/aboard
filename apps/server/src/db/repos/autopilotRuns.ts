@@ -153,6 +153,17 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
+    /** One automation's runs in a project, newest first. */
+    forProjectAutomation(projectId: string, automation: string, limit: number): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          "SELECT * FROM autopilot_runs WHERE project_id = ? AND automation = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+          projectId,
+          automation,
+          limit,
+        )
+        .map(toRun);
+    },
     /** Oldest first. */
     withStatus(statuses: readonly AutopilotRunStatus[]): AutopilotRun[] {
       return sql

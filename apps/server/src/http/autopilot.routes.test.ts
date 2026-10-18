@@ -7,9 +7,11 @@ import type {
   AutopilotScopeEntry,
   AutopilotStatus,
   BoardSnapshot,
+  OrchestrateState,
 } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { orchestrate } from "../autopilot/automations/orchestrate.ts";
 import { defineAutomation } from "../autopilot/types.ts";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -78,6 +80,25 @@ describe("Autopilot REST routes", () => {
     expect(((await (await h.request("/api/board")).json()) as BoardSnapshot).autopilot.paused).toBe(true);
     await h.request("/api/autopilot/resume", { method: "POST" });
     expect(h.services.autopilot.status().paused).toBe(false);
+  });
+
+  it("serves Orchestrate's state in a project and takes Run now, refusing with the reason", async () => {
+    const h = createTestHarness({ integrations: { automations: [orchestrate] } });
+    const project = h.services.projects.create({ title: "P", workspaceRoot: "/work/p" });
+    const path = `/api/autopilot/orchestrate/${project.id}`;
+    const state = (await (await h.request(path)).json()) as OrchestrateState;
+    expect(state).toMatchObject({ enabled: false, everyMinutes: 30, hold: "off", requestedAt: null, lastRun: null });
+
+    const refused = await h.request(`${path}/run`, { method: "POST" });
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("Orchestrate is off in P");
+
+    await h.request("/api/autopilot/board/orchestrate", { method: "PUT", json: { mode: "on" } });
+    const run = await h.request(`${path}/run`, { method: "POST" });
+    expect(run.status).toBe(202);
+    expect(((await run.json()) as OrchestrateState).requestedAt).not.toBeNull();
+    expect(h.events.at(-1)?.type).toBe("autopilot.changed");
+    expect((await h.request("/api/autopilot/orchestrate/missing")).status).toBe(404);
   });
 
   it("sets switches per scope and shows what inherit resolves to", async () => {

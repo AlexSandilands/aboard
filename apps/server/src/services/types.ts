@@ -48,6 +48,7 @@ import type { CustomAutomationsService } from "./customAutomations.ts";
 import type { RecurringService } from "./recurring.ts";
 import type { ActivityService } from "./activity.ts";
 import type { DigestsService } from "./digests.ts";
+import type { StatsService } from "./stats.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
@@ -80,6 +81,7 @@ export interface Services {
   customAutomations: CustomAutomationsService;
   digests: DigestsService;
   activity: ActivityService;
+  stats: StatsService;
   notifications: NotificationsService;
   social: SocialService;
   suggestions: SuggestionsService;

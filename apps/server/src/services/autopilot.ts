@@ -122,6 +122,8 @@ export interface AutopilotService {
   runsForTask(taskId: string, limit?: number): AutopilotRun[];
   /** Newest first. */
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
+  /** One automation's runs in a project, newest first. */
+  automationRunsForProject(automation: string, projectId: string, limit?: number): AutopilotRun[];
   hasRun(automation: string, dedupeKey: string, dryRun: boolean): boolean;
   /**
    * The handover the last successful run of a scheduled agent left in a project, for its next run; null when it has
@@ -162,9 +164,20 @@ export interface AutopilotService {
   finish(runId: string, result: ActionResult): AutopilotRun;
   /** Fails and flags the runs a restart left queued or running. Returns how many. */
   recover(): number;
+  /**
+   * Asks for a run of an automation in a project now (Orchestrate's Run now), publishing autopilot.changed so the
+   * engine looks at once. The automation's `check` turns it into a candidate and clears it. Kept in memory: a restart
+   * drops it. Returns when it was asked for; asking again while one is waiting keeps the first.
+   */
+  requestRun(automation: string, projectId: string): string;
+  /** When a run was asked for and not yet cleared; null when none is waiting or it is older than RUN_REQUEST_TTL_MS. */
+  runRequest(automation: string, projectId: string): string | null;
+  clearRunRequest(automation: string, projectId: string): void;
 }
 
 const RUN_LIMIT = 50;
+/** How long a Run now request waits for the engine before it is dropped. */
+export const RUN_REQUEST_TTL_MS = 60 * 60_000;
 
 export function createAutopilotService(
   core: Core,
@@ -187,6 +200,21 @@ export function createAutopilotService(
   },
 ): AutopilotService {
   const { repos } = core;
+  /** Run now requests by `automation:projectId`, with when they were made. */
+  const requests = new Map<string, string>();
+  const requestKey = (automation: string, projectId: string) => `${automation}:${projectId}`;
+  const runRequest = (automation: string, projectId: string): string | null => {
+    const key = requestKey(automation, projectId);
+    const at = requests.get(key);
+    if (!at) return null;
+    // A request the engine couldn't act on for this long (no free slot all that time) is dropped rather than started
+    // out of the blue later.
+    if (Date.now() - new Date(at).getTime() > RUN_REQUEST_TTL_MS) {
+      requests.delete(key);
+      return null;
+    }
+    return at;
+  };
   const find = (key: string) => deps.automations().find((a) => a.key === key);
   const titleOf = (key: string) => find(key)?.title ?? key;
 
@@ -420,7 +448,10 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
-      const started = enabledProjects(key).filter((enabledId) => !before.has(enabledId));
+      const enabledNow = new Set(enabledProjects(key));
+      // Run now requests where the automation just went off are dropped, not kept for when it's back on.
+      for (const wasOn of before) if (!enabledNow.has(wasOn)) requests.delete(requestKey(key, wasOn));
+      const started = [...enabledNow].filter((enabledId) => !before.has(enabledId));
       if (started.length > 0) deps.onEnabled?.(key, started);
       const gainedOwn = epicsWithOwnSetting(automation).filter((epicId) => !ownBefore.has(epicId));
       if (gainedOwn.length > 0) deps.onEpicOwnSetting?.(key, gainedOwn);
@@ -449,6 +480,8 @@ export function createAutopilotService(
     },
     runsForTask: (taskId, limit = RUN_LIMIT) => repos.autopilotRuns.forTask(taskId, limit),
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
+    automationRunsForProject: (automation, projectId, limit = RUN_LIMIT) =>
+      repos.autopilotRuns.forProjectAutomation(projectId, automation, limit),
     hasRun: (automation, dedupeKey, dryRun) => repos.autopilotRuns.exists(automation, dedupeKey, dryRun),
     lastHandover(automation, projectId) {
       const parsed = ScheduledAgentRunOutput.safeParse(
@@ -613,6 +646,19 @@ export function createAutopilotService(
         fx.autopilot();
       });
       return stranded.length;
+    },
+    requestRun(automation, projectId) {
+      const key = requestKey(automation, projectId);
+      const waiting = runRequest(automation, projectId);
+      if (waiting) return waiting;
+      const at = nowIso();
+      requests.set(key, at);
+      core.write((fx) => fx.autopilot());
+      return at;
+    },
+    runRequest,
+    clearRunRequest(automation, projectId) {
+      requests.delete(requestKey(automation, projectId));
     },
   };
 }

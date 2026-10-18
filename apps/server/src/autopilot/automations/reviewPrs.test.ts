@@ -21,7 +21,7 @@ import {
   type RunnerRequest,
   type RunnerResult,
 } from "../types.ts";
-import { earlierReviews, renderReview, reviewHandoff, reviewPrs, reviewTools } from "./reviewPrs.ts";
+import { REVIEW_ATTEMPTS, earlierReviews, renderReview, reviewHandoff, reviewPrs, reviewTools } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const SHA_A = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
@@ -586,6 +586,62 @@ describe("review PRs: the agent", () => {
     expect(runs()[0]).toMatchObject({ status: "failed", needsAttention: true, costUsd: 0.5 });
     expect(runs()[0]!.error).toContain("Could not resolve");
     expect(notes()).toEqual([]);
+  });
+
+  it("tries the post again, without a failure or a round used, when GitHub fails in passing", async () => {
+    const { setPr, pass, turnOn, failPost, runs, requests, notes } = setup();
+    turnOn();
+    failPost("GitHub couldn't post the review: An internal error occurred, please try again.");
+    setPr();
+    await pass();
+    expect(runs()).toHaveLength(1);
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false, output: { retry: true } });
+    expect(runs()[0]!.summary).toContain(`try 1 of ${REVIEW_ATTEMPTS}, will retry)`);
+    expect(runs()[0]!.summary).toContain("GitHub couldn't post the review");
+    expect(notes()).toEqual([]);
+    failPost(null);
+    await pass();
+    // The same head, reviewed again as the first round, and now it posted.
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("review round 1 of 3");
+    const [first, second] = runs().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    expect(first!.dedupeKey).toMatch(new RegExp(`^review:pr:.+:${SHA_A}$`));
+    expect(second!.dedupeKey).toBe(`${first!.dedupeKey}:2`);
+    expect(second).toMatchObject({ status: "succeeded" });
+    expect(notes()).toHaveLength(1);
+    // Settled: nothing more at this head.
+    await pass();
+    expect(requests).toHaveLength(2);
+  });
+
+  it("fails the run, flagged, once GitHub has failed in passing on every try", async () => {
+    const { setPr, pass, turnOn, failPost, runs, requests } = setup();
+    turnOn();
+    failPost("GitHub couldn't post the review: GitHub at github.com returned HTTP 502");
+    setPr();
+    for (let i = 0; i < REVIEW_ATTEMPTS + 1; i += 1) await pass();
+    expect(requests).toHaveLength(REVIEW_ATTEMPTS);
+    const byTime = runs().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    expect(byTime.map((r) => r.status)).toEqual(["skipped", "skipped", "failed"]);
+    expect(byTime[2]).toMatchObject({ needsAttention: true });
+    expect(byTime[2]!.error).toContain("GitHub couldn't post the review");
+    expect(byTime[2]!.error).toContain(`after ${REVIEW_ATTEMPTS} tries`);
+  });
+
+  it("doesn't retry what the agent failed on, nor a refusal from GitHub", async () => {
+    const { setPr, pass, turnOn, failRunner, failPost, runs, requests } = setup();
+    turnOn();
+    // The agent's own failure, even one that reads like a transient one, is a failure.
+    failRunner(new Error("API Error: 502 try again"));
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "failed", needsAttention: true });
+    failRunner(null);
+    failPost("Line must be part of the diff");
+    setPr({ headOid: SHA_B });
+    await pass();
+    expect(runs().filter((r) => r.status === "failed")).toHaveLength(2);
+    expect(requests).toHaveLength(2);
   });
 
   it("skips when the PR moved on before the agent started", async () => {

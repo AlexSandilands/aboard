@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { MergeTargetError, messageOf } from "../../integrations/github.ts";
+import { isTransientGithubError } from "../../integrations/githubApi.ts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
@@ -48,13 +49,8 @@ function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: strin
   };
 }
 
-/**
- * Failures another try may get past: a race with another merge into the branch or a push, the network, GitHub itself
- * failing (`HTTP 5xx` is how the API client reports it). Anything else, "not mergeable" included (GitHub says it for
- * branch protection too), goes to the user at once.
- */
-const PASSING_FAILURE =
-  /base branch was modified|head branch was modified|try again|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\bHTTP 5\d\d\b/i;
+/** Merge failures that pass on their own besides GitHub's and the network's: a race with another merge or a push. */
+const MERGE_RACE = /base branch was modified|head branch was modified/i;
 
 interface EpicPrData {
   kind: "open_pr" | "update_pr";
@@ -267,7 +263,10 @@ export const mergeEpicPrs = defineAutomation({
         }
         const message = messageOf(error);
         // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
-        const passing = (error instanceof AppError && error.code === "CONFLICT") || PASSING_FAILURE.test(message);
+        const passing =
+          (error instanceof AppError && error.code === "CONFLICT") ||
+          MERGE_RACE.test(message) ||
+          isTransientGithubError(error);
         if (passing && data.attempt < MERGE_ATTEMPTS) {
           return {
             status: "skipped",
