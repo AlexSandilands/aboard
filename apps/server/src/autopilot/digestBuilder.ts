@@ -77,6 +77,7 @@ const ATTENTION_TEXT: Partial<Record<NotificationKind, string>> = {
   thread_waiting: "an agent is waiting for you",
   pr_checks_failing: "checks are failing",
   pr_changes_requested: "changes were requested",
+  agent_request: "an agent asked you to look at it",
 };
 
 const task = (t: TaskRef) => `#${t.number} ${escapeMd(t.title)}`;

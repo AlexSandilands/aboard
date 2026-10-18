@@ -155,7 +155,9 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
         record.status === "done" ? null : review,
         issueImport,
         autopilotByTask.get(record.id) ?? null,
+        record.attentionRequest,
       ),
+      attentionRequest: record.attentionRequest,
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,

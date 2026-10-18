@@ -90,8 +90,11 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
     position: positionAmong(lane, {}),
     updatedAt: now,
     statusChangedAt: statusChangeTime(repos, epicId, now),
+    // A finished epic no longer asks, the same as a finished task (move and close clear it).
+    ...(status === "done" ? { attentionRequest: null } : {}),
   });
   fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
+  if (status === "done" && epic.attentionRequest) fx.log(epicId, actor, "attention_cleared", { finished: true });
 }
 
 /** Task cards: creation, updates, moves between columns, notes. */
@@ -364,6 +367,7 @@ export function createTasksService(
           autopilot: input.autopilot ?? null,
           autoMerge: input.autoMerge ?? null,
           priority: input.priority ?? false,
+          attentionRequest: null,
           suggestedModel: null,
           templateId: template?.id ?? null,
           delivery: null,
@@ -633,7 +637,9 @@ export function createTasksService(
           updatedAt: now,
           statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           ...(reopened ? { resolution: null, resolvedByTaskId: null } : {}),
+          ...(status === "done" ? { attentionRequest: null } : {}),
         });
+        if (status === "done" && current.attentionRequest) fx.log(id, actor, "attention_cleared", { finished: true });
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         if (statusChanged) {
           fx.log(id, actor, "status_changed", {
@@ -676,6 +682,8 @@ export function createTasksService(
           statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           resolution: input.resolution,
           resolvedByTaskId: by?.id ?? null,
+          // A finished task no longer asks; keeping it would bring it back if the task is reopened.
+          attentionRequest: null,
         });
         fx.log(id, actor, "closed", {
           resolution: input.resolution,

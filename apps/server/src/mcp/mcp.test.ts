@@ -58,6 +58,7 @@ describe("MCP endpoint", () => {
       "update_task",
       "delete_task",
       "add_note",
+      "request_attention",
       "link",
       "merge_task_pr",
     ]) {
@@ -640,5 +641,32 @@ describe("MCP endpoint", () => {
     });
     expect(text(created)).toContain("No labels are in use yet; pick short type labels such as ui");
     expect(text(created)).not.toContain("Prefer labels already on the board");
+  });
+
+  it("lets an agent flag a task for the user and clear it again", async () => {
+    const task = h.services.tasks.create({
+      projectId: h.services.projects.create({ workspaceRoot: "C:/Fake/proj" }).id,
+      title: "Plans",
+      plan: { phases: [{ title: "Write", steps: [{ title: "a" }] }] },
+    });
+    const call = async (args: Record<string, unknown>) => {
+      const result = await client.callTool({ name: "request_attention", arguments: { task: "#1", ...args } });
+      return { isError: result.isError ?? false, out: text(result) };
+    };
+
+    expect(await call({})).toMatchObject({ isError: true, out: expect.stringContaining("Pass a message") });
+    expect(await call({ message: "Plans are ready to review", clear: true })).toMatchObject({ isError: true });
+
+    const flagged = await call({ message: "Plans are ready to review", actor: "claude-code" });
+    expect(flagged).toEqual({ isError: false, out: expect.stringContaining("Flagged #1 for the user") });
+    expect(h.services.tasks.summary(task.id).attention.map((a) => a.message)).toEqual(["Plans are ready to review"]);
+    expect(text(await client.callTool({ name: "get_task", arguments: { task: "#1" } }))).toContain(
+      "Needs attention: Plans are ready to review",
+    );
+    expect(h.services.tasks.summary(task.id).attentionRequest?.actor).toBe("claude-code");
+
+    expect((await call({ clear: true })).out).toContain("Cleared");
+    expect((await call({ clear: true })).out).toContain("no request for attention to clear");
+    expect(h.services.tasks.summary(task.id).attention).toEqual([]);
   });
 });
