@@ -9,6 +9,7 @@ import {
   parseStatsPeriod,
   runsByAutomation,
   runsByStatusWeekly,
+  runsInStatuses,
 } from "./stats.logic";
 
 describe("niceScale", () => {
@@ -170,7 +171,20 @@ describe("runs by automation", () => {
     ]);
   });
   it("sums a status across automations by week", () => {
-    expect(runsByStatusWeekly(series, "succeeded", 2)).toEqual([2, 6]);
-    expect(runsByStatusWeekly(series, "failed", 2)).toEqual([1, 0]);
+    expect(runsByStatusWeekly(series, ["succeeded"], 2)).toEqual([2, 6]);
+    expect(runsByStatusWeekly(series, ["failed"], 2)).toEqual([1, 0]);
+  });
+  it("groups queued and running runs as in progress, so columns add up to the total", () => {
+    const withActive = {
+      ...series,
+      "autopilot.runs.review_prs.running": { unit: "count" as const, values: [0, 2], total: 2, previousTotal: 0 },
+      "autopilot.runs.review_prs.queued": { unit: "count" as const, values: [0, 1], total: 1, previousTotal: 0 },
+    };
+    expect(runsByStatusWeekly(withActive, ["queued", "running"], 2)).toEqual([0, 3]);
+    const row = runsByAutomation(withActive).find((r) => r.automation === "review_prs")!;
+    expect(runsInStatuses(row, ["queued", "running"])).toBe(3);
+    expect(
+      runsInStatuses(row, ["succeeded"]) + runsInStatuses(row, ["failed"]) + runsInStatuses(row, ["queued", "running"]),
+    ).toBe(row.total);
   });
 });

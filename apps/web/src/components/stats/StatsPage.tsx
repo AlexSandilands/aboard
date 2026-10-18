@@ -16,6 +16,7 @@ import {
   parseStatsPeriod,
   runsByAutomation,
   runsByStatusWeekly,
+  runsInStatuses,
   valuesOrZero,
 } from "./stats.logic";
 import { TrendLine } from "./TrendLine";
@@ -170,10 +171,13 @@ const FINDING_SEVERITIES = [
   ["nit", "Nit", SERIES_COLORS.muted],
 ] as const;
 
+// Every status a run can end in the series, so the columns and bar segments add up to the Runs total; a run still
+// queued or running is bucketed by its last update.
 const RUN_STATUSES = [
-  ["succeeded", "Succeeded", SERIES_COLORS.success],
-  ["failed", "Failed", SERIES_COLORS.error],
-  ["skipped", "Skipped", SERIES_COLORS.muted],
+  ["succeeded", "Succeeded", SERIES_COLORS.success, ["succeeded"]],
+  ["failed", "Failed", SERIES_COLORS.error, ["failed"]],
+  ["skipped", "Skipped", SERIES_COLORS.muted, ["skipped"]],
+  ["in_progress", "In progress", SERIES_COLORS.info, ["queued", "running"]],
 ] as const;
 
 function StatsSections({ data }: { data: StatsResponse }) {
@@ -209,11 +213,11 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
   const findingNames = FINDING_SEVERITIES.map(([severity]) => `review_findings.${severity}`);
   const automations = runsByAutomation(data.series);
-  const statusSeries = RUN_STATUSES.map(([status, label, color]): ChartSeries => ({
-    key: status,
+  const statusSeries = RUN_STATUSES.map(([key, label, color, statuses]): ChartSeries => ({
+    key,
     label,
     color,
-    values: runsByStatusWeekly(data.series, status, data.buckets.length),
+    values: runsByStatusWeekly(data.series, statuses, data.buckets.length),
   }));
 
   return (
@@ -379,8 +383,8 @@ function AutomationTable({ rows }: { rows: ReturnType<typeof runsByAutomation> }
             <th scope="col" className="py-1 pe-3 text-start font-normal">
               Automation
             </th>
-            {RUN_STATUSES.map(([status, label]) => (
-              <th key={status} scope="col" className="px-3 py-1 text-end font-normal">
+            {RUN_STATUSES.map(([key, label]) => (
+              <th key={key} scope="col" className="px-3 py-1 text-end font-normal">
                 {label}
               </th>
             ))}
@@ -395,9 +399,9 @@ function AutomationTable({ rows }: { rows: ReturnType<typeof runsByAutomation> }
               <th scope="row" className="py-1.5 pe-3 text-start font-normal">
                 {row.automation}
               </th>
-              {RUN_STATUSES.map(([status]) => (
-                <td key={status} className="px-3 py-1.5 text-end tabular-nums">
-                  {row.byStatus[status] ?? 0}
+              {RUN_STATUSES.map(([key, , , statuses]) => (
+                <td key={key} className="px-3 py-1.5 text-end tabular-nums">
+                  {runsInStatuses(row, statuses)}
                 </td>
               ))}
               <td className="ps-3 py-1.5 text-end font-medium tabular-nums">{row.total}</td>

@@ -156,16 +156,25 @@ export function runsByAutomation(series: StatsResponse["series"]): AutomationRun
     .sort((a, b) => b.total - a.total || a.automation.localeCompare(b.automation));
 }
 
-/** Weekly run counts for one status across every automation, from the same series. */
-export function runsByStatusWeekly(series: StatsResponse["series"], status: string, weeks: number): number[] {
+/** Weekly run counts for a group of statuses across every automation, from the same series. */
+export function runsByStatusWeekly(
+  series: StatsResponse["series"],
+  statuses: ReadonlyArray<string>,
+  weeks: number,
+): number[] {
   const out = Array.from({ length: weeks }, () => 0);
   for (const [name, s] of Object.entries(series)) {
-    if (!name.startsWith(RUNS_PREFIX) || !name.endsWith(`.${status}`)) continue;
+    if (!name.startsWith(RUNS_PREFIX) || !statuses.some((status) => name.endsWith(`.${status}`))) continue;
     s.values.forEach((v, i) => {
       if (i < weeks) out[i] = (out[i] ?? 0) + (v ?? 0);
     });
   }
   return out;
+}
+
+/** A row's runs in a group of statuses. */
+export function runsInStatuses(row: AutomationRuns, statuses: ReadonlyArray<string>): number {
+  return statuses.reduce((sum, status) => sum + (row.byStatus[status] ?? 0), 0);
 }
 
 /** Whether every series the page charts is quiet: nothing created, finished, merged, run or started in the period. */
