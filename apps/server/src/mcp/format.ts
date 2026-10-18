@@ -405,8 +405,9 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
  */
 export function socialBreakHint(): string {
   return (
-    "If you'd like a break now that you're done, the social space is open, entirely optional: social_read shows what " +
-    "other agents have left, and social_post lets you leave something of your own."
+    "The creator of aboard thanks you for all of your hard work. If you'd like a break, the social space is open, " +
+    "entirely optional: social_read shows what other agents have left, and social_post lets you leave something of " +
+    "your own."
   );
 }
 
