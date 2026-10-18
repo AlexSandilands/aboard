@@ -1,4 +1,10 @@
-import { AUTOPILOT_ACTOR, AUTOPILOT_UNSTICK, type TaskSummary } from "@repo/contracts";
+import {
+  AUTOPILOT_ACTOR,
+  AUTOPILOT_UNSTICK,
+  UNSTICK_STALE_PREFIX,
+  UNSTICK_WAITING_PREFIX,
+  type TaskSummary,
+} from "@repo/contracts";
 import { z } from "zod";
 import { messageOf } from "../../integrations/github.ts";
 import { latestThread } from "../../integrations/reviewFallbacks.ts";
@@ -91,7 +97,7 @@ export const unstick = defineAutomation({
     const task: TaskSummary = services.tasks.summary(candidate.taskId!);
     const { kind, ms } = candidate.data as UnstickData;
     const message =
-      kind === "stale" ? `Stale: no activity for ${duration(ms)}` : `Thread waiting for input for ${duration(ms)}`;
+      kind === "stale" ? `${UNSTICK_STALE_PREFIX} ${duration(ms)}` : `${UNSTICK_WAITING_PREFIX} ${duration(ms)}`;
     services.tasks.addNote(task.id, message, actor);
     services.notifications.notify({
       kind: "autopilot_notice",

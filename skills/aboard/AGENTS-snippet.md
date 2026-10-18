@@ -2,7 +2,7 @@
 
 Track work on the user's local task board via the `aboard` MCP server (Backlog → Planned → In Progress → Review → Done). Pass `workspacePath` = your cwd to identify the project. Tasks are `#42`, steps `"2.3"`.
 
-- **Orient:** `board_overview` / `list_tasks` at the start of meaningful work.
+- **Orient:** `board_overview` / `list_tasks` at the start of meaningful work. `board_activity(since: "7d")` looks back over a period: tasks finished, review findings, Autopilot failures, stalls, notes.
 - **Resume:** always `get_task` before continuing an existing task; it has the plan, current step and handover notes. Add any **Missing links** it lists, and open any **Images** it lists (absolute file paths; often a screenshot of the bug).
 - **Backlog:** something worth doing comes up mid-task (an idea, a follow-up, a ticket for later)? `add_to_backlog` once, then carry on.
 - **Plan first:** tasks can't leave Backlog without a plan. `set_plan` (or `create_task` with a plan): phases with 3–8 concrete, verifiable steps, approach in `context`. Markdown checklists (`## Phase` / `- [ ] step`) are accepted. Set `suggestedModel: {tier: "light" | "standard" | "deep", reason}` by how much reasoning implementing it needs. Then `move_task` → `in_progress`.
