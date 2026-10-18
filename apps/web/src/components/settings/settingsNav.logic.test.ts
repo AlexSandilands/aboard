@@ -19,6 +19,16 @@ describe("SETTINGS_GROUPS", () => {
       for (const section of group.sections) expect(section.id.startsWith(`${group.id}.`)).toBe(true);
     }
   });
+
+  it("gives Keybindings a section per keybinding group, which rows of that group sit under", () => {
+    const keybindings = SETTINGS_GROUPS.find((group) => group.id === "keybindings")!;
+    expect(keybindings.sections.map((entry) => entry.label)).toEqual(["General", "Navigation"]);
+    expect(sectionOf("keybindings.general.palette.open")?.id).toBe("keybindings.general");
+    expect(parseSettingsTarget("keybindings.navigation")).toEqual({
+      group: "keybindings",
+      anchor: "keybindings.navigation",
+    });
+  });
 });
 
 describe("parseSettingsTarget", () => {
@@ -117,6 +127,7 @@ describe("settingsPaletteEntries", () => {
     const entries = settingsPaletteEntries();
     expect(entries.filter((e) => e.isGroup).map((e) => e.title)).toEqual([
       "Settings: Board",
+      "Settings: Keybindings",
       "Settings: Tasks",
       "Settings: Autopilot",
       "Settings: Integrations",

@@ -15,6 +15,7 @@ import {
   MODEL_TIERS,
   NOTIFICATION_KINDS,
 } from "@repo/contracts";
+import { keybindingSectionId } from "./keybindings.logic";
 import { SETTINGS_GROUPS, sectionOf, type SettingsGroupId } from "./settingsNav.logic";
 
 export interface SettingsIndexEntry {
@@ -501,7 +502,7 @@ function generated(): Draft[] {
     ),
     ...KeybindingCommand.options.map((command) =>
       draft(
-        `board.keybindings.${command}`,
+        `${keybindingSectionId(DEFAULT_KEYBINDINGS[command].group)}.${command}`,
         DEFAULT_KEYBINDINGS[command].title,
         `The shortcut for this, and when it applies. Default ${DEFAULT_KEYBINDINGS[command].key}.`,
         ["keybinding", "shortcut", "hotkey", "key", "rebind", "when"],

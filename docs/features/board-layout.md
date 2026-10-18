@@ -325,14 +325,20 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
 - **Conflicts.** `keybindingConflicts` flags two commands on the same key whose `when`s can both be true
   (`whenOverlaps` tries every assignment of the flags the two use). The flags are treated as independent, so
   `overlayOpen` and `paletteOpen` are not known to imply each other; it may flag a pair that can't really collide.
-- **Editor.** Settings → Board → Keybindings (`KeybindingsSection`): a row per command, grouped by the registry's
-  `group`, with a button that records the next key combination (Esc records too; clicking away cancels), a `When`
-  field that saves on blur and shows the parse error, a conflict note, a warning when a bare character would run the
-  command while typing in a field (`triggersWhileTyping`), and Reset / Reset all (`keybindings.logic.ts` keeps the
-  stored map free of values equal to the default; saves are built from the cache, which is patched at once, or
-  from the newest save while any is still in flight (an earlier reply must not rewind it), so edits in a row don't
-  lose each other). Rows have ids `board.keybindings.<command>`, which the
-  settings index generates from the registry.
+- **Editor.** Settings → Keybindings (`KeybindingsSection`), laid out like T3 Code's keybindings page. A search box
+  on top filters by title, group, key, condition or command name (`keybindingSections`; every word must match, and
+  a settings link to a row clears it). Below it is one sub-section per `group` of the registry, taken from
+  `keybindingGroups()` (the settings nav builds its sections from the same list), so a command in a new group
+  needs no layout work. A row is the title, a small `When` line under it (`Always`, or the expression in mono) that
+  opens the editor (a field that saves on blur; the helper on what can be written is one info hover in it, and a parse
+  error shows there and on the row until the value changes), and on the right the key as chips, which is the button
+  that records the next key combination (Esc records too; clicking away cancels). A conflict note and a warning
+  when a bare character would run the command while typing in a field (`triggersWhileTyping`) sit under the title.
+  Reset shows only on a row that differs from the default, and Reset all beside the search box once anything does
+  (`keybindings.logic.ts` keeps the stored map free of values equal to the default; saves are built from the cache,
+  which is patched at once, or from the newest save while any is still in flight (an earlier reply must not
+  rewind it), so edits in a row don't lose each other). Sub-sections have ids `keybindings.<group>` and rows
+  `keybindings.<group>.<command>`, which the settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
   header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
   Board (`PaletteItem.shortcut`). The desktop app has no menu accelerator for these, so there is nothing to keep in sync.
@@ -387,7 +393,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
 | `packages/contracts/src/keybindings.ts`               | The shortcut registry, `when` parser and evaluator, overrides schema, conflicts (tested) |
 | `apps/web/src/components/layout/keyboard.logic.ts`, `useKeybindings.ts` | Matching key events, recording and formatting shortcuts (tested), the resolved bindings hook |
-| `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Board → Keybindings, and the override edits (tested) |
+| `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Keybindings: the page, grouping, search and the override edits (tested) |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |

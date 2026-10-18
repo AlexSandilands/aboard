@@ -60,15 +60,14 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           <SettingsSubsection id="board.notifications">
             <WithSettings>{(settings) => <NotificationsSection settings={settings} />}</WithSettings>
           </SettingsSubsection>
-          <SettingsSubsection id="board.keybindings">
-            <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>
-          </SettingsSubsection>
           <SettingsSubsection id="board.data">
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />
           </SettingsSubsection>
         </>
       );
+    case "keybindings":
+      return <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>;
     case "tasks":
       return <TasksContent />;
     case "autopilot":

@@ -33,7 +33,8 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
+| **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, Data (backup to git, archived projects) |
+| **Keybindings** | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), Models (model tiers) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |

@@ -1,6 +1,7 @@
 // Pure helpers for the settings page: its groups and sub-sections, scroll-spy and the project it shows.
+import { keybindingGroups } from "./keybindings.logic";
 
-export const SETTINGS_GROUP_IDS = ["board", "tasks", "autopilot", "integrations", "project"] as const;
+export const SETTINGS_GROUP_IDS = ["board", "keybindings", "tasks", "autopilot", "integrations", "project"] as const;
 export type SettingsGroupId = (typeof SETTINGS_GROUP_IDS)[number];
 
 export interface SettingsSectionDef {
@@ -31,9 +32,16 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     sections: [
       section("board.appearance", "Appearance", ["theme", "dark", "light", "banner"]),
       section("board.notifications", "Notifications", ["pop-ups", "alerts", "quiet hours"]),
-      section("board.keybindings", "Keybindings", ["shortcuts", "hotkeys", "keys", "keyboard", "when"]),
       section("board.data", "Data", ["backup", "git", "archived projects", "restore"]),
     ],
+  },
+  {
+    id: "keybindings",
+    label: "Keybindings",
+    // One sub-section per group of the keybinding registry, so a command in a new group needs no wiring here.
+    sections: keybindingGroups().map(({ label, sectionId }) =>
+      section(sectionId, label, ["shortcuts", "hotkeys", "keys", "keyboard", "when"]),
+    ),
   },
   {
     id: "tasks",
