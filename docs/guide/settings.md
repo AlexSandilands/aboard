@@ -34,7 +34,8 @@ and a click tries again.
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
-| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), Models (model tiers) |
+| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md) |
+| **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
@@ -48,8 +49,10 @@ and a click tries again.
   again (the board remembers an answer for a minute).
 - The Claude Code CLI the board runs for the board reviewer, issue import and Claude Code sessions is set under
   **Integrations → Claude Code**. **Integrations → GitHub Copilot** has the Copilot CLI Copilot sessions start.
-  Each has **Session models**: the model a new session starts on for each suggested tier (empty leaves the CLI's
-  default).
+  The model a new session starts on for each suggested tier is set on the **Model tiers** page (empty leaves the
+  CLI's default); each of T3 Code, Claude Code and GitHub Copilot has a **Models per tier** row that opens it.
+  A provider's field shows there once it is set up: T3 Code connected, or the CLI found (a value already saved
+  stays visible).
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
 - On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it
