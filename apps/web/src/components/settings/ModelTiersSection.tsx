@@ -42,7 +42,12 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   const edits = useRef(createTierEdits()).current;
   const save = (tier: ModelTier, change: TierChange) => {
     const next = edits.compose(settings.modelTiers[tier], tier, change);
-    updateSettings.mutate({ modelTiers: { [tier]: next } }, { onSettled: () => edits.settle(tier) });
+    // mutateAsync, since mutate's per-call callbacks only run for the latest of overlapping saves, and each must settle.
+    // The hook's own onError already reports a failure.
+    updateSettings
+      .mutateAsync({ modelTiers: { [tier]: next } })
+      .catch(() => {})
+      .finally(() => edits.settle(tier));
   };
 
   return (
