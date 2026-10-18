@@ -385,6 +385,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "An agent orchestrating an epic may start its tasks in new T3 threads and message them in your name.",
     ["epic", "orchestrator", "subagent", "worktree", "permission"],
   ),
+  draft(
+    "integrations.t3-code.handoff-menus",
+    "Show T3 Code in hand-off menus",
+    "Offer “New T3 Code thread…” on tasks and lanes. Off hides it from the board's menus.",
+    ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
+  ),
   // Integrations › Claude Code
   draft("integrations.claude-code.mcp", "Claude Code MCP server", MCP, [
     "add mcp",
@@ -403,6 +409,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Claude Code CLI",
     "What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
     ["claude path", "executable", "binary", "headless", "session"],
+  ),
+  draft(
+    "integrations.claude-code.handoff-menus",
+    "Show Claude Code in hand-off menus",
+    "Offer “New Claude Code session…” on tasks and lanes. Off hides it from the board's menus.",
+    ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
   draft("integrations.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
     "model tier",
@@ -435,6 +447,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Copilot CLI path",
     "What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH.",
     ["github copilot", "executable", "binary", "session"],
+  ),
+  draft(
+    "integrations.copilot.handoff-menus",
+    "Show Copilot CLI in hand-off menus",
+    "Offer “New Copilot CLI session…” on tasks and lanes. Off hides it from the board's menus.",
+    ["github copilot", "hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
   draft("integrations.copilot.models", "Copilot models per tier", MODELS_PER_TIER, [
     "github copilot",

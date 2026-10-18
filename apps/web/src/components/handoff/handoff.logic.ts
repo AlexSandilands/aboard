@@ -1,5 +1,7 @@
 import {
   defaultBaseRef,
+  type AgentCliStatus,
+  type AgentHarness,
   type AppSettings,
   type PlanSkillRef,
   type Project,
@@ -31,7 +33,7 @@ export function canStartT3Thread(
   task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
-  settings: Pick<AppSettings, "t3TokenSet"> | undefined,
+  settings: HandoffSettings | undefined,
 ): boolean {
   return showHandoffActions(task) && canStartProjectT3Thread(project, t3, settings);
 }
@@ -42,14 +44,33 @@ export const planSkillOf = (
   settings: Pick<AppSettings, "planSkill"> | undefined,
 ): PlanSkillRef => project.planSkill ?? settings?.planSkill ?? { source: "builtin" };
 
-/** A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. */
+/**
+ * A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. Either way the
+ * user can hide T3 from the menus in settings.
+ */
 export function canStartProjectT3Thread(
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
-  settings: Pick<AppSettings, "t3TokenSet"> | undefined,
+  settings: HandoffSettings | undefined,
 ): boolean {
-  return t3.detected && settings?.t3TokenSet === true && !!(project?.t3ProjectId || project?.workspaceRoot);
+  return (
+    t3.detected &&
+    settings?.t3TokenSet === true &&
+    settings.handoffMenus?.["t3-code"] !== false &&
+    !!(project?.t3ProjectId || project?.workspaceRoot)
+  );
 }
+
+type HandoffSettings = Pick<AppSettings, "t3TokenSet"> & Partial<Pick<AppSettings, "handoffMenus">>;
+
+/** The CLIs the menus offer a new session in: the ones that run here, less those the user hid in settings. */
+export const handoffClis = (
+  clis: readonly AgentCliStatus[] | undefined,
+  settings: Partial<Pick<AppSettings, "handoffMenus">> | undefined,
+): AgentHarness[] =>
+  (clis ?? [])
+    .filter((cli) => cli.available && settings?.handoffMenus?.[cli.harness] !== false)
+    .map((cli) => cli.harness);
 
 /**
  * Whether a failed launch may be retried with the same commandId. Keep it whenever T3 may already have

@@ -51,3 +51,23 @@ describe("headless job models", () => {
     expect((await patch({ issueImportModel: "" })).status).toBe(400);
   });
 });
+
+describe("hidden hand-off targets", () => {
+  it("shows every target by default, and merges each switch so one doesn't undo another", async () => {
+    const h = createTestHarness();
+    expect(h.services.settings.get().handoffMenus).toEqual({
+      "t3-code": true,
+      "claude-code": true,
+      "copilot-cli": true,
+    });
+    const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
+    await patch({ handoffMenus: { "copilot-cli": false } });
+    await patch({ handoffMenus: { "t3-code": false } });
+    expect(h.services.settings.get().handoffMenus).toEqual({
+      "t3-code": false,
+      "claude-code": true,
+      "copilot-cli": false,
+    });
+    expect((await patch({ handoffMenus: { codex: false } })).status).toBe(400);
+  });
+});

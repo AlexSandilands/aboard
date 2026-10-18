@@ -1,4 +1,5 @@
 import {
+  DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
@@ -19,6 +20,7 @@ export const defaultSettings: AppSettings = {
   agentT3Threads: false,
   headlessReviewCli: null,
   copilotCli: null,
+  handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
   headlessReviewModel: null,
   issueImportEnabled: true,

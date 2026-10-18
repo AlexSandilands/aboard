@@ -10,19 +10,12 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { ClipboardCopyIcon, MessageSquarePlusIcon } from "lucide-react";
-import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { HarnessIcon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { MenuItem } from "~/components/ui/menu";
 import { toastManager } from "~/components/ui/toast";
 import { api } from "~/lib/api";
-import {
-  useAgentClis,
-  useAutopilotEpicScope,
-  useAutopilotRuns,
-  useAutopilotScope,
-  useBoard,
-  useSettings,
-} from "~/state/queries";
+import { useAutopilotEpicScope, useAutopilotRuns, useAutopilotScope, useBoard, useSettings } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { canStartT3Thread } from "./handoff.logic";
 import { prAutopilotState } from "./fixPr.logic";
@@ -66,11 +59,11 @@ function useFixInTargets(task: Pick<TaskSummary, "status" | "archivedAt" | "proj
 } {
   const board = useBoard().data;
   const settings = useSettings().data;
-  const clis = useAgentClis().data ?? [];
+  const clis = useHandoffClis();
   const project = board?.projects.find((p) => p.id === task.projectId);
   return {
     t3: !!board && canStartT3Thread(task, project, board.integrations.t3, settings),
-    clis: clis.filter((c) => c.available).map((c) => c.harness),
+    clis,
   };
 }
 

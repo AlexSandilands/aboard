@@ -4,6 +4,7 @@ import {
   canStartProjectT3Thread,
   canStartT3Thread,
   FAVORITES,
+  handoffClis,
   initialPickerTab,
   initialWorkspaceChoice,
   keepsCommandId,
@@ -153,6 +154,21 @@ describe("visibility", () => {
     expect(canStartProjectT3Thread(project, t3, settings)).toBe(true);
     expect(canStartProjectT3Thread(project, { detected: false }, settings)).toBe(false);
     expect(canStartProjectT3Thread({ t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);
+  });
+
+  it("leaves out a target the user hid from the menus", () => {
+    const hidden = { ...settings, handoffMenus: { "t3-code": false, "claude-code": true, "copilot-cli": true } };
+    expect(canStartT3Thread(task, project, t3, hidden)).toBe(false);
+    expect(canStartProjectT3Thread(project, t3, hidden)).toBe(false);
+    const clis = [
+      { harness: "claude-code" as const, available: true, path: null },
+      { harness: "copilot-cli" as const, available: true, path: null },
+    ];
+    expect(handoffClis(clis, { handoffMenus: { ...hidden.handoffMenus, "copilot-cli": false } })).toEqual([
+      "claude-code",
+    ]);
+    expect(handoffClis(clis, hidden)).toEqual(["claude-code", "copilot-cli"]);
+    expect(handoffClis([{ harness: "claude-code", available: false, path: null }], undefined)).toEqual([]);
   });
 });
 

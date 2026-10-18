@@ -3,7 +3,8 @@ import { CopyIcon, GitForkIcon, SquareTerminalIcon } from "lucide-react";
 import { ClaudeAI, CopilotCli, T3Code } from "~/components/handoff/providerIcons";
 import { MenuItem } from "~/components/ui/menu";
 import { cn } from "~/lib/utils";
-import { useAgentClis } from "~/state/queries";
+import { handoffClis } from "~/components/handoff/handoff.logic";
+import { useAgentClis, useSettings } from "~/state/queries";
 import { harnessAvailable, type SessionLink } from "./sessions.logic";
 import { copyResumeCommand } from "./useSessionActions";
 
@@ -21,6 +22,11 @@ export function T3Icon({ className }: { className?: string }) {
 /** Whether the harness's CLI can be started here: when it can't, a session can only be resumed by hand. */
 export function useHarnessAvailable(harness: AgentHarness): boolean {
   return harnessAvailable(useAgentClis().data, harness);
+}
+
+/** The CLIs the hand-off menus offer a new session in (handoffClis). */
+export function useHandoffClis(): AgentHarness[] {
+  return handoffClis(useAgentClis().data, useSettings().data);
 }
 
 /**

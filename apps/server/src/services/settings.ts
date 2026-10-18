@@ -1,5 +1,6 @@
 import {
   CliModel,
+  DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
@@ -33,6 +34,7 @@ const DEFAULTS: StoredSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   copilotCli: null,
+  handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
   headlessReviewModel: null,
   issueImportEnabled: true,
@@ -75,6 +77,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "headlessReviewEnabled",
     "headlessReviewCli",
     "copilotCli",
+    "handoffMenus",
     "headlessReviewBudgetUsd",
     "headlessReviewModel",
     "issueImportEnabled",
@@ -135,6 +138,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
+    handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },
   };
 }
 
@@ -190,6 +194,9 @@ export function createSettingsService(core: Core): SettingsService {
           repos.settings.set("headlessReviewCli", blankToNull(input.headlessReviewCli));
         }
         if (input.copilotCli !== undefined) repos.settings.set("copilotCli", blankToNull(input.copilotCli));
+        if (input.handoffMenus !== undefined) {
+          repos.settings.set("handoffMenus", { ...load().handoffMenus, ...input.handoffMenus });
+        }
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }

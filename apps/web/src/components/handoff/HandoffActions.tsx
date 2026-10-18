@@ -15,10 +15,10 @@ import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
+import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { cn } from "~/lib/utils";
-import { useAgentClis, useBoard, useSettings } from "~/state/queries";
+import { useBoard, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { pickedAmong, plannableTasks } from "~/components/board/boardSelection.logic";
 
@@ -99,7 +99,7 @@ export function PlanTasksMenu({ project, canStartT3 }: { project: Project; canSt
   const pickedIds = useBoardPick((s) => s.picked);
   const tasks = useBoard().data?.tasks;
   const picked = pickedIds.length ? pickedAmong(pickedIds, plannableTasks(tasks ?? [], project.id)).length : 0;
-  const sessionClis = (useAgentClis().data ?? []).filter((c) => c.available);
+  const sessionClis = useHandoffClis();
   const open = (target: PlanTarget) => useDialogs.getState().openPlanPicker(project.id, target);
   return (
     <Menu>
@@ -129,7 +129,7 @@ export function PlanTasksMenu({ project, canStartT3 }: { project: Project; canSt
             Plan in a new T3 Code thread…
           </MenuItem>
         ) : null}
-        {sessionClis.map(({ harness }) => (
+        {sessionClis.map((harness) => (
           <MenuItem key={harness} onClick={() => open({ kind: "session", harness })}>
             <HarnessIcon harness={harness} />
             Plan in a new {AGENT_HARNESSES[harness].label} session…
@@ -166,8 +166,7 @@ export function HandoffMenu({
 }) {
   const suggested = defaultHandoffMode(task);
   const modelTiers = useSettings().data?.modelTiers;
-  const clis = useAgentClis().data ?? [];
-  const sessionClis = clis.filter((c) => c.available);
+  const sessionClis = useHandoffClis();
   return (
     <Menu>
       <Tooltip>
@@ -195,7 +194,7 @@ export function HandoffMenu({
             New T3 Code thread…
           </MenuItem>
         ) : null}
-        {sessionClis.map(({ harness }) => (
+        {sessionClis.map((harness) => (
           <MenuItem key={harness} onClick={() => useDialogs.getState().openSessionLaunch(task.id, harness)}>
             <HarnessIcon harness={harness} />
             New {AGENT_HARNESSES[harness].label} session…

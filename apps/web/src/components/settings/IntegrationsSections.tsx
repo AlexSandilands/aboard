@@ -3,6 +3,7 @@ import {
   type AgentIntegrationStatus,
   type AppSettings,
   type ConnectT3Result,
+  type HandoffTarget,
   type IntegrationsStatus,
   type T3IntegrationStatus,
 } from "@repo/contracts";
@@ -215,6 +216,7 @@ export function T3Section({ settings, status }: { settings: AppSettings; status:
           />
         }
       />
+      <HandoffMenuRow section="t3-code" target="t3-code" what="New T3 Code thread" settings={settings} />
       <ModelsPerTierRow section="t3-code" />
     </SettingsSection>
   );
@@ -417,8 +419,42 @@ export function ClaudeCodeSection({ settings }: { settings: AppSettings }) {
           </>
         }
       />
+      <HandoffMenuRow section="claude-code" target="claude-code" what="New Claude Code session" settings={settings} />
       <ModelsPerTierRow section="claude-code" />
     </SettingsSection>
+  );
+}
+
+/**
+ * Whether the board's hand-off menus offer to start this integration. Off hides it for someone who has it installed
+ * but doesn't want it offered; sessions already linked still reopen.
+ */
+function HandoffMenuRow({
+  section,
+  target,
+  what,
+  settings,
+}: {
+  section: string;
+  target: HandoffTarget;
+  what: string;
+  settings: AppSettings;
+}) {
+  const updateSettings = useUpdateSettings();
+  return (
+    <SettingsRow
+      id={`integrations.${section}.handoff-menus`}
+      title="Show in hand-off menus"
+      description={`Offer “${what}…” on tasks and lanes when it can start.`}
+      info="Off hides it from the hand-off, Plan tasks, Suggest epics and Fix PR menus. Linked sessions and threads still open."
+      control={
+        <Switch
+          aria-label={`Show ${what} in hand-off menus`}
+          checked={settings.handoffMenus[target]}
+          onCheckedChange={(checked) => updateSettings.mutate({ handoffMenus: { [target]: checked } })}
+        />
+      }
+    />
   );
 }
 
@@ -509,6 +545,7 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
           </>
         }
       />
+      <HandoffMenuRow section="copilot" target="copilot-cli" what="New Copilot CLI session" settings={settings} />
       <ModelsPerTierRow section="copilot" />
     </SettingsSection>
   );

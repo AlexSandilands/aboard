@@ -32,6 +32,7 @@ t3 auth session issue --scope orchestration:read --scope orchestration:operate -
 
 `orchestration:read` alone is enough for thread status. With `orchestration:operate` too, the hand-off
 menu gets **New T3 Code thread…**, which opens a new thread for the task; you pick the model, access,
-worktree and branch in a dialog.
+worktree and branch in a dialog. To keep it out of the menu, turn off **Show in hand-off menus** under
+**Settings → Integrations → T3 Code**.
 
 More detail: [docs/features/agent-handoff.md](../features/agent-handoff.md).

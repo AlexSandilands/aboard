@@ -170,6 +170,11 @@ an epic, when `GET /api/agent-clis` finds the CLI ([agent sessions](agent-sessio
 - a token is set;
 - the project has a T3 project id or a workspace folder T3 could know.
 
+Each of these entries also has a **Show in hand-off menus** switch in Settings → Integrations (T3 Code, Claude Code,
+Copilot), stored as `handoffMenus` (each switch merges in, like notification kinds). Turning one off takes it out of the hand-off, Plan tasks, Suggest epics
+and Fix PR menus (`canStartProjectT3Thread`, `handoffClis`), for someone who has the tool but doesn't want it offered.
+Sessions and threads already linked still open, and agents can still start threads (`agentT3Threads`).
+
 Linked threads don't hide it: a task can have several (a follow-up for conflicts, a review). Each linked
 thread shows on the card while it is active, as a button that opens it in T3 Code; settled and archived
 threads are listed in the panel only ([board-layout.md](board-layout.md#links-on-cards)).
