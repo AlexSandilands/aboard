@@ -39,6 +39,8 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   ...over,
 });
 
+const NL = String.fromCharCode(10);
+
 describe("custom automation form", () => {
   it("turns into the input the server takes, labels normalised", () => {
     const result = customFormToInput({
@@ -56,7 +58,14 @@ describe("custom automation form", () => {
         name: "Fix checks",
         trigger: { kind: "pr_event", event: "checks_failing" },
         filters: { projectIds: [], labels: ["ui", "backend"], epicId: null },
-        action: { kind: "agent", prompt: "Fix {{pr.url}}", skill: "", tier: "light", onPrBranch: false },
+        action: {
+          kind: "agent",
+          prompt: "Fix {{pr.url}}",
+          skill: "",
+          tier: "light",
+          onPrBranch: false,
+          allowedTools: [],
+        },
       },
     });
   });
@@ -78,6 +87,50 @@ describe("custom automation form", () => {
         error: expect.stringMatching(/no task/),
       },
     );
+  });
+
+  it("reads the allowed tools one per line or comma-separated, and gives them back one per line", () => {
+    const result = customFormToInput({
+      ...emptyCustomForm(),
+      name: "Dispatch",
+      prompt: "Go",
+      allowedTools: [" mcp__issue-tracker ", "", "mcp__issue-tracker__search_jira, WebFetch", ""].join(NL),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      input: { action: { allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch"] } },
+    });
+    const saved = custom({
+      action: {
+        kind: "agent",
+        prompt: "Go",
+        skill: "",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: ["mcp__a", "mcp__b__c"],
+      },
+    });
+    expect(formFromCustom(saved).allowedTools).toBe(["mcp__a", "mcp__b__c"].join(NL));
+    expect(customFormToInput(formFromCustom(saved))).toMatchObject({ ok: true, input: { action: saved.action } });
+  });
+
+  it("names the allowed tool that isn't one", () => {
+    expect(
+      customFormToInput({
+        ...emptyCustomForm(),
+        name: "A",
+        prompt: "Go",
+        allowedTools: ["mcp__ok", "issue-tracker"].join(NL),
+      }),
+    ).toEqual({ ok: false, error: expect.stringContaining('"issue-tracker"') });
+    expect(
+      customFormToInput({
+        ...emptyCustomForm(),
+        name: "A",
+        prompt: "Go",
+        allowedTools: Array.from({ length: 21 }, (_, i) => `mcp__s${i}`).join(NL),
+      }),
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/^Allowed tools:/) });
   });
 
   it("round-trips a saved automation", () => {

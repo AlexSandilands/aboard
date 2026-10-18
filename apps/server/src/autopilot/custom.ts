@@ -222,6 +222,8 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
           prompt,
           tier: action.tier ?? task.suggestedModel?.tier ?? null,
           options: ctx.config,
+          // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
+          ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
           ...(branch ? { workspace: { branch } } : {}),
         });
         const { result: _final, output: _output, ...patch } = result;

@@ -3,6 +3,8 @@ import { brandEnv } from "./brand.ts";
 import { nextPrChanges, type PrSnapshot } from "./schemas.ts";
 import {
   checkCustomDefinition,
+  CustomAction,
+  CUSTOM_TOOLS_MAX,
   customShellEnv,
   CustomTrigger,
   describeCustomTrigger,
@@ -47,7 +49,7 @@ describe("custom automation templates", () => {
 describe("checkCustomDefinition", () => {
   const filters = { projectIds: [], labels: [], epicId: null };
   const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60 };
-  const agent = { kind: "agent" as const, prompt: "Go", skill: "", tier: null, onPrBranch: false };
+  const agent = { kind: "agent" as const, prompt: "Go", skill: "", tier: null, onPrBranch: false, allowedTools: [] };
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 4 } });
 
   it("allows a schedule only with a shell command and project filters", () => {
@@ -71,6 +73,49 @@ describe("checkCustomDefinition", () => {
   it("refuses a status change from and to the same column", () => {
     const trigger = CustomTrigger.parse({ kind: "status_change", from: "review", to: "review" });
     expect(checkCustomDefinition({ trigger, filters, action: shell })).toMatch(/different column/);
+  });
+});
+
+describe("an agent action's allowed tools", () => {
+  const parse = (allowedTools?: string[]) =>
+    CustomAction.safeParse({ kind: "agent", prompt: "Go", ...(allowedTools ? { allowedTools } : {}) });
+
+  it("defaults to none, so an action saved before the field existed still parses", () => {
+    expect(parse()).toMatchObject({ success: true, data: { allowedTools: [] } });
+  });
+
+  it("takes MCP servers, MCP tools and built-in tools, trimmed and without repeats", () => {
+    const tools = [
+      "mcp__issue-tracker",
+      " mcp__issue-tracker__search_jira ",
+      "mcp__issue-tracker__search_*",
+      "WebFetch",
+      "Bash(gh pr view *)",
+    ];
+    expect(parse([...tools, "mcp__issue-tracker"])).toMatchObject({
+      success: true,
+      data: { allowedTools: tools.map((t) => t.trim()) },
+    });
+  });
+
+  it("refuses anything else", () => {
+    for (const bad of [
+      "",
+      "issue-tracker",
+      "mcp__",
+      "mcp__*",
+      "mcp__issue*__search_jira",
+      "mcp__a b",
+      "webfetch",
+      "Bash(",
+      "x".repeat(300),
+    ]) {
+      expect(parse([bad]).success).toBe(false);
+    }
+  });
+
+  it("caps how many there are", () => {
+    expect(parse(Array.from({ length: CUSTOM_TOOLS_MAX + 1 }, (_, i) => `mcp__s${i}`)).success).toBe(false);
   });
 });
 

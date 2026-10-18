@@ -20,6 +20,7 @@ import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/cu
 import { useBoard } from "~/state/queries";
 import {
   customFormToInput,
+  parseAllowedTools,
   previewAction,
   PR_EVENTS,
   sampleTask,
@@ -374,6 +375,37 @@ export function CustomAutomationEditorForm({
                 onCheckedChange={(onPrBranch) => patch({ onPrBranch })}
               />
             </div>
+            <Field
+              label="Allowed tools"
+              hint={
+                <>
+                  Optional, one per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>) or one
+                  of its tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own
+                  tools are always allowed.
+                </>
+              }
+            >
+              <Textarea
+                aria-label="Allowed tools"
+                className="font-mono"
+                rows={3}
+                value={form.allowedTools}
+                placeholder={"mcp__issue-tracker\nmcp__issue-tracker__search_jira"}
+                onChange={(event) => patch({ allowedTools: event.currentTarget.value })}
+              />
+            </Field>
+            {parseAllowedTools(form.allowedTools).length > 0 ? (
+              <Alert variant="warning">
+                <AlertDescription>
+                  These tools run unattended: nobody is asked to approve a call, so the agent can use everything they
+                  offer, including anything that writes. Allow a single tool rather than a whole server when you can.
+                  The server must be one of your own (<code className="font-mono">claude mcp add --scope user</code>, a
+                  plugin or a connector): a server from a project&apos;s <code className="font-mono">.mcp.json</code>{" "}
+                  needs an approval nobody can give in an unattended run. An agent with extra tools runs headless, not
+                  in a T3 Code thread.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               The runner, budget and timeout are this automation&apos;s settings in the Autopilot list, per scope.
             </p>

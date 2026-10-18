@@ -42,6 +42,8 @@ export interface CustomForm {
   /** "" takes the task's tier. */
   tier: ModelTier | "";
   onPrBranch: boolean;
+  /** One tool or server per line (commas work too), as typed. */
+  allowedTools: string;
   command: string;
   timeoutSeconds: string;
 }
@@ -91,6 +93,7 @@ export function emptyCustomForm(): CustomForm {
     skill: "",
     tier: "",
     onPrBranch: false,
+    allowedTools: "",
     command: "",
     timeoutSeconds: "300",
   };
@@ -117,12 +120,25 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
   }
   const a = custom.action;
   if (a.kind === "agent") {
-    Object.assign(form, { prompt: a.prompt, skill: a.skill, tier: a.tier ?? "", onPrBranch: a.onPrBranch });
+    Object.assign(form, {
+      prompt: a.prompt,
+      skill: a.skill,
+      tier: a.tier ?? "",
+      onPrBranch: a.onPrBranch,
+      allowedTools: a.allowedTools.join("\n"),
+    });
   } else {
     Object.assign(form, { command: a.command, timeoutSeconds: String(a.timeoutSeconds) });
   }
   return form;
 }
+
+/** The tools typed in the field: one per line or comma-separated, blanks dropped. */
+export const parseAllowedTools = (text: string): string[] =>
+  text
+    .split(/[\n,]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 
 const wholeNumber = (value: string): number | null => (/^\d+$/.test(value.trim()) ? Number(value) : null);
 
@@ -176,11 +192,17 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             skill: form.skill,
             tier: form.tier || null,
             onPrBranch: form.onPrBranch,
+            allowedTools: parseAllowedTools(form.allowedTools),
           }
         : { kind: "shell", command: form.command, timeoutSeconds },
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
+    if (issue.path.includes("allowedTools")) {
+      const tool = issue.path.at(-1);
+      const named = typeof tool === "number" ? ` "${parseAllowedTools(form.allowedTools)[tool] ?? ""}"` : "";
+      return { ok: false, error: `Allowed tools:${named} ${issue.message}` };
+    }
     const field = String(issue.path[issue.path.length - 1] ?? issue.path[0] ?? "");
     const what: Record<string, string> = {
       name: "Give it a name",
