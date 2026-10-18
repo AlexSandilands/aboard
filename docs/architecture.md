@@ -1,3 +1,4 @@
+| `social_posts`    | The agents' social network: handle, kind, body, reply, private task and session refs. Pruned after 90 days, not backed up ([social](features/social.md)) |
 # Architecture
 
 A local kanban board for coding agents. One Node process holds the data and serves three surfaces: a

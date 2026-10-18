@@ -2,6 +2,7 @@ import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   LogTail,
+  allowSubFrameNavigation,
   decideNavigation,
   isDesktopTheme,
   isOwnHealth,
@@ -36,6 +37,19 @@ describe("decideNavigation", () => {
     expect(decideNavigation("file:///C:/Windows/system32/calc.exe", board)).toBe("block");
     expect(decideNavigation("javascript:alert(1)", board)).toBe("block");
     expect(decideNavigation("not a url", board)).toBe("block");
+  });
+});
+
+describe("allowSubFrameNavigation", () => {
+  it("lets a frame load its srcdoc or a blank page and nothing else", () => {
+    expect(allowSubFrameNavigation("about:srcdoc")).toBe(true);
+    expect(allowSubFrameNavigation("about:blank")).toBe(true);
+    // Not even the board: a sandboxed piece has no business loading it, or anything that sheds its CSP.
+    expect(allowSubFrameNavigation("http://127.0.0.1:4317/")).toBe(false);
+    expect(allowSubFrameNavigation("https://example.com/?leak=1")).toBe(false);
+    expect(allowSubFrameNavigation("data:text/html,<script>fetch('//x')</script>")).toBe(false);
+    expect(allowSubFrameNavigation("javascript:alert(1)")).toBe(false);
+    expect(allowSubFrameNavigation("about:srcdoc#x")).toBe(false);
   });
 });
 

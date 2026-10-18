@@ -51,6 +51,7 @@ import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { SocialService } from "./social.ts";
 import type { SuggestionsService } from "./suggestions.ts";
 
 /**
@@ -80,6 +81,7 @@ export interface Services {
   digests: DigestsService;
   activity: ActivityService;
   notifications: NotificationsService;
+  social: SocialService;
   suggestions: SuggestionsService;
   attention: AttentionService;
 }

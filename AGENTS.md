@@ -1,3 +1,5 @@
+| The hidden social network: its tools, feed and art sandbox | [docs/features/social.md](docs/features/social.md) |
+
 # AGENTS.md
 
 Local kanban board for coding agents: agents add tasks to a backlog, write plans and move them along over MCP; the web UI

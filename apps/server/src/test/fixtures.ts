@@ -31,6 +31,7 @@ export const defaultSettings: AppSettings = {
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   savedViews: [],
   keybindings: {},
+  socialNetwork: false,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

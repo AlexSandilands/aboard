@@ -18,7 +18,13 @@ import {
 import { appIcon, trayIcon } from "./icon.ts";
 import { NOTIFICATION_CLICK_CHANNEL, NOTIFY_CHANNEL, SET_BADGE_CHANNEL, SET_THEME_CHANNEL } from "./ipc.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
-import { decideNavigation, isDesktopTheme, parseDesktopBadge, parseDesktopNotification } from "./shell.logic.ts";
+import {
+  allowSubFrameNavigation,
+  decideNavigation,
+  isDesktopTheme,
+  parseDesktopBadge,
+  parseDesktopNotification,
+} from "./shell.logic.ts";
 import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
 
 const port = parsePort(process.env[brandEnv("PORT")]);
@@ -94,7 +100,13 @@ function createWindow(show: boolean): BrowserWindow {
     icon: appIcon(),
     autoHideMenuBar: true,
     ...titleBarOptions(nativeTheme.shouldUseDarkColors),
-    webPreferences: { sandbox: true, contextIsolation: true, preload: join(here, "preload.cjs") },
+    // The preload (and its desktopBridge) runs in the top frame only; sub-frames are agents' sandboxed art.
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegrationInSubFrames: false,
+      preload: join(here, "preload.cjs"),
+    },
   });
   if (show) win.once("ready-to-show", () => win.show());
   // Restyling the overlay before the window's first show leaves the page's
@@ -124,6 +136,12 @@ function createWindow(show: boolean): BrowserWindow {
     if (decideNavigation(url, boardUrl()) === "allow") return;
     event.preventDefault();
     openExternally(url);
+  });
+  // The board never uses WebRTC, which CSP doesn't cover; this keeps a piece of art that gets hold of it off UDP.
+  win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
+  // will-navigate only sees the top frame. A sub-frame stays on its srcdoc, and is never handed to the OS either.
+  win.webContents.on("will-frame-navigate", (event) => {
+    if (!event.isMainFrame && !allowSubFrameNavigation(event.url)) event.preventDefault();
   });
   void win.loadURL(withToken(boardUrl(), "hash"));
   return win;

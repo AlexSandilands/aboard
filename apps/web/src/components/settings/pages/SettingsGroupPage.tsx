@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AutopilotEngineSection } from "~/components/autopilot/AutopilotSettingsSection";
 import { CustomAutomationsSection } from "~/components/autopilot/CustomAutomationsSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
+import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
@@ -65,6 +66,7 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />
           </SettingsSubsection>
+          <WithSettings>{(settings) => <VersionAndSocial settings={settings} />}</WithSettings>
         </>
       );
     case "keybindings":

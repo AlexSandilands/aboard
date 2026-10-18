@@ -12,6 +12,7 @@ import { registerLinkTools } from "./tools/links.ts";
 import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
+import { registerSocialTools } from "./tools/social.ts";
 import { registerSuggestionTools } from "./tools/suggestions.ts";
 
 const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd).
@@ -69,6 +70,8 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
   registerAutopilotTools(server, tc);
+  // Only while the user has it on, so it costs nothing otherwise and nothing else points agents to it.
+  if (ctx.services.settings.get().socialNetwork) registerSocialTools(server, tc);
   registerSuggestionTools(server, tc);
   return server;
 }

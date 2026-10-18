@@ -184,6 +184,8 @@ describe("settings export", () => {
       "backupIntervalMinutes",
       "terminal",
       "terminalOpenIn",
+      // Goes with its posts, which are never backed up.
+      "socialNetwork",
     ];
     const all = Object.keys(loadSettings(createRepos(openDatabase(":memory:"))));
     expect(all.filter((k) => !EXPORTED_SETTINGS.has(k)).sort()).toEqual(machineOnly.sort());
