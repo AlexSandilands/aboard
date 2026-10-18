@@ -139,11 +139,23 @@ export function readClaudeResult(stdout: string): ClaudeResult {
   };
 }
 
-/** Why a run failed, in words: the subtype ("error max budget usd") or the CLI's own message. */
-export const claudeFailure = (out: ClaudeResult, what: string): string =>
-  out.subtype && out.subtype !== "success"
-    ? out.subtype.replace(/_/g, " ")
-    : (out.result ?? `no ${what} result returned`);
+/** An error's own text is cut here: an HTML error page can be long. */
+const MAX_FAILURE_TEXT = 500;
+
+/**
+ * Why a run failed, in words: the subtype ("error max budget usd") or the CLI's own message. A run that ended on an
+ * error with text (an API error such as a 403) says that text, which tells more than its subtype; the limits
+ * (`error_max_*`) keep theirs, as the result then is only the agent's last words.
+ */
+export const claudeFailure = (out: ClaudeResult, what: string): string => {
+  const reason = out.subtype && out.subtype !== "success" ? out.subtype.replace(/_/g, " ") : null;
+  const text = out.isError && !out.subtype?.startsWith("error_max_") ? out.result?.trim() : null;
+  if (text) {
+    const clipped = text.length > MAX_FAILURE_TEXT ? `${text.slice(0, MAX_FAILURE_TEXT)}…` : text;
+    return reason ? `${clipped} (${reason})` : clipped;
+  }
+  return reason ?? out.result ?? `no ${what} result returned`;
+};
 
 /**
  * Parses `--output-format json` stdout into the structured output (checked against `schema`) and its cost.

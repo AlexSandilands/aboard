@@ -23,7 +23,8 @@ import {
   type SeverityCounts,
 } from "@repo/contracts";
 import { z } from "zod";
-import { StaleReviewError, type PostedReview, type ReviewComment } from "../../integrations/github.ts";
+import { StaleReviewError, messageOf, type PostedReview, type ReviewComment } from "../../integrations/github.ts";
+import { isTransientGithubError } from "../../integrations/githubApi.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
@@ -54,7 +55,15 @@ interface ReviewData {
   round: number;
   maxRounds: number;
   earlier: EarlierReview[];
+  /** Which try at this head this is, from 1: a post GitHub failed on in passing is tried again. */
+  attempt: number;
 }
+
+/** Tries per PR head when GitHub fails in passing (its own error, the network), before asking the user. */
+export const REVIEW_ATTEMPTS = 3;
+
+/** On a skipped run: nothing was posted and nothing is settled, so the head's review may be tried again. */
+const RETRY = { retry: true };
 
 type PrTarget = Pick<ReviewData, "host" | "repo" | "number">;
 
@@ -333,8 +342,11 @@ export const reviewPrs = defineAutomation({
           .runsForTask(task.id, 500)
           .filter((r) => r.automation === AUTOPILOT_REVIEW_PRS && !r.dryRun);
         return links.flatMap(({ link, ref, snapshot, headOid, headRef }): Candidate[] => {
-          const dedupeKey = prReviewDedupeKey(link.id, headOid);
-          if (runs.some((r) => r.dedupeKey === dedupeKey)) return [];
+          const headKey = prReviewDedupeKey(link.id, headOid);
+          const atHead = runs.filter((r) => r.dedupeKey === headKey || r.dedupeKey.startsWith(`${headKey}:`));
+          // Only a try that was skipped for a failure in passing leaves the head open for another.
+          if (atHead.some((r) => !(r.status === "skipped" && r.output?.retry === true))) return [];
+          const dedupeKey = atHead.length === 0 ? headKey : `${headKey}:${atHead.length + 1}`;
           const ofLink = runs.filter((r) => isReviewOfLink(r.dedupeKey, link.id));
           // One review at a time: a push meanwhile waits for it, then the latest head is reviewed with it in view.
           if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
@@ -354,6 +366,7 @@ export const reviewPrs = defineAutomation({
             round,
             maxRounds: engine.prReviewRounds,
             earlier: earlierReviews(used, link.id),
+            attempt: atHead.length + 1,
           };
           return [
             {
@@ -383,6 +396,7 @@ export const reviewPrs = defineAutomation({
     const threshold = effectiveFixThreshold(engine.prFixThreshold, data.round, data.maxRounds);
     let verdict: PrReviewVerdict;
     let posted: PostedReview;
+    let posting = false;
     try {
       const result = await runner.start({
         run,
@@ -412,6 +426,7 @@ export const reviewPrs = defineAutomation({
       }
       verdict = parsed.data;
       const rendered = renderReview(verdict, data);
+      posting = true;
       posted = await github.postReview(
         { host: data.host, repo: data.repo, number: data.number },
         { reviewedSha: data.headOid, body: rendered.body, comments: rendered.comments },
@@ -429,6 +444,18 @@ export const reviewPrs = defineAutomation({
         if (live && live !== data.headOid) {
           return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
         }
+      }
+      // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.
+      // Nothing was posted, so no round was used. The agent's own failures aren't retried here.
+      if (posting && isTransientGithubError(error)) {
+        if (data.attempt < REVIEW_ATTEMPTS) {
+          return {
+            status: "skipped",
+            summary: `${messageOf(error)} (PR #${data.number}, try ${data.attempt} of ${REVIEW_ATTEMPTS}, will retry)`,
+            output: RETRY,
+          };
+        }
+        throw new Error(`${messageOf(error)} (after ${REVIEW_ATTEMPTS} tries)`, { cause: error });
       }
       throw error;
     }
