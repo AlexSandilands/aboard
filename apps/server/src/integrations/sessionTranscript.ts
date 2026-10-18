@@ -1,7 +1,13 @@
 import type { AgentSessionRef, TaskLink } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
-import { condenseTranscriptFile, pageEntries, type TranscriptPage, type TranscriptStats } from "./claudeTranscript.ts";
+import {
+  condenseTranscriptFile,
+  pageEntries,
+  redact,
+  type TranscriptPage,
+  type TranscriptStats,
+} from "./claudeTranscript.ts";
 import { transcriptPath } from "./claudeSessionTitle.ts";
 
 export interface SessionTranscript {
@@ -22,8 +28,11 @@ export interface SessionTranscriptReader {
 
 type SessionLink = Extract<TaskLink, { kind: "agent_session" }>;
 
+/** A session for an error message, redacted: its label and title are free text. */
 const describe = (link: SessionLink) =>
-  `${link.ref.sessionId}${link.label ? ` "${link.label}"` : ""}${link.snapshot ? ` (${link.snapshot.status.replace("_", " ")})` : ""}`;
+  redact(
+    `${link.ref.sessionId}${link.label ? ` "${link.label}"` : ""}${link.snapshot ? ` (${link.snapshot.status.replace("_", " ")})` : ""}`,
+  );
 
 /**
  * Only sessions linked to the task are read, by the id the link holds, never by a path an agent gives: the transcript
@@ -40,11 +49,16 @@ export function createSessionTranscriptReader(deps: {
         (l): l is SessionLink => l.kind === "agent_session" && l.ref.harness === "claude-code",
       );
       if (sessions.length === 0) {
-        const t3 = task.links.some((l) => l.kind === "t3_thread");
+        const others = [
+          ...(task.links.some((l) => l.kind === "t3_thread") ? ["T3 Code threads"] : []),
+          ...(task.links.some((l) => l.kind === "agent_session" && l.ref.harness === "copilot-cli")
+            ? ["Copilot CLI sessions"]
+            : []),
+        ];
         throw new AppError(
           "NOT_FOUND",
           `#${task.number} has no Claude Code transcript: no Claude Code session is linked to it` +
-            `${t3 ? " (a T3 Code thread's transcript can't be read here)" : ""}.`,
+            `${others.length ? ` (the transcripts of ${others.join(" and ")} can't be read here)` : ""}.`,
         );
       }
       let link: SessionLink | undefined;
@@ -54,7 +68,7 @@ export function createSessionTranscriptReader(deps: {
         if (!link) {
           throw new AppError(
             "VALIDATION",
-            `Session ${session} isn't linked to #${task.number}. Linked Claude Code sessions: ${sessions.map(describe).join("; ")}.`,
+            `Session ${redact(session)} isn't linked to #${task.number}. Linked Claude Code sessions: ${sessions.map(describe).join("; ")}.`,
           );
         }
       } else if (sessions.length === 1) {
@@ -74,6 +88,8 @@ export function createSessionTranscriptReader(deps: {
           `No transcript for session ${ref.sessionId} was found on this machine (it may have run elsewhere, or been cleaned up).`,
         );
       }
+      // Each page reads and condenses the whole file again. No cache: a transcript is read a handful of times while an
+      // agent audits it, condensing streams the file, and a live session's transcript changes between pages anyway.
       let condensed;
       try {
         condensed = await condenseTranscriptFile(path);

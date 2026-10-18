@@ -236,13 +236,21 @@ needed when the task has more than one. T3 Code threads and Copilot CLI sessions
 
 The transcript is condensed to one line per event (`condenseTranscriptFile`): each user message, the assistant's
 final text of each turn, each tool call with its name and target (file, command, pattern), tool errors, permission
-denials, retries and interruptions. A header gives the turn, tool call, error and retry counts, the duration and
-the start and end times (`renderTranscript` in `format.ts`). Long text is cut, and entries are paged at 20,000
-characters (`PAGE_CHARS`); a page names the `offset` of the next entry.
+denials, retries and interruptions. A slash command is logged as `[command]` and a compaction summary as
+`[compacted]`, neither counted as a turn, and a command's output is left out. Stopping Claude while a tool waits
+rejects the tool too: that is logged as the interruption, not also as a denial. A header gives the turn, tool call,
+error and retry counts, the duration and the start and end times (`renderTranscript` in `format.ts`). Long text is
+cut, and entries are paged at 20,000 characters (`PAGE_CHARS`); a page names the `offset` of the next entry, and an
+offset past the end says so with the number of entries. Each page reads and condenses the file again, with no
+cache: a transcript is read a few times while it is audited, and a live session's grows between pages.
 
-Every line is redacted before it is cut (`redact`): API keys, bearer tokens, PEM key blocks, values named like
-secrets, pairing codes and long mixed-case runs become `[redacted]`. A transcript holds whatever the agent read,
-and the LLM gateway some users sit behind kills a session whose messages contain a credential-shaped string.
+Every line is redacted (`redact`): API keys, bearer tokens, PEM key blocks, values whose name holds a secret word
+anywhere in it (`PGPASSWORD=…`, `AWS_SECRET_ACCESS_KEY=…`, an `Authorization` header with any scheme), passwords in
+URLs, pairing codes and long mixed-case runs, standard base64 included, become `[redacted]`. Text is first cut to
+four times its limit, so a huge tool output isn't scanned whole, then redacted, then cut to the limit; a secret the
+first cut splits is the last run of non-space characters, which is dropped. The session's label is redacted in the
+header and in error messages too. A transcript holds whatever the agent read, and the LLM gateway some users sit
+behind kills a session whose messages contain a credential-shaped string.
 
 ### On the card and in the panel
 
@@ -291,7 +299,7 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
 | `apps/server/src/integrations/claudeTranscript.ts` | Condensing a Claude Code transcript, redaction, paging (tested) |
-| `apps/server/src/integrations/sessionTranscript.ts` | Choosing the linked session and finding its transcript |
+| `apps/server/src/integrations/sessionTranscript.ts` | Choosing the linked session and finding its transcript (tested) |
 | `apps/server/src/mcp/tools/transcripts.ts` | `get_session_transcript` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
 | `apps/web/src/components/handoff/SessionLaunchDialog.tsx` | The new-session dialog (`sessionLaunch.logic.ts`) |

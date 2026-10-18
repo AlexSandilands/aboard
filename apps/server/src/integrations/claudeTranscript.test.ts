@@ -12,6 +12,7 @@ const fake = {
   jwt: [jwtHead, jwtHead, "c2ln"].map((head) => glue(head, "Qw7".repeat(4))).join("."),
   base64: "Zx9Kq2Lm".repeat(4),
   pairing: "ABCD".repeat(3),
+  base64std: glue("Ab3+", "Cd4/", "Ef5g").repeat(4),
 };
 const leaks = (text: string) => Object.values(fake).filter((secret) => text.includes(secret)).length;
 const pemLine = (edge: string) => glue("-".repeat(5), edge, " PRIVATE", " KEY", "-".repeat(5));
@@ -51,6 +52,12 @@ describe("redact", () => {
     ["a named secret", `API_TOKEN=${"x7".repeat(8)}`],
     ["a pairing code", `pairing code: ${fake.pairing}`],
     ["a pairing link", `open http://127.0.0.1/pair#token=${fake.pairing}`],
+    ["standard base64", `value ${fake.base64std} end`],
+    ["a word after the secret word", `${glue("AWS_", "SECRET_", "ACCESS_", "KEY")}=${"x7".repeat(8)}`],
+    ["a word before the secret word", `export ${glue("PG", "PASS", "WORD")}=${"x7".repeat(8)}`],
+    ["a secret name inside a value", `--set=${glue("to", "ken")}=${"x7".repeat(8)}`],
+    ["a Basic authorization header", `${glue("Author", "ization")}: ${glue("Ba", "sic")} ${"x7".repeat(8)}`],
+    ["a password in a URL", glue("post", "gres:/", "/app", ":", "x7".repeat(8), "@db", ":5432/main")],
   ])("redacts %s", (_name, input) => {
     const out = redact(input);
     expect(leaks(out)).toBe(0);
@@ -71,9 +78,21 @@ describe("redact", () => {
     const path = ["", "home", "dev", "aboard", "src", "index.ts"].join("/");
     const keep = `commit ${"a1b2c3d4e5".repeat(4)} in ${uuid} at ${path}`;
     expect(redact(keep)).toBe(keep);
+    const config = ["max_tokens: 4096", "PORT=5317", "description: fix the password reset flow"].join("\n");
+    expect(redact(config)).toBe(config);
+    const deep = ["C:", "Users", "Dev", "Projects", "MyApp2", "src", "Components3", "Header.tsx"].join("/");
+    expect(redact(deep)).toBe(deep);
     expect(redact("the token expired, so we pass the secret along")).toBe(
       "the token expired, so we pass the secret along",
     );
+  });
+
+  it("scans a long run once, so a huge hyphenated or plain run is quick", () => {
+    for (const run of ["a-".repeat(200_000), "a".repeat(400_000), "a=".repeat(200_000)]) {
+      const started = performance.now();
+      expect(redact(run) === run).toBe(true);
+      expect(performance.now() - started).toBeLessThan(2000);
+    }
   });
 });
 
@@ -184,6 +203,76 @@ describe("condenseTranscript", () => {
     expect(entries[3]!.startsWith("[assistant] The key is [redacted]. word")).toBe(true);
   });
 
+  it("cuts huge text before redacting it, and drops a secret the first cut splits", async () => {
+    // The prompt's limit is 1500 characters, and text is first cut at four times that.
+    const { entries } = await condenseTranscript(
+      lines([
+        user(0, `${"\n".repeat(6000 - 8)}${fake.openai}`),
+        assistant(1, tool("a", "Bash", { command: "cat big.log" })),
+        user(1, [result("a", "a-b-c-d ".repeat(250_000), true)]),
+      ]),
+    );
+    expect(entries[0]).toBe("[user #1] …");
+    expect(entries[0]!.includes(fake.openai.slice(0, 6))).toBe(false);
+    expect(entries[2]!.length).toBe("[error] Bash: ".length + 300);
+  });
+
+  it("logs slash commands and compaction apart from turns, and an interrupted tool once", async () => {
+    const command = [
+      "<command-message>review</command-message>",
+      "<command-name>/review</command-name>",
+      "<command-args>the PR</command-args>",
+    ].join("\n");
+    const { entries, stats } = await condenseTranscript(
+      lines([
+        user(0, command),
+        user(0, "<local-command-stdout>Total cost: 10 cents</local-command-stdout>"),
+        assistant(1, tool("a", "Edit", { file_path: "/w/a.ts" })),
+        user(2, [result("a", "The user doesn't want to proceed with this tool use.", true)]),
+        user(2, [text("[Request interrupted by user for tool use]")]),
+        assistant(3, tool("b", "Write", { file_path: "/w/b.ts" })),
+        user(4, [
+          result("b", "The user doesn't want to proceed with this tool use.", true),
+          text("[Request interrupted by user for tool use]"),
+        ]),
+        user(5, "This session is being continued from a previous conversation. Summary: …", {
+          isCompactSummary: true,
+        }),
+        user(6, "Go on"),
+      ]),
+    );
+    expect(entries).toEqual([
+      "[command] /review the PR",
+      "[tool] Edit /w/a.ts",
+      "[interrupted] [Request interrupted by user for tool use] (at Edit /w/a.ts)",
+      "[tool] Write /w/b.ts",
+      "[interrupted] [Request interrupted by user for tool use] (at Write /w/b.ts)",
+      "[compacted] The earlier conversation was summarised to free up context.",
+      "[user #1] Go on",
+    ]);
+    expect(stats).toMatchObject({ turns: 1, toolCalls: 2, errors: 0, denials: 0, interruptions: 2 });
+  });
+
+  it("keeps a denial the user didn't follow with an interruption", async () => {
+    const { entries, stats } = await condenseTranscript(
+      lines([
+        user(0, "Edit it"),
+        assistant(1, tool("a", "Edit", { file_path: "/w/a.ts" })),
+        user(2, [result("a", "Permission to use Edit has been denied.", true)]),
+        assistant(3, text("Understood.")),
+        user(4, [text("[Request interrupted by user]")]),
+      ]),
+    );
+    expect(entries).toEqual([
+      "[user #1] Edit it",
+      "[tool] Edit /w/a.ts",
+      "[denied] Edit /w/a.ts",
+      "[assistant] Understood.",
+      "[interrupted] [Request interrupted by user]",
+    ]);
+    expect(stats).toMatchObject({ denials: 1, interruptions: 1 });
+  });
+
   it("reports an empty transcript", async () => {
     const { entries, stats } = await condenseTranscript(lines([{ type: "ai-title", aiTitle: "x" }]));
     expect(entries).toEqual([]);
@@ -205,7 +294,7 @@ describe("pageEntries", () => {
 
   it("always returns one entry, even one over the limit, and clamps the offset", () => {
     expect(pageEntries(entries, 1, 3)).toMatchObject({ lines: [entries[1]], next: 2 });
-    expect(pageEntries(entries, 99, 25)).toMatchObject({ lines: [], offset: 4, next: null });
+    expect(pageEntries(entries, 99, 25)).toMatchObject({ lines: [], offset: 99, next: null });
     expect(pageEntries(entries, -5, 25).offset).toBe(0);
   });
 });

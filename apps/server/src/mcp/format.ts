@@ -22,6 +22,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+import { redact } from "../integrations/claudeTranscript.ts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
@@ -747,11 +748,20 @@ export function renderTranscript(t: SessionTranscript): string {
     ...(stats.durationMs !== null ? [spanText(stats.durationMs)] : []),
   ];
   const lines = [
-    `Transcript of Claude Code session ${t.sessionId}${t.label ? ` "${t.label}"` : ""} for #${t.taskNumber}`,
+    // The label is free text an agent wrote, so it is redacted like the transcript.
+    `Transcript of Claude Code session ${t.sessionId}${t.label ? ` "${redact(t.label)}"` : ""} for #${t.taskNumber}`,
     counts.join(", "),
   ];
   if (stats.startedAt) lines.push(`From ${stats.startedAt}${stats.endedAt ? ` to ${stats.endedAt}` : ""}`);
   if (page.total === 0) return [...lines, "", "The transcript has no messages."].join("\n");
+  if (page.lines.length === 0) {
+    const entries = `${page.total} entr${page.total === 1 ? "y" : "ies"}`;
+    lines.push(
+      "",
+      `Offset ${page.offset} is past the end: the transcript has ${entries}, offsets 0 to ${page.total - 1}.`,
+    );
+    return lines.join("\n");
+  }
   const to = page.offset + page.lines.length;
   lines.push(`Entries ${page.offset + 1}-${to} of ${page.total} (offset ${page.offset}):`, "", ...page.lines);
   lines.push("", page.next === null ? "End of transcript." : `More follows: call again with offset: ${page.next}.`);
