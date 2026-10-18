@@ -350,13 +350,19 @@ export class StaleReviewError extends AppError {
 const MERGE_TARGET_QUERY = `query PullRequestMergeTarget($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
-    pullRequest(number: $number) { id state headRefOid baseRefName }
+    pullRequest(number: $number) { id state headRefOid baseRefName mergeStateStatus }
   }
 }`;
 const MergeTarget = z.object({
   repository: z.object({
     defaultBranchRef: z.object({ name: z.string() }).nullish(),
-    pullRequest: z.object({ id: z.string(), state: z.string(), headRefOid: z.string(), baseRefName: z.string() }),
+    pullRequest: z.object({
+      id: z.string(),
+      state: z.string(),
+      headRefOid: z.string(),
+      baseRefName: z.string(),
+      mergeStateStatus: z.string().nullish(),
+    }),
   }),
 });
 
@@ -807,6 +813,15 @@ export function createGithubIntegration(deps: {
       if (pr.state.toUpperCase() !== "OPEN") throw new AppError("CONFLICT", `The PR is ${pr.state.toLowerCase()}`);
       if (pr.headRefOid !== input.headOid) {
         throw new AppError("CONFLICT", `The PR moved on to ${pr.headRefOid.slice(0, 7)} since it was checked`);
+      }
+      // An admin's account may merge past branch rules (a required approval, an out-of-date branch); into the
+      // default branch the board only merges what GitHub would let anyone merge.
+      const state = pr.mergeStateStatus?.toUpperCase() ?? "UNKNOWN";
+      if (input.into === "default" && !IMMEDIATELY_MERGEABLE.has(state)) {
+        throw new AppError(
+          "VALIDATION",
+          `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
+        );
       }
       await api.graphql(host, MERGE_MUTATION, {
         input: { pullRequestId: pr.id, mergeMethod: input.method.toUpperCase(), expectedHeadOid: pr.headRefOid },

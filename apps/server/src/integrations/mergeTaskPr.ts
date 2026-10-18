@@ -65,6 +65,7 @@ export async function mergeTaskPr(
   if (reason) throw refuse(task, reason);
   // notMergeable passed, so the snapshot is there with a head and a base.
   const { headOid, baseRef } = snapshot as { headOid: string; baseRef: string };
+  if (snapshot?.reviewDecision === "review_required") throw refuse(task, "it still needs an approving review");
   if (snapshot?.canMerge === false) throw refuse(task, "the signed-in GitHub account can't merge it");
   const allowed = snapshot?.mergeMethods ?? [];
   if (input.method && allowed.length > 0 && !allowed.includes(input.method)) {

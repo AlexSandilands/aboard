@@ -130,10 +130,11 @@ the default branch, for tasks the user allowed to be merged that way ([ADR 0008]
   ([Autopilot's gate](autopilot.md#merge-into-epic-branch)) gives a reason: not in Review, PR not open or a draft,
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
   clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable. Also when
-  the account can't merge or the repo doesn't allow the method asked for.
+  an approving review is still required, the account can't merge, or the repo doesn't allow the method asked for.
 - **Merging.** `GithubIntegration.mergeIntoDefaultBranch` reads the PR fresh, runs `checkAutopilotMergeTarget` with
   `into: "default"` (the base must be GitHub's default branch, and still the one the snapshot showed), stops with a
-  `CONFLICT` and refreshes the link if the head moved, then calls `mergePullRequest` with `expectedHeadOid` and the
+  `CONFLICT` and refreshes the link if the head moved, refuses unless GitHub's `mergeStateStatus` is `CLEAN`,
+  `HAS_HOOKS` or `UNSTABLE` (so an admin's account never merges past a branch rule such as a required approval), then calls `mergePullRequest` with `expectedHeadOid` and the
   method (asked for, else `pickMergeMethod`'s squash, merge, rebase). The link is refreshed, which finishes the task
   ([below](#finishing-on-merge)); if the refresh failed the tool moves it to Done itself. It notes the merge on the task.
 

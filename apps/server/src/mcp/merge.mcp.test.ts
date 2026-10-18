@@ -122,6 +122,7 @@ describe("merge_task_pr", () => {
       { pr: failing, reason: /its checks are failing/ },
       { pr: { mergeable: "CONFLICTING" }, reason: /conflicts with main/ },
       { pr: { reviewDecision: "CHANGES_REQUESTED" }, reason: /requested changes/ },
+      { pr: { reviewDecision: "REVIEW_REQUIRED" }, reason: /still needs an approving review/ },
       { pr: { isDraft: true }, reason: /isn't open and ready for review/ },
     ];
     for (const { pr, reason } of cases) {
@@ -162,6 +163,15 @@ describe("merge_task_pr", () => {
     expect(result.text).toMatch(/^CONFLICT: .*moved on to head-2/);
     expect(merges()).toEqual([]);
     expect(linkOf(task.id)).toMatchObject({ snapshot: { headOid: "head-2" } });
+    expect(h.services.tasks.summary(task.id).status).toBe("review");
+  });
+
+  it("never merges past a branch rule, even when the account could (an admin's)", async () => {
+    const task = await reviewTask({ autoMerge: true, pr: { mergeStateStatus: "BLOCKED" } });
+    const result = await call("merge_task_pr", { task: `#${task.number}` });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("can't be merged yet (BLOCKED)");
+    expect(merges()).toEqual([]);
     expect(h.services.tasks.summary(task.id).status).toBe("review");
   });
 
