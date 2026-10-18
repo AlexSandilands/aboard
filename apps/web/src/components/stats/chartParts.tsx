@@ -1,7 +1,12 @@
-import type { StatsBucket } from "@repo/contracts";
-import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { StatsBucket, StatsBucketKind } from "@repo/contracts";
+import { createContext, useCallback, useContext, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { axisLabelIndices, bucketLabel } from "./stats.logic";
+import { axisLabelIndices, bucketLabel, bucketTitle } from "./stats.logic";
+
+/** What the charts' buckets are, set once by the page: it words the axes, tooltips and screen reader text. */
+export const BucketKindContext = createContext<StatsBucketKind>("week");
+
+const useBucketKind = (): StatsBucketKind => useContext(BucketKindContext);
 
 /** The drawing box every chart shares: wide, so the SVG scales down with its container and keeps its proportions. */
 export const CHART = {
@@ -40,7 +45,7 @@ export function yFor(value: number, max: number): number {
   return CHART.top + PLOT_HEIGHT - (value / max) * PLOT_HEIGHT;
 }
 
-/** The week under the pointer or keyboard cursor, and the handlers that move it. */
+/** The bucket under the pointer or keyboard cursor, and the handlers that move it. */
 export function useChartCursor(count: number) {
   const [active, setActive] = useState<number | null>(null);
   const onKeyDown = useCallback(
@@ -99,11 +104,12 @@ export function YAxis({ ticks, max, format }: { ticks: number[]; max: number; fo
   );
 }
 
-/** Week-start labels along the bottom, thinned so a year of weeks stays readable. `centers` is each bucket's x. */
+/** Bucket-start labels along the bottom, thinned so a year of weeks stays readable. `centers` is each bucket's x. */
 export function XAxis({ buckets, centers }: { buckets: ReadonlyArray<StatsBucket>; centers: ReadonlyArray<number> }) {
+  const kind = useBucketKind();
   return (
     <g aria-hidden>
-      {axisLabelIndices(buckets.length).map((i) => (
+      {axisLabelIndices(buckets.length, kind === "day" ? 7 : 6).map((i) => (
         <text
           key={i}
           x={centers[i]}
@@ -111,7 +117,7 @@ export function XAxis({ buckets, centers }: { buckets: ReadonlyArray<StatsBucket
           textAnchor="middle"
           className="fill-muted-foreground text-[10px]"
         >
-          {bucketLabel(buckets[i]!)}
+          {bucketLabel(buckets[i]!, kind)}
         </text>
       ))}
     </g>
@@ -133,7 +139,7 @@ export function Legend({ series }: { series: ReadonlyArray<ChartSeries> }) {
 }
 
 /**
- * The hover card for one week, placed over the chart at `x` (in drawing units) and clamped so it never leaves the
+ * The hover card for one bucket, placed over the chart at `x` (in drawing units) and clamped so it never leaves the
  * chart. Not interactive, so it never steals the pointer from the marks under it.
  */
 export function ChartTooltip({
@@ -169,9 +175,10 @@ export function ChartTooltip({
   );
 }
 
-/** "Week of Oct 6", marked as partial for the current (last) week. */
-export function weekTitle(bucket: StatsBucket, index: number, count: number): string {
-  return `Week of ${bucketLabel(bucket)}${index === count - 1 ? " (so far)" : ""}`;
+/** The tooltip's title for a bucket: "Week of Oct 6" or "Mon, Oct 13", marked as partial for the last one. */
+export function useBucketTitle(): (bucket: StatsBucket, index: number, count: number) => string {
+  const kind = useBucketKind();
+  return (bucket, index, count) => bucketTitle(bucket, index, count, kind);
 }
 
 /** The chart's values as a table for screen readers, which can't read an SVG's marks. */
@@ -186,12 +193,13 @@ export function ChartTable({
   series: ReadonlyArray<ChartSeries>;
   format: (value: number | null) => string;
 }) {
+  const kind = useBucketKind();
   return (
     <table className="sr-only">
       <caption>{caption}</caption>
       <thead>
         <tr>
-          <th scope="col">Week of</th>
+          <th scope="col">{kind === "day" ? "Day" : "Week of"}</th>
           {series.map((s) => (
             <th key={s.key} scope="col">
               {s.label}
@@ -202,7 +210,7 @@ export function ChartTable({
       <tbody>
         {buckets.map((bucket, i) => (
           <tr key={bucket.start}>
-            <th scope="row">{bucketLabel(bucket)}</th>
+            <th scope="row">{bucketLabel(bucket, kind)}</th>
             {series.map((s) => (
               <td key={s.key}>{format(s.values[i] ?? null)}</td>
             ))}
@@ -234,18 +242,19 @@ export function ChartFrame({
   children: ReactNode;
   className?: string;
 }) {
+  const unit = useBucketKind() === "day" ? "days" : "weeks";
   return (
     <figure className={cn("m-0", className)}>
       {legend}
       <div className="relative">
         {tooltip}
-        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- arrow keys step through the weeks; the table is the screen reader view */}
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- arrow keys step through the buckets; the table is the screen reader view */}
         <svg
           viewBox={`0 0 ${CHART.width} ${CHART.height}`}
           role="group"
           aria-roledescription="chart"
-          aria-label={`${label}. Use the arrow keys to move between weeks.`}
-          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the focusable chart is how keyboard users reach each week's values
+          aria-label={`${label}. Use the arrow keys to move between ${unit}.`}
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the focusable chart is how keyboard users reach each bucket's values
           tabIndex={0}
           className="block h-auto w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onKeyDown={cursor.onKeyDown}

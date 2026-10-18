@@ -97,7 +97,8 @@ describe("seed scenarios", () => {
     expect(completed.values.filter((n) => (n ?? 0) > 0).length).toBeGreaterThan(8);
     expect(stats.series["cycle_time.in_progress_to_done"]!.total).toBeGreaterThan(0);
     expect(stats.series["autopilot.runs"]!.total).toBeGreaterThan(40);
-  });
+    // Seeding plus the stats read (which spawns git for commits) took 17 s on a busy Windows runner, over the default.
+  }, 60_000);
 
   it("threads stores PR and T3 thread snapshots", () => {
     const links = seeded("threads").details.flatMap((t) => t.links);

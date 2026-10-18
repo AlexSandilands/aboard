@@ -24,7 +24,10 @@ import type { Core } from "./core.ts";
  * for commits.
  */
 export interface StatsService {
-  /** The last `weeks` calendar weeks, ending with the current one, and the same number before them, for comparison. */
+  /**
+   * The last `weeks` calendar weeks, ending with the current one, and the same number before them, for comparison.
+   * One week is shown by day instead: the last 7 days ending today, against the 7 before.
+   */
   weekly(weeks: StatsPeriod, projectId?: string): Promise<StatsResponse>;
 }
 
@@ -95,6 +98,13 @@ export function weekBoundaries(now: Date, count: number): Date[] {
   return Array.from({ length: count + 1 }, (_, i) => new Date(y, m, monday + 7 * (i - count + 1)));
 }
 
+/** The `count + 1` boundaries of `count` calendar days, local midnight, ending at the midnight after `now`'s day. */
+export function dayBoundaries(now: Date, count: number): Date[] {
+  const [y, m, d] = [now.getFullYear(), now.getMonth(), now.getDate()];
+  // By calendar date, not 24 h steps, so a day with a clock change still starts at midnight.
+  return Array.from({ length: count + 1 }, (_, i) => new Date(y, m, d + i - count + 1));
+}
+
 const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
 
 function median(xs: readonly number[]): number | null {
@@ -146,8 +156,11 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
       const project = projectId ? repos.projects.get(projectId) : null;
       if (projectId && !project) throw notFound("Project", projectId);
 
-      // 2 * weeks buckets: the second half is the period shown, the first the one it is compared with.
-      const bounds = weekBoundaries(core.now(), weeks * 2);
+      // 2 * `perPeriod` buckets: the second half is the period shown, the first the one it is compared with. A single
+      // week is shown by day, so its period is 7 buckets.
+      const bucket = weeks === 1 ? "day" : "week";
+      const perPeriod = bucket === "day" ? 7 : weeks;
+      const bounds = (bucket === "day" ? dayBoundaries : weekBoundaries)(core.now(), perPeriod * 2);
       const stamps = bounds.map((d) => d.getTime());
       const [start, end] = [bounds[0]!.toISOString(), bounds.at(-1)!.toISOString()];
       const bucketOf = (at: number): number =>
@@ -386,7 +399,7 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
       }
 
       // Breakdowns split the period by category rather than by week: what finished, and what ran sessions.
-      const boundary = stamps[weeks]!;
+      const boundary = stamps[perPeriod]!;
       const breakdown = (entries: { key: string | null; at: number }[]): StatsBreakdown => {
         const rows = new Map<string | null, { total: number; previousTotal: number }>();
         for (const { key, at } of entries) {
@@ -442,13 +455,13 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
 
       const computed = new Map<string, StatsSeries>();
       for (const [name, s] of built) {
-        const perBucket = Array.from({ length: weeks * 2 }, () => [] as number[]);
+        const perBucket = Array.from({ length: perPeriod * 2 }, () => [] as number[]);
         for (const sample of s.samples) perBucket[bucketOf(sample.at)]?.push(sample.value);
         computed.set(name, {
           unit: s.unit,
-          values: perBucket.slice(weeks).map((xs) => reduce(s.aggregate, xs)),
-          total: reduce(s.aggregate, perBucket.slice(weeks).flat()),
-          previousTotal: reduce(s.aggregate, perBucket.slice(0, weeks).flat()),
+          values: perBucket.slice(perPeriod).map((xs) => reduce(s.aggregate, xs)),
+          total: reduce(s.aggregate, perBucket.slice(perPeriod).flat()),
+          previousTotal: reduce(s.aggregate, perBucket.slice(0, perPeriod).flat()),
         });
       }
       // Open tasks are a level, not events: a period's total is where it ended, the previous one's where that ended.
@@ -456,16 +469,17 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         const levels = openAt[status]!;
         computed.set(`open_tasks.${status}`, {
           unit: "count",
-          values: levels.slice(weeks),
-          total: levels[weeks * 2 - 1]!,
-          previousTotal: levels[weeks - 1]!,
+          values: levels.slice(perPeriod),
+          total: levels[perPeriod * 2 - 1]!,
+          previousTotal: levels[perPeriod - 1]!,
         });
       }
       const out: Record<string, StatsSeries> = Object.fromEntries([...computed].sort(([a], [b]) => a.localeCompare(b)));
 
-      const shown = bounds.slice(weeks).map((d) => d.toISOString());
+      const shown = bounds.slice(perPeriod).map((d) => d.toISOString());
       return {
         weeks,
+        bucket,
         from: shown[0]!,
         to: shown.at(-1)!,
         previousFrom: start,

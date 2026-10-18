@@ -10,13 +10,13 @@ import {
   XAxis,
   YAxis,
   useChartCursor,
-  weekTitle,
+  useBucketTitle,
   yFor,
   type ChartSeries,
 } from "./chartParts";
 import { niceDurationScale, niceScale } from "./stats.logic";
 
-/** The path of one series: a line per run of weeks that have a value, so a quiet week is a gap and not a drop to zero. */
+/** The path of one series: a line per run of buckets that have a value, so a quiet bucket is a gap and not a drop to zero. */
 function linePath(values: ReadonlyArray<number | null>, xs: ReadonlyArray<number>, max: number): string {
   let d = "";
   let drawing = false;
@@ -33,7 +33,7 @@ function linePath(values: ReadonlyArray<number | null>, xs: ReadonlyArray<number
 
 const DOT = 3.5;
 
-/** Weekly values as a line. Weeks with no value (`null`) break the line. */
+/** A series as a line. Buckets with no value (`null`) break the line. */
 export function TrendLine({
   buckets,
   series,
@@ -49,12 +49,13 @@ export function TrendLine({
   durations?: boolean;
 }) {
   const cursor = useChartCursor(buckets.length);
+  const bucketTitle = useBucketTitle();
   const n = buckets.length;
   const highest = Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0)));
   const { max, ticks } = durations ? niceDurationScale(highest) : niceScale(highest);
   const step = n > 0 ? PLOT_WIDTH / n : PLOT_WIDTH;
   const xs = buckets.map((_, i) => CHART.left + step * i + step / 2);
-  // A year of weeks would be a bead string; dots then only mark weeks that stand alone (no neighbour to join) and the hovered one.
+  // A year of weeks would be a bead string; dots then only mark buckets that stand alone (no neighbour to join) and the hovered one.
   const dotsAlways = n <= 13;
   const active = cursor.active !== null ? buckets[cursor.active] : undefined;
 
@@ -67,7 +68,7 @@ export function TrendLine({
         cursor.active !== null && active ? (
           <ChartTooltip
             x={xs[cursor.active]!}
-            title={weekTitle(active, cursor.active, n)}
+            title={bucketTitle(active, cursor.active, n)}
             rows={series.map((s) => ({
               key: s.key,
               label: s.label,

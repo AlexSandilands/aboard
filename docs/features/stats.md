@@ -1,6 +1,6 @@
 # Stats
 
-Board tasks: #64 (the API), #190 (the page), #191 (commits) and #192 (flow and PR flow), epic #189.
+Board tasks: #64 (the API), #190 (the page), #191 (commits), #192 (flow and PR flow) and #197 (Back, spacing and the one-week view), epic #189.
 
 Weekly trends over the board's history: how much work is created and finished, how long it takes, how often
 reviews loop, how many PRs merge, what Autopilot and agent sessions do, and where agents got stuck. The server computes them from data
@@ -9,13 +9,16 @@ it already keeps, and from git for commits; nothing is recorded for the purpose.
 ## How it works
 
 `GET /api/stats?weeks=&projectId=` (`apps/server/src/http/routes/system.ts`) calls `services.stats.weekly`
-(`apps/server/src/services/stats.ts`). `weeks` is 4, 12 (the default) or 52, and anything else is a 400.
+(`apps/server/src/services/stats.ts`). `weeks` is 1, 4, 12 (the default) or 52, and anything else is a 400. One week is the exception to "by week": it is
+charted **by day** ([One week, by day](#one-week-by-day)).
 `projectId` limits every series to one project (404 when it doesn't exist); without it the whole board counts.
 
 The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 
 - `buckets`: the calendar weeks of the period, oldest first, each `{ start, end }` as instants. A week starts
   on **Monday at 00:00 in the server's local time**; the last bucket is the current week, so it is partial.
+- `bucket`: what a bucket spans, `"week"` or `"day"` (when `weeks` is 1). The rest of this doc says "week" for
+  either; the client words labels from this field.
 - `series`: a **map by name** to `{ unit, values, total, previousTotal }`. `values` has one entry per bucket.
   `total` covers the whole period and `previousTotal` the period of equal length just before it
   (`previousFrom` to `from`), for "up or down on last time".
@@ -107,12 +110,26 @@ counted (the commits it brought are). Commit times are bucketed like every other
   read is kept for 30 seconds only, as a timeout or a lock may pass. A new commit can take that long to show, and nothing is fetched for it: `origin/<branch>` is as fresh as the
   last fetch.
 
+## One week, by day
+
+`weeks=1` has `bucket: "day"` and 7 buckets: **the last 7 days ending today** (today and the 6 before), each from
+local midnight to the next. The previous period is the 7 days before those. A calendar week would be nearly empty
+on a Monday, which is why it isn't used. Everything else is unchanged: the service builds 14 day boundaries with
+`dayBoundaries` in place of `weekBoundaries` and the per-bucket code doesn't know the difference. `open_tasks.*`
+are the levels at the end of each day.
+
 ## The page
 
 `/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like
 `/social`. It is reached from the Stats icon in the sidebar footer and the command palette's "Open stats"
-(`useOpenStats`, which carries over the project the board is on). `?project=` (a project id; none is the whole board)
-and `?weeks=` (4, 12 or 52; anything else reads as 12) hold the view, so links and reloads keep it.
+(`useOpenStats`, which carries over the project the board is on). While it is open the footer's three icons give way
+to a single **Back** button, as in Settings, and so does Esc: both go to the board on the project the stats page
+showed (`useLeaveStats`). `?project=` (a project id; none is the whole board)
+and `?weeks=` (1, 4, 12 or 52; anything else reads as 12) hold the view, so links and reloads keep it.
+
+The sections are 40 px (`space-y-10`) apart; the gaps inside a section are small. With `bucket: "day"` the axis
+labels read "Mon 13", the tooltips "Mon, Oct 13", and the titles and blurbs say "per day" / "each day"; the page
+passes the bucket kind to the charts through `BucketKindContext`, and the tiles compare with "previous week".
 
 `useStats(weeks, projectId)` reads `GET /api/stats`. Nothing is pushed over SSE for stats, so it is stale at once
 and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
@@ -137,7 +154,7 @@ The charts are hand-rolled SVG with no dependency:
 - Series colours are theme tokens (`SERIES_COLORS`), so charts follow light, dark and custom themes. Stacked
   segments and dots get a surface-coloured outline for the gap. Identity never rides on colour alone: a legend names
   each series and the tooltip repeats the names.
-- A week's values show in a tooltip on hover, or with the arrow keys once the chart has focus. Each chart also
+- A bucket's values show in a tooltip on hover, or with the arrow keys once the chart has focus. Each chart also
   renders an `sr-only` table. Nothing animates in; the dim while loading is `motion-reduce:transition-none`.
 - Axis ticks come from `niceScale`, or `niceDurationScale` for durations (ticks on 30m, 2h, 1d, 1w and so on).
   The logic is in `stats.logic.ts` and tested in `stats.logic.test.ts`.
@@ -181,7 +198,7 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | File | What it does |
 | ---- | ------------ |
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
-| `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
+| `apps/server/src/services/stats.ts` | Week and day boundaries, the series, the previous-period split |
 | `apps/server/src/integrations/commitLog.ts` | The `git log` reader for a project's default branch |
 | `apps/server/src/db/repos/links.ts` | `prsMergedBetween` (with the link and its creation), `agentSessionsStartedBetween`, `sessionsStartedBetween` |
 | `apps/server/src/services/activity.ts` | `statusStays`, shared with the activity report; `stallKind`, `wasRestarted`: the stall and restart definitions the friction series share with `board_activity` |

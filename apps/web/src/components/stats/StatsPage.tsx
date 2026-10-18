@@ -13,7 +13,8 @@ import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ApiError } from "~/lib/api";
 import { useBoard, useStats } from "~/state/queries";
-import { SERIES_COLORS, type ChartSeries } from "./chartParts";
+import { cn } from "~/lib/utils";
+import { BucketKindContext, SERIES_COLORS, type ChartSeries } from "./chartParts";
 import { KpiTile } from "./KpiTile";
 import {
   breakdownRows,
@@ -21,6 +22,8 @@ import {
   formatStatsValue,
   isQuiet,
   parseStatsPeriod,
+  periodLabel,
+  previousPeriodLabel,
   runsByAutomation,
   runsByStatusWeekly,
   runsInStatuses,
@@ -39,7 +42,7 @@ const EMPTY: StatsSeries = {
   previousTotal: null,
 };
 
-/** Route component for `/stats`: weekly trends over the board's history (docs/features/stats.md). */
+/** Route component for `/stats`: trends by week (by day for one week) over the board's history (docs/features/stats.md). */
 export function StatsPage() {
   const { isMobile, open } = useSidebar();
   const navigate = useNavigate();
@@ -104,7 +107,7 @@ export function StatsPage() {
               }}
             >
               {STATS_PERIODS.map((period) => (
-                <Toggle key={period} value={String(period)} aria-label={`${period} weeks`}>
+                <Toggle key={period} value={String(period)} aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}>
                   {period}w
                 </Toggle>
               ))}
@@ -125,11 +128,15 @@ export function StatsPage() {
           ) : stats.data ? (
             <div
               aria-busy={stats.isPlaceholderData}
-              className={
-                stats.isPlaceholderData ? "opacity-60 transition-opacity motion-reduce:transition-none" : undefined
-              }
+              // The sections' own gaps are small; this is the room between one section and the chart above it.
+              className={cn(
+                "space-y-10",
+                stats.isPlaceholderData && "opacity-60 transition-opacity motion-reduce:transition-none",
+              )}
             >
-              <StatsSections data={stats.data} />
+              <BucketKindContext value={stats.data.bucket}>
+                <StatsSections data={stats.data} />
+              </BucketKindContext>
             </div>
           ) : stats.isError ? (
             <p className="text-sm text-destructive">Couldn't load the stats.</p>
@@ -146,7 +153,7 @@ function seriesOf(data: StatsResponse, name: string): StatsSeries {
   return data.series[name] ?? { ...EMPTY, values: data.buckets.map(() => null) };
 }
 
-/** A series as a chart wants it. Counts and costs read null as a quiet week, so bars get zeros. */
+/** A series as a chart wants it. Counts and costs read null as a quiet bucket, so bars get zeros. */
 function chartSeries(
   data: StatsResponse,
   name: string,
@@ -214,7 +221,8 @@ const RUN_STATUSES = [
 ] as const;
 
 function StatsSections({ data }: { data: StatsResponse }) {
-  const previousLabel = `previous ${data.weeks} weeks`;
+  const per = data.bucket === "day" ? "day" : "week";
+  const previousLabel = previousPeriodLabel(data);
   const count = (value: number | null) => formatStatsValue(value, "count");
   const kpi = (
     label: string,
@@ -238,8 +246,8 @@ function StatsSections({ data }: { data: StatsResponse }) {
   if (isQuiet(data.series)) {
     return (
       <p className="text-sm text-muted-foreground">
-        Nothing happened {data.project ? `in ${data.project.title} ` : ""}in the last {data.weeks} weeks, or the weeks
-        before. Charts appear as tasks are finished and agents run.
+        Nothing happened {data.project ? `in ${data.project.title} ` : ""}in {periodLabel(data)}, or the {per}s before.
+        Charts appear as tasks are finished and agents run.
       </p>
     );
   }
@@ -255,17 +263,17 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
   return (
     <>
-      <StatsSection title="Throughput" description="Tasks created and finished each week. Epics aren't counted.">
+      <StatsSection title="Throughput" description={`Tasks created and finished each ${per}. Epics aren't counted.`}>
         <Tiles>
           {kpi("Tasks finished", "tasks_completed", "up")}
           {kpi("Tasks created", "tasks_created")}
         </Tiles>
-        <ChartCard title="Created and finished per week">
+        <ChartCard title={`Created and finished per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             integer
             format={count}
-            label="Tasks created and finished per week"
+            label={`Tasks created and finished per ${per}`}
             series={[
               chartSeries(data, "tasks_created", "Created", SERIES_COLORS.muted, { zeros: true }),
               chartSeries(data, "tasks_completed", "Finished", SERIES_COLORS.primary, { zeros: true }),
@@ -276,17 +284,17 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
       <StatsSection
         title="Cycle time"
-        description="Median time to finish the tasks that finished each week. A gap is a week where nothing finished."
+        description={`Median time to finish the tasks that finished each ${per}. A gap is a ${per} where nothing finished.`}
       >
         <Tiles>
           {kpi("In progress to done", "cycle_time.in_progress_to_done", "down")}
           {kpi("Created to done", "cycle_time.created_to_done", "down")}
         </Tiles>
-        <ChartCard title="Median cycle time per week">
+        <ChartCard title={`Median cycle time per ${per}`}>
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ms")}
-            label="Median cycle time per week"
+            label={`Median cycle time per ${per}`}
             durations
             series={[
               chartSeries(data, "cycle_time.created_to_done", "Created to done", SERIES_COLORS.muted),
@@ -298,7 +306,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
       <StatsSection
         title="Flow"
-        description="Where work waits: how long tasks sat in each status before moving on, by the week the stay ended, and how many were open at each week's end."
+        description={`Where work waits: how long tasks sat in each status before moving on, by the ${per} the stay ended, and how many were open at each ${per}'s end.`}
       >
         <Tiles>
           {kpi("Time in Planned", "time_in_status.planned.median", "down")}
@@ -318,7 +326,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ms")}
-            label="Median time tasks spent in each status, per week"
+            label={`Median time tasks spent in each status, per ${per}`}
             durations
             series={OPEN_STATUSES.map(([status, label, color]) =>
               chartSeries(data, `time_in_status.${status}.median`, label, color),
@@ -329,20 +337,20 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ms")}
-            label="Average time tasks spent in each status, per week"
+            label={`Average time tasks spent in each status, per ${per}`}
             durations
             series={OPEN_STATUSES.map(([status, label, color]) =>
               chartSeries(data, `time_in_status.${status}.average`, label, color),
             )}
           />
         </ChartCard>
-        <ChartCard title="Open tasks at each week's end">
+        <ChartCard title={`Open tasks at each ${per}'s end`}>
           <WeeklyBars
             buckets={data.buckets}
             mode="stacked"
             integer
             format={count}
-            label="Open tasks at the end of each week, by status"
+            label={`Open tasks at the end of each ${per}, by status`}
             series={OPEN_STATUSES.map(([status, label, color]) =>
               chartSeries(data, `open_tasks.${status}`, label, color, { zeros: true }),
             )}
@@ -360,21 +368,21 @@ function StatsSections({ data }: { data: StatsResponse }) {
           {kpi("Review rounds per task", "review_rounds_per_task", "down")}
           {kpi("Review findings", "review_findings.blocking", "down", sumTotals(data, findingNames))}
         </Tiles>
-        <ChartCard title="PRs merged per week">
+        <ChartCard title={`PRs merged per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             integer
             format={count}
-            label="PRs merged per week"
+            label={`PRs merged per ${per}`}
             series={[chartSeries(data, "prs_merged", "PRs merged", SERIES_COLORS.primary, { zeros: true })]}
           />
         </ChartCard>
-        <ChartCard title="Commits per week">
+        <ChartCard title={`Commits per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             integer
             format={count}
-            label="Commits on the default branch per week"
+            label={`Commits on the default branch per ${per}`}
             series={[chartSeries(data, "commits", "Commits", SERIES_COLORS.primary, { zeros: true })]}
           />
           {data.notes.map((note) => (
@@ -387,7 +395,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ratio")}
-            label="Average review rounds per finished task, per week"
+            label={`Average review rounds per finished task, per ${per}`}
             series={[chartSeries(data, "review_rounds_per_task", "Rounds per task", SERIES_COLORS.primary)]}
           />
         </ChartCard>
@@ -397,7 +405,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             mode="stacked"
             integer
             format={count}
-            label="Review findings raised per week, by severity"
+            label={`Review findings raised per ${per}, by severity`}
             series={FINDING_SEVERITIES.map(([severity, label, color]) =>
               chartSeries(data, `review_findings.${severity}`, label, color, {
                 zeros: true,
@@ -409,7 +417,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
       <StatsSection
         title="PR flow"
-        description="How merged PRs got there, by the week the board saw them merge: how long they were open, and how much Autopilot had to review and fix."
+        description={`How merged PRs got there, by the ${per} the board saw them merge: how long they were open, and how much Autopilot had to review and fix.`}
       >
         <Tiles>
           {kpi("Open to merged", "pr_open_to_merged", "down")}
@@ -421,7 +429,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ms")}
-            label="Median time from a PR being linked to its merge, per week"
+            label={`Median time from a PR being linked to its merge, per ${per}`}
             durations
             series={[chartSeries(data, "pr_open_to_merged", "Open to merged", SERIES_COLORS.primary)]}
           />
@@ -430,7 +438,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           <TrendLine
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "ratio")}
-            label="Average Autopilot review rounds and fix attempts per merged PR, per week"
+            label={`Average Autopilot review rounds and fix attempts per merged PR, per ${per}`}
             series={[
               chartSeries(data, "autopilot.pr_review_rounds_per_pr", "Review rounds", SERIES_COLORS.info),
               chartSeries(data, "autopilot.fix_attempts_per_pr", "Fix attempts", SERIES_COLORS.warning),
@@ -443,7 +451,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             mode="stacked"
             integer
             format={count}
-            label="Times Autopilot gave up on a PR per week, by automation"
+            label={`Times Autopilot gave up on a PR per ${per}, by automation`}
             series={GAVE_UP.map(([automation, label, color]) =>
               chartSeries(data, `autopilot.gave_up.${automation}`, label, color, { zeros: true }),
             )}
@@ -451,7 +459,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
         </ChartCard>
       </StatsSection>
 
-      <StatsSection title="Autopilot" description="Runs by the week they finished, and what they cost.">
+      <StatsSection title="Autopilot" description={`Runs by the ${per} they finished, and what they cost.`}>
         <Tiles>
           {kpi("Runs", "autopilot.runs")}
           {kpi("Retries after a failure", "autopilot.retries", "down")}
@@ -463,29 +471,29 @@ function StatsSections({ data }: { data: StatsResponse }) {
             mode="stacked"
             integer
             format={count}
-            label="Autopilot runs per week, by outcome"
+            label={`Autopilot runs per ${per}, by outcome`}
             series={statusSeries}
           />
         </ChartCard>
         {automations.length > 0 ? <AutomationTable rows={automations} /> : null}
-        <ChartCard title="Cost per week">
+        <ChartCard title={`Cost per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             format={(value) => formatStatsValue(value, "usd")}
-            label="Autopilot cost per week"
+            label={`Autopilot cost per ${per}`}
             series={[chartSeries(data, "autopilot.cost_usd", "Cost", SERIES_COLORS.primary, { zeros: true })]}
           />
         </ChartCard>
       </StatsSection>
 
-      <StatsSection title="Sessions" description="Agent sessions, by the week they were first linked to a task.">
+      <StatsSection title="Sessions" description={`Agent sessions, by the ${per} they were first linked to a task.`}>
         <Tiles>{kpi("Sessions started", "agent_sessions_started")}</Tiles>
-        <ChartCard title="Sessions started per week">
+        <ChartCard title={`Sessions started per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             integer
             format={count}
-            label="Agent sessions started per week"
+            label={`Agent sessions started per ${per}`}
             series={[chartSeries(data, "agent_sessions_started", "Sessions", SERIES_COLORS.primary, { zeros: true })]}
           />
         </ChartCard>
@@ -493,7 +501,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
       <StatsSection
         title="Friction"
-        description="Where agents got stuck or needed you, by the week it happened. None of these is a failure on its own."
+        description={`Where agents got stuck or needed you, by the ${per} it happened. None of these is a failure on its own.`}
       >
         <Tiles>
           {kpi("Steps blocked", "friction.steps_blocked")}
@@ -508,7 +516,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             buckets={data.buckets}
             integer
             format={count}
-            label="Steps marked blocked or skipped per week"
+            label={`Steps marked blocked or skipped per ${per}`}
             series={[
               chartSeries(data, "friction.steps_blocked", "Blocked", SERIES_COLORS.warning, { zeros: true }),
               chartSeries(data, "friction.steps_skipped", "Skipped", SERIES_COLORS.muted, { zeros: true }),
@@ -520,7 +528,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             buckets={data.buckets}
             integer
             format={count}
-            label="Attention requests and Autopilot flags per week"
+            label={`Attention requests and Autopilot flags per ${per}`}
             series={[
               chartSeries(data, "friction.attention_requests", "Agent requests", SERIES_COLORS.info, { zeros: true }),
               chartSeries(data, "friction.autopilot_flags", "Autopilot flags", SERIES_COLORS.warning, {
@@ -534,7 +542,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             buckets={data.buckets}
             integer
             format={count}
-            label="Stalled tasks and runs cut short by a restart, per week"
+            label={`Stalled tasks and runs cut short by a restart, per ${per}`}
             series={[
               chartSeries(data, "friction.stalls.stale", "Quiet too long", SERIES_COLORS.warning, { zeros: true }),
               chartSeries(data, "friction.stalls.waiting", "Waiting on input", SERIES_COLORS.info, { zeros: true }),

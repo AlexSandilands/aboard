@@ -122,7 +122,8 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
         paletteOpen: palette.open,
         dialogOpen: anyDialogOpen(dialogs),
         settingsOpen,
-        panelOpen: onBack !== null && !settingsOpen,
+        // The task panel, not the stats page, which also has an `onBack`.
+        panelOpen: selectedTaskId !== null && !settingsOpen,
         canGoBack: onBack !== null,
       },
       IS_MAC,

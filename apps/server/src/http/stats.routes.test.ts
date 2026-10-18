@@ -12,12 +12,13 @@ describe("GET /api/stats", () => {
     expect(body.buckets).toHaveLength(12);
   });
 
-  it("takes 4, 12 or 52 weeks and a project", async () => {
+  it("takes 1 (by day), 4, 12 or 52 weeks and a project", async () => {
     const h = createTestHarness();
     const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-    for (const weeks of [4, 12, 52]) {
+    for (const weeks of [1, 4, 12, 52]) {
       const body = StatsResponse.parse(await (await h.request(`/api/stats?weeks=${weeks}`)).json());
-      expect(body.buckets).toHaveLength(weeks);
+      expect(body.buckets).toHaveLength(weeks === 1 ? 7 : weeks);
+      expect(body.bucket).toBe(weeks === 1 ? "day" : "week");
     }
     const scoped = StatsResponse.parse(await (await h.request(`/api/stats?projectId=${project.id}`)).json());
     expect(scoped.project).toEqual({ id: project.id, title: "Alpha" });

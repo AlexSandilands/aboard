@@ -215,7 +215,7 @@ sections of the task panel. Your layout is saved per browser.
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
 | `J`          | Jump to the open task's card on the board |
-| `Esc`        | Close the task panel, or leave Settings |
+| `Esc`        | Close the task panel, or leave Settings or Stats |
 
 These are the defaults. Change any of them, or say when one applies, under **Settings → Keybindings**
 (it has a search box):

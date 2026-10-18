@@ -2,6 +2,7 @@ import {
   STATS_PERIODS,
   type StatsBreakdown,
   type StatsBucket,
+  type StatsBucketKind,
   type StatsPeriod,
   type StatsResponse,
   type StatsUnit,
@@ -113,9 +114,37 @@ const SHORT_DATE = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
-/** A week's start as "Oct 6", the bucket's label on an axis and in a tooltip. */
-export function bucketLabel(bucket: StatsBucket): string {
-  return SHORT_DATE.format(new Date(bucket.start));
+const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
+
+const FULL_DAY = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
+/** A bucket's start as "Oct 6" for a week or "Mon 13" for a day: its label on an axis and in a table. */
+export function bucketLabel(bucket: StatsBucket, kind: StatsBucketKind = "week"): string {
+  const start = new Date(bucket.start);
+  if (kind !== "day") return SHORT_DATE.format(start);
+  // Spelled out so the weekday leads in any locale's ordering: "Mon 13".
+  return `${WEEKDAY.format(start)} ${start.getDate()}`;
+}
+
+/** What a bucket is called in a tooltip: "Week of Oct 6" or "Mon, Oct 13", marked partial for the current (last) one. */
+export function bucketTitle(bucket: StatsBucket, index: number, count: number, kind: StatsBucketKind = "week"): string {
+  const start = new Date(bucket.start);
+  const name = kind === "day" ? FULL_DAY.format(start) : `Week of ${SHORT_DATE.format(start)}`;
+  return `${name}${index === count - 1 ? " (so far)" : ""}`;
+}
+
+/** What the comparison tiles compare against: "previous week" for a day-by-day week, else "previous 12 weeks". */
+export function previousPeriodLabel(data: Pick<StatsResponse, "bucket" | "weeks">): string {
+  return data.bucket === "day" ? "previous week" : `previous ${data.weeks} weeks`;
+}
+
+/** The period as the empty-board message names it: "the last 7 days" or "the last 12 weeks". */
+export function periodLabel(data: Pick<StatsResponse, "bucket" | "weeks">): string {
+  return data.bucket === "day" ? "the last 7 days" : `the last ${data.weeks} weeks`;
 }
 
 /** The indices of the buckets that get an axis label: spread out so 52 weeks don't collide, always the last. */
