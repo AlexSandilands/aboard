@@ -112,10 +112,14 @@ describe("an agent action's allowed tools", () => {
       "Bash",
       "Bash(gh pr view *)",
       "PowerShell",
-      "x".repeat(300),
     ]) {
       expect(parse([bad]).success).toBe(false);
     }
+  });
+
+  it("caps how long a rule is", () => {
+    expect(parse([`mcp__${"a".repeat(195)}`]).success).toBe(true);
+    expect(parse([`mcp__${"a".repeat(196)}`]).success).toBe(false);
   });
 
   it("caps how many there are", () => {

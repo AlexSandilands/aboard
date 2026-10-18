@@ -648,7 +648,7 @@ describe("custom automations: actions", () => {
     define({
       name: "Agent",
       trigger: { kind: "status_change", to: "review" },
-      action: { kind: "agent", prompt: "Look at {{task.title}}" },
+      action: { kind: "agent", prompt: "Look at {{task.title}}", allowedTools: ["mcp__issue-tracker__search_jira"] },
     });
     define({
       name: "Shell",
@@ -664,6 +664,9 @@ describe("custom automations: actions", () => {
     expect(runs.every((r) => r.dryRun && r.status === "skipped")).toBe(true);
     const agent = runs.find((r) => r.summary.startsWith("Would start an agent"))!;
     expect(agent.detail).toContain("Look at Dry");
+    expect(agent.detail).toContain(
+      "Allowed to call without asking, on top of the usual tools: mcp__issue-tracker__search_jira",
+    );
     const shellRun = runs.find((r) => r.summary.startsWith("Would run"))!;
     expect(shellRun.detail).toContain("make check");
     expect(shellRun.detail).toContain(`${brandEnv("TASK_TITLE")}="Dry"`);
