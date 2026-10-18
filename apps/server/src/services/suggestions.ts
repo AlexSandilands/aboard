@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
   BUILTIN_PLAN_SKILL_BODY,
@@ -236,13 +236,19 @@ export function createSuggestionsService(
     const text = `---\nname: ${name}\ndescription: ${builtin.description}\n---\n\n${body.trim()}\n`;
     writeFileSync(path, text, { encoding: "utf8", flag: "wx" });
     const ref = { source: "global" as const, name, path };
-    core.write(() => {
-      const field = which === "review" ? "reviewSkill" : "planSkill";
-      if (deps.settings.get()[field].source === "builtin") deps.settings.update({ [field]: ref });
-      for (const project of deps.projects.list()) {
-        if (project[field]?.source === "builtin") deps.projects.update(project.id, { [field]: ref });
-      }
-    });
+    try {
+      core.write(() => {
+        const field = which === "review" ? "reviewSkill" : "planSkill";
+        if (deps.settings.get()[field].source === "builtin") deps.settings.update({ [field]: ref });
+        for (const project of deps.projects.list()) {
+          if (project[field]?.source === "builtin") deps.projects.update(project.id, { [field]: ref });
+        }
+      });
+    } catch (error) {
+      // Nothing points at it, so don't leave a skill the user never chose (and the next try would take `-2`).
+      rmSync(dir, { recursive: true, force: true });
+      throw error;
+    }
     return path;
   };
 

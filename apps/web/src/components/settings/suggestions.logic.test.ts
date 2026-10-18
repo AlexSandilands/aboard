@@ -12,6 +12,16 @@ describe("lineDiff", () => {
     ]);
   });
 
+  it("keeps a large text's unchanged start and end aligned", () => {
+    const lines = Array.from({ length: 5_000 }, (_, i) => `l${i}`);
+    const changed = lines.map((l) => (l === "l2500" ? "L2500" : l));
+    const diff = lineDiff(lines.join("\n"), changed.join("\n"));
+    expect(diff.filter((l) => l.kind !== "same")).toEqual([
+      { kind: "removed", text: "l2500" },
+      { kind: "added", text: "L2500" },
+    ]);
+  });
+
   it("ignores line endings", () => {
     expect(lineDiff("a\r\nb\r\n", "a\nb\n").every((l) => l.kind === "same")).toBe(true);
   });

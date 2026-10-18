@@ -91,6 +91,16 @@ describe("suggestions", () => {
     ).toThrow(/same as the current text/);
   });
 
+  it("keeps each piece of evidence once", () => {
+    const h = setup();
+    const { hash } = h.s.suggestions.read(h.key);
+    const { suggestion } = h.s.suggestions.suggest(
+      { target: h.key, baseHash: hash, proposed: "Once.", rationale: "x", evidence: ["#1", "#1 ", "#2"] },
+      "agent",
+    );
+    expect(suggestion.evidence).toEqual(["#1", "#2"]);
+  });
+
   it("keeps one open suggestion per target: a new one supersedes the old", () => {
     const h = setup();
     const first = suggestFor(h, h.key, "One.").suggestion;

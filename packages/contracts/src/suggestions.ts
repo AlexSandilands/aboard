@@ -119,6 +119,10 @@ export const SuggestChangeInput = z.object({
   baseHash: z.string().trim().min(1),
   proposed: z.string().min(1).max(SUGGESTION_TEXT_MAX),
   rationale: z.string().trim().min(1).max(SUGGESTION_RATIONALE_MAX),
-  evidence: z.array(z.string().trim().min(1).max(500)).max(SUGGESTION_EVIDENCE_MAX).default([]),
+  evidence: z
+    .array(z.string().trim().min(1).max(500))
+    .max(SUGGESTION_EVIDENCE_MAX)
+    .default([])
+    .transform((items) => [...new Set(items)]),
 });
 export type SuggestChangeInput = z.input<typeof SuggestChangeInput>;

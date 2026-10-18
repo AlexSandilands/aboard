@@ -2,8 +2,11 @@
 
 export type DiffLine = { kind: "same" | "added" | "removed"; text: string };
 
-/** Above this many lines on either side the diff gives up on alignment and shows old then new, whole. */
-const MAX_DIFF_LINES = 3_000;
+/**
+ * Past this many cells in the table of the changed middle, the diff gives up on alignment and shows that part old
+ * then new, whole. The text is an agent's, so its size is the agent's to choose.
+ */
+const MAX_DIFF_CELLS = 1_000_000;
 
 const linesOf = (text: string): string[] => text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
 
@@ -12,9 +15,30 @@ const linesOf = (text: string): string[] => text.replace(/\r\n/g, "\n").replace(
  * ignored, so a CRLF file and an LF proposal differ only where their text does.
  */
 export function lineDiff(before: string, after: string): DiffLine[] {
-  const a = linesOf(before);
-  const b = linesOf(after);
-  if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) {
+  const all = { a: linesOf(before), b: linesOf(after) };
+  // Most suggestions change a few lines: the common start and end need no table.
+  let start = 0;
+  while (start < all.a.length && start < all.b.length && all.a[start] === all.b[start]) start++;
+  let end = 0;
+  while (
+    end < all.a.length - start &&
+    end < all.b.length - start &&
+    all.a[all.a.length - 1 - end] === all.b[all.b.length - 1 - end]
+  ) {
+    end++;
+  }
+  const same = (lines: string[]): DiffLine[] => lines.map((text) => ({ kind: "same", text }));
+  const head = same(all.a.slice(0, start));
+  const tail = same(all.a.slice(all.a.length - end));
+  return [
+    ...head,
+    ...middleDiff(all.a.slice(start, all.a.length - end), all.b.slice(start, all.b.length - end)),
+    ...tail,
+  ];
+}
+
+function middleDiff(a: string[], b: string[]): DiffLine[] {
+  if ((a.length + 1) * (b.length + 1) > MAX_DIFF_CELLS) {
     return [
       ...a.map((text) => ({ kind: "removed" as const, text })),
       ...b.map((text) => ({ kind: "added" as const, text })),
