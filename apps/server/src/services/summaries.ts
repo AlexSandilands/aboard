@@ -122,8 +122,6 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const findings = findingsByTask.get(record.id) ?? [];
     const review = deriveReviewSummary(rounds, findings, reviewMaxRounds);
     const issueImport = toTaskImport(importsByTask.get(record.id));
-    // Like a review, a request is about work in progress: a finished task no longer asks.
-    const attentionRequest = record.status === "done" ? null : record.attentionRequest;
     const blockedBy = relatedTasks(relations.filter((r) => r.blockedId === record.id).map((r) => r.blockerId));
     const summary: TaskSummary = {
       id: record.id,
@@ -157,9 +155,9 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
         record.status === "done" ? null : review,
         issueImport,
         autopilotByTask.get(record.id) ?? null,
-        attentionRequest,
+        record.attentionRequest,
       ),
-      attentionRequest,
+      attentionRequest: record.attentionRequest,
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }
         : null,

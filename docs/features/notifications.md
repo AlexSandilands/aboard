@@ -105,7 +105,7 @@ attention** list and the `attentionOnly` filters show it, and the same write sen
   an agent calls `request_attention(task, clear: true)`. Opening the panel marks the notification read but leaves the
   flag, so a glance doesn't lose it.
 - With the kind's switch off the flag still shows; only the notification is skipped.
-- A Done task doesn't ask (its request is hidden, like a finished task's review), and one can't be made on it.
+- A task that is finished (moved to Done or closed) loses its request, and one can't be made on a Done task.
 - The task's activity log has `attention_requested` and `attention_cleared`.
 
 ## Decisions

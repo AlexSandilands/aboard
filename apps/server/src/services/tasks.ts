@@ -622,7 +622,9 @@ export function createTasksService(
           updatedAt: now,
           statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           ...(reopened ? { resolution: null, resolvedByTaskId: null } : {}),
+          ...(status === "done" ? { attentionRequest: null } : {}),
         });
+        if (status === "done" && current.attentionRequest) fx.log(id, actor, "attention_cleared", { finished: true });
         if (reopened && current.resolvedByTaskId) fx.detail(current.resolvedByTaskId);
         if (statusChanged) {
           fx.log(id, actor, "status_changed", {
@@ -665,6 +667,8 @@ export function createTasksService(
           statusChangedAt: statusChanged ? statusChangeTime(repos, id, now) : current.statusChangedAt,
           resolution: input.resolution,
           resolvedByTaskId: by?.id ?? null,
+          // A finished task no longer asks; keeping it would bring it back if the task is reopened.
+          attentionRequest: null,
         });
         fx.log(id, actor, "closed", {
           resolution: input.resolution,

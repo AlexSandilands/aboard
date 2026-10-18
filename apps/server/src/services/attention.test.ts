@@ -79,10 +79,17 @@ describe("request attention", () => {
     expect(s.tasks.detail(task.id).events.filter((e) => e.type === "attention_cleared")).toHaveLength(2);
   });
 
-  it("stops asking once the task is done", () => {
+  it("drops the request when the task is finished, so reopening it doesn't bring it back", () => {
     const { s, task } = setup();
     s.attention.request(task.id, "Look", "claude-code");
     s.tasks.close(task.id, { resolution: "wont_do" }, "user");
+    expect(s.tasks.summary(task.id)).toMatchObject({ attention: [], attentionRequest: null });
+    s.tasks.move(task.id, { status: "in_progress" }, "user");
     expect(s.tasks.summary(task.id).attention).toEqual([]);
+
+    s.attention.request(task.id, "Look again", "claude-code");
+    s.tasks.move(task.id, { status: "done" }, "user");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    expect(s.tasks.summary(task.id).attentionRequest).toBeNull();
   });
 });
