@@ -106,8 +106,8 @@ prompt, skill name and allowed tools, the declared inputs with their current val
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **Custom automations → Import**, then choose the file (or **Example: Dispatch**, which the app
-ships). Before anything is saved you see everything it would run: the prompt, any command, the tools it may use
+To use someone's file: **Custom automations → Import**, then choose the file (or one of the examples the app ships:
+**Dispatch** or **Improve prompts and skills**). Before anything is saved you see everything it would run: the prompt, any command, the tools it may use
 without asking and the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
 It comes in **off**; switch it on in the Autopilot list when you have read it and the orange warning is gone.
@@ -121,13 +121,43 @@ It comes in **off**; switch it on in the Autopilot list when you have read it an
 
 ### Dispatch
 
-Dispatch is the example that ships. Every hour it searches Jira (with your **Jira tools** slot) for recent defects
+Dispatch is the first example that ships. Every hour it searches Jira (with your **Jira tools** slot) for recent defects
 that match its JQL, skips keys already on the board (a task linking the key) or in its handover, adds the ones that
 look fixable by an agent to the board with a plan, and then either asks you to approve each plan or, if you turned
 **Require a human to approve plans first** off, flags the task so Autopilot starts it. It never merges: you review the
 pull requests. Fill the Jira slot with tools such as `mcp__issue-tracker__search_jira` and
 `mcp__issue-tracker__get_jira_issue`, check the JQL and the limits, pick the projects, switch **Start planned tasks** on
 if it should start work, and switch Dispatch on.
+
+### Improve prompts and skills
+
+The second example audits how agents did and suggests changes to the text they run with. Every Monday at 07:00 it
+reads what happened in the project over the past week (`board_activity`: review rounds and findings, failed or
+retried Autopilot runs, blocked steps, stalls, agents' notes), looks closer at the few tasks that went worst (their
+session transcripts only when the notes don't say why), and suggests at most a few rewrites of your review and
+planning skills, your custom automations' prompts and the skills they name. You decide each one under
+**Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)); it never edits anything
+itself.
+
+It comes with its own skill, `aboard-improve`, which keeps the suggestions few and lean:
+
+- each one cites the tasks that show the problem, at least two or one that cost a failed run or a blocked task;
+- it rewrites or deletes the sentence that caused the problem rather than adding one, and a suggestion that makes
+  the text longer says why in its first line;
+- one behaviour per suggestion, no generic advice ("be careful"), the target's own wording and layout kept;
+- with weak evidence it suggests nothing, which is a good week.
+
+Its handover remembers what it suggested, so the next run sees whether you accepted it and whether the problem went
+away. `get_editable_prompt` shows each prompt's recent suggestions and what you decided, so it never suggests again
+what you rejected. Text the board itself ships (its tool descriptions) can't be suggested to; if one of your
+projects is the board's own code, it adds a backlog task there instead.
+
+To use it: **Import → Example: Improve prompts and skills**, switch **Save the skill** on (without the skill it
+suggests nothing), and check the inputs: **Look back (whole days)** (7), **Most suggestions per run** (3) and **May
+suggest changes to** (`skills`, `prompts` or `all`). Switch it on in the projects to audit. It runs on the deep model
+tier, once per project it's on in. A run that finds another project's run already left a suggestion open for the
+same skill or prompt leaves it alone; two runs at the same moment can still both suggest, and the later one replaces
+the earlier (it stays in the history).
 
 ## Commands run on your machine
 

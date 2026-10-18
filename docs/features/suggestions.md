@@ -36,7 +36,9 @@ Agents use three MCP tools (`apps/server/src/mcp/tools/suggestions.ts`):
 
 - `list_editable_prompts`: every target with its key, title, where it is used, and whether it is built-in or in a
   repository.
-- `get_editable_prompt(target)`: the current text and its hash (the first 16 hex digits of its SHA-256).
+- `get_editable_prompt(target)`: the current text and its hash (the first 16 hex digits of its SHA-256), and the
+  target's five latest suggestions (`forTarget`) with their status, date and the rationale's first line, so an agent
+  can tell what the user accepted or rejected and doesn't propose a rejected change again.
 - `suggest_change(target, baseHash, proposed, rationale, evidence[])`: `proposed` is the whole new text. The board
   refuses a key it doesn't list (NOT_FOUND), a hash that isn't the current text's (CONFLICT, with a hint to read it
   again), a text that is the same as the current one, and an automation prompt the automation couldn't save (an

@@ -67,6 +67,8 @@ export interface SuggestionsService {
    */
   suggest(input: SuggestChangeInput, actor: string): { suggestion: Suggestion; replaced: Suggestion | null };
   list(): SuggestionList;
+  /** A target's latest suggestions, newest first, so an agent can see what was accepted or rejected before. */
+  forTarget(key: string, limit?: number): Suggestion[];
   get(id: string): Suggestion;
   /**
    * Applies an open suggestion if its target still has the text the agent read, else marks it stale (returned with
@@ -365,6 +367,8 @@ export function createSuggestionsService(
         open: repos.suggestions.openCount(),
       };
     },
+
+    forTarget: (key, limit = 5) => repos.suggestions.forTarget(key, limit),
 
     get,
 

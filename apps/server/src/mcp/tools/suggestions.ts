@@ -4,6 +4,7 @@ import {
   SUGGESTION_RATIONALE_MAX,
   SUGGESTION_TEXT_MAX,
   type EditablePrompt,
+  type Suggestion,
 } from "@repo/contracts";
 import { actorField, run, textResult, type ToolRegistrar } from "../shared.ts";
 
@@ -21,6 +22,13 @@ const promptLine = (p: EditablePrompt): string => {
     p.inRepo ? "a file in a project's repository" : null,
   ].filter(Boolean);
   return `- ${p.key}  ${p.title}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}\n  used by: ${p.usedBy.join(", ")}`;
+};
+
+/** One line per earlier suggestion: when, what became of it, and the first line of its rationale. */
+const earlierLine = (s: Suggestion): string => {
+  const day = (s.resolvedAt ?? s.createdAt).slice(0, 10);
+  const why = s.rationale.split("\n")[0]!.trim();
+  return `- ${day} ${s.status}: ${why.length > 160 ? `${why.slice(0, 159)}…` : why}`;
 };
 
 /** Suggested changes to prompts and skills (docs/features/suggestions.md). Agents propose; only the user applies. */
@@ -50,19 +58,24 @@ export const registerSuggestionTools: ToolRegistrar = (server, { services, actor
       title: "Read a prompt or skill you can suggest a change to",
       description:
         "The full current text of one editable prompt or skill, and its hash. Pass the hash to suggest_change as " +
-        "baseHash: the change only applies while the text is still the one you read.",
+        "baseHash: the change only applies while the text is still the one you read. It also lists the latest " +
+        "suggestions for it and what the user decided: don't propose again what they rejected.",
       inputSchema: { target: targetField },
     },
     (args) =>
       run(
         () => {
           const prompt = services.suggestions.read(args.target);
+          const earlier = services.suggestions.forTarget(prompt.key);
           return textResult(
             [
               `${prompt.title}  (target: ${prompt.key})`,
               `hash: ${prompt.hash}`,
               `used by: ${prompt.usedBy.join(", ")}`,
               prompt.path ? `file: ${prompt.path}` : null,
+              earlier.length > 0
+                ? `earlier suggestions (newest first):\n${earlier.map(earlierLine).join("\n")}`
+                : "earlier suggestions: none",
               "",
               "----- current text -----",
               prompt.text,

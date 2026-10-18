@@ -760,7 +760,14 @@ and shows the prompt, command, allowed tools and skill text in full, as untruste
 files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Dispatch** is an hourly scheduled agent with the inputs `jql`,
 `look_back_days`, `max_issues` and `require_approval` and a `jira` slot. It uses `list_tasks(query: KEY)` to skip keys
 already on the board, `add_to_backlog` and `set_plan`, then `request_attention` or the Autopilot flag, and keeps triaged
-and skipped keys in its handover. It never merges.
+and skipped keys in its handover. It never merges. **Improve prompts and skills** (#134) is a weekly (Monday 07:00)
+scheduled agent on the `deep` tier with the inputs `look_back_days`, `max_suggestions` and `targets`, `allowedTools:
+["Skill"]` (a headless run is denied the Skill tool otherwise) and its own skill, `<brand id>-improve`, in the file.
+The skill holds the method and the rules that keep suggestions lean (evidence from at least two tasks or one costly
+one, one behaviour each, rewrite or delete rather than add, no growth without a stated reason); the prompt holds the
+inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
+`suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
+target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
 
 ### Runners
 

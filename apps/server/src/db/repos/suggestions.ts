@@ -69,6 +69,16 @@ export function createSuggestionsRepo(sql: Sql) {
       );
       return row ? toSuggestion(row) : null;
     },
+    /** A target's suggestions, newest first, whatever their status. */
+    forTarget(targetKey: string, limit: number): Suggestion[] {
+      return sql
+        .all<SuggestionRow>(
+          "SELECT * FROM suggestions WHERE target_key = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+          targetKey,
+          limit,
+        )
+        .map(toSuggestion);
+    },
     /** Open ones first (oldest first), then the newest `decidedLimit` decided ones. */
     list(decidedLimit: number): Suggestion[] {
       const open = sql.all<SuggestionRow>("SELECT * FROM suggestions WHERE status = 'open' ORDER BY created_at, rowid");

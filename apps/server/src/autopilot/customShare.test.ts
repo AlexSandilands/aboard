@@ -1,5 +1,6 @@
 import {
   AUTOMATION_BUNDLE_VERSION,
+  BRAND,
   AUTOMATION_EXAMPLES,
   customAutomationKey,
   CustomAction,
@@ -27,7 +28,7 @@ afterEach(() => {
 
 type Action = CreateCustomAutomationInput["action"];
 
-function setup() {
+function setup(aheadMs = 2 * 3_600_000) {
   // The user's home is a throwaway folder: an import writes skills into it.
   const home = mkdtempSync(join(tmpdir(), "share-test-home-"));
   homes.push(home);
@@ -42,8 +43,8 @@ function setup() {
         return Promise.resolve({ runner: "headless", result: null, output: { summary: "ok", handover: "" } });
       },
     },
-    // Two hours on, so the hourly slot after the automation was made has come.
-    now: () => new Date(Date.now() + 2 * 3_600_000),
+    // Two hours on by default, so the hourly slot after the automation was made has come.
+    now: () => new Date(Date.now() + aheadMs),
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -339,5 +340,37 @@ describe("the Dispatch example", () => {
     );
     expect(request.prompt).toContain(`Project: Alpha`);
     expect(request.outputSchema).toBeTruthy();
+  });
+});
+
+describe("the Improve example", () => {
+  it("imports with its skill, and its weekly run uses the skill on the deep tier with the filled inputs", async () => {
+    // Eight days on, so a weekly slot has come whatever today is.
+    const s = setup(8 * 24 * 3_600_000);
+    const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+    const bundle = AUTOMATION_EXAMPLES.find((e) => e.id === "improve")!.bundle;
+    const res = await s.request("/api/autopilot/custom/import", {
+      method: "POST",
+      json: { bundle, inputs: { max_suggestions: "1" }, projectIds: [project.id], installSkill: true },
+      headers: ORIGIN,
+    });
+    expect(res.status).toBe(201);
+    const { automation } = await s.json<{ automation: CustomAutomation }>(res);
+    const skill = `${BRAND.id}-improve`;
+    expect(automation.action).toMatchObject({ skill, tier: "deep" });
+    expect(readFileSync(join(s.skillDir(skill), "SKILL.md"), "utf8")).toContain(`name: ${skill}`);
+
+    s.services.autopilot.setScope("board", null, customAutomationKey(automation.id), { mode: "on" });
+    await s.engine.pass();
+    await s.engine.idle();
+    expect(s.agentRuns).toHaveLength(1);
+    const request = s.agentRuns[0]!;
+    expect(request.tier).toBe("deep");
+    expect(request.tools).toEqual(["Skill"]);
+    expect(request.prompt).toContain(`Use the ${skill} skill.`);
+    expect(request.prompt).toContain('since "7d"');
+    expect(request.prompt).toContain("at most 1 changes");
+    expect(request.prompt).toContain("You may suggest changes to: all.");
+    expect(request.prompt).toContain("Project folder: /work/alpha");
   });
 });
