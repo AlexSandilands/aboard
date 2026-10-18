@@ -558,6 +558,25 @@ describe("github poller schedule", () => {
     expect(gh.requests).toHaveLength(2);
   });
 
+  it("doesn't ask again from a panel or a new link while a PR is backed off", async () => {
+    const link = { ...ghLink("bad", 404), taskId: "t1" };
+    const { gh, github } = setup([link]);
+    await github.pollAll();
+    expect(gh.requests).toHaveLength(1);
+    await github.viewTask("t1");
+    await github.viewTask("t1");
+    await github.pollLink("bad");
+    expect(gh.requests).toHaveLength(1);
+  });
+
+  it("reads a link once when a poll and a panel ask for it at the same time", async () => {
+    const link = { ...idle("l1", 1, 60_000), taskId: "t1" };
+    const { gh, github } = setup([link]);
+    fakes(gh, 1);
+    await Promise.all([github.pollAll(Date.now() + 120_000), github.viewTask("t1"), github.pollLink("l1")]);
+    expect(gh.requests).toHaveLength(1);
+  });
+
   it("polls an open panel's PRs hot, for a while after it last asked", async () => {
     const { gh, github, snapshots } = setup([idle("quiet", 1, 10_000)]);
     fakes(gh, 1);

@@ -777,8 +777,21 @@ export function createGithubIntegration(deps: {
     });
   };
 
+  /** Links being read now, so a poll, a panel opening and a new link never fetch one at once and race to store it. */
+  const inFlight = new Set<string>();
+
   /** Reads the links in batches per host and repo, and returns how many queries went out. */
-  const pollLinks = async (links: readonly RefPrLink[]): Promise<number> => {
+  const pollLinks = async (all: readonly RefPrLink[]): Promise<number> => {
+    const links = all.filter((l) => !inFlight.has(l.id));
+    for (const link of links) inFlight.add(link.id);
+    try {
+      return await pollBatches(links);
+    } finally {
+      for (const link of links) inFlight.delete(link.id);
+    }
+  };
+
+  const pollBatches = async (links: readonly RefPrLink[]): Promise<number> => {
     const groups = new Map<string, { host: string; repo: string; links: RefPrLink[] }>();
     for (const link of links) {
       const key = `${link.ref.host}
@@ -816,15 +829,23 @@ ${link.ref.repo.toLowerCase()}`;
     return queries;
   };
 
-  /** The polled GitHub PR links, or null when polling is off or gh is unusable. */
-  const pollableLinks = async (): Promise<RefPrLink[] | null> => {
+  /**
+   * The polled GitHub PR links, or null when polling is off or gh is unusable. Links that failed lately and links on a
+   * host that refused are left out, so no path (the tick, a panel opening, a new link) asks again within the back-off.
+   */
+  const pollableLinks = async (now: number): Promise<RefPrLink[] | null> => {
     const services = deps.services();
     if (!services.settings.get().githubPolling) return null;
     const current = await ensureStatus();
     if (!current.authenticated) return null;
-    return services.links
+    const links = services.links
       .listByKind("pr")
       .filter((l): l is RefPrLink => isGithubPr(l, current) && polls(l.ref.host, current));
+    const ids = new Set(links.map((l) => l.id));
+    for (const key of failedAt.keys()) {
+      if (!backedOff(key, now) || !(key.startsWith("host:") || ids.has(key))) failedAt.delete(key);
+    }
+    return links.filter((l) => !backedOff(l.id, now) && !backedOff(`host:${l.ref.host}`, now));
   };
 
   const isViewed = (taskId: string, now: number): boolean =>
@@ -834,13 +855,10 @@ ${link.ref.repo.toLowerCase()}`;
     if (polling) return;
     polling = true;
     try {
-      const links = await pollableLinks();
-      if (!links) return;
       for (const [taskId] of viewedAt) if (!isViewed(taskId, now)) viewedAt.delete(taskId);
-      const due = links.filter(
-        (l) =>
-          prIsDue(l, now, isViewed(l.taskId, now)) && !backedOff(l.id, now) && !backedOff(`host:${l.ref.host}`, now),
-      );
+      const links = await pollableLinks(now);
+      if (!links) return;
+      const due = links.filter((l) => prIsDue(l, now, isViewed(l.taskId, now)));
       if (due.length === 0) return;
       const queries = await pollLinks(due);
       log.debug?.(`[github] polled ${due.length} of ${links.length} PRs in ${queries} queries`);
@@ -853,7 +871,7 @@ ${link.ref.repo.toLowerCase()}`;
 
   const pollLink = async (linkId: string): Promise<void> => {
     try {
-      const link = (await pollableLinks())?.find((l) => l.id === linkId);
+      const link = (await pollableLinks(Date.now()))?.find((l) => l.id === linkId);
       if (link) await pollLinks([link]);
     } catch (error) {
       log.warn(`[github] couldn't read the new PR link: ${messageOf(error)}`);
@@ -864,7 +882,7 @@ ${link.ref.repo.toLowerCase()}`;
     const now = Date.now();
     viewedAt.set(taskId, now);
     try {
-      const links = await pollableLinks();
+      const links = await pollableLinks(now);
       const stale = links?.filter((l) => l.taskId === taskId && isOlderThan(l, now, PANEL_REFRESH_AGE_MS)) ?? [];
       if (stale.length > 0) await pollLinks(stale);
     } catch (error) {

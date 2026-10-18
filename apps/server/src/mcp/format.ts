@@ -82,7 +82,7 @@ export function linkText(link: TaskLink): string {
       const state = s
         ? ` (${s.state}, checks ${s.checks}${optionalChecksText(s.optionalChecks)}${s.reviewDecision ? `, ${s.reviewDecision.replace("_", " ")}` : ""}${
             s.mergeable === "conflicting" ? ", conflicts" : ""
-          })`
+          }${s.mergeState === "blocked" || s.mergeState === "behind" ? `, merge ${s.mergeState}` : ""})`
         : "";
       return `PR ${name}${state}${label} ${link.url}`;
     }

@@ -421,8 +421,15 @@ export const useStartSession = (opts?: MutationOpts) =>
   );
 export const useRemoveLink = (opts?: MutationOpts) =>
   useApiMutation((linkId: string) => api<void>(`/api/links/${enc(linkId)}`, { method: "DELETE" }), opts);
-export const useRefreshLink = (opts?: MutationOpts) =>
-  useApiMutation((linkId: string) => api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} }), opts);
+/** Reads a link now. An unchanged PR sends no event, so the task is refetched for its new `syncedAt` ("checked Ns ago"). */
+export const useRefreshLink = (opts?: MutationOpts) => {
+  const queryClient = useQueryClient();
+  return useApiMutation(async (linkId: string) => {
+    const link = await api<TaskLink>(`/api/links/${enc(linkId)}/refresh`, { body: {} });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.task(link.taskId) });
+    return link;
+  }, opts);
+};
 /** Merges a PR, or turns auto-merge on or off. The snapshot and any move to Done arrive over SSE. */
 export const useMergePr = (opts?: MutationOpts) =>
   useApiMutation(
