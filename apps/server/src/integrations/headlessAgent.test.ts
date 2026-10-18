@@ -37,6 +37,24 @@ describe("headless agent", () => {
     expect(after(args, "--name")).toBe("Autopilot · Fix PRs · PR #7");
   });
 
+  it("allows an edit agent the extra tools it is given, and still denies the pushes and merges", () => {
+    const args = agentArgs({
+      access: "edit",
+      budgetUsd: 1,
+      sessionId: SESSION,
+      model: null,
+      defaultBranch: "main",
+      tools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira"],
+    });
+    const allowed = args.slice(args.indexOf("--allowedTools") + 1, args.indexOf("--disallowedTools"));
+    expect(allowed).toEqual(
+      expect.arrayContaining(["Bash", `mcp__${BRAND.id}`, "mcp__issue-tracker", "mcp__issue-tracker__search_jira"]),
+    );
+    const denied = args.slice(args.indexOf("--disallowedTools") + 1);
+    expect(denied).toEqual(expect.arrayContaining(pushDenyRules("main")));
+    expect(args).not.toContain("--strict-mcp-config");
+  });
+
   it("runs read-only with extra tools and a schema", () => {
     const args = agentArgs({
       access: "read-only",

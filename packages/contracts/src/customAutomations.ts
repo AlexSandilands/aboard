@@ -15,6 +15,9 @@ export const CUSTOM_PROMPT_MAX = 20_000;
 export const CUSTOM_COMMAND_MAX = 4_000;
 export const CUSTOM_TIMEOUT_MAX_SECONDS = 3_600;
 export const CUSTOM_STALE_HOURS_MAX = 24 * 30;
+/** The most extra tools an agent action may allow, and the longest rule. */
+export const CUSTOM_TOOLS_MAX = 20;
+export const CUSTOM_TOOL_MAX = 200;
 
 /** The catalogue key of a custom automation. Stored in settings and runs. */
 export const customAutomationKey = (id: string): string => `${CUSTOM_AUTOMATION_PREFIX}${id}`;
@@ -73,6 +76,43 @@ export const CustomFilters = z.object({
 });
 export type CustomFilters = z.infer<typeof CustomFilters>;
 
+/**
+ * A tool an agent action is allowed to call without asking, as Claude Code's `--allowedTools` takes it: a whole MCP
+ * server (`mcp__issue-tracker`), one of its tools (`mcp__issue-tracker__search_jira`, or `mcp__issue-tracker__search_*`), or a
+ * built-in tool with an optional specifier (`Skill(name)`). A `*` is only allowed in the tool part of
+ * an MCP rule: Claude Code skips one in the server part.
+ */
+const MCP_TOOL_RULE = /^mcp__[A-Za-z0-9_-]+(?:__[A-Za-z0-9_*-]+)?$/;
+
+/**
+ * The built-in tools a rule may name. Not the shell tools (Bash, PowerShell, ...): the push and merge deny rules are
+ * `Bash(...)` patterns, so allowing another shell tool would sidestep them, and an edit run already has Bash.
+ */
+export const CUSTOM_BUILT_IN_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "Edit",
+  "Write",
+  "NotebookEdit",
+  "WebFetch",
+  "WebSearch",
+  "TodoWrite",
+  "Task",
+  "Agent",
+  "Skill",
+] as const;
+const BUILT_IN_TOOL_RULE = new RegExp(`^(?:${CUSTOM_BUILT_IN_TOOLS.join("|")})(?:\\([^()\\r\\n]+\\))?$`);
+
+export const CustomToolRule = z
+  .string()
+  .trim()
+  .max(CUSTOM_TOOL_MAX)
+  .refine(
+    (rule) => MCP_TOOL_RULE.test(rule) || BUILT_IN_TOOL_RULE.test(rule),
+    "Use mcp__<server>, mcp__<server>__<tool> or a built-in tool such as WebFetch (not Bash or another shell)",
+  );
+
 export const CustomAction = z.discriminatedUnion("kind", [
   /** An agent through Autopilot's runners, on the trigger's task. */
   z.object({
@@ -85,6 +125,16 @@ export const CustomAction = z.discriminatedUnion("kind", [
     tier: ModelTier.nullable().default(null),
     /** Work on the branch of the task's open pull request when it has one, instead of a new branch. */
     onPrBranch: z.boolean().default(false),
+    /**
+     * Tools the agent may call besides the board's and the built-in ones, e.g. an MCP server of the user's. They run
+     * unattended, with no one to approve them. Passed to the runner as `tools`, so they need a headless run; the push and
+     * merge deny rules still win.
+     */
+    allowedTools: z
+      .array(CustomToolRule)
+      .max(CUSTOM_TOOLS_MAX, `At most ${CUSTOM_TOOLS_MAX} tools`)
+      .default([])
+      .transform((rules) => [...new Set(rules)]),
   }),
   /**
    * A command run in the project's folder by /bin/sh, or PowerShell on Windows. Task values reach it only as
@@ -251,6 +301,12 @@ export function customValues(
     pr: pr ? { url: pr.url } : null,
     project: project ? { name: project.title, path: project.workspaceRoot } : null,
   };
+}
+
+/** What a dry run or the form's preview adds under an agent's prompt: the extra tools it may call unattended. */
+export function customAgentToolsNote(action: CustomAction): string | null {
+  if (action.kind !== "agent" || action.allowedTools.length === 0) return null;
+  return `Allowed to call without asking, on top of the usual tools: ${action.allowedTools.join(", ")}`;
 }
 
 /** The most of a scheduled agent's handover the next run is given (and the board keeps), in characters. */

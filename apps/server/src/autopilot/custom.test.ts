@@ -279,6 +279,22 @@ describe("custom automations: triggers", () => {
       expect(agentRuns[0]).toMatchObject({ tier: "light", options: { runner: "headless" } });
     });
 
+    it("gives a scheduled agent the extra tools the action allows", async () => {
+      const { define, pass, agentRuns, project } = setup();
+      const tools = ["mcp__issue-tracker__search_jira", "mcp__issue-tracker__get_jira_issue"];
+      define({
+        name: "Dispatch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: { ...agent, allowedTools: tools },
+      });
+      await pass();
+      await pass(5 * 60_000);
+      expect(agentRuns).toHaveLength(1);
+      expect(agentRuns[0]!.tools).toEqual(tools);
+      expect(agentRuns[0]!.run.taskId).toBeNull();
+    });
+
     it("doesn't start another run while the last one is going, and runs the latest slot once it ends", async () => {
       let finish = () => {};
       const { define, pass, agentRuns, project, engine } = setup({
@@ -773,6 +789,36 @@ describe("custom automations: actions", () => {
     expect(runsOf()[0]).toMatchObject({ status: "succeeded", threadUrl: "t3code://threads/env/t1" });
   });
 
+  it("gives the agent the extra tools the action allows, and none when it allows none", async () => {
+    const { s, task, define, pass, agentRuns } = setup();
+    const trigger = { kind: "status_change" as const, to: "review" as const };
+    const tools = ["mcp__issue-tracker", "mcp__issue-tracker__search_jira"];
+    define({ name: "With", trigger, action: { kind: "agent", prompt: "Go", allowedTools: tools } });
+    const t = task("Moves");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    await pass();
+    expect(agentRuns).toHaveLength(1);
+    expect(agentRuns[0]!.tools).toEqual(tools);
+
+    const { s: s2, task: task2, define: define2, pass: pass2, agentRuns: runs2 } = setup();
+    define2({ name: "Without", trigger, action: { kind: "agent", prompt: "Go" } });
+    s2.tasks.move(task2("Moves").id, { status: "review" }, "agent");
+    await pass2();
+    expect(runs2).toHaveLength(1);
+    expect(runs2[0]).not.toHaveProperty("tools");
+  });
+
+  it("refuses an allowed tool that isn't a tool or server name", () => {
+    const { s } = setup();
+    expect(() =>
+      s.customAutomations.create({
+        name: "Bad",
+        trigger: { kind: "stale", hours: 3 },
+        action: { kind: "agent", prompt: "Go", allowedTools: ["issue-tracker"] },
+      }),
+    ).toThrow(/mcp__/);
+  });
+
   it("passes task values to a shell command only as environment variables", async () => {
     const { s, define, pass, shellRuns, runsOf, project } = setup();
     define({
@@ -845,7 +891,7 @@ describe("custom automations: actions", () => {
     define({
       name: "Agent",
       trigger: { kind: "status_change", to: "review" },
-      action: { kind: "agent", prompt: "Look at {{task.title}}" },
+      action: { kind: "agent", prompt: "Look at {{task.title}}", allowedTools: ["mcp__issue-tracker__search_jira"] },
     });
     define({
       name: "Shell",
@@ -861,6 +907,9 @@ describe("custom automations: actions", () => {
     expect(runs.every((r) => r.dryRun && r.status === "skipped")).toBe(true);
     const agent = runs.find((r) => r.summary.startsWith("Would start an agent"))!;
     expect(agent.detail).toContain("Look at Dry");
+    expect(agent.detail).toContain(
+      "Allowed to call without asking, on top of the usual tools: mcp__issue-tracker__search_jira",
+    );
     const shellRun = runs.find((r) => r.summary.startsWith("Would run"))!;
     expect(shellRun.detail).toContain("make check");
     expect(shellRun.detail).toContain(`${brandEnv("TASK_TITLE")}="Dry"`);
