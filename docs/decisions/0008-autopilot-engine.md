@@ -39,6 +39,15 @@ scheduled agent run, or rules inside the server that start an agent only when an
   delivery (Merge into epic branch, #123); `checkAutopilotMergeTarget` in `integrations/github.ts` refuses any
   other target, the default branch above all, on GitHub's own reading just before the merge. The epic's PR into the
   default branch is only ever opened as a draft and described; the user merges it.
+- **Into the default branch: only `merge_task_pr`, only for flagged tasks.** (Amended for the orchestrator agent,
+  #167.) The board merges into the default branch without the user's click in exactly one place: the
+  `merge_task_pr` MCP tool, for a task the user flagged for auto-merge (`tasks.auto_merge`, Default is off). It
+  passes the same gate as Merge into epic branch (`notMergeable` in `autopilot/mergeGate.ts`), then
+  `checkAutopilotMergeTarget` with `into: "default"`, which allows the default branch and nothing else. Autopilot's
+  own automations still can't: `mergeIntoDefaultBranch` isn't on the `GithubActions` they get, and the guard's
+  default (`into: "epic"`) still refuses the default branch. Headless runs keep their `gh pr merge` deny rule, so
+  the tool is the only way, and the gate can't be skipped. The agent chooses which flagged PR to merge and when,
+  since it can see the board and order merges so they don't conflict; the server decides whether it may.
 - **REST only.** Autopilot settings, pause and resume are REST routes for the UI. There is no MCP tool for
   them, so an agent can't turn Autopilot on, raise its limits or unpause it.
 - **The review watchdog stays separate.** `apps/server/src/integrations/reviewFallbacks.ts` is a fallback

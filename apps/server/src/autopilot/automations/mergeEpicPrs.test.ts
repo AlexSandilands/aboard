@@ -16,7 +16,8 @@ import { AppError } from "../../errors.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { NO_GITHUB, NO_RUNNER, type GithubActions } from "../types.ts";
-import { epicPrBody, MERGE_ATTEMPTS, mergeEpicPrs, NO_CHECKS_WAIT_MS } from "./mergeEpicPrs.ts";
+import { NO_CHECKS_WAIT_MS } from "../mergeGate.ts";
+import { epicPrBody, MERGE_ATTEMPTS, mergeEpicPrs } from "./mergeEpicPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it", status: "done" as const }] }] };
@@ -404,6 +405,22 @@ describe("the default-branch guard", () => {
     );
     expect(() => checkAutopilotMergeTarget({ ...ok, base: "epic/2-other" })).toThrow(/now merges into/);
     expect(() => checkAutopilotMergeTarget({ ...ok, defaultBranch: null })).toThrow(/default branch/);
+  });
+
+  it("lets merge_task_pr's path into the default branch only, and nowhere else", () => {
+    const main = { base: "main", expectedBase: "main", defaultBranch: "main", into: "default" as const };
+    expect(() => checkAutopilotMergeTarget(main)).not.toThrow();
+    // An epic's branch or any other isn't the default branch, so this path refuses it.
+    expect(() => checkAutopilotMergeTarget({ ...main, base: BRANCH, expectedBase: BRANCH })).toThrow(
+      /only merges into the default branch/,
+    );
+    expect(() => checkAutopilotMergeTarget({ ...main, base: "release", expectedBase: "release" })).toThrow(
+      MergeTargetError,
+    );
+    expect(() => checkAutopilotMergeTarget({ ...main, base: "release" })).toThrow(/now merges into release/);
+    expect(() => checkAutopilotMergeTarget({ ...main, defaultBranch: null })).toThrow(/default branch/);
+    // Without `into`, the default branch stays out of reach.
+    expect(() => checkAutopilotMergeTarget({ ...main, into: undefined })).toThrow(/never merges into the default/);
   });
 
   it("fails the run, flagged, when GitHub's guard refuses", async () => {

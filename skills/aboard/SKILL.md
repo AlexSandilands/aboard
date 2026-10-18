@@ -87,6 +87,13 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    A task can also be marked **priority** (`priority: true` on `create_task` / `add_to_backlog` / `update_task`; `false` clears
    it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
 
+   And it can be allowed **auto-merge** (`autoMerge: "on"` on `create_task` / `add_to_backlog` / `update_task`;
+   `"off"` or `"default"` takes it back): then `merge_task_pr(task)` may merge its one open PR into the default
+   branch. Set it only when the user says so. The board refuses the merge, with the reason, until the task is in
+   Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass
+   and it merges cleanly. Fix what it names or wait; never merge with `gh` or `git` instead. When several flagged
+   tasks are ready, merge one at a time so the rest don't conflict.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once

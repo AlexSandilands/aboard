@@ -392,7 +392,8 @@ to fix a pull request linked to a task.
 **Merge into epic branch** (`merge_epic_prs`, #123; `automations/mergeEpicPrs.ts`). Needs no agent and is off until
 switched on, with no settings. Only epics with integration delivery ([epics](epics.md#delivery)) give it work.
 
-- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` finds nothing in the way: the task
+- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
+  with [`merge_task_pr`](github-prs.md#merge_task_pr)) finds nothing in the way: the task
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
   blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
