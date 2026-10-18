@@ -11,7 +11,7 @@ export function skillSyncBadge(status: SkillSyncHarnessStatus): { label: string;
       // Sync rewrites it on the next start; with sync off it stays as it is.
       return { label: "Out of date", variant: status.enabled ? "info" : "warning" };
     case "edited":
-      return { label: "Edited by you", variant: "warning" };
+      return { label: status.installedByBoard ? "Edited by you" : "Not the app's copy", variant: "warning" };
     case "not_installed":
       return status.enabled ? { label: "Not installed", variant: "warning" } : null;
   }
@@ -24,7 +24,9 @@ export const skillSyncFolder = (status: Pick<SkillSyncHarnessStatus, "harness">)
 /** The row's description: what the switch does, or what the user has to decide. */
 export function skillSyncDescription(status: SkillSyncHarnessStatus): string {
   if (status.enabled && status.state === "edited") {
-    return "Your copy differs from the app's, so it isn't updated. Overwrite it, or keep yours and stop syncing.";
+    return status.installedByBoard
+      ? "Your copy differs from the app's, so it isn't updated. Overwrite it, or keep yours and stop syncing."
+      : "A copy the board didn't install is there, perhaps an older one. Overwrite it with the app's, or keep it and stop syncing.";
   }
   if (status.enabled) return `Installed in ${skillSyncFolder(status)} and updated with the app.`;
   return `Install it in ${skillSyncFolder(status)} and keep it updated with the app.`;
@@ -38,9 +40,11 @@ export function skillSyncDisablePrompt(
   const edited = status.state === "edited";
   return {
     edited,
-    description: edited
-      ? `The skill in ${skillSyncFolder(status)} has your edits. Deleting it loses them; keeping it leaves it as it is, no longer updated.`
-      : `Delete the skill from ${skillSyncFolder(status)}, or keep it there, no longer updated.`,
+    description: !edited
+      ? `Delete the skill from ${skillSyncFolder(status)}, or keep it there, no longer updated.`
+      : status.installedByBoard
+        ? `The skill in ${skillSyncFolder(status)} has your edits. Deleting it loses them; keeping it leaves it as it is, no longer updated.`
+        : `The skill in ${skillSyncFolder(status)} isn't the app's copy. Deleting it loses any changes made to it; keeping it leaves it as it is.`,
   };
 }
 

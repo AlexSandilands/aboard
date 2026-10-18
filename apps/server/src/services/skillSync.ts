@@ -106,7 +106,13 @@ export function createSkillSyncService(core: Core, opts: { userHome: string }): 
     const stored = load();
     const harnesses = SkillSyncHarness.options.map((harness): SkillSyncHarnessStatus => {
       const rec = stored.harnesses[harness] ?? OFF;
-      return { harness, enabled: rec.enabled, state: stateOf(harness, rec), path: pathOf(harness) };
+      return {
+        harness,
+        enabled: rec.enabled,
+        state: stateOf(harness, rec),
+        installedByBoard: rec.installedHash !== null,
+        path: pathOf(harness),
+      };
     });
     return {
       harnesses,

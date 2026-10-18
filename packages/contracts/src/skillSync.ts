@@ -22,6 +22,11 @@ export interface SkillSyncHarnessStatus {
   /** The user turned sync on for this harness: the board installs the skill and rewrites it when the app changes. */
   enabled: boolean;
   state: SkillSyncState;
+  /**
+   * The board wrote (or adopted) a copy here. An `edited` copy it never wrote is one put there by hand, often an older
+   * version from before sync existed, rather than one the user changed.
+   */
+  installedByBoard: boolean;
   /** The installed file's absolute path. */
   path: string;
 }

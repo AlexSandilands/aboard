@@ -6,6 +6,7 @@ const status = (state: SkillSyncState, enabled = true): SkillSyncHarnessStatus =
   harness: "claude",
   enabled,
   state,
+  installedByBoard: true,
   path: "/home/me/.claude/skills/x/SKILL.md",
 });
 
@@ -23,6 +24,13 @@ describe("skill sync logic", () => {
     expect(skillSyncDescription(status("up_to_date"))).toContain(`~/.claude/skills/${BRAND.id}`);
     expect(skillSyncDescription(status("edited"))).toMatch(/Overwrite it, or keep yours/);
     expect(skillSyncDescription(status("edited", false))).toMatch(/^Install it/);
+  });
+
+  it("doesn't call a copy the board never wrote the user's edits", () => {
+    const manual = { ...status("edited"), installedByBoard: false };
+    expect(skillSyncBadge(manual)?.label).toBe("Not the app's copy");
+    expect(skillSyncDescription(manual)).toMatch(/didn't install/);
+    expect(skillSyncDisablePrompt(manual)?.description).toMatch(/isn't the app's copy/);
   });
 
   it("asks before turning off only when there is a copy, warning about edits", () => {

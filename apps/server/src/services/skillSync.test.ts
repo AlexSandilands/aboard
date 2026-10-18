@@ -57,7 +57,7 @@ describe("skill sync", () => {
     sync.enable("claude");
     const edited = `${boardSkillFile()}\nMy own rule.\n`;
     put(edited);
-    expect(claude(sync.status()).state).toBe("edited");
+    expect(claude(sync.status())).toMatchObject({ state: "edited", installedByBoard: true });
     sync.syncAll();
     sync.enable("claude");
     expect(read()).toBe(edited);
@@ -78,7 +78,7 @@ describe("skill sync", () => {
   it("treats a different copy already there as edited and leaves it", () => {
     const { sync, claude, read, put } = setup();
     put("---\nname: mine\n---\n\nMy skill.\n");
-    expect(claude(sync.enable("claude"))).toMatchObject({ enabled: true, state: "edited" });
+    expect(claude(sync.enable("claude"))).toMatchObject({ enabled: true, state: "edited", installedByBoard: false });
     expect(read()).toContain("My skill.");
   });
 

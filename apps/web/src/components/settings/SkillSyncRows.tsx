@@ -1,7 +1,6 @@
 import { BOARD_AGENTS_SNIPPET, type SkillSyncHarness, type SkillSyncStatus } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { copyToClipboard } from "~/components/task/InlineInput";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -153,8 +152,15 @@ export function AgentsSnippetRow({ id }: { id: string }) {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => {
-            copyToClipboard(BOARD_AGENTS_SNIPPET, "snippet");
+          onClick={async () => {
+            // Recorded only once the clipboard has it, so a failed copy doesn't hide a later change.
+            try {
+              await navigator.clipboard.writeText(BOARD_AGENTS_SNIPPET);
+            } catch {
+              toastManager.add({ type: "error", title: "Couldn't copy snippet" });
+              return;
+            }
+            toastManager.add({ type: "success", title: "Copied snippet" });
             copied.mutate();
           }}
         >

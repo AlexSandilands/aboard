@@ -314,7 +314,6 @@ export function usePrFix(linkId: string | null) {
   });
 }
 
-/** The last git backup run. Polled while shown, quickly while a run is in progress. */
 /** The board skill's install state per harness. Read on focus too: the user edits the files outside the board. */
 export function useSkillSync() {
   return useQuery({
@@ -325,6 +324,7 @@ export function useSkillSync() {
   });
 }
 
+/** The last git backup run. Polled while shown, quickly while a run is in progress. */
 export function useBackupStatus() {
   return useQuery({
     queryKey: queryKeys.backupStatus,

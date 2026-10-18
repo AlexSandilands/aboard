@@ -39,8 +39,9 @@ The server explains the basics when an agent connects. For the full workflow:
   tools that no longer exist.
 
 The row shows the installed copy's state: **Up to date**, **Out of date** (rewritten when the board next
-starts), or **Edited by you**. The board only rewrites a copy that is still exactly what it wrote; one you
-edited stays yours until you choose **Overwrite**, or **Keep mine** to stop syncing it. Turning the switch off
+starts), **Edited by you**, or **Not the app's copy** (one you copied in yourself, often an older version). The
+board only rewrites a copy that is still exactly what it wrote; any other stays yours until you choose
+**Overwrite**, or **Keep mine** to stop syncing it. Turning the switch off
 asks whether to delete the installed copy, and it never touches your other skills.
 
 ## Projects
