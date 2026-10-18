@@ -31,7 +31,8 @@ The server explains the basics when an agent connects. For the full workflow:
 
 - **Claude Code, Copilot, Codex:** in **Settings → Integrations**, turn on **Board skill** in the agent's
   section. The board installs [`skills/aboard`](../../skills/aboard) into its global skills folder
-  (`~/.claude/skills/aboard`, `~/.copilot/skills/aboard` or `~/.codex/skills/aboard`) and rewrites it when an
+  (`~/.claude/skills/aboard`, `~/.copilot/skills/aboard` or `~/.codex/skills/aboard`, or under the folder
+  `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` names when you set one) and rewrites it when an
   update changes it, so agents never follow an old workflow. It's off until you turn it on.
 - **Other agents:** paste [`skills/aboard/AGENTS-snippet.md`](../../skills/aboard/AGENTS-snippet.md) into
   your `AGENTS.md` or `CLAUDE.md`. **Copy snippet** in the Codex section copies it and, later, says when it

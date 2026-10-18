@@ -1,6 +1,12 @@
-import { BRAND, type SkillSyncHarnessStatus, type SkillSyncState } from "@repo/contracts";
+import type { SkillSyncHarnessStatus, SkillSyncState } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { skillSyncBadge, skillSyncDescription, skillSyncDisablePrompt, snippetHint } from "./skillSync.logic";
+import {
+  skillSyncBadge,
+  skillSyncDescription,
+  skillSyncDisablePrompt,
+  skillSyncFolder,
+  snippetHint,
+} from "./skillSync.logic";
 
 const status = (state: SkillSyncState, enabled = true): SkillSyncHarnessStatus => ({
   harness: "claude",
@@ -21,7 +27,10 @@ describe("skill sync logic", () => {
   });
 
   it("names the folder and asks for a choice when the copy was edited", () => {
-    expect(skillSyncDescription(status("up_to_date"))).toContain(`~/.claude/skills/${BRAND.id}`);
+    expect(skillSyncDescription(status("up_to_date"))).toContain("/home/me/.claude/skills/x and");
+    expect(skillSyncFolder({ path: String.raw`C:\Users\me\.copilot\skills\x\SKILL.md` })).toBe(
+      String.raw`C:\Users\me\.copilot\skills\x`,
+    );
     expect(skillSyncDescription(status("edited"))).toMatch(/Overwrite it, or keep yours/);
     expect(skillSyncDescription(status("edited", false))).toMatch(/^Install it/);
   });

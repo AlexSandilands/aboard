@@ -1,11 +1,11 @@
-import { BOARD_AGENTS_SNIPPET, boardSkillFile, BRAND, type SkillSyncStatus } from "@repo/contracts";
+import { BOARD_AGENTS_SNIPPET, boardSkillFile, BRAND, brandEnv, type SkillSyncStatus } from "@repo/contracts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
-import { SKILL_SYNC_KEY } from "./skillSync.ts";
+import { harnessHomesFrom, SKILL_SYNC_KEY } from "./skillSync.ts";
 import { promptHash } from "./suggestions.ts";
 
 function setup() {
@@ -137,5 +137,31 @@ describe("skill sync", () => {
       snippetCopiedHash: promptHash(`${BOARD_AGENTS_SNIPPET}old`),
     });
     expect(sync.status().snippet).toEqual({ copied: true, changedSinceCopied: true });
+  });
+
+  it("installs where the harness's env var moves its folder", () => {
+    const home = mkdtempSync(join(tmpdir(), "skill-sync-home-"));
+    const copilotHome = mkdtempSync(join(tmpdir(), "skill-sync-copilot-"));
+    const homes = harnessHomesFrom({ COPILOT_HOME: copilotHome }, home);
+    expect(homes).toEqual({ claude: join(home, ".claude"), copilot: copilotHome, codex: join(home, ".codex") });
+
+    const h = createTestHarness({ userHome: home, harnessHomes: homes });
+    const status = h.services.skillSync.enable("copilot").harnesses.find((s) => s.harness === "copilot")!;
+    expect(status.path).toBe(join(copilotHome, "skills", BRAND.id, "SKILL.md"));
+    expect(readFileSync(status.path, "utf8")).toBe(boardSkillFile());
+    expect(existsSync(join(home, ".copilot"))).toBe(false);
+  });
+
+  it("ignores the harnesses' env vars when the home is overridden, as the sandbox does", () => {
+    const env = {
+      [brandEnv("USER_HOME")]: "/sandbox/user",
+      CLAUDE_CONFIG_DIR: "/real/.claude",
+      CODEX_HOME: "/real/codex",
+    };
+    expect(harnessHomesFrom(env, "/sandbox/user")).toEqual({
+      claude: join("/sandbox/user", ".claude"),
+      copilot: join("/sandbox/user", ".copilot"),
+      codex: join("/sandbox/user", ".codex"),
+    });
   });
 });

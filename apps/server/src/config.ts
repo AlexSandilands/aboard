@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { BRAND, brandEnv } from "@repo/contracts";
 import type { SessionDirs } from "./integrations/agentSessions.ts";
+import { harnessHomesFrom, type HarnessHomes } from "./services/skillSync.ts";
 
 export interface Config {
   port: number;
@@ -21,6 +22,8 @@ export interface Config {
   pollers: boolean;
   /** The user's home folder, where harnesses install skills (`~/.claude/skills`). */
   userHome: string;
+  /** Each harness's folder (CLAUDE_CONFIG_DIR, COPILOT_HOME, CODEX_HOME or the default), where the board skill goes. */
+  harnessHomes: HarnessHomes;
   /** Where Claude Code and Copilot CLI keep their running sessions, for linked sessions' status. */
   sessionDirs: SessionDirs;
   /** Where Autopilot's headless runs get their git worktrees. */
@@ -41,6 +44,8 @@ export function boardUrlOf({
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const homeDir = env[brandEnv("HOME")] ?? join(homedir(), `.${BRAND.id}`);
+  // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
+  const userHome = env[brandEnv("USER_HOME")] || homedir();
   mkdirSync(homeDir, { recursive: true });
   return {
     port: Number(env[brandEnv("PORT")] ?? 4317),
@@ -53,8 +58,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
-    // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
-    userHome: env[brandEnv("USER_HOME")] || homedir(),
+    userHome,
+    harnessHomes: harnessHomesFrom(env, userHome),
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),
     sessionDirs: {

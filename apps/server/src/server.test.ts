@@ -5,6 +5,7 @@ import { BRAND } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Config } from "./config.ts";
 import { startServer } from "./server.ts";
+import { harnessHomesFrom } from "./services/skillSync.ts";
 import { runningServerUrl } from "./serverFile.ts";
 
 const dirs: string[] = [];
@@ -26,6 +27,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     t3Home: "/nonexistent",
     pollers: false,
     userHome: "/nonexistent",
+    harnessHomes: harnessHomesFrom({}, "/nonexistent"),
     sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),

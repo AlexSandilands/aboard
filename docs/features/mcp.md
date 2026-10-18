@@ -208,9 +208,10 @@ The app ships them too: `packages/contracts/src/boardSkill.ts` holds both texts 
 fails while it differs from `skills/aboard/`.
 
 **Skill sync** (`apps/server/src/services/skillSync.ts`, routes under `/api/skill-sync`) installs that text as
-`<home>/<root>/<BRAND.id>/SKILL.md` for each harness the user turns on in Settings → Integrations: Claude Code
-(`.claude/skills`), Copilot (`.copilot/skills`) and Codex (`.codex/skills`). It is off by default, and per
-machine: its `skillSync` settings key isn't in backups.
+`<harness folder>/skills/<BRAND.id>/SKILL.md` for each harness the user turns on in Settings → Integrations. The
+harness folder is the one the harness itself reads: `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` when set,
+else `~/.claude`, `~/.copilot` or `~/.codex` (`harnessHomesFrom`, read once into `config.harnessHomes`). It is off
+by default, and per machine: its `skillSync` settings key isn't in backups.
 
 - It records the hash of what it last wrote (line endings ignored) and only rewrites a file that still has that
   hash. On start, and when a harness is turned on, it brings each enabled copy up to date.
@@ -222,7 +223,8 @@ machine: its `skillSync` settings key isn't in backups.
   and says when it changed.
 
 The sandbox sets `brandEnv("USER_HOME")` to a folder of its own, so trying this there never writes the real
-`~/.claude`; tests pass `userHome` to the harness.
+`~/.claude`. With it set, the harnesses' env vars are ignored, since they point into the real home. Tests pass
+`userHome` (and `harnessHomes`) to the harness.
 
 `skills/aboard-review/SKILL.md` is different: it must match `BUILTIN_REVIEW_SKILL_BODY` in
 `packages/contracts/src/reviewPrompt.ts`, the review skill the server hands out, and

@@ -26,7 +26,7 @@ import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
-import { createSkillSyncService } from "./skillSync.ts";
+import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
 import { createSocialService } from "./social.ts";
 import { createStatsService } from "./stats.ts";
 import { createSuggestionsService } from "./suggestions.ts";
@@ -53,6 +53,8 @@ export interface ServiceDeps {
   now?: () => Date;
   /** The user's home folder, where global skills live; tests use a temp folder. */
   userHome: string;
+  /** Each harness's folder for the board skill; defaults under `userHome`. */
+  harnessHomes?: HarnessHomes;
 }
 
 /** Builds the service layer over one database. */
@@ -156,7 +158,7 @@ export function createServices(deps: ServiceDeps): Services {
       notifications,
       userHome: deps.userHome,
     }),
-    skillSync: createSkillSyncService(core, { userHome: deps.userHome }),
+    skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
     activity: createActivityService(core, {
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),

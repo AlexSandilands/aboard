@@ -7,6 +7,7 @@ import { BRAND, type BoardEvent } from "@repo/contracts";
 import { GhError } from "../integrations/gh.ts";
 import type { SessionDirs } from "../integrations/agentSessions.ts";
 import type { IntegrationOverrides } from "../integrations/index.ts";
+import type { Config } from "../config.ts";
 
 /** In-memory server context + app for tests. `events` collects everything published on the bus. */
 /** Nothing in a test may reach `gh`, GitHub or Claude Code; an import started by a route fails at once instead. */
@@ -25,6 +26,7 @@ export function createTestHarness(
     sessionDirs?: SessionDirs;
     /** The user's home folder, where global skills are found and built-in ones are forked to. */
     userHome?: string;
+    harnessHomes?: Config["harnessHomes"];
     worktreesDir?: string;
     integrations?: IntegrationOverrides;
   } = {},

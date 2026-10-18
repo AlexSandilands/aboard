@@ -4,13 +4,6 @@ import { z } from "zod";
 export const SkillSyncHarness = z.enum(["claude", "copilot", "codex"]);
 export type SkillSyncHarness = z.infer<typeof SkillSyncHarness>;
 
-/** Each harness's global skills folder, under the user's home. */
-export const SKILL_SYNC_ROOTS: Record<SkillSyncHarness, string> = {
-  claude: ".claude/skills",
-  copilot: ".copilot/skills",
-  codex: ".codex/skills",
-};
-
 /**
  * The installed copy against the app's: `edited` when it is neither the app's text nor the text the board last wrote,
  * so the board leaves it alone until the user chooses to overwrite it.

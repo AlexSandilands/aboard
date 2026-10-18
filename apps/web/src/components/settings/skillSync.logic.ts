@@ -1,4 +1,4 @@
-import { BRAND, SKILL_SYNC_ROOTS, type SkillSyncHarnessStatus, type SkillSyncStatus } from "@repo/contracts";
+import type { SkillSyncHarnessStatus, SkillSyncStatus } from "@repo/contracts";
 
 type BadgeVariant = "success" | "warning" | "info" | "secondary";
 
@@ -17,9 +17,9 @@ export function skillSyncBadge(status: SkillSyncHarnessStatus): { label: string;
   }
 }
 
-/** Where the skill goes for a harness, as the user would write it. */
-export const skillSyncFolder = (status: Pick<SkillSyncHarnessStatus, "harness">): string =>
-  `~/${SKILL_SYNC_ROOTS[status.harness]}/${BRAND.id}`;
+/** The folder the server installs the skill in: the one the harness reads, which its env vars may move. */
+export const skillSyncFolder = (status: Pick<SkillSyncHarnessStatus, "path">): string =>
+  status.path.replace(/[\\/][^\\/]*$/, "");
 
 /** The row's description: what the switch does, or what the user has to decide. */
 export function skillSyncDescription(status: SkillSyncHarnessStatus): string {

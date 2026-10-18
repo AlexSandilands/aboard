@@ -2,7 +2,7 @@ import {
   BOARD_AGENTS_SNIPPET,
   boardSkillFile,
   BRAND,
-  SKILL_SYNC_ROOTS,
+  brandEnv,
   SkillSyncHarness,
   type SkillSyncHarnessStatus,
   type SkillSyncState,
@@ -34,6 +34,30 @@ interface StoredSkillSync {
 
 const OFF: HarnessRecord = { enabled: false, installedHash: null };
 
+/** Each harness's own folder, which holds its global `skills/`. */
+export type HarnessHomes = Record<SkillSyncHarness, string>;
+
+const defaultHarnessHomes = (userHome: string): HarnessHomes => ({
+  claude: join(userHome, ".claude"),
+  copilot: join(userHome, ".copilot"),
+  codex: join(userHome, ".codex"),
+});
+
+/**
+ * Where each harness reads global skills from: the folder its own env var names (CLAUDE_CONFIG_DIR, COPILOT_HOME,
+ * CODEX_HOME), else the default under the user's home. With brandEnv("USER_HOME") set (the sandbox), those env vars
+ * still point into the real home, so only the overridden home is used.
+ */
+export function harnessHomesFrom(env: NodeJS.ProcessEnv, userHome: string): HarnessHomes {
+  const defaults = defaultHarnessHomes(userHome);
+  if (env[brandEnv("USER_HOME")]) return defaults;
+  return {
+    claude: env.CLAUDE_CONFIG_DIR || defaults.claude,
+    copilot: env.COPILOT_HOME || defaults.copilot,
+    codex: env.CODEX_HOME || defaults.codex,
+  };
+}
+
 /** A copy saved with CRLF line endings (an editor, git's autocrlf) is still the same text. */
 const hashOf = (text: string) => promptHash(text.replace(/\r\n/g, "\n"));
 
@@ -55,7 +79,10 @@ export interface SkillSyncService {
  * step with the app. Only a file that still matches what the board last wrote is ever rewritten, so a copy the user
  * edited stays theirs until they choose to overwrite it. Nothing outside the board's own folder is touched.
  */
-export function createSkillSyncService(core: Core, opts: { userHome: string }): SkillSyncService {
+export function createSkillSyncService(
+  core: Core,
+  opts: { userHome: string; harnessHomes?: Partial<HarnessHomes> },
+): SkillSyncService {
   const { repos } = core;
 
   const load = (): StoredSkillSync => {
@@ -69,7 +96,8 @@ export function createSkillSyncService(core: Core, opts: { userHome: string }): 
     save({ ...current, harnesses: { ...current.harnesses, [harness]: rec } });
   };
 
-  const pathOf = (harness: SkillSyncHarness) => join(opts.userHome, SKILL_SYNC_ROOTS[harness], BRAND.id, "SKILL.md");
+  const homes = { ...defaultHarnessHomes(opts.userHome), ...opts.harnessHomes };
+  const pathOf = (harness: SkillSyncHarness) => join(homes[harness], "skills", BRAND.id, "SKILL.md");
   const readDisk = (harness: SkillSyncHarness): string | null => {
     try {
       return readFileSync(pathOf(harness), "utf8");
