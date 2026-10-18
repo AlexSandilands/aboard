@@ -13,7 +13,7 @@ Each project's lane has an **Autopilot** pill. It's dim when nothing is on for t
 something is on, and animated while a run is going. Click it to see every automation with an on/off switch. A
 faded switch is following the board: hover it to see what that means ("On, following the board"). Flip it and the
 switch turns solid, meaning this project sets it itself; the **↺** button beside it goes back to following the board.
-The cog at the top opens **Settings → Autopilot**.
+To pin the value the board has now, flip the switch twice. The cog at the top opens **Settings → Autopilot**.
 
 An **epic** has the same switch, in a small round **Autopilot** button on its band and in its panel's top bar. It
 covers only the tasks in that epic, and a faded switch follows the project ("On, following the project"). So you can

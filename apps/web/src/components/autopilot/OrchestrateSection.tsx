@@ -1,19 +1,21 @@
 import type { AutopilotAutomation, AutopilotScopeEntry } from "@repo/contracts";
 import { LoaderCircleIcon, PlayIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useNow } from "~/hooks/useNow";
 import { cn } from "~/lib/utils";
 import type { useSetAutopilotScope } from "~/state/mutations";
 import { useRunOrchestrateNow } from "~/state/mutations";
 import { useAutopilotOverview, useOrchestrateState } from "~/state/queries";
 import { scopeRowModel } from "./autopilot.logic";
-import { orchestrateLine } from "./orchestrate.logic";
+import { lastRunText, orchestrateLine } from "./orchestrate.logic";
 import { RunHistoryLink } from "./RunHistoryLink";
 import { ScopeCard, ScopeRow } from "./ScopeRow";
 
 /**
  * Orchestrate's card at the top of a project's Autopilot popover: its row, then one line with the next check (or why
- * there won't be one) beside History and ▶ Run now. The latest run and the pill's countdown are in Settings.
+ * there won't be one) beside History and ▶ Run now. The latest run is that line's tooltip; the pill's countdown
+ * switch is in Settings.
  */
 export function OrchestrateSection({
   automation,
@@ -47,16 +49,23 @@ export function OrchestrateSection({
       />
       <div className="flex items-center gap-2 py-1.5">
         {state.data && line ? (
-          <p
-            aria-live="polite"
-            className={cn(
-              "min-w-0 flex-1 truncate text-2xs",
-              line.kind === "countdown" ? "text-foreground tabular-nums" : "text-muted-foreground",
-              line.kind === "running" && "text-info-foreground",
-            )}
-          >
-            {line.text}
-          </p>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <p
+                  aria-live="polite"
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-2xs",
+                    line.kind === "countdown" ? "text-foreground tabular-nums" : "text-muted-foreground",
+                    line.kind === "running" && "text-info-foreground",
+                  )}
+                />
+              }
+            >
+              {line.text}
+            </TooltipTrigger>
+            <TooltipPopup side="top">{lastRunText(state.data.lastRun)}</TooltipPopup>
+          </Tooltip>
         ) : state.error ? (
           <p className="min-w-0 flex-1 truncate text-2xs text-destructive-foreground">{state.error.message}</p>
         ) : (

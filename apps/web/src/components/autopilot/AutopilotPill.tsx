@@ -100,7 +100,7 @@ export function AutopilotPill({ project }: { project: Project }) {
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="start" width="lg" padding="compact">
-        <ScopePopover title={project.title} entries={scope.data} set={set} projectId={project.id} />
+        <ScopePopover title={project.title} entries={scope.data} set={set} projectId={project.id} error={scope.error} />
       </PopoverPopup>
     </Popover>
   );

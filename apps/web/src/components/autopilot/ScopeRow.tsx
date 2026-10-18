@@ -74,7 +74,7 @@ export function ScopeRow({
 }: {
   name: string;
   description: string;
-  /** The switch's accessible name, e.g. "Review PRs in Aboard". */
+  /** The switch's accessible name, e.g. "Review PRs in Aboard"; where its state comes from is added to it. */
   label: string;
   model: ScopeRowModel;
   scope: "project" | "epic";
@@ -123,7 +123,7 @@ export function ScopeRow({
         <TooltipTrigger render={<span className={cn("inline-flex", model.inherited && "opacity-55")} />}>
           <Switch
             size="sm"
-            aria-label={label}
+            aria-label={`${label}: ${model.note}`}
             checked={model.checked}
             disabled={disabled || !model.canToggle}
             onCheckedChange={() => onChange(model.nextMode)}

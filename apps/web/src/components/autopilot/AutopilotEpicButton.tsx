@@ -55,7 +55,7 @@ export function AutopilotEpicButton({
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
-        <ScopePopover title={`epic #${epic.number}`} entries={scope.data} set={set} epic>
+        <ScopePopover title={`epic #${epic.number}`} entries={scope.data} set={set} error={scope.error} epic>
           {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
           <ScopeCard className="py-2">
             <EpicDeliveryControl epic={epic} />

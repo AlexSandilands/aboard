@@ -219,10 +219,10 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   project sets it the switch is solid and a ↺ button saves Inherit again. An automation that can't be turned on
   (`blocked`, an empty required tool slot) shows a ⚠ with the reason as its tooltip and its switch can only be
   turned off. Under Recurring tasks a calendar icon button opens the project's settings at that section. Paused is a
-  one-line `Alert` with a **Resume** button (`PausedNotice`). The rows wait behind a skeleton until the scope loads, so
+  one-line `Alert` with a **Resume** button (`PausedNotice`). The rows wait behind a skeleton until the scope loads (a failed load shows its error instead), so
   no switch shows a made-up Off, and a long list scrolls in a `ScrollArea`.
   - **Orchestrate** is pinned above, in a card of its own (`OrchestrateSection`): its row, then one line with
-    "Next check in 12:34" ticking every second (`useNow`; the slot is counted in the browser with
+    "Next check in 12:34" (hover it for the latest run, `lastRunText`) ticking every second (`useNow`; the slot is counted in the browser with
     `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
     hours until their end, today's cap, idle), beside a **History** button (`RunHistoryLink`, not marked as opened from
     Settings) that opens the run history page filtered to the project and a **▶ Run now** button
@@ -348,7 +348,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   bottom). The list highlights that section.
 - **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
-  popover (its Settings link, and Recurring tasks… for the project's rules).
+  popover (its settings cog, and the icon beside Recurring tasks for the project's rules).
 - **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
   default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
   leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that

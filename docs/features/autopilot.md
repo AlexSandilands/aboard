@@ -329,7 +329,7 @@ this automation's own switch decides whether a project's rules run. It has no co
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
   example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
   The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings ("Recurring tasks…", `useOpenSettings()("project.recurring", { project })`), scrolled to the section.
+  these settings with an icon button beside Recurring tasks (`useOpenSettings()("project.recurring", { project })`), scrolled to the section.
 
 #### Recurring rules API
 

@@ -24,6 +24,7 @@ export function ScopePopover({
   set,
   projectId,
   epic = false,
+  error,
   children,
 }: {
   /** The project's or epic's name, for the switches' labels. */
@@ -34,6 +35,8 @@ export function ScopePopover({
   projectId?: string;
   /** An epic's popover: leaves out the automations that don't apply to epics. */
   epic?: boolean;
+  /** The scope query's error, so a failed load shows a message instead of a skeleton for good. */
+  error?: Error | null;
   children?: ReactNode;
 }) {
   const overview = useAutopilotOverview();
@@ -45,6 +48,7 @@ export function ScopePopover({
   const scope = epic ? "epic" : "project";
   // The switches would show a made-up Off until the scope arrives, so rows wait for it.
   const loading = !overview.data || !entries;
+  const loadError = error ?? overview.error;
   return (
     <div className="flex w-full flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -70,7 +74,11 @@ export function ScopePopover({
         </Tooltip>
       </div>
       {paused ? <PausedNotice disabled={resume.isPending} onResume={() => resume.mutate(false)} /> : null}
-      {loading ? (
+      {loading && loadError ? (
+        <p role="alert" className="text-2xs text-destructive-foreground">
+          Couldn't load Autopilot: {loadError.message}
+        </p>
+      ) : loading ? (
         <ScopeSkeleton />
       ) : (
         <>
