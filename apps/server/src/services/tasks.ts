@@ -506,7 +506,7 @@ export function createTasksService(
           changed.push("manual");
           // A round still waiting for a reviewer would wait forever: nothing reviews a manual task.
           const round = manual ? repos.reviews.latest(id) : null;
-          if (round && (round.status === "pending" || round.status === "running")) {
+          if (round && (round.status === "pending" || round.status === "running" || round.status === "stalled")) {
             const error = "The task became a manual task";
             repos.reviews.update({ ...round, status: "failed", error, updatedAt: now, completedAt: now });
             fx.log(id, actor, "review_status", { round: round.round, status: "failed", error });

@@ -74,7 +74,7 @@ be blocked by them, and live in any project, General included. The rules are in 
   refuses a manual task.
 - Turning it back into a code task outside Backlog needs a plan, or it would sit past the gate with none.
 - `reviews.effectiveAutoReview` is false for it, so entering Review opens no round, and `openRound` refuses one
-  (Run review, `start_review`). Turning a task manual closes a round still pending or running as `failed`, its
+  (Run review, `start_review`). Turning a task manual closes a round still pending, running or stalled as `failed`, its
   review raises no attention, and the review watchdog skips it.
 - Creating one skips any T3 thread or agent session link passed with it (agents in T3 Code pass their thread on
   every create) instead of refusing the whole create.

@@ -41,24 +41,26 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
               Auto-review {effectiveOn ? "on" : "off"} (set under Automation)
             </span>
           )}
-          <PanelControl
-            part="meta"
-            title="Copy the review loop prompt, to run it in any agent session"
-            onClick={() =>
-              void fetchReviewPrompt(task.id).then(
-                (prompt) => copyToClipboard(prompt, "review prompt"),
-                (error: unknown) =>
-                  toastManager.add({
-                    type: "error",
-                    title: "Couldn't load the review prompt",
-                    description: error instanceof Error ? error.message : String(error),
-                  }),
-              )
-            }
-          >
-            <CopyIcon className="size-3.5" />
-            Copy prompt
-          </PanelControl>
+          {task.manual ? null : (
+            <PanelControl
+              part="meta"
+              title="Copy the review loop prompt, to run it in any agent session"
+              onClick={() =>
+                void fetchReviewPrompt(task.id).then(
+                  (prompt) => copyToClipboard(prompt, "review prompt"),
+                  (error: unknown) =>
+                    toastManager.add({
+                      type: "error",
+                      title: "Couldn't load the review prompt",
+                      description: error instanceof Error ? error.message : String(error),
+                    }),
+                )
+              }
+            >
+              <CopyIcon className="size-3.5" />
+              Copy prompt
+            </PanelControl>
+          )}
           {task.manual ? null : (
             <PanelControl
               part="meta"
