@@ -1,6 +1,6 @@
 import { AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
-import { FieldRow, useScopeAutomations } from "./AutomationRows";
+import { AutomationField, useScopeAutomations } from "./AutomationRows";
 import { BOARD_MODES, boardModeToSave, boardSummary, boardSwitchValue } from "./autopilot.logic";
 import { BlockedWarning } from "./InputsAndSlots";
 import { ModeSwitch } from "./ModeSwitch";
@@ -41,16 +41,15 @@ export function OrchestrateSettings() {
         ) : null}
       </SettingsRow>
       {automation.fields.map((field) => (
-        <div key={field.key} className="@container/settings-row px-3 sm:px-4">
-          <FieldRow
-            automation={automation}
-            field={field}
-            entry={entry}
-            projectId={null}
-            rejected={rejected}
-            onConfig={onConfig}
-          />
-        </div>
+        <AutomationField
+          key={field.key}
+          automation={automation}
+          field={field}
+          entry={entry}
+          projectId={null}
+          rejected={rejected}
+          onConfig={onConfig}
+        />
       ))}
       <SettingsRow
         title="Run history"

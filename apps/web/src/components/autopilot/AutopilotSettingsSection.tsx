@@ -4,11 +4,17 @@ import {
   type FindingSeverity,
   type UpdateAutopilotEngineInput,
 } from "@repo/contracts";
-import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
-import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import {
+  SETTINGS_TEXT_WIDTH,
+  SettingsNote,
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionHeader,
+  UnitInput,
+} from "~/components/settings/settingsLayout";
 import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { AutomationRows, AutomationSections } from "./AutomationRows";
@@ -36,19 +42,17 @@ export function AutopilotEngineSection() {
         {overview.data ? (
           <EngineRows paused={overview.data.paused} engine={overview.data.engine} />
         ) : (
-          <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
-            {overview.error ? overview.error.message : "Loading Autopilot..."}
-          </p>
+          <SettingsNote>{overview.error ? overview.error.message : "Loading Autopilot..."}</SettingsNote>
         )}
       </SettingsSection>
       <OrchestrateSettings />
-      <div className="space-y-2.5">
-        <div className="flex min-h-7 items-center justify-between gap-4 px-3 sm:px-4">
-          <h2 className="text-sm font-normal text-foreground/70">Automations</h2>
-          <RunHistoryLink automation={AUTOPILOT_ALL_RUNS} label="All runs" />
-        </div>
+      <section className="space-y-2.5">
+        <SettingsSectionHeader
+          title="Automations"
+          headerAction={<RunHistoryLink automation={AUTOPILOT_ALL_RUNS} label="All runs" size="xs" />}
+        />
         <AutomationSections />
-      </div>
+      </section>
     </>
   );
 }
@@ -190,7 +194,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
               if (value) save({ prFixThreshold: value });
             }}
           >
-            <SelectTrigger size="sm" className="sm:w-40" aria-label="PR fix threshold">
+            <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label="PR fix threshold">
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>
@@ -250,33 +254,27 @@ function LimitInput({
 }) {
   const shown = value === null ? "" : String(value);
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <Input
-        key={shown}
-        aria-label={label}
-        size="sm"
-        font="mono"
-        inputMode="decimal"
-        className="w-24"
-        placeholder={required ? undefined : "No cap"}
-        defaultValue={shown}
-        onBlur={(event) => {
-          const input = event.currentTarget;
-          const next = parseLimit(input.value, { min, max, integer });
-          if (next === undefined || (next === null && required)) {
-            input.value = shown;
-            toastManager.add({
-              type: "warning",
-              title: `${label} not saved`,
-              description: `Enter ${integer ? "a whole number" : "a number"} from ${min} to ${max}.`,
-            });
-          } else if (next !== value) onSave(next);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-        }}
-      />
-      {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
-    </span>
+    <UnitInput
+      key={shown}
+      aria-label={label}
+      unit={unit}
+      placeholder={required ? undefined : "No cap"}
+      defaultValue={shown}
+      onBlur={(event) => {
+        const input = event.currentTarget;
+        const next = parseLimit(input.value, { min, max, integer });
+        if (next === undefined || (next === null && required)) {
+          input.value = shown;
+          toastManager.add({
+            type: "warning",
+            title: `${label} not saved`,
+            description: `Enter ${integer ? "a whole number" : "a number"} from ${min} to ${max}.`,
+          });
+        } else if (next !== value) onSave(next);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
   );
 }

@@ -4,6 +4,8 @@ import { CheckIcon, ChevronRightIcon, CopyIcon, InfoIcon, Undo2Icon } from "luci
 import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
+import type { InputProps } from "~/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -90,6 +92,28 @@ export function StatusLine({ badge, children }: { badge?: ReactNode; children?: 
   );
 }
 
+/** The muted heading above a card: an optional status before the title, an optional action at the end. */
+export function SettingsSectionHeader({
+  title,
+  status,
+  headerAction,
+}: {
+  title: string;
+  /** Shown before the title, e.g. a StatusDot. */
+  status?: ReactNode;
+  headerAction?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">
+      <h2 className="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">
+        {status}
+        {title}
+      </h2>
+      <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
+    </div>
+  );
+}
+
 /** A titled group of settings rows. Muted headings have no descriptions; copy belongs to rows. */
 export function SettingsSection({
   id,
@@ -101,23 +125,21 @@ export function SettingsSection({
   /** A stable id (`<group>.<section>.<part>`) when the group is a target of its own. */
   id?: string;
   title: string;
-  /** Shown before the title, e.g. a StatusDot. */
   status?: ReactNode;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section id={id} className="scroll-mt-4 space-y-2.5">
-      <div className="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">
-        <h2 className="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">
-          {status}
-          {title}
-        </h2>
-        <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
-      </div>
+      <SettingsSectionHeader title={title} status={status} headerAction={headerAction} />
       <SettingsGroup>{children}</SettingsGroup>
     </section>
   );
+}
+
+/** A line of muted text in place of rows: loading, an error, nothing to list. */
+export function SettingsNote({ children }: { children: ReactNode }) {
+  return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">{children}</p>;
 }
 
 /**
@@ -190,8 +212,39 @@ export function SettingsRow({
   );
 }
 
+/**
+ * The two widths a control in a settings row has, so the controls of a card line up on the row's right edge: numbers,
+ * times and anything with a unit are the first, free text (a model, a path) the second. Full width on narrow screens,
+ * where the row stacks.
+ */
+export const SETTINGS_NUMBER_WIDTH = "sm:w-36";
+export const SETTINGS_TEXT_WIDTH = "sm:w-56";
+
+/** A number field with its unit inside the field as a trailing addon (`[ 30 | minutes ]`), at the number width. */
+export function UnitInput({ unit, className, ...props }: InputProps & { unit?: string }) {
+  return (
+    <InputGroup className={cn(SETTINGS_NUMBER_WIDTH, className)}>
+      <InputGroupInput size="sm" font="mono" inputMode="decimal" {...props} />
+      {unit ? (
+        <InputGroupAddon align="inline-end">
+          <span className="text-xs text-muted-foreground">{unit}</span>
+        </InputGroupAddon>
+      ) : null}
+    </InputGroup>
+  );
+}
+
 /** Puts a setting back to its default; sits beside a row's title (SettingsRow's `resetAction`). */
-export function SettingResetButton({ label, onClick }: { label: string; onClick: () => void }) {
+export function SettingResetButton({
+  label,
+  to = "default",
+  onClick,
+}: {
+  label: string;
+  /** What it goes back to, for a setting that inherits from somewhere other than its default. */
+  to?: string;
+  onClick: () => void;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger
@@ -199,7 +252,7 @@ export function SettingResetButton({ label, onClick }: { label: string; onClick:
           <Button
             size="icon-micro"
             variant="ghost-muted"
-            aria-label={`Reset ${label} to default`}
+            aria-label={`Reset ${label} to ${to}`}
             onClick={(event) => {
               event.stopPropagation();
               onClick();
@@ -209,7 +262,7 @@ export function SettingResetButton({ label, onClick }: { label: string; onClick:
           </Button>
         }
       />
-      <TooltipPopup side="top">Reset to default</TooltipPopup>
+      <TooltipPopup side="top">Reset to {to}</TooltipPopup>
     </Tooltip>
   );
 }

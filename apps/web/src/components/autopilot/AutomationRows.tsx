@@ -6,17 +6,24 @@ import {
   type AutopilotField,
   type AutopilotScopeEntry,
 } from "@repo/contracts";
-import { ChevronRightIcon, RotateCcwIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
-import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { skillOptions } from "~/components/review/review.logic";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
-import { FoldedSettingsSection, SettingsGroup, SettingsRow } from "~/components/settings/settingsLayout";
+import {
+  FoldedSettingsSection,
+  SETTINGS_TEXT_WIDTH,
+  SettingResetButton,
+  SettingsGroup,
+  SettingsNote,
+  SettingsRow,
+  UnitInput,
+} from "~/components/settings/settingsLayout";
 import { cn } from "~/lib/utils";
 import { BlockedWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
@@ -83,7 +90,7 @@ export function useScopeAutomations(projectId: string | null) {
  */
 export function AutomationRows({ projectId }: { projectId: string | null }) {
   const { message, items, pending = false, rejected = 0 } = useScopeAutomations(projectId);
-  if (message) return <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">{message}</p>;
+  if (message) return <SettingsNote>{message}</SettingsNote>;
   return (
     <>
       {items.map((item) => (
@@ -108,7 +115,7 @@ export function AutomationSections() {
   if (message) {
     return (
       <SettingsGroup>
-        <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">{message}</p>
+        <SettingsNote>{message}</SettingsNote>
       </SettingsGroup>
     );
   }
@@ -143,16 +150,15 @@ export function AutomationSections() {
               </div>
             ) : null}
             {automation.fields.map((field) => (
-              <div key={field.key} className="@container/settings-row px-3 sm:px-4">
-                <FieldRow
-                  automation={automation}
-                  field={field}
-                  entry={entry}
-                  projectId={null}
-                  rejected={rejected}
-                  onConfig={onConfig}
-                />
-              </div>
+              <AutomationField
+                key={field.key}
+                automation={automation}
+                field={field}
+                entry={entry}
+                projectId={null}
+                rejected={rejected}
+                onConfig={onConfig}
+              />
             ))}
           </FoldedSettingsSection>
         ))}
@@ -210,20 +216,19 @@ function AutomationRow({
         </div>
       ) : null}
       {automation.fields.length ? (
-        <div className="mt-1">
-          <button
-            type="button"
-            aria-expanded={open}
-            className="-ms-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setOpen(!open)}
-          >
-            <ChevronRightIcon className={cn("size-3 transition-transform", open && "rotate-90")} />
+        <Collapsible open={open} onOpenChange={setOpen} className="mt-1">
+          <CollapsibleTrigger className="-ms-1 inline-flex h-6 items-center gap-1 rounded-md px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <ChevronRightIcon
+              aria-hidden
+              className={cn("size-3 transition-transform motion-reduce:transition-none", open && "rotate-90")}
+            />
             Settings
-          </button>
-          {open ? (
-            <div className="mt-1 flex flex-col divide-y divide-border/40 rounded-lg border border-border/50 bg-background/30 px-3">
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            {/* Edge to edge in the row, so the field rows inside line up with every other row of the card. */}
+            <div className="-mx-3 -mb-3 mt-3 border-t border-border/50 sm:-mx-4 [&>*+*]:border-t [&>*+*]:border-border/50">
               {automation.fields.map((field) => (
-                <FieldRow
+                <AutomationField
                   key={field.key}
                   automation={automation}
                   field={field}
@@ -234,14 +239,18 @@ function AutomationRow({
                 />
               ))}
             </div>
-          ) : null}
-        </div>
+          </CollapsiblePanel>
+        </Collapsible>
       ) : null}
     </SettingsRow>
   );
 }
 
-export function FieldRow({
+/**
+ * One config field of an automation as a settings row: its label and help on the left, its control at the right edge
+ * (a multiline field's under them, full width), and a reset beside the title while it is set at this scope.
+ */
+export function AutomationField({
   automation,
   field,
   entry,
@@ -264,40 +273,27 @@ export function FieldRow({
     onConfig((current) => withConfigValue(current, field.key, next));
     return true;
   };
+  const control = (
+    <FieldControl key={rejected} field={field} value={value} projectId={projectId} onSave={save} label={field.label} />
+  );
+  const multiline = field.kind === "text" && field.multiline;
   return (
-    <div className="flex flex-col gap-2 py-2.5 @min-[32rem]/settings-row:flex-row @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:justify-between @min-[32rem]/settings-row:gap-6">
-      <div className="min-w-0">
-        <p className="text-xs font-medium">{field.label}</p>
-        {field.help ? <p className="max-w-md text-2xs text-muted-foreground/80">{field.help}</p> : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <FieldControl
-          key={rejected}
-          field={field}
-          value={value}
-          projectId={projectId}
-          onSave={save}
-          label={field.label}
-        />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost-muted"
-                size="icon-xs"
-                aria-label={`Reset ${field.label}`}
-                className={cn(!overridden && "invisible")}
-                tabIndex={overridden ? 0 : -1}
-                onClick={() => save(undefined)}
-              />
-            }
-          >
-            <RotateCcwIcon />
-          </TooltipTrigger>
-          <TooltipPopup>{projectId ? "Use the board's value" : "Use the default"}</TooltipPopup>
-        </Tooltip>
-      </div>
-    </div>
+    <SettingsRow
+      title={field.label}
+      description={field.help}
+      resetAction={
+        overridden ? (
+          <SettingResetButton
+            label={field.label}
+            to={projectId ? "the board's value" : "default"}
+            onClick={() => save(undefined)}
+          />
+        ) : undefined
+      }
+      control={multiline ? undefined : control}
+    >
+      {multiline ? <div className="mt-3">{control}</div> : null}
+    </SettingsRow>
   );
 }
 
@@ -327,7 +323,6 @@ function FieldControl({
             key={fieldText(value)}
             aria-label={label}
             size="sm"
-            className="sm:w-80"
             placeholder={field.placeholder}
             defaultValue={fieldText(value)}
             onBlur={(event) => {
@@ -344,7 +339,7 @@ function FieldControl({
           key={fieldText(value)}
           aria-label={label}
           size="sm"
-          className="sm:w-56"
+          className={SETTINGS_TEXT_WIDTH}
           placeholder={field.placeholder}
           defaultValue={fieldText(value)}
           onBlur={(event) => {
@@ -367,7 +362,7 @@ function FieldControl({
             if (next !== null) onSave(next);
           }}
         >
-          <SelectTrigger size="sm" className="sm:w-44" aria-label={label}>
+          <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label={label}>
             <SelectValue />
           </SelectTrigger>
           <SelectPopup>
@@ -412,34 +407,28 @@ function NumberField({
   onSave: (next: unknown) => boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <Input
-        aria-label={field.label}
-        size="sm"
-        font="mono"
-        inputMode="decimal"
-        className="w-24"
-        defaultValue={fieldText(value)}
-        onBlur={(event) => {
-          const input = event.currentTarget;
-          const next = parseNumberField(input.value, field);
-          if (next === null) {
-            input.value = fieldText(value);
-            toastManager.add({
-              type: "warning",
-              title: `${field.label} not saved`,
-              description: rangeHint(field),
-            });
-          } else if (next !== (typeof value === "number" ? value : undefined) && !onSave(next)) {
-            input.value = fieldText(value);
-          }
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-        }}
-      />
-      {field.unit ? <span className="text-xs text-muted-foreground">{field.unit}</span> : null}
-    </span>
+    <UnitInput
+      aria-label={field.label}
+      unit={field.unit}
+      defaultValue={fieldText(value)}
+      onBlur={(event) => {
+        const input = event.currentTarget;
+        const next = parseNumberField(input.value, field);
+        if (next === null) {
+          input.value = fieldText(value);
+          toastManager.add({
+            type: "warning",
+            title: `${field.label} not saved`,
+            description: rangeHint(field),
+          });
+        } else if (next !== (typeof value === "number" ? value : undefined) && !onSave(next)) {
+          input.value = fieldText(value);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
   );
 }
 
