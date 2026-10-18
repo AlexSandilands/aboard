@@ -32,6 +32,21 @@ and keeps to the same pause, dry run, caps and quiet hours.
      tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
      branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
      branch. A new run waits until the last one for the project has finished, then the latest slot runs once.
+     Each scheduled run ends with a short **handover**: a note of what the next run needs to know, such as items it is
+     holding or waiting on, what it triggered, and what it already triaged or skipped. The next run of the same
+     automation in the same project is given it (cut off at 4,000 characters), so the agent remembers between
+     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's Recent runs lists each
+     run's summary and handover.
+
+     Under **Allowed tools** you can list tools the agent may use besides the board's own, one per line: a whole MCP
+     server (`mcp__issue-tracker`) or a single tool (`mcp__issue-tracker__search_jira`). Nobody is there to approve a call
+     when the agent runs, so a tool not listed can't be used, and one that is listed runs without asking. Prefer
+     one tool to a whole server. The server has to be your own, added with `claude mcp add --scope user` (or come from
+     a plugin or connector); a server that lives in a project's `.mcp.json` needs an approval the agent can't get. An
+     agent with extra tools runs headless, so a task's agent can't run in T3 Code only (a scheduled agent is always
+     headless). It still can't push to your default
+     branch or merge a pull request through git or gh; what a tool of a server you allow can do is up to that
+     server.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.

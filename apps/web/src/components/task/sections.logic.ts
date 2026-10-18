@@ -10,6 +10,7 @@ export const SECTION_IDS = [
   "sessions",
   "links",
   "relations",
+  "automation",
   "review",
   "autopilot",
   "plan",
@@ -24,6 +25,7 @@ export const SECTION_TITLES: Record<SectionId, string> = {
   sessions: "Sessions",
   links: "Links",
   relations: "Relations",
+  automation: "Automation",
   review: "Local review",
   autopilot: "Autopilot",
   plan: "Plan",
@@ -39,7 +41,7 @@ export interface SectionLayout {
 }
 
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
-const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links" };
+const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", automation: "review" };
 
 const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
@@ -100,6 +102,10 @@ export type SectionTask = Pick<
   | "attention"
   | "review"
   | "reviews"
+  | "autopilot"
+  | "autoReview"
+  | "autoMerge"
+  | "priority"
   | "progress"
   | "currentStep"
   | "description"
@@ -125,6 +131,9 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
       return task.links.every(isSessionLink);
     case "relations":
       return task.blockedBy.length === 0 && task.blocks.length === 0;
+    // The settings are the section's content, so it stays open: they're what you came to change.
+    case "automation":
+      return false;
     case "review":
       return task.reviews.length === 0;
     // The runs aren't in the task detail; open it when one needs attention, since that is why you'd look.
@@ -212,6 +221,18 @@ export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks
   ].filter((group) => group.chips.length > 0);
 }
 
+/** The settings that were changed from their default, or "Defaults" when none were. */
+function automationSummary(task: Pick<SectionTask, "autopilot" | "autoReview" | "autoMerge" | "priority">): string {
+  const on = (value: boolean | null) => (value ? "on" : "off");
+  const parts = [
+    task.autopilot === null ? null : `Autopilot ${on(task.autopilot)}`,
+    task.autoReview === null ? null : `Auto-review ${on(task.autoReview)}`,
+    task.autoMerge === null ? null : `Auto-merge ${on(task.autoMerge)}`,
+    task.priority ? "Priority" : null,
+  ].filter((part) => part !== null);
+  return parts.length ? parts.join(" · ") : "Defaults";
+}
+
 const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr_conflict"]);
 const SESSION_ATTENTION = new Set(["thread_needs_input", "thread_failed"]);
 
@@ -240,6 +261,8 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       ].filter((part) => part !== null);
       return parts.length ? parts.join(" · ") : task.blockedBy.length ? "Unblocked" : "None";
     }
+    case "automation":
+      return automationSummary(task);
     case "review": {
       if (!task.review) return "Not reviewed yet";
       if (task.review.state === "pending" || task.review.state === "running") return reviewBadgeLabel(task.review);

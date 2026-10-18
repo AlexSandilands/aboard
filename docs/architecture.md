@@ -133,7 +133,8 @@ ORM.
 
 Positions are fractional-index strings (`fractional-indexing`), so a move rewrites one row. Deleting a
 task cascades to its plan, links, labels, events and reviews. Derived values (progress, the current step,
-attention, an epic's roll-up) are computed when summaries are built, never stored. The exception is an epic's
+attention, an epic's roll-up) are computed when summaries are built, never stored. The exceptions are an agent's
+request for attention (`attention_*` columns on the task, [notifications](features/notifications.md#agent-requests)) and an epic's
 status, derived from its tasks but stored so lists and filters treat it like any status
 ([ADR 0007](decisions/0007-epic-is-a-task-kind.md)).
 

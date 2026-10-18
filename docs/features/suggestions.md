@@ -112,7 +112,7 @@ Suggestions are backed up (`suggestions.json`), so a restore keeps the ones the 
 | File                                                     | What it does                                                              |
 | -------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `packages/contracts/src/suggestions.ts`                  | `EditableTarget` and its keys, `Suggestion`, `SuggestionView`, `SuggestChangeInput` |
-| `apps/server/src/db/migrations/029_suggestions.sql`      | The `suggestions` table; a partial unique index keeps one open per target |
+| `apps/server/src/db/migrations/030_suggestions.sql`      | The `suggestions` table; a partial unique index keeps one open per target |
 | `apps/server/src/db/repos/suggestions.ts`                | Typed SQL                                                                 |
 | `apps/server/src/services/suggestions.ts`                | Targets, hashing, suggest, accept (with the built-in fork), reject       |
 | `apps/server/src/mcp/tools/suggestions.ts`               | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`          |

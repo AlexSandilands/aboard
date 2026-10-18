@@ -6,6 +6,7 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
+import { createAttentionService } from "./attention.ts";
 import { createAutopilotService } from "./autopilot.ts";
 import { createAttachmentsService } from "./attachments.ts";
 import { createBackupService } from "./backup/index.ts";
@@ -91,6 +92,11 @@ export function createServices(deps: ServiceDeps): Services {
     polls: deps.prHostHoldsTasks ?? ((host) => host === "github.com"),
   });
   reviews = createReviewsService(core, { task: tasks.record, notifications });
+  const attention = createAttentionService(core, {
+    task: tasks.record,
+    summary: (id) => tasks.service.summary(id),
+    notifications,
+  });
 
   const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
   restartRecurring = (ids) => recurring.restart(ids);
@@ -113,6 +119,7 @@ export function createServices(deps: ServiceDeps): Services {
     backup: createBackupService(core, deps.attachmentsDir),
     templates,
     notifications,
+    attention,
     autopilot: createAutopilotService(core, {
       automations,
       notifications,

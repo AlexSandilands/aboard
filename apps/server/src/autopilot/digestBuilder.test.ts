@@ -39,6 +39,7 @@ describe("renderPlainDigest", () => {
           attention: [
             { number: 9, title: "Flaky test", kind: "pr_checks_failing" },
             { number: 10, title: "Docs", kind: "thread_waiting" },
+            { number: 11, title: "Plans", kind: "agent_request" },
           ],
           runs: {
             total: 3,
@@ -70,6 +71,7 @@ describe("renderPlainDigest", () => {
         "**Needs attention**",
         "- #9 Flaky test: checks are failing",
         "- #10 Docs: an agent is waiting for you",
+        "- #11 Plans: an agent asked you to look at it",
         "",
         "**Autopilot**",
         "- 3 runs: 1 succeeded, 1 failed, 1 skipped",

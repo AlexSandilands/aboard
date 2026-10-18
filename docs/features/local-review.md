@@ -11,7 +11,7 @@ for a review or relayed what it found.
 ### The loop
 
 Turn it on in Settings → Tasks → Review ("Review before the PR"). A task can override the setting in its
-panel (Auto: Default / On / Off), or an agent can with `update_task(autoReview)`.
+panel (Automation → Auto-review: Default / On / Off), or an agent can with `update_task(autoReview)`.
 
 1. The implementing agent finishes and calls `move_task` to `review`. The board opens **review round 1**.
    The `move_task` result tells the agent to run the loop and includes a **reviewer brief**.

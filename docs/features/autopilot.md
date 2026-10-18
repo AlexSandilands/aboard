@@ -135,7 +135,7 @@ past an earlier flag in that very millisecond.
 Default never auto-starts a task; only On does, so an automation that starts work (Start planned tasks) checks
 for `task.autopilot === true` on top of its scope being on. The flag does nothing by itself.
 
-- The user sets it in the task panel's Details section. Agents set it with `autopilot: "default" | "on" | "off"`
+- The user sets it in the task panel's Automation section. Agents set it with `autopilot: "default" | "on" | "off"`
   on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
   as an `updated` activity entry naming `autopilot`.
 - After `set_plan` or `create_task`, when Start planned tasks resolves On for the task (its epic, project or the board)
@@ -575,6 +575,36 @@ the automation. Runs stay, under the old key.
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
+
+  **Handover.** A scheduled run has no memory of the last one, so it is asked for `{summary, handover}`
+  (`SCHEDULED_AGENT_OUTPUT_SCHEMA`, `outputSchema` on the runner request) and keeps it in `output`
+  (`ScheduledAgentRunOutput`, `kind: "scheduled_agent"`, the handover cut to `HANDOVER_MAX_CHARS` = 4000 by
+  `capHandover`). The prompt's footer (`customAgentPrompt` with a null task) says what a handover is for (what the next
+  run needs, not a log; it replaces the last one) and, when there is one, passes on the last run's under "Handover from
+  the last run", inside `<handover>` tags and labelled as data (the agent reads external text, so it may echo some),
+  not instructions. `AutopilotService.lastHandover(automation,
+  projectId)` reads it from the newest real, succeeded, task-less run of the same automation in the same project that
+  has such an output (`lastScheduledAnswer`): a failed run leaves none, so the one before it carries on. A run
+  with no structured answer fails (the runner's `outputSchema` handling), and what it did isn't carried over, so the
+  next run may repeat it; an answer of the wrong shape that got through anyway keeps no `output`. Other
+  projects and other automations never see it. A dry run's preview includes it. The custom automation editor lists
+  the latest runs per project (`ScheduledRuns`) with their summary and handover, since a task-less run has no task
+  panel to show in.
+  - **Allowed tools** (`allowedTools`, `CustomToolRule` in contracts): extra tools the agent may call unattended,
+    such as the user's own MCP servers, as `mcp__<server>`, `mcp__<server>__<tool>` (a `*` only in the tool part) or a
+    built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`Skill(name)`); a built-in rule only adds a tool, it never narrows one the run already
+    has (an edit run allows all of them but Agent and Skill); at most 20,
+    200 characters each, deduped. The shell tools (Bash, PowerShell) are refused: the push and merge deny rules are
+    `Bash(...)` patterns, so another shell tool would sidestep them, and an edit run has Bash anyway. `act` passes the
+    rules as `RunnerRequest.tools`, for a task's run and a scheduled one alike, which `agentArgs` appends to `--allowedTools`. They make the run
+    headless (a T3 thread can't be given tools, so with the runner set to T3 Code only, a task's run fails and says
+    so; a scheduled run is headless anyway). Everything else about the run is unchanged: the push and merge deny rules still win, since deny rules beat
+    allow rules. That covers git and gh run through Bash; a tool of an MCP server that runs commands is the user's
+    call, which is why the editor warns. The dry-run preview lists the tools under the prompt. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
+    no prompt: the editor warns about that. The server has to be one the run can start without approval: the user's
+    own (`claude mcp add --scope user`, a plugin or a connector), as for [issue import](issue-import.md). A server from
+    the project's `.mcp.json` needs an approval nobody can give. Custom agent runs never set `untrustedInput`; an
+    untrusted run starts with `--strict-mcp-config`, so MCP rules would find no server there anyway.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values

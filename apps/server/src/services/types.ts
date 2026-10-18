@@ -48,6 +48,7 @@ import type { CustomAutomationsService } from "./customAutomations.ts";
 import type { RecurringService } from "./recurring.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
+import type { AttentionService } from "./attention.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { SuggestionsService } from "./suggestions.ts";
 
@@ -78,6 +79,7 @@ export interface Services {
   digests: DigestsService;
   notifications: NotificationsService;
   suggestions: SuggestionsService;
+  attention: AttentionService;
 }
 
 export interface ProjectRef {
