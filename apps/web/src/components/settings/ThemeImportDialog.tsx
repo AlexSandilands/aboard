@@ -147,6 +147,8 @@ export function ThemeImportDialog({ open, onOpenChange }: { open: boolean; onOpe
   const installBatch = async (files: ReadonlyArray<File>) => {
     const request = ++requestRef.current;
     setIsReading(true);
+    // A file read earlier names nothing in this batch; Keep both falls back to "Name (1)".
+    setFileName(null);
     const failures: string[] = [];
     const parsed: Array<{ theme: ThemeDefinition; sourceName: string }> = [];
     for (const file of files) {
