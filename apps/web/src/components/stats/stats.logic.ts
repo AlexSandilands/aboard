@@ -184,9 +184,16 @@ export function runsInStatuses(row: AutomationRuns, statuses: ReadonlyArray<stri
   return statuses.reduce((sum, status) => sum + (row.byStatus[status] ?? 0), 0);
 }
 
-/** Whether every series the page charts is quiet: nothing created, finished, merged, run or started in the period. */
+const OPEN_TASKS_PREFIX = "open_tasks.";
+
+/**
+ * Whether every series the page charts is quiet: nothing created, finished, merged, run or started in the period. The
+ * open-task levels are left out: they say what is on the board, not that anything happened.
+ */
 export function isQuiet(series: StatsResponse["series"]): boolean {
-  return Object.values(series).every((s) => (s.total ?? 0) === 0 && (s.previousTotal ?? 0) === 0);
+  return Object.entries(series).every(
+    ([name, s]) => name.startsWith(OPEN_TASKS_PREFIX) || ((s.total ?? 0) === 0 && (s.previousTotal ?? 0) === 0),
+  );
 }
 
 export type BreakdownRow = {

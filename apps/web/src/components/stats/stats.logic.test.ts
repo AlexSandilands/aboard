@@ -5,6 +5,7 @@ import {
   changeVsPrevious,
   formatDuration,
   formatStatsValue,
+  isQuiet,
   niceDurationScale,
   niceScale,
   parseStatsPeriod,
@@ -219,5 +220,16 @@ describe("breakdownRows", () => {
 
   it("is empty without a breakdown", () => {
     expect(breakdownRows(undefined, name, "None")).toEqual([]);
+  });
+});
+
+describe("isQuiet", () => {
+  const level = { unit: "count" as const, values: [3, 3], total: 3, previousTotal: 2 };
+  const none = { unit: "count" as const, values: [0, 0], total: 0, previousTotal: 0 };
+  it("doesn't count tasks sitting open as something happening", () => {
+    expect(isQuiet({ "open_tasks.backlog": level, tasks_created: none })).toBe(true);
+  });
+  it("is not quiet once anything else has a value", () => {
+    expect(isQuiet({ "open_tasks.backlog": level, tasks_created: { ...none, total: 1 } })).toBe(false);
   });
 });

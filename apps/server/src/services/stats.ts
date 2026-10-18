@@ -1,17 +1,22 @@
-import type {
-  AutopilotRun,
-  Project,
-  StatsBreakdown,
-  StatsPeriod,
-  StatsResponse,
-  StatsSeries,
-  StatsUnit,
-  TaskEvent,
+import {
+  AUTOPILOT_FIX_PRS,
+  AUTOPILOT_REVIEW_PRS,
+  FIX_GAVE_UP_KEY_PREFIX,
+  fixRunKeyPrefix,
+  prReviewOutput,
+  type AutopilotRun,
+  type Project,
+  type StatsBreakdown,
+  type StatsPeriod,
+  type StatsResponse,
+  type StatsSeries,
+  type StatsUnit,
+  type TaskEvent,
 } from "@repo/contracts";
 import { notFound } from "../errors.ts";
 import { defaultBranchCommits, type DefaultBranchCommit } from "../integrations/commitLog.ts";
 import type { RunGit } from "../integrations/backup.ts";
-import { stallKind, wasRestarted } from "./activity.ts";
+import { OPEN_STATUSES, stallKind, statusStays, wasRestarted } from "./activity.ts";
 import type { Core } from "./core.ts";
 
 /**
@@ -50,6 +55,9 @@ interface SeriesBuilder {
 /** Resolutions that close a task without it being delivered here; they aren't finished work. */
 const NOT_DELIVERED = new Set(["wont_do", "duplicate"]);
 
+/** The newest runs read per task when counting what Autopilot did on its merged PRs; older ones are not counted. */
+const RUNS_PER_TASK = 2000;
+
 /** The series that exist even on an empty board, so a client can chart them without checking. */
 const COUNT_SERIES = [
   "tasks_created",
@@ -70,6 +78,9 @@ const COUNT_SERIES = [
   "friction.stalls.stale",
   "friction.stalls.waiting",
   "friction.runs_restarted",
+  "autopilot.gave_up",
+  "autopilot.gave_up.review_prs",
+  "autopilot.gave_up.fix_prs",
   "commits",
 ];
 
@@ -160,6 +171,13 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
       series("cycle_time.in_progress_to_done", "ms", "median");
       series("cycle_time.created_to_done", "ms", "median");
       series("review_rounds_per_task", "ratio", "mean");
+      series("pr_open_to_merged", "ms", "median");
+      series("autopilot.pr_review_rounds_per_pr", "ratio", "mean");
+      series("autopilot.fix_attempts_per_pr", "ratio", "mean");
+      for (const status of OPEN_STATUSES) {
+        series(`time_in_status.${status}.average`, "ms", "mean");
+        series(`time_in_status.${status}.median`, "ms", "median");
+      }
 
       const inScope = (taskProject: string | null | undefined): boolean => !projectId || taskProject === projectId;
       const projectOf = new Map<string, string | null>();
@@ -210,12 +228,91 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         add("review_rounds_per_task", "ratio", "mean", done, rounds.get(task.id) ?? 0);
       }
 
-      // PRs merged, by when the board saw the merge. One PR linked to several tasks is one PR.
-      const seenPrs = new Set<string>();
+      // Where work waits. A stay in an open status counts in the week it ended, and the tasks in each open status are
+      // counted as of every week's end (as of now, for the current week). Epics follow their tasks, so they are left out.
+      const nowMs = core.now().getTime();
+      const snapshotTimes = stamps.slice(1).map((s) => Math.min(s, nowMs));
+      const openAt = Object.fromEntries(OPEN_STATUSES.map((status) => [status, snapshotTimes.map(() => 0)] as const));
+      const flowTasks = repos.tasks
+        .list({ ...(projectId ? { projectId } : {}), includeArchived: true })
+        .filter((t) => t.kind !== "epic");
+      const movesByTask = new Map<string, TaskEvent[]>();
+      for (const m of repos.events.ofTypes(
+        flowTasks.map((t) => t.id),
+        ["status_changed", "closed"],
+      )) {
+        const moves = movesByTask.get(m.taskId);
+        if (moves) moves.push(m);
+        else movesByTask.set(m.taskId, [m]);
+      }
+      for (const task of flowTasks) {
+        // An archived task is off the board, so it stops counting as open when it was archived.
+        const archived = task.archivedAt ? Date.parse(task.archivedAt) : Infinity;
+        for (const stay of statusStays(task.createdAt, movesByTask.get(task.id) ?? [], task.status)) {
+          const status = OPEN_STATUSES.find((s) => s === stay.status);
+          if (!status) continue;
+          const since = Date.parse(stay.since);
+          if (stay.until) {
+            const waited = Math.max(0, Date.parse(stay.until) - since);
+            add(`time_in_status.${status}.average`, "ms", "mean", stay.until, waited);
+            add(`time_in_status.${status}.median`, "ms", "median", stay.until, waited);
+          }
+          const until = Math.min(stay.until ? Date.parse(stay.until) : Infinity, archived);
+          snapshotTimes.forEach((t, i) => {
+            if (t >= since && t < until) openAt[status]![i]! += 1;
+          });
+        }
+      }
+
+      // PRs merged, by when the board saw the merge. One PR linked to several tasks is one PR. It was open from the
+      // first of its links. Autopilot works each link on its own, so what it did on the PR is the sum over its links: the
+      // reviews of a link number from 1 (its highest round is how many it had), and every fix attempt happened.
+      const mergedPrs = new Map<
+        string,
+        { at: string; openedAt: string; links: { linkId: string; taskId: string }[] }
+      >();
       for (const pr of repos.links.prsMergedBetween(start, end)) {
-        if (!inScope(pr.projectId) || seenPrs.has(pr.url)) continue;
-        seenPrs.add(pr.url);
+        if (!inScope(pr.projectId)) continue;
+        const seen = mergedPrs.get(pr.url);
+        if (!seen) mergedPrs.set(pr.url, { at: pr.at, openedAt: pr.openedAt, links: [pr] });
+        else {
+          if (pr.openedAt < seen.openedAt) seen.openedAt = pr.openedAt;
+          seen.links.push(pr);
+        }
+      }
+      const realRuns = new Map<string, AutopilotRun[]>();
+      const realRunsOf = (taskId: string): AutopilotRun[] => {
+        if (!realRuns.has(taskId)) {
+          realRuns.set(
+            taskId,
+            repos.autopilotRuns.forTask(taskId, RUNS_PER_TASK).filter((r) => !r.dryRun),
+          );
+        }
+        return realRuns.get(taskId)!;
+      };
+      for (const pr of mergedPrs.values()) {
         count("prs_merged", pr.at);
+        add("pr_open_to_merged", "ms", "median", pr.at, Math.max(0, Date.parse(pr.at) - Date.parse(pr.openedAt)));
+        let reviewRounds = 0;
+        let fixAttempts = 0;
+        for (const { linkId, taskId } of pr.links) {
+          let linkRounds = 0;
+          for (const run of realRunsOf(taskId)) {
+            const review = prReviewOutput(run);
+            if (review?.linkId === linkId) linkRounds = Math.max(linkRounds, review.round);
+            // A skipped attempt did nothing; conflict-only ones are attempts too.
+            if (
+              run.automation === AUTOPILOT_FIX_PRS &&
+              run.status !== "skipped" &&
+              run.dedupeKey.startsWith(fixRunKeyPrefix(linkId))
+            ) {
+              fixAttempts += 1;
+            }
+          }
+          reviewRounds += linkRounds;
+        }
+        add("autopilot.pr_review_rounds_per_pr", "ratio", "mean", pr.at, reviewRounds);
+        add("autopilot.fix_attempts_per_pr", "ratio", "mean", pr.at, fixAttempts);
       }
 
       // Agent sessions, by when they were first linked to a task, in that task's project.
@@ -243,6 +340,15 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         count("autopilot.runs", at);
         count(`autopilot.runs.${run.automation}.${run.status}`, at);
         if (run.costUsd) add("autopilot.cost_usd", "usd", "sum", at, run.costUsd);
+        // Review PRs says so in its verdict; Fix PRs records a run of its own, under a dedupe key made for it.
+        const gaveUp =
+          run.automation === AUTOPILOT_REVIEW_PRS
+            ? prReviewOutput(run)?.handoff === "gave_up"
+            : run.automation === AUTOPILOT_FIX_PRS && run.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX);
+        if (gaveUp) {
+          count("autopilot.gave_up", at);
+          count(`autopilot.gave_up.${run.automation}`, at);
+        }
         if (run.taskId) {
           const key = `${run.automation}:${run.taskId}`;
           if (lastOnTask.get(key) === "failed") count("autopilot.retries", at);
@@ -334,17 +440,28 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         if (commits.note) notes.push(commits.note);
       }
 
-      const out: Record<string, StatsSeries> = {};
-      for (const [name, s] of [...built].sort(([a], [b]) => a.localeCompare(b))) {
+      const computed = new Map<string, StatsSeries>();
+      for (const [name, s] of built) {
         const perBucket = Array.from({ length: weeks * 2 }, () => [] as number[]);
         for (const sample of s.samples) perBucket[bucketOf(sample.at)]?.push(sample.value);
-        out[name] = {
+        computed.set(name, {
           unit: s.unit,
           values: perBucket.slice(weeks).map((xs) => reduce(s.aggregate, xs)),
           total: reduce(s.aggregate, perBucket.slice(weeks).flat()),
           previousTotal: reduce(s.aggregate, perBucket.slice(0, weeks).flat()),
-        };
+        });
       }
+      // Open tasks are a level, not events: a period's total is where it ended, the previous one's where that ended.
+      for (const status of OPEN_STATUSES) {
+        const levels = openAt[status]!;
+        computed.set(`open_tasks.${status}`, {
+          unit: "count",
+          values: levels.slice(weeks),
+          total: levels[weeks * 2 - 1]!,
+          previousTotal: levels[weeks - 1]!,
+        });
+      }
+      const out: Record<string, StatsSeries> = Object.fromEntries([...computed].sort(([a], [b]) => a.localeCompare(b)));
 
       const shown = bounds.slice(weeks).map((d) => d.toISOString());
       return {

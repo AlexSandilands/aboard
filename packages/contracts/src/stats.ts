@@ -37,7 +37,10 @@ export const StatsSeries = z.object({
    * nothing in the week had one.
    */
   values: z.array(z.number().nullable()),
-  /** Over the whole period: the sum for counts and costs, the median for durations, the mean for ratios. */
+  /**
+   * Over the whole period: the sum for counts and costs, the median for durations, the mean for ratios. A series that
+   * is a level rather than events (`open_tasks.<status>`) has where the period ended, and its previous where that did.
+   */
   total: z.number().nullable(),
   /** The same for the period of equal length just before it, for comparison. */
   previousTotal: z.number().nullable(),

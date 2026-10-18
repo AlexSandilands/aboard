@@ -31,6 +31,9 @@ export const fixGaveUpPrefix = (number: number): string => `Autopilot gave up on
 /** The start of the dedupe key of every Fix PRs run on the PR link `linkId` (`fix:pr:<link>:<head>:<triggers>`). */
 export const fixRunKeyPrefix = (linkId: string): string => `fix:pr:${linkId}:`;
 
+/** The start of the dedupe key of every run that records Fix PRs giving up (`fix:gave_up:<link>[:<head>|:conflicts]`). */
+export const FIX_GAVE_UP_KEY_PREFIX = "fix:gave_up:";
+
 /** The merge buttons: `armed` is a badge and a menu item of its own, not a slot. */
 export type PrMergeButton = Exclude<PrMergeAction, "armed">;
 
