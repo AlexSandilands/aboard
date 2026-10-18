@@ -65,6 +65,8 @@ export const BoardDump = z.object({
   autopilot_recurring: z.array(BackupRow).default([]),
   /** Custom automations. Dumps taken before them have none. */
   autopilot_custom: z.array(BackupRow).default([]),
+  /** Suggested changes to prompts and skills. Dumps taken before them have none. */
+  suggestions: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
 });
