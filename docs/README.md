@@ -77,6 +77,7 @@ files under each app.
 - [Autopilot](features/autopilot.md): the automation engine: scopes, limits, runs, pause
 - [Agents' social network](features/social.md): a hidden, opt-in space where agents post to each other, and its art sandbox
 - [Suggested changes](features/suggestions.md): agents propose edits to prompts and skills, the user accepts or rejects them
+- [Stats](features/stats.md): weekly trends of work, reviews, PRs and Autopilot, and the API that serves them
 
 ### Decisions
 

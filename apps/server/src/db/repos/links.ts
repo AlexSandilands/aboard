@@ -129,6 +129,32 @@ export function createLinksRepo(sql: Sql) {
       );
       return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
+    /** PR links whose merge the board saw at or after `from` and before `to`, with the task's project. */
+    prsMergedBetween(from: string, to: string): { url: string; projectId: string; at: string }[] {
+      return sql
+        .all<{ url: string; project_id: string; at: string }>(
+          `SELECT l.url, t.project_id, json_extract(l.pr_changes_json, '$.merged') AS at
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL
+             AND json_extract(l.pr_changes_json, '$.merged') >= ? AND json_extract(l.pr_changes_json, '$.merged') < ?
+           ORDER BY at, l.id`,
+          from,
+          to,
+        )
+        .map((r) => ({ url: r.url, projectId: r.project_id, at: r.at }));
+    },
+    /** Agent session links added at or after `from` and before `to`, with the task's project. */
+    agentSessionsBetween(from: string, to: string): { sessionId: string; projectId: string; at: string }[] {
+      return sql
+        .all<{ session_id: string | null; project_id: string; at: string }>(
+          `SELECT json_extract(l.ref_json, '$.sessionId') AS session_id, t.project_id, l.created_at AS at
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'agent_session' AND l.created_at >= ? AND l.created_at < ? ORDER BY l.created_at, l.id`,
+          from,
+          to,
+        )
+        .map((r) => ({ sessionId: r.session_id ?? "", projectId: r.project_id, at: r.at }));
+    },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);
     },
