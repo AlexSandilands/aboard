@@ -140,7 +140,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
         // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded),
         // and the latest slot then runs once it ends.
-        if (isAgent && services.autopilot.runsForProject(project.id).some((r) => running(r, custom.id))) return [];
+        if (isAgent && services.autopilot.runsForProject(project.id, 500).some((r) => running(r, custom.id))) return [];
         const stamp = localStamp(slot);
         return [
           {
