@@ -43,6 +43,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("tasks.planning", "Planning", ["plan tasks", "planning skill", "bulk planning"]),
       section("tasks.review", "Review", ["local review", "rounds", "board reviewer", "skill", "budget"]),
       section("tasks.models", "Models", ["model tiers", "light", "standard", "deep"]),
+      section("tasks.suggestions", "Suggestions", ["suggested changes", "prompts", "skills", "improve", "accept"]),
     ],
   },
   {

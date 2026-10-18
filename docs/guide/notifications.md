@@ -9,6 +9,7 @@ The board tells you when something needs you, so you don't have to keep it open.
 - A **local review round finishes**, with what it found.
 - An **Autopilot run fails** or gives up.
 - A new [digest of what changed](digest.md) is ready.
+- An agent **suggests a change** to one of your prompts or skills ([suggested changes](settings.md#suggested-changes)).
 
 Each change is announced once. A pull request or thread you link is not announced for the state it already
 has; only for what changes after.

@@ -34,7 +34,7 @@ and a click tries again.
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | **Board**        | Appearance (theme, sidebar banner, priority lane, scroll to a task), Notifications, [Keybindings](using-the-board.md#keyboard), Data (backup to git, archived projects) |
-| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), Models (model tiers) |
+| **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), Models (model tiers), [Suggestions](#suggested-changes) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
@@ -58,3 +58,25 @@ and a click tries again.
 
 Editing a template, a custom automation or a recurring rule opens it as a page of its own; the top bar shows where
 you are (**Settings / Tasks / Template: Bug**), and **Esc** or **Cancel** goes back to the list.
+
+## Suggested changes
+
+Agents can suggest changes to the prompts and skills the board runs them with: the review and planning skills you
+chose (on the board or a project), your custom automations' prompts, and the skills those automations name. Each
+suggestion waits under **Settings → Tasks → Suggestions**, with a count beside the section in the list and a
+notification when a new one arrives. Nothing changes until you decide.
+
+Each one shows why the agent suggests it, the evidence (tasks open on the board, links open in a new tab), and the
+change as a diff; **Show the whole proposed text** shows all of it. Read it before you accept: it is an agent's
+text, and it will steer later agents.
+
+- **Accept** writes the change: the skill's `SKILL.md`, or the automation's prompt. A skill in a project's folder is
+  a file in that repository, so commit the change there.
+- A **built-in** skill can't be edited. **Save as my own skill** saves the changed text as a skill of your own
+  (in a `-custom` folder under `~/.claude/skills`) and switches Settings to it.
+- **Reject** drops it.
+- If the text changed after the agent read it (you edited the file, say), the suggestion can't be applied: it says
+  so, and accepting marks it out of date. An agent can suggest it again on the new text.
+- A new suggestion for the same prompt or skill replaces the open one.
+
+Decided suggestions stay listed below the open ones.

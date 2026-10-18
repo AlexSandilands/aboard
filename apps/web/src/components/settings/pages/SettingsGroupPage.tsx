@@ -23,6 +23,7 @@ import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
+import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
 import { TerminalSection } from "../TerminalSection";
@@ -105,6 +106,9 @@ function TasksContent() {
         <WithSettings>
           {(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}
         </WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="tasks.suggestions">
+        <SuggestionsSection />
       </SettingsSubsection>
     </>
   );
