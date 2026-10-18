@@ -7,11 +7,12 @@ import type {
   MergePrInput,
   PrRef,
   PrReviewCommentInfo,
+  PrOptionalChecks,
   PrReviewInfo,
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
-import { EPIC_BRANCH_PREFIX } from "@repo/contracts";
+import { EPIC_BRANCH_PREFIX, PrMergeState } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService, TasksService } from "../services/types.ts";
@@ -24,10 +25,17 @@ import {
   type GithubApi,
   type GraphqlError,
 } from "./githubApi.ts";
+import {
+  isOlderThan,
+  PANEL_OPEN_TTL_MS,
+  PANEL_REFRESH_AGE_MS,
+  POLL_TICK_MS,
+  prIsDue,
+  WARM_INTERVAL_MS,
+} from "./prPolling.ts";
 import type { FetchFn } from "./t3.ts";
 import { mapWithConcurrency, type Logger } from "./util.ts";
 
-export const PR_POLL_INTERVAL_MS = 2 * 60_000;
 export const GH_STATUS_INTERVAL_MS = 10 * 60_000;
 /** Requests in flight at once, polite to GitHub's secondary limits. */
 const POLL_CONCURRENCY = 4;
@@ -42,6 +50,8 @@ const RollupItem = z
     status: z.string().nullish(),
     conclusion: z.string().nullish(),
     state: z.string().nullish(),
+    /** Whether the base branch requires this check to merge this PR (`isRequired(pullRequestNumber:)`). */
+    isRequired: z.boolean().nullish(),
   })
   .loose();
 
@@ -75,6 +85,7 @@ export const GraphqlPr = z.object({
   isDraft: z.boolean().optional(),
   reviewDecision: z.string().nullish(),
   mergeable: z.string().nullish(),
+  mergeStateStatus: z.string().nullish(),
   headRefName: z.string().nullish(),
   baseRefName: z.string().nullish(),
   headRefOid: z.string().nullish(),
@@ -178,13 +189,42 @@ function rollupItemState(item: z.infer<typeof RollupItem>): string {
   return item.conclusion ? item.conclusion.toUpperCase() : status === "COMPLETED" ? "SUCCESS" : "PENDING";
 }
 
-export function mapChecks(rollup: ReadonlyArray<z.infer<typeof RollupItem>> | null | undefined): PrSnapshot["checks"] {
+type Rollup = ReadonlyArray<z.infer<typeof RollupItem>> | null | undefined;
+
+/**
+ * The checks that decide the verdict: those the base branch requires (GitHub's merge box ignores the rest), or every
+ * check when none is required, as without branch protection. `rest` is what's left out of the verdict.
+ */
+function splitRollup(rollup: NonNullable<Rollup>): { counted: string[]; rest: string[] } {
+  const required = rollup.filter((item) => item.isRequired === true);
+  const counted = required.length > 0 ? required : rollup;
+  return {
+    counted: counted.map(rollupItemState),
+    rest: required.length > 0 ? rollup.filter((item) => item.isRequired !== true).map(rollupItemState) : [],
+  };
+}
+
+export function mapChecks(rollup: Rollup): PrSnapshot["checks"] {
   if (!rollup || rollup.length === 0) return "none";
-  const states = rollup.map(rollupItemState);
-  if (states.some((s) => FAILING.has(s))) return "failing";
-  if (states.some((s) => PENDING.has(s))) return "pending";
+  const { counted } = splitRollup(rollup);
+  if (counted.some((s) => FAILING.has(s))) return "failing";
+  if (counted.some((s) => PENDING.has(s))) return "pending";
   return "passing";
 }
+
+/** Optional checks still running or failing while others are required; undefined when there are none. */
+export function mapOptionalChecks(rollup: Rollup): PrOptionalChecks | undefined {
+  if (!rollup || rollup.length === 0) return undefined;
+  const { rest } = splitRollup(rollup);
+  const pending = rest.filter((s) => PENDING.has(s)).length;
+  const failing = rest.filter((s) => FAILING.has(s)).length;
+  return pending + failing > 0 ? { pending, failing } : undefined;
+}
+
+const asMergeState = (value: string | null | undefined): PrMergeState | undefined => {
+  const parsed = PrMergeState.safeParse(value?.toLowerCase());
+  return parsed.success ? parsed.data : value ? "unknown" : undefined;
+};
 
 const asMergeMethod = (value: string | null | undefined): MergeMethod | null =>
   value === "squash" || value === "merge" || value === "rebase" ? value : null;
@@ -213,10 +253,14 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
   if (repo.mergeCommitAllowed) mergeMethods.push("merge");
   if (repo.squashMergeAllowed) mergeMethods.push("squash");
   if (repo.rebaseMergeAllowed) mergeMethods.push("rebase");
+  const optionalChecks = mapOptionalChecks(rollup);
+  const mergeState = asMergeState(pr.mergeStateStatus);
   return {
     state,
     title: pr.title,
     checks: mapChecks(rollup),
+    ...(optionalChecks ? { optionalChecks } : {}),
+    ...(mergeState ? { mergeState } : {}),
     reviewDecision,
     mergeable,
     headRef: pr.headRefName || null,
@@ -236,7 +280,9 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
-const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefName baseRefName headRefOid isCrossRepository updatedAt
+const prFields = (
+  numberVar: string,
+) => `number title state isDraft reviewDecision mergeable mergeStateStatus headRefName baseRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
       reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
       reviewThreads(last: 30) { nodes { isResolved comments(last: 5) { nodes {
@@ -244,8 +290,8 @@ const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefNa
       } } } }
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
-        ... on CheckRun { status conclusion }
-        ... on StatusContext { state }
+        ... on CheckRun { status conclusion isRequired(pullRequestNumber: ${numberVar}) }
+        ... on StatusContext { state isRequired(pullRequestNumber: ${numberVar}) }
       } } } } } }`;
 
 /**
@@ -254,7 +300,7 @@ const PR_FIELDS = `number title state isDraft reviewDecision mergeable headRefNa
  */
 export function pollQuery(numbers: readonly number[]): { query: string; variables: Record<string, unknown> } {
   const declarations = ["$owner: String!", "$name: String!", ...numbers.map((_, i) => `$n${i}: Int!`)];
-  const fields = numbers.map((_, i) => `    pr${i}: pullRequest(number: $n${i}) { ${PR_FIELDS} }`).join("\n");
+  const fields = numbers.map((_, i) => `    pr${i}: pullRequest(number: $n${i}) { ${prFields(`$n${i}`)} }`).join("\n");
   const variables: Record<string, unknown> = {};
   numbers.forEach((n, i) => (variables[`n${i}`] = n));
   return {
@@ -535,6 +581,9 @@ export function isGithubHost(host: string, signedIn: readonly GithubHostStatus[]
 
 // ── Poller ───────────────────────────────────────────────────────────────
 
+/** The poller's `debug` line is optional so a logger that only warns still fits. */
+type PollLogger = Logger & Partial<Pick<Console, "debug">>;
+
 export interface GithubServices {
   links: Pick<LinksService, "listByKind" | "get" | "setSnapshot">;
   tasks: Pick<TasksService, "summary">;
@@ -554,8 +603,18 @@ export interface GithubIntegration {
    * whose other PR is open. Other hosts only while they're polled (GitHub, and gh signed in to it).
    */
   holdsTasks(host: string): boolean;
-  /** One poll over all GitHub PR links (no-op when polling is off or gh is unusable). */
-  pollAll(): Promise<void>;
+  /**
+   * One poll over the GitHub PR links that are due: hot ones every 20 s, warm every 2 minutes, merged or closed every
+   * 30 (`prIsDue`). No-op when polling is off or gh is unusable. `now` is for tests.
+   */
+  pollAll(now?: number): Promise<void>;
+  /**
+   * A task's panel is open: reads its PR links now when the last read is older than 15 s, and polls them hot while
+   * the panel keeps asking. No-op when polling is off or gh is unusable.
+   */
+  viewTask(taskId: string): Promise<void>;
+  /** Reads a PR link that was just added, so it shows its state now rather than at the next poll. Never throws. */
+  pollLink(linkId: string): Promise<void>;
   /** Reads an issue with `gh issue view`. Throws AppError (`gh` missing or not signed in, issue not found). */
   fetchIssue(ref: IssueRef): Promise<IssueDetails>;
   /** The URLs of an issue's sub-issues, in GitHub's order; none for an issue without any. Throws AppError. */
@@ -595,10 +654,10 @@ export function createGithubIntegration(deps: {
   services: () => GithubServices;
   runGh?: RunGh;
   fetch?: FetchFn;
-  log?: Logger;
+  log?: PollLogger;
 }): GithubIntegration {
   const runGh = deps.runGh ?? defaultRunGh;
-  const log = deps.log ?? console;
+  const log: PollLogger = deps.log ?? console;
   const tokens = createGhTokens({ runGh });
   const api: GithubApi = createGithubApi({ tokens, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
   let status: GithubStatus = { available: false, authenticated: false, error: null, hosts: [] };
@@ -608,6 +667,14 @@ export function createGithubIntegration(deps: {
   const timers: NodeJS.Timeout[] = [];
   /** Last error logged per link (or host), so a persistent failure is logged once. */
   const loggedErrors = new Map<string, string>();
+  /** When each task's panel last asked for its PRs, so they're polled hot while it's open. */
+  const viewedAt = new Map<string, number>();
+  /**
+   * When a link, or a host (`host:<name>`), last failed. The poller looks every 20 s, so a PR GitHub can't find or a
+   * host that refused (a rate limit) is left alone for the warm interval rather than asked again each tick.
+   */
+  const failedAt = new Map<string, number>();
+  const backedOff = (key: string, now: number): boolean => now - (failedAt.get(key) ?? -Infinity) < WARM_INTERVAL_MS;
 
   const logOnce = (key: string, label: string, message: string) => {
     if (loggedErrors.get(key) === message) return;
@@ -701,54 +768,107 @@ export function createGithubIntegration(deps: {
       if (parsed?.success && repoParsed?.success) {
         services.links.setSnapshot(link.id, mapPrSnapshot(parsed.data, repoParsed.data));
         loggedErrors.delete(link.id);
+        failedAt.delete(link.id);
         return;
       }
+      failedAt.set(link.id, Date.now());
       const message = errorFor(errors, `pr${i}`) ?? (pr ? "GitHub returned an unexpected PR shape" : "PR not found");
       logOnce(link.id, link.url, message);
     });
   };
 
-  const pollAll = async (): Promise<void> => {
+  /** Reads the links in batches per host and repo, and returns how many queries went out. */
+  const pollLinks = async (links: readonly RefPrLink[]): Promise<number> => {
+    const groups = new Map<string, { host: string; repo: string; links: RefPrLink[] }>();
+    for (const link of links) {
+      const key = `${link.ref.host}
+${link.ref.repo.toLowerCase()}`;
+      const group = groups.get(key) ?? { host: link.ref.host, repo: link.ref.repo, links: [] };
+      group.links.push(link);
+      groups.set(key, group);
+    }
+    const batches = [...groups.values()].flatMap((g) =>
+      chunk(g.links, BATCH_SIZE).map((batch) => ({ host: g.host, repo: g.repo, links: batch })),
+    );
+    /** Hosts that answered with a rate limit or a refused token this poll: skip their other batches. */
+    const stoppedHosts = new Set<string>();
+    let queries = 0;
+    await mapWithConcurrency(batches, POLL_CONCURRENCY, async (batch) => {
+      if (stoppedHosts.has(batch.host)) return;
+      queries += 1;
+      try {
+        await pollBatch(batch.host, batch.repo, batch.links);
+        loggedErrors.delete(`host:${batch.host}`);
+        failedAt.delete(`host:${batch.host}`);
+      } catch (error) {
+        if (error instanceof GithubApiError && error.kind !== "not_found" && error.kind !== "response") {
+          stoppedHosts.add(batch.host);
+          failedAt.set(`host:${batch.host}`, Date.now());
+          logOnce(`host:${batch.host}`, batch.host, error.message);
+          return;
+        }
+        for (const link of batch.links) {
+          failedAt.set(link.id, Date.now());
+          logOnce(link.id, link.url, messageOf(error));
+        }
+      }
+    });
+    return queries;
+  };
+
+  /** The polled GitHub PR links, or null when polling is off or gh is unusable. */
+  const pollableLinks = async (): Promise<RefPrLink[] | null> => {
+    const services = deps.services();
+    if (!services.settings.get().githubPolling) return null;
+    const current = await ensureStatus();
+    if (!current.authenticated) return null;
+    return services.links
+      .listByKind("pr")
+      .filter((l): l is RefPrLink => isGithubPr(l, current) && polls(l.ref.host, current));
+  };
+
+  const isViewed = (taskId: string, now: number): boolean =>
+    now - (viewedAt.get(taskId) ?? -Infinity) < PANEL_OPEN_TTL_MS;
+
+  const pollAll = async (now = Date.now()): Promise<void> => {
     if (polling) return;
     polling = true;
     try {
-      const services = deps.services();
-      if (!services.settings.get().githubPolling) return;
-      const current = await ensureStatus();
-      if (!current.authenticated) return;
-      const links = services.links
-        .listByKind("pr")
-        .filter((l): l is RefPrLink => isGithubPr(l, current) && polls(l.ref.host, current));
-      const groups = new Map<string, { host: string; repo: string; links: RefPrLink[] }>();
-      for (const link of links) {
-        const key = `${link.ref.host}\n${link.ref.repo.toLowerCase()}`;
-        const group = groups.get(key) ?? { host: link.ref.host, repo: link.ref.repo, links: [] };
-        group.links.push(link);
-        groups.set(key, group);
-      }
-      const batches = [...groups.values()].flatMap((g) =>
-        chunk(g.links, BATCH_SIZE).map((batch) => ({ host: g.host, repo: g.repo, links: batch })),
+      const links = await pollableLinks();
+      if (!links) return;
+      for (const [taskId] of viewedAt) if (!isViewed(taskId, now)) viewedAt.delete(taskId);
+      const due = links.filter(
+        (l) =>
+          prIsDue(l, now, isViewed(l.taskId, now)) && !backedOff(l.id, now) && !backedOff(`host:${l.ref.host}`, now),
       );
-      /** Hosts that answered with a rate limit or a refused token this poll: skip their other batches. */
-      const stoppedHosts = new Set<string>();
-      await mapWithConcurrency(batches, POLL_CONCURRENCY, async (batch) => {
-        if (stoppedHosts.has(batch.host)) return;
-        try {
-          await pollBatch(batch.host, batch.repo, batch.links);
-          loggedErrors.delete(`host:${batch.host}`);
-        } catch (error) {
-          if (error instanceof GithubApiError && error.kind !== "not_found" && error.kind !== "response") {
-            stoppedHosts.add(batch.host);
-            logOnce(`host:${batch.host}`, batch.host, error.message);
-            return;
-          }
-          for (const link of batch.links) logOnce(link.id, link.url, messageOf(error));
-        }
-      });
+      if (due.length === 0) return;
+      const queries = await pollLinks(due);
+      log.debug?.(`[github] polled ${due.length} of ${links.length} PRs in ${queries} queries`);
     } catch (error) {
       log.warn(`[github] poll failed: ${messageOf(error)}`);
     } finally {
       polling = false;
+    }
+  };
+
+  const pollLink = async (linkId: string): Promise<void> => {
+    try {
+      const link = (await pollableLinks())?.find((l) => l.id === linkId);
+      if (link) await pollLinks([link]);
+    } catch (error) {
+      log.warn(`[github] couldn't read the new PR link: ${messageOf(error)}`);
+    }
+  };
+
+  const viewTask = async (taskId: string): Promise<void> => {
+    const now = Date.now();
+    viewedAt.set(taskId, now);
+    try {
+      const links = await pollableLinks();
+      const stale = links?.filter((l) => l.taskId === taskId && isOlderThan(l, now, PANEL_REFRESH_AGE_MS)) ?? [];
+      if (stale.length > 0) await pollLinks(stale);
+    } catch (error) {
+      log.warn(`[github] panel refresh failed: ${messageOf(error)}`);
     }
   };
 
@@ -852,6 +972,8 @@ export function createGithubIntegration(deps: {
       return h === "github.com" || polls(h, status);
     },
     pollAll,
+    viewTask,
+    pollLink,
     async fetchIssue(ref) {
       const target = ref.host === "github.com" ? ref.repo : `${ref.host}/${ref.repo}`;
       try {
@@ -1068,7 +1190,7 @@ export function createGithubIntegration(deps: {
     start() {
       void checkStatus().then(() => pollAll());
       timers.push(setInterval(() => void checkStatus(), GH_STATUS_INTERVAL_MS).unref());
-      timers.push(setInterval(() => void pollAll(), PR_POLL_INTERVAL_MS).unref());
+      timers.push(setInterval(() => void pollAll(), POLL_TICK_MS).unref());
     },
     stop() {
       for (const timer of timers.splice(0)) clearInterval(timer);

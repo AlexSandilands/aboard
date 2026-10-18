@@ -126,6 +126,25 @@ describe("REST", () => {
     expect(unknown.status).toBe(400);
   });
 
+  it("reads a PR link as soon as it is added, and a task's PRs when its panel opens", async () => {
+    const h = await setup();
+    const prLinked = vi.spyOn(h.integrations, "prLinked").mockImplementation(() => {});
+    const taskViewed = vi.spyOn(h.integrations, "taskViewed").mockResolvedValue();
+    const pr = await h.request(`/api/tasks/${h.task.id}/links`, {
+      method: "POST",
+      json: { value: "https://github.com/o/r/pull/7" },
+    });
+    expect(pr.status).toBe(201);
+    expect(prLinked).toHaveBeenCalledWith(((await pr.json()) as { id: string }).id);
+    await h.request(`/api/tasks/${h.task.id}/links`, { method: "POST", json: { value: "https://example.com/doc" } });
+    expect(prLinked).toHaveBeenCalledTimes(1);
+
+    const view = await h.request(`/api/tasks/%23${h.task.number}/view`, { method: "POST", json: {} });
+    expect(view.status).toBe(204);
+    expect(taskViewed).toHaveBeenCalledWith(h.task.id);
+    vi.restoreAllMocks();
+  });
+
   it("deletes a task permanently only once it is archived", async () => {
     const h = await setup();
     const active = await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" });

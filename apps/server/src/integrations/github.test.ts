@@ -23,11 +23,13 @@ const repo = {
   viewerPermission: "WRITE",
 };
 
-const rollup = (...nodes: Array<Record<string, string>>) => ({
+const rollup = (...nodes: Array<Record<string, unknown>>) => ({
   nodes: [{ commit: { statusCheckRollup: { contexts: { nodes } } } }],
 });
 const checkRun = (status: string, conclusion: string) => ({ __typename: "CheckRun", name: "ci", status, conclusion });
 const statusContext = (state: string) => ({ __typename: "StatusContext", context: "ci/legacy", state });
+const required = <T extends object>(item: T) => ({ ...item, isRequired: true });
+const optional = <T extends object>(item: T) => ({ ...item, isRequired: false });
 
 describe("mapPrSnapshot", () => {
   it("maps state, draft, review, mergeable and the merge fields", () => {
@@ -183,6 +185,59 @@ describe("mapPrSnapshot", () => {
     ["status context error", [checkRun("COMPLETED", "SUCCESS"), statusContext("ERROR")], "failing"],
   ] as const)("checks: %s", (_name, items, expected) => {
     expect(mapPrSnapshot(fakePr({ commits: rollup(...items) }), repo).checks).toBe(expected);
+  });
+});
+
+describe("required checks", () => {
+  const snapshot = (...items: Array<Record<string, unknown>>) =>
+    mapPrSnapshot(fakePr({ commits: rollup(...items) }), repo);
+
+  it("ignores an optional queued check once another is required, and counts it aside", () => {
+    const s = snapshot(required(checkRun("COMPLETED", "SUCCESS")), optional(checkRun("QUEUED", "")));
+    expect(s.checks).toBe("passing");
+    expect(s.optionalChecks).toEqual({ pending: 1, failing: 0 });
+  });
+
+  it("ignores an optional failure the same way", () => {
+    const s = snapshot(required(checkRun("COMPLETED", "SUCCESS")), optional(checkRun("COMPLETED", "FAILURE")));
+    expect(s.checks).toBe("passing");
+    expect(s.optionalChecks).toEqual({ pending: 0, failing: 1 });
+  });
+
+  it("is pending while a required status context is expected, and failing when a required check fails", () => {
+    expect(snapshot(required(statusContext("EXPECTED")), optional(checkRun("COMPLETED", "SUCCESS"))).checks).toBe(
+      "pending",
+    );
+    expect(snapshot(required(checkRun("IN_PROGRESS", "")), required(checkRun("COMPLETED", "FAILURE"))).checks).toBe(
+      "failing",
+    );
+    expect(snapshot(required(checkRun("COMPLETED", "SUCCESS")), required(checkRun("IN_PROGRESS", ""))).checks).toBe(
+      "pending",
+    );
+  });
+
+  it("counts every check when none is required, and reports no optional ones", () => {
+    const pending = snapshot(optional(checkRun("COMPLETED", "SUCCESS")), optional(checkRun("QUEUED", "")));
+    expect(pending.checks).toBe("pending");
+    expect(pending.optionalChecks).toBeUndefined();
+    expect(snapshot(checkRun("COMPLETED", "FAILURE")).checks).toBe("failing");
+  });
+
+  it("leaves optionalChecks out when the optional checks are all green", () => {
+    expect(
+      snapshot(required(checkRun("COMPLETED", "SUCCESS")), optional(checkRun("COMPLETED", "SUCCESS"))),
+    ).not.toHaveProperty("optionalChecks");
+  });
+
+  it("maps GitHub's merge state, and reads isRequired for the PR's own number", () => {
+    expect(mapPrSnapshot(fakePr({ mergeStateStatus: "CLEAN" }), repo).mergeState).toBe("clean");
+    expect(mapPrSnapshot(fakePr({ mergeStateStatus: "HAS_HOOKS" }), repo).mergeState).toBe("has_hooks");
+    expect(mapPrSnapshot(fakePr({ mergeStateStatus: "SOMETHING_NEW" }), repo).mergeState).toBe("unknown");
+    expect(mapPrSnapshot(fakePr(), repo)).not.toHaveProperty("mergeState");
+    const { query } = pollQuery([4, 9]);
+    expect(query).toContain("isRequired(pullRequestNumber: $n0)");
+    expect(query).toContain("isRequired(pullRequestNumber: $n1)");
+    expect(query).toContain("mergeStateStatus");
   });
 });
 
@@ -440,6 +495,81 @@ describe("github poller", () => {
     await expect(github.refresh(ghLink("l1", 404))).rejects.toThrow(
       /Could not fetch PR: Could not resolve to a Repository/,
     );
+  });
+});
+
+describe("github poller schedule", () => {
+  const idle = (id: string, number: number, syncedAgoMs: number, over: Partial<PrSnapshot> = {}): PrLink => ({
+    ...ghLink(id, number),
+    syncedAt: new Date(Date.now() - syncedAgoMs).toISOString(),
+    snapshot: { ...mapPrSnapshot(fakePr({ number }), repo), updatedAt: "2026-10-01T10:00:00Z", ...over },
+  });
+  const fakes = (gh: ReturnType<typeof createFakeGithub>, ...numbers: number[]) =>
+    numbers.forEach((n) => gh.prs.set(`o/r#${n}`, fakePr({ number: n })));
+
+  it("polls only the PRs that are due, each at its own tier", async () => {
+    const links = [
+      ghLink("new", 1),
+      idle("pending", 2, 25_000, { checks: "pending" }),
+      idle("pending-fresh", 3, 5_000, { checks: "pending" }),
+      idle("warm-fresh", 4, 60_000),
+      idle("warm-due", 5, 125_000),
+      idle("merged", 6, 10 * 60_000, { state: "merged" }),
+      idle("merged-due", 7, 31 * 60_000, { state: "merged" }),
+    ];
+    const { gh, github, snapshots } = setup(links);
+    fakes(gh, 1, 2, 3, 4, 5, 6, 7);
+    await github.pollAll();
+    expect([...snapshots.keys()].sort()).toEqual(["merged-due", "new", "pending", "warm-due"]);
+    expect(gh.requests).toHaveLength(1);
+  });
+
+  it("leaves a PR GitHub can't find, and a refused host, alone until the warm interval", async () => {
+    const { gh, github, warnings } = setup([ghLink("bad", 404)]);
+    await github.pollAll();
+    await github.pollAll();
+    expect(gh.requests).toHaveLength(1);
+    await github.pollAll(Date.now() + 2 * 60_000);
+    expect(gh.requests).toHaveLength(2);
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("reads a PR link that was just added, and only when polling is on", async () => {
+    const link = ghLink("l1", 7);
+    const on = setup([link]);
+    fakes(on.gh, 7);
+    await on.github.pollLink("l1");
+    expect(on.snapshots.has("l1")).toBe(true);
+    await on.github.pollLink("nope");
+    expect(on.gh.requests).toHaveLength(1);
+
+    const off = setup([link], { settings: { githubPolling: false } });
+    await off.github.pollLink("l1");
+    expect(off.gh.requests).toEqual([]);
+  });
+
+  it("reads a task's PRs when its panel opens only if the last read is older than 15 seconds", async () => {
+    const other = { ...idle("other-task", 9, 60_000), taskId: "t2" };
+    const { gh, github, snapshots } = setup([idle("stale", 1, 20_000), idle("fresh", 2, 5_000), other]);
+    fakes(gh, 1, 2, 9);
+    await github.viewTask("t1");
+    expect([...snapshots.keys()]).toEqual(["stale"]);
+    await github.viewTask("t1");
+    expect(gh.requests).toHaveLength(2);
+  });
+
+  it("polls an open panel's PRs hot, for a while after it last asked", async () => {
+    const { gh, github, snapshots } = setup([idle("quiet", 1, 10_000)]);
+    fakes(gh, 1);
+    await github.viewTask("t1");
+    expect(snapshots.size).toBe(0);
+    // Warm would wait two minutes; the panel makes it hot, so it is due 15 seconds on.
+    await github.pollAll(Date.now() + 15_000);
+    expect(snapshots.has("quiet")).toBe(true);
+    snapshots.clear();
+    // Past its TTL the panel no longer counts, so the PR is warm again and not due after a minute.
+    await github.pollAll(Date.now() + 50_000);
+    expect(snapshots.size).toBe(0);
   });
 });
 

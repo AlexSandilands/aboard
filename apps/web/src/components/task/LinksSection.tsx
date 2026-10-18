@@ -3,6 +3,7 @@ import {
   classifyLink,
   prMergeAction,
   type AppSettings,
+  type PrSnapshot,
   type T3IntegrationStatus,
   type TaskDetail,
   type TaskLink,
@@ -261,6 +262,15 @@ export function RemoveItem({ onRemove }: { onRemove: () => void }) {
   );
 }
 
+/** The checks icon's tooltip, with the checks that aren't required to merge beside it. */
+function checksHintLabel(label: string, optional: PrSnapshot["optionalChecks"]): string {
+  const parts = [
+    optional?.pending ? `${optional.pending} optional running` : "",
+    optional?.failing ? `${optional.failing} optional failing` : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? `${label} (${parts.join(", ")})` : label;
+}
+
 function PullRequestRow({
   task,
   link,
@@ -338,15 +348,15 @@ function PullRequestRow({
             </Hint>
           ) : null}
           {snapshot.checks === "passing" ? (
-            <Hint label="Checks passing">
+            <Hint label={checksHintLabel("Checks passing", snapshot.optionalChecks)}>
               <CircleCheckIcon className="size-3.5 text-success" />
             </Hint>
           ) : snapshot.checks === "failing" ? (
-            <Hint label="Checks failing">
+            <Hint label={checksHintLabel("Checks failing", snapshot.optionalChecks)}>
               <CircleXIcon className="size-3.5 text-destructive-foreground" />
             </Hint>
           ) : snapshot.checks === "pending" ? (
-            <Hint label="Checks running">
+            <Hint label={checksHintLabel("Checks running", snapshot.optionalChecks)}>
               <CircleDashedIcon className="size-3.5 text-warning" />
             </Hint>
           ) : null}

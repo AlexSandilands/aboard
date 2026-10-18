@@ -13,6 +13,7 @@ import {
   reviewIsDone,
   type ReviewFinding,
   type PlanPhase,
+  type PrSnapshot,
   type Project,
   type TaskDetail,
   type TaskTemplate,
@@ -62,6 +63,16 @@ export function projectLabel(project: Project | undefined): string {
   return project.workspaceRoot ? `${project.title} (${project.workspaceRoot})` : project.title;
 }
 
+/** Checks that aren't required to merge, shown beside the verdict: "checks passing (1 optional pending)". */
+function optionalChecksText(optional: PrSnapshot["optionalChecks"]): string {
+  if (!optional) return "";
+  const parts = [
+    optional.pending > 0 ? `${optional.pending} optional pending` : "",
+    optional.failing > 0 ? `${optional.failing} optional failing` : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
 export function linkText(link: TaskLink): string {
   const label = link.label ? ` "${link.label}"` : "";
   switch (link.kind) {
@@ -69,7 +80,7 @@ export function linkText(link: TaskLink): string {
       const name = link.ref ? `${link.ref.repo}#${link.ref.number}` : "PR";
       const s = link.snapshot;
       const state = s
-        ? ` (${s.state}, checks ${s.checks}${s.reviewDecision ? `, ${s.reviewDecision.replace("_", " ")}` : ""}${
+        ? ` (${s.state}, checks ${s.checks}${optionalChecksText(s.optionalChecks)}${s.reviewDecision ? `, ${s.reviewDecision.replace("_", " ")}` : ""}${
             s.mergeable === "conflicting" ? ", conflicts" : ""
           })`
         : "";

@@ -75,6 +75,7 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         const link = services.links.add(id, input, actor(args.actor));
         // A session's status is a local file read; show it now rather than at the next poll.
         if (link.kind === "agent_session") void ctx.integrations.refreshLink(link.id).catch(() => {});
+        if (link.kind === "pr") ctx.integrations.prLinked(link.id);
         const summary = services.tasks.summary(id);
         return textResult(`Linked to #${summary.number}: ${linkText(link)}${warning ? `\nWarning: ${warning}` : ""}`);
       }),

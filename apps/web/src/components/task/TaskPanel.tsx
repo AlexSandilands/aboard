@@ -9,6 +9,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandlers } from "~/hooks/useResizableWidth";
 import { ApiError } from "~/lib/api";
 import { useBoard, useTaskDetail } from "~/state/queries";
+import { useTaskView } from "~/state/taskView";
 import { usePanel } from "~/state/ui";
 import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
@@ -108,6 +109,7 @@ function ResizeHandle({ handlers }: { handlers: ResizableWidthHandlers }) {
 
 function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const detail = useTaskDetail(taskId);
+  useTaskView(taskId, detail.data?.links.some((l) => l.kind === "pr" && l.ref !== null) ?? false);
   const projects = useBoard().data?.projects ?? EMPTY_PROJECTS;
   const [editor, setEditor] = useState<{ open: boolean; mode: PlanEditorMode; session: number }>({
     open: false,

@@ -44,7 +44,9 @@ const reviewPrsOn = (services: Services, task: TaskSummary): boolean => {
  * - Review PRs, when it is on for the task, reviewed this head and found nothing at or above the fix threshold;
  * - no review or fix of the task's PRs is running, and no reviewer requested changes on GitHub;
  * - its checks pass, or none has reported for NO_CHECKS_WAIT_MS since the head was first seen (GitHub reports none
- *   for a moment after a push), and GitHub says it merges cleanly.
+ *   for a moment after a push), and GitHub says it merges cleanly. With required checks, `checks` is their verdict
+ *   alone (an optional check that is still running or failing is in `optionalChecks` and doesn't hold a merge back,
+ *   as in GitHub's merge box); with none required, every check counts.
  */
 export function notMergeable(
   services: Services,
