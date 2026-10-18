@@ -1,6 +1,6 @@
 import { EMPTY_MODEL_TIERS, type ModelTiers } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { applyTierChange, createTierEdits, visibleTierProviders } from "./modelTiers.logic";
+import { applyTierChange, createTierEdits, saveTierChange, visibleTierProviders } from "./modelTiers.logic";
 
 const T3_MODEL = {
   selection: { instanceId: "codex", model: "gpt-5.4", options: [] },
@@ -73,6 +73,54 @@ describe("createTierEdits", () => {
       description: "Opus",
       t3: null,
     });
+  });
+});
+
+describe("saveTierChange", () => {
+  const cached = tiers().light;
+  const deferred = () => {
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it("sends only the edited tier, and a second overlapping edit carries the first", async () => {
+    const edits = createTierEdits();
+    const first = deferred();
+    const second = deferred();
+    const sent: Array<Partial<ModelTiers>> = [];
+    const queue = [first, second];
+    const send = (update: { modelTiers: Partial<ModelTiers> }) => {
+      sent.push(update.modelTiers);
+      return queue.shift()!.promise;
+    };
+    const a = saveTierChange(edits, send, cached, "light", { field: "description", value: "Haiku" });
+    // The cache still holds the old tier while the first save is in flight.
+    const b = saveTierChange(edits, send, cached, "light", { field: "cli", harness: "claude-code", value: "haiku" });
+    expect(sent.map((update) => Object.keys(update))).toEqual([["light"], ["light"]]);
+    expect(sent[1]?.light).toEqual({ description: "Haiku", t3: null, cli: { "claude-code": "haiku" } });
+    first.resolve();
+    second.resolve();
+    await Promise.all([a, b]);
+    // Both saves settled: the next edit builds on the cache again.
+    const fresh = { description: "Server", t3: null };
+    expect(edits.compose(fresh, "light", { field: "cli", harness: "copilot-cli", value: "x" }).description).toBe(
+      "Server",
+    );
+  });
+
+  it("settles a tier whose save was rejected, without rejecting itself", async () => {
+    const edits = createTierEdits();
+    const failed = deferred();
+    const save = saveTierChange(edits, () => failed.promise, cached, "deep", { field: "description", value: "Opus" });
+    failed.reject(new Error("nope"));
+    await expect(save).resolves.toBeUndefined();
+    const fresh = { description: "Server", t3: null };
+    expect(edits.compose(fresh, "deep", { field: "t3", value: null }).description).toBe("Server");
   });
 });
 

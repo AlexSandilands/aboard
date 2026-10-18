@@ -16,7 +16,13 @@ import { Button } from "~/components/ui/button";
 import { useUpdateSettings } from "~/state/mutations";
 import { useAgentIntegrations, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { createTierEdits, visibleTierProviders, type TierChange, type TierProvider } from "./modelTiers.logic";
+import {
+  createTierEdits,
+  saveTierChange,
+  visibleTierProviders,
+  type TierChange,
+  type TierProvider,
+} from "./modelTiers.logic";
 import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
@@ -40,15 +46,10 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   for (const harness of agents.data?.harnesses ?? []) cliFound[harness.harness] = harness.cli.found;
   const shown = new Set<TierProvider>(visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }));
   const edits = useRef(createTierEdits()).current;
-  const save = (tier: ModelTier, change: TierChange) => {
-    const next = edits.compose(settings.modelTiers[tier], tier, change);
-    // mutateAsync, since mutate's per-call callbacks only run for the latest of overlapping saves, and each must settle.
-    // The hook's own onError already reports a failure.
-    updateSettings
-      .mutateAsync({ modelTiers: { [tier]: next } })
-      .catch(() => {})
-      .finally(() => edits.settle(tier));
-  };
+  // mutateAsync, since mutate's per-call callbacks only run for the latest of overlapping saves, and each must settle.
+  // The hook's own onError already reports a failure.
+  const save = (tier: ModelTier, change: TierChange) =>
+    void saveTierChange(edits, updateSettings.mutateAsync, settings.modelTiers[tier], tier, change);
 
   return (
     <SettingsSection id="models.tiers.list" title="Model tiers">

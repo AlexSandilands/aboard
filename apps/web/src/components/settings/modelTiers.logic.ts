@@ -75,3 +75,23 @@ export function createTierEdits() {
     },
   };
 }
+
+export type TierEdits = ReturnType<typeof createTierEdits>;
+
+/**
+ * Saves one edit: sends only its tier, built on any save of that tier still in flight, and settles the tier when the
+ * save ends either way. Callers get no rejection; whoever owns `send` reports a failure (the settings hook toasts).
+ */
+export function saveTierChange(
+  edits: TierEdits,
+  send: (update: { modelTiers: Partial<ModelTiers> }) => Promise<unknown>,
+  cached: ModelTierSetting,
+  tier: ModelTier,
+  change: TierChange,
+): Promise<void> {
+  const next = edits.compose(cached, tier, change);
+  return send({ modelTiers: { [tier]: next } }).then(
+    () => edits.settle(tier),
+    () => edits.settle(tier),
+  );
+}
