@@ -301,6 +301,10 @@ export const RETRIED_PREFIX = "retried:";
 
 export const isRetried = (dedupeKey: string): boolean => dedupeKey.startsWith(RETRIED_PREFIX);
 
+/** The key a retired one (`retried:<runId>:<key>`) had before it was retired. */
+export const unretiredKey = (dedupeKey: string): string =>
+  isRetried(dedupeKey) ? dedupeKey.slice(dedupeKey.indexOf(":", RETRIED_PREFIX.length) + 1) : dedupeKey;
+
 /**
  * Whether the same automation has made a real run on the same task (or, for a task-less run, in the same project)
  * since this one. A superseded run's work is history: retrying it would redo nothing, yet drop it from the rounds and
@@ -351,7 +355,9 @@ export function autopilotRunEventText(payload: Record<string, unknown>): string 
     case "failed":
       return `${title} failed: ${text("error") ?? summary}`;
     case "retried":
-      return `asked ${title} to try again: ${summary}`;
+      return payload.reason === "restart"
+        ? `${title} will try again, since the board restarted while it was going: ${summary}`
+        : `asked ${title} to try again: ${summary}`;
     default:
       return payload.dryRun === true ? `${title} (dry run): ${summary}` : `skipped ${title}: ${summary}`;
   }

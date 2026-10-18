@@ -421,14 +421,15 @@ async function start(argv: string[]): Promise<void> {
     env.T3CODE_HOME = join(home, "no-t3");
     // Vite serves the UI; a stale build in apps/web/dist would only confuse.
     env[brandEnv("WEB_DIST")] = join(home, "no-web-dist");
+    // `tsx watch` rather than `node --watch`, which also restarts when a file is only read (NTFS last-access).
+    const tsxBin = join(
+      dirname(createRequire(join(serverDir, "package.json")).resolve("tsx/package.json")),
+      "dist",
+      "cli.mjs",
+    );
     children.push(
       // Absolute paths put this checkout in each child's command line, which `ownedPids` checks.
-      run(
-        "server",
-        ["--watch", "--watch-preserve-output", "--import", "tsx", join(serverDir, "src", "main.ts")],
-        serverDir,
-        env,
-      ),
+      run("server", [tsxBin, "watch", "--clear-screen=false", join(serverDir, "src", "main.ts")], serverDir, env),
     );
   }
 

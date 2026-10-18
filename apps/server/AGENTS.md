@@ -26,8 +26,9 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
 - MCP results are plain text. Tool descriptions are written for agents; read
   [docs/features/mcp.md](../../docs/features/mcp.md) before adding or changing a tool, and update
   `skills/aboard/` when the workflow changes.
-- `dev` and `start` run through `tsx` (`node --import tsx`), because some code uses syntax Node's type
-  stripping can't run (parameter properties). `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app.
+- `dev` and `start` run through `tsx` (`tsx watch`, `node --import tsx`), because some code uses syntax Node's type
+  stripping can't run (parameter properties). `dev` must not use `node --watch`: on NTFS it restarts when a
+  file is merely read, which kills Autopilot runs. `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app.
 
 ## Tests
 

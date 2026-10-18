@@ -133,8 +133,19 @@ leave them out.
 - Every change to a run publishes `autopilot.changed` with the pause state and the runs in flight; the board
   snapshot carries the same `autopilot` object, so lanes, epic bands and cards can show what's running. Each run
   in flight carries its task's `epicId`, read from the task when the status is built (it isn't stored on the run).
-- An action that throws fails its run and flags it **needs attention**. The server marks runs a restart left
-  `queued` or `running` as failed and flagged, at startup, whether or not the pollers run.
+- An action that throws fails its run and flags it **needs attention**. The server ends runs a restart left
+  `queued` or `running` as failed ("The board restarted while this run was going") at startup, whether or not the
+  pollers run (`recover`), and **retries each once**: the run is retired like a hand retry (key `retried:<runId>:<key>`,
+  no flag, no inbox notification) and the task logs an `autopilot_run` entry with status `retried` and reason
+  `restart`, so the engine redoes the work on its next pass and the run no longer counts as a Review PRs round or a
+  Fix PRs attempt. Retries stop at one: a run whose work a restart already cut short (a retired run of the same
+  automation and key that ended with that error) is failed and flagged instead, so a run that itself restarts the
+  board can't loop. A run a later run of its automation has superseded is flagged too. Retired restart runs still
+  count as restarts in `board_activity`. A restart that lands in the instant between GitHub accepting a review and
+  the run recording it can make the redo post a second review; the check for a landed review only covers a post that
+  returned an error, not one the process was killed during. In dev, `pnpm dev` and `pnpm sandbox` run the
+  server under `tsx watch`, which restarts on edits but not on a file being read: `node --watch` also restarts
+  on an NTFS last-access change, so an agent merely reading a server file would restart the board.
 
 ### Needs attention
 
