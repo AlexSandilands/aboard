@@ -17,6 +17,8 @@ import type {
   NotificationList,
   SkillInfo,
   SocialFeed,
+  StatsPeriod,
+  StatsResponse,
   SessionLaunchOptions,
   T3LaunchOptions,
   T3ModelCatalog,
@@ -31,7 +33,7 @@ import { useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
-import { api, eventsUrl } from "~/lib/api";
+import { ApiError, api, eventsUrl } from "~/lib/api";
 import { applyBoardEvent } from "./boardReducer";
 
 export const queryKeys = {
@@ -45,6 +47,7 @@ export const queryKeys = {
   backupStatus: ["backupStatus"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
+  stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
   t3Projects: ["t3Projects"] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
@@ -461,5 +464,26 @@ export function useSocialFeed() {
     queryKey: queryKeys.socialFeed,
     queryFn: ({ signal }) => api<SocialFeed>("/api/social", { signal }),
     refetchInterval: 30_000,
+  });
+}
+
+/**
+ * Weekly stats for the stats page. No event covers them, so they are read when the page opens, when the period or
+ * project changes (a new key) and when the window regains focus, instead of being pushed.
+ */
+export function useStats(weeks: StatsPeriod, projectId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stats(weeks, projectId),
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({ weeks: String(weeks) });
+      if (projectId) query.set("projectId", projectId);
+      return api<StatsResponse>(`/api/stats?${query}`, { signal });
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: "always",
+    // A project that no longer exists answers 404 for good; one retry is for everything else.
+    retry: (failures, error) => !(error instanceof ApiError && error.status === 404) && failures < 1,
+    // Keeps the old charts up (dimmed by the page) while another period or project loads.
+    placeholderData: (previous) => previous,
   });
 }

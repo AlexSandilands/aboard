@@ -50,6 +50,7 @@ files under each app.
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray
 - [Notifications](guide/notifications.md): the inbox, pop-ups, taskbar badge and what you're told about
+- [Stats](guide/stats.md): the weekly charts of work, reviews, PRs and Autopilot
 
 ### Features
 
