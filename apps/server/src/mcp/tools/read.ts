@@ -41,6 +41,27 @@ import {
   type ToolRegistrar,
 } from "../shared.ts";
 import { openRoundPointer } from "./reviews.ts";
+import { renderActivity } from "../activityFormat.ts";
+
+const HOUR_MS = 3_600_000;
+
+/** A time for board_activity: "7d" or "36h" before now, or an ISO date or time (UTC unless it has an offset). */
+function parseActivityTime(text: string, field: string, now: number): Date {
+  const relative = /^(\d+)\s*([hd])$/i.exec(text.trim());
+  if (relative) {
+    const unit = relative[2]!.toLowerCase() === "d" ? 24 * HOUR_MS : HOUR_MS;
+    return new Date(now - Number(relative[1]) * unit);
+  }
+  // A time without an offset would be read as the server's local time; the report says UTC.
+  const at = new Date(/T\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(text.trim()) ? `${text.trim()}Z` : text);
+  if (Number.isNaN(at.getTime())) {
+    throw new AppError(
+      "VALIDATION",
+      `${field} must be an ISO date or time, or how long ago ("24h", "7d"), not "${text}"`,
+    );
+  }
+  return at;
+}
 
 /**
  * The reviewer reads the task through get_task too, so this must not tell it to start a reviewer itself:
@@ -112,6 +133,46 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         const t3 = snapshot.integrations.t3;
         if (t3.detected) lines.push("", `T3 Code detected (environment ${t3.environmentId ?? "unknown"}).`);
         return textResult(lines.join("\n"));
+      }),
+  );
+
+  server.registerTool(
+    "board_activity",
+    {
+      title: "Board activity",
+      description:
+        "What happened on the board over a period, in one read-only call: tasks finished (time in each status, " +
+        "review rounds, steps blocked or skipped), review findings by severity and area, Autopilot runs per automation " +
+        "with failures (including ones the board's restart cut short), retries and give-ups, stalls (quiet tasks, " +
+        "threads waiting for input) and the notes agents left. Each section is capped, with task numbers to drill " +
+        'into with get_task. Use it to look back ("how did this week go?", what keeps failing or stalling); ' +
+        "board_overview and list_tasks show the board as it is now. Pass workspacePath or projectId to limit it to " +
+        "one project.",
+      inputSchema: {
+        since: z
+          .string()
+          .min(1)
+          .describe(
+            'Start of the period: an ISO date or time (UTC unless it has an offset), or how long ago: "24h", "7d".',
+          ),
+        until: z.string().min(1).optional().describe("End of the period, in the same forms as since. Defaults to now."),
+        ...projectFields,
+      },
+      annotations: { readOnlyHint: true },
+    },
+    (args) =>
+      run(() => {
+        const now = Date.now();
+        const from = parseActivityTime(args.since, "since", now);
+        const to = args.until ? parseActivityTime(args.until, "until", now) : new Date(now);
+        if (from >= to) throw new AppError("VALIDATION", "since must be before until");
+        let projectId: string | undefined;
+        if (hasProjectRef(args)) {
+          const project = findProject(services, args);
+          if (!project) return textResult(`No activity for ${args.workspacePath ?? args.projectId}: no such project.`);
+          projectId = project.id;
+        }
+        return textResult(renderActivity(services.activity.between(from, to, projectId)));
       }),
   );
 

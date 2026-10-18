@@ -22,7 +22,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `tools/read.ts`    | `board_overview`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
+| `tools/read.ts`    | `board_overview`, `board_activity`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
@@ -136,6 +136,30 @@ text when both are present.
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`); `set_plan` adds one to `CONFLICT` (use
   `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says
   `Deleted N step(s): 1.2 Title, …`. See [plans.md](plans.md#writing-a-plan).
+
+### board_activity
+
+`board_activity(since, until?, projectId? | workspacePath?)` is the look-back counterpart of `board_overview`:
+read-only text over a window `[since, until)`, for the improvement automation, an orchestrator, or anyone asking
+"how did this week go?". `since` and `until` are ISO dates or times (UTC without an offset) or a time ago
+(`24h`, `7d`); `until` defaults to now. Nothing new is stored: `services/activity.ts` reads `task_events`,
+`task_reviews` and `review_findings`, `autopilot_runs` and `thread_waiting` notifications, and
+`mcp/activityFormat.ts` renders it. Sections, each cut to a cap in `ACTIVITY_CAPS` with "(N more)":
+
+- **Tasks finished:** tasks moved to Done or closed in the window (epics follow their tasks and are left out),
+  with the time each spent in Backlog, Planned, In Progress and Review, its local review rounds, Autopilot PR
+  review rounds, and steps that went blocked or skipped.
+- **Review findings:** local rounds opened in the window (failed and stalled counted), the findings they raised by
+  severity, status and directory, the most severe titles, and each Autopilot PR review's counts (its run only
+  keeps counts, not titles).
+- **Autopilot runs:** real runs that finished in the window, per automation: outcomes, retries (another run on a
+  task the automation already ran on), "gave up", and failures with their reason. A run the board's restart
+  failed is marked `(board restarted)`.
+- **Stalls:** Unstick's stale and waiting runs and `thread_waiting` notifications, once per task and kind.
+- **Notes:** notes anyone but Autopilot wrote, newest first. Notes have no "needs the user" flag; what needs the
+  user shows as a run's `needsAttention` or an attention reason on the task.
+
+Task refs (`#42`) let the agent open one with `get_task`.
 
 ### Writing tool descriptions
 
