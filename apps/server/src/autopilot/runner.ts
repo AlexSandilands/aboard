@@ -373,12 +373,21 @@ export function createAutopilotRunner(deps: {
     };
   };
 
-  /** A run with no task (a digest): headless, in an empty folder of its own that is removed afterwards. */
+  /**
+   * A run with no task (a digest, a scheduled agent): headless, in an empty folder of its own that is removed
+   * afterwards. With a `repo` it can use git there, so it gets the same push guard as a run in a worktree.
+   */
   const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
     const options = readRunnerOptions(request.options);
     if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
+    const defaultBranch = request.repo ? await defaultBranchOf(runGit, request.repo).catch(() => null) : null;
+    const prompt = request.repo
+      ? `${request.prompt}
+
+You are running unattended as ${BRAND.name} Autopilot, with no task and no worktree, in an empty temporary folder. ${SAFETY(defaultBranch)}`
+      : request.prompt;
     const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
     const sessionId = newSessionId();
     update({ runner: "headless", sessionId });
@@ -386,7 +395,7 @@ export function createAutopilotRunner(deps: {
       const stdout = await runAgent({
         cli: settings.headlessReviewCli,
         cwd,
-        prompt: request.prompt,
+        prompt,
         timeoutMs: options.timeoutMinutes * 60_000,
         args: agentArgs({
           access: request.access ?? "edit",
@@ -394,7 +403,7 @@ export function createAutopilotRunner(deps: {
           sessionId,
           model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
           name: autopilotSessionName(request.label),
-          defaultBranch: null,
+          defaultBranch,
           ...(request.tools ? { tools: request.tools } : {}),
           ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
         }),

@@ -116,6 +116,20 @@ describe("custom automation form", () => {
     });
   });
 
+  it("drops the pull request branch switch when the trigger becomes a schedule, which has no pull request", () => {
+    const form = {
+      ...emptyCustomForm(),
+      name: "A",
+      prompt: "Go",
+      onPrBranch: true,
+      triggerKind: "schedule" as const,
+      scheduleKind: "interval" as const,
+      unit: "minutes" as const,
+      every: "15",
+    };
+    expect(customFormToInput(form)).toMatchObject({ ok: true, input: { action: { onPrBranch: false } } });
+  });
+
   it("round-trips a scheduled agent every few minutes", () => {
     const saved = custom({
       trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },

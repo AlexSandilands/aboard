@@ -13,6 +13,8 @@ import {
   latestMinutesSlot,
   localStamp,
   customShellEnv,
+  AUTOPILOT_ACTIVE_STATUSES,
+  type AutopilotRun,
   type CustomAutomation,
   type CustomTrigger,
   type CustomData,
@@ -104,6 +106,9 @@ function taskEvents(
 
 const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
 
+const running = (run: AutopilotRun, customId: string) =>
+  run.automation === customAutomationKey(customId) && AUTOPILOT_ACTIVE_STATUSES.includes(run.status);
+
 /** The catalogue entry for a custom automation. */
 export function customAutomation(custom: CustomAutomation, deps: { runShell: RunShell }): Automation {
   const { trigger, filters, action } = custom;
@@ -133,6 +138,9 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
               ? latestMinutesSlot(s.everyMinutes, now)
               : latestDue(s, now, localStamp(new Date(armedAt)));
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
+        // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded),
+        // and the latest slot then runs once it ends.
+        if (isAgent && services.autopilot.runsForProject(project.id).some((r) => running(r, custom.id))) return [];
         const stamp = localStamp(slot);
         return [
           {
@@ -220,14 +228,15 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       if (action.kind === "agent") {
         if (!task) {
           // A schedule: no task, so the runner starts it headless in an empty temp folder (never the project's own
-          // checkout, which the board may be running from).
+          // checkout, which the board may be running from, so T3 Code is no option); `repo` gives it the push guard.
           const where = project?.title ?? "the board";
           const result = await ctx.runner.start({
             run: ctx.run,
             label: `${custom.name} · ${where}`,
             prompt: customAgentPrompt(custom, values, null, null),
             tier: action.tier,
-            options: ctx.config,
+            options: { ...ctx.config, runner: "headless" },
+            repo: project?.workspaceRoot ?? null,
           });
           const { result: _final, output: _output, ...patch } = result;
           return { ...patch, summary: `Started an agent for "${custom.name}" in ${where}` };

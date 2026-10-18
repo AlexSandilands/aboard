@@ -566,9 +566,13 @@ the automation. Runs stay, under the old key.
   set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
   the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
   `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
-  (never in the project's checkout, which the board may be running from; "T3 only" fails such a run). The tier is the
-  action's, else the default for the runner's model tiers. Nothing keeps a run from starting while the last one for
-  the project is still going: it counts against `maxConcurrent` like any agent run.
+  (never in the project's checkout, which the board may be running from, so the runner option is ignored: it is always
+  headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
+  default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
+  read from, not edit. The tier is the action's, else the default for the runner's model tiers. One at a time per
+  project: while a run of the automation for the project is queued or running, `check` returns no candidate, so the
+  slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
+  caps like any agent run.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values

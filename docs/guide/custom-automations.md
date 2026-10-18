@@ -29,7 +29,9 @@ and keeps to the same pause, dry run, caps and quiet hours.
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
      temporary folder, not the project's own, and is told the project's name and folder; it can use the board's
-     tools to find its work. It can't run in T3 Code, and can't work on a pull request's branch.
+     tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
+     branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
+     branch. A new run waits until the last one for the project has finished, then the latest slot runs once.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
      `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.

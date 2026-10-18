@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { AUTOPILOT_BACKGROUND_MAX, createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
-import type { RunnerRequest } from "./types.ts";
+import type { RunnerRequest, RunnerResult } from "./types.ts";
 
 const plan: PlanInput = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const HOUR = 3_600_000;
@@ -22,7 +22,13 @@ afterEach(() => {
   for (const engine of engines.splice(0)) engine.stop();
 });
 
-function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<ShellResult> } = {}) {
+function setup(
+  opts: {
+    shell?: (request: ShellRequest) => ShellResult | Promise<ShellResult>;
+    /** What an agent run returns; it ends when this does. */
+    agent?: () => Promise<RunnerResult>;
+  } = {},
+) {
   let offsetMs = 0;
   const shellRuns: ShellRequest[] = [];
   const h = createTestHarness({
@@ -41,7 +47,9 @@ function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<
     runner: {
       start: (request) => {
         agentRuns.push(request);
-        return Promise.resolve({ runner: "t3", threadUrl: "t3code://threads/env/t1", result: null });
+        return opts.agent
+          ? opts.agent()
+          : Promise.resolve({ runner: "t3", threadUrl: "t3code://threads/env/t1", result: null });
       },
     },
     now: () => new Date(Date.now() + offsetMs),
@@ -60,10 +68,10 @@ function setup(opts: { shell?: (request: ShellRequest) => ShellResult | Promise<
     if (mode) s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode });
     return custom;
   };
-  const pass = async (laterMs = 0) => {
+  const pass = async (laterMs = 0, { wait = true } = {}) => {
     offsetMs = laterMs;
     await engine.pass();
-    await engine.idle();
+    if (wait) await engine.idle();
   };
   const runsOf = (projectId = project.id) => s.autopilot.runsForProject(projectId);
   const shell = (command = "./notify.sh") => ({ kind: "shell" as const, command, timeoutSeconds: 30 });
@@ -244,6 +252,10 @@ describe("custom automations: triggers", () => {
       expect(request.prompt).not.toContain("get_task");
       expect(request.run.taskId).toBeNull();
       expect(request.workspace).toBeUndefined();
+      // Headless whatever the automation's runner option says, with the push guard aimed at the project's checkout.
+      expect(request.options).toMatchObject({ runner: "headless" });
+      expect(request.repo).toBe("/work/alpha");
+      expect(request.tier).toBeNull();
       expect(runsOf()[0]).toMatchObject({
         automation: customAutomationKey(custom.id),
         taskId: null,
@@ -251,6 +263,40 @@ describe("custom automations: triggers", () => {
       });
       expect(runsOf()[0]!.dedupeKey).toMatch(/^schedule:/);
       expect(runsOf(other.id)).toHaveLength(0);
+    });
+
+    it("passes the action's tier, and starts headless even when the runner option says T3 only", async () => {
+      const { s, define, pass, agentRuns, project } = setup();
+      const custom = define({
+        name: "Watch",
+        trigger: minutes(5),
+        filters: { projectIds: [project.id] },
+        action: { ...agent, tier: "light" },
+      });
+      s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on", config: { runner: "t3" } });
+      await pass(5 * 60_000);
+      expect(agentRuns[0]).toMatchObject({ tier: "light", options: { runner: "headless" } });
+    });
+
+    it("doesn't start another run while the last one is going, and runs the latest slot once it ends", async () => {
+      let finish = () => {};
+      const { define, pass, agentRuns, project, engine } = setup({
+        agent: () =>
+          new Promise((resolve) => {
+            finish = () => resolve({ runner: "headless", result: null });
+          }),
+      });
+      define({ name: "Watch", trigger: minutes(5), filters: { projectIds: [project.id] }, action: agent });
+      await pass(5 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(1);
+      await pass(10 * 60_000, { wait: false });
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(1);
+      finish();
+      await engine.idle();
+      await pass(15 * 60_000, { wait: false });
+      expect(agentRuns).toHaveLength(2);
+      finish();
     });
 
     it("catches up once after downtime, not once per missed slot", async () => {

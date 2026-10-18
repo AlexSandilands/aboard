@@ -190,7 +190,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             prompt: form.prompt,
             skill: form.skill,
             tier: form.tier || null,
-            onPrBranch: form.onPrBranch,
+            // The switch is hidden on a schedule, which has no pull request.
+            onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
           }
         : { kind: "shell", command: form.command, timeoutSeconds },
   });

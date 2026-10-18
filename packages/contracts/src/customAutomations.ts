@@ -277,7 +277,9 @@ export function customAgentPrompt(
       ]
     : [
         values.project ? `Project: ${values.project.name}` : null,
-        values.project?.path ? `Project folder: ${values.project.path}` : null,
+        values.project?.path
+          ? `Project folder: ${values.project.path} (the live checkout: read from it if you need to, but don't edit files or switch branches in it)`
+          : null,
         `This run has no task and starts in an empty temporary folder, not the project's. Use the ${BRAND.id} MCP server (board_overview) to see the project's tasks.`,
       ];
   parts.push(

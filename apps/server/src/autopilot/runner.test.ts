@@ -717,6 +717,16 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session")).toEqual([]);
       });
 
+      it("with a repo, tells the agent not to push to the default branch and denies it", async () => {
+        const { run, jobs, start } = setup({ t3: T3_UP });
+        await start({ run: { ...run, taskId: null }, tier: null, options: {}, repo: repo.checkout });
+        const job = jobs[0]!;
+        expect(job.prompt).toContain("never push to `main`");
+        expect(job.prompt).toContain("empty temporary folder");
+        expect(job.args).toContain("Bash(git push * main)");
+        expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+      });
+
       it("never uses T3 Code or a nudge, and removes its folder when the agent fails", async () => {
         const { run, jobs, launches, start } = setup({
           t3: T3_UP,

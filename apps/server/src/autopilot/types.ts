@@ -171,6 +171,11 @@ export interface RunnerRequest {
    * from origin's copy of it, and the workspace note says to open the pull request against it.
    */
   workspace?: { baseRef?: string | null; branch?: string | null; prBase?: string | null };
+  /**
+   * A task-less headless run only (it has no worktree): the project's checkout, whose default branch the run is told
+   * not to push to and is denied pushing to. The run itself works in an empty temporary folder, never here.
+   */
+  repo?: string | null;
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
