@@ -97,12 +97,42 @@ const MODELS_PER_TIER = "The model each suggested tier starts a new session on i
 
 const WRITTEN: ReadonlyArray<Draft> = [
   // Board › Appearance
-  draft("board.appearance.theme", "Theme", "Follow the system, or pick light or dark.", [
-    "dark mode",
-    "light mode",
-    "colour",
-    "color",
-  ]),
+  draft(
+    "board.appearance.theme",
+    "Colors & themes",
+    "Follow the system or pick light or dark, and pick a theme: T3 Code, T3 Chat, Grove, Ocean, Ember or Iris, for both appearances or one.",
+    ["dark mode", "light mode", "colour", "color", "palette", "theme", "t3 chat", "grove", "ocean", "ember", "iris"],
+  ),
+  draft(
+    "board.appearance.contrast",
+    "Contrast",
+    "Fades text and borders toward their background below 100%, and strengthens them above it.",
+    ["accessibility", "readability", "legibility", "borders"],
+  ),
+  draft(
+    "board.appearance.glass-opacity",
+    "Glass opacity",
+    "How see-through menus, dialogs and popovers are. 100% makes them solid and turns the blur off.",
+    ["transparency", "blur", "translucent", "frosted"],
+  ),
+  draft(
+    "board.appearance.panel-animations",
+    "Panel animations",
+    "How fast the sidebar opens and closes and the task panel opens. 0 ms turns the animation off.",
+    ["motion", "speed", "transition", "duration", "reduced motion"],
+  ),
+  draft(
+    "board.appearance.interface-font",
+    "Interface font",
+    "The font and size for everything outside code. The size scales the whole board.",
+    ["typography", "typeface", "font size", "text size", "zoom", "scale"],
+  ),
+  draft(
+    "board.appearance.mono-font",
+    "Monospace font",
+    "The font for code, ids and keyboard shortcuts. Only monospaced fonts are accepted.",
+    ["typography", "typeface", "code font", "fixed width"],
+  ),
   draft("board.appearance.banner", "Sidebar banner", "The art behind the name in the top-left corner.", [
     "image",
     "logo",

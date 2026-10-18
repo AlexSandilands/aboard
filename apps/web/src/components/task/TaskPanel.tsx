@@ -61,7 +61,7 @@ export function TaskPanel({ taskId, onClose }: { taskId: string; onClose: () => 
   return (
     <aside
       aria-label="Task details"
-      className="@container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+      className="panel-enter @container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />

@@ -22,6 +22,7 @@ import {
   withCollapseChoice,
 } from "~/components/task/sections.logic";
 import { togglePin, type PinnableAction } from "~/components/task/taskActions.logic";
+import { DEFAULT_APPEARANCE_PREFS, normalizeAppearancePrefs, type AppearancePrefs } from "~/theme/appearance.logic";
 
 /** Persisted board view preferences. The filters are not here: they are the board's URL params. */
 interface BoardViewState extends CollapseState {
@@ -90,15 +91,29 @@ export const useBoardPick = create<BoardPickState>()((set) => ({
 /** Where a bulk planning session starts: a T3 Code thread, a CLI in a terminal, or a prompt on the clipboard. */
 export type PlanTarget = { kind: "t3" } | { kind: "session"; harness: AgentHarness } | { kind: "copy" };
 
-/** Persisted look-and-feel choices that live in the browser rather than server settings. */
-interface AppearanceState {
+/**
+ * Persisted look-and-feel choices that live in the browser rather than server settings. The contrast, glass,
+ * animation and font prefs are applied to the page by theme/appearance.ts; the theme itself is in hooks/useTheme.ts.
+ */
+interface AppearanceState extends AppearancePrefs {
   /** Art behind the sidebar brand row. Stored values are re-validated by resolveStageBanner. */
   banner: StageBannerChoice;
   setBanner: (banner: StageBannerChoice) => void;
   /** Opening a task from outside the board (search, a link, a notification) scrolls the board to its card. */
   scrollToTask: boolean;
   setScrollToTask: (value: boolean) => void;
+  /** Sets one or more of the prefs; values are clamped to their ranges. */
+  setPrefs: (prefs: Partial<AppearancePrefs>) => void;
 }
+
+const prefsOf = (s: AppearancePrefs): AppearancePrefs => ({
+  contrast: s.contrast,
+  glassOpacity: s.glassOpacity,
+  panelAnimationMs: s.panelAnimationMs,
+  fontSans: s.fontSans,
+  fontMono: s.fontMono,
+  fontSize: s.fontSize,
+});
 
 export const useAppearance = create<AppearanceState>()(
   persist(
@@ -107,8 +122,18 @@ export const useAppearance = create<AppearanceState>()(
       setBanner: (banner) => set({ banner }),
       scrollToTask: true,
       setScrollToTask: (scrollToTask) => set({ scrollToTask }),
+      ...DEFAULT_APPEARANCE_PREFS,
+      setPrefs: (prefs) => set((s) => normalizeAppearancePrefs({ ...prefsOf(s), ...prefs })),
     }),
-    { name: storageKey("appearance"), partialize: ({ banner, scrollToTask }) => ({ banner, scrollToTask }) },
+    {
+      name: storageKey("appearance"),
+      partialize: (s) => ({ banner: s.banner, scrollToTask: s.scrollToTask, ...prefsOf(s) }),
+      // Saves from before these prefs have none; a hand-edited one may be out of range.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<AppearanceState>;
+        return { ...current, ...saved, ...normalizeAppearancePrefs({ ...prefsOf(current), ...saved }) };
+      },
+    },
   ),
 );
 

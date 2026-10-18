@@ -10,14 +10,16 @@ const target = `http://127.0.0.1:${serverPort}`;
 // The server's Origin guard reads the same variable, so Vite on another port can still write.
 const webPort = Number(process.env[brandEnv("WEB_PORT")] ?? 5317);
 
-/** Fills brand placeholders in index.html (`%BRAND_NAME%`, `%THEME_STORAGE_KEY%`). */
+/** Fills brand placeholders in index.html: `%BRAND_NAME%` and `%STORAGE_KEY(name)%` for `storageKey("name")`. */
 function brandHtml(): Plugin {
   return {
     name: "brand-html",
     transformIndexHtml: {
       order: "pre",
       handler: (html) =>
-        html.replaceAll("%BRAND_NAME%", BRAND.name).replaceAll("%THEME_STORAGE_KEY%", storageKey("theme")),
+        html
+          .replaceAll("%BRAND_NAME%", BRAND.name)
+          .replace(/%STORAGE_KEY\(([a-z-]+)\)%/g, (_match, name: string) => storageKey(name)),
     },
   };
 }
