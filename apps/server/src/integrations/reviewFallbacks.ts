@@ -4,6 +4,7 @@ import {
   reviewFixInstructions,
   reviewIsDone,
   reviewLoopInstructions,
+  resolveHeadlessModel,
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
@@ -106,6 +107,7 @@ export function createReviewFallbacks(deps: {
         cli: settings.headlessReviewCli,
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
+        model: resolveHeadlessModel(settings.modelTiers, settings.headlessReviewModel),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,

@@ -15,6 +15,14 @@ export const AUTOPILOT_UNSTICK = "unstick";
 /** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
 export const AUTOPILOT_ORCHESTRATE = "orchestrate";
 
+/** How an Unstick note and run summary open for a task gone quiet; board_activity tells the two kinds apart by it. */
+export const UNSTICK_STALE_PREFIX = "Stale: no activity for";
+/** How they open for a task whose thread waits on the user. */
+export const UNSTICK_WAITING_PREFIX = "Thread waiting for input for";
+
+/** What a run failed by the board restarting says first, so reports can tell it from a failure of the run's own. */
+export const BOARD_RESTARTED_ERROR = "The board restarted";
+
 /** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
 export const AutopilotMode = z.enum(["inherit", "on", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;

@@ -216,7 +216,7 @@ export function resolveSuggestion(
   if (!suggested) return null;
   const unavailable = (why: string): T3LaunchSuggestion => ({ ...suggested, modelSelection: null, unavailable: why });
   const binding = modelTiers[suggested.tier].t3;
-  if (!binding) return unavailable(`No T3 Code model is set for the ${suggested.tier} tier in Settings.`);
+  if (!binding) return unavailable(`No T3 Code model is set for the ${suggested.tier} tier in Settings → Model tiers.`);
   const provider = providers.find((p) => p.instanceId === binding.selection.instanceId);
   if (!provider) return unavailable(`${binding.label} isn't offered by T3 Code right now.`);
   if (!provider.ready) return unavailable(`${provider.displayName} isn't ready in T3 Code.`);

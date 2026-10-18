@@ -26,6 +26,10 @@ function task(patch: Partial<SectionTask> = {}): SectionTask {
     attention: [],
     review: null,
     reviews: [],
+    autopilot: null,
+    autoReview: null,
+    autoMerge: null,
+    priority: false,
     progress: { done: 0, total: 0 },
     currentStep: null,
     description: null,
@@ -69,6 +73,7 @@ describe("normalizeSectionLayout", () => {
       "sessions",
       "links",
       "relations",
+      "automation",
       "review",
       "autopilot",
       "details",
@@ -92,6 +97,7 @@ describe("normalizeSectionLayout", () => {
       "sessions",
       "links",
       "relations",
+      "automation",
       "review",
       "autopilot",
       "details",
@@ -100,8 +106,35 @@ describe("normalizeSectionLayout", () => {
   });
 
   it("keeps Sessions where the user put it once it is saved", () => {
-    const order = ["sessions", "plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
+    const order = [
+      "sessions",
+      "plan",
+      "labels",
+      "links",
+      "relations",
+      "automation",
+      "review",
+      "autopilot",
+      "details",
+      "activity",
+    ];
     expect(normalizeSectionLayout({ order }).order).toEqual(order);
+  });
+
+  it("places Automation before Local review in a layout saved without it", () => {
+    const saved = ["review", "plan", "sessions", "labels", "links", "relations", "autopilot", "details", "activity"];
+    expect(normalizeSectionLayout({ order: saved }).order).toEqual([
+      "automation",
+      "review",
+      "plan",
+      "sessions",
+      "labels",
+      "links",
+      "relations",
+      "autopilot",
+      "details",
+      "activity",
+    ]);
   });
 
   it("hides Sessions with Links in a layout saved before Sessions existed", () => {
@@ -170,6 +203,10 @@ describe("collapsedByDefault", () => {
     expect(collapsedByDefault("links", task({ links: [thread, session] }))).toBe(true);
     expect(collapsedByDefault("sessions", task({ links: [link] }))).toBe(true);
     expect(collapsedByDefault("links", task({ links: [session, link] }))).toBe(false);
+  });
+
+  it("keeps Automation open: the settings are its content", () => {
+    expect(collapsedByDefault("automation", task())).toBe(false);
   });
 
   it("opens Autopilot only when a run needs attention", () => {
@@ -241,6 +278,16 @@ describe("summarizeSection", () => {
     expect(
       summarizeSection("relations", task({ blockedBy: [relation(4, "review")], blocks: [relation(8, "backlog")] })),
     ).toBe("blocked by #4 · blocks #8");
+  });
+
+  it("automation names the settings that differ from their default", () => {
+    expect(summarizeSection("automation", task())).toBe("Defaults");
+    expect(summarizeSection("automation", task({ autopilot: true, autoMerge: false, priority: true }))).toBe(
+      "Autopilot on · Auto-merge off · Priority",
+    );
+    expect(summarizeSection("automation", task({ autopilot: false, autoReview: true }))).toBe(
+      "Autopilot off · Auto-review on",
+    );
   });
 
   it("review", () => {

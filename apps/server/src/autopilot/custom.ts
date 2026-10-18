@@ -1,6 +1,7 @@
 import {
   capHandover,
   customAgentPrompt,
+  customAgentToolsNote,
   customArmedAt,
   customAutomationKey,
   customTaskMatches,
@@ -120,7 +121,15 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services, handover?: string | null) => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
-    return customAgentPrompt(custom, values, task, task ? services.tasks.detail(task.id).description : null, handover);
+    const prompt = customAgentPrompt(
+      custom,
+      values,
+      task,
+      task ? services.tasks.detail(task.id).description : null,
+      handover,
+    );
+    const tools = customAgentToolsNote(action);
+    return tools ? `${prompt}\n\n${tools}` : prompt;
   };
 
   /** What the project's last run of this scheduled agent left for the next one. */
@@ -252,6 +261,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
             prompt: customAgentPrompt(custom, values, null, null, project ? handoverIn(services, project.id) : null),
             tier: action.tier,
             options: { ...ctx.config, runner: "headless" },
+            ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
             repo: project?.workspaceRoot ?? null,
             // Its answer is the handover the next run of this agent in this project gets.
             outputSchema: SCHEDULED_AGENT_OUTPUT_SCHEMA,
@@ -282,6 +292,8 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
           prompt,
           tier: action.tier ?? task.suggestedModel?.tier ?? null,
           options: ctx.config,
+          // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
+          ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
           ...(branch ? { workspace: { branch } } : {}),
         });
         const { result: _final, output: _output, ...patch } = result;

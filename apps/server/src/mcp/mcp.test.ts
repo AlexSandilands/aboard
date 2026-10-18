@@ -54,6 +54,7 @@ describe("MCP endpoint", () => {
     const names = tools.map((t) => t.name);
     for (const name of [
       "board_overview",
+      "board_activity",
       "list_projects",
       "list_tasks",
       "get_task",

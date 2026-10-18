@@ -33,7 +33,7 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 - **Cards** name their project in a small chip. Order is by project (the board's order), then position.
   The cells count in the column headers like any lane's.
 - **Setting it.** The star on a card (shown on hover, filled while set), **Mark as priority** in the panel's More menu,
-  and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
+  the Priority switch in the panel's Automation section, and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
 - **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which
   changes its status. It takes no place in the column: positions only mean something inside one project's lane, and
   the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is
@@ -96,10 +96,10 @@ Web Animations API because React would drop a class on re-render. `#N` in the pa
 
 ### Task panel sections
 
-The panel's sections are Labels, Sessions, Links, Relations, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
-any link problem, the blockers and what the task blocks, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
+any link problem, the blockers and what the task blocks, the automation settings that aren't at their default, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
 That text is the fallback and what screen readers read. Where there is something to show, the section passes
@@ -113,6 +113,7 @@ toggles):
 | Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu, one per expanded row (sessions folded into a thread stay in its menu), 4 then `+N`         |
 | Links        | PR chips coloured by state with a checks dot, 3 then `+N` for the rest. Without a PR the text stays                |
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
+| Automation   | Text only                                                                                                          |
 | Local review | The review badge                                                                                                   |
 | Autopilot    | Status pill of the run that needs attention, else the latest run                                                                                       |
 | Plan         | The step bar (grey to-do, blue current, green done) with done/total and the current step                           |
@@ -126,6 +127,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Sessions             | The task has no T3 threads or agent sessions      |
 | Links                | The task has no PRs, issues, Jira keys or URLs    |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
+| Automation           | Never: the settings are its content               |
 | Local review         | No review rounds                                  |
 | Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
 | Details              | No description and no plan context                |
@@ -137,11 +139,21 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended, except Sessions, which goes before Links in a layout saved without it (and takes its hidden and collapsed state from Links when that layout
-had them, since it used to be part of Links).
+had them, since it used to be part of Links) and Automation, which goes before Local review.
 
 The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
 runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
 tasks Autopilot never touched don't show it.
+
+#### The Automation section
+
+The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,
+whether Start planned tasks may start it), **Auto-review** (Default / On / Off, whether moving to Review opens a local
+review round), **Auto-merge** (Default / On / Off, whether `merge_task_pr` may merge its PR; Default reads as off) and a
+**Priority** switch. Each saves through `useUpdateTask` as soon as it changes. The actions menu's "Mark as priority" and the
+card's star stay as shortcuts to the same field. Local review's header only shows whether auto-review is on, as plain text; with Automation hidden, show it again from **Customize sections** to change it. Each row's hint is a tooltip and also its group's description, so screen readers read it.
+An epic has none of these (no plan to start, no PR, no priority), so the panel leaves the section out for it, like Plan and
+Local review.
 
 #### The Sessions section
 
@@ -224,8 +236,10 @@ inactive threads are dimmed.
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `tasks`, `autopilot`, `integrations` or `project`
-(`/settings` and unknown groups redirect to `board`). The editors are sub-routes: `tasks/templates/<id>`,
+Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
+(`/settings` and unknown groups redirect to `board`). `models` is the Model tiers page: one row per tier
+(`models.tiers.<tier>`) with its description and each set-up provider's model; the integration sections link to it
+with a **Models per tier** row (`integrations.<section>.models`). The editors are sub-routes: `tasks/templates/<id>`,
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 
@@ -238,6 +252,13 @@ rule editor take `?project=`; without it the page shows the project the board wa
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
   (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
   targets them.
+- **Rows.** The column is `max-w-4xl` (as T3's readable page width). A `SettingsRow` (`settingsLayout.tsx`) is a
+  title, at most one short line of description (or none when the title says it), and the control on the right.
+  Anything longer goes in `info`, an `InfoHover` button beside the title that opens a popover on hover, click or Enter
+  (setup steps, how Jira tools are matched, what a CLI path is used for). Status details (Found / version /
+  path, Registered / scope, Connected) go in `status`, a compact line under the description built with
+  `StatusLine`, so they never squeeze beside the control. The search index has its own descriptions and keywords,
+  so text moved behind an info button is still found.
 - **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
   `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
@@ -318,14 +339,20 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
 - **Conflicts.** `keybindingConflicts` flags two commands on the same key whose `when`s can both be true
   (`whenOverlaps` tries every assignment of the flags the two use). The flags are treated as independent, so
   `overlayOpen` and `paletteOpen` are not known to imply each other; it may flag a pair that can't really collide.
-- **Editor.** Settings → Board → Keybindings (`KeybindingsSection`): a row per command, grouped by the registry's
-  `group`, with a button that records the next key combination (Esc records too; clicking away cancels), a `When`
-  field that saves on blur and shows the parse error, a conflict note, a warning when a bare character would run the
-  command while typing in a field (`triggersWhileTyping`), and Reset / Reset all (`keybindings.logic.ts` keeps the
-  stored map free of values equal to the default; saves are built from the cache, which is patched at once, or
-  from the newest save while any is still in flight (an earlier reply must not rewind it), so edits in a row don't
-  lose each other). Rows have ids `board.keybindings.<command>`, which the
-  settings index generates from the registry.
+- **Editor.** Settings → Keybindings (`KeybindingsSection`), laid out like T3 Code's keybindings page. A search box
+  on top filters by title, group, key, condition or command name (`keybindingSections`; every word must match, and
+  a settings link to a row clears it). Below it is one sub-section per `group` of the registry, taken from
+  `keybindingGroups()` (the settings nav builds its sections from the same list), so a command in a new group
+  needs no layout work. A row is the title, a small `When` line under it (`Always`, or the expression in mono) that
+  opens the editor (a field that saves on blur; the helper on what can be written is one info hover in it, and a parse
+  error shows there and on the row until the value changes), and on the right the key as chips, which is the button
+  that records the next key combination (Esc records too; clicking away cancels). A conflict note and a warning
+  when a bare character would run the command while typing in a field (`triggersWhileTyping`) sit under the title.
+  Reset shows only on a row that differs from the default, and Reset all beside the search box once anything does
+  (`keybindings.logic.ts` keeps the stored map free of values equal to the default; saves are built from the cache,
+  which is patched at once, or from the newest save while any is still in flight (an earlier reply must not
+  rewind it), so edits in a row don't lose each other). Sub-sections have ids `keybindings.<group>` and rows
+  `keybindings.<group>.<command>`, which the settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
   header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
   Board (`PaletteItem.shortcut`). The desktop app has no menu accelerator for these, so there is nothing to keep in sync.
@@ -380,7 +407,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
 | `packages/contracts/src/keybindings.ts`               | The shortcut registry, `when` parser and evaluator, overrides schema, conflicts (tested) |
 | `apps/web/src/components/layout/keyboard.logic.ts`, `useKeybindings.ts` | Matching key events, recording and formatting shortcuts (tested), the resolved bindings hook |
-| `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Board → Keybindings, and the override edits (tested) |
+| `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Keybindings: the page, grouping, search and the override edits (tested) |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |

@@ -39,6 +39,8 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   ...over,
 });
 
+const NL = String.fromCharCode(10);
+
 describe("custom automation form", () => {
   it("turns into the input the server takes, labels normalised", () => {
     const result = customFormToInput({
@@ -56,7 +58,14 @@ describe("custom automation form", () => {
         name: "Fix checks",
         trigger: { kind: "pr_event", event: "checks_failing" },
         filters: { projectIds: [], labels: ["ui", "backend"], epicId: null },
-        action: { kind: "agent", prompt: "Fix {{pr.url}}", skill: "", tier: "light", onPrBranch: false },
+        action: {
+          kind: "agent",
+          prompt: "Fix {{pr.url}}",
+          skill: "",
+          tier: "light",
+          onPrBranch: false,
+          allowedTools: [],
+        },
       },
     });
   });
@@ -133,12 +142,60 @@ describe("custom automation form", () => {
   it("round-trips a scheduled agent every few minutes", () => {
     const saved = custom({
       trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
-      action: { kind: "agent", prompt: "Go", skill: "orchestrate", tier: null, onPrBranch: false },
+      action: { kind: "agent", prompt: "Go", skill: "orchestrate", tier: null, onPrBranch: false, allowedTools: [] },
     });
     expect(customFormToInput(formFromCustom(saved))).toEqual({
       ok: true,
       input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
     });
+  });
+
+  it("reads the allowed tools one per line, and gives them back one per line", () => {
+    const result = customFormToInput({
+      ...emptyCustomForm(),
+      name: "Dispatch",
+      prompt: "Go",
+      allowedTools: [" mcp__issue-tracker ", "", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)", ""].join(
+        NL,
+      ),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      input: {
+        action: { allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)"] },
+      },
+    });
+    const saved = custom({
+      action: {
+        kind: "agent",
+        prompt: "Go",
+        skill: "",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: ["mcp__a", "mcp__b__c"],
+      },
+    });
+    expect(formFromCustom(saved).allowedTools).toBe(["mcp__a", "mcp__b__c"].join(NL));
+    expect(customFormToInput(formFromCustom(saved))).toMatchObject({ ok: true, input: { action: saved.action } });
+  });
+
+  it("names the allowed tool that isn't one", () => {
+    expect(
+      customFormToInput({
+        ...emptyCustomForm(),
+        name: "A",
+        prompt: "Go",
+        allowedTools: ["mcp__ok", "issue-tracker"].join(NL),
+      }),
+    ).toEqual({ ok: false, error: expect.stringContaining('"issue-tracker"') });
+    expect(
+      customFormToInput({
+        ...emptyCustomForm(),
+        name: "A",
+        prompt: "Go",
+        allowedTools: Array.from({ length: 21 }, (_, i) => `mcp__s${i}`).join(NL),
+      }),
+    ).toMatchObject({ ok: false, error: expect.stringMatching(/^Allowed tools:/) });
   });
 
   it("round-trips a saved automation", () => {
@@ -190,6 +247,19 @@ describe("preview", () => {
     );
     expect(agent).toContain("Look at #7 Fix it");
     expect(agent).toContain('get_task("#7")');
+    expect(agent).not.toContain("Allowed to call");
+    const withTools = previewAction(
+      {
+        name: "Ping",
+        trigger: { kind: "status_change", to: "review" },
+        action: { kind: "agent", prompt: "Go", allowedTools: ["mcp__issue-tracker__search_jira"] },
+      },
+      task("t"),
+      [project],
+    );
+    expect(withTools).toContain(
+      "Allowed to call without asking, on top of the usual tools: mcp__issue-tracker__search_jira",
+    );
   });
 
   it("previews a scheduled agent with the project footer and no task", () => {

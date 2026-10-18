@@ -9,7 +9,6 @@ import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateTask } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
-import { AUTOPILOT_OPTIONS, autopilotChoice, autopilotValue } from "./autopilot.logic";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
 
@@ -20,7 +19,6 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
     <TaskSection title="Details">
       <div className="flex flex-col gap-3">
         <SuggestedModelField task={task} />
-        {task.kind === "epic" ? null : <AutopilotField task={task} />}
         <MarkdownField
           taskId={task.id}
           title="Description"
@@ -83,34 +81,6 @@ function SuggestedModelField({ task }: { task: TaskDetail }) {
       {suggestion?.reason ? (
         <p className="mt-1 text-xs leading-snug text-muted-foreground/80">{suggestion.reason}</p>
       ) : null}
-    </div>
-  );
-}
-
-/** Whether Autopilot's Start planned tasks may start this task once it is planned. */
-function AutopilotField({ task }: { task: TaskDetail }) {
-  const { mutate: updateTask } = useUpdateTask();
-  return (
-    <div className="flex min-h-6 items-center gap-2 px-1.5 pb-1">
-      <h4 className="shrink-0 text-2xs text-muted-foreground/80 select-none">Autopilot</h4>
-      <Select
-        items={AUTOPILOT_OPTIONS}
-        value={autopilotChoice(task.autopilot)}
-        onValueChange={(value) => {
-          if (value) updateTask({ id: task.id, autopilot: autopilotValue(value) });
-        }}
-      >
-        <SelectTrigger size="xs" className="w-auto min-w-28" aria-label="Autopilot for this task">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectPopup>
-          {AUTOPILOT_OPTIONS.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectPopup>
-      </Select>
     </div>
   );
 }

@@ -12,3 +12,10 @@ export const autopilotChoice = (value: boolean | null): AutopilotChoice =>
 
 export const autopilotValue = (choice: AutopilotChoice): boolean | null =>
   choice === "default" ? null : choice === "on";
+
+/** Default never auto-merges either: merge_task_pr refuses a task unless it is On. Same tri-state as Autopilot. */
+export const AUTO_MERGE_OPTIONS: ReadonlyArray<{ value: AutopilotChoice; label: string }> = [
+  { value: "default", label: "Default (off)" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];

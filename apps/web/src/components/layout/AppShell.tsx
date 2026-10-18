@@ -66,7 +66,7 @@ export function AppShell({
 
 /**
  * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
- * (Settings → Board → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
+ * (Settings → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
  * task (in the scoped project), Esc goes back (closes the detail panel, or leaves Settings).
  *
  * It listens in the capture phase because card controls stop their keydowns from bubbling, which

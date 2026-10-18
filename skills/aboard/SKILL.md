@@ -16,6 +16,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 
 1. **Orient.** At the start of meaningful work call `board_overview` (with `workspacePath`) or
    `list_tasks`. If the user's request matches an existing task, that's the one you're working on.
+   To look back over a period instead (how did the week go, what keeps failing or stalling), call
+   `board_activity(since: "7d")`: it lists what finished, review findings, Autopilot runs and failures,
+   stalls and notes, each section capped, with task numbers to open with `get_task`.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own

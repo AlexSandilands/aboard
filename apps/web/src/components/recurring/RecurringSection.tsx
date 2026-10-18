@@ -109,9 +109,7 @@ export function RecurringSection({ project }: { project: Project }) {
           <SettingsRow
             title={rules.error ? "Couldn't load the rules" : "No recurring tasks"}
             description={
-              rules.error
-                ? rules.error.message
-                : "Add a rule, or start from one of the examples below. Each needs a template, which says what the task is."
+              rules.error ? rules.error.message : "Add a rule, or start from an example below. Each needs a template."
             }
           />
         ) : (
@@ -171,7 +169,8 @@ export function RecurringSection({ project }: { project: Project }) {
             <SettingsRow
               key={suggestion.id}
               title={suggestion.name}
-              description={`${suggestion.summary}. Adds a template for this project, which you can edit.`}
+              description={`${suggestion.summary}.`}
+              info="Adds a template for this project, which you can edit."
               control={
                 <Button
                   size="sm"

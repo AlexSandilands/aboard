@@ -80,6 +80,7 @@ export const ORCHESTRATE_BOARD_TOOLS = [
   "list_projects",
   "list_templates",
   "list_tasks",
+  "board_activity",
   "get_task",
   "epic_overview",
   "get_handoff_prompt",

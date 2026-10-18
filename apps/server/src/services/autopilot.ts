@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_ACTOR,
+  BOARD_RESTARTED_ERROR,
   AutopilotEngineSettings,
   capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
@@ -558,7 +559,7 @@ export function createAutopilotService(
           const failed: AutopilotRun = {
             ...run,
             status: "failed",
-            error: "The board restarted while this run was going",
+            error: `${BOARD_RESTARTED_ERROR} while this run was going`,
             needsAttention: run.taskId !== null,
             finishedAt: at,
             updatedAt: at,

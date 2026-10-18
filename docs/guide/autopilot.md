@@ -100,7 +100,7 @@ kept.
 ## Start planned tasks
 
 The one that does the work: it starts an agent on a task you've planned. Switch it on per project or for the
-board, then flag the tasks you want it to take: **Autopilot: On** in the task panel's Details. A task flagged
+board, then flag the tasks you want it to take: **Autopilot: On** in the task panel's Automation section. A task flagged
 Default or Off is never started.
 
 A task is picked up when it's in **Planned**, flagged On, has a plan and nothing unfinished blocks it, and the
