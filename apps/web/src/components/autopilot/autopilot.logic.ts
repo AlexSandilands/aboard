@@ -113,6 +113,48 @@ export function parentEntry(
   return parentEntries?.find((entry) => entry.automation === automation) ?? null;
 }
 
+/** What one row of a project's or epic's Autopilot popover shows: a switch that is faded while it follows the scope above. */
+export interface ScopeRowModel {
+  /** What the automation resolves to here, whether set at this scope or inherited. */
+  checked: boolean;
+  /** True while the scope sets nothing (Inherit): the switch is faded and there is nothing to reset. */
+  inherited: boolean;
+  /** The mode a click on the switch saves. It is always an explicit On or Off; the reset button saves Inherit. */
+  nextMode: "on" | "off";
+  /** False when a click would turn on an automation that can't be (`blocked`). Turning off always works. */
+  canToggle: boolean;
+  blocked: string | null;
+  /** The switch's tooltip: where its state comes from. */
+  note: string;
+}
+
+/**
+ * The row for one automation at a project or epic. `entry` already resolves through the scopes above (`enabled` and
+ * `source` are what Inherit would give), so the row needs no entry from the parent scope.
+ */
+export function scopeRowModel(
+  entry: Pick<AutopilotScopeEntry, "mode" | "enabled" | "source">,
+  blocked: string | null,
+  scope: "project" | "epic",
+): ScopeRowModel {
+  const inherited = entry.mode === "inherit";
+  const nextMode = entry.enabled ? "off" : "on";
+  const state = entry.enabled ? "On" : "Off";
+  const note = !inherited
+    ? `${state} for this ${scope}`
+    : entry.source === "default"
+      ? `${state} by default`
+      : `${state}, following the ${entry.source}`;
+  return {
+    checked: entry.enabled,
+    inherited,
+    nextMode,
+    canToggle: !(nextMode === "on" && blocked),
+    blocked,
+    note,
+  };
+}
+
 // ── Config forms ─────────────────────────────────────────────────────────
 
 /** The automations a scope's popover lists: an epic's leaves out those that don't apply to epics. */

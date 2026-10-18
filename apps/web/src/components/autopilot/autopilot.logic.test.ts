@@ -25,6 +25,7 @@ import {
   projectActiveRuns,
   runsSummary,
   runStatusLabel,
+  scopeRowModel,
   scheduledAgentRuns,
   scheduledAnswerOf,
   taskActiveRun,
@@ -193,6 +194,52 @@ describe("inheritLabel", () => {
     expect(parentEntry(entries, "a")?.enabled).toBe(true);
     expect(parentEntry(entries, "b")).toBeNull();
     expect(parentEntry(undefined, "a")).toBeNull();
+  });
+});
+
+describe("scopeRowModel", () => {
+  it("fades an inherited switch and says where it comes from", () => {
+    expect(scopeRowModel({ mode: "inherit", enabled: true, source: "board" }, null, "project")).toEqual({
+      checked: true,
+      inherited: true,
+      nextMode: "off",
+      canToggle: true,
+      blocked: null,
+      note: "On, following the board",
+    });
+    expect(scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, null, "project")).toMatchObject({
+      checked: false,
+      inherited: true,
+      nextMode: "on",
+      note: "Off by default",
+    });
+  });
+
+  it("follows the project for an epic, whatever the board says", () => {
+    const row = scopeRowModel({ mode: "inherit", enabled: false, source: "project" }, null, "epic");
+    expect(row.note).toBe("Off, following the project");
+  });
+
+  it("shows a switch set here as solid, with its own state", () => {
+    expect(scopeRowModel({ mode: "on", enabled: true, source: "project" }, null, "project")).toMatchObject({
+      checked: true,
+      inherited: false,
+      nextMode: "off",
+      note: "On for this project",
+    });
+    expect(scopeRowModel({ mode: "off", enabled: false, source: "epic" }, null, "epic")).toMatchObject({
+      checked: false,
+      inherited: false,
+      nextMode: "on",
+      note: "Off for this epic",
+    });
+  });
+
+  it("won't turn a blocked automation on, but turns it off", () => {
+    const off = scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, "Pick a tool", "project");
+    expect(off).toMatchObject({ canToggle: false, blocked: "Pick a tool" });
+    const on = scopeRowModel({ mode: "on", enabled: true, source: "project" }, "Pick a tool", "project");
+    expect(on.canToggle).toBe(true);
   });
 });
 

@@ -4,9 +4,10 @@ import { cn } from "~/lib/utils";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotEpicScope, useAutopilotOverview, useAutopilotScope, useAutopilotStatus } from "~/state/queries";
+import { useAutopilotEpicScope, useAutopilotOverview, useAutopilotStatus } from "~/state/queries";
 import { epicActiveRuns, epicPillState, hasEpicAutomations, pillTooltip } from "./autopilot.logic";
 import { PILL_CLASS_NAME, PillIcon } from "./AutopilotPill";
+import { ScopeCard } from "./ScopeRow";
 import { ScopePopover } from "./ScopePopover";
 
 /**
@@ -27,7 +28,6 @@ export function AutopilotEpicButton({
   const overview = useAutopilotOverview();
   const status = useAutopilotStatus();
   const scope = useAutopilotEpicScope(epic.projectId, epic.id);
-  const projectScope = useAutopilotScope(epic.projectId);
   const set = useSetAutopilotScope(epic.projectId, undefined, epic.id);
   if (!overview.data || !hasEpicAutomations(overview.data.automations) || epic.archivedAt !== null) return null;
 
@@ -55,17 +55,12 @@ export function AutopilotEpicButton({
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
-        <ScopePopover
-          title={`epic #${epic.number}`}
-          entries={scope.data}
-          parentEntries={projectScope.data}
-          set={set}
-          epic
-        />
-        {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
-        <div className="mt-2 border-t border-border/50 pt-2">
-          <EpicDeliveryControl epic={epic} />
-        </div>
+        <ScopePopover title={`epic #${epic.number}`} entries={scope.data} set={set} epic>
+          {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
+          <ScopeCard className="py-2">
+            <EpicDeliveryControl epic={epic} />
+          </ScopeCard>
+        </ScopePopover>
       </PopoverPopup>
     </Popover>
   );
