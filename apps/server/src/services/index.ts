@@ -6,6 +6,7 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
+import { createActivityService } from "./activity.ts";
 import { createAttentionService } from "./attention.ts";
 import { createAutopilotService } from "./autopilot.ts";
 import { createAttachmentsService } from "./attachments.ts";
@@ -147,6 +148,9 @@ export function createServices(deps: ServiceDeps): Services {
       customAutomations,
       notifications,
       userHome: deps.userHome,
+    }),
+    activity: createActivityService(core, {
+      automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),
     digests: createDigestsService(core, {
       notifications,

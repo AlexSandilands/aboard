@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import type { Runner, RunnerRequest } from "../types.ts";
+import { UNSTICK_STALE_PREFIX, UNSTICK_WAITING_PREFIX } from "@repo/contracts";
 import { AUTOPILOT_UNSTICK, unstick } from "./unstick.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -67,6 +68,8 @@ describe("unstick stale tasks", () => {
     expect(runs()).toHaveLength(0);
     await pass(26 * HOUR_MS);
     expect(runs()).toMatchObject([{ status: "succeeded", summary: "Stale: no activity for 26h" }]);
+    // board_activity tells stale from waiting by these.
+    expect(runs()[0]!.summary.startsWith(UNSTICK_STALE_PREFIX)).toBe(true);
     expect(s.tasks.summary(task.id).attention).toContainEqual({
       kind: "autopilot",
       severity: "warning",
@@ -101,6 +104,7 @@ describe("unstick stale tasks", () => {
     expect(runs()).toHaveLength(0);
     await pass(45 * MINUTE_MS);
     expect(runs()).toMatchObject([{ summary: "Thread waiting for input for 45m", needsAttention: false }]);
+    expect(runs()[0]!.summary.startsWith(UNSTICK_WAITING_PREFIX)).toBe(true);
     expect(notices().map((n) => n.title)).toEqual([`#${task.number} is waiting for you`]);
     await pass(50 * MINUTE_MS);
     expect(runs()).toHaveLength(1);

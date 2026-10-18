@@ -46,6 +46,7 @@ import type { AutopilotService } from "./autopilot.ts";
 import type { BackupService } from "./backup/index.ts";
 import type { CustomAutomationsService } from "./customAutomations.ts";
 import type { RecurringService } from "./recurring.ts";
+import type { ActivityService } from "./activity.ts";
 import type { DigestsService } from "./digests.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
@@ -77,6 +78,7 @@ export interface Services {
   recurring: RecurringService;
   customAutomations: CustomAutomationsService;
   digests: DigestsService;
+  activity: ActivityService;
   notifications: NotificationsService;
   suggestions: SuggestionsService;
   attention: AttentionService;
