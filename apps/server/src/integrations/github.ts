@@ -820,7 +820,9 @@ export function createGithubIntegration(deps: {
       if (input.into === "default" && !IMMEDIATELY_MERGEABLE.has(state)) {
         throw new AppError(
           "VALIDATION",
-          `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
+          state === "UNKNOWN"
+            ? "GitHub is still working out whether the PR can be merged: try again in a minute"
+            : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
         );
       }
       await api.graphql(host, MERGE_MUTATION, {

@@ -173,6 +173,10 @@ describe("merge_task_pr", () => {
     expect(result.text).toContain("can't be merged yet (BLOCKED)");
     expect(merges()).toEqual([]);
     expect(h.services.tasks.summary(task.id).status).toBe("review");
+    // Still being computed (just after a push): wait, rather than a branch rule.
+    gh.prs.get("o/r#7")!.mergeStateStatus = "UNKNOWN";
+    expect((await call("merge_task_pr", { task: `#${task.number}` })).text).toContain("try again in a minute");
+    expect(merges()).toEqual([]);
   });
 
   it("never merges into a branch other than the default branch", async () => {
