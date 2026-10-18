@@ -227,6 +227,23 @@ A session's name is, in order:
 `claudeDir` is `$CLAUDE_CONFIG_DIR`, else `~/.claude`. Neither file format is documented, so a title that can't
 be read is left out rather than guessed.
 
+### Transcripts
+
+`get_session_transcript(task, session?, offset?)` lets an agent audit how a task's Claude Code session went: what
+it was asked, what it concluded, what it ran and where it went wrong. Only a session linked to the task can be read,
+found by the link's id and folder as the title is (`transcriptPath`), never by a path the agent gives; `session` is
+needed when the task has more than one. T3 Code threads and Copilot CLI sessions aren't covered.
+
+The transcript is condensed to one line per event (`condenseTranscriptFile`): each user message, the assistant's
+final text of each turn, each tool call with its name and target (file, command, pattern), tool errors, permission
+denials, retries and interruptions. A header gives the turn, tool call, error and retry counts, the duration and
+the start and end times (`renderTranscript` in `format.ts`). Long text is cut, and entries are paged at 20,000
+characters (`PAGE_CHARS`); a page names the `offset` of the next entry.
+
+Every line is redacted before it is cut (`redact`): API keys, bearer tokens, PEM key blocks, values named like
+secrets, pairing codes and long mixed-case runs become `[redacted]`. A transcript holds whatever the agent read,
+and the LLM gateway some users sit behind kills a session whose messages contain a credential-shaped string.
+
 ### On the card and in the panel
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
@@ -254,7 +271,7 @@ Copilot CLI support is unit-tested only.
 | Option | Why not chosen |
 | --- | --- |
 | A `claude://` style URL handler | Neither CLI registers one, and it would need installing per machine |
-| Reading the transcript files for status (it is read for the title only) | Larger and slower than the running-session files, with no pid to check |
+| Reading the transcript files for status (it is read for the title and for `get_session_transcript` only) | Larger and slower than the running-session files, with no pid to check |
 | Focusing a window that already shows any session | No reliable way across terminals; only a Windows Terminal window the board named can be found again |
 | Writing the prompt to a file for the session to read | Neither CLI takes a first prompt from a file, and a pointer prompt reads worse than the prompt itself |
 
@@ -273,6 +290,9 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |
+| `apps/server/src/integrations/claudeTranscript.ts` | Condensing a Claude Code transcript, redaction, paging (tested) |
+| `apps/server/src/integrations/sessionTranscript.ts` | Choosing the linked session and finding its transcript |
+| `apps/server/src/mcp/tools/transcripts.ts` | `get_session_transcript` |
 | `apps/web/src/components/sessions/` | Status and warning copy, the warning dialog, shared menu items, `useSessionActions` |
 | `apps/web/src/components/handoff/SessionLaunchDialog.tsx` | The new-session dialog (`sessionLaunch.logic.ts`) |
 | `apps/web/src/components/settings/TerminalSection.tsx` | Settings → Integrations → Terminal |

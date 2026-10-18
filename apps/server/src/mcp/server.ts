@@ -12,6 +12,7 @@ import { registerMergeTools } from "./tools/merge.ts";
 import { registerReviewTools } from "./tools/reviews.ts";
 import { registerThreadTools } from "./tools/threads.ts";
 import { registerSuggestionTools } from "./tools/suggestions.ts";
+import { registerTranscriptTools } from "./tools/transcripts.ts";
 
 const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for tracking work across projects. Columns: Backlog -> Planned -> In Progress -> Review -> Done, one swimlane per project. Identify the project by passing workspacePath (your cwd).
 - Orient with board_overview or list_tasks; ALWAYS call get_task before resuming an existing task. To look back over a period (what finished, failed or stalled), call board_activity(since: "7d").
@@ -35,7 +36,8 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - request_attention(task, message) flags a task for the user (Needs attention plus a notification) when you can't go on without them or they should look at something: you are blocked, unsure, found a problem, or have work ready to review. Say exactly what to look at. It interrupts them, so don't use it for progress (add_note) or when nothing is for them to act on; clear: true removes it once resolved.
 - End each session with add_note: a handover of what's done, what's left and the next action.
 - In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.
-- In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}, label); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board. Give it a short label saying what this session does, such as "Implementing #107", "Planning #107" or, for an epic you orchestrate, "Orchestrating #107": it is the name the board shows (link again with a new label when the work changes). A subagent has the same session id as the session that started it, so only the main session links; a subagent must never link or relabel it.`;
+- In Claude Code or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}, label); the id is $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID. The user can then see it running and reopen it in a terminal from the board. Give it a short label saying what this session does, such as "Implementing #107", "Planning #107" or, for an epic you orchestrate, "Orchestrating #107": it is the name the board shows (link again with a new label when the work changes). A subagent has the same session id as the session that started it, so only the main session links; a subagent must never link or relabel it.
+- To audit how a task went, get_session_transcript(task) reads a condensed, redacted transcript of a Claude Code session linked to it.`;
 
 /** Generic HTTP client user agents that say nothing about which agent is calling. */
 const GENERIC_AGENTS =
@@ -68,6 +70,7 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   registerReviewTools(server, tc);
   registerThreadTools(server, tc);
   registerSuggestionTools(server, tc);
+  registerTranscriptTools(server, tc);
   return server;
 }
 
