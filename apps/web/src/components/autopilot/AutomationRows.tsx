@@ -464,6 +464,7 @@ function SkillField({
   return (
     <ReviewSkillSelect
       ariaLabel={label}
+      className={SETTINGS_TEXT_WIDTH}
       options={skillOptions(skills, current, builtinLabel ? { builtinLabel } : {})}
       value={current}
       onChange={(skill) => {
