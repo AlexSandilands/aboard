@@ -25,6 +25,8 @@ export interface Effects {
   notified(notification: InboxNotification, popup: boolean): void;
   /** Notifications were read (publishes notifications.changed). */
   notificationsChanged(): void;
+  /** A suggested change was made or decided (publishes suggestions.changed). */
+  suggestions(): void;
   /** Appends a task_events row and marks the task's card changed. */
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
 }
@@ -39,6 +41,7 @@ interface Pending {
   autopilot: boolean;
   notified: Array<{ notification: InboxNotification; popup: boolean }>;
   notificationsChanged: boolean;
+  suggestions: boolean;
 }
 
 export interface Core {
@@ -87,6 +90,9 @@ export function createCore(deps: {
     notificationsChanged: () => {
       p.notificationsChanged = true;
     },
+    suggestions: () => {
+      p.suggestions = true;
+    },
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
       p.tasks.add(taskId);
@@ -120,6 +126,7 @@ export function createCore(deps: {
     }
     if (p.labelColors) events.push({ type: "labels.colors_changed", labelColors: repos.labels.colors() });
     if (p.autopilot) events.push({ type: "autopilot.changed", autopilot: loadAutopilotStatus(repos) });
+    if (p.suggestions) events.push({ type: "suggestions.changed", open: repos.suggestions.openCount() });
     // A deleted task takes its notifications with it, which only matters when some of them were unread.
     if (p.notified.length > 0 || p.notificationsChanged || p.deletedTasks.size > 0) {
       const unread = unreadNotifications(repos, now());
@@ -152,6 +159,7 @@ export function createCore(deps: {
         autopilot: false,
         notified: [],
         notificationsChanged: false,
+        suggestions: false,
       };
       pending = p;
       let result: T;

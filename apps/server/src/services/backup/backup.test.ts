@@ -80,6 +80,17 @@ function seed() {
     action: { kind: "shell", command: "./notify.sh" },
   });
   s.autopilot.setScope("board", null, `custom:${custom.id}`, { mode: "on" });
+  // An open suggestion: the user hasn't decided yet, so a restore keeps it.
+  s.suggestions.suggest(
+    {
+      target: "builtin:review",
+      baseHash: s.suggestions.read("builtin:review").hash,
+      proposed: "Be brief.",
+      rationale: "Shorter.",
+      evidence: ["#1"],
+    },
+    "improver",
+  );
   // Autopilot settings are exported; its runs are history and stay out.
   h.db.exec(`INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
     ('board', '', 'noop', 'on', '{}', '2026-10-16T00:00:00.000Z'),
@@ -107,6 +118,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   autopilot_settings: "scope_kind, scope_id, automation",
   autopilot_recurring: "id",
   autopilot_custom: "id",
+  suggestions: "id",
   tasks: "id",
   plan_phases: "id",
   plan_steps: "id",
@@ -311,6 +323,15 @@ describe("restore", () => {
     expect(readDumpDir(dir).autopilot_recurring).toEqual([]);
   });
 
+  it("reads a folder written before suggestions, which has no suggestions.json", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    writeDumpDir(dir, s.backup.dump());
+    expect(readDumpDir(dir).suggestions).toHaveLength(1);
+    rmSync(join(dir, "suggestions.json"));
+    expect(readDumpDir(dir).suggestions).toEqual([]);
+  });
+
   it("reads a folder written before custom automations, which has no custom-automations.json", () => {
     const { s } = seed();
     const dir = tempDir();
@@ -405,6 +426,7 @@ describe("restore", () => {
       autopilot_settings: _a,
       autopilot_recurring: _rc,
       autopilot_custom: _cu,
+      suggestions: _sg,
       task_relations: _rel,
       ...counts
     } = dump.manifest.counts;
@@ -416,6 +438,7 @@ describe("restore", () => {
       autopilot_settings: [],
       autopilot_recurring: [],
       autopilot_custom: [],
+      suggestions: [],
       projects: dump.projects.map(({ plan_skill_json: _ps, ...project }) => project),
       tasks: dump.tasks.map((bundle) => {
         const {
