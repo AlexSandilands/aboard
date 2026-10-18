@@ -455,6 +455,15 @@ export const TaskRelation = TaskRef.extend({
 });
 export type TaskRelation = z.infer<typeof TaskRelation>;
 
+/** A calendar date, `YYYY-MM-DD`, that exists (so not 2026-02-30). */
+export const DueDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "A due date is YYYY-MM-DD")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+  }, "Not a real date");
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -503,6 +512,8 @@ export const TaskSummary = z.object({
   autoMerge: z.boolean().nullable(),
   /** True shows the task in the priority lane above every project; always false for an epic. */
   priority: z.boolean(),
+  /** Optional due date, `YYYY-MM-DD` with no time or timezone; null for none. */
+  dueDate: DueDate.nullable(),
   /** An epic's delivery; null for a task, and for an epic nobody chose one for yet (which delivers to main). */
   delivery: EpicDelivery.nullable(),
   /**
@@ -705,6 +716,8 @@ export const UpdateTaskInput = z.object({
   autoMerge: z.boolean().nullable().optional(),
   /** True puts the task in the priority lane above every project; false takes it out. */
   priority: z.boolean().optional(),
+  /** null clears it. */
+  dueDate: DueDate.nullable().optional(),
   /** Replaces the whole label list. */
   labels: z.array(z.string()).optional(),
   /** null clears it. */

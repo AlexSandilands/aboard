@@ -198,3 +198,11 @@ export function deriveEpicStatus(rollup: EpicRollup): TaskStatus {
   if (rollup.total === 0) return "backlog";
   return TaskStatus.options.find((s) => rollup.byStatus[s] > 0) ?? "backlog";
 }
+
+export type DueState = "overdue" | "today" | "later";
+
+/** Where a `YYYY-MM-DD` due date stands against `today` (the viewer's local date, same format). */
+export function dueState(dueDate: string, today: string): DueState {
+  // Both are zero-padded ISO dates, so string order is date order.
+  return dueDate < today ? "overdue" : dueDate === today ? "today" : "later";
+}

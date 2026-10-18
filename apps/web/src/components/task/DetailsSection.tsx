@@ -1,14 +1,16 @@
 import { MODEL_TIERS, ModelTier, modelTierDescription, type TaskDetail } from "@repo/contracts";
-import { PencilIcon } from "lucide-react";
+import { PencilIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { Markdown } from "~/components/markdown/Markdown";
 import { usePanelTaskLinks } from "./PanelTaskLinks";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateTask } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
+import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "./dueDate.logic";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
 
@@ -19,6 +21,7 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
     <TaskSection title="Details">
       <div className="flex flex-col gap-3">
         <SuggestedModelField task={task} />
+        {task.kind === "epic" ? null : <DueDateField task={task} />}
         <MarkdownField
           taskId={task.id}
           title="Description"
@@ -81,6 +84,47 @@ function SuggestedModelField({ task }: { task: TaskDetail }) {
       {suggestion?.reason ? (
         <p className="mt-1 text-xs leading-snug text-muted-foreground/80">{suggestion.reason}</p>
       ) : null}
+    </div>
+  );
+}
+
+/** The optional due date: a native date input with a clear button. Reads amber when due today and red when overdue. */
+function DueDateField({ task }: { task: TaskDetail }) {
+  const { mutate: updateTask } = useUpdateTask();
+  const { dueDate } = task;
+  const state = dueDate ? dueStateOf(dueDate) : null;
+  return (
+    <div className="px-1.5 pb-1">
+      <div className="flex min-h-6 items-center gap-2">
+        <h4 className="shrink-0 text-2xs text-muted-foreground/80 select-none">Due date</h4>
+        <Input
+          size="sm"
+          type="date"
+          aria-label="Due date"
+          className="w-auto"
+          value={dueDate ?? ""}
+          onChange={(event) => {
+            // An emptied or half-typed input reports "", which is not a request to clear: that is the button.
+            const next = event.currentTarget.value;
+            if (next && next !== dueDate) updateTask({ id: task.id, dueDate: next });
+          }}
+        />
+        {dueDate && state ? (
+          <>
+            <span className={`text-xs ${dueStateClassName(state)}`}>
+              {state === "later" ? dueDateLabel(dueDate) : `${dueStateText(state)} · ${dueDateLabel(dueDate)}`}
+            </span>
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label="Clear due date"
+              onClick={() => updateTask({ id: task.id, dueDate: null })}
+            >
+              <XIcon />
+            </Button>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
