@@ -8,6 +8,7 @@ import {
   describeCustomTrigger,
   describeShellRun,
   latestHourlySlot,
+  latestMinutesSlot,
   placeholdersIn,
   renderCustomPrompt,
   type CustomValues,
@@ -50,12 +51,28 @@ describe("checkCustomDefinition", () => {
   const agent = { kind: "agent" as const, prompt: "Go", skill: "", tier: null, onPrBranch: false };
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 4 } });
 
-  it("allows a schedule only with a shell command and project filters", () => {
+  it("allows a schedule with a shell command or an agent, and project filters only", () => {
     expect(checkCustomDefinition({ trigger: schedule, filters, action: shell })).toBeNull();
-    expect(checkCustomDefinition({ trigger: schedule, filters, action: agent })).toMatch(/no task/);
+    expect(checkCustomDefinition({ trigger: schedule, filters, action: agent })).toBeNull();
     expect(checkCustomDefinition({ trigger: schedule, filters: { ...filters, epicId: "e" }, action: shell })).toMatch(
       /only filter by project/,
     );
+    expect(checkCustomDefinition({ trigger: schedule, filters: { ...filters, labels: ["x"] }, action: agent })).toMatch(
+      /only filter by project/,
+    );
+    expect(checkCustomDefinition({ trigger: schedule, filters, action: { ...agent, onPrBranch: true } })).toMatch(
+      /no pull request/,
+    );
+  });
+
+  it("holds a minutes schedule to 5 minutes through a day", () => {
+    const minutes = (everyMinutes: number) =>
+      CustomTrigger.safeParse({ kind: "schedule", schedule: { kind: "minutes", everyMinutes } }).success;
+    expect(minutes(5)).toBe(true);
+    expect(minutes(1440)).toBe(true);
+    expect(minutes(4)).toBe(false);
+    expect(minutes(1441)).toBe(false);
+    expect(minutes(7.5)).toBe(false);
   });
 
   it("refuses placeholders in a shell command and unknown ones in a prompt", () => {
@@ -95,6 +112,20 @@ describe("triggers", () => {
   it("counts hourly slots from local midnight", () => {
     expect(latestHourlySlot(6, new Date(2026, 9, 17, 13, 45))).toEqual(new Date(2026, 9, 17, 12));
     expect(latestHourlySlot(24, new Date(2026, 9, 17, 23, 59))).toEqual(new Date(2026, 9, 17, 0));
+  });
+
+  it("counts minute slots from local midnight, restarting each day", () => {
+    expect(latestMinutesSlot(15, new Date(2026, 9, 17, 13, 44, 59))).toEqual(new Date(2026, 9, 17, 13, 30));
+    expect(latestMinutesSlot(15, new Date(2026, 9, 17, 13, 45))).toEqual(new Date(2026, 9, 17, 13, 45));
+    expect(latestMinutesSlot(7, new Date(2026, 9, 17, 0, 20))).toEqual(new Date(2026, 9, 17, 0, 14));
+    expect(latestMinutesSlot(90, new Date(2026, 9, 17, 4, 0))).toEqual(new Date(2026, 9, 17, 3, 0));
+    expect(latestMinutesSlot(1440, new Date(2026, 9, 17, 23, 59))).toEqual(new Date(2026, 9, 17, 0, 0));
+  });
+
+  it("describes a minutes schedule", () => {
+    expect(
+      describeCustomTrigger(CustomTrigger.parse({ kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } })),
+    ).toBe("Every 15 minutes");
   });
 });
 

@@ -72,12 +72,73 @@ describe("custom automation form", () => {
     expect(
       customFormToInput({ ...emptyCustomForm(), name: "A", actionKind: "shell", command: "echo {{task.title}}" }),
     ).toMatchObject({ ok: false, error: expect.stringContaining(brandEnv("TASK_TITLE")) });
-    expect(customFormToInput({ ...emptyCustomForm(), name: "A", triggerKind: "schedule", prompt: "Go" })).toMatchObject(
-      {
-        ok: false,
-        error: expect.stringMatching(/no task/),
+    const interval = {
+      ...emptyCustomForm(),
+      name: "A",
+      triggerKind: "schedule" as const,
+      scheduleKind: "interval" as const,
+    };
+    expect(customFormToInput({ ...interval, prompt: "Go", unit: "minutes", every: "4" })).toMatchObject({
+      ok: false,
+      error: "Run every 5 to 1440 minutes",
+    });
+    expect(customFormToInput({ ...interval, prompt: "Go", unit: "minutes", every: "1441" })).toMatchObject({
+      ok: false,
+    });
+    expect(customFormToInput({ ...interval, prompt: "Go", unit: "hours", every: "25" })).toMatchObject({
+      ok: false,
+      error: "Run every 1 to 24 hours",
+    });
+    expect(customFormToInput({ ...interval, prompt: "Go", unit: "minutes", every: "15", labels: "ui" })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/only filter by project/),
+    });
+  });
+
+  it("takes an agent on a schedule, in minutes or hours", () => {
+    const interval = {
+      ...emptyCustomForm(),
+      name: "A",
+      triggerKind: "schedule" as const,
+      scheduleKind: "interval" as const,
+      prompt: "Go",
+    };
+    expect(customFormToInput({ ...interval, unit: "minutes", every: "15" })).toMatchObject({
+      ok: true,
+      input: {
+        trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
+        action: { kind: "agent", prompt: "Go" },
       },
-    );
+    });
+    expect(customFormToInput({ ...interval, unit: "hours", every: "2" })).toMatchObject({
+      ok: true,
+      input: { trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 2 } } },
+    });
+  });
+
+  it("drops the pull request branch switch when the trigger becomes a schedule, which has no pull request", () => {
+    const form = {
+      ...emptyCustomForm(),
+      name: "A",
+      prompt: "Go",
+      onPrBranch: true,
+      triggerKind: "schedule" as const,
+      scheduleKind: "interval" as const,
+      unit: "minutes" as const,
+      every: "15",
+    };
+    expect(customFormToInput(form)).toMatchObject({ ok: true, input: { action: { onPrBranch: false } } });
+  });
+
+  it("round-trips a scheduled agent every few minutes", () => {
+    const saved = custom({
+      trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
+      action: { kind: "agent", prompt: "Go", skill: "orchestrate", tier: null, onPrBranch: false },
+    });
+    expect(customFormToInput(formFromCustom(saved))).toEqual({
+      ok: true,
+      input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
+    });
   });
 
   it("round-trips a saved automation", () => {
@@ -129,5 +190,20 @@ describe("preview", () => {
     );
     expect(agent).toContain("Look at #7 Fix it");
     expect(agent).toContain('get_task("#7")');
+  });
+
+  it("previews a scheduled agent with the project footer and no task", () => {
+    const scheduled = previewAction(
+      {
+        name: "Watch",
+        trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
+        action: { kind: "agent", prompt: "Check on {{project.name}}" },
+      },
+      null,
+      [project],
+    );
+    expect(scheduled).toContain("Check on Alpha");
+    expect(scheduled).toContain("Project folder: /work/alpha");
+    expect(scheduled).not.toContain("get_task");
   });
 });
