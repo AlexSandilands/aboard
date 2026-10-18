@@ -13,7 +13,7 @@ import {
   type CustomDefinition,
 } from "./customAutomations.ts";
 
-// A custom automation as a file someone can share and anyone can import (docs/features/autopilot.md#sharing). The
+// A custom automation as a file someone can share and anyone can import (docs/features/autopilot.md#sharing-automations). The
 // file holds the definition without what is the sharer's own: their projects, their epic, when it was armed, and the
 // tools they filled its slots with (people use different MCP servers). It declares the inputs the importer fills in and
 // the tool slots they fill with tools of their own.

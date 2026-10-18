@@ -7,6 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { cn } from "~/lib/utils";
 import { blankInput, blankSlot, type FormInput, type FormSlot } from "./customAutomations.logic";
 
 const INPUT_TYPES: ReadonlyArray<{ value: AutomationInputType; label: string }> = [
@@ -15,9 +16,9 @@ const INPUT_TYPES: ReadonlyArray<{ value: AutomationInputType; label: string }> 
   { value: "boolean", label: "Yes / no" },
 ];
 
-function Labelled({ label, children }: { label: string; children: ReactNode }) {
+function Labelled({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
-    <label className="flex min-w-0 flex-col gap-1">
+    <label className={cn("flex min-w-0 flex-col gap-1", className)}>
       <span className="text-2xs font-medium text-foreground/70">{label}</span>
       {children}
     </label>
@@ -114,7 +115,7 @@ export function InputsField({ inputs, onChange }: { inputs: FormInput[]; onChang
             </Labelled>
           </div>
           <div className="flex items-end justify-between gap-2">
-            <Labelled label="Value">
+            <Labelled label="Value" className="flex-1">
               <InputValueControl
                 input={input}
                 label={`${input.label || `Input ${i + 1}`} value`}

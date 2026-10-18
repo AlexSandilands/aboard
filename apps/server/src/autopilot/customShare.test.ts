@@ -1,5 +1,6 @@
 import {
   AUTOMATION_BUNDLE_VERSION,
+  AUTOMATION_EXAMPLES,
   customAutomationKey,
   CustomAction,
   type AutomationBundle,
@@ -262,5 +263,39 @@ describe("a required tool slot", () => {
     await s.engine.pass();
     await s.engine.idle();
     expect(s.agentRuns).toHaveLength(1);
+  });
+});
+
+describe("the Dispatch example", () => {
+  it("imports, takes a fake Jira server's tools into its slot and runs with them and the filled inputs", async () => {
+    const s = setup();
+    const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+    const bundle = AUTOMATION_EXAMPLES.find((e) => e.id === "dispatch")!.bundle;
+    const imported = await s.json<{ automation: CustomAutomation }>(
+      await s.request("/api/autopilot/custom/import", {
+        method: "POST",
+        json: {
+          bundle,
+          inputs: { jql: "project = ALPHA AND issuetype = Bug", require_approval: "false" },
+          slots: { jira: ["mcp__fake-jira__search_issues", "mcp__fake-jira__get_issue"] },
+          projectIds: [project.id],
+        },
+      }),
+    );
+    const key = customAutomationKey(imported.automation.id);
+    s.services.autopilot.setScope("board", null, key, { mode: "on" });
+    await s.engine.pass();
+    await s.engine.idle();
+    expect(s.agentRuns).toHaveLength(1);
+    const request = s.agentRuns[0]!;
+    expect(request.tools).toEqual(["mcp__fake-jira__search_issues", "mcp__fake-jira__get_issue"]);
+    expect(request.prompt).toContain("(project = ALPHA AND issuetype = Bug) AND created >= -14d");
+    expect(request.prompt).toContain("up to 50 issues");
+    expect(request.prompt).toContain("set to: false");
+    expect(request.prompt).toContain(
+      "- Jira tools (search issues by JQL and read an issue): mcp__fake-jira__search_issues",
+    );
+    expect(request.prompt).toContain(`Project: Alpha`);
+    expect(request.outputSchema).toBeTruthy();
   });
 });

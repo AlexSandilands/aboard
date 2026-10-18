@@ -45,7 +45,7 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
       return c.json(custom.create(input), 201);
     }),
   );
-  // A shared file (docs/features/autopilot.md#sharing): the definition without the sharer's projects, epic and slot
+  // A shared file (docs/features/autopilot.md#sharing-automations): the definition without the sharer's projects, epic and slot
   // tools, and the skill it names when that is one of the user's own.
   app.get(
     "/api/autopilot/custom/:id/export",

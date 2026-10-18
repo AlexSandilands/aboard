@@ -1,6 +1,6 @@
 import { AutomationBundle, AUTOMATION_BUNDLE_FORMAT, AUTOMATION_BUNDLE_VERSION } from "./automationBundle.ts";
 
-// Automations shipped as files anyone can import (docs/features/autopilot.md#sharing). They are ordinary bundles: the
+// Automations shipped as files anyone can import (docs/features/autopilot.md#sharing-automations). They are ordinary bundles: the
 // import screen reads them like a file from someone else, and the importer fills in their inputs and tool slots.
 
 export interface AutomationExample {
