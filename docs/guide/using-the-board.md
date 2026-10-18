@@ -112,14 +112,14 @@ or clear the tier from the dropdown there; picking one drops the planner's reaso
 
 ## Autopilot flag
 
-Each task has an **Autopilot** setting in the panel's Details section: Default, On or Off. Autopilot only
+Each task has an **Autopilot** setting in the panel's Automation section: Default, On or Off. Autopilot only
 starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
 project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
 flag tasks but never change Autopilot's own settings.
 
 ## Priority
 
-Star a task on its card (the star shows when you hover it), or choose **Mark as priority** in the panel's More menu, and
+Star a task on its card (the star shows when you hover it), choose **Mark as priority** in the panel's More menu, or turn on **Priority** in the panel's Automation section, and
 it moves to a **Priority** lane at the top of the board, above every project, whatever you are filtering. The lane
 shows priority tasks from all projects in their usual columns, each with its project's name; drag a card between
 columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
