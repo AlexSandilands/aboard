@@ -107,6 +107,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       .sort((x, y) => x.number - y.number);
   const importsByTask = repos.imports.forTasks(ids);
   const autopilotByTask = repos.autopilotRuns.attentionFor(ids);
+  const cleanPrReviewByTask = repos.autopilotRuns.cleanPrReviewTimes(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
   for (const record of records) {
@@ -120,7 +121,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const note = notes.get(record.id);
     const rounds = roundsByTask.get(record.id) ?? [];
     const findings = findingsByTask.get(record.id) ?? [];
-    const review = deriveReviewSummary(rounds, findings, reviewMaxRounds);
+    const review = deriveReviewSummary(rounds, findings, reviewMaxRounds, cleanPrReviewByTask.get(record.id) ?? null);
     const issueImport = toTaskImport(importsByTask.get(record.id));
     const blockedBy = relatedTasks(relations.filter((r) => r.blockedId === record.id).map((r) => r.blockerId));
     const summary: TaskSummary = {

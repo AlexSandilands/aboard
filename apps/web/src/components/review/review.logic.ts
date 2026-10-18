@@ -1,6 +1,7 @@
 import {
   BUILTIN_REVIEW_SKILL_NAME,
   isGatingSeverity,
+  reviewFixedAtLimit,
   type FindingSeverity,
   type ReviewFinding,
   type ReviewSkillRef,
@@ -16,8 +17,10 @@ export function reviewBadgeVariant(summary: TaskReviewSummary): BadgeVariant {
   switch (summary.state) {
     case "pending":
     case "running":
-    case "fixed":
       return "info";
+    // Fixed at the round limit, no round is left to re-review it: nothing to wait for, nothing to do.
+    case "fixed":
+      return reviewFixedAtLimit(summary) ? "outline" : "info";
     case "changes_requested":
     case "stalled":
     case "stuck":

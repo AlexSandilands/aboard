@@ -114,7 +114,8 @@ export type TaskReview = z.infer<typeof TaskReview>;
  * - changes_requested: blocking or major findings are open and rounds remain;
  * - stuck: they are still open after the last allowed round;
  * - fixed: the latest round raised blocking or major findings and all are resolved, but unverified;
- * - clean: the latest round raised none and none are open from earlier rounds.
+ * - clean: the latest round raised none and none are open from earlier rounds, or a clean PR review came after
+ *   the fixes (`verifiedOnPr`).
  */
 export const ReviewState = z.enum([
   "pending",
@@ -145,6 +146,8 @@ export const TaskReviewSummary = z.object({
   open: SeverityCounts,
   /** The latest round was reviewed by the board's own reviewer, not an agent running the loop. */
   byBoard: z.boolean(),
+  /** A clean Autopilot PR review after the last fix stood in for the re-review that no round was left to run. */
+  verifiedOnPr: z.boolean(),
 });
 export type TaskReviewSummary = z.infer<typeof TaskReviewSummary>;
 
@@ -162,25 +165,48 @@ interface FindingLike {
   round: number;
   severity: FindingSeverity;
   status: FindingStatus;
+  resolvedAt?: string | null;
 }
 
+/**
+ * `cleanPrReviewAt` is when Autopilot's newest clean PR review started (`cleanPrReviewTimes` in the runs repo). Fixes the
+ * latest round raised are re-reviewed by it when it came after the last of them was resolved: that's what a
+ * "fixed" round waits for, and at the round limit no round is left to give it. Matched on time, not on commits,
+ * so no git calls are needed.
+ */
 export function deriveReviewSummary(
   rounds: ReadonlyArray<RoundLike>,
   findings: ReadonlyArray<FindingLike>,
   maxRounds: number,
+  cleanPrReviewAt: string | null = null,
 ): TaskReviewSummary | null {
   const latest = rounds.reduce<RoundLike | null>((acc, r) => (acc && acc.round > r.round ? acc : r), null);
   if (!latest) return null;
   const open: SeverityCounts = { blocking: 0, major: 0, minor: 0, nit: 0 };
   for (const f of findings) if (f.status === "open") open[f.severity] += 1;
   const cycleRounds = rounds.filter((r) => r.cycle === latest.cycle).length;
-  const base = { round: cycleRounds, maxRounds, open, byBoard: latest.reviewer === BOARD_REVIEWER };
+  const base = {
+    round: cycleRounds,
+    maxRounds,
+    open,
+    byBoard: latest.reviewer === BOARD_REVIEWER,
+    verifiedOnPr: false,
+  };
   if (latest.status !== "submitted") return { ...base, state: latest.status };
   if (open.blocking + open.major > 0) {
     return { ...base, state: cycleRounds >= maxRounds ? "stuck" : "changes_requested" };
   }
-  const raisedGating = findings.some((f) => f.round === latest.round && isGatingSeverity(f.severity));
-  return { ...base, state: raisedGating ? "fixed" : "clean" };
+  const gating = findings.filter((f) => f.round === latest.round && isGatingSeverity(f.severity));
+  if (gating.length === 0) return { ...base, state: "clean" };
+  if (cleanPrReviewAt !== null) {
+    const reviewedAt = Date.parse(cleanPrReviewAt);
+    const resolvedTimes = gating.map((f) => (f.resolvedAt ? Date.parse(f.resolvedAt) : Number.NaN));
+    // Without a time for every fix we can't tell the PR review saw them.
+    if (resolvedTimes.every((t) => !Number.isNaN(t)) && reviewedAt > Math.max(...resolvedTimes)) {
+      return { ...base, state: "clean", verifiedOnPr: true };
+    }
+  }
+  return { ...base, state: "fixed" };
 }
 
 /** Whether the implementing agent should run another round. */
@@ -234,6 +260,10 @@ export const REVIEW_PR_STEP =
   "When the loop ends (a clean round, or the round limit), always open the pull request, listing any findings " +
   `still open in its description, unless the user asked you not to; then link it and carry on. ${REVIEW_PR_LINKED}`;
 
+/** Fixes nobody will re-review: the loop is out of rounds, and no clean PR review has checked them either. */
+export const reviewFixedAtLimit = (summary: TaskReviewSummary): boolean =>
+  summary.state === "fixed" && summary.round >= summary.maxRounds;
+
 /** Short badge text for cards. */
 export function reviewBadgeLabel(summary: TaskReviewSummary): string {
   const gating = summary.open.blocking + summary.open.major;
@@ -251,7 +281,7 @@ export function reviewBadgeLabel(summary: TaskReviewSummary): string {
     case "stuck":
       return `Stuck: ${gating} open`;
     case "fixed":
-      return "Fixed, re-review";
+      return reviewFixedAtLimit(summary) ? "Fixed at round limit" : "Fixed, re-review";
     case "clean":
       return "Reviewed";
   }

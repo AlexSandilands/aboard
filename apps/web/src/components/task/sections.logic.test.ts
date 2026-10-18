@@ -57,6 +57,7 @@ const summary = (state: TaskReviewSummary["state"]): TaskReviewSummary => ({
   maxRounds: 3,
   open: { blocking: 0, major: 0, minor: 0, nit: 0 },
   byBoard: false,
+  verifiedOnPr: false,
 });
 
 describe("normalizeSectionLayout", () => {

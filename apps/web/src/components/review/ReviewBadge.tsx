@@ -1,4 +1,4 @@
-import { reviewBadgeLabel, type TaskReviewSummary } from "@repo/contracts";
+import { reviewBadgeLabel, reviewFixedAtLimit, type TaskReviewSummary } from "@repo/contracts";
 import { Badge } from "~/components/ui/badge";
 import { reviewBadgeVariant } from "./review.logic";
 
@@ -11,6 +11,8 @@ function reviewTitle(summary: TaskReviewSummary): string {
     `Local review: ${reviewBadgeLabel(summary)}`,
     `Round ${summary.round} of ${summary.maxRounds}`,
     open.length ? `Open: ${open.join(", ")}` : null,
+    summary.verifiedOnPr ? "Re-reviewed on the PR" : null,
+    reviewFixedAtLimit(summary) ? "No round left to re-review the fixes" : null,
   ]
     .filter(Boolean)
     .join(" · ");
