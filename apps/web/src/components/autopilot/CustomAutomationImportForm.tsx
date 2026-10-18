@@ -175,11 +175,7 @@ export function CustomAutomationImportForm({
               <>
                 <Section
                   title="Prompt the agent starts with"
-                  hint={
-                    action.skill && !bundle.skill
-                      ? `It is told to use a skill called ${action.skill}, which isn't in the file: you need it installed already.`
-                      : `Model tier: ${MODEL_TIERS.find((t) => t.value === action.tier)?.label ?? "the default"}.${action.onPrBranch ? " Works on the pull request's branch." : ""}`
-                  }
+                  hint={`Model tier: ${MODEL_TIERS.find((t) => t.value === action.tier)?.label ?? "the default"}.${action.onPrBranch ? " Works on the pull request's branch." : ""}${action.skill && !bundle.skill ? ` It is told to use a skill called ${action.skill}, which isn't in the file: you need it installed already.` : ""}`}
                 >
                   <Code tall>{action.prompt}</Code>
                 </Section>

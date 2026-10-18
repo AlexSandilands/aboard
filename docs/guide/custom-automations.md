@@ -114,6 +114,8 @@ It comes in **off**; switch it on in the Autopilot list when you have read it an
 
 - A skill in the file is written to `~/.claude/skills` only if you switch **Save the skill** on. One that already
   exists is never overwritten: a name you use is kept apart (`triage-2`) and the automation names the new one.
+- Export tells you when a skill went into the file. Only its `SKILL.md` travels, not scripts or other files beside
+  it, so check the skill for anything private first.
 - An automation name you already use gets a number: `Dispatch (2)`.
 - A file made by a newer version of the app is refused, saying so.
 

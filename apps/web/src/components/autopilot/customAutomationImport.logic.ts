@@ -4,6 +4,7 @@ import {
   checkCustomDefinition,
   CreateCustomAutomationInput,
   type ImportAutomationInput,
+  inputStartValue,
   parseAutomationBundle,
 } from "@repo/contracts";
 import { parseAllowedTools } from "./customAutomations.logic";
@@ -30,7 +31,7 @@ export function readBundle(text: string): { ok: true; bundle: AutomationBundle }
 /** The inputs at the author's defaults, no tools, no projects, and the skill (if any) not installed until agreed to. */
 export function initialDraft(bundle: AutomationBundle): ImportDraft {
   return {
-    inputs: Object.fromEntries(bundle.inputs.map((input) => [input.name, input.default])),
+    inputs: Object.fromEntries(bundle.inputs.map((input) => [input.name, inputStartValue(input)])),
     slots: Object.fromEntries(bundle.slots.map((slot) => [slot.name, ""])),
     projectIds: [],
     installSkill: false,

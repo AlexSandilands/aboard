@@ -4,6 +4,7 @@ import {
   AUTOMATION_BUNDLE_VERSION,
   automationBundle,
   bundleToDefinition,
+  inputStartValue,
   parseAutomationBundle,
 } from "./automationBundle.ts";
 import {
@@ -81,6 +82,13 @@ describe("automation bundles", () => {
     expect(skillOf()).toBe("");
     expect(skillOf(null)).toBe("");
     expect(skillOf("triage-2")).toBe("triage-2");
+  });
+
+  it("starts a yes / no input with no default at no, so it is a valid choice from the start", () => {
+    const input = { name: "ok", label: "OK", type: "boolean" as const, default: "" };
+    expect(inputStartValue(input)).toBe("false");
+    expect(inputStartValue({ ...input, default: "true" })).toBe("true");
+    expect(inputStartValue({ ...input, type: "text" })).toBe("");
   });
 
   it("refuses what isn't an automation file, a file from a newer version and a broken one", () => {

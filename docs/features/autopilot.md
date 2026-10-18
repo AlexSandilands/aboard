@@ -665,7 +665,10 @@ skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkil
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
 is saved like any new one, with no switches, so it is off. As when creating one, a shell action needs the board page's
-`Origin`.
+`Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
+the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
+frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
+`SKILL.md`, not other files beside it, and the UI says when a skill went into the file.
 
 The web import screen (`CustomAutomationImportForm`, `/settings/autopilot/custom/import`) reads the file in the browser
 and shows the prompt, command, allowed tools and skill text in full, as untrusted, before **Import**. It also offers the

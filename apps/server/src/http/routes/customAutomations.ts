@@ -64,6 +64,10 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
       // A file's shell command runs on this machine, so, as when writing one by hand, only the board's page may import it.
       const parsed = parseAutomationBundle(input.bundle);
       if (parsed.ok) assertShellFromBrowser(c, parsed.bundle.action);
+      // A skill persists into every later session that reads the user's skills, so it is held to the same rail.
+      if (parsed.ok && parsed.bundle.skill && input.installSkill && !c.req.header("origin")) {
+        throw new AppError("VALIDATION", "Skills can only be installed from the board's settings page");
+      }
       return c.json(
         custom.importBundle(input, (skill) => installSkill(config.userHome, skill)),
         201,

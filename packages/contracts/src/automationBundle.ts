@@ -107,6 +107,10 @@ export function automationBundle(
   };
 }
 
+/** What an input starts at on import: its default, except that a yes / no input with none starts at no. */
+export const inputStartValue = (input: Pick<AutomationInputDecl, "type" | "default">): string =>
+  input.type === "boolean" && input.default === "" ? "false" : input.default;
+
 /** What the importer chooses on top of the file. */
 export interface BundleFill {
   /** Input values by name; an input left out takes its default. */
@@ -134,7 +138,10 @@ export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = 
         ? {
             ...action,
             skill: fill.skill !== undefined ? (fill.skill ?? "") : bundle.skill ? "" : action.skill,
-            inputs: bundle.inputs.map((input) => ({ ...input, value: fill.inputs?.[input.name] ?? input.default })),
+            inputs: bundle.inputs.map((input) => ({
+              ...input,
+              value: fill.inputs?.[input.name] ?? inputStartValue(input),
+            })),
             slots: bundle.slots.map((slot) => ({ ...slot, tools: [...(fill.slots?.[slot.name] ?? [])] })),
           }
         : action,

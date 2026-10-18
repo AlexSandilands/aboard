@@ -66,15 +66,26 @@ export function readInstalledSkill(homeDir: string, name: string): string | null
   }
 }
 
-/** Sets the `name:` of a skill's frontmatter, so a skill saved under another folder name still answers to it. */
-function renameInFrontmatter(body: string, name: string): string {
-  return body.replace(/^(---\r?\n[\s\S]*?)^name:[ \t]*.*$/m, `$1name: ${name}`);
+/**
+ * The skill's text with its frontmatter `name:` set to `name` (added, with a frontmatter block, when there is none).
+ * Harnesses go by that name before the folder's, so it has to be the one the board checked and the automation names,
+ * whatever the file brought. Only the frontmatter block is edited, never a `name:` line in the body.
+ */
+function withFrontmatterName(body: string, name: string): string {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(body);
+  if (!block) return `---\nname: ${name}\n---\n${body}`;
+  const nameLine = /^name:[ \t]*.*$/m;
+  const fields = nameLine.test(block[1]!)
+    ? block[1]!.replace(nameLine, `name: ${name}`)
+    : `name: ${name}\n${block[1]!}`;
+  return body.replace(block[0], () => `---\n${fields}\n---`);
 }
 
 /**
  * Writes a skill into `~/.claude/skills/<name>/SKILL.md`. A name that is already taken by an installed skill (by its
  * folder or its frontmatter name, in any of the user's skill folders) gets `-2`, `-3` and so on instead, so an import
- * never overwrites a skill of the user's.
+ * never overwrites a skill of the user's. The file's own frontmatter name is replaced by the installed one, so a file
+ * can't install a skill under a name it didn't ask for.
  */
 export function installSkill(homeDir: string, skill: BundleSkill): InstalledSkill {
   const taken = new Set(discoverSkills({ homeDir }).map((s) => s.name.toLowerCase()));
@@ -90,6 +101,6 @@ export function installSkill(homeDir: string, skill: BundleSkill): InstalledSkil
   const dir = join(homeDir, INSTALL_ROOT, name);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, SKILL_FILE);
-  writeFileSync(path, name === skill.name ? skill.body : renameInFrontmatter(skill.body, name), { flag: "wx" });
+  writeFileSync(path, withFrontmatterName(skill.body, name), { flag: "wx" });
   return { name, path, renamed: name !== skill.name };
 }

@@ -8,6 +8,7 @@ import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
 import { useCustomAutomations, useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
 import { bundleFilename } from "./customAutomationImport.logic";
@@ -61,12 +62,16 @@ export function CustomAutomationsSection() {
   const exporting = useExportCustomAutomation();
   const onExport = (custom: CustomAutomation) =>
     exporting.mutate(custom.id, {
-      onSuccess: (bundle) =>
-        downloadText(
-          bundleFilename(custom.name),
-          `${JSON.stringify(bundle, null, 2)}
-`,
-        ),
+      onSuccess: (bundle) => {
+        downloadText(bundleFilename(custom.name), `${JSON.stringify(bundle, null, 2)}\n`);
+        if (bundle.skill) {
+          toastManager.add({
+            type: "info",
+            title: `The skill ${bundle.skill.name} is in the file`,
+            description: "Only its SKILL.md travels, not other files beside it. Check it for anything private.",
+          });
+        }
+      },
     });
   const [deleting, setDeleting] = useState<CustomAutomation | null>(null);
   const list = customs.data ?? [];

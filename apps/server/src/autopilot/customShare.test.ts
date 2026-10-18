@@ -130,13 +130,17 @@ describe("importing a custom automation", () => {
     const bundle = await fileOf();
     const s = setup();
     const project = s.services.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
-    const res = await post(s, {
-      bundle,
-      inputs: { jql: "project = BETA" },
-      slots: { jira: ["mcp__atlassian__search"] },
-      projectIds: [project.id],
-      installSkill: true,
-    });
+    const res = await post(
+      s,
+      {
+        bundle,
+        inputs: { jql: "project = BETA" },
+        slots: { jira: ["mcp__atlassian__search"] },
+        projectIds: [project.id],
+        installSkill: true,
+      },
+      ORIGIN,
+    );
     expect(res.status).toBe(201);
     const { automation, skill } = await s.json<Imported>(res);
     expect(skill).toMatchObject({ name: "triage", renamed: false });
@@ -162,7 +166,7 @@ describe("importing a custom automation", () => {
     const bundle = await fileOf();
     const s = setup();
     s.installSkill("triage", "---\nname: triage\n---\nMine");
-    const { automation, skill } = await s.json<Imported>(await post(s, { bundle, installSkill: true }));
+    const { automation, skill } = await s.json<Imported>(await post(s, { bundle, installSkill: true }, ORIGIN));
     expect(skill).toMatchObject({ name: "triage-2", renamed: true });
     expect(automation.action).toMatchObject({ skill: "triage-2" });
     expect(readFileSync(join(s.skillDir("triage"), "SKILL.md"), "utf8")).toContain("Mine");
@@ -190,14 +194,14 @@ describe("importing a custom automation", () => {
   it("refuses what isn't an automation file, a newer version and a definition that can't run, writing nothing", async () => {
     const bundle = await fileOf();
     const s = setup();
-    const refused = async (body: unknown, message: RegExp) => {
-      const res = await post(s, body);
+    const refused = async (body: unknown, message: RegExp, headers?: Record<string, string>) => {
+      const res = await post(s, body, headers);
       expect(res.status).toBe(400);
       expect(JSON.stringify(await res.json())).toMatch(message);
     };
     await refused({ bundle: { hello: "world" } }, /automation file/);
     await refused({ bundle: { ...bundle, version: AUTOMATION_BUNDLE_VERSION + 1 } }, /newer/);
-    await refused({ bundle, slots: { jira: ["Bash"] }, installSkill: true }, /Bash|Use mcp__/);
+    await refused({ bundle, slots: { jira: ["Bash"] }, installSkill: true }, /Bash|Use mcp__/, ORIGIN);
     await refused(
       {
         bundle: {
@@ -207,9 +211,43 @@ describe("importing a custom automation", () => {
         installSkill: true,
       },
       /enter a number/,
+      ORIGIN,
     );
     expect(existsSync(s.skillDir("triage"))).toBe(false);
     expect(s.services.customAutomations.list()).toHaveLength(0);
+  });
+
+  it("installs a skill only from the board's page, writing nothing otherwise", async () => {
+    const bundle = await fileOf();
+    const s = setup();
+    const refused = await post(s, { bundle, installSkill: true });
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify(await refused.json())).toMatch(/Skills can only be installed/);
+    expect(existsSync(s.skillDir("triage"))).toBe(false);
+    expect(s.services.customAutomations.list()).toHaveLength(0);
+    // Without asking for the skill, no Origin is needed.
+    expect((await post(s, { bundle })).status).toBe(201);
+  });
+
+  it("writes the skill under the name it installs as, whatever the file's own name line says", async () => {
+    const bundle = await fileOf();
+    const s = setup();
+    s.installSkill("commit", "---\nname: commit\n---\nMine");
+    const body = "---\nname: commit\ndescription: x\n---\nBody\nname: not-this";
+    const withBody = { ...bundle, skill: { name: "triage", body } };
+    const { skill } = await s.json<Imported>(await post(s, { bundle: withBody, installSkill: true }, ORIGIN));
+    expect(skill).toMatchObject({ name: "triage", renamed: false });
+    expect(readFileSync(join(s.skillDir("triage"), "SKILL.md"), "utf8")).toBe(
+      "---\nname: triage\ndescription: x\n---\nBody\nname: not-this",
+    );
+    // No frontmatter at all: one is added.
+    const bare = { ...bundle, name: "Plain", skill: { name: "plain", body: "Just text" } };
+    await post(s, { bundle: bare, installSkill: true }, ORIGIN);
+    expect(readFileSync(join(s.skillDir("plain"), "SKILL.md"), "utf8")).toBe("---\nname: plain\n---\nJust text");
+    // A frontmatter block without a name gets one.
+    const noName = { ...bundle, name: "NoName", skill: { name: "nn", body: "---\ndescription: d\n---\nT" } };
+    await post(s, { bundle: noName, installSkill: true }, ORIGIN);
+    expect(readFileSync(join(s.skillDir("nn"), "SKILL.md"), "utf8")).toBe("---\nname: nn\ndescription: d\n---\nT");
   });
 
   it("takes a shell command only from the board's page", async () => {
