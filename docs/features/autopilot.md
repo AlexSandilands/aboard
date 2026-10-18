@@ -504,7 +504,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   board's. `boardTools` makes the runner write an MCP config naming only the board (`boardMcpConfig`, with its API
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
   `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
-  job). It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
+  job). The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
   thread tools, `retry_autopilot_run`, `merge_task_pr`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`

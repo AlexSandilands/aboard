@@ -101,6 +101,9 @@ describe("Orchestrate", () => {
     expect(request.deniedTools).not.toContain(`mcp__${BRAND.id}__merge_task_pr`);
     expect(request.outputSchema).toMatchObject({ required: ["summary", "handover"] });
     expect(request.prompt).toContain("merge_task_pr(task)");
+    // The allow list takes plain commands only, so the prompt says so rather than leaving a refusal to read as "Bash is off".
+    expect(request.prompt).toContain("Run each `gh` command on its own, one per Bash call");
+    expect(request.prompt).toContain("not that Bash is off");
 
     // The next slot runs again; the one after a long gap catches up once.
     await pass(15 * MINUTE);
