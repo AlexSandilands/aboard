@@ -88,13 +88,24 @@ The reviewer follows a skill:
 ### The card
 
 The review state shows as a badge on the card, not as a column: *Reviewing*, *N open*, *Fixed, re-review*,
-*Reviewed*, *Needs review*, *Stuck* or *Review failed*. While the loop runs it's the agent's business. The
+*Fixed at round limit*, *Reviewed*, *Needs review*, *Stuck* or *Review failed*. While the loop runs it's the agent's business. The
 card only asks for your attention when the loop ended without a clean result:
 
 - **Stuck:** blocking or major findings are still open after the last round.
 - **Needs review:** nobody ran the round and no fallback could.
 - **Review failed:** the board's reviewer couldn't finish (the reason is on the round).
 - **Board review: N to fix:** the board's own reviewer found problems that no agent is looping on.
+
+*Fixed, re-review* means the latest round's blocking or major findings are all resolved and the next round is
+due. When they are resolved in the last allowed round there is no next round, so the badge reads *Fixed at round
+limit* (a muted tone, with nothing to wait for or do) and the task counts as done with the loop: Review PRs and
+`merge_task_pr` don't wait on it. If Autopilot's [PR review](autopilot.md) then comes back clean (a real,
+succeeded Review PRs run with the hand-off `clean` and no blocking or major issues) that started after the last of
+those fixes was resolved, that review
+stands in for the re-review: the state becomes *Reviewed* (`verifiedOnPr` on the summary), and `get_task` says
+the fixes were re-reviewed on the pull request. The match is on time, not on commits, so it needs no git
+calls; a PR review that asked for fixes, or one that started before the fixes were resolved, doesn't count.
+The fixes still have to be pushed before they're resolved on the board.
 
 ### Fallbacks: when no agent runs the round
 

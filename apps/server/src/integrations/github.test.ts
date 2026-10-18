@@ -1,4 +1,4 @@
-import type { AppSettings, PrSnapshot, TaskLink, TaskStatus } from "@repo/contracts";
+import { prReviewHeader, type AppSettings, type PrSnapshot, type TaskLink, type TaskStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
@@ -13,6 +13,7 @@ import {
   StaleReviewError,
   type GithubServices,
 } from "./github.ts";
+import { GithubApiError, isTransientGithubError } from "./githubApi.ts";
 import type { LinkSnapshot } from "../services/types.ts";
 
 const repo = {
@@ -888,6 +889,94 @@ describe("github postReview", () => {
     expect(retry!.input.body).toContain("Summary");
     expect(retry!.input.body).toContain("`src/a.ts:3`");
     expect(retry!.input.body).toContain("A comment");
+  });
+
+  describe("when GitHub answers with an error", () => {
+    const body = `${prReviewHeader()}\n\nSummary`;
+    const internal = "An internal error occurred, please try again.";
+
+    it("counts the review as posted when GitHub created it all the same, without posting again", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.failNextReview(internal, { landed: true });
+      const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] });
+      expect(posted).toEqual({
+        id: 901,
+        url: "https://github.com/o/r/pull/7#pullrequestreview-901",
+        headOid: "abcdef1234567890",
+        folded: 0,
+      });
+      expect(gh.mutations.map((m) => m.operation)).toEqual(["PostPullRequestReview"]);
+    });
+
+    it("counts it as posted also when the review has inline comments, and doesn't fold them in", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.failNextReview(internal, { landed: true });
+      const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body, comments });
+      expect(posted).toMatchObject({ id: 901, folded: 0 });
+      expect(gh.mutations).toHaveLength(1);
+    });
+
+    it("fails, labelled as GitHub's, with the kind kept, when no review is there; a transient one isn't folded", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.failNextReview(internal, { landed: false });
+      const error = await github.postReview(ref, { reviewedSha: "abcdef1", body, comments }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(GithubApiError);
+      expect(error).toMatchObject({ kind: "response", message: `GitHub couldn't post the review: ${internal}` });
+      expect(isTransientGithubError(error)).toBe(true);
+      // One post, as it was: not the same review again without its comments.
+      expect(gh.mutations.map((m) => m.operation)).toEqual(["PostPullRequestReview"]);
+    });
+
+    it("doesn't look for a review after a plain refusal", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      // An earlier review at this head must not stand in for one GitHub refused.
+      gh.reviews.set("o/r#7", [{ databaseId: 1, url: "u1", body, oid: "abcdef1234567890" }]);
+      gh.failNextMutation("Pull request review thread line must be part of the diff");
+      await expect(github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] })).rejects.toThrow(/line must/);
+      expect(gh.requests.map((r) => r.operation)).not.toContain("PullRequestViewerReviews");
+    });
+
+    it("ignores an older review of the same head: it isn't the post that failed", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.reviews.set("o/r#7", [
+        { databaseId: 1, url: "u1", body, oid: "abcdef1234567890", submittedAt: "2026-01-01T00:00:00Z" },
+      ]);
+      gh.failNextReview(internal, { landed: false });
+      await expect(github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] })).rejects.toThrow(/internal/);
+    });
+
+    it("ignores another commit's review and one with another's text", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.reviews.set("o/r#7", [
+        { databaseId: 1, url: "u1", body, oid: "1111111111111111" },
+        { databaseId: 2, url: "u2", body: "A review by hand", oid: "abcdef1234567890" },
+      ]);
+      gh.failNextReview(internal, { landed: false });
+      await expect(github.postReview(ref, { reviewedSha: "abcdef1", body, comments: [] })).rejects.toThrow(/internal/);
+    });
+
+    it("still puts comments GitHub refuses into the body when no review landed", async () => {
+      const { gh, github } = setup([ghLink("l1", 7)]);
+      gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+      gh.failNextThreadedReview();
+      const posted = await github.postReview(ref, { reviewedSha: "abcdef1", body, comments });
+      expect(posted.folded).toBe(1);
+    });
+  });
+
+  it("labels a refusal as GitHub's", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    gh.failNextMutation("Pull request review thread line must be part of the diff");
+    await expect(github.postReview(ref, { reviewedSha: "abcdef1", body: "x", comments: [] })).rejects.toThrow(
+      "GitHub couldn't post the review: Pull request review thread line must be part of the diff",
+    );
   });
 
   it("reports a host gh isn't signed in to, and GitHub's refusal", async () => {

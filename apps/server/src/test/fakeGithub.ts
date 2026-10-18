@@ -23,6 +23,13 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
   /** Refuse the next review that has inline threads, as GitHub does for a line outside the diff. */
   let failNextThreadedReview = false;
   let reviewCount = 0;
+  /** An error for the next review post, which GitHub may or may not have created before answering with it. */
+  let failNextReview: { message: string; landed: boolean } | null = null;
+  /** The reviews the signed-in account has posted, by PR key. */
+  const reviews = new Map<
+    string,
+    { databaseId: number; url: string; body: string; oid: string; submittedAt?: string }[]
+  >();
 
   const repoOf = (owner: string, name: string): GraphqlRepo | undefined =>
     repos.get(`${owner}/${name}`) ??
@@ -88,6 +95,22 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
           },
         },
       };
+    }
+    if (operation === "PullRequestViewerReviews") {
+      const { owner, name, number } = variables as { owner: string; name: string; number: number };
+      const key = `${owner}/${name}#${number}`;
+      if (!prs.has(key))
+        return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a PullRequest" }] };
+      const nodes = (reviews.get(key) ?? []).map((r) => ({
+        databaseId: r.databaseId,
+        url: r.url,
+        state: "COMMENTED",
+        submittedAt: r.submittedAt ?? new Date().toISOString(),
+        viewerDidAuthor: true,
+        body: r.body,
+        commit: { oid: r.oid },
+      }));
+      return { data: { repository: { pullRequest: { reviews: { nodes } } } } };
     }
     if (operation === "PullRequestId") {
       const { owner, name, number } = variables as { owner: string; name: string; number: number };
@@ -156,15 +179,20 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
         mutations.push({ operation: `${operation} (refused)`, input });
         return { data: null, errors: [{ type: "UNPROCESSABLE", message: "Line must be part of the diff" }] };
       }
+      const refused = failNextReview;
+      failNextReview = null;
       reviewCount += 1;
       const id = 900 + reviewCount;
-      return {
-        data: {
-          addPullRequestReview: {
-            pullRequestReview: { databaseId: id, url: `https://github.com/o/r/pull/7#pullrequestreview-${id}` },
-          },
-        },
-      };
+      const url = `https://github.com/o/r/pull/7#pullrequestreview-${id}`;
+      if (!refused || refused.landed) {
+        const key = [...prs.entries()].find(([, p]) => p === pr)![0];
+        reviews.set(key, [
+          ...(reviews.get(key) ?? []),
+          { databaseId: id, url, body: String(input.body), oid: String(input.commitOID) },
+        ]);
+      }
+      if (refused) return { data: null, errors: [{ type: "INTERNAL", message: refused.message }] };
+      return { data: { addPullRequestReview: { pullRequestReview: { databaseId: id, url } } } };
     }
     if (operation === "MergePullRequest") pr.state = "MERGED";
     else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
@@ -206,6 +234,11 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
     failNextThreadedReview() {
       failNextThreadedReview = true;
     },
+    /** The next review post answers with this error; with `landed`, GitHub created the review all the same. */
+    failNextReview(message: string, how: { landed: boolean }) {
+      failNextReview = { message, landed: how.landed };
+    },
+    reviews,
   };
 }
 

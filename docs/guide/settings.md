@@ -60,8 +60,8 @@ and a click tries again.
   model.
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
-- On the Autopilot page each automation is folded: its Inherit / On / Off switch is in the header, and opening it
-  shows what it does and its settings.
+- On the Autopilot page each automation is folded: its On / Off switch is in the header, and opening it
+  shows what it does and its settings. Only a project's or epic's switch has Inherit.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
 
 Editing a template, a custom automation or a recurring rule opens it as a page of its own; the top bar shows where

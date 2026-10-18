@@ -28,6 +28,7 @@ export * from "./customAutomations.ts";
 export * from "./automationBundle.ts";
 export * from "./automationExamples.ts";
 export * from "./digest.ts";
+export * from "./stats.ts";
 export * from "./notifications.ts";
 export * from "./keybindings.ts";
 export * from "./delivery.ts";

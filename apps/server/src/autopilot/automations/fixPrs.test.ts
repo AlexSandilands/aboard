@@ -532,6 +532,115 @@ describe("fix PRs: limits", () => {
     expect(runs()[0]!.needsAttention).toBe(true);
   });
 
+  describe("conflict-only attempts", () => {
+    const head = (n: number) => n.toString(16).padStart(40, "0");
+
+    it("don't use up the rounds or the attempts per head that review points and checks have", async () => {
+      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
+      engineSettings({ prReviewRounds: 2 });
+      turnOn();
+      for (const n of [1, 2, 3]) {
+        setPr({ mergeable: "conflicting", headOid: head(n) });
+        await pass();
+      }
+      expect(requests).toHaveLength(3);
+      expect(runs().map((r) => r.summary)).toEqual([
+        expect.stringContaining("(conflict attempt 3 of 5)"),
+        expect.stringContaining("(conflict attempt 2 of 5)"),
+        expect.stringContaining("(conflict attempt 1 of 5)"),
+      ]);
+      expect(requests[2]!.prompt).toContain("This is conflict-only fix attempt 3 of at most 5 on this PR.");
+      // Both rounds are still there for real fixes, and so are both attempts at the head the conflicts moved to.
+      setPr({ checks: "failing", headOid: head(4) });
+      await pass();
+      setPr({ checks: "failing", headOid: head(4), reviewComments: [comment(1)] });
+      await pass();
+      expect(requests).toHaveLength(5);
+      expect(requests[4]!.prompt).toContain("This is fix attempt 2 of at most 2 on this PR.");
+      expect(runs()[0]!.summary).toContain("(attempt 2 of 2)");
+      setPr({ checks: "failing", headOid: head(5) });
+      await pass();
+      expect(runs()[0]!.summary).toBe("Autopilot gave up on PR #7: 2 fix attempts used, still to fix: failing checks");
+    });
+
+    it("stop at five, failed ones counted and skipped ones not", async () => {
+      const { requests, setPr, pass, turnOn, runs, failRunner, linkId, s, task } = setup();
+      turnOn();
+      failRunner(new WorktreeHeadError("moved", head(2), true));
+      setPr({ mergeable: "conflicting", headOid: head(1) });
+      await pass();
+      failRunner(new Error("budget"));
+      setPr({ mergeable: "conflicting", headOid: head(2) });
+      await pass();
+      failRunner(null);
+      for (const n of [3, 4, 5, 6]) {
+        setPr({ mergeable: "conflicting", headOid: head(n) });
+        await pass();
+      }
+      expect(requests).toHaveLength(6);
+      expect(runs().map((r) => r.status)).toEqual([
+        "succeeded",
+        "succeeded",
+        "succeeded",
+        "succeeded",
+        "failed",
+        "skipped",
+      ]);
+      setPr({ mergeable: "conflicting", headOid: head(7) });
+      await pass();
+      expect(requests).toHaveLength(6);
+      const gaveUp = runs()[0]!;
+      expect(gaveUp).toMatchObject({
+        dedupeKey: `fix:gave_up:${linkId()}:conflicts`,
+        summary: "Autopilot gave up on PR #7: 5 conflict-only attempts used, still to fix: merge conflicts",
+        needsAttention: true,
+      });
+      expect(s.tasks.summary(task.id).attention.map((a) => a.message)).toContain(gaveUp.summary);
+      // Given up once, however often the base moves on.
+      setPr({ mergeable: "conflicting", headOid: head(8) });
+      await pass();
+      expect(runs()).toHaveLength(7);
+    });
+
+    it("still run once the rounds and the attempts at that head are used, unless checks fail with them", async () => {
+      const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
+      engineSettings({ prReviewRounds: 2 });
+      turnOn();
+      setPr({ checks: "failing", headOid: head(1) });
+      await pass();
+      setPr({ checks: "failing", headOid: head(1), reviewComments: [comment(1)] });
+      await pass();
+      setPr({ checks: "failing", headOid: head(1), reviewComments: [comment(1)], mergeable: "conflicting" });
+      await pass();
+      expect(requests).toHaveLength(3);
+      expect(runs()[0]!.summary).toContain("merge conflicts (conflict attempt 1 of 5)");
+      // A new head with failing checks and a conflict together is a normal attempt, and the rounds are gone.
+      setPr({ checks: "failing", headOid: head(2), mergeable: "conflicting" });
+      await pass();
+      expect(requests).toHaveLength(3);
+      expect(runs()[0]).toMatchObject({
+        dedupeKey: `fix:gave_up:${linkId()}`,
+        summary: "Autopilot gave up on PR #7: 2 fix attempts used, still to fix: failing checks, merge conflicts",
+      });
+    });
+
+    it("count a mixed attempt as a round", async () => {
+      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
+      engineSettings({ prReviewRounds: 1 });
+      turnOn();
+      setPr({ checks: "failing", mergeable: "conflicting", headOid: head(1) });
+      await pass();
+      expect(runs()[0]!.summary).toContain("failing checks, merge conflicts (attempt 1 of 1)");
+      setPr({ mergeable: "conflicting", headOid: head(2) });
+      await pass();
+      expect(runs()[0]!.summary).toContain("merge conflicts (conflict attempt 1 of 5)");
+      setPr({ checks: "failing", headOid: head(3) });
+      await pass();
+      expect(requests).toHaveLength(2);
+      expect(runs()[0]!.summary).toBe("Autopilot gave up on PR #7: 1 fix attempt used, still to fix: failing checks");
+    });
+  });
+
   it("only previews in dry run", async () => {
     const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
     engineSettings({ dryRun: true });
@@ -679,7 +788,7 @@ describe("manualFix: Fix in → on a PR", () => {
 
 describe("fix PRs: an integration epic's own PR", () => {
   it("fixes only its conflicts with the default branch, in a session of its own on the epic's branch", async () => {
-    const { s, project, requests, pass, turnOn } = setup();
+    const { s, project, requests, pass, turnOn, engineSettings } = setup();
     turnOn();
     const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [], "user");
     const pr = () => s.tasks.summary(epic.id).links.find((l) => l.kind === "pr")!;
@@ -712,5 +821,14 @@ describe("fix PRs: an integration epic's own PR", () => {
     expect(requests[0]!.prompt).toContain("**Merge conflicts**");
     expect(requests[0]!.prompt).not.toContain("**Failing checks.**");
     expect(requests[0]!.prompt).toContain("never merge the pull request");
+
+    // Conflicts have a budget of their own, so the epic's PR keeps being fixed past the PR rounds.
+    engineSettings({ prReviewRounds: 1 });
+    for (const sha of [SHA_A, SHA_B]) {
+      epicPr({ mergeable: "conflicting", headOid: sha });
+      await pass();
+    }
+    expect(requests).toHaveLength(3);
+    expect(requests[2]!.prompt).toContain("This is conflict-only fix attempt 3 of at most 5 on this PR.");
   });
 });

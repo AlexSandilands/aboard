@@ -129,6 +129,39 @@ export function createLinksRepo(sql: Sql) {
       );
       return new Map(rows.map((r) => [r.id, JSON.parse(r.pr_changes_json!) as PrChanges]));
     },
+    /** PR links whose merge the board saw at or after `from` and before `to`, with the task's project. */
+    prsMergedBetween(from: string, to: string): { url: string; projectId: string; at: string }[] {
+      return sql
+        .all<{ url: string; project_id: string; at: string }>(
+          `SELECT l.url, t.project_id, json_extract(l.pr_changes_json, '$.merged') AS at
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL
+             AND json_extract(l.pr_changes_json, '$.merged') >= ? AND json_extract(l.pr_changes_json, '$.merged') < ?
+           ORDER BY at, l.id`,
+          from,
+          to,
+        )
+        .map((r) => ({ url: r.url, projectId: r.project_id, at: r.at }));
+    },
+    /**
+     * Agent sessions first linked to a task at or after `from` and before `to`, with that task's project. A session
+     * linked again later, or to other tasks, counts only where it was first linked.
+     */
+    agentSessionsStartedBetween(from: string, to: string): { projectId: string; at: string }[] {
+      return sql
+        .all<{ project_id: string; at: string }>(
+          `SELECT project_id, at FROM (
+             SELECT t.project_id, l.created_at AS at,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY COALESCE(json_extract(l.ref_json, '$.sessionId'), l.id) ORDER BY l.created_at, l.id
+                    ) AS n
+             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind = 'agent_session'
+           ) WHERE n = 1 AND at >= ? AND at < ? ORDER BY at`,
+          from,
+          to,
+        )
+        .map((r) => ({ projectId: r.project_id, at: r.at }));
+    },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);
     },

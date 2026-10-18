@@ -79,9 +79,27 @@ export const AUTOPILOT_MODES: ReadonlyArray<{ value: AutopilotMode; label: strin
 ];
 
 /**
- * What the Inherit choice resolves to at a scope, e.g. "Inherit (On from board)". `parent` is the entry at the scope
- * above (the board's, for a project; the project's, for an epic, which already resolves through the board); the board
- * itself has none, so Inherit there is off by default.
+ * The board is the top scope, so Inherit there only falls back to the built-in default, which is Off: its switch
+ * offers On and Off alone.
+ */
+export const BOARD_MODES = AUTOPILOT_MODES.filter((mode) => mode.value !== "inherit");
+
+/** The board switch's choice for a stored mode: no row (inherit) reads as Off. */
+export const boardSwitchValue = (mode: AutopilotMode): AutopilotMode => (mode === "inherit" ? "off" : mode);
+
+/**
+ * The mode to save for a board switch choice. Off is saved as inherit, which drops the board's row unless it still
+ * holds config, since both resolve to Off.
+ */
+export const boardModeToSave = (mode: AutopilotMode): AutopilotMode => (mode === "off" ? "inherit" : mode);
+
+/** What the board switch's row says about the choice. */
+export const boardSummary = (mode: AutopilotMode): string => (mode === "on" ? "On for the board" : "Off for the board");
+
+/**
+ * What the Inherit choice resolves to at a project or epic, e.g. "Inherit (On from board)". `parent` is the entry at
+ * the scope above (the board's, for a project; the project's, for an epic, which already resolves through the board);
+ * without one (still loading) it reads as off by default.
  */
 export function inheritLabel(parent: Pick<AutopilotScopeEntry, "enabled" | "source"> | null | undefined): string {
   return describeInherited(parent ?? { enabled: false, source: "default" });

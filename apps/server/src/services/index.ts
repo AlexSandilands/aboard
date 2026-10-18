@@ -26,6 +26,7 @@ import { createRecurringService } from "./recurring.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSocialService } from "./social.ts";
+import { createStatsService } from "./stats.ts";
 import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService } from "./tasks.ts";
@@ -154,6 +155,7 @@ export function createServices(deps: ServiceDeps): Services {
     activity: createActivityService(core, {
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
     }),
+    stats: createStatsService(core),
     digests: createDigestsService(core, {
       notifications,
       automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,

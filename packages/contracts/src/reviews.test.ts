@@ -4,6 +4,7 @@ import {
   BOARD_REVIEWER,
   deriveReviewSummary,
   reviewBadgeLabel,
+  reviewFixedAtLimit,
   reviewIsDone,
   reviewIsInProgress,
   reviewWantsAnotherRound,
@@ -18,10 +19,11 @@ const round = (n: number, status: ReviewRoundStatus = "submitted", cycle = 1, re
   status,
   reviewer,
 });
-const finding = (n: number, severity: FindingSeverity, status: FindingStatus = "open") => ({
+const finding = (n: number, severity: FindingSeverity, status: FindingStatus = "open", resolvedAt?: string) => ({
   round: n,
   severity,
   status,
+  resolvedAt: resolvedAt ?? null,
 });
 
 describe("deriveReviewSummary", () => {
@@ -43,6 +45,7 @@ describe("deriveReviewSummary", () => {
       maxRounds: 3,
       open: { blocking: 1, major: 0, minor: 1, nit: 0 },
       byBoard: false,
+      verifiedOnPr: false,
     });
     expect(reviewWantsAnotherRound(summary)).toBe(true);
     expect(reviewBadgeLabel(summary!)).toBe("1 open");
@@ -80,6 +83,52 @@ describe("deriveReviewSummary", () => {
   it("counts gating findings left open in earlier rounds", () => {
     const summary = deriveReviewSummary([round(1), round(2)], [finding(1, "blocking")], 3);
     expect(summary?.state).toBe("changes_requested");
+  });
+});
+
+describe("a fixed round at the round limit", () => {
+  const rounds = [round(1), round(2), round(3)];
+  const fixedAt = "2026-01-01T10:00:00.000Z";
+  const fixed = [finding(3, "major", "fixed", fixedAt), finding(3, "nit")];
+
+  it("is labelled as such, and only at the limit", () => {
+    const atLimit = deriveReviewSummary(rounds, fixed, 3)!;
+    expect(atLimit.state).toBe("fixed");
+    expect(reviewFixedAtLimit(atLimit)).toBe(true);
+    expect(reviewBadgeLabel(atLimit)).toBe("Fixed at round limit");
+    const underLimit = deriveReviewSummary([round(1)], [finding(1, "major", "fixed", fixedAt)], 3)!;
+    expect(reviewFixedAtLimit(underLimit)).toBe(false);
+    expect(reviewBadgeLabel(underLimit)).toBe("Fixed, re-review");
+  });
+
+  it("counts as a clean review when a clean PR review finished after the last fix", () => {
+    const summary = deriveReviewSummary(rounds, fixed, 3, "2026-01-01T10:05:00.000Z")!;
+    expect(summary).toMatchObject({ state: "clean", verifiedOnPr: true });
+    expect(reviewBadgeLabel(summary)).toBe("Reviewed");
+    expect(reviewFixedAtLimit(summary)).toBe(false);
+  });
+
+  it("waits for the newest fix: a PR review between two fixes verifies neither", () => {
+    const findings = [
+      finding(3, "major", "fixed", fixedAt),
+      finding(3, "blocking", "wont_fix", "2026-01-01T10:10:00.000Z"),
+    ];
+    expect(deriveReviewSummary(rounds, findings, 3, "2026-01-01T10:05:00.000Z")?.state).toBe("fixed");
+  });
+
+  it("ignores a PR review from before the fix, or from the same instant", () => {
+    expect(deriveReviewSummary(rounds, fixed, 3, "2026-01-01T09:00:00.000Z")?.state).toBe("fixed");
+    expect(deriveReviewSummary(rounds, fixed, 3, fixedAt)?.state).toBe("fixed");
+  });
+
+  it("ignores a PR review when a fix has no resolution time", () => {
+    const findings = [finding(3, "major", "fixed")];
+    expect(deriveReviewSummary(rounds, findings, 3, "2026-01-01T10:05:00.000Z")?.state).toBe("fixed");
+  });
+
+  it("leaves open gating findings alone: a clean PR review doesn't clear them", () => {
+    const findings = [finding(3, "major")];
+    expect(deriveReviewSummary(rounds, findings, 3, "2026-01-01T10:05:00.000Z")?.state).toBe("stuck");
   });
 });
 
@@ -146,6 +195,7 @@ describe("deriveAttention for reviews", () => {
     maxRounds: 3,
     open: { blocking: 1, major: 1, minor: 0, nit: 0 },
     byBoard,
+    verifiedOnPr: false,
   });
 
   it("flags loops that ended without a clean result", () => {

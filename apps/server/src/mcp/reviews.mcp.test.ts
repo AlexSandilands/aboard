@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { AUTOPILOT_REVIEW_PRS } from "@repo/contracts";
+import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -218,6 +220,51 @@ describe("local review loop over MCP", () => {
     expect(await detail()).toContain("PR: the review loop has ended");
     await call(agent, "move_task", { task: taskRef, status: "in_progress" });
     expect(await detail()).not.toContain("PR: the review loop");
+  });
+
+  it("says in get_task when fixes made at the round limit won't be re-reviewed, or were re-reviewed on the PR", async () => {
+    h.services.settings.update({ reviewMaxRounds: 1 });
+    const id = h.services.tasks.resolveId(taskRef);
+    h.services.reviews.submit(id, { findings: [{ severity: "major", title: "Unquoted fields" }] }, "reviewer");
+    h.services.reviews.resolveFinding(id, "R1.1", { status: "fixed" }, "agent");
+    const atLimit = "The fixes were made in the last allowed round, so no round will re-review them.";
+    const onPr = "The fixes were re-reviewed on the pull request";
+
+    const before = (await call(agent, "get_task", { task: taskRef })).text;
+    expect(before).toContain("Local review: Fixed at round limit");
+    expect(before).toContain(atLimit);
+    expect(before).not.toContain(onPr);
+
+    // Autopilot's PR review starts after the fix and comes back clean.
+    const start = new Date(Date.now() + 60_000).toISOString();
+    createRepos(h.db).autopilotRuns.insert({
+      id: "run-1",
+      automation: AUTOPILOT_REVIEW_PRS,
+      taskId: id,
+      projectId: h.services.tasks.summary(id).projectId,
+      dedupeKey: "review:pr:l:abc",
+      status: "succeeded",
+      summary: "",
+      dryRun: false,
+      runner: null,
+      sessionId: null,
+      threadUrl: null,
+      worktreePath: null,
+      costUsd: null,
+      detail: null,
+      exitCode: null,
+      error: null,
+      needsAttention: false,
+      output: { kind: "pr_review", handoff: "clean", counts: { blocking: 0, major: 0, minor: 0, nit: 0 } },
+      createdAt: start,
+      startedAt: start,
+      finishedAt: start,
+      updatedAt: start,
+    });
+    const after = (await call(agent, "get_task", { task: taskRef })).text;
+    expect(after).toContain("Local review: Reviewed");
+    expect(after).toContain(onPr);
+    expect(after).not.toContain(atLimit);
   });
 
   it("follows a per-task override set through update_task", async () => {

@@ -93,7 +93,11 @@ when it changed.
 The poller's snapshot (`state`, `headRef`, `headOid`, `isCrossRepository`) is what the **Review PRs** automation
 reads: it reviews an open (or, if asked, draft) PR once per head commit. `postReview` posts the result with the
 `gh` token as one review with `event: COMMENT` (`addPullRequestReview`), after checking the PR's live head is the
-commit that was reviewed; inline comments GitHub refuses (a line outside the diff) go into the body. See
+commit that was reviewed; inline comments GitHub refuses (a line outside the diff) go into the body. When GitHub
+answers a post with an error, `postReview` looks for the review among the account's own at that head
+(`findPostedReview`, starting with the review header) before reporting the failure, so a review that landed counts as
+posted. Its errors read "GitHub couldn't post the review: …" and keep their kind, which `isTransientGithubError` (also
+used by the epic merge) reads to tell what is worth another try. See
 [Autopilot](autopilot.md#automations).
 
 **Fix PRs** reads `checks`, `mergeable`, `reviewDecision`, `reviews` and `reviewComments` to decide when a PR needs
