@@ -93,6 +93,12 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    A task can also be marked **priority** (`priority: true` on `create_task` / `add_to_backlog` / `update_task`; `false` clears
    it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
 
+   A task can be a **manual task** (`manual: true` on `create_task` / `add_to_backlog` / `update_task`): a to-do
+   for a person rather than code, such as an access request or a sign-off. It needs no plan, can't be flagged for
+   Autopilot or auto-merge, and agents and Autopilot leave it alone: never work on one, hand it off or link a
+   session to it (`get_task` shows **Manual task: yes**, `list_tasks` tags it `[manual]`). When your work waits on
+   something only a person can do, add it as a manual task and pass it as `blockedBy` on your task.
+
    A task can have a **due date** (`dueDate: "YYYY-MM-DD"` on `update_task`; `null` clears it). Set it only when the user
    gives you a date; never invent one.
 

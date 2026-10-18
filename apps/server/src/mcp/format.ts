@@ -146,7 +146,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   } else if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
-  } else if (task.status === "backlog") {
+  } else if (task.status === "backlog" && !task.manual) {
     parts.push("no plan");
   }
   if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
@@ -162,8 +162,8 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   if (task.review) parts.push(`review: ${reviewBadgeLabel(task.review)}`);
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
   const labels = task.labels.length ? ` ${task.labels.map((l) => `[${l}]`).join(" ")}` : "";
-  const epic = task.kind === "epic" ? " [epic]" : "";
-  return `#${task.number} ${task.title}${epic}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
+  const kind = task.kind === "epic" ? " [epic]" : task.manual ? " [manual]" : "";
+  return `#${task.number} ${task.title}${kind}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /** Tasks grouped under status headings, in board column order. */
@@ -331,6 +331,8 @@ export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness 
   const hints = [...keys]
     .filter((key) => !linked.has(key))
     .map((key) => `Jira ${key}: link(task: ${ref}, value: "${key}")`);
+  // No agent works on a manual task, so it has no thread, session or PR to link.
+  if (task.manual) return hints;
   if (!task.links.some((l) => l.kind === "t3_thread")) {
     hints.push(
       `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
@@ -377,7 +379,9 @@ export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsag
 
 /** A nudge, at planning moments, to suggest a model tier for a planned open task that has none. */
 export function suggestedModelHint(task: TaskDetail): string | null {
-  if (task.suggestedModel || task.progress.total === 0 || task.resolution || task.status === "done") return null;
+  if (task.suggestedModel || task.manual || task.progress.total === 0 || task.resolution || task.status === "done") {
+    return null;
+  }
   return (
     "This task has no suggested model. Judge how much reasoning implementing it needs and call " +
     `update_task(task: "#${task.number}", suggestedModel: {tier: "light" | "standard" | "deep", reason}).`
@@ -390,7 +394,7 @@ export function suggestedModelHint(task: TaskDetail): string | null {
  * flag lets the board start an agent on the task unattended, so it is the user's call.
  */
 export function autopilotFlagHint(task: TaskDetail): string | null {
-  if (task.autopilot !== null || task.kind === "epic" || task.progress.total === 0) return null;
+  if (task.autopilot !== null || task.kind === "epic" || task.manual || task.progress.total === 0) return null;
   if (task.resolution || task.archivedAt || (task.status !== "backlog" && task.status !== "planned")) return null;
   return (
     "Autopilot's Start planned tasks is on for this task, and only starts tasks flagged for Autopilot. " +
@@ -429,7 +433,8 @@ const stepLabels = (phases: ReadonlyArray<PlanPhase>) =>
  * `closing` is set by the move to Done, so a long-Done task never nags; `now` is passed in for tests.
  */
 export function progressHints(task: TaskDetail, now: number, opts: { closing?: boolean } = {}): string[] {
-  if (task.kind === "epic" || task.archivedAt || task.resolution || task.progress.total === 0) return [];
+  // A manual task's plan, if it has one, is the user's checklist: nobody is reporting progress on it.
+  if (task.kind === "epic" || task.manual || task.archivedAt || task.resolution || task.progress.total === 0) return [];
   const ref = `"#${task.number}"`;
   const steps = stepLabels(task.phases);
   const open = steps.filter((s) => s.step.status !== "done" && s.step.status !== "skipped");
@@ -640,6 +645,9 @@ export function renderTaskDetail(
     lines.push(`Auto-merge: ${task.autoMerge ? "on (merge_task_pr may merge its PR)" : "off"}`);
   }
   if (task.priority) lines.push("Priority: yes (shown in the priority lane)");
+  if (task.manual) {
+    lines.push("Manual task: yes (a to-do for a person; agents and Autopilot leave it alone, so don't work on it)");
+  }
   if (task.dueDate) lines.push(`Due: ${task.dueDate}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
   if (task.currentStep) {
@@ -692,7 +700,7 @@ export function renderTaskDetail(
       phase.steps.flatMap((step, si) => (step.notes?.trim() ? [`  ${pi + 1}.${si + 1}: ${step.notes.trim()}`] : [])),
     );
     if (withNotes.length) lines.push("Step notes:", ...withNotes);
-  } else if (task.resolution) {
+  } else if (task.resolution || task.manual) {
     lines.push("Plan: none.");
   } else {
     lines.push("Plan: none yet. Add one with set_plan before moving this out of Backlog.");

@@ -32,6 +32,7 @@ import { Button } from "~/components/ui/button";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "~/components/ui/command";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useTheme } from "~/hooks/useTheme";
@@ -288,6 +289,8 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   // The template a new task starts from, and the title and description it last filled in (see followTemplate).
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [applied, setApplied] = useState({ title: "", description: "" });
+  // A manual task is a to-do for a person: it needs no plan, so the planned flow skips the plan editor.
+  const [manual, setManual] = useState(false);
 
   const addProject = useAddProject();
   const newGeneralTask = useNewGeneralTask();
@@ -414,6 +417,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
     const template = issue ? undefined : availableTemplates.find((t) => t.id === templateId);
     const { fields: templateFields, planFromTemplate } = templateRequest(template, flow);
+    const asManual = manual && flow !== "epic" && !issue;
     createTask.mutate(
       {
         projectId,
@@ -424,6 +428,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         ...(flow === "epic" ? { kind: "epic" as const } : {}),
         ...(epicId ? { epicId } : {}),
         ...templateFields,
+        ...(asManual ? { manual: true, ...(flow === "planned" ? { status: "planned" as const } : {}) } : {}),
       },
       {
         onSuccess: (task) => {
@@ -431,7 +436,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           if (flow === "planned") {
             closePalette();
             void navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: task.id }) }).then(() =>
-              planFromTemplate ? undefined : usePanel.getState().requestPlanEditor(),
+              planFromTemplate || asManual ? undefined : usePanel.getState().requestPlanEditor(),
             );
             return;
           }
@@ -1045,6 +1050,12 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                     ))}
                   </SelectPopup>
                 </Select>
+              ) : null}
+              {view.flow !== "epic" ? (
+                <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                  <Switch size="sm" checked={manual} aria-label="Manual task" onCheckedChange={(on) => setManual(on)} />
+                  Manual task · a to-do for a person, which agents and Autopilot leave alone
+                </div>
               ) : null}
               <MarkdownInput
                 input={descriptionInput.input}

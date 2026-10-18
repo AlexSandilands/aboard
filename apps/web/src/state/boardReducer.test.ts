@@ -35,6 +35,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     autopilot: null,
     autoMerge: null,
     priority: false,
+    manual: false,
     dueDate: null,
     delivery: null,
     integrationBranch: null,

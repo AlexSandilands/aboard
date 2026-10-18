@@ -138,7 +138,10 @@ export function createReviewsService(
     list: reviewsOf,
 
     effectiveAutoReview(taskId) {
-      return deps.task(taskId).autoReview ?? loadSettings(repos).autoReview;
+      const task = deps.task(taskId);
+      // A manual task has no change for a reviewer to read.
+      if (task.manual) return false;
+      return task.autoReview ?? loadSettings(repos).autoReview;
     },
 
     skillFor,

@@ -106,10 +106,18 @@ describe("pillTimerAt", () => {
   });
 
   it("finds work the way the server does", () => {
-    const task = { projectId: "p", archivedAt: null, status: "in_progress" as const, attention: [], autoMerge: null };
+    const task = {
+      projectId: "p",
+      archivedAt: null,
+      status: "in_progress" as const,
+      attention: [],
+      autoMerge: null,
+      manual: false,
+    };
     expect(projectHasOrchestrateWork([task], "p")).toBe(true);
     expect(projectHasOrchestrateWork([task], "other")).toBe(false);
     expect(projectHasOrchestrateWork([{ ...task, status: "review" }], "p")).toBe(false);
     expect(projectHasOrchestrateWork([{ ...task, status: "review", autoMerge: true }], "p")).toBe(true);
+    expect(projectHasOrchestrateWork([{ ...task, manual: true }], "p")).toBe(false);
   });
 });

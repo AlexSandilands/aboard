@@ -166,6 +166,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       autopilot: record.autopilot,
       autoMerge: record.autoMerge,
       priority: record.priority,
+      manual: record.manual,
       dueDate: record.dueDate,
       delivery: record.kind === "epic" ? record.delivery : null,
       integrationBranch: integrationBranchOf(record, record.parentId ? referenced.get(record.parentId) : undefined),

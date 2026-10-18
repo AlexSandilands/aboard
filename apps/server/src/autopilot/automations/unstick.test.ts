@@ -119,6 +119,14 @@ describe("unstick stale tasks", () => {
     expect(runs()).toHaveLength(0);
   });
 
+  it("leaves manual tasks alone, however quiet", async () => {
+    const { s, working, pass, runs, turnOn } = setup();
+    s.tasks.update(working().id, { manual: true }, "user");
+    turnOn();
+    await pass(30 * HOUR_MS);
+    expect(runs()).toHaveLength(0);
+  });
+
   it("only reminds: it never posts into the thread", async () => {
     const { working, withThread, pass, turnOn, nudges, runs, notices } = setup();
     withThread(working().id, "input");

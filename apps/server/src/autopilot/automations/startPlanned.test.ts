@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { NO_GITHUB, RunAbandonedError, type Runner, type RunnerRequest } from "../types.ts";
-import { AUTOPILOT_START_PLANNED, START_POLL_MS, startPlanned } from "./startPlanned.ts";
+import { AUTOPILOT_START_PLANNED, notStartable, START_POLL_MS, startPlanned } from "./startPlanned.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 
@@ -135,6 +135,17 @@ describe("start planned tasks: eligibility", () => {
     turnOn();
     await pass();
     expect(runs()).toEqual([]);
+  });
+
+  it("never starts a manual task", async () => {
+    const { s, task, pass, runs, turnOn } = setup();
+    const manual = task("Manual");
+    s.tasks.update(manual.id, { manual: true }, "user");
+    turnOn();
+    await pass();
+    expect(runs()).toEqual([]);
+    // Turning it manual cleared its flag; the rule refuses it even if one were left.
+    expect(notStartable({ ...s.tasks.summary(manual.id), autopilot: true })).toBe("it's a manual task");
   });
 
   it("leaves a flagged task in a project with no folder, instead of failing a run for it", async () => {

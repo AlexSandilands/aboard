@@ -160,6 +160,12 @@ describe("orchestrate prompt", () => {
 });
 
 describe("handoffModeError", () => {
+  it("refuses every prompt for a manual task", () => {
+    for (const mode of ["work", "plan"] as const) {
+      expect(handoffModeError({ number: 7, kind: "task", manual: true }, mode)).toContain("is a manual task");
+    }
+  });
+
   it("orchestrates epics only, and gives subagents work prompts only", () => {
     expect(handoffModeError({ number: 7, kind: "epic" }, "orchestrate")).toBeNull();
     expect(handoffModeError({ number: 7, kind: "epic" }, "work")).toContain("is an epic");

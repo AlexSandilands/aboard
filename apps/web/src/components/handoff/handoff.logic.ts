@@ -17,12 +17,13 @@ import {
 
 /**
  * Hand-off actions belong to work that's still open. An epic's hand-off orchestrates its tasks, and stays on a
- * finished epic (its card in Done) so its session can be reopened and tasks added to it can be started.
+ * finished epic (its card in Done) so its session can be reopened and tasks added to it can be started. A manual task
+ * is for a person, so no agent is handed it (the server refuses too).
  */
 export function showHandoffActions(
-  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
+  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind" | "manual">>,
 ) {
-  return (task.status !== "done" || task.kind === "epic") && task.archivedAt === null;
+  return (task.status !== "done" || task.kind === "epic") && task.archivedAt === null && !task.manual;
 }
 
 /**
@@ -30,7 +31,7 @@ export function showHandoffActions(
  * can have several threads (a follow-up for conflicts, a review, …), so linked ones don't hide it. Whether T3 really has the project is only known once the dialog loads its options.
  */
 export function canStartT3Thread(
-  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind">>,
+  task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind" | "manual">>,
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
   t3: Pick<T3IntegrationStatus, "detected">,
   settings: HandoffSettings | undefined,

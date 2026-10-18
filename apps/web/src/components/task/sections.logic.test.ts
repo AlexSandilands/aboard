@@ -30,6 +30,7 @@ function task(patch: Partial<SectionTask> = {}): SectionTask {
     autoReview: null,
     autoMerge: null,
     priority: false,
+    manual: false,
     progress: { done: 0, total: 0 },
     currentStep: null,
     description: null,
@@ -289,6 +290,7 @@ describe("summarizeSection", () => {
     expect(summarizeSection("automation", task({ autopilot: false, autoReview: true }))).toBe(
       "Autopilot off · Auto-review on",
     );
+    expect(summarizeSection("automation", task({ manual: true, autoReview: true }))).toBe("Manual task");
   });
 
   it("review", () => {

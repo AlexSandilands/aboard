@@ -69,6 +69,7 @@ const FIELDS: AutopilotField[] = [
 /** Why a task can't be started, or null when it can. The same rules decide the candidates and re-check them. */
 export function notStartable(task: TaskSummary): string | null {
   if (task.kind === "epic") return "it's an epic";
+  if (task.manual) return "it's a manual task";
   if (task.archivedAt !== null) return "it's archived";
   if (task.status !== "planned") return "it's no longer in Planned";
   if (task.autopilot !== true) return "its Autopilot flag isn't On";
@@ -109,7 +110,7 @@ export function workingAgents(services: Services, now: Date): number {
     services.tasks.summaries({ status }),
   );
   return open.filter((task) => {
-    if (task.kind === "epic" || task.archivedAt !== null) return false;
+    if (task.kind === "epic" || task.manual || task.archivedAt !== null) return false;
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");

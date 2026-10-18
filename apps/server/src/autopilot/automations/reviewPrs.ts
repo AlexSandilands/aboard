@@ -320,7 +320,7 @@ export const reviewPrs = defineAutomation({
   check: ({ services, engine, projects }) =>
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
-        if (task.kind === "epic" || task.archivedAt !== null || task.status === "done") return [];
+        if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
         // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
         // is about to change. Only in Review, where the watchdog runs rounds; later the PR is reviewed as usual.
         if (

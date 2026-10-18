@@ -198,6 +198,13 @@ export function createLinksService(
       return core.write((fx) => {
         const task = deps.task(taskId);
         const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
+        if (classified.kind === "agent_session" && task.manual) {
+          throw new AppError(
+            "VALIDATION",
+            `#${task.number} is a manual task, which people do and agents leave alone, so no agent session is linked ` +
+              "to it. Make it a code task first (update_task manual: false) if an agent should work on it.",
+          );
+        }
         const existing =
           repos.links.find(task.id, classified.kind, classified.url) ??
           // A Jira issue is one link however it was written: a bare key, or a URL on any host.

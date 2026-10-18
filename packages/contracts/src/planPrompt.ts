@@ -145,9 +145,11 @@ export const planTasksShortPrompt = (tasks: ReadonlyArray<Pick<TaskSummary, "num
  * plan, never an epic (its tasks carry the plans).
  */
 export function planTaskProblem(
-  task: Pick<TaskSummary, "number" | "kind" | "archivedAt" | "status" | "progress">,
+  task: Pick<TaskSummary, "number" | "kind" | "archivedAt" | "status" | "progress"> &
+    Partial<Pick<TaskSummary, "manual">>,
 ): string | null {
   if (task.kind === "epic") return `#${task.number} is an epic: plan its tasks instead`;
+  if (task.manual) return `#${task.number} is a manual task, which needs no plan`;
   if (task.archivedAt) return `#${task.number} is archived`;
   if (task.status === "done") return `#${task.number} is done`;
   if (task.status !== "backlog" && task.progress.total > 0) return `#${task.number} already has a plan`;

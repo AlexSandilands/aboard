@@ -28,6 +28,7 @@ describe("picking cards to plan", () => {
 
   it("picks Backlog and plan-less open tasks, never epics, archived or done ones", () => {
     expect(canPickTask(task({}))).toBe(true);
+    expect(canPickTask(task({ manual: true }))).toBe(false);
     expect(canPickTask(task({ status: "backlog", progress: { done: 0, total: 3 } }))).toBe(true);
     expect(canPickTask(task({ status: "in_progress", progress: { done: 0, total: 0 } }))).toBe(true);
     expect(canPickTask(task({ status: "planned", progress: { done: 0, total: 3 } }))).toBe(false);

@@ -141,6 +141,15 @@ tasks first. Turn the lane off in Settings → Board → Appearance; priority ta
 
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
 
+## Manual tasks
+
+Some work isn't code: asking for access, getting a sign-off, a call to make. Turn on **Manual task** in the task
+panel's Automation section, or with the switch under the description when you create a task from the command
+palette, and the card gets a **Manual** badge. A manual task needs no plan, so you can drag it to any column, and
+agents and Autopilot leave it alone: no hand-off menu, no review round, no Autopilot or auto-merge flag. It can
+still sit in an epic and block a code task, and Autopilot still tells you when finishing it unblocks one. Agents
+can add one too, say for something only you can do that their work waits on.
+
 ## Due dates
 
 A task can have an optional due date: pick one in the panel's Details section (the **Due date** row; the **×** clears it).

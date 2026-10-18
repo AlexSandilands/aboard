@@ -16,6 +16,7 @@ import {
   autoMergeField,
   autopilotField,
   autopilotValue,
+  manualField,
   priorityField,
   dueDateField,
   blockedByField,
@@ -110,6 +111,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
         "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
         "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
+        "manual: true for a to-do a person does rather than code (agents and Autopilot leave it alone). Pass " +
         "template (a name from list_templates, such as Bug or Spike) to start from the user's template: its " +
         "description, labels and plan are copied, and the task stays in Backlog.",
       inputSchema: {
@@ -132,6 +134,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         autopilot: autopilotField.optional(),
         autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
+        manual: manualField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -154,6 +157,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           ...(args.autoMerge ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
           ...(args.priority ? { priority: true } : {}),
+          ...(args.manual ? { manual: true } : {}),
           actor: actor(args.actor),
         });
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
@@ -177,7 +181,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "blockedBy when other tasks must be Done first. For work that belongs to no code project, pass general: true " +
         "instead of workspacePath. When the result asks about the Autopilot flag, ask the user " +
         "before setting autopilot; set autoMerge and priority only if the user has asked for them. With template (a name from list_templates, such as Bug or Spike) the plan is " +
-        "optional: the template's plan is copied, and a plan you give replaces it. " +
+        "optional: the template's plan is copied, and a plan you give replaces it. A manual task (manual: true, a " +
+        "to-do for a person rather than code) needs no plan either. " +
         "For something you are not doing now, use add_to_backlog instead.",
       inputSchema: {
         title: z
@@ -197,6 +202,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         autopilot: autopilotField.optional(),
         autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
+        manual: manualField.optional(),
         t3Thread: t3ThreadField.optional(),
         actor: actorField,
       },
@@ -205,7 +211,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       run(() => {
         requireWritingProject(args);
         const plan = planFromArgs(args);
-        const template = templateFor(services, args, { needsPlan: true, hasPlan: plan !== null });
+        const template = templateFor(services, args, { needsPlan: !args.manual, hasPlan: plan !== null });
         const project = writingProject(services, args);
         const links = linkInputs(args);
         const task = services.tasks.create({
@@ -213,7 +219,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(args.title ? { title: args.title } : {}),
           ...(args.description ? { description: args.description } : {}),
           ...(args.epic ? { epicId: args.epic } : {}),
-          ...(template ? { template: template.id, status: "planned" as const } : {}),
+          ...(template ? { template: template.id } : {}),
+          ...(template || args.manual ? { status: "planned" as const } : {}),
           ...(args.blockedBy?.length ? { blockedBy: args.blockedBy } : {}),
           ...(plan ? { plan } : {}),
           ...(links.length ? { links } : {}),
@@ -221,6 +228,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(args.autopilot ? { autopilot: autopilotValue(args.autopilot) } : {}),
           ...(args.autoMerge ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
           ...(args.priority ? { priority: true } : {}),
+          ...(args.manual ? { manual: true } : {}),
           actor: actor(args.actor),
         });
         return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
@@ -310,7 +318,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       description:
         "Change a task's status: backlog -> planned -> in_progress -> review -> done (any direction is allowed). " +
         "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
-        "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan; if you get PLAN_REQUIRED, call set_plan first. " +
+        "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan, except for a manual task; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it before opening the PR (a PR opened earlier is reviewed on GitHub too), then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
         "beforeTask/afterTask optionally position it within the column.",
@@ -391,7 +399,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, due date, or archive/unarchive it. " +
+        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, due date, manual flag, or archive/unarchive it. " +
         "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr merge its PR " +
         "into the default branch, so set either only after the user has said so, and dueDate (YYYY-MM-DD, null clears it) only when the user gives a date. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
@@ -431,6 +439,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         autopilot: autopilotField.optional(),
         autoMerge: autoMergeField.optional(),
         priority: priorityField.optional(),
+        manual: manualField.optional(),
         dueDate: dueDateField.nullable().optional(),
         epic: epicField.nullable().optional().describe('The epic to put it in ("#12"); null takes it out.'),
         addBlockedBy: blockedByField.optional().describe("Tasks to add as blockers of this one."),
@@ -463,6 +472,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),
             ...(args.autoMerge !== undefined ? { autoMerge: autopilotValue(args.autoMerge) } : {}),
             ...(args.priority !== undefined ? { priority: args.priority } : {}),
+            ...(args.manual !== undefined ? { manual: args.manual } : {}),
             ...(args.dueDate !== undefined ? { dueDate: args.dueDate } : {}),
             ...(args.epic !== undefined ? { epicId: args.epic } : {}),
             ...(args.addBlockedBy?.length ? { addBlockedBy: args.addBlockedBy } : {}),

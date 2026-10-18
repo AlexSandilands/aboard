@@ -66,6 +66,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     autopilot: null,
     autoMerge: null,
     priority: false,
+    manual: false,
     dueDate: null,
     delivery: null,
     integrationBranch: null,

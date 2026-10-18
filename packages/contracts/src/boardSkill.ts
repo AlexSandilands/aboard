@@ -97,6 +97,12 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    A task can also be marked **priority** (\`priority: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\`; \`false\` clears
    it): it shows in a lane above every project and Autopilot starts it before other planned tasks. Set it only when the user asks.
 
+   A task can be a **manual task** (\`manual: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\`): a to-do
+   for a person rather than code, such as an access request or a sign-off. It needs no plan, can't be flagged for
+   Autopilot or auto-merge, and agents and Autopilot leave it alone: never work on one, hand it off or link a
+   session to it (\`get_task\` shows **Manual task: yes**, \`list_tasks\` tags it \`[manual]\`). When your work waits on
+   something only a person can do, add it as a manual task and pass it as \`blockedBy\` on your task.
+
    A task can have a **due date** (\`dueDate: "YYYY-MM-DD"\` on \`update_task\`; \`null\` clears it). Set it only when the user
    gives you a date; never invent one.
 
@@ -318,6 +324,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Planning several tasks:** a session the board starts from a lane's **Plan tasks** plans each task it lists with the user; \`get_handoff_prompt(tasks: ["#3", "#4"])\` gives the same prompt. Approve simple tasks as a set, complex ones one at a time; \`set_plan\` each, then \`move_task\` → \`planned\`.
 - **Labels:** tag tasks with the kind of work (\`labels: ["ui"]\`, \`["backend", "bug"]\`) on \`create_task\` / \`add_to_backlog\` or \`update_task\` (replaces the list). Reuse the labels \`board_overview\` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
 - **Autopilot:** when a planning result says **Autopilot flag not set**, ask the user whether to flag the task, then \`update_task(autopilot: "on" | "off")\`; never set it unasked. You can flag tasks but never change Autopilot's own settings.
+- **Manual tasks:** \`manual: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` makes a to-do for a person (an access request, a sign-off). It needs no plan, and agents and Autopilot leave it alone: never work on a task marked manual. Block your own task on one with \`blockedBy\` when your work waits on a person.
 - **Due date:** \`update_task(dueDate: "YYYY-MM-DD" | null)\`. Set it only when the user gives a date.
 - **Priority:** \`priority: true | false\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` puts a task in the lane above every project, and Autopilot starts it first. Set it only when the user asks.
 - **Auto-merge:** \`autoMerge: "on"\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` lets \`merge_task_pr(task)\` merge the task's PR into the default branch once it's reviewed, green and mergeable (the board refuses, with the reason, until then). Set it only when the user says so; never merge with \`gh\`/\`git\` instead. A failed or interrupted Autopilot run on a task: \`retry_autopilot_run(task)\`, never an empty commit.

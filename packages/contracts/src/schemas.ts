@@ -518,6 +518,11 @@ export const TaskSummary = z.object({
   autoMerge: z.boolean().nullable(),
   /** True shows the task in the priority lane above every project; always false for an epic. */
   priority: z.boolean(),
+  /**
+   * A manual task: one for people to track, which agents and Autopilot leave alone. It needs no plan, never gets a
+   * review round or hand-off, and can't be flagged for Autopilot or auto-merge. Always false for an epic.
+   */
+  manual: z.boolean(),
   /** Optional due date, `YYYY-MM-DD` with no time or timezone; null for none. */
   dueDate: DueDate.nullable(),
   /** An epic's delivery; null for a task, and for an epic nobody chose one for yet (which delivers to main). */
@@ -678,6 +683,8 @@ export const CreateTaskInput = z
     autoMerge: z.boolean().nullable().optional(),
     /** True puts the task in the priority lane. Defaults to false. */
     priority: z.boolean().optional(),
+    /** True makes a manual task, which needs no plan and which agents and Autopilot leave alone. Defaults to false. */
+    manual: z.boolean().optional(),
     /** Tasks that block this one (uuid, "#42" or "42"). */
     blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
@@ -722,6 +729,8 @@ export const UpdateTaskInput = z.object({
   autoMerge: z.boolean().nullable().optional(),
   /** True puts the task in the priority lane above every project; false takes it out. */
   priority: z.boolean().optional(),
+  /** True makes it a manual task, clearing its Autopilot and auto-merge flags; false makes it a code task again. */
+  manual: z.boolean().optional(),
   /** null clears it. */
   dueDate: DueDate.nullable().optional(),
   /** Replaces the whole label list. */

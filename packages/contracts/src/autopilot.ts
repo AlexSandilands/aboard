@@ -310,12 +310,14 @@ const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
  * A task Orchestrate has a reason to look at: work going on, something wrong with it (a failed start included), or a
  * Review task it may merge. One waiting on the user isn't, nor a Review task with nothing wrong that only the user
  * merges, or a project whose work all waits on them would start a paid run every slot. Planned tasks are Start
- * planned's to start, so they count only once flagged. A project with none of these is idle: its slots don't run.
+ * planned's to start, so they count only once flagged. Manual tasks are the user's, so they never count. A project with
+ * none of these is idle: its slots don't run.
  */
 export const orchestrateNeedsLooking = (
-  t: Pick<TaskSummary, "archivedAt" | "status" | "attention" | "autoMerge">,
+  t: Pick<TaskSummary, "archivedAt" | "status" | "attention" | "autoMerge" | "manual">,
 ): boolean =>
   t.archivedAt === null &&
+  !t.manual &&
   t.status !== "done" &&
   !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
   (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
