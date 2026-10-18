@@ -494,6 +494,36 @@ describe("github merge into an epic's branch", () => {
   });
 });
 
+describe("github merge into the default branch", () => {
+  const link = () => ghLink("l1", 7);
+  const input = { base: "main", headOid: "head-1", method: "squash" as const };
+
+  it("merges with the given method at the checked head, then refreshes the snapshot", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "main" }));
+    await github.mergeIntoDefaultBranch(link(), input);
+    expect(gh.mutations).toEqual([
+      {
+        operation: "MergePullRequest",
+        input: { pullRequestId: "PR_o/r#7", mergeMethod: "SQUASH", expectedHeadOid: "head-1" },
+      },
+    ]);
+    expect(snapshots.get("l1")).toMatchObject({ state: "merged", baseRef: "main" });
+  });
+
+  it("refuses a PR into any other branch, one retargeted since the poll, or one moved past the checked head", async () => {
+    const { gh, github } = setup([link()]);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoDefaultBranch(link(), { ...input, base: "epic/3-checkout" })).rejects.toThrow(
+      MergeTargetError,
+    );
+    await expect(github.mergeIntoDefaultBranch(link(), input)).rejects.toThrow(/now merges into epic\/3-checkout/);
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "main", headRefOid: "head-2" }));
+    await expect(github.mergeIntoDefaultBranch(link(), input)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(gh.mutations).toEqual([]);
+  });
+});
+
 describe("the epic's pull request", () => {
   const input = { host: "github.com", repo: "o/r", head: "epic/3-checkout", title: "Epic #3: Checkout", body: "Tasks" };
 

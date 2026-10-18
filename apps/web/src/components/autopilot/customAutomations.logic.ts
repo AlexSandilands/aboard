@@ -3,6 +3,8 @@ import {
   CreateCustomAutomationInput,
   customAgentPrompt,
   customAgentToolsNote,
+  CUSTOM_MINUTES_MAX,
+  CUSTOM_MINUTES_MIN,
   customTaskMatches,
   customValues,
   describeShellRun,
@@ -27,11 +29,13 @@ export interface CustomForm {
   /** "" is any column. */
   from: TaskStatus | "";
   prEvent: CustomPrEvent;
-  scheduleKind: "weekly" | "hourly";
+  scheduleKind: "weekly" | "interval";
   /** 0 is Sunday. */
   days: number[];
   time: string;
-  everyHours: string;
+  /** The interval's length as typed, in `unit`s. */
+  every: string;
+  unit: "minutes" | "hours";
   staleStatus: TaskStatus;
   staleHours: string;
   projectIds: string[];
@@ -42,7 +46,7 @@ export interface CustomForm {
   actionKind: "agent" | "shell";
   prompt: string;
   skill: string;
-  /** "" takes the task's tier. */
+  /** "" takes the task's tier (a schedule has none, so the default one). */
   tier: ModelTier | "";
   onPrBranch: boolean;
   /** One tool or server per line, as typed. */
@@ -85,7 +89,8 @@ export function emptyCustomForm(): CustomForm {
     scheduleKind: "weekly",
     days: [1, 2, 3, 4, 5],
     time: "09:00",
-    everyHours: "6",
+    every: "6",
+    unit: "hours",
     staleStatus: "in_progress",
     staleHours: "48",
     projectIds: [],
@@ -117,9 +122,13 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
   if (t.kind === "pr_event") form.prEvent = t.event;
   if (t.kind === "stale") Object.assign(form, { staleStatus: t.status, staleHours: String(t.hours) });
   if (t.kind === "schedule") {
-    form.scheduleKind = t.schedule.kind;
-    if (t.schedule.kind === "weekly") Object.assign(form, { days: t.schedule.days, time: t.schedule.time });
-    else form.everyHours = String(t.schedule.everyHours);
+    if (t.schedule.kind === "weekly") {
+      Object.assign(form, { days: t.schedule.days, time: t.schedule.time });
+    } else {
+      form.scheduleKind = "interval";
+      if (t.schedule.kind === "hourly") Object.assign(form, { every: String(t.schedule.everyHours), unit: "hours" });
+      else Object.assign(form, { every: String(t.schedule.everyMinutes), unit: "minutes" });
+    }
   }
   const a = custom.action;
   if (a.kind === "agent") {
@@ -159,10 +168,16 @@ function triggerOf(form: CustomForm): CustomTrigger | string {
       return { kind: "stale", status: form.staleStatus, hours };
     }
     case "schedule": {
-      if (form.scheduleKind === "hourly") {
-        const everyHours = wholeNumber(form.everyHours);
-        if (everyHours === null || everyHours < 1 || everyHours > 24) return "Run every 1 to 24 hours";
-        return { kind: "schedule", schedule: { kind: "hourly", everyHours } };
+      if (form.scheduleKind === "interval") {
+        const every = wholeNumber(form.every);
+        if (form.unit === "minutes") {
+          if (every === null || every < CUSTOM_MINUTES_MIN || every > CUSTOM_MINUTES_MAX) {
+            return `Run every ${CUSTOM_MINUTES_MIN} to ${CUSTOM_MINUTES_MAX} minutes`;
+          }
+          return { kind: "schedule", schedule: { kind: "minutes", everyMinutes: every } };
+        }
+        if (every === null || every < 1 || every > 24) return "Run every 1 to 24 hours";
+        return { kind: "schedule", schedule: { kind: "hourly", everyHours: every } };
       }
       return { kind: "schedule", schedule: { kind: "weekly", days: form.days, time: form.time } };
     }
@@ -194,7 +209,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             prompt: form.prompt,
             skill: form.skill,
             tier: form.tier || null,
-            onPrBranch: form.onPrBranch,
+            // The switch is hidden on a schedule, which has no pull request.
+            onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
             allowedTools: parseAllowedTools(form.allowedTools),
           }
         : { kind: "shell", command: form.command, timeoutSeconds },
@@ -246,10 +262,11 @@ export function previewAction(
     projects[0] ??
     null;
   const def = CreateCustomAutomationInput.parse(input);
-  const values = customValues(def, project, input.trigger.kind === "schedule" ? null : task);
+  const scheduled = input.trigger.kind === "schedule";
+  const values = customValues(def, project, scheduled ? null : task);
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
-  if (!task) return null;
+  if (!scheduled && !task) return null;
+  const prompt = customAgentPrompt(def, values, scheduled ? null : task, null);
   const tools = customAgentToolsNote(def.action);
-  const prompt = customAgentPrompt(def, values, task, null);
   return tools ? `${prompt}${NL}${NL}${tools}` : prompt;
 }

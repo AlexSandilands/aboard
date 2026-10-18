@@ -35,7 +35,16 @@ export const HourlySchedule = z.object({
   everyHours: z.number().int().min(1).max(24),
 });
 
-export const CustomSchedule = z.discriminatedUnion("kind", [WeeklySchedule, HourlySchedule]);
+export const CUSTOM_MINUTES_MIN = 5;
+export const CUSTOM_MINUTES_MAX = 24 * 60;
+
+/** Every N minutes from local midnight (so 15 is 00:00, 00:15, 00:30 and so on). */
+export const MinutesSchedule = z.object({
+  kind: z.literal("minutes"),
+  everyMinutes: z.number().int().min(CUSTOM_MINUTES_MIN).max(CUSTOM_MINUTES_MAX),
+});
+
+export const CustomSchedule = z.discriminatedUnion("kind", [WeeklySchedule, HourlySchedule, MinutesSchedule]);
 export type CustomSchedule = z.infer<typeof CustomSchedule>;
 
 /** What a custom automation watches for. Every kind but `schedule` is about one task. */
@@ -300,38 +309,49 @@ export function customAgentToolsNote(action: CustomAction): string | null {
   return `Allowed to call without asking, on top of the usual tools: ${action.allowedTools.join(", ")}`;
 }
 
-/** An agent action's prompt: the skill to use, the user's prompt filled in, and the task it is about. */
+/**
+ * An agent action's prompt: the skill to use, the user's prompt filled in, and the task it is about. A scheduled run
+ * has no task: its footer names the project (and its folder, which the run itself isn't in) instead.
+ */
 export function customAgentPrompt(
   def: Pick<CustomDefinition, "name" | "action">,
   values: CustomValues,
-  task: TaskSummary,
+  task: TaskSummary | null,
   description: string | null,
 ): string {
   if (def.action.kind !== "agent") throw new Error("Not an agent action");
   const parts: string[] = [];
   if (def.action.skill) parts.push(`Use the ${def.action.skill} skill.`);
   parts.push(renderCustomPrompt(def.action.prompt, values));
-  const context = [
-    `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
-    task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
-    values.pr ? `Pull request: ${values.pr.url}` : null,
-    description?.trim() ? `Description:\n${description.trim()}` : null,
-    `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
-  ].filter(Boolean);
-  parts.push(`---\nStarted by the ${BRAND.name} Autopilot automation "${def.name}".\n${context.join("\n")}`);
+  const context = task
+    ? [
+        `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
+        task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
+        values.pr ? `Pull request: ${values.pr.url}` : null,
+        description?.trim() ? `Description:\n${description.trim()}` : null,
+        `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
+      ]
+    : [
+        values.project ? `Project: ${values.project.name}` : null,
+        values.project?.path
+          ? `Project folder: ${values.project.path} (the live checkout: read from it if you need to, but don't edit files or switch branches in it)`
+          : null,
+        `This run has no task and starts in an empty temporary folder, not the project's. Use the ${BRAND.id} MCP server (board_overview) to see the project's tasks.`,
+      ];
+  parts.push(
+    `---\nStarted by the ${BRAND.name} Autopilot automation "${def.name}".\n${context.filter(Boolean).join("\n")}`,
+  );
   return parts.join("\n\n");
 }
 
 /** Why a definition can't be saved, or null. Rules a field schema can't express alone. */
 export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "filters" | "action">): string | null {
   const { trigger, filters, action } = def;
-  if (trigger.kind === "schedule") {
-    if (action.kind === "agent") {
-      return "A schedule has no task for an agent to work on; use a shell command, or another trigger";
-    }
-    if (filters.labels.length > 0 || filters.epicId) {
-      return "A schedule has no task, so it can only filter by project";
-    }
+  if (trigger.kind === "schedule" && (filters.labels.length > 0 || filters.epicId)) {
+    return "A schedule has no task, so it can only filter by project";
+  }
+  if (trigger.kind === "schedule" && action.kind === "agent" && action.onPrBranch) {
+    return "A schedule has no pull request, so its agent can't work on a PR's branch";
   }
   if (trigger.kind === "status_change" && trigger.from === trigger.to) {
     return "Pick a different column to move from than to";
@@ -379,6 +399,7 @@ export function describeCustomTrigger(trigger: CustomTrigger): string {
     case "schedule": {
       const s = trigger.schedule;
       if (s.kind === "hourly") return s.everyHours === 1 ? "Every hour" : `Every ${s.everyHours} hours`;
+      if (s.kind === "minutes") return `Every ${s.everyMinutes} minutes`;
       const days = s.days.length === 7 ? "Every day" : s.days.map((d) => DAY_NAMES[d]).join(", ");
       return `${days} at ${s.time}`;
     }
@@ -393,4 +414,13 @@ export function describeCustomTrigger(trigger: CustomTrigger): string {
 export function latestHourlySlot(everyHours: number, now: Date): Date {
   const hour = Math.floor(now.getHours() / everyHours) * everyHours;
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour);
+}
+
+/**
+ * The latest slot at or before `now` of an every-N-minutes schedule, counted from local midnight. A step that doesn't
+ * divide the day (7 minutes) restarts at midnight, like the hourly one.
+ */
+export function latestMinutesSlot(everyMinutes: number, now: Date): Date {
+  const minute = Math.floor((now.getHours() * 60 + now.getMinutes()) / everyMinutes) * everyMinutes;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, minute);
 }

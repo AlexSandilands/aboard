@@ -392,7 +392,8 @@ to fix a pull request linked to a task.
 **Merge into epic branch** (`merge_epic_prs`, #123; `automations/mergeEpicPrs.ts`). Needs no agent and is off until
 switched on, with no settings. Only epics with integration delivery ([epics](epics.md#delivery)) give it work.
 
-- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` finds nothing in the way: the task
+- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
+  with [`merge_task_pr`](github-prs.md#merge_task_pr)) finds nothing in the way: the task
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
   blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
@@ -530,7 +531,7 @@ the automation. Runs stay, under the old key.
 | `pr_event`         | Per PR link: `linked`, `new_head`, `checks_failing`, `conflict`, `merged`, timed by `PrChanges` | `pr_linked:<link>`, `pr_head:<link>:<oid>`, `pr_checks:<link>:<began>`, `pr_conflict:<link>:<began>`, `pr_merged:<link>` |
 | `stale`            | A task in `status` for `hours`              | `stale:<taskId>:<statusChangedAt>`             |
 | `blocker_finished` | A task whose blockers are all Done          | `unblocked:<taskId>:<latest blocker statusChangedAt>` |
-| `schedule`         | Per project in scope, no task: weekly (`latestDue`) or every N hours from local midnight | `schedule:<projectId>:<local slot stamp>` |
+| `schedule`         | Per project in scope, no task: weekly (`latestDue`), every N hours (`latestHourlySlot`) or every N minutes, 5 to 1440 (`latestMinutesSlot`), counted from local midnight; only the latest slot counts, so downtime catches up once | `schedule:<projectId>:<local slot stamp>` |
 
 - **Arming.** Events before a task came into the automation's scope don't fire, so switching it on doesn't act on
   the board's history. `customArmedAt` takes the latest of:
@@ -558,21 +559,31 @@ the automation. Runs stay, under the old key.
   mergeability keep the last known state, so checks that fail again after a push, or a conflict GitHub recomputes,
   aren't new; passing and then failing again is.
 - **Filters**: projects (on top of the scopes), labels (any of, normalised) and epic (`customTaskMatches` in
-  contracts). Epics and archived tasks never match. A schedule has no task, so it takes only a shell action and the
-  project filter (`checkCustomDefinition`, run by the service and the form).
+  contracts). Epics and archived tasks never match. A schedule has no task, so it takes only the project filter
+  (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
   It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
-  set to the PR's head branch. Its config is the shared runner options, per scope.
+  set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
+  the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
+  `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
+  (never in the project's checkout, which the board may be running from, so the runner option is ignored: it is always
+  headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
+  default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
+  read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
+  folder gets the safety note without a branch name and the generic denials). The tier is the action's, else the default for the runner's model tiers. One at a time per
+  project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
+  slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
+  caps like any agent run.
   - **Allowed tools** (`allowedTools`, `CustomToolRule` in contracts): extra tools the agent may call unattended,
     such as the user's own MCP servers, as `mcp__<server>`, `mcp__<server>__<tool>` (a `*` only in the tool part) or a
     built-in tool from `CUSTOM_BUILT_IN_TOOLS` with an optional specifier (`Skill(name)`); a built-in rule only adds a tool, it never narrows one the run already
     has (an edit run allows all of them but Agent and Skill); at most 20,
     200 characters each, deduped. The shell tools (Bash, PowerShell) are refused: the push and merge deny rules are
     `Bash(...)` patterns, so another shell tool would sidestep them, and an edit run has Bash anyway. `act` passes the
-    rules as `RunnerRequest.tools`, which `agentArgs` appends to `--allowedTools`. They make the run
-    headless (a T3 thread can't be given tools, so with the runner set to T3 Code only, the run fails and says
-    so). Everything else about the run is unchanged: the push and merge deny rules still win, since deny rules beat
+    rules as `RunnerRequest.tools`, for a task's run and a scheduled one alike, which `agentArgs` appends to `--allowedTools`. They make the run
+    headless (a T3 thread can't be given tools, so with the runner set to T3 Code only, a task's run fails and says
+    so; a scheduled run is headless anyway). Everything else about the run is unchanged: the push and merge deny rules still win, since deny rules beat
     allow rules. That covers git and gh run through Bash; a tool of an MCP server that runs commands is the user's
     call, which is why the editor warns. The dry-run preview lists the tools under the prompt. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
     no prompt: the editor warns about that. The server has to be one the run can start without approval: the user's

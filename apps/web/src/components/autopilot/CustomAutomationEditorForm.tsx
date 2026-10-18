@@ -1,5 +1,7 @@
 import {
   CUSTOM_COMMAND_MAX,
+  CUSTOM_MINUTES_MAX,
+  CUSTOM_MINUTES_MIN,
   CUSTOM_NAME_MAX,
   CUSTOM_PLACEHOLDERS,
   CUSTOM_PROMPT_MAX,
@@ -145,11 +147,7 @@ export function CustomAutomationEditorForm({
             label="Trigger"
             value={form.triggerKind}
             items={TRIGGER_KINDS}
-            onChange={(triggerKind) => {
-              if (!triggerKind) return;
-              // A schedule has no task, so it can only run a command.
-              patch(triggerKind === "schedule" ? { triggerKind, actionKind: "shell" } : { triggerKind });
-            }}
+            onChange={(triggerKind) => triggerKind && patch({ triggerKind })}
           />
         </Field>
 
@@ -208,11 +206,11 @@ export function CustomAutomationEditorForm({
                 value={[form.scheduleKind]}
                 onValueChange={(next) => {
                   const scheduleKind = next[0];
-                  if (scheduleKind === "weekly" || scheduleKind === "hourly") patch({ scheduleKind });
+                  if (scheduleKind === "weekly" || scheduleKind === "interval") patch({ scheduleKind });
                 }}
               >
                 <Toggle value="weekly">On weekdays</Toggle>
-                <Toggle value="hourly">Every few hours</Toggle>
+                <Toggle value="interval">Every…</Toggle>
               </ToggleGroup>
             </Field>
             {form.scheduleKind === "weekly" ? (
@@ -243,18 +241,38 @@ export function CustomAutomationEditorForm({
                 </Field>
               </div>
             ) : (
-              <Field label="Every (hours)" hint="Counted from midnight: 6 runs at 00:00, 06:00, 12:00 and 18:00.">
-                <Input
-                  size="sm"
-                  type="number"
-                  min={1}
-                  max={24}
-                  aria-label="Every N hours"
-                  className="sm:w-32"
-                  value={form.everyHours}
-                  onChange={(event) => patch({ everyHours: event.currentTarget.value })}
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-[auto_auto_1fr]">
+                <Field label="Every">
+                  <Input
+                    size="sm"
+                    type="number"
+                    min={form.unit === "minutes" ? CUSTOM_MINUTES_MIN : 1}
+                    max={form.unit === "minutes" ? CUSTOM_MINUTES_MAX : 24}
+                    aria-label="Interval length"
+                    className="sm:w-32"
+                    value={form.every}
+                    onChange={(event) => patch({ every: event.currentTarget.value })}
+                  />
+                </Field>
+                <Field label="Unit">
+                  <ToggleGroup
+                    aria-label="Interval unit"
+                    value={[form.unit]}
+                    onValueChange={(next) => {
+                      const unit = next[0];
+                      if (unit === "minutes" || unit === "hours") patch({ unit });
+                    }}
+                  >
+                    <Toggle value="minutes">Minutes</Toggle>
+                    <Toggle value="hours">Hours</Toggle>
+                  </ToggleGroup>
+                </Field>
+                <p className="self-end pb-2 text-xs text-muted-foreground">
+                  {form.unit === "minutes"
+                    ? `${CUSTOM_MINUTES_MIN} to ${CUSTOM_MINUTES_MAX} minutes, counted from midnight: 15 runs at 00:00, 00:15, 00:30 and so on.`
+                    : "1 to 24 hours, counted from midnight: 6 runs at 00:00, 06:00, 12:00 and 18:00."}
+                </p>
+              </div>
             )}
           </>
         ) : null}
@@ -308,9 +326,7 @@ export function CustomAutomationEditorForm({
               if (actionKind === "agent" || actionKind === "shell") patch({ actionKind });
             }}
           >
-            <Toggle value="agent" disabled={isSchedule}>
-              Start an agent
-            </Toggle>
+            <Toggle value="agent">Start an agent</Toggle>
             <Toggle value="shell">Run a command</Toggle>
           </ToggleGroup>
         </Field>
@@ -328,7 +344,10 @@ export function CustomAutomationEditorForm({
                       <code className="font-mono">{`{{${p.key}}}`}</code>
                     </span>
                   ))}
-                  . The task&apos;s details are added after it.
+                  .{" "}
+                  {isSchedule
+                    ? "The project's name and folder are added after it."
+                    : "The task's details are added after it."}
                 </>
               }
             >
@@ -355,26 +374,33 @@ export function CustomAutomationEditorForm({
                   label="Model tier"
                   value={form.tier}
                   items={[
-                    { value: "", label: "The task's tier" },
+                    { value: "", label: isSchedule ? "The default tier" : "The task's tier" },
                     ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label })),
                   ]}
                   onChange={(tier) => patch({ tier })}
                 />
               </Field>
             </div>
-            <div className="flex items-start justify-between gap-4">
-              <span className="space-y-0.5">
-                <span className="block text-sm font-medium">Work on the pull request&apos;s branch</span>
-                <span className="block text-xs text-muted-foreground">
-                  When the task has an open pull request, the agent pushes to it instead of starting a new branch.
+            {isSchedule ? (
+              <p className="text-xs text-muted-foreground">
+                A scheduled agent has no task: it runs headless in an empty temporary folder, not the project&apos;s
+                own, and can use the board&apos;s tools to find its work. It doesn&apos;t run in T3 Code.
+              </p>
+            ) : (
+              <div className="flex items-start justify-between gap-4">
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium">Work on the pull request&apos;s branch</span>
+                  <span className="block text-xs text-muted-foreground">
+                    When the task has an open pull request, the agent pushes to it instead of starting a new branch.
+                  </span>
                 </span>
-              </span>
-              <Switch
-                aria-label="Work on the pull request's branch"
-                checked={form.onPrBranch}
-                onCheckedChange={(onPrBranch) => patch({ onPrBranch })}
-              />
-            </div>
+                <Switch
+                  aria-label="Work on the pull request's branch"
+                  checked={form.onPrBranch}
+                  onCheckedChange={(onPrBranch) => patch({ onPrBranch })}
+                />
+              </div>
+            )}
             <Field
               label="Allowed tools"
               hint={

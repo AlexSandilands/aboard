@@ -15,8 +15,10 @@ and keeps to the same pause, dry run, caps and quiet hours.
      it has a merge conflict, or it's merged. Needs the GitHub poller, which fills in the PR's state.
    - **A task sits in a column too long**: N hours in In Progress, say. Once per stay in the column.
    - **A task's last blocker finishes**.
-   - **On a schedule**: weekdays at a time, or every N hours from midnight (local time). It runs once in each
-     project it's on in, with no task, so it can only run a command.
+   - **On a schedule**: weekdays at a time, or every N minutes (5 to 1440) or hours (1 to 24) from midnight
+     (local time), so every 15 minutes runs at 00:00, 00:15, 00:30 and so on. It runs once in each project it's on
+     in, with no task, so it can only filter by project. If the board was off, it runs once when it's back, not
+     once for each slot it missed.
 2. **Only in these projects**, **with any of these labels**, **in the epic**: narrow it down. Leave them empty
    for every task.
 3. **Do**: one of these.
@@ -25,14 +27,19 @@ and keeps to the same pause, dry run, caps and quiet hours.
      `{{automation.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
      skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
-     ([Autopilot](autopilot.md#runners)).
+     ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
+     temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's
+     tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
+     branch or merge). It always runs headless, whatever the runner setting says, and can't work on a pull request's
+     branch. A new run waits until the last one for the project has finished, then the latest slot runs once.
 
      Under **Allowed tools** you can list tools the agent may use besides the board's own, one per line: a whole MCP
      server (`mcp__issue-tracker`) or a single tool (`mcp__issue-tracker__search_jira`). Nobody is there to approve a call
      when the agent runs, so a tool not listed can't be used, and one that is listed runs without asking. Prefer
      one tool to a whole server. The server has to be your own, added with `claude mcp add --scope user` (or come from
      a plugin or connector); a server that lives in a project's `.mcp.json` needs an approval the agent can't get. An
-     agent with extra tools runs headless, so it can't run in T3 Code only. It still can't push to your default
+     agent with extra tools runs headless, so a task's agent can't run in T3 Code only (a scheduled agent is always
+     headless). It still can't push to your default
      branch or merge a pull request through git or gh; what a tool of a server you allow can do is up to that
      server.
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task

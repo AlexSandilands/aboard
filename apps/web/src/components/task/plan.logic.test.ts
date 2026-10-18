@@ -63,6 +63,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     lastNote: null,
     autoReview: null,
     autopilot: null,
+    autoMerge: null,
     priority: false,
     delivery: null,
     integrationBranch: null,

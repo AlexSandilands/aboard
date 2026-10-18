@@ -350,13 +350,19 @@ export class StaleReviewError extends AppError {
 const MERGE_TARGET_QUERY = `query PullRequestMergeTarget($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
-    pullRequest(number: $number) { id state headRefOid baseRefName }
+    pullRequest(number: $number) { id state headRefOid baseRefName mergeStateStatus }
   }
 }`;
 const MergeTarget = z.object({
   repository: z.object({
     defaultBranchRef: z.object({ name: z.string() }).nullish(),
-    pullRequest: z.object({ id: z.string(), state: z.string(), headRefOid: z.string(), baseRefName: z.string() }),
+    pullRequest: z.object({
+      id: z.string(),
+      state: z.string(),
+      headRefOid: z.string(),
+      baseRefName: z.string(),
+      mergeStateStatus: z.string().nullish(),
+    }),
   }),
 });
 
@@ -399,17 +405,31 @@ export class MergeTargetError extends AppError {
 }
 
 /**
- * The guard on every merge Autopilot makes (docs/decisions/0008-autopilot-engine.md): only into the branch it was
- * asked for, which must be an epic's integration branch, and never into the default branch. Checked against what
- * GitHub says just before the merge, so a PR retargeted since the last poll is caught.
+ * The guard on every merge the board makes on its own (docs/decisions/0008-autopilot-engine.md): only into the branch
+ * it was asked for. Autopilot's merges (`into: "epic"`, the default) must go into an epic's integration branch and
+ * never into the default branch. merge_task_pr, for a task the user flagged for auto-merge, is the one path that
+ * merges into the default branch (`into: "default"`), and only there. Checked against what GitHub says just before the
+ * merge, so a PR retargeted since the last poll is caught.
  */
 export function checkAutopilotMergeTarget(target: {
   base: string;
   expectedBase: string;
   defaultBranch: string | null;
+  into?: "epic" | "default";
 }): void {
   if (target.defaultBranch === null) {
-    throw new MergeTargetError("Can't tell the repository's default branch, so Autopilot won't merge");
+    throw new MergeTargetError("Can't tell the repository's default branch, so the board won't merge");
+  }
+  if (target.into === "default") {
+    if (target.expectedBase !== target.defaultBranch) {
+      throw new MergeTargetError(
+        `The PR targets ${target.expectedBase}, not the default branch (${target.defaultBranch}): merge_task_pr only merges into the default branch`,
+      );
+    }
+    if (target.base !== target.expectedBase) {
+      throw new MergeTargetError(`The PR now merges into ${target.base}, not ${target.expectedBase}`);
+    }
+    return;
   }
   if (target.base === target.defaultBranch || target.expectedBase === target.defaultBranch) {
     throw new MergeTargetError(`Autopilot never merges into the default branch (${target.defaultBranch})`);
@@ -428,6 +448,15 @@ export interface EpicMergeInput {
   base: string;
   /** The head commit every condition was checked at; the merge is refused if the PR moved past it. */
   headOid: string;
+}
+
+/** merge_task_pr's merge of a task's PR into the default branch, at the commit it checked. */
+export interface DefaultBranchMergeInput {
+  /** The base the board's snapshot shows; it must be the default branch, and still the PR's base on GitHub. */
+  base: string;
+  /** The head commit every condition was checked at; the merge is refused if the PR moved past it. */
+  headOid: string;
+  method: MergeMethod;
 }
 
 /** The epic's draft PR into the default branch. */
@@ -548,6 +577,12 @@ export interface GithubIntegration {
    * Throws MergeTargetError for a target it may never merge into, AppError for anything else GitHub refuses.
    */
   mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  /**
+   * merge_task_pr's merge of a task's PR into the default branch, at `headOid`, once checkAutopilotMergeTarget (into
+   * "default") passes on what GitHub says now. Then refreshes the link. Throws MergeTargetError for any other base,
+   * AppError for anything else GitHub refuses.
+   */
+  mergeIntoDefaultBranch(link: TaskLink, input: DefaultBranchMergeInput): Promise<void>;
   /** The open PR from the epic's branch into the default branch, opened as a draft when there is none. Never merged. */
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   /** Replaces a PR's description. Throws AppError. */
@@ -753,6 +788,59 @@ export function createGithubIntegration(deps: {
     loggedErrors.delete(link.id);
   };
 
+  /** A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. */
+  const mergeChecked = async (
+    link: TaskLink,
+    input: { into: "epic" | "default"; base: string; headOid: string; method: MergeMethod },
+  ): Promise<void> => {
+    const notGithub = () => new AppError("VALIDATION", "Only a GitHub pull request can be merged");
+    if (link.kind !== "pr" || !link.ref) throw notGithub();
+    if (!isGithubPr(link, await ensureStatus())) throw notGithub();
+    await requireGh(link);
+    const [owner, name] = splitRepo(link.ref.repo);
+    const host = link.ref.host;
+    try {
+      const raw = await api.graphql(host, MERGE_TARGET_QUERY, { owner, name, number: link.ref.number });
+      const parsed = MergeTarget.safeParse(raw);
+      if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+      const { pullRequest: pr, defaultBranchRef } = parsed.data.repository;
+      checkAutopilotMergeTarget({
+        base: pr.baseRefName,
+        expectedBase: input.base,
+        defaultBranch: defaultBranchRef?.name ?? null,
+        into: input.into,
+      });
+      if (pr.state.toUpperCase() !== "OPEN") throw new AppError("CONFLICT", `The PR is ${pr.state.toLowerCase()}`);
+      if (pr.headRefOid !== input.headOid) {
+        throw new AppError("CONFLICT", `The PR moved on to ${pr.headRefOid.slice(0, 7)} since it was checked`);
+      }
+      // An admin's account may merge past branch rules (a required approval, an out-of-date branch); into the
+      // default branch the board only merges what GitHub would let anyone merge.
+      const state = pr.mergeStateStatus?.toUpperCase() ?? "UNKNOWN";
+      if (input.into === "default" && !IMMEDIATELY_MERGEABLE.has(state)) {
+        throw new AppError(
+          "VALIDATION",
+          state === "UNKNOWN"
+            ? "GitHub is still working out whether the PR can be merged: try again in a minute"
+            : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
+        );
+      }
+      await api.graphql(host, MERGE_MUTATION, {
+        input: { pullRequestId: pr.id, mergeMethod: input.method.toUpperCase(), expectedHeadOid: pr.headRefOid },
+      });
+    } catch (error) {
+      // Show the new head, or the PR merged or closed by hand, so the next check doesn't try the old head again.
+      await refreshOne(link).catch(() => {});
+      if (error instanceof AppError) throw error;
+      throw new AppError("VALIDATION", messageOf(error));
+    }
+    try {
+      await refreshOne(link);
+    } catch (error) {
+      logOnce(link.id, link.url, messageOf(error));
+    }
+  };
+
   return {
     status: () => {
       if (checkedAt === 0 && !checking) void checkStatus();
@@ -878,42 +966,12 @@ export function createGithubIntegration(deps: {
         throw new AppError("VALIDATION", messageOf(error));
       }
     },
-    async mergeIntoEpicBranch(link, input) {
-      const notGithub = () => new AppError("VALIDATION", "Only a GitHub pull request can be merged");
-      if (link.kind !== "pr" || !link.ref) throw notGithub();
-      if (!isGithubPr(link, await ensureStatus())) throw notGithub();
-      await requireGh(link);
-      const [owner, name] = splitRepo(link.ref.repo);
-      const host = link.ref.host;
-      try {
-        const raw = await api.graphql(host, MERGE_TARGET_QUERY, { owner, name, number: link.ref.number });
-        const parsed = MergeTarget.safeParse(raw);
-        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
-        const { pullRequest: pr, defaultBranchRef } = parsed.data.repository;
-        checkAutopilotMergeTarget({
-          base: pr.baseRefName,
-          expectedBase: input.base,
-          defaultBranch: defaultBranchRef?.name ?? null,
-        });
-        if (pr.state.toUpperCase() !== "OPEN") throw new AppError("CONFLICT", `The PR is ${pr.state.toLowerCase()}`);
-        if (pr.headRefOid !== input.headOid) {
-          throw new AppError("CONFLICT", `The PR moved on to ${pr.headRefOid.slice(0, 7)} since it was checked`);
-        }
-        // A merge commit, never a squash or rebase: the epic's branch keeps each task's commits.
-        await api.graphql(host, MERGE_MUTATION, {
-          input: { pullRequestId: pr.id, mergeMethod: "MERGE", expectedHeadOid: pr.headRefOid },
-        });
-      } catch (error) {
-        // Show the new head, or the PR merged or closed by hand, so the next check doesn't try the old head again.
-        await refreshOne(link).catch(() => {});
-        if (error instanceof AppError) throw error;
-        throw new AppError("VALIDATION", messageOf(error));
-      }
-      try {
-        await refreshOne(link);
-      } catch (error) {
-        logOnce(link.id, link.url, messageOf(error));
-      }
+    mergeIntoEpicBranch(link, input) {
+      // A merge commit, never a squash or rebase: the epic's branch keeps each task's commits.
+      return mergeChecked(link, { into: "epic", base: input.base, headOid: input.headOid, method: "merge" });
+    },
+    mergeIntoDefaultBranch(link, input) {
+      return mergeChecked(link, { into: "default", base: input.base, headOid: input.headOid, method: input.method });
     },
     async ensureEpicPr(input) {
       await requireSignedIn(input.host);

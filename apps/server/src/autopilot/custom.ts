@@ -11,6 +11,7 @@ import {
   describeShellRun,
   latestDue,
   latestHourlySlot,
+  latestMinutesSlot,
   localStamp,
   customShellEnv,
   type CustomAutomation,
@@ -116,7 +117,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services): string => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
-    const prompt = customAgentPrompt(custom, values, task!, task ? services.tasks.detail(task.id).description : null);
+    const prompt = customAgentPrompt(custom, values, task, task ? services.tasks.detail(task.id).description : null);
     const tools = customAgentToolsNote(action);
     return tools ? `${prompt}\n\n${tools}` : prompt;
   };
@@ -126,11 +127,26 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
     const scoped = inScope(ctx);
     if (trigger.kind === "schedule") {
       const s = trigger.schedule;
+      // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded), and
+      // the latest slot then runs once it ends. The runs in flight are asked for directly, not found in the history.
+      const busy = new Set(
+        isAgent
+          ? services.autopilot
+              .status()
+              .active.filter((r) => r.automation === customAutomationKey(custom.id))
+              .map((r) => r.projectId)
+          : [],
+      );
       return scoped.flatMap(({ project }): Candidate[] => {
         const armedAt = customArmedAt(custom, { projectId: project.id });
         const slot =
-          s.kind === "hourly" ? latestHourlySlot(s.everyHours, now) : latestDue(s, now, localStamp(new Date(armedAt)));
+          s.kind === "hourly"
+            ? latestHourlySlot(s.everyHours, now)
+            : s.kind === "minutes"
+              ? latestMinutesSlot(s.everyMinutes, now)
+              : latestDue(s, now, localStamp(new Date(armedAt)));
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
+        if (busy.has(project.id)) return [];
         const stamp = localStamp(slot);
         return [
           {
@@ -216,7 +232,22 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       const values = customValues(custom, project, task, data);
 
       if (action.kind === "agent") {
-        if (!task) throw new Error("An agent action needs a task to work on");
+        if (!task) {
+          // A schedule: no task, so the runner starts it headless in an empty temp folder (never the project's own
+          // checkout, which the board may be running from, so T3 Code is no option); `repo` gives it the push guard.
+          const where = project?.title ?? "the board";
+          const result = await ctx.runner.start({
+            run: ctx.run,
+            label: `${custom.name} · ${where}`,
+            prompt: customAgentPrompt(custom, values, null, null),
+            tier: action.tier,
+            options: { ...ctx.config, runner: "headless" },
+            ...(action.allowedTools.length > 0 ? { tools: action.allowedTools } : {}),
+            repo: project?.workspaceRoot ?? null,
+          });
+          const { result: _final, output: _output, ...patch } = result;
+          return { ...patch, summary: `Started an agent for "${custom.name}" in ${where}` };
+        }
         const prompt = customAgentPrompt(custom, values, task, services.tasks.detail(task.id).description);
         const branch = action.onPrBranch ? (prOfTask(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
         const result = await ctx.runner.start({

@@ -41,6 +41,7 @@ function seed() {
     template: "Bug",
     labels: ["ui", "backend"],
     autopilot: true,
+    autoMerge: true,
     links: [{ value: "ABC-1" }, { value: "https://github.com/o/r/pull/7" }],
   });
   s.templates.create({
@@ -50,7 +51,7 @@ function seed() {
     labels: ["ops"],
     phases: [{ title: "Review", steps: [{ title: "Read the board" }] }],
   });
-  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false });
+  const b = s.tasks.create({ projectId: project.id, title: "Duplicate", plan, autopilot: false, autoMerge: false });
   s.tasks.close(b.id, { resolution: "duplicate", byTaskId: a.id }, "agent");
   const idea = s.tasks.create({ projectId: project.id, title: "Idea", blockedBy: [a.id] });
   const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [idea.id], "agent");
@@ -255,12 +256,12 @@ describe("restore", () => {
     const restored = openDatabase(dbPath);
     try {
       expect(comparableTables(restored)).toEqual(comparableTables(db));
-      // Both flags survive: On, Off, and Default (null) for the task that never had one.
-      expect(restored.prepare("SELECT autopilot FROM tasks ORDER BY number").all()).toEqual([
-        { autopilot: 1 },
-        { autopilot: 0 },
-        { autopilot: null },
-        { autopilot: null },
+      // The Autopilot and auto-merge flags survive: On, Off, and Default (null) for the tasks that never had one.
+      expect(restored.prepare("SELECT autopilot, auto_merge FROM tasks ORDER BY number").all()).toEqual([
+        { autopilot: 1, auto_merge: 1 },
+        { autopilot: 0, auto_merge: 0 },
+        { autopilot: null, auto_merge: null },
+        { autopilot: null, auto_merge: null },
       ]);
       // An epic's delivery and its branch survive.
       expect(restored.prepare("SELECT delivery, integration_branch FROM tasks WHERE kind = 'epic'").all()).toEqual([
@@ -398,7 +399,7 @@ describe("restore", () => {
   it("restores a dump taken at an older schema and migrates it forward", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
-    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag or priority columns, no
+    // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag, auto-merge or priority columns, no
     // project planning skill, no relations, no Autopilot settings.
     const {
       autopilot_settings: _a,
@@ -424,6 +425,7 @@ describe("restore", () => {
           parent_id: _p,
           autopilot: _f,
           priority: _pr,
+          auto_merge: _am,
           template_id: _m,
           delivery: _d,
           integration_branch: _b,
