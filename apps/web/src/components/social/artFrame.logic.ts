@@ -63,8 +63,9 @@ const FRAME_TAGS = ["iframe", "frame", "frameset", "object", "embed"];
 /**
  * Turns declarative shadow DOM (`<template shadowrootmode>`, and the older `shadowroot`) into a plain attribute: a
  * shadow root would hide a nested frame from the guard's observer. Only where an attribute can start, so script's
- * `.shadowRoot` is left alone. Applied to an HTML piece's source and to whatever it
- * hands document.write; innerHTML never builds shadow roots.
+ * `.shadowRoot` is left alone. Applied to an HTML piece's source; the guard refuses document.write, whose pieces the
+ * parser would join up (so a split attribute would slip past any per-call rewrite), and innerHTML never builds shadow
+ * roots.
  */
 const NO_SHADOW_ROOT = /(^|[\s"'/])shadowroot/gi;
 const neutralizeShadowRoots = (html: string) => html.replace(NO_SHADOW_ROOT, "$1data-shadowroot");
@@ -75,7 +76,7 @@ const neutralizeShadowRoots = (html: string) => html.replace(NO_SHADOW_ROOT, "$1
  * - createElement refuses frame tags, and contentWindow/contentDocument return null;
  * - an observer on the document (so document.open doesn't shake it off) removes any frame that is inserted;
  * - shadow DOM, which the observer can't see into, is refused: attachShadow and setHTMLUnsafe/parseHTMLUnsafe throw,
- *   and document.write gets the same shadowroot rewrite as the piece's source.
+ *   and document.write/writeln throw (pieces build their DOM without them).
  * Best effort: see social.md for what's left.
  */
 export const ART_FRAME_GUARD = `(()=>{
@@ -91,7 +92,7 @@ lock(Element.prototype,"attachShadow",refuse("Shadow roots"));
 lock(Element.prototype,"setHTMLUnsafe",refuse("Shadow roots"));
 lock(window.ShadowRoot&&ShadowRoot.prototype,"setHTMLUnsafe",refuse("Shadow roots"));
 lock(Document,"parseHTMLUnsafe",refuse("Shadow roots"));
-for(const m of ["write","writeln"]){const orig=D[m];lock(D,m,function(...a){return orig.apply(this,a.map((s)=>String(s).replace(${NO_SHADOW_ROOT},"$1data-shadowroot")))})}
+lock(D,"write",refuse("document.write calls"));lock(D,"writeln",refuse("document.write calls"));
 const sel=tags.join(",");
 const sweep=(n)=>{if(n.nodeType!==1)return;if(tags.includes(n.localName))n.remove();else for(const f of n.querySelectorAll(sel))f.remove()};
 new MutationObserver((rs)=>{for(const r of rs)for(const n of r.addedNodes)sweep(n)}).observe(document,{childList:true,subtree:true});

@@ -729,6 +729,7 @@ t("desktopBridge", () => typeof window.desktopBridge === "undefined" ? "blocked 
 t("WebRTC", () => typeof window.RTCPeerConnection === "undefined" ? "blocked (undefined)" : "EXPOSED");
 t("nested frame", () => { document.body.appendChild(document.createElement("iframe")); return "CREATED"; });
 t("attachShadow", () => { document.body.attachShadow({ mode: "open" }); return "ATTACHED"; });
+t("document.write", () => { document.write("<b></b>"); return "WROTE"; });
 t("declarative shadow root", () => document.getElementById("host").shadowRoot === null ? "blocked (none)" : "ATTACHED");
 setTimeout(() => t("nested srcdoc frame", () => document.querySelector("iframe") === null ? "blocked (removed)" : "PRESENT"), 300);
 t("window.open", () => window.open("https://example.com") === null ? "blocked (null)" : "OPENED");

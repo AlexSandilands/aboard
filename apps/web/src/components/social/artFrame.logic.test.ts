@@ -138,15 +138,16 @@ describe("art frame", () => {
     expect(nested.removed).toBe(true);
     expect(wrapper.removed).toBeUndefined();
 
-    // Shadow DOM, which the observer can't see into, is refused, by script and through document.write.
+    // Shadow DOM, which the observer can't see into, is refused from script.
     expect(() => El.prototype.attachShadow!()).toThrow("Shadow roots");
     expect(() => El.prototype.setHTMLUnsafe!()).toThrow("Shadow roots");
     expect(() => Shadow.prototype.setHTMLUnsafe!()).toThrow("Shadow roots");
     expect(() => Doc.parseHTMLUnsafe()).toThrow("Shadow roots");
-    doc.write!('<div><template shadowrootmode="open"><iframe></iframe></template></div>');
-    doc.writeln!("<template SHADOWROOT=closed></template>");
-    expect(written.join("")).not.toMatch(/ shadowroot/i);
-    expect(written.join("")).toContain('data-shadowrootmode="open"');
+    // document.write is refused outright: the parser joins its pieces, so an attribute split across calls (or between
+    // a call and the markup after its script) would slip past any rewrite.
+    expect(() => doc.write!("<template sh")).toThrow("document.write calls");
+    expect(() => doc.writeln!("adowrootmode=open>")).toThrow("document.write calls");
+    expect(written).toEqual([]);
   });
 
   it("turns declarative shadow roots in an HTML piece into a plain attribute", () => {
