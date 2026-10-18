@@ -110,7 +110,8 @@ export function workingAgents(services: Services, now: Date): number {
     services.tasks.summaries({ status }),
   );
   return open.filter((task) => {
-    if (task.kind === "epic" || task.manual || task.archivedAt !== null) return false;
+    // A task turned manual mid-run still counts: nothing stops its agent, so its slot is taken while the thread works.
+    if (task.kind === "epic" || task.archivedAt !== null) return false;
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");

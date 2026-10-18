@@ -231,8 +231,8 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
 ### Manual tasks
 
 A manual task (`task.manual`, see [task-lifecycle.md](task-lifecycle.md#manual-tasks)) is for a person, so the
-automations that act on tasks pass it over: Start planned tasks (`notStartable`, and `workingAgents` doesn't count
-it), Remind me about stuck tasks, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
+automations that act on tasks pass it over: Start planned tasks (`notStartable`; `workingAgents` still counts a
+thread that is working on a task turned manual mid-run, since nothing stops that agent), Remind me about stuck tasks, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
 its prompt tells the agent to leave manual tasks alone). Unblock dependents still fires when a manual blocker
 finishes, since the task it unblocks is code; Auto-archive still tidies it away once Done.
 

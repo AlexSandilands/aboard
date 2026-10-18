@@ -288,6 +288,21 @@ describe("start planned tasks: limits", () => {
     expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
   });
 
+  it("keeps counting a working thread whose task was turned manual", async () => {
+    const { s, task, pass, requests, turnOn, thread } = setup();
+    const a = task("A");
+    const b = task("B");
+    turnOn();
+    await pass();
+    thread(a.id, "working");
+    s.tasks.update(a.id, { manual: true }, "user");
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id]);
+    thread(a.id, "idle");
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
+  });
+
   it("frees the slot when the thread is archived or settled, or the task is Done, but not while it is in Review", async () => {
     const { s, task, pass, requests, turnOn, thread } = setup();
     const a = task("A");
