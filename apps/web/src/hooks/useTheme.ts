@@ -163,41 +163,27 @@ function applyCurrent(suppressTransitions: boolean) {
  */
 export function initTheme() {
   applyCurrent(false);
+  // Registered once here, not per subscriber: each re-apply writes storage and messages the shell, and the theme has
+  // to follow the OS and other tabs even when no component using the hook is mounted.
+  window.matchMedia(MEDIA_QUERY).addEventListener("change", () => {
+    applyCurrent(true);
+    emit();
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== null && !KEYS.has(event.key)) return;
+    applyCurrent(true);
+    emit();
+  });
 }
 
 function emit() {
   for (const listener of listeners) listener();
 }
 
-function onSystem() {
-  applyCurrent(true);
-  emit();
-}
-
-function onStorage(event: StorageEvent) {
-  if (event.key !== null && !KEYS.has(event.key)) return;
-  applyCurrent(true);
-  emit();
-}
-
-// The window listeners are shared: one per subscriber would re-apply (and write storage, and message the shell)
-// once for every component using the hook.
-let systemQuery: MediaQueryList | null = null;
-
 function subscribe(listener: () => void) {
-  if (listeners.length === 0) {
-    systemQuery = window.matchMedia(MEDIA_QUERY);
-    systemQuery.addEventListener("change", onSystem);
-    window.addEventListener("storage", onStorage);
-  }
   listeners.push(listener);
   return () => {
     listeners = listeners.filter((l) => l !== listener);
-    if (listeners.length === 0) {
-      systemQuery?.removeEventListener("change", onSystem);
-      systemQuery = null;
-      window.removeEventListener("storage", onStorage);
-    }
   };
 }
 
