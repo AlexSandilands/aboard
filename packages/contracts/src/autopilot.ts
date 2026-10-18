@@ -274,6 +274,18 @@ export const AutopilotOverview = z.object({
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
 
+/**
+ * A retried run keeps its row as history under this prefix plus its id, so its old dedupe key is free for the
+ * engine to act on again and automations that read keys (rounds, attempts) no longer count it.
+ */
+export const RETRIED_PREFIX = "retried:";
+
+export const isRetried = (dedupeKey: string): boolean => dedupeKey.startsWith(RETRIED_PREFIX);
+
+/** Whether a run can be retried: a real run that ended failed or skipped and hasn't been retried already. */
+export const canRetryRun = (run: Pick<AutopilotRun, "dryRun" | "status" | "dedupeKey">): boolean =>
+  !run.dryRun && (run.status === "failed" || run.status === "skipped") && !isRetried(run.dedupeKey);
+
 /** The activity line for an `autopilot_run` event (after the actor), shared by the panel and MCP results. */
 export function autopilotRunEventText(payload: Record<string, unknown>): string {
   const text = (key: string) => (typeof payload[key] === "string" ? payload[key] : null);
@@ -286,6 +298,8 @@ export function autopilotRunEventText(payload: Record<string, unknown>): string 
       return `finished ${title}: ${summary}`;
     case "failed":
       return `${title} failed: ${text("error") ?? summary}`;
+    case "retried":
+      return `asked ${title} to try again: ${summary}`;
     default:
       return payload.dryRun === true ? `${title} (dry run): ${summary}` : `skipped ${title}: ${summary}`;
   }

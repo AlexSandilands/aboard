@@ -96,8 +96,19 @@ so they need no hook of their own. Events published while the engine itself writ
    `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
    after another.
 
-A run is never retried: once a dedupe key has a run, whatever its outcome, that candidate is done. A key that
-should act again changes (`review:pr:<headSha>`, `start:<taskId>:<statusChangedAt>`). Dry-run runs are deduped
+The engine never retries a run by itself: once a dedupe key has a run, whatever its outcome, that candidate is done. A
+key that should act again changes (`review:pr:<headSha>`, `start:<taskId>:<statusChangedAt>`).
+
+**Retrying by hand.** A real run that ended `failed` or `skipped` can be handed back to the engine
+(`AutopilotService.retry`): the Autopilot section's **Retry** on the run, `POST /api/autopilot/runs/:id/retry`, or
+the MCP tool `retry_autopilot_run(task, automation?)` (the task's newest such run, optionally of one automation by key
+or title). The run stays as history, but its dedupe key is retired to `retried:<runId>:<old key>` (`RETRIED_PREFIX`,
+`canRetryRun` in contracts) and its attention flag is lifted, and the task logs an `autopilot_run` entry with status
+`retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
+under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
+Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge into epic branch's tries) no longer
+count the retried one. This replaces pushing an empty commit to get a new head reviewed after a board restart failed
+the review. Dry-run runs are deduped
 apart from real ones (the unique key is automation, dedupe key and `dry_run`), so turning dry-run off doesn't
 hide work it only previewed.
 
@@ -147,7 +158,8 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
 
 ### API
 
-REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on, lift its limits or unpause it.
+REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on, lift its limits or unpause it. The
+one exception is `retry_autopilot_run`, which only frees a run's work for the engine to judge again.
 
 | Route                                           | Does                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
@@ -157,6 +169,7 @@ REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
+| `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
 
 ### Automations
 

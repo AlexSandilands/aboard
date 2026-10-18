@@ -32,7 +32,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
 const ENV = "env-1";
 const plan = { phases: [{ title: "Build", steps: [{ title: "Do it" }] }] };
 
-describe("T3 threads for an epic's tasks over MCP", () => {
+describe("T3 threads for a task over MCP", () => {
   let h: Harness;
   let agent: Client;
   let taskId: string;
@@ -160,18 +160,27 @@ describe("T3 threads for an epic's tasks over MCP", () => {
     expect(launches[1]!.input.commandId).not.toBe(launches[0]!.input.commandId);
   });
 
-  it("is only for an epic's tasks, and takes only a branch name as baseRef", async () => {
-    const { launches } = fakeT3();
+  it("works on a task outside an epic too", async () => {
+    const { launches, messages } = fakeT3();
     const loose = h.services.tasks.create({
       projectId: h.services.tasks.summary(taskId).projectId,
       title: "Loose",
       plan,
     });
-    const refused = await call(agent, "start_task_thread", { task: `#${loose.number}` });
-    expect(refused.text).toContain(`#${loose.number} isn't in an epic`);
-    expect((await call(agent, "message_task_thread", { task: `#${loose.number}`, text: "hi" })).text).toContain(
-      "isn't in an epic",
+    const started = await call(agent, "start_task_thread", { task: `#${loose.number}` });
+    expect(started.isError).toBe(false);
+    expect(started.text).toContain(
+      `Follow it with get_task, or message it with message_task_thread("#${loose.number}"`,
     );
+    expect(launches).toHaveLength(1);
+    expect(launches[0]!.taskId).toBe(loose.id);
+    const sent = await call(agent, "message_task_thread", { task: `#${loose.number}`, text: "hi" });
+    expect(sent.isError).toBe(false);
+    expect(messages).toHaveLength(1);
+  });
+
+  it("takes only a branch name as baseRef", async () => {
+    const { launches } = fakeT3();
     for (const baseRef of ["--upload-pack=x", "main..evil", "a b", "feat/x.lock"]) {
       expect((await call(agent, "start_task_thread", { task: "#2", baseRef })).isError).toBe(true);
     }
@@ -216,7 +225,7 @@ describe("T3 threads for an epic's tasks over MCP", () => {
     expect(messages).toEqual([
       {
         threadId: "th-busy",
-        text: "From the agent orchestrating this task's epic (sent through the board):\n\nUse the v2 API",
+        text: "From an orchestrating agent (sent through the board):\n\nUse the v2 API",
       },
     ]);
   });

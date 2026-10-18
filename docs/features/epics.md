@@ -231,7 +231,8 @@ ready, is only found out at launch. If it can:
     checkout.
 
   The result names the model, access and workspace it chose, and says when the suggested model wasn't used.
-- Both tools work only on a task in an epic; other tasks are started from the board. `baseRef` must look like
+- Both tools work on any task, in an epic or not, so Autopilot's Orchestrate (and any orchestrating agent) can
+  restart or nudge loose tasks too. The user's **Let agents start threads** setting still gates them. `baseRef` must look like
   a branch name (no leading `-`, `..`, spaces or the characters git refuses).
 - The launch's `commandId` is derived from the task and how many threads were ever linked to it (unlinked ones
   included, so removing a link never brings an old id back). A retry after a timeout or an
@@ -243,8 +244,8 @@ ready, is only found out at launch. If it can:
 - When T3 can't take the task, the error says why and points at `get_handoff_prompt(task, subagent: true)` and the
   pasted-prompt route.
 - `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
-  archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From the agent
-  orchestrating this task's epic (sent through the board)". Each call is a new message, so a retry can post it twice.
+  archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From an
+  orchestrating agent (sent through the board)". Each call is a new message, so a retry can post it twice.
 
 A Jira import run, which reads untrusted issue text, denies tools named with `message`, `dispatch`, `launch` or
 `start` among its write verbs, so an injected instruction can't drive these tools.

@@ -5,7 +5,9 @@ import {
   AutopilotEngineSettings,
   capHandover,
   DEFAULT_AUTOPILOT_ENGINE,
+  isRetried,
   resolveAutopilot,
+  RETRIED_PREFIX,
   ScheduledAgentRunOutput,
   type AutopilotAutomation,
   type AutopilotOverview,
@@ -136,6 +138,13 @@ export interface AutopilotService {
    * has one (another pass got there first).
    */
   record(input: RecordRunInput): AutopilotRun | null;
+  /**
+   * Lets the engine try a finished run's work again: a run that failed (a board restart strands runs as failed) or
+   * was skipped. The run stays as history under a retired dedupe key (`retried:<id>:<key>`), so the automation no
+   * longer sees it, and its attention flag is lifted. The next pass decides whether there is still work: switches,
+   * pause, quiet hours and the caps apply as usual.
+   */
+  retry(runId: string, actor: string): AutopilotRun;
   /** queued → running. */
   start(runId: string): AutopilotRun;
   /** Runner details on a run in flight. */
@@ -482,6 +491,36 @@ export function createAutopilotService(
         fx.autopilot();
         return run;
       });
+    },
+    retry(runId, actor) {
+      const run = runOf(runId);
+      if (run.dryRun) throw new AppError("VALIDATION", "A dry run did nothing, so there is nothing to retry");
+      if (isRetried(run.dedupeKey)) throw new AppError("CONFLICT", "This run has already been retried");
+      if (run.status !== "failed" && run.status !== "skipped") {
+        throw new AppError(
+          "CONFLICT",
+          run.status === "succeeded" ? "This run succeeded, so there is nothing to retry" : "This run is still going",
+        );
+      }
+      const retired: AutopilotRun = {
+        ...run,
+        dedupeKey: `${RETRIED_PREFIX}${run.id}:${run.dedupeKey}`,
+        needsAttention: false,
+        updatedAt: nowIso(),
+      };
+      core.write((fx) => {
+        repos.autopilotRuns.update(retired);
+        if (run.taskId) {
+          fx.log(run.taskId, actor, "autopilot_run", {
+            automation: run.automation,
+            title: titleOf(run.automation),
+            status: "retried",
+            summary: run.summary,
+          });
+        }
+        fx.autopilot();
+      });
+      return retired;
     },
     start(runId) {
       const run = runOf(runId);

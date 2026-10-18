@@ -94,6 +94,10 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    and it merges cleanly. Fix what it names or wait; never merge with `gh` or `git` instead. When several flagged
    tasks are ready, merge one at a time so the rest don't conflict.
 
+   When an Autopilot run on a task failed or was cut short (a review or a start a board restart interrupted),
+   `retry_autopilot_run(task)` hands it back to Autopilot, which acts again on its next pass if there is still
+   work. Retry once the cause is gone, and never push an empty commit to re-trigger a review.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once
