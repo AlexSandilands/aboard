@@ -1,4 +1,4 @@
-import type { StatsPeriod, StatsResponse, StatsSeries, StatsUnit } from "@repo/contracts";
+import type { StatsPeriod, StatsResponse, StatsSeries, StatsUnit, TaskEvent } from "@repo/contracts";
 import { notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
 
@@ -123,7 +123,10 @@ export function createStatsService(core: Core): StatsService {
         .getMany([...lastFinish.keys()])
         .filter((t) => t.kind !== "epic" && !NOT_DELIVERED.has(String(lastFinish.get(t.id)!.resolution)));
       const finishedIds = finished.map((t) => t.id);
-      const moves = repos.events.ofTypes(finishedIds, ["status_changed"]);
+      const movesOf = new Map<string, TaskEvent[]>();
+      for (const m of repos.events.ofTypes(finishedIds, ["status_changed", "closed"])) {
+        movesOf.set(m.taskId, [...(movesOf.get(m.taskId) ?? []), m]);
+      }
       const rounds = new Map<string, number>();
       for (const r of repos.reviews.forTasks(finishedIds)) rounds.set(r.taskId, (rounds.get(r.taskId) ?? 0) + 1);
       for (const task of finished) {
@@ -131,9 +134,16 @@ export function createStatsService(core: Core): StatsService {
         const doneAt = Date.parse(done);
         count("tasks_completed", done);
         add("cycle_time.created_to_done", "ms", "median", done, Math.max(0, doneAt - Date.parse(task.createdAt)));
-        const started = moves.find((m) => m.taskId === task.id && m.payload.to === "in_progress" && m.at <= done);
+        // From the first move to In Progress of the last cycle: a task that was finished and reopened starts again.
+        let started: string | null = null;
+        for (const m of movesOf.get(task.id) ?? []) {
+          const finishes = m.type === "closed" || m.payload.to === "done";
+          if (finishes && m.at >= done) break;
+          if (finishes) started = null;
+          else if (m.payload.to === "in_progress" && started === null) started = m.at;
+        }
         if (started) {
-          add("cycle_time.in_progress_to_done", "ms", "median", done, Math.max(0, doneAt - Date.parse(started.at)));
+          add("cycle_time.in_progress_to_done", "ms", "median", done, Math.max(0, doneAt - Date.parse(started)));
         }
         add("review_rounds_per_task", "ratio", "mean", done, rounds.get(task.id) ?? 0);
       }
@@ -146,15 +156,9 @@ export function createStatsService(core: Core): StatsService {
         count("prs_merged", pr.at);
       }
 
-      // Agent sessions, by when they were first linked to a task; the same session on two tasks is one session.
-      const seenSessions = new Set<string>();
-      for (const s of repos.links.agentSessionsBetween(start, end)) {
-        if (!inScope(s.projectId)) continue;
-        if (s.sessionId) {
-          if (seenSessions.has(s.sessionId)) continue;
-          seenSessions.add(s.sessionId);
-        }
-        count("agent_sessions_started", s.at);
+      // Agent sessions, by when they were first linked to a task, in that task's project.
+      for (const s of repos.links.agentSessionsStartedBetween(start, end)) {
+        if (inScope(s.projectId)) count("agent_sessions_started", s.at);
       }
 
       // Local review rounds, and the findings they raised by severity.

@@ -143,17 +143,24 @@ export function createLinksRepo(sql: Sql) {
         )
         .map((r) => ({ url: r.url, projectId: r.project_id, at: r.at }));
     },
-    /** Agent session links added at or after `from` and before `to`, with the task's project. */
-    agentSessionsBetween(from: string, to: string): { sessionId: string; projectId: string; at: string }[] {
+    /**
+     * Agent sessions first linked to a task at or after `from` and before `to`, with that task's project. A session
+     * linked again later, or to other tasks, counts only where it was first linked.
+     */
+    agentSessionsStartedBetween(from: string, to: string): { projectId: string; at: string }[] {
       return sql
-        .all<{ session_id: string | null; project_id: string; at: string }>(
-          `SELECT json_extract(l.ref_json, '$.sessionId') AS session_id, t.project_id, l.created_at AS at
-           FROM task_links l JOIN tasks t ON t.id = l.task_id
-           WHERE l.kind = 'agent_session' AND l.created_at >= ? AND l.created_at < ? ORDER BY l.created_at, l.id`,
+        .all<{ project_id: string; at: string }>(
+          `SELECT project_id, at FROM (
+             SELECT t.project_id, l.created_at AS at,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY COALESCE(json_extract(l.ref_json, '$.sessionId'), l.id) ORDER BY l.created_at, l.id
+                    ) AS n
+             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind = 'agent_session'
+           ) WHERE n = 1 AND at >= ? AND at < ? ORDER BY at`,
           from,
           to,
         )
-        .map((r) => ({ sessionId: r.session_id ?? "", projectId: r.project_id, at: r.at }));
+        .map((r) => ({ projectId: r.project_id, at: r.at }));
     },
     delete(id: string): void {
       sql.run("DELETE FROM task_links WHERE id = ?", id);

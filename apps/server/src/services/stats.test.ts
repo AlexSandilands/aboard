@@ -33,6 +33,20 @@ describe("weekBoundaries", () => {
     expect(bounds.every((d) => d.getDay() === 1 && d.getHours() === 0)).toBe(true);
   });
 
+  it("starts every week at midnight across a clock change", () => {
+    const zone = process.env.TZ;
+    try {
+      // New York puts its clocks forward on 2026-03-08 and back on 2026-11-01.
+      process.env.TZ = "America/New_York";
+      const bounds = weekBoundaries(new Date(2026, 10, 18, 12), 52);
+      expect(bounds.some((d) => d.getTimezoneOffset() !== bounds[0]!.getTimezoneOffset())).toBe(true);
+      expect(bounds.every((d) => d.getDay() === 1 && d.getHours() === 0)).toBe(true);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
+
   it("puts a Sunday night in the week that ends, and Monday midnight in the one that starts", () => {
     expect(weekBoundaries(at(18, 23), 1)).toEqual([new Date(2026, 9, 12), new Date(2026, 9, 19)]);
     expect(weekBoundaries(at(19, 0), 1)).toEqual([new Date(2026, 9, 19), new Date(2026, 9, 26)]);
@@ -113,6 +127,22 @@ describe("stats.weekly", () => {
     expect(values("cycle_time.in_progress_to_done").values).toEqual([null, null, null, 4 * HOUR]);
     // Five hours and two: the median is their middle.
     expect(values("cycle_time.created_to_done").total).toBe(3.5 * HOUR);
+  });
+
+  it("measures a reopened task's cycle time from its last start", () => {
+    const { s, alpha, clock, task, finish, values } = setup();
+    clock(at(12, 9));
+    const t = task(alpha.id, "Reopened");
+    s.tasks.move(t.id, { status: "in_progress" }, "agent");
+    clock(at(12, 10));
+    finish(t.id);
+    clock(at(13, 9));
+    s.tasks.move(t.id, { status: "in_progress" }, "agent");
+    clock(at(13, 12));
+    finish(t.id);
+
+    expect(values("tasks_completed").total).toBe(1);
+    expect(values("cycle_time.in_progress_to_done").total).toBe(3 * HOUR);
   });
 
   it("counts review rounds, rounds per finished task and findings by severity", () => {

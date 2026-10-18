@@ -34,16 +34,16 @@ appear only when that automation ran in the two periods.
 | ------ | ---- | -------------- | ------ |
 | `tasks_created` | count | Tasks created, epics left out | `task_events` `created` |
 | `tasks_completed` | count | Tasks that reached Done: the last move to Done or close of each task. Epics and closes as `wont_do` or `duplicate` are left out | `status_changed`, `closed` |
-| `cycle_time.in_progress_to_done` | ms, median | From the first move to In Progress to finishing; tasks that never went through In Progress have none | `status_changed` |
+| `cycle_time.in_progress_to_done` | ms, median | From the first move to In Progress in the last cycle (after any earlier finish, so a reopened task starts again) to finishing; tasks that never went through In Progress have none | `status_changed` |
 | `cycle_time.created_to_done` | ms, median | From creation to finishing | `tasks.created_at`, finish event |
 | `prs_merged` | count | PRs, by when the board first saw them merged; a PR linked to two tasks counts once | `task_links.pr_changes_json` `merged` |
-| `agent_sessions_started` | count | Agent sessions, by when first linked to a task; one session on two tasks counts once | `agent_session` links |
+| `agent_sessions_started` | count | Agent sessions, by when first linked to a task; a session on several tasks, or linked again later, counts where it was first linked, in that task's project | `agent_session` links |
 | `review_rounds` | count | Local review rounds opened | `task_reviews` |
 | `review_rounds_per_task` | ratio, mean | Local review rounds each finished task had in all (0 when none), taken in the week it finished | `task_reviews`, finish event |
 | `review_findings.<severity>` | count | Findings raised, for `blocking`, `major`, `minor`, `nit` | `review_findings` |
 | `autopilot.runs` | count | Real runs, in the week they finished | `autopilot_runs` |
 | `autopilot.runs.<automation>.<status>` | count | The same, per automation and final status | `autopilot_runs` |
-| `autopilot.retries` | count | Runs that followed a failed run of the same automation on the same task | `autopilot_runs` |
+| `autopilot.retries` | count | Runs that followed a failed run of the same automation on the same task, both finished in the two periods; a retry of a failure from before the first week isn't counted | `autopilot_runs` |
 | `autopilot.cost_usd` | usd | `cost_usd` of those runs | `autopilot_runs` |
 
 Series names are stable ids; the labels are the client's to write. A new metric is a new key, so adding one
@@ -77,6 +77,6 @@ doesn't change the shape.
 | ---- | ------------ |
 | `packages/contracts/src/stats.ts` | `StatsQuery`, `StatsResponse`, `StatsSeries`, the allowed periods |
 | `apps/server/src/services/stats.ts` | Week boundaries, the series, the previous-period split |
-| `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsBetween` |
+| `apps/server/src/db/repos/links.ts` | `prsMergedBetween`, `agentSessionsStartedBetween` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
