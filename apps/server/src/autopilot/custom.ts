@@ -1,5 +1,8 @@
 import {
+  BRAND,
   capHandover,
+  CHECK_FAILED_KEY_PREFIX,
+  CHECK_NEW_ITEMS_MAX,
   customAgentPrompt,
   customAllowedTools,
   customBlockedReason,
@@ -19,20 +22,27 @@ import {
   latestMinutesSlot,
   localStamp,
   customShellEnv,
+  parseCheckOutput,
   ScheduledAgentAnswer,
   SCHEDULED_AGENT_OUTPUT_SCHEMA,
+  type CheckFailure,
+  type CheckItem,
   type CustomAutomation,
   type CustomTrigger,
   type CustomData,
   type CustomValues,
   type PrChanges,
+  type Project,
   type ScheduledAgentRunOutput,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
+import { messageOf } from "../integrations/github.ts";
 import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
 import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";
+import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "./automations/orchestrate.ts";
+import { agentHold } from "./limits.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "./runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Automation, type Candidate, type CheckContext } from "./types.ts";
 
@@ -114,10 +124,50 @@ function taskEvents(
 
 const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
 
+/** Board tools Orchestrate may use that an untrusted item's agent may not: they reach other agents and runs. */
+const ITEM_HELD_BACK: ReadonlySet<string> = new Set([
+  "start_task_thread",
+  "message_task_thread",
+  "retry_autopilot_run",
+  "merge_task_pr",
+]);
+
+/**
+ * The board tools an untrusted item's agent is denied: Orchestrate's (a test keeps that list complete), and the ones
+ * that start, steer or retry other agents' work or merge. What is left reads the board, adds notes and asks the user.
+ */
+export const CHECK_ITEM_DENIED_TOOLS = [
+  ...ORCHESTRATE_DENIED_BOARD_TOOLS,
+  ...ORCHESTRATE_BOARD_TOOLS.filter((tool) => ITEM_HELD_BACK.has(tool)),
+].map((tool) => `mcp__${BRAND.id}__${tool}`);
+
+/** Where a check script's last run in a project stands. */
+type CheckState =
+  | { kind: "running" }
+  | { kind: "done"; items: CheckItem[]; dropped: number }
+  | { kind: "failed"; failure: CheckFailure };
+
+interface CheckRun {
+  /** The schedule slot it ran for, as a local stamp. */
+  slot: string;
+  /** The automation's `updatedAt` when it ran: an edit runs the check again. */
+  version: string;
+  state: CheckState;
+}
+
+/**
+ * Each custom automation's check script runs, by `<automation id>:<project id>`: the latest per project. Kept in memory
+ * between passes (the catalogue entries are rebuilt every pass), so a restart forgets it and runs a slot's check once
+ * more; the items' dedupe keys keep that from starting anything twice.
+ */
+export type CheckRuns = Map<string, CheckRun>;
+
+export const createCheckRuns = (): CheckRuns => new Map();
+
 /** The catalogue entry for a custom automation. */
 export function customAutomation(
   custom: CustomAutomation,
-  deps: { runShell: RunShell; runScript: RunScript },
+  deps: { runShell: RunShell; runScript: RunScript; checkRuns: CheckRuns },
 ): Automation {
   const { trigger, filters, action } = custom;
   const isAgent = action.kind === "agent";
@@ -148,6 +198,120 @@ export function customAutomation(
   // A required tool slot nobody filled: the agent would start without what it needs.
   const blocked = customBlockedReason(action);
   const tools = customAllowedTools(action);
+  const automationKey = customAutomationKey(custom.id);
+  const checkScript = action.kind === "agent" ? action.check : null;
+
+  /** Runs the check script and reads what it printed. Never throws: a failure is a state of its own. */
+  const runCheck = async (project: Project, values: CustomValues): Promise<CheckState> => {
+    const failed = (what: string, error: string, ran?: { output: string; exitCode: number | null }): CheckState => ({
+      kind: "failed",
+      failure: {
+        summary: `The check of "${custom.name}" in ${project.title} ${what}`,
+        error,
+        output: ran?.output || null,
+        exitCode: ran?.exitCode ?? null,
+      },
+    });
+    if (!checkScript) return { kind: "done", items: [], dropped: 0 };
+    if (!project.workspaceRoot) {
+      return failed("couldn't start", `${project.title} has no workspace folder to run the check in`);
+    }
+    try {
+      const ran = await deps.runScript({
+        language: checkScript.language,
+        body: checkScript.body,
+        cwd: project.workspaceRoot,
+        env: customShellEnv(values),
+        context: customScriptContext(values),
+        timeoutMs: checkScript.timeoutSeconds * 1000,
+      });
+      if (ran.timedOut) {
+        return failed(
+          "timed out",
+          `The check didn't finish within ${checkScript.timeoutSeconds} seconds and was stopped`,
+          ran,
+        );
+      }
+      if (ran.exitCode !== 0) {
+        const code = ran.exitCode ?? "a signal";
+        return failed(`exited with ${code}`, `The check exited with ${code}`, ran);
+      }
+      if (ran.stdoutTruncated) return failed("printed too much", "The check printed more than the board reads", ran);
+      const parsed = parseCheckOutput(ran.stdout);
+      if (!parsed.ok) return failed("printed something that isn't an item", parsed.error, ran);
+      return { kind: "done", items: parsed.items, dropped: parsed.dropped };
+    } catch (error) {
+      const message = error instanceof InterpreterMissingError ? error.message : messageOf(error);
+      return failed("couldn't start", `The check couldn't run: ${message}`);
+    }
+  };
+
+  /**
+   * A check automation's candidates in one project for the slot: none while its check script runs (started here, in
+   * the background, so the pass never waits on it), then one per new item it printed, or one failed run. The script
+   * runs once per slot; held items are taken from what it printed by a later pass in the same slot.
+   */
+  const checkCandidates = (
+    ctx: CheckContext<Record<string, unknown>>,
+    project: Project,
+    stamp: string,
+  ): Candidate[] => {
+    const { services, engine, now } = ctx;
+    const runKey = `${custom.id}:${project.id}`;
+    const failedKey = `${CHECK_FAILED_KEY_PREFIX}${project.id}:${stamp}`;
+    const last = deps.checkRuns.get(runKey);
+    const current = last && last.slot === stamp && last.version === custom.updatedAt ? last : null;
+    if (!current) {
+      // Its failure this slot is already recorded (the run's act forgot it, or a restart did): run again only once
+      // that run is retried, which retires its key.
+      if (services.autopilot.hasRun(automationKey, failedKey, engine.dryRun)) return [];
+      // No agent could start now, so the items would only wait: run the script once one can. A dry run starts none.
+      if (!engine.dryRun && agentHold(services, engine, now)) return [];
+      const run: CheckRun = { slot: stamp, version: custom.updatedAt, state: { kind: "running" } };
+      deps.checkRuns.set(runKey, run);
+      void runCheck(project, customValues(custom, project, null)).then((state) => {
+        run.state = state;
+        return ctx.wake?.();
+      });
+      return [];
+    }
+    const { state } = current;
+    if (state.kind === "running") return [];
+    if (state.kind === "failed") {
+      const { failure } = state;
+      return [
+        {
+          dedupeKey: failedKey,
+          summary: `run the check of "${custom.name}" in ${project.title}`,
+          projectId: project.id,
+          startsNoAgent: true,
+          data: { checkFailure: failure } satisfies CustomData,
+          preview: [failure.summary, failure.error, failure.output].filter(Boolean).join("\n\n"),
+        },
+      ];
+    }
+    const printed = state.items.length + state.dropped;
+    const fresh = state.items
+      .map((item) => ({ item, dedupeKey: `check:${project.id}:${item.key}` }))
+      .filter(({ dedupeKey }) => !services.autopilot.hasRun(automationKey, dedupeKey, engine.dryRun))
+      .slice(0, CHECK_NEW_ITEMS_MAX);
+    return fresh.map(({ item, dedupeKey }): Candidate => {
+      const data = { item } satisfies CustomData;
+      return {
+        dedupeKey,
+        summary: `start an agent for ${item.key} in ${project.title}`,
+        projectId: project.id,
+        data,
+        ...(engine.dryRun
+          ? {
+              preview: `The check script really ran (a dry run still runs it) and printed ${printed} item${printed === 1 ? "" : "s"}${
+                state.dropped > 0 ? `, of which ${state.dropped} past the limit were dropped` : ""
+              }. This one's agent would start with:\n\n${preview(customValues(custom, project, null, data), null, services)}`,
+            }
+          : {}),
+      };
+    });
+  };
 
   const check = (ctx: CheckContext<Record<string, unknown>>): Candidate[] => {
     if (blocked) return [];
@@ -158,7 +322,7 @@ export function customAutomation(
       // One at a time per project: a run that outlasts the interval holds the next slot back (it isn't recorded), and
       // the latest slot then runs once it ends. The runs in flight are asked for directly, not found in the history.
       const busy = new Set(
-        isAgent
+        isAgent && !checkScript
           ? services.autopilot
               .status()
               .active.filter((r) => r.automation === customAutomationKey(custom.id))
@@ -174,8 +338,10 @@ export function customAutomation(
               ? latestMinutesSlot(s.everyMinutes, now)
               : latestDue(s, now, localStamp(new Date(armedAt)));
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
-        if (busy.has(project.id)) return [];
         const stamp = localStamp(slot);
+        // Each item gets an agent of its own, so one going doesn't hold back the next slot.
+        if (checkScript) return checkCandidates(ctx, project, stamp);
+        if (busy.has(project.id)) return [];
         return [
           {
             dedupeKey: `schedule:${project.id}:${stamp}`,
@@ -266,6 +432,37 @@ export function customAutomation(
       const values = customValues(custom, project, task, data);
 
       if (action.kind === "agent") {
+        if (data.checkFailure) {
+          // Recorded now, so the slot's failure needn't be kept in memory too: hasRun stops the check running again.
+          if (project) deps.checkRuns.delete(`${custom.id}:${project.id}`);
+          const failure = data.checkFailure;
+          return {
+            status: "failed",
+            summary: failure.summary,
+            error: failure.error,
+            detail: failure.output,
+            exitCode: failure.exitCode,
+          };
+        }
+        if (data.item) {
+          const where = project?.title ?? "the board";
+          const result = await ctx.runner.start({
+            run: ctx.run,
+            label: `${custom.name} · ${data.item.key}`,
+            prompt: customAgentPrompt(custom, values, null, null),
+            tier: action.tier,
+            options: { ...ctx.config, runner: "headless" },
+            repo: project?.workspaceRoot ?? null,
+            // An item often carries text anyone can write: read-only, and only this board's server, narrowed.
+            ...(action.untrustedItems
+              ? { access: "read-only", untrustedInput: true, boardTools: true, deniedTools: CHECK_ITEM_DENIED_TOOLS }
+              : tools.length > 0
+                ? { tools }
+                : {}),
+          });
+          const { result: _final, output: _output, ...patch } = result;
+          return { ...patch, summary: `Started an agent for ${data.item.key} in ${where}` };
+        }
         if (!task) {
           // A schedule: no task, so the runner starts it headless in an empty temp folder (never the project's own
           // checkout, which the board may be running from, so T3 Code is no option); `repo` gives it the push guard.

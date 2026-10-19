@@ -187,6 +187,21 @@ export function CustomAutomationImportForm({
                     <Code>{tools.join("\n")}</Code>
                   </Section>
                 ) : null}
+                {action.check ? (
+                  <Section
+                    title={`Check script it runs first (${action.check.language})`}
+                    hint={`Each line it prints starts an agent of its own.${action.untrustedItems ? " Those agents treat the lines as untrusted: read-only, with only this board's tools." : " Those agents trust the lines and get the usual access."}`}
+                  >
+                    <Code tall>{action.check.body}</Code>
+                    <Alert variant="warning">
+                      <TriangleAlertIcon />
+                      <AlertDescription>
+                        This runs on your machine as you, in the project&apos;s folder, on every slot of the schedule.
+                        Don&apos;t import it unless you trust who wrote it and have read every line.
+                      </AlertDescription>
+                    </Alert>
+                  </Section>
+                ) : null}
               </>
             ) : (
               <Section title={action.kind === "script" ? `Script it runs (${action.language})` : "Command it runs"}>

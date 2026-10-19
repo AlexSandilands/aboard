@@ -184,7 +184,14 @@ export function createAutopilotEngine(deps: {
       return resolved;
     };
 
-    const candidates = await automation.check({ services: s, engine, now: at, projects, board: boardConfig });
+    const candidates = await automation.check({
+      services: s,
+      engine,
+      now: at,
+      projects,
+      board: boardConfig,
+      wake: schedule,
+    });
     for (const found of candidates) {
       let candidate = found;
       // A task's run belongs to the task's project and epic, whatever the check said, so their switches apply.

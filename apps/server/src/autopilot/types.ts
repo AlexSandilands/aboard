@@ -50,6 +50,11 @@ export interface CheckContext<C> {
   projects: ReadonlyArray<ProjectScope<C>>;
   /** The board-level config when the automation is on for the board itself; null otherwise. */
   board: C | null;
+  /**
+   * Asks for another pass soon. For a check that started work in the background (a custom automation's check script)
+   * and has candidates once it ends; the engine's minute tick would get there too, only later.
+   */
+  wake?: () => void;
 }
 
 /** What a runner recorded about an agent action. */
