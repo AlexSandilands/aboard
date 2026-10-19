@@ -53,8 +53,9 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
   inside it, and its cards are `compact` (`BoardCell` → `SortableTaskCard` → `TaskCardContent`): one line with the number,
   the project's icon, the title, the Autopilot badge, the first PR chip, and the blocked and attention icons. Scrolling back
   to the top brings the full lane back. Shrinking the lane would shorten the board, and near its end clamp the scroll
-  position back until the lane unstuck again, so a spacer after the lane keeps its footprint while stuck and the scroll
-  position is restored if it was clamped. The lines re-measure on scroll (once per frame) while the lane is pinned, since
+  position back until the lane unstuck again, so while stuck an empty element at the end of the board's content gets
+  just the height that keeps the scroll position the lane stuck at reachable (usually none, so no gap shows under the
+  lane) and the scroll position is restored if it was clamped. The lines re-measure on scroll (once per frame) while the lane is pinned, since
   its cards don't scroll with the content (`DependencyLines`' `pinnedLane`). `revealCard` treats the pinned lane's
   bottom as the top of the visible area for cards outside it, and scrolls the lane itself for a card inside it. Drags work
   in and out of a stuck lane as in an unpinned one, with two differences: the drag preview is one line, and the board

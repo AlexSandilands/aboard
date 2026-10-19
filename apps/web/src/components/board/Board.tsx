@@ -518,6 +518,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   // filter leaves out is skipped, and the filters stay as they are.
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnHeaderRef = useRef<HTMLDivElement>(null);
+  const stuckSpacerRef = useRef<HTMLDivElement>(null);
   const reveal = useReveal((s) => s.request);
   const collapsedEpics = useBoardView((s) => s.collapsedEpics);
   const revealExpanded = useRef<RevealProgress | null>(null);
@@ -655,6 +656,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                     draggingTaskId={activeRowId === PRIORITY_ROW_ID ? (activeTask?.id ?? null) : null}
                     overCell={overHere}
                     columnHeaderRef={columnHeaderRef}
+                    spacerRef={stuckSpacerRef}
                   />
                 );
               }
@@ -691,6 +693,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
               ) : null}
             </DragOverlay>
           </DndContext>
+          {/* Sized by useStuck, at the end so it never shows between lanes. Give it no `style`. */}
+          <div ref={stuckSpacerRef} aria-hidden className="pointer-events-none" />
           {lanes.length === 0 ? (
             <p className="ps-(--workspace-gutter-start) pt-6 text-sm text-muted-foreground">
               No tasks match the current filters.

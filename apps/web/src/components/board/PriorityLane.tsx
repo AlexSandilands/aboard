@@ -32,6 +32,7 @@ export const PriorityLane = memo(function PriorityLane({
   draggingTaskId,
   overCell,
   columnHeaderRef,
+  spacerRef,
 }: {
   cells: LaneCells;
   selectedTaskId: string | null;
@@ -41,13 +42,15 @@ export const PriorityLane = memo(function PriorityLane({
   overCell: OverCell | null;
   /** The sticky column header the pinned lane sits under. */
   columnHeaderRef: RefObject<HTMLElement | null>;
+  /** An empty element at the end of the board's content, which `useStuck` sizes. */
+  spacerRef: RefObject<HTMLDivElement | null>;
 }) {
   const counts = laneCounts({ project: PRIORITY_PROJECT, bands: [], cells });
   const toggleRow = laneHasCollapsibleCell(cells);
   const pinned = useBoardView((s) => s.pinPriorityLane);
   const setPinned = useBoardView((s) => s.setPinPriorityLane);
   const maxHeight = useBoardView((s) => pinnedLaneMaxHeight(s.pinnedLaneHeight));
-  const { sentinelRef, sectionRef, spacerRef, stuck } = useStuck(pinned, columnHeaderRef);
+  const { sentinelRef, sectionRef, stuck } = useStuck(pinned, columnHeaderRef, spacerRef);
   const pinLabel = pinned ? "Unpin the priority lane" : "Pin the priority lane to the top of the board";
   return (
     <>
@@ -117,7 +120,6 @@ export const PriorityLane = memo(function PriorityLane({
           </div>
         </div>
       </section>
-      {pinned ? <div ref={spacerRef} aria-hidden className="pointer-events-none" /> : null}
     </>
   );
 });

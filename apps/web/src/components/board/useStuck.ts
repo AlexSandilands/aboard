@@ -7,21 +7,22 @@ import { isStuck } from "./stuck.logic";
  * scroll box (`data-board-scroll`).
  *
  * Going stuck shrinks the lane, which would shorten the board and, near its bottom, clamp the scroll position back
- * until the lane unsticks and grows again: a flicker. So the lane's footprint is kept while it is stuck: `spacerRef`
- * is an element after the lane whose height this hook sets to what the lane gave up, and the scroll position is put
- * back if the shorter board clamped it. The unstuck height can't be read while stuck (the cards are one line then), so
- * it is the last one seen unstuck: tasks added or removed, or cells folded, while stuck leave the spacer off by the
- * change until the lane unsticks, which moves the board's scroll extent a little. Attach `sentinelRef`, `sectionRef`
- * and `spacerRef`; `spacerRef` is only ever styled here, so give it no `style`.
+ * until the lane unsticks and grows again: a flicker. So while stuck, `spacerRef` (an empty element at the end of the
+ * board's content, which this hook styles; give it no `style`) is given just the height that keeps the scroll position
+ * the lane stuck at reachable, usually none, and the scroll position is put back if the shorter board clamped it. It
+ * is at the end, and not the lane's whole lost height after the lane, so no gap shows between the lane and the
+ * projects. Attach `sentinelRef` and `sectionRef`.
  */
-export function useStuck(pinned: boolean, headerRef: RefObject<HTMLElement | null>) {
+export function useStuck(
+  pinned: boolean,
+  headerRef: RefObject<HTMLElement | null>,
+  spacerRef: RefObject<HTMLDivElement | null>,
+) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
-  const spacerRef = useRef<HTMLDivElement>(null);
   const [stuckNow, setStuck] = useState(false);
   const stuck = pinned && stuckNow;
-  // The lane's height while it isn't stuck, and the scroll position when the sentinel went out of view.
-  const naturalHeight = useRef(0);
+  // The scroll position when the sentinel went out of view.
   const scrollAtStick = useRef(0);
 
   useEffect(() => {
@@ -56,25 +57,26 @@ export function useStuck(pinned: boolean, headerRef: RefObject<HTMLElement | nul
     const section = sectionRef.current;
     const spacer = spacerRef.current;
     if (!pinned || !section || !spacer) return;
+    const root = section.closest<HTMLElement>("[data-board-scroll]");
     const fill = () => {
-      spacer.style.height = stuck ? `${Math.max(0, naturalHeight.current - section.offsetHeight)}px` : "0px";
+      if (!stuck || !root) {
+        spacer.style.height = "0px";
+        return;
+      }
+      // How far the board scrolls without the spacer, against how far it had to for the lane to stick.
+      const reachable = root.scrollHeight - spacer.offsetHeight - root.clientHeight;
+      spacer.style.height = `${Math.max(0, scrollAtStick.current - reachable)}px`;
     };
-    if (stuck) {
-      // The shorter lane may already have clamped the scroll position; the spacer gives the room back.
-      const root = section.closest<HTMLElement>("[data-board-scroll]");
-      fill();
-      if (root && root.scrollTop < scrollAtStick.current) root.scrollTop = scrollAtStick.current;
-    } else {
-      fill();
-      naturalHeight.current = section.offsetHeight;
-    }
-    const observer = new ResizeObserver(() => {
-      if (!stuck) naturalHeight.current = section.offsetHeight;
-      fill();
-    });
+    fill();
+    // The shorter lane may already have clamped the scroll position; the spacer gives the room back.
+    if (stuck && root && root.scrollTop < scrollAtStick.current) root.scrollTop = scrollAtStick.current;
+    const observer = new ResizeObserver(fill);
     observer.observe(section);
-    return () => observer.disconnect();
-  }, [pinned, stuck]);
+    return () => {
+      observer.disconnect();
+      spacer.style.height = "0px";
+    };
+  }, [pinned, stuck, spacerRef]);
 
-  return { sentinelRef, sectionRef, spacerRef, stuck };
+  return { sentinelRef, sectionRef, stuck };
 }
