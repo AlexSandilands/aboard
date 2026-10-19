@@ -108,10 +108,12 @@ describe("runScript with node", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   it("ends the programs a timed-out script started", async () => {
     const dir = tempDir();
     const marker = join(dir, "grandchild.txt");
-    const grandchild = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 4000)`;
+    const started = join(dir, "started.txt");
+    // It says it started, so a slow Node start-up fails the test rather than passing it without a grandchild.
+    const grandchild = `const fs = require("node:fs"); fs.writeFileSync(${JSON.stringify(started)}, "up"); setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, "alive"), 6000)`;
     const result = await run({
       language: "node",
-      timeoutMs: 1_500,
+      timeoutMs: 3_000,
       body: `
         const { spawn } = require("node:child_process");
         spawn(process.execPath, ["-e", ${JSON.stringify(grandchild)}], { stdio: "ignore" });
@@ -119,7 +121,8 @@ describe("runScript with node", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       `,
     });
     expect(result.timedOut).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 5_500));
+    expect(existsSync(started)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 7_000));
     expect(existsSync(marker)).toBe(false);
   }, 30_000);
 
@@ -240,9 +243,12 @@ describe("scriptInvocation", () => {
     expect(linux).toMatchObject({ args: flags });
     expect((linux as { exe: string }).exe).toMatch(/python3$/);
     expect(scriptInvocation("python", "s.py", bin("python"), "linux")).toMatchObject({ args: flags });
-    expect(scriptInvocation("python", "s.py", bin("py.exe"), "win32")).toMatchObject({ args: ["-3", ...flags] });
-    const python = scriptInvocation("python", "s.py", bin("py.exe", "python.exe"), "win32") as { exe: string };
+    expect(scriptInvocation("python", "s.py", bin("py.exe", "python.exe"), "win32")).toMatchObject({
+      args: ["-3", ...flags],
+    });
+    const python = scriptInvocation("python", "s.py", bin("python.exe"), "win32") as { exe: string; args: string[] };
     expect(python.exe).toMatch(/python\.exe$/);
+    expect(python.args).toEqual(flags);
     expect(scriptInvocation("python", "s.py", bin("node"), "linux")).toEqual({ missing: "python" });
   });
 

@@ -813,7 +813,11 @@ the automation. Runs stay, under the old key.
   (`customScriptContext`: `automation`, `project` with `id`, `name` and `path`, `inputs`, `task` and `pr`, null when the
   trigger has none), with non-ASCII characters escaped so every runtime reads it the same. The result keeps `stdout`
   (the first `STDOUT_MAX` characters) and `stderr` apart for a caller that parses what the script printed; the run
-  gets the interleaved tail and exit code as for a shell action. `{{…}}` in a body is refused on save, as in a command.
+  gets the interleaved tail and exit code as for a shell action. A `{{…}}` in a body that names a placeholder is
+  refused on save, as in a command (other `{{…}}` text is left alone). Known limits: a PowerShell script gets the shell
+  action's two-line prelude (progress and encoding) and exit handling around it, so it can't open with `param(...)`,
+  `[CmdletBinding()]` or `using`; it runs with `-File`, which an execution-policy Group Policy can block, unlike a
+  shell action's `-EncodedCommand`; and on Windows only `.exe` programs are found on the PATH (not `.cmd` shims).
   The spawn, output buffering and timeout kill are shared with shell actions in `integrations/captureProcess.ts`.
   The storage is the same `action_json` column, so no migration.
 - **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose

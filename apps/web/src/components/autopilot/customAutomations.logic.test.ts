@@ -257,6 +257,32 @@ describe("custom automation form", () => {
   });
 });
 
+describe("a script automation in the form", () => {
+  const action = {
+    kind: "script" as const,
+    language: "python" as const,
+    body: "if x:\r\n    print(1)\r\n",
+    timeoutSeconds: 45,
+  };
+
+  it("is saved back as it was, indentation and line endings kept", () => {
+    const saved = custom({ action });
+    const form = formFromCustom(saved);
+    expect(form.actionKind).toBe("script");
+    expect(customFormToInput(form)).toMatchObject({ ok: true, input: { action } });
+  });
+
+  it("previews the script with the sample task's variables", () => {
+    const preview = previewAction(
+      { name: "Ping", trigger: { kind: "status_change", to: "review" }, action },
+      task("t"),
+      [project],
+    );
+    expect(preview).toContain("print(1)");
+    expect(preview).toContain(`${brandEnv("TASK_NUMBER")}="7"`);
+  });
+});
+
 describe("preview", () => {
   it("picks the newest task the filters let through", () => {
     const tasks = [

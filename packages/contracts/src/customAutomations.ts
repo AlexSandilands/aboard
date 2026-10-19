@@ -593,7 +593,11 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
     }
   } else {
     const isScript = action.kind === "script";
-    const named = placeholdersIn(isScript ? action.body : action.command)[0];
+    // A script is long, and `{{x}}` is legitimate text in one (an f-string escape, a template): only a name that is a
+    // placeholder was meant as one.
+    const named = placeholdersIn(isScript ? action.body : action.command).find(
+      (key) => !isScript || KNOWN.has(key) || key.startsWith(INPUT_PREFIX),
+    );
     if (named) {
       const env = CUSTOM_PLACEHOLDERS.find((p) => p.key === named)?.env;
       return `${isScript ? "Scripts" : "Shell commands"} aren't filled in, so values can't be injected into them: read ${

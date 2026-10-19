@@ -139,6 +139,10 @@ describe("checkCustomDefinition", () => {
       { kind: "script" }
     >;
     expect(checkCustomDefinition({ trigger, filters, action: script })).toBeNull();
+    // `{{count}}` isn't a placeholder: in a script it is text (an f-string escape, a template).
+    expect(
+      checkCustomDefinition({ trigger, filters, action: { ...script, body: 'print(f"{{count}} of {{ total }}")' } }),
+    ).toBeNull();
     expect(checkCustomDefinition({ trigger, filters, action: { ...script, body: "echo({{task.title}})" } })).toMatch(
       /Scripts aren't filled in.*TASK_TITLE/,
     );

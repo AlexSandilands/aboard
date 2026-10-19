@@ -97,9 +97,9 @@ export function scriptInvocation(
       };
     case "python": {
       // -I ignores the user's PYTHON* variables and site packages and keeps the script's folder off sys.path; -X utf8
-      // keeps non-ASCII output intact on a Windows code page. python3 first off Windows, where `python` may be 2.
+      // keeps non-ASCII output intact on a Windows code page. python3 first off Windows, where `python` may be 2; the py launcher first on it, since a machine without Python can have the Store's python.exe stub on the PATH.
       const flags = ["-I", "-X", "utf8", file];
-      const names = windows ? ["python", "py", "python3"] : ["python3", "python"];
+      const names = windows ? ["py", "python", "python3"] : ["python3", "python"];
       for (const name of names) {
         const exe = findOnPath([name], env, platform);
         if (exe) return { exe, args: name === "py" ? ["-3", ...flags] : flags };
