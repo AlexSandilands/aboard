@@ -1,3 +1,4 @@
+import { SETTINGS_NUMBER_WIDTH } from "~/components/settings/settingsLayout";
 import { Input } from "~/components/ui/input";
 import { isClockTime } from "./autopilot.logic";
 
@@ -20,7 +21,7 @@ export function TimeInput({
       aria-label={label}
       size="sm"
       font="mono"
-      className="w-32"
+      className={SETTINGS_NUMBER_WIDTH}
       disabled={disabled}
       defaultValue={value}
       onBlur={(event) => {

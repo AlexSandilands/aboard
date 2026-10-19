@@ -1000,7 +1000,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
   rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
 - **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
-  Automations heading: its board switch and config (the same `FieldRow`s), the **Countdown on lanes** switch for the lane pill's timer
+  Automations heading: its board switch and config (the same `AutomationField` rows), the **Countdown on lanes** switch for the lane pill's timer
   (`showAutopilotTimer`, a per-browser display preference) and a **View
   all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
   heading has an **All runs** link to the history of every automation.
@@ -1010,7 +1010,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
   it has one, such as the digest's own skill). A project's settings page shows them as rows
   (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces it), so editing one
-  key sends the scope's other keys with it; the reset button next to a field removes the key so it inherits.
+  key sends the scope's other keys with it; the reset button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
   (which every settings change also publishes) refetches the scopes, so another window's edit shows up too. The

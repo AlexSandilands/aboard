@@ -13,16 +13,19 @@ export function RunHistoryLink({
   project,
   fromSettings = true,
   label = "View all runs",
+  size = fromSettings ? "sm" : "compact",
 }: {
   automation: string;
   project?: string;
   fromSettings?: boolean;
   label?: string;
+  /** The button size; "xs" in a section heading, like the other heading actions. */
+  size?: "xs" | "sm" | "compact";
 }) {
   const navigate = useNavigate();
   return (
     <Button
-      size={fromSettings ? "sm" : "compact"}
+      size={size}
       variant="outline"
       onClick={() =>
         void navigate({

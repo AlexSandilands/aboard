@@ -2,7 +2,7 @@ import { customBlockedReason, describeCustomTrigger, type CustomAutomation } fro
 import { useNavigate } from "@tanstack/react-router";
 import { DownloadIcon, FileUpIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { SettingsNote, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
@@ -95,7 +95,9 @@ export function CustomAutomationsSection() {
         </div>
       }
     >
-      {list.length === 0 ? (
+      {customs.isPending ? (
+        <SettingsNote>Loading custom automations...</SettingsNote>
+      ) : list.length === 0 ? (
         <SettingsRow
           title={customs.error ? "Couldn't load custom automations" : "No custom automations"}
           description={

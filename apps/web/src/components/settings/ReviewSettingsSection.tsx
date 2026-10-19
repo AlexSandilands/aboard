@@ -15,11 +15,14 @@ export function ReviewSkillSelect({
   value,
   onChange,
   ariaLabel,
+  className = "sm:w-56",
 }: {
   options: SkillOption[];
   value: ReviewSkillRef | null;
   onChange: (skill: ReviewSkillRef | null) => void;
   ariaLabel: string;
+  /** The trigger's width classes; the default suits a row on its own page. */
+  className?: string;
 }) {
   return (
     <Select
@@ -30,7 +33,7 @@ export function ReviewSkillSelect({
         if (option) onChange(option.skill);
       }}
     >
-      <SelectTrigger size="sm" className="sm:w-56" aria-label={ariaLabel}>
+      <SelectTrigger size="sm" className={className} aria-label={ariaLabel}>
         <SelectValue />
       </SelectTrigger>
       <SelectPopup>
