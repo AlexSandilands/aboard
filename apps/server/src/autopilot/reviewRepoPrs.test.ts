@@ -26,7 +26,12 @@ describe("Review repo PRs: the bundle", () => {
     const parsed = parseAutomationBundle(JSON.parse(JSON.stringify(bundle)));
     expect(parsed).toMatchObject({ ok: true });
     expect(bundle.version).toBe(2);
-    expect(bundle.inputs.map((i) => i.name)).toEqual(["trusted_logins", "max_rounds"]);
+    expect(bundle.inputs.map((i) => i.name)).toEqual([
+      "trusted_logins",
+      "max_rounds",
+      "max_per_run",
+      "review_outside_contributors",
+    ]);
     const definition = CreateCustomAutomationInput.parse(bundleToDefinition(bundle, { projectIds: ["p1"] }));
     expect(checkCustomDefinition(definition)).toBeNull();
     expect(definition.action).toMatchObject({
@@ -76,6 +81,7 @@ describe("Review repo PRs: the check script", () => {
     headRefName: `branch-${number}`,
     headRefOid: HEAD,
     author: { login: "sam" },
+    authorAssociation: "MEMBER",
     labels: { nodes: [] },
     reviews: { nodes: [] },
     comments: { nodes: [] },
@@ -210,6 +216,29 @@ cp.execFileSync = (file, args) => {
     ]);
     expect(numbers(items)).toEqual([2]);
     expect(run([pr(1, { reviews: three })], { max_rounds: "4" })).toHaveLength(1);
+  });
+
+  it("doesn't take /stop-review-later or /re-review-this for a command", () => {
+    const body = ["/stop-review-later", "/re-review-this"].join(String.fromCharCode(10));
+    const items = run([pr(1, { comments: comments(comment("sam", body)) })]);
+    expect(numbers(items)).toEqual([1]);
+    expect(items[0]).toMatchObject({ requested: false, key: `acme/shop#1:${HEAD.slice(0, 7)}:0` });
+  });
+
+  it("reviews only PRs from writers and trusted logins unless asked to take outsiders too", () => {
+    const outsider = (login: string) => pr(login.length, { author: { login }, authorAssociation: "NONE" });
+    const stranger = outsider("mallory");
+    const trustedOutsider = outsider("lee");
+    const owner = pr(30, { authorAssociation: "OWNER" });
+    const items = run([stranger, trustedOutsider, owner], { trusted_logins: "lee" });
+    expect(numbers(items)).toEqual([trustedOutsider.number, 30]);
+    expect(numbers(run([stranger], { review_outside_contributors: "true" }))).toEqual([stranger.number]);
+  });
+
+  it("starts only a few reviews a run, the newest first", () => {
+    const many = [1, 2, 3, 4, 5, 6, 7].map((n) => pr(n));
+    expect(numbers(run(many))).toEqual([1, 2, 3, 4, 5]);
+    expect(numbers(run(many, { max_per_run: "2" }))).toEqual([1, 2]);
   });
 
   it("prints nothing when there is nothing to do", () => {

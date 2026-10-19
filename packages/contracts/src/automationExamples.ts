@@ -194,6 +194,8 @@ const { execFileSync } = require("node:child_process");
 const MARKER = "__MARKER__";
 const context = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
 const maxRounds = Math.max(1, parseInt(context.inputs.max_rounds, 10) || 3);
+const perRun = Math.max(1, parseInt(context.inputs.max_per_run, 10) || 5);
+const outsiders = String(context.inputs.review_outside_contributors).toLowerCase() === "true";
 const lower = (login) => String(login || "").toLowerCase();
 const trusted = new Set(String(context.inputs.trusted_logins || "").split(/[\s,]+/).filter(Boolean).map(lower));
 
@@ -207,7 +209,7 @@ const query = [
   "  repository(owner: $owner, name: $name) {",
   "    pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {",
   "      nodes {",
-  "        number title url isDraft headRefName headRefOid",
+  "        number title url isDraft headRefName headRefOid authorAssociation",
   "        author { login }",
   "        labels(first: 50) { nodes { name } }",
   "        reviews(last: 100) { nodes { state body submittedAt commit { oid } author { login } } }",
@@ -220,8 +222,14 @@ const query = [
 const { data } = JSON.parse(gh(["api", "graphql", "-f", "query=" + query, "-f", "owner=" + owner, "-f", "name=" + name]));
 const me = lower(data.viewer.login);
 
+const items = [];
 for (const pr of data.repository.pullRequests.nodes) {
   if (pr.isDraft || pr.labels.nodes.some((label) => label.name === "no-autopilot")) continue;
+
+  // The agent reads the PR with this account's access, so a stranger's PR isn't reviewed unless asked for: only the
+  // repository's owner, members and collaborators, this account and the trusted logins are.
+  const writer = ["OWNER", "MEMBER", "COLLABORATOR"].includes(pr.authorAssociation);
+  if (!outsiders && !writer && lower(pr.author && pr.author.login) !== me && !trusted.has(lower(pr.author && pr.author.login))) continue;
 
   // Only reviews this account posted count: anyone could paste the marker into a review to keep their PR out.
   const reviews = pr.reviews.nodes.filter((r) => lower(r.author && r.author.login) === me && (r.body || "").includes(MARKER));
@@ -233,7 +241,7 @@ for (const pr of data.repository.pullRequests.nodes) {
   const mayCommand = (login) => lower(login) === author || lower(login) === me || trusted.has(lower(login));
   const commands = pr.comments.nodes
     .filter((c) => mayCommand(c.author && c.author.login))
-    .map((c) => ({ at: Date.parse(c.createdAt), found: (c.body || "").match(/^[ \t]*\/(?:re-review|stop-review)\b/gm) }))
+    .map((c) => ({ at: Date.parse(c.createdAt), found: (c.body || "").match(/^[ \t]*\/(?:re-review|stop-review)(?=\s|$)/gm) }))
     .filter((c) => c.found)
     .map((c) => ({ at: c.at, command: c.found[c.found.length - 1].trim() }));
   const last = commands[commands.length - 1];
@@ -246,22 +254,23 @@ for (const pr of data.repository.pullRequests.nodes) {
   // The round limit stops automatic reviews. A /re-review is a person asking, so it goes through.
   if (!requested && (atHead || reviews.length >= maxRounds)) continue;
 
-  console.log(
-    JSON.stringify({
-      // The head commit makes each push a new review, and the /re-review count makes each request one.
-      key: repo + "#" + pr.number + ":" + pr.headRefOid.slice(0, 7) + ":" + rereviews.length,
-      repo,
-      number: pr.number,
-      title: pr.title,
-      url: pr.url,
-      author: pr.author ? pr.author.login : "",
-      branch: pr.headRefName,
-      head: pr.headRefOid,
-      round: reviews.length + 1,
-      requested,
-    }),
-  );
+  items.push({
+    // The head commit makes each push a new review, and the /re-review count makes each request one.
+    key: repo + "#" + pr.number + ":" + pr.headRefOid.slice(0, 7) + ":" + rereviews.length,
+    repo,
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    author: pr.author ? pr.author.login : "",
+    branch: pr.headRefName,
+    head: pr.headRefOid,
+    round: reviews.length + 1,
+    requested,
+  });
 }
+// Newest first, and only a few a run, so a repository with many open PRs isn't reviewed all at once the first time.
+// The rest are listed again by the next run.
+for (const item of items.slice(0, perRun)) console.log(JSON.stringify(item));
 `.replace("__MARKER__", prReviewMarker());
 
 const REVIEW_PRS_PROMPT = `You review one pull request, running unattended as the user's GitHub account. A script found that it needs a review.
@@ -283,7 +292,7 @@ const REVIEW_REPO_PRS = AutomationBundle.parse({
   version: AUTOMATION_BUNDLE_VERSION,
   name: "Review repo PRs",
   description:
-    "Every 5 minutes, a script lists the open pull requests of the project's repository that have no review of this automation at their head commit, and an agent reviews each one and posts the review as a comment. It covers pull requests that aren't linked to a task. A pull request opts out with a no-autopilot label or /stop-review (from its author or a trusted login); /re-review asks again. It never approves or requests changes. Needs the GitHub CLI (gh), signed in.",
+    "Every 5 minutes, a script lists the open pull requests of the project's repository that have no review of this automation at their head commit, and an agent reviews each one and posts the review as a comment. It covers pull requests that aren't linked to a task, from people with write access and your trusted logins (outside contributors only if you turn that on), and starts at most a few new reviews per run. A pull request opts out with a no-autopilot label or /stop-review (from its author or a trusted login); /re-review asks again. It never approves or requests changes. Needs the GitHub CLI (gh), signed in.",
   trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 5 } },
   action: {
     kind: "agent",
@@ -296,11 +305,18 @@ const REVIEW_REPO_PRS = AutomationBundle.parse({
   inputs: [
     {
       name: "trusted_logins",
-      label: "Trusted GitHub logins besides the author (comma separated)",
+      label: "Trusted GitHub logins (comma separated)",
       type: "text",
       default: "",
     },
     { name: "max_rounds", label: "Most automatic reviews per PR", type: "number", default: "3" },
+    { name: "max_per_run", label: "Most new reviews started per run", type: "number", default: "5" },
+    {
+      name: "review_outside_contributors",
+      label: "Also review PRs from people with no write access",
+      type: "boolean",
+      default: "false",
+    },
   ],
 });
 

@@ -279,6 +279,12 @@ not a file). The board starts one agent for each. It reads the pull request with
 **comment**, under the same header Review PRs uses. It never approves or requests changes: there is no such code in the
 script, and the agent is told not to.
 
+It reviews only pull requests from people who can be trusted with your access: the repository's owners, members and
+collaborators, your own account and the **Trusted GitHub logins**. A stranger's pull request is left alone, since its
+text would go to an agent that runs `gh` as you; turn on **Also review PRs from people with no write access** to
+include them. To keep the first run, or a busy repository, from starting a flood of agents, at most **Most new reviews
+started per run** (5 by default) start at once, the most recently updated first, and the rest follow on later runs.
+
 The script leaves a pull request alone when it is a draft, has a `no-autopilot` label, or has a review of this kind
 that someone dismissed. In the comments it reads two commands, only at the start of a line, and only from the **pull
 request's author, the account running `gh` or a login in Trusted GitHub logins**, never from anyone else:
@@ -294,8 +300,9 @@ that, since a person asked.
 To use it: **Import → Example: Review repo PRs**, read the script, enter your trusted logins if any, pick the
 projects, and switch it on. It comes in with **Treat the items as untrusted** off, because the agent has to run `gh` to
 read the pull request and post its review, which an agent of untrusted items can't. A pull request's title, description,
-comments and code are text its author wrote, and the agent reads them with your access: use it on repositories where
-you trust whoever can open a pull request. If **Review PRs** is on for the same project, a pull request linked to a
+comments and code are text its author wrote, and the agent reads them with your access: that is why outside
+contributors are off by default, and why you should only turn them on for repositories where a stranger's text is
+acceptable to it. If **Review PRs** is on for the same project, a pull request linked to a
 task can be reviewed by both when they run together: each counts the other's review once it is posted.
 
 ## Commands and scripts run on your machine
