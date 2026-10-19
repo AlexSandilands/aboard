@@ -14,6 +14,7 @@ import {
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
+  type CustomScript,
   type CustomScriptLanguage,
   type CustomTrigger,
   type ModelTier,
@@ -74,6 +75,9 @@ export interface CustomForm {
   allowedTools: string;
   inputs: FormInput[];
   slots: FormSlot[];
+  /** An agent's check script and whether its items are untrusted: not editable here yet, kept as they were. */
+  check: CustomScript | null;
+  untrustedItems: boolean;
   command: string;
   /** A script action: not editable here yet, kept so saving the form leaves it as it was. */
   language: CustomScriptLanguage;
@@ -130,6 +134,8 @@ export function emptyCustomForm(): CustomForm {
     allowedTools: "",
     inputs: [],
     slots: [],
+    check: null,
+    untrustedItems: true,
     command: "",
     language: "sh",
     body: "",
@@ -181,6 +187,8 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
         description,
         tools: tools.join("\n"),
       })),
+      check: a.check,
+      untrustedItems: a.untrustedItems,
     });
   } else if (a.kind === "script") {
     Object.assign(form, { language: a.language, body: a.body, timeoutSeconds: String(a.timeoutSeconds) });
@@ -259,6 +267,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             allowedTools: parseAllowedTools(form.allowedTools),
             inputs: form.inputs,
             slots: form.slots.map((slot) => ({ ...slot, tools: parseAllowedTools(slot.tools) })),
+            check: form.check,
+            untrustedItems: form.untrustedItems,
           }
         : form.actionKind === "script"
           ? { kind: "script", language: form.language, body: form.body, timeoutSeconds }

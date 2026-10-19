@@ -213,7 +213,15 @@ export function CustomAutomationImportForm({
                     ? `Check script it runs first (${script.language})`
                     : `Script it runs (${script.language})`
                 }
-                hint={role === "check" ? "It runs on this machine before the agent starts." : undefined}
+                hint={
+                  role === "check"
+                    ? `It runs on this machine before the agent starts. Each line it prints starts an agent of its own${
+                        action.kind === "agent" && !action.untrustedItems
+                          ? ", which trusts the line and gets the usual access."
+                          : ", which treats the line as untrusted: read-only, with only this board's tools."
+                      }`
+                    : undefined
+                }
               >
                 <Code tall>{script.body}</Code>
               </Section>

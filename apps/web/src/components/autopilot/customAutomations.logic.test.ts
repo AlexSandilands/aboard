@@ -68,6 +68,8 @@ describe("custom automation form", () => {
           allowedTools: [],
           inputs: [],
           slots: [],
+          check: null,
+          untrustedItems: true,
         },
       },
     });
@@ -154,11 +156,35 @@ describe("custom automation form", () => {
         allowedTools: [],
         inputs: [],
         slots: [],
+        check: null,
+        untrustedItems: true,
       },
     });
     expect(customFormToInput(formFromCustom(saved))).toEqual({
       ok: true,
       input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
+    });
+  });
+
+  it("keeps an agent's check script it can't edit yet when the form is saved", () => {
+    const saved = custom({
+      trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
+      action: {
+        kind: "agent",
+        prompt: "Look at {{item.title}}",
+        skill: "",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: [],
+        inputs: [],
+        slots: [],
+        check: { language: "python", body: "print('{}')", timeoutSeconds: 60 },
+        untrustedItems: false,
+      },
+    });
+    expect(customFormToInput({ ...formFromCustom(saved), name: "Renamed" })).toMatchObject({
+      ok: true,
+      input: { name: "Renamed", action: saved.action },
     });
   });
 
@@ -187,6 +213,8 @@ describe("custom automation form", () => {
         allowedTools: ["mcp__a", "mcp__b__c"],
         inputs: [],
         slots: [],
+        check: null,
+        untrustedItems: true,
       },
     });
     expect(formFromCustom(saved).allowedTools).toBe(["mcp__a", "mcp__b__c"].join(NL));
@@ -204,6 +232,8 @@ describe("custom automation form", () => {
         allowedTools: [],
         inputs: [{ name: "jql", label: "JQL", type: "text", default: "type = Bug", value: "project = X" }],
         slots: [{ name: "jira", label: "Jira tools", description: "search", tools: ["mcp__a__b", "mcp__a__c"] }],
+        check: null,
+        untrustedItems: true,
       },
     });
     const form = formFromCustom(saved);

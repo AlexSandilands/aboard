@@ -22,10 +22,8 @@ import { handle, idParam, noContent, parseBody } from "../respond.ts";
  */
 function assertShellFromBrowser(c: Context, action: CustomAction | undefined): void {
   if (!action || !actionRunsCode(action) || c.req.header("origin")) return;
-  throw new AppError(
-    "VALIDATION",
-    `${action.kind === "shell" ? "Shell commands" : "Scripts"} can only be set from the board's settings page`,
-  );
+  const what = action.kind === "shell" ? "Shell commands" : action.kind === "script" ? "Scripts" : "Check scripts";
+  throw new AppError("VALIDATION", `${what} can only be set from the board's settings page`);
 }
 
 /**

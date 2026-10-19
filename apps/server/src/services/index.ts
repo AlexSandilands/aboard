@@ -3,7 +3,7 @@ import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { AUTOMATIONS } from "../autopilot/automations/index.ts";
-import { customAutomation } from "../autopilot/custom.ts";
+import { createCheckRuns, customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { runScript, type RunScript } from "../integrations/scriptRunner.ts";
@@ -115,10 +115,12 @@ export function createServices(deps: ServiceDeps): Services {
   const customAutomations = createCustomAutomationsService(core);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
+  // Outlives the catalogue entries, which are rebuilt on every call.
+  const checkRuns = createCheckRuns();
   // Read on every call, so a custom automation's edit applies from the next pass.
   const automations = () => [
     ...builtIn,
-    ...customAutomations.list().map((c) => customAutomation(c, { runShell, runScript: runScriptFile })),
+    ...customAutomations.list().map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns })),
   ];
 
   return {

@@ -788,8 +788,9 @@ the automation. Runs stay, under the old key.
     call, which is why the editor warns. The dry-run preview lists the tools under the prompt. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
     no prompt: the editor warns about that. The server has to be one the run can start without approval: the user's
     own (`claude mcp add --scope user`, a plugin or a connector), as for [issue import](issue-import.md). A server from
-    the project's `.mcp.json` needs an approval nobody can give. Custom agent runs never set `untrustedInput`; an
-    untrusted run starts with `--strict-mcp-config`, so MCP rules would find no server there anyway.
+    the project's `.mcp.json` needs an approval nobody can give. Only the agents of untrusted check items set
+    `untrustedInput` ([check scripts](#check-scripts)); an untrusted run starts with `--strict-mcp-config`, so MCP
+    rules would find no server there anyway, and the definition check refuses allowed tools and slots with them.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values
@@ -821,7 +822,7 @@ the automation. Runs stay, under the old key.
   The spawn, output buffering and timeout kill are shared with shell actions in `integrations/captureProcess.ts`.
   The storage is the same `action_json` column, so no migration.
 - **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
-  action is (or stays) a shell command or a script needs an `Origin` header, which browsers send and the guard checks is the
+  action is (or stays) a shell command, a script or an agent with a check script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
@@ -846,6 +847,64 @@ so rows saved before them still parse.
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
   finds nothing meanwhile, so emptying a slot of one that is already on stops it rather than starting an agent without
   its tools. Inherit and Off are unaffected.
+
+#### Check scripts
+
+An agent action on a schedule can carry a `check` (a `CustomScript`: language, body, timeout) that runs before any
+agent and decides what, if anything, they start for (#227). Null, the default, runs one agent per slot as above. Only a
+schedule takes one for now (`checkCustomDefinition`); task triggers would need a check per task event.
+
+- **Output.** The script prints JSON lines on stdout, each an object with a non-empty string `key` (at most
+  `CHECK_KEY_MAX`, 200 characters) and any fields of its own; `parseCheckOutput` (contracts) reads them. Blank lines
+  are skipped and a key printed twice counts once; any other line (not JSON, not an object, no key, a key with a
+  control character, which would end up in the run's label and session name, over `CHECK_LINE_MAX`) fails the whole output with its line number, so a script that prints a stray `Done!` starts nothing.
+  At most `CHECK_ITEMS_MAX` (500) items are read per run. It gets the same environment and stdin context as a script
+  action, with no task, and runs in the project's `workspaceRoot`. A `{{…}}` in it that names a placeholder is refused.
+- **In the engine.** `check` must not wait on a script (the engine awaits each automation's `check` in turn), so the
+  first pass of a slot starts the script in the background and returns nothing; when it ends it calls
+  `CheckContext.wake` (the engine's debounced pass) and the next pass returns what it printed. Where each project's
+  check stands (`running`, `done` with the items, `failed`) lives in a `CheckRuns` map made once in `createServices`,
+  keyed `<automation id>:<project id>` and stamped with the slot and the automation's `updatedAt`, so it runs once per
+  slot and again after an edit. One runs at a time per automation and project: a check that outlasts its interval is
+  waited for rather than started again beside itself, what it printed is acted on once (`offered`) in the slot it
+  ended in or the one after (`finishedSlot`, by the engine's clock, `CheckContext.clock`), however many intervals it
+  ran for, and the slot due then gets a run of its own. Output no pass read by then (Autopilot paused, the automation
+  switched off) is dropped rather than acted on late. It is in memory only: after a restart the slot's check runs
+  once more, and the items' dedupe keys keep that from starting anything twice. The check doesn't start while no
+  agent could (`agentHold`: quiet hours, `maxConcurrent`, the daily caps), so it isn't run only for its items to wait
+  (a dry run runs it anyway), nor while `AUTOPILOT_BACKGROUND_MAX` (4) checks are already running, across automations
+  and projects: the agent caps don't bound scripts. The one-run-per-project hold of scheduled agents doesn't apply:
+  each item is a run of its own.
+- **Items.** Each item becomes a candidate keyed `check:<projectId>:<item key>`. The board is the memory, not the
+  script: a key with a run (going, done or failed) is never started again, so a script can print every open item each
+  time, and a failed item starts again only through `retry_autopilot_run`. Keys that already have a run are dropped
+  before counting, and at most `CHECK_NEW_ITEMS_MAX` (50) new ones go per pass. Items go through the engine's
+  per-candidate hold as usual: one held by `maxConcurrent` or a cap isn't recorded, and a later pass in the same slot
+  takes it from the same output (a finished agent run asks for a pass). Printing nothing is a quiet pass: no run.
+- **A failed check** (non-zero exit, timeout, a missing interpreter, output past `STDOUT_MAX`, a bad line) becomes one
+  candidate `check-failed:<projectId>:<slot stamp>:<updatedAt>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
+  records as a failed run with the error, the output tail and the exit code. No task, so nothing is flagged; the
+  automation's run history shows it. `act` then forgets the failure, and that run's key keeps the slot's check from
+  running again until it is retried (which retires the key), the automation is edited (a new `updatedAt`) or the next
+  slot comes. Like Fix PRs' give-ups, these runs
+  (retried or not) don't count towards the daily run cap or `maxConcurrent`.
+- **The agent.** Each item's agent starts headless with no task, like a scheduled one, labelled `<name> · <item key>`.
+  `customAgentPrompt` fills `{{item}}` (the item as JSON) and `{{item.<field>}}` (a dotted path; a string as it is,
+  anything else as JSON, a missing field empty) in the same single pass as the other placeholders, so an item's text is
+  never read for placeholders itself; a prompt can name them only with a check. The footer quotes the whole item inside
+  `<item>` tags as data, not instructions, and asks for no handover: one run of the check starts many agents, and the
+  check is their memory.
+- **Untrusted items** (`untrustedItems`, on by default): items usually carry text anyone can write, such as PR titles
+  and comments. Their agents run read-only with `untrustedInput` and `boardTools`, like Orchestrate: no MCP server but
+  this board's, file tools only in their empty folder, and the board's tools narrowed by `CHECK_ITEM_DENIED_TOOLS`
+  (Orchestrate's deny list plus starting, messaging or retrying other agents' work and merging). What is left reads the
+  board, adds notes and asks the user. Allowed tools and slots can't be used with it, so the definition check refuses
+  them; off, the agents get a scheduled agent's access and the action's tools.
+- **Dry run.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
+  preview is its agent's filled prompt; a failed check records a skipped run with the failure.
+- **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
+  script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
+  items' agents run. The editor can't edit a check yet (#228); it keeps one it doesn't show when the form is saved.
 
 ### Sharing automations
 
