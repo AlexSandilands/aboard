@@ -904,7 +904,49 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   preview is its agent's filled prompt; a failed check records a skipped run with the failure.
 - **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
   script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
-  items' agents run. The editor can't edit a check yet (#228); it keeps one it doesn't show when the form is saved.
+  items' agents run.
+- **In the editor.** A schedule's agent form has **Check first with a script**: a switch that reveals the
+  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`.
+  The section is hidden for the other triggers, and `customFormToInput` leaves a check out unless the trigger is a
+  schedule, so what was typed survives switching the trigger and back. The prompt hint names `{{item}}` and
+  `{{item.<field>}}` while a check is on.
+
+#### The script editor
+
+`ScriptField` (`components/autopilot/`) is the one editor for both scripts of the form: a script action, picked as **Run a
+script** beside **Start an agent** and **Run a command**, and an agent's check. It holds:
+
+- A **language** toggle (Node.js, Python, PowerShell, sh) with what each needs installed (`SCRIPT_LANGUAGES` in
+  `scripts.logic.ts`): Node is always there, since it runs on the board's own Node.
+- The code, in CodeMirror 6 (`ScriptEditor`, which lazy-loads `ScriptEditorImpl` so the ~470 kB chunk stays out of the main
+  bundle; until it loads, a plain text area edits the same value). It has a monospace font, line numbers and highlighting for
+  the language, coloured from the theme's tokens so it follows the theme and the Contrast setting. Tab indents with
+  spaces; Esc then Tab leaves the editor so a keyboard user is never trapped.
+- **Load from file** (the file's extension picks the language; at most `SCRIPT_FILE_MAX_BYTES`) and **Copy**.
+- A **starter** per language and role (`scriptStarter`): it shows how to read the JSON context on stdin and, for a check, how
+  to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
+  the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
+- The timeout, and the **test run** below.
+
+#### Test runs
+
+`POST /api/autopilot/custom/test-script` (`TestScriptInput` → `TestScriptResult`; `services/testScript.ts`) runs a draft
+script once, now, in the folder of a project the user picks, and returns the exit code, stdout and stderr (each cut to
+`TEST_OUTPUT_MAX`), the duration and whether it timed out. **It is not a dry run**: the script executes with the same
+interpreter, environment and stdin context a real run gets, so it can do whatever it does (approve a PR, push), and the
+editor says so and asks for a second click ("Run it for real") naming the project. Nothing is saved or recorded: no run
+row, no event.
+
+- An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
+  none, like the scheduled agent it belongs to.
+- For a **check** that exits 0 the response also has the output read as the board reads it (`parseCheckOutput`): the items
+  and how many were dropped, or `problem` naming the bad line, and the prompt the first item's agent would start with
+  (`customAgentPrompt` with the form's prompt and skill, so it shows the `<item>` block). A check that fails or times out
+  has no items.
+- A missing interpreter, or a project with no folder, is an answer (`error`) or a `VALIDATION` error, not a server error.
+- Like writing a script, it needs an `Origin` header, so only the board's page can start one, and one test runs at a time
+  (`CONFLICT` otherwise), so a double click can't act twice. There is no MCP path.
+- The test uses the script's own timeout, and a client that goes away doesn't stop it.
 
 ### Sharing automations
 
@@ -1191,6 +1233,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
 | `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
+| `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
+| `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
