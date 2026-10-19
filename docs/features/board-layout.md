@@ -57,7 +57,9 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
   position is restored if it was clamped. The lines re-measure on scroll (once per frame) while the lane is pinned, since
   its cards don't scroll with the content (`DependencyLines`' `pinnedLane`). `revealCard` treats the pinned lane's
   bottom as the top of the visible area for cards outside it, and scrolls the lane itself for a card inside it. Drags work
-  in and out of a stuck lane as in an unpinned one.
+  in and out of a stuck lane as in an unpinned one, with two differences: the drag preview is one line, and the board
+  doesn't auto-scroll while a card from the stuck lane is dragged (its top scroll zone would reach the lane itself and
+  unstick it), so use the wheel to reach a lane out of view.
 - **Autopilot** starts priority tasks first ([autopilot.md](autopilot.md#automations)).
 
 ### In progress, all projects

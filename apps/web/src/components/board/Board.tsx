@@ -639,7 +639,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             onDragEnd={handleDragEnd}
             onDragCancel={endDrag}
             measuring={measuring}
-            autoScroll={autoScroll}
+            // Dragged from the stuck lane, the board's top scroll zone would reach the lane's first rows and scroll the
+            // board up until the lane unsticks; the wheel still scrolls.
+            autoScroll={activeCompact ? false : autoScroll}
             accessibility={{ announcements }}
           >
             {shownLanes.map((lane) => {
