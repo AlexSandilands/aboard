@@ -99,7 +99,7 @@ so they need no hook of their own. Events published while the engine itself writ
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
    isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
 7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
-   `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
+   `background` (custom shell commands and scripts), go on in the background; other board-only actions are awaited, one
    after another.
 
 The engine never retries a run by itself: once a dedupe key has a run, whatever its outcome, that candidate is done. A
@@ -125,7 +125,7 @@ hide work it only previewed.
 `autopilot_runs` holds one row per run: `queued → running → succeeded | failed | skipped`. The runner fills in
 `runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
 `output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
-verdict there. A custom automation's shell action fills in `exit_code` and `detail` (the output's tail); a dry run
+verdict there. A custom automation's shell or script action fills in `exit_code` and `detail` (the output's tail); a dry run
 of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). Runs are history, so backups
 leave them out.
 
@@ -703,7 +703,9 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 ### Custom automations
 
-Automations the user defines (#97, sharing #135; guide: [custom automations](../guide/custom-automations.md)). Each row of
+Automations the user defines (#97, sharing #135, scripts and checks #225; guide: [custom automations](../guide/custom-automations.md)).
+An action is an agent (on a schedule, optionally gated by a [check script](#check-scripts)), a shell command or a script.
+Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
 (built-ins, then every custom row), so a create, edit or delete applies from the next pass; nothing is reloaded.
@@ -788,8 +790,9 @@ the automation. Runs stay, under the old key.
     call, which is why the editor warns. The dry-run preview lists the tools under the prompt. Nobody can approve a call in a headless run, so a tool not listed is denied, and one listed runs with
     no prompt: the editor warns about that. The server has to be one the run can start without approval: the user's
     own (`claude mcp add --scope user`, a plugin or a connector), as for [issue import](issue-import.md). A server from
-    the project's `.mcp.json` needs an approval nobody can give. Custom agent runs never set `untrustedInput`; an
-    untrusted run starts with `--strict-mcp-config`, so MCP rules would find no server there anyway.
+    the project's `.mcp.json` needs an approval nobody can give. Only the agents of untrusted check items set
+    `untrustedInput` ([check scripts](#check-scripts)); an untrusted run starts with `--strict-mcp-config`, so MCP
+    rules would find no server there anyway, and the definition check refuses allowed tools and slots with them.
 - **Shell action** (`background`, not `needsAgent`, so the agent caps and quiet hours don't hold it):
   `integrations/shellCommand.ts` runs the command with `/bin/sh -c`, or, on Windows, Windows PowerShell with
   `-EncodedCommand` (never cmd.exe, which expands `%VAR%` before parsing, so a value could add a command; values
@@ -802,8 +805,26 @@ the automation. Runs stay, under the old key.
   it doesn't end. Non-zero exits and timeouts fail the run and flag the task; the output's last 4,000 characters and
   the exit code go on the run. At most `AUTOPILOT_BACKGROUND_MAX` (4) go at once; the engine skips further
   candidates until one ends, without recording them.
+- **Script action** (`{kind: "script", language: "python" | "node" | "powershell" | "sh", body, timeoutSeconds}`; the
+  body is at most `CUSTOM_SCRIPT_MAX`, 100,000 characters): like a shell action in every other way (`background`, same
+  environment, same results, same cap), but `integrations/scriptRunner.ts` writes the body to a file in a temp folder
+  of its own, removed afterwards, and runs it with the language's interpreter in the project's `workspaceRoot`. `node`
+  is the server's own `process.execPath` (as Node under Electron); `python` is `python -I -X utf8` (`python3` first
+  off Windows; `python`, then `py -3`, on it); `powershell` is `pwsh`, else Windows PowerShell; `sh` is `sh` on the
+  PATH. The interpreter is looked up on the PATH before anything starts, so a missing one fails the run with
+  "python not found on PATH" (and flags the task) rather than a spawn error. The context goes to stdin as JSON
+  (`customScriptContext`: `automation`, `project` with `id`, `name` and `path`, `inputs`, `task` and `pr`, null when the
+  trigger has none), with non-ASCII characters escaped so every runtime reads it the same. The result keeps `stdout`
+  (the first `STDOUT_MAX` characters) and `stderr` apart for a caller that parses what the script printed; the run
+  gets the interleaved tail and exit code as for a shell action. A `{{…}}` in a body that names a placeholder is
+  refused on save, as in a command (other `{{…}}` text is left alone). Known limits: a PowerShell script gets the shell
+  action's two-line prelude (progress and encoding) and exit handling around it, so it can't open with `param(...)`,
+  `[CmdletBinding()]` or `using`; it runs with `-File`, which an execution-policy Group Policy can block, unlike a
+  shell action's `-EncodedCommand`; and on Windows only `.exe` programs are found on the PATH (not `.cmd` shims).
+  The spawn, output buffering and timeout kill are shared with shell actions in `integrations/captureProcess.ts`.
+  The storage is the same `action_json` column, so no migration.
 - **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
-  action is (or stays) a shell command needs an `Origin` header, which browsers send and the guard checks is the
+  action is (or stays) a shell command, a script or an agent with a check script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
@@ -829,19 +850,129 @@ so rows saved before them still parse.
   finds nothing meanwhile, so emptying a slot of one that is already on stops it rather than starting an agent without
   its tools. Inherit and Off are unaffected.
 
+#### Check scripts
+
+An agent action on a schedule can carry a `check` (a `CustomScript`: language, body, timeout) that runs before any
+agent and decides what, if anything, they start for (#227). Null, the default, runs one agent per slot as above. Only a
+schedule takes one for now (`checkCustomDefinition`); task triggers would need a check per task event.
+
+- **Output.** The script prints JSON lines on stdout, each an object with a non-empty string `key` (at most
+  `CHECK_KEY_MAX`, 200 characters) and any fields of its own; `parseCheckOutput` (contracts) reads them. Blank lines
+  are skipped and a key printed twice counts once; any other line (not JSON, not an object, no key, a key with a
+  control character, which would end up in the run's label and session name, over `CHECK_LINE_MAX`) fails the whole output with its line number, so a script that prints a stray `Done!` starts nothing.
+  At most `CHECK_ITEMS_MAX` (500) items are read per run. It gets the same environment and stdin context as a script
+  action, with no task, and runs in the project's `workspaceRoot`. A `{{…}}` in it that names a placeholder is refused.
+- **In the engine.** `check` must not wait on a script (the engine awaits each automation's `check` in turn), so the
+  first pass of a slot starts the script in the background and returns nothing; when it ends it calls
+  `CheckContext.wake` (the engine's debounced pass) and the next pass returns what it printed. Where each project's
+  check stands (`running`, `done` with the items, `failed`) lives in a `CheckRuns` map made once in `createServices`,
+  keyed `<automation id>:<project id>` and stamped with the slot and the automation's `updatedAt`, so it runs once per
+  slot and again after an edit. One runs at a time per automation and project: a check that outlasts its interval is
+  waited for rather than started again beside itself, what it printed is acted on once (`offered`) in the slot it
+  ended in or the one after (`finishedSlot`, by the engine's clock, `CheckContext.clock`), however many intervals it
+  ran for, and the slot due then gets a run of its own. Output no pass read by then (Autopilot paused, the automation
+  switched off) is dropped rather than acted on late. It is in memory only: after a restart the slot's check runs
+  once more, and the items' dedupe keys keep that from starting anything twice. The check doesn't start while no
+  agent could (`agentHold`: quiet hours, `maxConcurrent`, the daily caps), so it isn't run only for its items to wait
+  (a dry run runs it anyway), nor while `AUTOPILOT_BACKGROUND_MAX` (4) checks are already running, across automations
+  and projects: the agent caps don't bound scripts. The one-run-per-project hold of scheduled agents doesn't apply:
+  each item is a run of its own.
+- **Items.** Each item becomes a candidate keyed `check:<projectId>:<item key>`. The board is the memory, not the
+  script: a key with a run (going, done or failed) is never started again, so a script can print every open item each
+  time, and a failed item starts again only through `retry_autopilot_run`. Keys that already have a run are dropped
+  before counting, and at most `CHECK_NEW_ITEMS_MAX` (50) new ones go per pass. Items go through the engine's
+  per-candidate hold as usual: one held by `maxConcurrent` or a cap isn't recorded, and a later pass in the same slot
+  takes it from the same output (a finished agent run asks for a pass). Printing nothing is a quiet pass: no run.
+- **A failed check** (non-zero exit, timeout, a missing interpreter, output past `STDOUT_MAX`, a bad line) becomes one
+  candidate `check-failed:<projectId>:<slot stamp>:<updatedAt>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
+  records as a failed run with the error, the output tail and the exit code. No task, so nothing is flagged; the
+  automation's run history shows it. `act` then forgets the failure, and that run's key keeps the slot's check from
+  running again until it is retried (which retires the key), the automation is edited (a new `updatedAt`) or the next
+  slot comes. Like Fix PRs' give-ups, these runs
+  (retried or not) don't count towards the daily run cap or `maxConcurrent`.
+- **The agent.** Each item's agent starts headless with no task, like a scheduled one, labelled `<name> · <item key>`.
+  `customAgentPrompt` fills `{{item}}` (the item as JSON) and `{{item.<field>}}` (a dotted path; a string as it is,
+  anything else as JSON, a missing field empty) in the same single pass as the other placeholders, so an item's text is
+  never read for placeholders itself; a prompt can name them only with a check. The footer quotes the whole item inside
+  `<item>` tags as data, not instructions, and asks for no handover: one run of the check starts many agents, and the
+  check is their memory.
+- **Untrusted items** (`untrustedItems`, on by default): items usually carry text anyone can write, such as PR titles
+  and comments. Their agents run read-only with `untrustedInput` and `boardTools`, like Orchestrate: no MCP server but
+  this board's, file tools only in their empty folder, and the board's tools narrowed by `CHECK_ITEM_DENIED_TOOLS`
+  (Orchestrate's deny list plus starting, messaging or retrying other agents' work and merging). What is left reads the
+  board, adds notes and asks the user. Allowed tools and slots can't be used with it, so the definition check refuses
+  them; off, the agents get a scheduled agent's access and the action's tools.
+- **Dry run.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
+  preview is its agent's filled prompt; a failed check records a skipped run with the failure.
+- **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
+  script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
+  items' agents run.
+- **In the editor.** A schedule's agent form has **Check first with a script**: a switch that reveals the
+  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`.
+  The section is hidden for the other triggers, and `customFormToInput` leaves a check out unless the trigger is a
+  schedule, so what was typed survives switching the trigger and back. The prompt hint names `{{item}}` and
+  `{{item.<field>}}` while a check is on.
+
+#### The script editor
+
+`ScriptField` (`components/autopilot/`) is the one editor for both scripts of the form: a script action, picked as **Run a
+script** beside **Start an agent** and **Run a command**, and an agent's check. It holds:
+
+- A **language** toggle (Node.js, Python, PowerShell, sh) with what each needs installed (`SCRIPT_LANGUAGES` in
+  `scripts.logic.ts`): Node is always there, since it runs on the board's own Node.
+- The code, in CodeMirror 6 (`ScriptEditor`, which lazy-loads `ScriptEditorImpl` so the ~470 kB chunk stays out of the main
+  bundle; until it loads, a plain text area edits the same value). It has a monospace font, line numbers and highlighting for
+  the language, coloured from the theme's tokens so it follows the theme and the Contrast setting. Tab indents with
+  spaces; Esc then Tab leaves the editor so a keyboard user is never trapped.
+- **Load from file** (the file's extension picks the language; at most `SCRIPT_FILE_MAX_BYTES`) and **Copy**.
+- A **starter** per language and role (`scriptStarter`): it shows how to read the JSON context on stdin and, for a check, how
+  to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
+  the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
+- The timeout, and the **test run** below.
+
+#### Test runs
+
+`POST /api/autopilot/custom/test-script` (`TestScriptInput` → `TestScriptResult`; `services/testScript.ts`) runs a draft
+script once, now, in the folder of a project the user picks, and returns the exit code, stdout and stderr (each cut to
+`TEST_OUTPUT_MAX`), the duration and whether it timed out. **It is not a dry run**: the script executes with the same
+interpreter, environment and stdin context a real run gets, so it can do whatever it does (approve a PR, push), and the
+editor says so and asks for a second click ("Run it for real") naming the project. Nothing is saved or recorded: no run
+row, no event.
+
+- An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
+  none, like the scheduled agent it belongs to.
+- For a **check** that exits 0 the response also has the output read as the board reads it (`parseCheckOutput`): the items
+  and how many were dropped, or `problem` naming the bad line, and the prompt the first item's agent would start with
+  (`customAgentPrompt` with the form's prompt and skill, so it shows the `<item>` block). A check that fails or times out
+  has no items.
+- A missing interpreter, or a project with no folder, is an answer (`error`) or a `VALIDATION` error, not a server error.
+- Like writing a script, it needs an `Origin` header, so only the board's page can start one, and one test runs at a time
+  (`CONFLICT` otherwise), so a double click can't act twice. There is no MCP path.
+- The test uses the script's own timeout, and a client that goes away doesn't stop it.
+
 ### Sharing automations
 
 An automation is shared as a versioned JSON file, an `AutomationBundle` (`packages/contracts/src/automationBundle.ts`,
-`format: "<brand id>.automation"`, `version: 1`). It holds the name, description, trigger, the filters' labels only, the
-action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
+`format: "<brand id>.automation"`, `version: 1`, or `2` for a file that carries a script). It holds the name, description,
+trigger, the filters' labels only, the action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
 optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
 importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
 
+**Scripts** (a `script` action, or an agent's `check`; `actionScripts` lists them) are someone else's code run as the
+importer, so they get more care. A file is written as version 2 only when it carries one (`bundleVersionFor`), so
+every other file stays version 1 and a board from before scripts still reads it; a version 1 file that carries a
+script is refused, since an older board would read it without the script. Language, body and timeout travel as they
+are, the body held to `CUSTOM_SCRIPT_MAX` by the contract. Importing a file with a script needs `confirmScript: true` (the
+service refuses with a reason otherwise, whoever calls it) and, like creating one, the board page's `Origin`
+(`actionRunsCode`, in the route's guard, also covers a check script on create and patch). There is no MCP path that
+writes one, and a suggestion (which can only change an agent's prompt) leaves the check as it was. Dump, restore and
+the git backup keep the whole `action_json`, so a script comes back as written.
+
 | Route                                  | Does                                                                                                      |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `GET /api/autopilot/custom/:id/export` | The bundle (`automationBundle`): inputs' current values as defaults, slots empty, and the action's skill read from the user's installed skills when it is there and fits `BUNDLE_SKILL_BODY_MAX` |
-| `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill}`; 201 `{automation, skill}`                       |
+| `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill, confirmScript}`; 201 `{automation, skill}`       |
 
 `customAutomations.importBundle` parses the file again (a body that isn't one is `VALIDATION`), fills the inputs and
 slots (`bundleToDefinition`; an input left out takes its default), restricts the filters to `projectIds`, gives it a free
@@ -849,14 +980,18 @@ name (`Name (2)`) and runs the usual definition check **before** writing anythin
 skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
-is saved like any new one, with no switches, so it is off. As when creating one, a shell action needs the board page's
+is saved like any new one, with no switches, so it is off. As when creating one, a shell or script action needs the board page's
 `Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
 the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
 frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
 `SKILL.md`, not other files beside it, and the UI says when a skill went into the file.
 
 The web import screen (`CustomAutomationImportForm`, `/settings/autopilot/custom/import`) reads the file in the browser
-and shows the prompt, command, allowed tools and skill text in full, as untrusted, before **Import**. It also offers the
+and shows the prompt, command, scripts (each with its language, and a check script as such), allowed tools and skill
+text in full, as untrusted, before **Import**. A file with a script also shows `ScriptWarning` (the shared notice for
+the editor too: it runs as you and can do anything you can, such as approve PRs through `gh`; text it reads from GitHub
+comes from anyone who can comment, so it should check who wrote it) and a switch ("I've read the script above and I understand it runs on my machine as me"), which
+**Import** waits for. It also offers the
 files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Dispatch** is an hourly scheduled agent with the inputs `jql`,
 `look_back_days`, `max_issues` and `require_approval` and a `jira` slot. It uses `list_tasks(query: KEY)` to skip keys
 already on the board, `add_to_backlog` and `set_plan`, then `request_attention` or the Autopilot flag, and keeps triaged
@@ -868,6 +1003,25 @@ one, one behaviour each, rewrite or delete rather than add, no growth without a 
 inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
 `suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
 target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
+
+**Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
+schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
+`trusted_logins`, `max_rounds`, `look_back_days` (7) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
+(the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
+PR that needs a review (only PRs whose `updatedAt` is within `look_back_days`, so a first run isn't a flood of old PRs; the script prints no cap of its own, since the board drops remembered keys only after it, and a failed review would hold a slot; the board's 50 new items per pass and the agent caps do that job); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
+`no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
+(a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
+`trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a
+null author never counts). A review counts when the viewer
+posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so this skips what Review PRs posted (not the reverse: Review PRs decides from the board's runs, so a linked PR can be reviewed twice); a review at
+`headRefOid` ends the PR's turn. Otherwise the PR is listed unless the reviews already number `max_rounds`; a
+`/re-review` newer than the last review (by `submittedAt`; a pending review has none) lists it regardless. A dismissed review isn't an opt-out: GitHub only lets a review that approved or requested changes be dismissed, and the example posts comment reviews. The key is `<repo>#<number>:<head, 7 characters>:<count of
+/re-review commands>`, so a push and a request each make a new one, and the board's key memory means a review that
+failed isn't retried every slot. Each item's agent (`untrustedItems: false`, since it runs `gh` to read the PR and
+post one `--comment` review headed `prReviewHeader()`, which an untrusted-item agent can't) is told in its prompt to
+read only and never approve or request changes; nothing in the bundle approves. The risk of that choice, text from
+anyone who can open a PR read by an agent with the user's access, is stated in the guide and on the import page's
+warning. `reviewRepoPrs.test.ts` runs the script under Node with `child_process.execFileSync` replaced by a fake `gh`.
 
 ### Runners
 
@@ -1098,8 +1252,12 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
-| `apps/server/src/integrations/shellCommand.ts` | Running a shell action |
+| `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
+| `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
+| `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
+| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
+| `apps/server/src/autopilot/reviewRepoPrs.test.ts` | The example's bundle, and its script run against a fake `gh` |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |

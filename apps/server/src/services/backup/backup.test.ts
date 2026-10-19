@@ -82,6 +82,11 @@ function seed() {
     action: { kind: "shell", command: "./notify.sh" },
   });
   s.autopilot.setScope("board", null, `custom:${custom.id}`, { mode: "on" });
+  s.customAutomations.create({
+    name: "Check",
+    trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 6 } },
+    action: { kind: "script", language: "python", body: "print(1)\n  # kept as written\n" },
+  });
   // An open suggestion: the user hasn't decided yet, so a restore keeps it.
   s.suggestions.suggest(
     {
@@ -299,6 +304,15 @@ describe("restore", () => {
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
       expect(restored.prepare("SELECT name, action_json FROM autopilot_custom").all()).toEqual([
         { name: "Notify", action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300 }) },
+        {
+          name: "Check",
+          action_json: JSON.stringify({
+            kind: "script",
+            language: "python",
+            body: "print(1)\n  # kept as written\n",
+            timeoutSeconds: 300,
+          }),
+        },
       ]);
       expect(restored.prepare("SELECT flag_autopilot, last_task_id FROM autopilot_recurring").all()).toEqual([
         { flag_autopilot: 1, last_task_id: a.id },
@@ -345,11 +359,24 @@ describe("restore", () => {
     expect(readDumpDir(dir).suggestions).toEqual([]);
   });
 
+  it("keeps a script automation's body as written in the git backup's folder and the dump file", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    const dump = s.backup.dump();
+    writeDumpDir(dir, dump);
+    const actions = (rows: BoardDump["autopilot_custom"]) => rows.map((row) => JSON.parse(String(row.action_json)));
+    const script = { kind: "script", language: "python", body: "print(1)\n  # kept as written\n", timeoutSeconds: 300 };
+    expect(actions(readDumpDir(dir).autopilot_custom)).toContainEqual(script);
+    const file = join(tempDir(), "dump.json");
+    writeFileSync(file, dumpFileJson(dump));
+    expect(actions(readDump(file).autopilot_custom)).toContainEqual(script);
+  });
+
   it("reads a folder written before custom automations, which has no custom-automations.json", () => {
     const { s } = seed();
     const dir = tempDir();
     writeDumpDir(dir, s.backup.dump());
-    expect(readDumpDir(dir).autopilot_custom).toHaveLength(1);
+    expect(readDumpDir(dir).autopilot_custom).toHaveLength(2);
     rmSync(join(dir, "custom-automations.json"));
     expect(readDumpDir(dir).autopilot_custom).toEqual([]);
   });

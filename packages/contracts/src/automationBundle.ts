@@ -7,6 +7,7 @@ import {
   CUSTOM_NAME_MAX,
   CUSTOM_SLOTS_MAX,
   CustomAction,
+  CustomScript,
   CustomTrigger,
   type CreateCustomAutomationInput,
   type CustomAutomation,
@@ -19,8 +20,13 @@ import {
 // the tool slots they fill with tools of their own.
 
 export const AUTOMATION_BUNDLE_FORMAT = `${BRAND.id}.automation`;
-/** Bumped when the file's shape changes in a way an older reader can't take. */
-export const AUTOMATION_BUNDLE_VERSION = 1;
+/** Every file without a script, so a board from before scripts reads what a newer one writes. */
+export const PLAIN_BUNDLE_VERSION = 1 as const;
+/**
+ * The newest version this board reads, and the one a file carrying a script is written as: an older board would drop a
+ * check script and refuse a script action. Bumped when the file's shape changes in a way an older reader can't take.
+ */
+export const AUTOMATION_BUNDLE_VERSION = 2 as const;
 export const BUNDLE_SKILL_BODY_MAX = 100_000;
 
 /** A skill carried in the file by its text, written to the importer's skills on import after they confirm. */
@@ -35,10 +41,35 @@ export const BundleSkill = z.object({
 });
 export type BundleSkill = z.infer<typeof BundleSkill>;
 
+/** A script a file carries: the action itself, or the check an agent runs first. */
+export interface BundleScript {
+  role: "script" | "check";
+  script: CustomScript;
+}
+
+/**
+ * Every script an action would run, in the order a reader should see them. An agent's `check` is parsed here too, so
+ * the places that guard or confirm scripts don't depend on the action schema having kept it.
+ */
+export function actionScripts(action: CustomAction): BundleScript[] {
+  if (action.kind === "script") return [{ role: "script", script: action }];
+  if (action.kind !== "agent") return [];
+  const check = CustomScript.safeParse((action as { check?: unknown }).check);
+  return check.success ? [{ role: "check", script: check.data }] : [];
+}
+
+/** Whether saving this action sets up something that runs as the user: a command, a script or a check script. */
+export const actionRunsCode = (action: CustomAction): boolean =>
+  action.kind === "shell" || actionScripts(action).length > 0;
+
+/** The version a file for this action is written as: the oldest that can hold it. */
+export const bundleVersionFor = (action: CustomAction): AutomationBundle["version"] =>
+  actionScripts(action).length > 0 ? AUTOMATION_BUNDLE_VERSION : PLAIN_BUNDLE_VERSION;
+
 export const AutomationBundle = z
   .object({
     format: z.literal(AUTOMATION_BUNDLE_FORMAT),
-    version: z.literal(AUTOMATION_BUNDLE_VERSION),
+    version: z.union([z.literal(PLAIN_BUNDLE_VERSION), z.literal(AUTOMATION_BUNDLE_VERSION)]),
     name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
     /** What it does, for the person importing it. */
     description: z.string().trim().max(1_000).default(""),
@@ -53,8 +84,16 @@ export const AutomationBundle = z
     skill: BundleSkill.optional(),
   })
   .superRefine((bundle, ctx) => {
-    if (bundle.action.kind === "shell" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
+    if (bundle.action.kind !== "agent" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
       ctx.addIssue({ code: "custom", message: "Only an agent can have inputs or tool slots", path: ["action"] });
+    }
+    // A version 1 reader would read this as a file without its script, so it must say it is a newer one.
+    if (bundle.version < AUTOMATION_BUNDLE_VERSION && actionScripts(bundle.action).length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `A script needs a version ${AUTOMATION_BUNDLE_VERSION} file`,
+        path: ["version"],
+      });
     }
   });
 export type AutomationBundle = z.infer<typeof AutomationBundle>;
@@ -91,7 +130,7 @@ export function automationBundle(
   const { action } = def;
   return {
     format: AUTOMATION_BUNDLE_FORMAT,
-    version: AUTOMATION_BUNDLE_VERSION,
+    version: bundleVersionFor(action),
     name: def.name,
     description: "",
     trigger: def.trigger,
@@ -157,6 +196,8 @@ export const ImportAutomationInput = z.object({
   projectIds: z.array(z.string().min(1)).default([]),
   /** Write the file's skill into the user's skills. Only after they've seen it. */
   installSkill: z.boolean().default(false),
+  /** The importer has read the file's scripts and agrees they run on their machine. Required when it has one. */
+  confirmScript: z.boolean().default(false),
 });
 export type ImportAutomationInput = z.input<typeof ImportAutomationInput>;
 

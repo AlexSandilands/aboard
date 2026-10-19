@@ -4,7 +4,9 @@ import {
   AUTOPILOT_ALL_RUNS,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
+  CHECK_FAILED_KEY_PREFIX,
   FIX_GAVE_UP_KEY_PREFIX,
+  RETRIED_PREFIX,
   type AutopilotRun,
   type AutopilotRunFilter,
   type AutopilotRunStatus,
@@ -347,15 +349,24 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
-    /** Real runs of these automations that started at or after `since`, leaving out Fix PRs give-ups (no agent). */
+    /**
+     * Real runs of these automations that started at or after `since`, leaving out the ones that start no agent: Fix
+     * PRs give-ups and failed check scripts, retried or not.
+     */
     startedSince(automations: readonly string[], since: string): number {
+      // A retried run's key is `retried:<id>:<key>`, and an id has no colon.
+      const noAgent = [FIX_GAVE_UP_KEY_PREFIX, CHECK_FAILED_KEY_PREFIX].flatMap((prefix) => [
+        `${prefix}%`,
+        `${RETRIED_PREFIX}%:${prefix}%`,
+      ]);
       return (
         sql.get<{ n: number }>(
           `SELECT COUNT(*) AS n FROM autopilot_runs WHERE dry_run = 0 AND started_at >= ?
-           AND automation IN (SELECT value FROM json_each(?)) AND dedupe_key NOT LIKE ?`,
+           AND automation IN (SELECT value FROM json_each(?))
+           ${noAgent.map(() => "AND dedupe_key NOT LIKE ?").join(" ")}`,
           since,
           jsonList(automations),
-          `${FIX_GAVE_UP_KEY_PREFIX}%`,
+          ...noAgent,
         )?.n ?? 0
       );
     },

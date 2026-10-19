@@ -1,10 +1,12 @@
 import {
+  actionRunsCode,
   automationBundle,
   BUNDLE_SKILL_BODY_MAX,
   BundleSkill,
   CreateCustomAutomationInput,
   ImportAutomationInput,
   parseAutomationBundle,
+  TestScriptInput,
   UpdateCustomAutomationInput,
   type CustomAction,
 } from "@repo/contracts";
@@ -15,15 +17,14 @@ import { installSkill, readInstalledSkill } from "../../skills.ts";
 import { handle, idParam, noContent, parseBody } from "../respond.ts";
 
 /**
- * A shell action runs whatever it says, so only the board's own page may write one: browsers always send an Origin
- * (which the guard checks is this board), while agents and scripts usually send none. A guard rail on top of REST
- * only, not a boundary: anything on this machine can set the header.
+ * A shell command, script or check script runs whatever it says, so only the board's own page may write one: browsers
+ * always send an Origin (which the guard checks is this board), while agents and scripts usually send none. A guard
+ * rail on top of REST only, not a boundary: anything on this machine can set the header.
  */
-function assertShellFromBrowser(c: Context, action: Pick<CustomAction, "kind"> | undefined): void {
-  if (action?.kind !== "shell") return;
-  if (!c.req.header("origin")) {
-    throw new AppError("VALIDATION", "Shell commands can only be set from the board's settings page");
-  }
+function assertShellFromBrowser(c: Context, action: CustomAction | undefined): void {
+  if (!action || !actionRunsCode(action) || c.req.header("origin")) return;
+  const what = action.kind === "shell" ? "Shell commands" : action.kind === "script" ? "Scripts" : "Check scripts";
+  throw new AppError("VALIDATION", `${what} can only be set from the board's settings page`);
 }
 
 /**
@@ -36,6 +37,17 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
   app.get(
     "/api/autopilot/custom",
     handle((c) => c.json(custom.list())),
+  );
+  // Runs a draft script for real, so, like writing one, only the board's page may ask for it.
+  app.post(
+    "/api/autopilot/custom/test-script",
+    handle(async (c) => {
+      const input = await parseBody(c, TestScriptInput);
+      if (!c.req.header("origin")) {
+        throw new AppError("VALIDATION", "Test runs can only be started from the board's settings page");
+      }
+      return c.json(await custom.testScript(input));
+    }),
   );
   app.post(
     "/api/autopilot/custom",
@@ -61,7 +73,7 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
     "/api/autopilot/custom/import",
     handle(async (c) => {
       const input = await parseBody(c, ImportAutomationInput);
-      // A file's shell command runs on this machine, so, as when writing one by hand, only the board's page may import it.
+      // A file's shell command or script runs on this machine, so, as when writing one by hand, only the board's page may import it.
       const parsed = parseAutomationBundle(input.bundle);
       if (parsed.ok) assertShellFromBrowser(c, parsed.bundle.action);
       // A skill persists into every later session that reads the user's skills, so it is held to the same rail.
@@ -78,7 +90,7 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
     "/api/autopilot/custom/:id",
     handle(async (c) => {
       const input = await parseBody(c, UpdateCustomAutomationInput);
-      // Any change to a shell automation changes what runs or when.
+      // Any change to a shell or script automation changes what runs or when.
       assertShellFromBrowser(c, input.action ?? custom.get(idParam(c)).action);
       return c.json(custom.update(idParam(c), input));
     }),

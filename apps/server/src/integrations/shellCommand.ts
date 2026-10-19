@@ -1,6 +1,5 @@
-import { spawn } from "node:child_process";
 import { brandEnv } from "@repo/contracts";
-import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
+import { captureProcess } from "./captureProcess.ts";
 
 // Autopilot's shell actions: a command the user wrote, run in a project's folder. Task values reach it only as
 // environment variables, never in the command line.
@@ -14,10 +13,6 @@ import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
 
 /** How much of the output a run keeps: the end, where errors usually are. */
 export const SHELL_OUTPUT_TAIL = 4_000;
-/** What is held while the command runs, so a chatty one can't fill memory. */
-const BUFFER_MAX = 64_000;
-/** How long a timed-out command gets to end before it is killed outright and the run is given up on. */
-const KILL_GRACE_MS = 5_000;
 
 export interface ShellRequest {
   command: string;
@@ -81,48 +76,15 @@ export function shellInvocation(command: string, platform: NodeJS.Platform = pro
   return ["/bin/sh", ["-c", command]];
 }
 
-export const runShellCommand: RunShell = (request) =>
-  new Promise((resolve, reject) => {
-    const [exe, args] = shellInvocation(request.command);
-    const child = spawn(exe, args, {
-      cwd: request.cwd,
-      env: shellEnvironment(request.env),
-      windowsHide: true,
-      detached: POSIX_GROUPS,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const group = POSIX_GROUPS ? child.pid : undefined;
-    if (group !== undefined) liveGroups.add(group);
-    let output = "";
-    let timedOut = false;
-    let settled = false;
-    let grace: NodeJS.Timeout | null = null;
-    const take = (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-      if (output.length > BUFFER_MAX) output = output.slice(-BUFFER_MAX);
-    };
-    child.stdout.on("data", take);
-    child.stderr.on("data", take);
-    const finish = (result: ShellResult | Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (grace) clearTimeout(grace);
-      if (group !== undefined) liveGroups.delete(group);
-      if (result instanceof Error) reject(result);
-      else resolve(result);
-    };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree(child);
-      // A tree that ignores SIGTERM (or holds the pipes open) mustn't keep the run going forever.
-      grace = setTimeout(() => {
-        killTree(child, true);
-        finish({ exitCode: null, output: output.slice(-SHELL_OUTPUT_TAIL), timedOut: true });
-      }, KILL_GRACE_MS);
-    }, request.timeoutMs);
-    child.on("error", (error) => finish(error));
-    child.on("close", (code) =>
-      finish({ exitCode: timedOut ? null : code, output: output.slice(-SHELL_OUTPUT_TAIL), timedOut }),
-    );
+export const runShellCommand: RunShell = async (request) => {
+  const [exe, args] = shellInvocation(request.command);
+  const { exitCode, output, timedOut } = await captureProcess({
+    exe,
+    args,
+    cwd: request.cwd,
+    env: shellEnvironment(request.env),
+    timeoutMs: request.timeoutMs,
+    tail: SHELL_OUTPUT_TAIL,
   });
+  return { exitCode, output, timedOut };
+};

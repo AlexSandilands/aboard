@@ -1,4 +1,5 @@
 import {
+  actionScripts,
   type AutomationBundle,
   customAllowedTools,
   describeCustomTrigger,
@@ -20,10 +21,12 @@ import {
   draftToRequest,
   importProblem,
   initialDraft,
+  needsScriptConfirm,
   readBundle,
   type ImportDraft,
 } from "./customAutomationImport.logic";
 import { InputValueControl } from "./InputsAndSlots";
+import { ScriptWarning } from "./ScriptWarning";
 
 /** A file bigger than this isn't an automation. */
 const FILE_MAX_BYTES = 500_000;
@@ -94,7 +97,7 @@ export function CustomAutomationImportForm({
   const patch = (next: Partial<ImportDraft>) => setDraft((current) => (current ? { ...current, ...next } : current));
 
   const submit = () => {
-    if (!bundle || !draft || problem) return;
+    if (!bundle || !draft || problem || needsScriptConfirm(bundle, draft)) return;
     importing.mutate(draftToRequest(bundle, draft), {
       onSuccess: ({ automation, skill }) => {
         if (skill?.renamed) {
@@ -111,6 +114,7 @@ export function CustomAutomationImportForm({
 
   const { action } = bundle ?? {};
   const tools = action ? customAllowedTools(action) : [];
+  const scripts = action ? actionScripts(action) : [];
 
   return (
     <>
@@ -188,7 +192,7 @@ export function CustomAutomationImportForm({
                   </Section>
                 ) : null}
               </>
-            ) : (
+            ) : action.kind === "script" ? null : (
               <Section title="Command it runs">
                 <Code tall>{action.command}</Code>
                 <Alert variant="warning">
@@ -200,6 +204,46 @@ export function CustomAutomationImportForm({
                 </Alert>
               </Section>
             )}
+
+            {scripts.map(({ role, script }) => (
+              <Section
+                key={role}
+                title={
+                  role === "check"
+                    ? `Check script it runs first (${script.language})`
+                    : `Script it runs (${script.language})`
+                }
+                hint={
+                  role === "check"
+                    ? `It runs on this machine before the agent starts. Each line it prints starts an agent of its own${
+                        action.kind === "agent" && !action.untrustedItems
+                          ? ", which trusts the line and gets the usual access."
+                          : ", which treats the line as untrusted: read-only, with only this board's tools."
+                      }`
+                    : undefined
+                }
+              >
+                <Code tall>{script.body}</Code>
+              </Section>
+            ))}
+            {scripts.length > 0 ? (
+              <>
+                <ScriptWarning>
+                  <p>Don&apos;t import it unless you trust who wrote it and have read every line.</p>
+                </ScriptWarning>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm">
+                    I&apos;ve read {scripts.length === 1 ? "the script" : "the scripts"} above and I understand{" "}
+                    {scripts.length === 1 ? "it runs" : "they run"} on my machine as me
+                  </span>
+                  <Switch
+                    aria-label="Confirm the script runs on your machine"
+                    checked={draft.confirmScript}
+                    onCheckedChange={(confirmScript) => patch({ confirmScript })}
+                  />
+                </div>
+              </>
+            ) : null}
 
             {bundle.skill ? (
               <Section
@@ -294,7 +338,10 @@ export function CustomAutomationImportForm({
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button disabled={!bundle || Boolean(problem) || importing.isPending} onClick={submit}>
+        <Button
+          disabled={!bundle || !draft || Boolean(problem) || needsScriptConfirm(bundle, draft) || importing.isPending}
+          onClick={submit}
+        >
           Import automation
         </Button>
       </EditorFooter>

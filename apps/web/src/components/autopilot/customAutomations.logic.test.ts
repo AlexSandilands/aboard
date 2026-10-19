@@ -5,9 +5,15 @@ import {
   emptyCustomForm,
   emptyFormSlots,
   formFromCustom,
+  formSampleTask,
   previewAction,
   sampleTask,
+  testScriptRequest,
+  withActionKind,
+  withCheck,
+  withLanguage,
 } from "./customAutomations.logic";
+import { scriptStarter } from "./scripts.logic";
 
 const task = (id: string, overrides: Partial<TaskSummary> = {}) =>
   ({
@@ -68,6 +74,8 @@ describe("custom automation form", () => {
           allowedTools: [],
           inputs: [],
           slots: [],
+          check: null,
+          untrustedItems: true,
         },
       },
     });
@@ -154,11 +162,35 @@ describe("custom automation form", () => {
         allowedTools: [],
         inputs: [],
         slots: [],
+        check: null,
+        untrustedItems: true,
       },
     });
     expect(customFormToInput(formFromCustom(saved))).toEqual({
       ok: true,
       input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
+    });
+  });
+
+  it("round-trips an agent's check script through the editor's fields", () => {
+    const saved = custom({
+      trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 15 } },
+      action: {
+        kind: "agent",
+        prompt: "Look at {{item.title}}",
+        skill: "",
+        tier: null,
+        onPrBranch: false,
+        allowedTools: [],
+        inputs: [],
+        slots: [],
+        check: { language: "python", body: "print('{}')", timeoutSeconds: 60 },
+        untrustedItems: false,
+      },
+    });
+    expect(customFormToInput({ ...formFromCustom(saved), name: "Renamed" })).toMatchObject({
+      ok: true,
+      input: { name: "Renamed", action: saved.action },
     });
   });
 
@@ -187,6 +219,8 @@ describe("custom automation form", () => {
         allowedTools: ["mcp__a", "mcp__b__c"],
         inputs: [],
         slots: [],
+        check: null,
+        untrustedItems: true,
       },
     });
     expect(formFromCustom(saved).allowedTools).toBe(["mcp__a", "mcp__b__c"].join(NL));
@@ -204,6 +238,8 @@ describe("custom automation form", () => {
         allowedTools: [],
         inputs: [{ name: "jql", label: "JQL", type: "text", default: "type = Bug", value: "project = X" }],
         slots: [{ name: "jira", label: "Jira tools", description: "search", tools: ["mcp__a__b", "mcp__a__c"] }],
+        check: null,
+        untrustedItems: true,
       },
     });
     const form = formFromCustom(saved);
@@ -254,6 +290,191 @@ describe("custom automation form", () => {
       ok: true,
       input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
     });
+  });
+});
+
+describe("a script automation in the form", () => {
+  const action = {
+    kind: "script" as const,
+    language: "python" as const,
+    body: "if x:\r\n    print(1)\r\n",
+    timeoutSeconds: 45,
+  };
+
+  it("is saved back as it was, indentation and line endings kept", () => {
+    const saved = custom({ action });
+    const form = formFromCustom(saved);
+    expect(form.actionKind).toBe("script");
+    expect(customFormToInput(form)).toMatchObject({ ok: true, input: { action } });
+  });
+
+  it("previews the script with the sample task's variables", () => {
+    const preview = previewAction(
+      { name: "Ping", trigger: { kind: "status_change", to: "review" }, action },
+      task("t"),
+      [project],
+    );
+    expect(preview).toContain("print(1)");
+    expect(preview).toContain(`${brandEnv("TASK_NUMBER")}="7"`);
+  });
+});
+
+describe("the check script in the form", () => {
+  const scheduled = (over: Partial<ReturnType<typeof emptyCustomForm>> = {}) => ({
+    ...emptyCustomForm(),
+    name: "Triage",
+    prompt: "Look at {{item.title}}",
+    triggerKind: "schedule" as const,
+    checkOn: true,
+    checkLanguage: "python" as const,
+    checkBody: "print('{}')",
+    checkTimeoutSeconds: "60",
+    ...over,
+  });
+
+  it("is read from what was typed, with its own timeout", () => {
+    expect(customFormToInput(scheduled())).toMatchObject({
+      ok: true,
+      input: { action: { check: { language: "python", body: "print('{}')", timeoutSeconds: 60 } } },
+    });
+  });
+
+  it("is left out when it is switched off, and when the trigger can't have one", () => {
+    expect(customFormToInput(scheduled({ checkOn: false, prompt: "Go" }))).toMatchObject({
+      input: { action: { check: null } },
+    });
+    expect(customFormToInput(scheduled({ triggerKind: "status_change", prompt: "Go" }))).toMatchObject({
+      ok: true,
+      input: { action: { check: null } },
+    });
+  });
+
+  it("says what is wrong with an empty script or timeout", () => {
+    expect(customFormToInput(scheduled({ checkBody: "  " }))).toEqual({
+      ok: false,
+      error: "Write the check script, or switch the check off",
+    });
+    expect(customFormToInput(scheduled({ checkTimeoutSeconds: "soon" }))).toMatchObject({ ok: false });
+    expect(customFormToInput(scheduled({ checkTimeoutSeconds: "9999" }))).toEqual({
+      ok: false,
+      error: "The check's timeout is 1 to 3600 seconds",
+    });
+  });
+
+  it("refuses untrusted items with allowed tools, as the server does", () => {
+    expect(customFormToInput(scheduled({ allowedTools: "WebFetch" }))).toMatchObject({ ok: false });
+    expect(customFormToInput(scheduled({ allowedTools: "WebFetch", untrustedItems: false }))).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("starts from the starter when switched on with nothing written, and keeps what was written", () => {
+    const form = { ...emptyCustomForm(), checkLanguage: "powershell" as const };
+    expect(withCheck(form, true)).toMatchObject({ checkOn: true, checkBody: scriptStarter("powershell", "check") });
+    expect(withCheck({ ...form, checkBody: "mine" }, true).checkBody).toBe("mine");
+    expect(withCheck({ ...form, checkBody: "mine" }, false)).toMatchObject({ checkOn: false, checkBody: "mine" });
+  });
+});
+
+describe("a script action's editor", () => {
+  it("starts a new script from its language's starter", () => {
+    const form = withActionKind(emptyCustomForm(), "script");
+    expect(form.actionKind).toBe("script");
+    expect(form.body).toBe(scriptStarter("node", "action"));
+    expect(customFormToInput({ ...form, name: "Ping" })).toMatchObject({
+      ok: true,
+      input: { action: { kind: "script", language: "node", timeoutSeconds: 300 } },
+    });
+  });
+
+  it("swaps the starter for the new language's, but never what the user wrote", () => {
+    const starter = withActionKind(emptyCustomForm(), "script");
+    expect(withLanguage(starter, "action", "python")).toMatchObject({
+      language: "python",
+      body: scriptStarter("python", "action"),
+    });
+    const written = { ...starter, body: "console.log('mine')" };
+    expect(withLanguage(written, "action", "python")).toMatchObject({ language: "python", body: written.body });
+    const check = { ...starter, checkBody: scriptStarter("node", "check") };
+    expect(withLanguage(check, "check", "sh").checkBody).toBe(scriptStarter("sh", "check"));
+  });
+
+  it("asks for a script before saving", () => {
+    expect(customFormToInput({ ...emptyCustomForm(), name: "Ping", actionKind: "script", body: " " })).toEqual({
+      ok: false,
+      error: "Write the script to run",
+    });
+  });
+});
+
+describe("a test run's request", () => {
+  const form = {
+    ...emptyCustomForm(),
+    name: "Triage",
+    prompt: "Look at {{item.title}}",
+    skill: "triage",
+    inputs: [{ name: "depth", label: "Depth", type: "number" as const, value: "3", default: "1" }],
+    actionKind: "script" as const,
+    language: "sh" as const,
+    body: "echo hi",
+    timeoutSeconds: "20",
+    checkLanguage: "python" as const,
+    checkBody: "print('{}')",
+    checkTimeoutSeconds: "40",
+  };
+
+  it("carries an action's script and the task it is given", () => {
+    expect(testScriptRequest(form, "action", "p", "t1")).toEqual({
+      ok: true,
+      input: {
+        projectId: "p",
+        role: "action",
+        taskId: "t1",
+        name: "Triage",
+        inputs: { depth: "3" },
+        prompt: "",
+        skill: "",
+        script: { language: "sh", body: "echo hi", timeoutSeconds: 20 },
+      },
+    });
+  });
+
+  it("carries a check's script with the agent's prompt, and no task", () => {
+    expect(testScriptRequest(form, "check", "p", "t1")).toMatchObject({
+      ok: true,
+      input: {
+        role: "check",
+        taskId: null,
+        prompt: "Look at {{item.title}}",
+        skill: "triage",
+        script: { language: "python", body: "print('{}')", timeoutSeconds: 40 },
+      },
+    });
+  });
+
+  it("says what to fix first", () => {
+    expect(testScriptRequest({ ...form, body: " " }, "action", "p")).toEqual({
+      ok: false,
+      error: "Write the script first",
+    });
+    expect(testScriptRequest({ ...form, timeoutSeconds: "x" }, "action", "p")).toMatchObject({ ok: false });
+    expect(testScriptRequest({ ...form, checkTimeoutSeconds: "0" }, "check", "p")).toEqual({
+      ok: false,
+      error: "The timeout is 1 to 3600 seconds",
+    });
+  });
+});
+
+describe("the task a test run is given", () => {
+  it("is the newest the form's filters let through, even before the form can be saved", () => {
+    const tasks = [
+      task("a", { labels: ["ui"] }),
+      task("b", { labels: ["api"], updatedAt: "2026-10-09T00:00:00.000Z" }),
+    ];
+    const form = { ...emptyCustomForm(), actionKind: "script" as const, body: "", labels: "ui" };
+    expect(formSampleTask(form, tasks)?.id).toBe("a");
+    expect(formSampleTask({ ...form, labels: "" }, tasks)?.id).toBe("b");
+    expect(formSampleTask({ ...form, triggerKind: "schedule" }, tasks)).toBeNull();
   });
 });
 

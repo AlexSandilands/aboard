@@ -42,6 +42,8 @@ export interface CheckContext<C> {
   services: Services;
   engine: AutopilotEngineSettings;
   now: Date;
+  /** The engine's clock, for work a check started that ends after the pass (`now` is the pass's time). */
+  clock?: () => Date;
   /**
    * Projects where the automation is on, or has an epic it is on for (then the check sees the whole project, and the
    * engine drops the tasks the epic's setting doesn't reach). `config` is the project's. Only candidates in these (or
@@ -50,6 +52,11 @@ export interface CheckContext<C> {
   projects: ReadonlyArray<ProjectScope<C>>;
   /** The board-level config when the automation is on for the board itself; null otherwise. */
   board: C | null;
+  /**
+   * Asks for another pass soon. For a check that started work in the background (a custom automation's check script)
+   * and has candidates once it ends; the engine's minute tick would get there too, only later.
+   */
+  wake?: () => void;
 }
 
 /** What a runner recorded about an agent action. */

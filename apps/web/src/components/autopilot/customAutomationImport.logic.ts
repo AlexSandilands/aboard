@@ -1,4 +1,5 @@
 import {
+  actionScripts,
   type AutomationBundle,
   bundleToDefinition,
   checkCustomDefinition,
@@ -15,6 +16,8 @@ export interface ImportDraft {
   slots: Record<string, string>;
   projectIds: string[];
   installSkill: boolean;
+  /** Ticked once they have read the file's scripts: the server refuses a file with one otherwise. */
+  confirmScript: boolean;
 }
 
 /** A file's text as a bundle, or what is wrong with it. */
@@ -35,6 +38,7 @@ export function initialDraft(bundle: AutomationBundle): ImportDraft {
     slots: Object.fromEntries(bundle.slots.map((slot) => [slot.name, ""])),
     projectIds: [],
     installSkill: false,
+    confirmScript: false,
   };
 }
 
@@ -46,8 +50,13 @@ export function draftToRequest(bundle: AutomationBundle, draft: ImportDraft): Im
     slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),
     projectIds: draft.projectIds,
     installSkill: draft.installSkill,
+    confirmScript: draft.confirmScript,
   };
 }
+
+/** Whether the file runs a script the importer hasn't yet confirmed they've read. */
+export const needsScriptConfirm = (bundle: AutomationBundle, draft: Pick<ImportDraft, "confirmScript">): boolean =>
+  !draft.confirmScript && actionScripts(bundle.action).length > 0;
 
 /** Why this can't be imported as filled in (the server's checks, run first), or null. An empty slot is allowed. */
 export function importProblem(bundle: AutomationBundle, draft: ImportDraft): string | null {

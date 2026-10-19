@@ -4,6 +4,8 @@ import type {
   CustomAutomation,
   ImportAutomationInput,
   ImportedAutomation,
+  TestScriptInput,
+  TestScriptResult,
   UpdateCustomAutomationInput,
 } from "@repo/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -59,3 +61,12 @@ export const useExportCustomAutomation = () =>
 
 export const useDeleteCustomAutomation = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/custom/${enc(id)}`, { method: "DELETE" }));
+
+/**
+ * Runs a draft script once, for real (it can act): the result is shown where it was asked for, so a failure is
+ * the panel's to show, not a toast.
+ */
+export const useTestScript = () =>
+  useMutation({
+    mutationFn: (input: TestScriptInput) => api<TestScriptResult>("/api/autopilot/custom/test-script", { body: input }),
+  });

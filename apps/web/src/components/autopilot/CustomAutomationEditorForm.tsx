@@ -9,13 +9,12 @@ import {
   customEnvName,
   MODEL_TIERS,
 } from "@repo/contracts";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { WEEKDAYS } from "~/components/recurring/recurring.logic";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
@@ -24,59 +23,22 @@ import { useBoard } from "~/state/queries";
 import {
   customFormToInput,
   emptyFormSlots,
+  formSampleTask,
   parseAllowedTools,
   previewAction,
   PR_EVENTS,
   sampleTask,
   STATUSES,
   TRIGGER_KINDS,
+  withActionKind,
+  withCheck,
   type CustomForm,
 } from "./customAutomations.logic";
+import { Choice, Field } from "./FormFields";
 import { BlockedWarning, InputsField, SlotsField } from "./InputsAndSlots";
 import { RunHistoryLink } from "./RunHistoryLink";
-
-function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
-      {children}
-      {hint ? <span className="text-2xs text-muted-foreground">{hint}</span> : null}
-    </div>
-  );
-}
-
-function Choice<T extends string>({
-  label,
-  value,
-  items,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: T | "";
-  items: ReadonlyArray<{ value: T | ""; label: string }>;
-  onChange: (value: T | "") => void;
-  placeholder?: string;
-}) {
-  return (
-    <Select<string>
-      items={items as ReadonlyArray<{ value: string; label: string }>}
-      value={value}
-      onValueChange={(next) => onChange((next ?? "") as T | "")}
-    >
-      <SelectTrigger size="sm" aria-label={label}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectPopup>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectPopup>
-    </Select>
-  );
-}
+import { ScriptField } from "./ScriptField";
+import { ScriptWarning } from "./ScriptWarning";
 
 /**
  * The body of the custom automation editor: trigger, filters, action and a preview of what it would run for a task
@@ -109,6 +71,8 @@ export function CustomAutomationEditorForm({
       (form.projectIds.length === 0 || form.projectIds.includes(t.projectId)),
   );
   const isSchedule = form.triggerKind === "schedule";
+  // Only a schedule can check first: an agent for a task already has its item, the task.
+  const checking = isSchedule && form.actionKind === "agent" && form.checkOn;
   const result = customFormToInput(form);
   const sample = result.ok && !isSchedule ? sampleTask(result.input, board?.tasks ?? []) : null;
   const preview = result.ok ? previewAction(result.input, sample, projects) : null;
@@ -327,11 +291,14 @@ export function CustomAutomationEditorForm({
             value={[form.actionKind]}
             onValueChange={(next) => {
               const actionKind = next[0];
-              if (actionKind === "agent" || actionKind === "shell") patch({ actionKind });
+              if (actionKind === "agent" || actionKind === "shell" || actionKind === "script") {
+                setForm((current) => withActionKind(current, actionKind));
+              }
             }}
           >
             <Toggle value="agent">Start an agent</Toggle>
             <Toggle value="shell">Run a command</Toggle>
+            <Toggle value="script">Run a script</Toggle>
           </ToggleGroup>
         </Field>
 
@@ -353,6 +320,12 @@ export function CustomAutomationEditorForm({
                       , <code className="font-mono">{`{{inputs.${input.name}}}`}</code>
                     </span>
                   ))}
+                  {checking ? (
+                    <>
+                      , <code className="font-mono">{"{{item}}"}</code> (the whole item) and{" "}
+                      <code className="font-mono">{"{{item.<field>}}"}</code> for what the check printed
+                    </>
+                  ) : null}
                   .{" "}
                   {isSchedule
                     ? "The project's name and folder are added after it."
@@ -368,6 +341,55 @@ export function CustomAutomationEditorForm({
                 onChange={(event) => patch({ prompt: event.currentTarget.value })}
               />
             </Field>
+            {isSchedule ? (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">Check first with a script</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Runs before any agent. Each JSON line it prints is an item, and each item it hasn&apos;t printed
+                      before starts an agent of its own; printing nothing starts nothing, so a quiet check costs
+                      nothing.
+                    </span>
+                  </span>
+                  <Switch
+                    aria-label="Check first with a script"
+                    checked={form.checkOn}
+                    onCheckedChange={(checkOn) => setForm((current) => withCheck(current, checkOn))}
+                  />
+                </div>
+                {form.checkOn ? (
+                  <>
+                    <ScriptWarning />
+                    <ScriptField kind="check" form={form} patch={patch} projects={projects} sample={null} />
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="space-y-0.5">
+                        <span className="block text-sm font-medium">Treat the items as untrusted</span>
+                        <span className="block text-xs text-muted-foreground">
+                          Items often carry text anyone can write, such as a pull request title or comment. On, each
+                          item&apos;s agent runs read-only with only this board&apos;s tools, and not the ones that
+                          reach other agents or merge. It can&apos;t be combined with allowed tools or tool slots.
+                        </span>
+                      </span>
+                      <Switch
+                        aria-label="Treat the items as untrusted"
+                        checked={form.untrustedItems}
+                        onCheckedChange={(untrustedItems) => patch({ untrustedItems })}
+                      />
+                    </div>
+                    {form.untrustedItems ? null : (
+                      <Alert variant="warning">
+                        <AlertDescription>
+                          Each item&apos;s agent gets the same access as any scheduled agent here, including writing,
+                          and it reads text the check copied from outside. Only turn this off when whoever can write
+                          that text is trusted.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </>
+                ) : null}
+              </>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Skill" hint="Optional. The agent is told to use it.">
                 <Input
@@ -465,6 +487,17 @@ export function CustomAutomationEditorForm({
             <p className="text-xs text-muted-foreground">
               The runner, budget and timeout are this automation&apos;s settings in the Autopilot list, per scope.
             </p>
+          </>
+        ) : form.actionKind === "script" ? (
+          <>
+            <ScriptWarning />
+            <ScriptField
+              kind="action"
+              form={form}
+              patch={patch}
+              projects={projects}
+              sample={formSampleTask(form, board?.tasks ?? [])}
+            />
           </>
         ) : (
           <>

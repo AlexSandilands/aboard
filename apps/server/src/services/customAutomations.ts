@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  actionScripts,
   bundleToDefinition,
   checkCustomDefinition,
   CUSTOM_NAME_MAX,
@@ -16,10 +17,15 @@ import {
   type CustomDefinition,
   type ImportedAutomation,
   type InstalledSkill,
+  type TaskSummary,
+  type TestScriptInput,
+  type TestScriptResult,
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
+import type { RunScript } from "../integrations/scriptRunner.ts";
 import type { Core } from "./core.ts";
+import { createTestScript } from "./testScript.ts";
 
 /**
  * The automations the user defines (docs/features/autopilot.md#custom-automations). Each is a catalogue entry
@@ -43,6 +49,12 @@ export interface CustomAutomationsService {
   /** Its switches go with it; its runs stay as history. */
   delete(id: string): void;
   /**
+   * Runs a draft script once, now, in a project's folder (it really executes: nothing about it is a dry run) and says
+   * what it did. Nothing is saved. Throws NOT_FOUND for an unknown project or task, VALIDATION for a project with no
+   * folder, CONFLICT while another test is running.
+   */
+  testScript(input: TestScriptInput): Promise<TestScriptResult>;
+  /**
    * Ignores events before now in these scopes (project ids, or `epicArmKey(epicId)`): the automation was just
    * switched on there, or Autopilot resumed. Other scopes keep events they haven't acted on yet (held for quiet hours
    * or a cap).
@@ -63,8 +75,16 @@ export interface CustomAutomationsService {
   statusFrom(taskIds: readonly string[]): Map<string, TaskStatus | null>;
 }
 
-export function createCustomAutomationsService(core: Core): CustomAutomationsService {
+export function createCustomAutomationsService(
+  core: Core,
+  deps: { runScript: RunScript; taskSummary: (id: string) => TaskSummary },
+): CustomAutomationsService {
   const { repos } = core;
+  const testScript = createTestScript({
+    runScript: deps.runScript,
+    project: (id) => repos.projects.get(id),
+    task: deps.taskSummary,
+  });
 
   const get = (id: string): CustomAutomation => {
     const custom = repos.autopilotCustom.get(id);
@@ -126,15 +146,31 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
   return {
     list: () => repos.autopilotCustom.all(),
 
+    testScript,
+
     get,
 
     create: (input) => insert(CreateCustomAutomationInput.parse(input)),
 
     importBundle(input, installSkill) {
-      const { bundle: file, inputs, slots, projectIds, installSkill: wantSkill } = ImportAutomationInput.parse(input);
+      const {
+        bundle: file,
+        inputs,
+        slots,
+        projectIds,
+        installSkill: wantSkill,
+        confirmScript,
+      } = ImportAutomationInput.parse(input);
       const parsed = parseAutomationBundle(file);
       if (!parsed.ok) throw new AppError("VALIDATION", parsed.error);
       const { bundle } = parsed;
+      // Here, not in the route, so nothing that imports can skip it: a script is someone else's code, run as the user.
+      if (!confirmScript && actionScripts(bundle.action).length > 0) {
+        throw new AppError(
+          "VALIDATION",
+          "This file runs a script on your machine as you. Read it and confirm (confirmScript) to import it",
+        );
+      }
       const fill = { inputs, slots, projectIds };
       const named = (skill?: string | null) =>
         CreateCustomAutomationInput.parse({
