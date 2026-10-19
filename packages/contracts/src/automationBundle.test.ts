@@ -1,19 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionRunsCode,
+  actionScripts,
   AUTOMATION_BUNDLE_FORMAT,
   AUTOMATION_BUNDLE_VERSION,
   automationBundle,
   bundleToDefinition,
   inputStartValue,
   parseAutomationBundle,
+  PLAIN_BUNDLE_VERSION,
 } from "./automationBundle.ts";
 import {
   checkCustomDefinition,
+  CUSTOM_SCRIPT_MAX,
   CreateCustomAutomationInput,
   CustomAction,
   CustomTrigger,
   type CustomDefinition,
 } from "./customAutomations.ts";
+
+/** An agent action with a `check` of any shape, however the action's own schema treats one. */
+const withCheck = (agent: CustomAction, check: unknown): CustomAction => Object.assign({}, agent, { check });
 
 const definition = (): CustomDefinition => ({
   name: "Dispatch",
@@ -34,7 +41,7 @@ describe("automation bundles", () => {
     const bundle = automationBundle(definition(), { name: "triage", body: "---\nname: triage\n---\nDo it" });
     expect(bundle).toMatchObject({
       format: AUTOMATION_BUNDLE_FORMAT,
-      version: AUTOMATION_BUNDLE_VERSION,
+      version: PLAIN_BUNDLE_VERSION,
       filters: { labels: ["bug"] },
       inputs: [{ name: "jql", default: "type = Bug" }],
       slots: [{ name: "jira", label: "Jira tools", description: "search" }],
@@ -108,5 +115,73 @@ describe("automation bundles", () => {
       ok: false,
       error: expect.stringMatching(/Only an agent/),
     });
+  });
+});
+
+describe("automation bundles that carry a script", () => {
+  const script = { kind: "script", language: "python", body: "print('x')\n  # kept\n" } as const;
+  const scripted = (): CustomDefinition => ({ ...definition(), action: CustomAction.parse(script) });
+
+  it("is written as the version that holds a script, and a file without one stays at version 1", () => {
+    expect(automationBundle(scripted()).version).toBe(AUTOMATION_BUNDLE_VERSION);
+    expect(automationBundle(definition()).version).toBe(PLAIN_BUNDLE_VERSION);
+    expect(
+      automationBundle({ ...definition(), action: CustomAction.parse({ kind: "shell", command: "make" }) }).version,
+    ).toBe(PLAIN_BUNDLE_VERSION);
+  });
+
+  it("round-trips a script action through JSON, body and language as written", () => {
+    const parsed = parseAutomationBundle(JSON.parse(JSON.stringify(automationBundle(scripted()))));
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.bundle.action).toMatchObject({ kind: "script", language: "python", body: script.body });
+    const def = CreateCustomAutomationInput.parse(bundleToDefinition(parsed.bundle));
+    expect(checkCustomDefinition(def)).toBeNull();
+    expect(def.action).toMatchObject({ kind: "script", language: "python", body: script.body, timeoutSeconds: 300 });
+  });
+
+  it("still reads files from before scripts, as version 1", () => {
+    const old = JSON.parse(JSON.stringify(automationBundle(definition())));
+    expect(old.version).toBe(1);
+    expect(parseAutomationBundle(old).ok).toBe(true);
+  });
+
+  it("refuses a script in a version 1 file, which an older board would read without it", () => {
+    const file = { ...automationBundle(scripted()), version: PLAIN_BUNDLE_VERSION };
+    expect(parseAutomationBundle(file)).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/needs a version 2 file/),
+    });
+  });
+
+  it("refuses a script past the size limit and a blank one", () => {
+    const file = automationBundle(scripted());
+    const withBody = (body: string) => ({ ...file, action: { ...file.action, body } });
+    expect(parseAutomationBundle(withBody("x".repeat(CUSTOM_SCRIPT_MAX))).ok).toBe(true);
+    expect(parseAutomationBundle(withBody("x".repeat(CUSTOM_SCRIPT_MAX + 1))).ok).toBe(false);
+    expect(parseAutomationBundle(withBody("  \n")).ok).toBe(false);
+  });
+
+  it("gives a script no inputs or slots, like a command", () => {
+    const file = { ...automationBundle(scripted()), slots: [{ name: "jira", label: "Jira", description: "" }] };
+    expect(parseAutomationBundle(file)).toMatchObject({ ok: false, error: expect.stringMatching(/Only an agent/) });
+  });
+
+  it("lists the scripts an action runs: its own body, or an agent's check", () => {
+    expect(actionScripts(CustomAction.parse(script))).toEqual([
+      { role: "script", script: expect.objectContaining({ language: "python", body: script.body }) },
+    ]);
+    expect(actionScripts(CustomAction.parse({ kind: "shell", command: "make" }))).toEqual([]);
+    const agent = definition().action;
+    expect(actionScripts(agent)).toEqual([]);
+    const check = { language: "node", body: "console.log(1)", timeoutSeconds: 60 };
+    expect(actionScripts(withCheck(agent, check))).toEqual([{ role: "check", script: check }]);
+    expect(actionScripts(withCheck(agent, { language: "ruby", body: "x" }))).toEqual([]);
+  });
+
+  it("counts a command, a script and a check script as code, and a plain agent as none", () => {
+    expect(actionRunsCode(CustomAction.parse({ kind: "shell", command: "make" }))).toBe(true);
+    expect(actionRunsCode(CustomAction.parse(script))).toBe(true);
+    expect(actionRunsCode(withCheck(definition().action, { language: "sh", body: "ls" }))).toBe(true);
+    expect(actionRunsCode(definition().action)).toBe(false);
   });
 });

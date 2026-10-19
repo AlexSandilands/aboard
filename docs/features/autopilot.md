@@ -902,22 +902,33 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   them; off, the agents get a scheduled agent's access and the action's tools.
 - **Dry run.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
   preview is its agent's filled prompt; a failed check records a skipped run with the failure.
-- **Sharing and the editor.** The bundle carries the check with the action, and the import page shows it with the
-  script warning. The editor can't edit a check yet (#228); it keeps one it doesn't show when the form is saved.
+- **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
+  script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
+  items' agents run. The editor can't edit a check yet (#228); it keeps one it doesn't show when the form is saved.
 
 ### Sharing automations
 
 An automation is shared as a versioned JSON file, an `AutomationBundle` (`packages/contracts/src/automationBundle.ts`,
-`format: "<brand id>.automation"`, `version: 1`). It holds the name, description, trigger, the filters' labels only, the
-action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
+`format: "<brand id>.automation"`, `version: 1`, or `2` for a file that carries a script). It holds the name, description,
+trigger, the filters' labels only, the action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
 optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
 importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
 
+**Scripts** (a `script` action, or an agent's `check`; `actionScripts` lists them) are someone else's code run as the
+importer, so they get more care. A file is written as version 2 only when it carries one (`bundleVersionFor`), so
+every other file stays version 1 and a board from before scripts still reads it; a version 1 file that carries a
+script is refused, since an older board would read it without the script. Language, body and timeout travel as they
+are, the body held to `CUSTOM_SCRIPT_MAX` by the contract. Importing a file with a script needs `confirmScript: true` (the
+service refuses with a reason otherwise, whoever calls it) and, like creating one, the board page's `Origin`
+(`actionRunsCode`, in the route's guard, also covers a check script on create and patch). There is no MCP path that
+writes one, and a suggestion (which can only change an agent's prompt) leaves the check as it was. Dump, restore and
+the git backup keep the whole `action_json`, so a script comes back as written.
+
 | Route                                  | Does                                                                                                      |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `GET /api/autopilot/custom/:id/export` | The bundle (`automationBundle`): inputs' current values as defaults, slots empty, and the action's skill read from the user's installed skills when it is there and fits `BUNDLE_SKILL_BODY_MAX` |
-| `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill}`; 201 `{automation, skill}`                       |
+| `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill, confirmScript}`; 201 `{automation, skill}`       |
 
 `customAutomations.importBundle` parses the file again (a body that isn't one is `VALIDATION`), fills the inputs and
 slots (`bundleToDefinition`; an input left out takes its default), restricts the filters to `projectIds`, gives it a free
@@ -932,7 +943,11 @@ frontmatter block, when missing), so a file can't install a skill under another 
 `SKILL.md`, not other files beside it, and the UI says when a skill went into the file.
 
 The web import screen (`CustomAutomationImportForm`, `/settings/autopilot/custom/import`) reads the file in the browser
-and shows the prompt, command, allowed tools and skill text in full, as untrusted, before **Import**. It also offers the
+and shows the prompt, command, scripts (each with its language, and a check script as such), allowed tools and skill
+text in full, as untrusted, before **Import**. A file with a script also shows `ScriptWarning` (the shared notice for
+the editor too: it runs as you and can do anything you can, such as approve PRs through `gh`; text it reads from GitHub
+comes from anyone who can comment, so it should check who wrote it) and a switch ("I've read the script above and I understand it runs on my machine as me"), which
+**Import** waits for. It also offers the
 files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Dispatch** is an hourly scheduled agent with the inputs `jql`,
 `look_back_days`, `max_issues` and `require_approval` and a `jira` slot. It uses `list_tasks(query: KEY)` to skip keys
 already on the board, `add_to_backlog` and `set_plan`, then `request_attention` or the Autopilot flag, and keeps triaged
