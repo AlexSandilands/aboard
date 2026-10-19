@@ -42,7 +42,12 @@ export function useStuck(pinned: boolean, headerRef: RefObject<HTMLElement | nul
       { root, rootMargin: `-${headerRef.current?.offsetHeight ?? 0}px 0px 0px 0px` },
     );
     observer.observe(sentinel);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      // Unpinned, or the board remounting: nothing is stuck, and a stick seen earlier mustn't move the scroll later.
+      setStuck(false);
+      scrollAtStick.current = 0;
+    };
   }, [pinned, headerRef]);
 
   useLayoutEffect(() => {

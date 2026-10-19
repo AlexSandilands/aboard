@@ -223,3 +223,28 @@ export function landsPastPreview(
       : 0;
   return index >= previewCount;
 }
+
+interface Rect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Pointer hits once a stuck priority lane is drawn over the board. Droppables are measured without regard to
+ * stacking, so the project lanes' cards and cells scrolled under the lane still count where the lane covers them,
+ * and a priority cell scrolled inside the lane still counts where it is clipped. Keep the priority hits when the
+ * pointer is on the lane and the others when it isn't. Without a stuck lane (`lane` null) every hit stays.
+ */
+export function hitsAroundStuckLane<T extends { data?: { droppableContainer?: { data: { current?: unknown } } } }>(
+  hits: T[],
+  pointer: { x: number; y: number } | null,
+  lane: Rect | null,
+): T[] {
+  if (!lane || !pointer) return hits;
+  const onLane = pointer.x >= lane.left && pointer.x <= lane.right && pointer.y >= lane.top && pointer.y <= lane.bottom;
+  return hits.filter(
+    (hit) => (readDragData(hit.data?.droppableContainer?.data?.current)?.rowId === PRIORITY_ROW_ID) === onLane,
+  );
+}

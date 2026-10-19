@@ -63,7 +63,8 @@ export const PriorityLane = memo(function PriorityLane({
           "scroll-mt-10 border-b border-border/40 pt-1.5 pb-3",
           pinned
             ? // Under the column header (z-10) and the dependency lines (z-5), over the lanes. Opaque, so the cards
-              // scrolling beneath don't show through the tint.
+              // scrolling beneath don't show through the tint. `top` is the column header's height (h-9 and its
+              // border, see Board.tsx); useStuck measures the same header for its observer.
               "sticky top-[calc(var(--spacing)*9+1px)] z-4 bg-background bg-linear-to-b from-warning/4 to-warning/4"
             : "bg-warning/4",
           stuck && "flex flex-col shadow-[0_10px_18px_-10px_rgb(0_0_0/0.35)]",

@@ -142,9 +142,10 @@ export function DependencyLines({
         measure();
       });
     };
-    scroller?.addEventListener("scroll", onScroll, { passive: true });
+    // Captured, since scroll events don't bubble: the stuck lane scrolls inside itself as well.
+    scroller?.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
-      scroller?.removeEventListener("scroll", onScroll);
+      scroller?.removeEventListener("scroll", onScroll, { capture: true });
       observer.disconnect();
       mutations.disconnect();
       cancelAnimationFrame(frame);

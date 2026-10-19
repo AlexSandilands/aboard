@@ -5,6 +5,7 @@ import {
   canDropIn,
   computeDrop,
   homeRowId,
+  hitsAroundStuckLane,
   landsPastPreview,
   parseCellKey,
   placementAfterDrop,
@@ -314,5 +315,27 @@ describe("landsPastPreview", () => {
   it("never applies to Done or to non-moves", () => {
     expect(landsPastPreview({ kind: "move", status: "done", afterId: "d" }, "x", full, 2)).toBe(false);
     expect(landsPastPreview({ kind: "noop" }, "x", full, 2)).toBe(false);
+  });
+});
+
+describe("hitsAroundStuckLane", () => {
+  const hit = (id: string, rowId: string) => ({
+    id,
+    data: { droppableContainer: { data: { current: { type: "task", rowId, status: "planned" } } } },
+  });
+  const lane = { left: 0, top: 37, right: 1000, bottom: 200 };
+  const hits = [hit("under", "p"), hit("inLane", "priority")];
+
+  it("keeps the priority hits when the pointer is on the stuck lane", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 100 }, lane).map((h) => h.id)).toEqual(["inLane"]);
+  });
+
+  it("keeps the other hits when the pointer is below it, where a priority cell may reach clipped", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 300 }, lane).map((h) => h.id)).toEqual(["under"]);
+  });
+
+  it("changes nothing without a stuck lane", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 100 }, null)).toEqual(hits);
+    expect(hitsAroundStuckLane(hits, null, lane)).toEqual(hits);
   });
 });

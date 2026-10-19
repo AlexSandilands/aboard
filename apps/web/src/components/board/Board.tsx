@@ -56,6 +56,7 @@ import {
   canDropIn,
   cellDroppableId,
   homeRowId,
+  hitsAroundStuckLane,
   computeDrop,
   landsPastPreview,
   parseCellKey,
@@ -76,7 +77,8 @@ const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.lab
 
 /** Pointer hits prefer cards over the cell beneath them; keyboard drags fall back to corners. */
 const collisionDetection: CollisionDetection = (args) => {
-  const hits = pointerWithin(args);
+  const stuckLane = document.querySelector("[data-stuck]")?.getBoundingClientRect() ?? null;
+  const hits = hitsAroundStuckLane(pointerWithin(args), args.pointerCoordinates, stuckLane);
   if (hits.length > 0) {
     const cards = hits.filter((hit) => !String(hit.id).startsWith("cell:"));
     return cards.length > 0 ? cards : hits;
@@ -573,6 +575,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     <BoardContext value={context}>
       <div ref={scrollRef} data-board-scroll className="min-h-0 flex-1 overflow-auto">
         <div ref={contentRef} className="relative w-full min-w-min pb-10">
+          {/* Its height (h-9 and the border) is also the pinned priority lane's sticky `top` in PriorityLane. */}
           <div
             ref={columnHeaderRef}
             className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain"

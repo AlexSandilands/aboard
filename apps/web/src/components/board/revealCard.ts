@@ -2,17 +2,20 @@ import { revealScrollTarget, visibleFrom } from "./reveal.logic";
 
 /** Longest a smooth scroll is waited on before the card flashes anyway (browsers without `scrollend`). */
 const SCROLL_SETTLE_MS = 1200;
+/** How long a pinned priority lane is given to notice it has stuck after an instant scroll. */
+const STICK_SETTLE_MS = 150;
 
 /**
  * Scrolls the board's scroll box to a card (smoothly, or at once under reduced motion), then flashes a ring round it.
- * `header` is the sticky column header, which hides the top of the box; so does the pinned priority lane (found in the
- * box by its `data-pinned`) for a card that isn't in it.
+ * `header` is the sticky column header, which hides the top of the box; so does the stuck priority lane (found in the
+ * box by its `data-stuck`) for a card that isn't in it.
  */
 export function revealCard(scroller: HTMLElement, header: HTMLElement | null, card: Element): void {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const align = (behavior: ScrollBehavior, el: Element): boolean => {
     const box = scroller.getBoundingClientRect();
-    const lane = scroller.querySelector<HTMLElement>("[data-pinned]");
+    // Only a stuck lane covers the board: a pinned one still in its place shrinks to its cap when it sticks.
+    const lane = scroller.querySelector<HTMLElement>("[data-stuck]");
     const view = {
       top: visibleFrom(
         box.top,
@@ -46,7 +49,17 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
 
   if (reduceMotion) {
     align("instant", card);
-    flash(card, true);
+    if (!scroller.querySelector("[data-pinned]")) {
+      flash(card, true);
+      return;
+    }
+    // A pinned lane shrinks and starts covering the board once the scroll has stuck it: aim once more after that.
+    window.setTimeout(() => {
+      const current = liveCard(scroller, card);
+      if (!current) return;
+      align("instant", current);
+      flash(current, true);
+    }, STICK_SETTLE_MS);
     return;
   }
   if (!align("smooth", card)) {
