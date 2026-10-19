@@ -29,6 +29,7 @@ import { useStartPlanningSession } from "~/state/mutations";
 import { useAgentClis, useBoard, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { planSkillOf } from "./handoff.logic";
+import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { announceSession } from "./SessionLaunchDialog";
 import { ComposerStrip } from "./T3LaunchPickers";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
@@ -200,12 +201,13 @@ function PlanSession({
   const [model, setModel] = useState("");
   const cli = useAgentClis().data?.find((c) => c.harness === harness);
   const start = useStartPlanningSession({ silent: true });
+  const images = useLaunchImages();
   const badModel = modelError(model);
   const blocker = !cli?.available
     ? `${harnessLabel(harness)} isn't installed`
     : !project.workspaceRoot
       ? "The project has no folder"
-      : badModel;
+      : (badModel ?? images.blocker);
 
   const submit = () => {
     if (blocker || !prompt.trim() || start.isPending) return;
@@ -214,6 +216,7 @@ function PlanSession({
         projectId: project.id,
         harness,
         prompt,
+        ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
         taskIds: tasks.map((t) => t.id),
       },
@@ -256,10 +259,13 @@ function PlanSession({
                 submit();
               }
             }}
+            {...images.handlers}
             aria-label="First message"
             className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
           />
+          <LaunchImageThumbs state={images} />
           <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+            <AddImageControl state={images} />
             <Input
               size="sm"
               className="w-56"

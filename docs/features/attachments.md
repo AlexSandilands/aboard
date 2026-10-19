@@ -33,6 +33,25 @@ stored on the board and written into the text as a pill; agents get its file pat
 - **Agents:** `get_task` lists the task's images under **Images** with absolute paths, so Claude Code can open
   a screenshot as a file. Nothing else shows them to agents.
 
+## In the launch dialogs
+
+The hand-off dialogs (a new T3 Code thread, a new Claude Code or Copilot CLI session, and their Plan tasks, Suggest
+epics and Fix in → forms) take images too: paste or drop them into the first message, or pick them with the image
+button. They are not written into the prompt as tokens: the dialog keeps them as thumbnails under it (a click
+previews, × removes), and Send waits for uploads to finish.
+
+- **Uploading:** each image is shrunk and uploaded at once with no `taskId`, so one pasted into a dialog that is
+  then closed is swept after a day like any unclaimed image. The launch request carries `attachmentIds` (up to 10,
+  in order); the server refuses an id that is gone or belongs to another task, before anything starts.
+- **T3 Code:** the server uploads each image to T3 and sends it with the first message
+  ([agent-handoff.md](agent-handoff.md#how-the-launch-works)).
+- **CLI sessions:** the prompt gets a `[Attached image "<name>" is saved at: <path>]` line per image (T3's wording),
+  and so does the short prompt when the full one can't go on the command line.
+- **Whose they are:** a task's launch gives the images to the task once it starts (for a CLI, before the prompt is
+  built, so the path is where the file stays): they are backed up, deleted with it, and listed by `get_task`. A
+  Suggest epics or Plan tasks launch has no one task, so its images stay unclaimed and are swept after a day; T3
+  keeps its own copy, and a CLI session has read the file by then.
+
 ## Backup
 
 The rows go in the task's JSON (`task_attachments`); the files are copied next to the JSON as
@@ -48,16 +67,21 @@ A row whose ids aren't ids is never turned into a path. See [backup.md](backup.m
   type, size and signature.
 - **A token in the text, not a column.** The text stays the one source of what is shown where, and it travels
   through copy, templates and backups unchanged.
+- **Launch images beside the prompt, not in it.** The prompt goes to an agent as written, and a token there would
+  mean nothing to it; T3 and the path lines are how agents get them.
+- **Project launches leave images unclaimed.** Giving them to each planned task would copy one screenshot onto many
+  tasks; the day before the sweep is long enough for the agent to read it.
 
 ## Code map
 
 | File                                                 | What it does                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------- |
 | `packages/contracts/src/attachments.ts`              | Token helpers, accepted types, limits                         |
-| `apps/server/src/services/attachments.ts`            | Upload, read, claim, delete files, sweep                      |
+| `apps/server/src/services/attachments.ts`            | Upload, read, claim, resolve and claim a launch's images, delete files, sweep |
 | `apps/server/src/http/routes/attachments.ts`         | `POST /api/attachments`, `GET /api/attachments/:id`           |
 | `apps/server/src/db/migrations/024_task_attachments.sql` | The table                                                 |
 | `apps/server/src/services/backup/files.ts`           | Copying images into and out of a backup folder                |
 | `apps/web/src/lib/attachments.ts`, `.logic.ts`       | Shrinking before upload                                       |
 | `apps/web/src/components/attachments/`               | Paste hook, pill, thumbnails, preview dialog                  |
+| `apps/web/src/components/handoff/LaunchImages.tsx`   | The launch dialogs' images (`launchImages.logic.ts`)          |
 | `apps/web/src/components/editor/`                    | The editor's attachment and upload nodes                      |

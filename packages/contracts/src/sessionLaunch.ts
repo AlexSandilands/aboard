@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentHarness, AGENT_HARNESSES } from "./agentSessions.ts";
+import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { ModelTier, ModelTiers } from "./modelTiers.ts";
 
@@ -66,6 +67,8 @@ export const StartSessionInput = z.object({
   /** Picks the session's label: "Planning #N", "Implementing #N", "Fixing the PR of #N" or, for an epic, "Orchestrating #N". */
   mode: z.enum(["work", "plan", "orchestrate", "fix"]),
   prompt: z.string().trim().min(1).max(100_000),
+  /** Images pasted into the dialog: claimed onto the task, and their paths added to the prompt. */
+  attachmentIds: LaunchAttachmentIds.optional(),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
   workspace: SessionWorkspace,

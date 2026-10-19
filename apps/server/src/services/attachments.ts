@@ -37,6 +37,13 @@ export interface AttachmentsService {
   forTask(taskId: string): Array<TaskAttachment & { path: string }>;
   /** Gives the unclaimed images that `text` refers to to the task. */
   claim(taskId: string, text: string | null | undefined): void;
+  /**
+   * The images pasted into a launch dialog, in order, with their files' paths. Refuses an id that isn't an image on
+   * disk, or one that belongs to a task other than `taskId` (with no task, any claimed one).
+   */
+  forLaunch(ids: readonly string[], taskId: string | null): Array<TaskAttachment & { path: string }>;
+  /** Gives these unclaimed images to the task, and returns them where they now are. */
+  claimIds(taskId: string, ids: readonly string[]): Array<TaskAttachment & { path: string }>;
   /** Deletes a deleted task's files. Call after the delete committed. */
   removeFilesOf(taskId: string): void;
   /** Removes unclaimed images older than a day, and files of tasks that no longer exist. */
@@ -77,6 +84,19 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
     const attachment = repos.attachments.get(id);
     if (!attachment) throw notFound("Attachment", id);
     return attachment;
+  };
+
+  /** Moves an unclaimed image's file and row to the task; one already claimed (or gone) is left alone. */
+  const moveToTask = (id: string, taskId: string) => {
+    const attachment = repos.attachments.get(id);
+    if (!attachment || attachment.taskId !== null) return;
+    const from = pathOf(attachment);
+    const to = pathOf({ ...attachment, taskId });
+    if (from && to) {
+      mkdirSync(join(to, ".."), { recursive: true });
+      if (existsSync(from)) renameSync(from, to);
+    }
+    repos.attachments.setTask(id, taskId);
   };
 
   return {
@@ -131,17 +151,29 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
       }),
 
     claim(taskId, text) {
-      for (const id of attachmentIdsIn(text)) {
+      for (const id of attachmentIdsIn(text)) moveToTask(id, taskId);
+    },
+
+    forLaunch(ids, taskId) {
+      return [...new Set(ids)].map((id) => {
         const attachment = repos.attachments.get(id);
-        if (!attachment || attachment.taskId !== null) continue;
-        const from = pathOf(attachment);
-        const to = pathOf({ ...attachment, taskId });
-        if (from && to) {
-          mkdirSync(join(to, ".."), { recursive: true });
-          if (existsSync(from)) renameSync(from, to);
+        const path = attachment ? pathOf(attachment) : null;
+        if (!attachment || !path || !existsSync(path)) {
+          throw new AppError("VALIDATION", "An image was removed before the launch; paste it again");
         }
-        repos.attachments.setTask(id, taskId);
-      }
+        if (attachment.taskId !== null && attachment.taskId !== taskId) {
+          throw new AppError("VALIDATION", "An image belongs to another task");
+        }
+        return { ...attachment, path };
+      });
+    },
+
+    claimIds(taskId, ids) {
+      core.write((fx) => {
+        for (const id of ids) moveToTask(id, taskId);
+        fx.detail(taskId);
+      });
+      return this.forLaunch(ids, taskId);
     },
 
     removeFilesOf(taskId) {
