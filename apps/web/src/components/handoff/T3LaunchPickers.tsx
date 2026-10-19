@@ -81,6 +81,19 @@ export function ComposerControl({
   );
 }
 
+/** The strip under the composer, inset 22px each side and tucked under it like T3 Code's drawer. */
+export function ComposerStrip({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "-mt-3 mx-auto flex w-[calc(100%-2.75rem)] items-center rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opacity-60" />;
 
 export function ProviderIcon({ driver, className }: { driver: string; className?: string }) {
