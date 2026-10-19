@@ -220,7 +220,7 @@ export const CustomAction = z.discriminatedUnion("kind", [
     check: CustomScript.nullable().default(null),
     /**
      * Items often carry text anyone can write (a PR title, a comment), so by default their agents run read-only, with
-     * only this board's MCP server, and that narrowed (CHECK_ITEM_DENIED_BOARD_TOOLS). Off gives them the same access
+     * only this board's MCP server, and that narrowed (CHECK_ITEM_DENIED_TOOLS in the server's autopilot/custom.ts). Off gives them the same access
      * as any scheduled agent. Only read with a check.
      */
     untrustedItems: z.boolean().default(true),

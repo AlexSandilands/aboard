@@ -258,6 +258,8 @@ export function customAutomation(
     ctx: CheckContext<Record<string, unknown>>,
     project: Project,
     stamp: string,
+    /** The slot before `stamp`: a check that ran over from it is still acted on, but nothing older. */
+    previousStamp: string | null,
   ): Candidate[] => {
     const { services, engine, now } = ctx;
     const runKey = `${custom.id}:${project.id}`;
@@ -266,7 +268,12 @@ export function customAutomation(
     const last = deps.checkRuns.get(runKey);
     // One at a time: a check that outlasts its interval is waited for, not started again beside itself.
     if (last?.state.kind === "running") return [];
-    const current = last && last.version === custom.updatedAt && (last.slot === stamp || !last.offered) ? last : null;
+    const current =
+      last &&
+      last.version === custom.updatedAt &&
+      (last.slot === stamp || (!last.offered && last.slot === previousStamp))
+        ? last
+        : null;
     if (!current) {
       // Its failure this slot is already recorded (the run's act forgot it, or a restart did): run again only once
       // that run is retried, which retires its key.
@@ -341,16 +348,20 @@ export function customAutomation(
       );
       return scoped.flatMap(({ project }): Candidate[] => {
         const armedAt = customArmedAt(custom, { projectId: project.id });
-        const slot =
+        const slotAt = (at: Date) =>
           s.kind === "hourly"
-            ? latestHourlySlot(s.everyHours, now)
+            ? latestHourlySlot(s.everyHours, at)
             : s.kind === "minutes"
-              ? latestMinutesSlot(s.everyMinutes, now)
-              : latestDue(s, now, localStamp(new Date(armedAt)));
+              ? latestMinutesSlot(s.everyMinutes, at)
+              : latestDue(s, at, localStamp(new Date(armedAt)));
+        const slot = slotAt(now);
         if (!slot || slot.getTime() <= Date.parse(armedAt)) return [];
         const stamp = localStamp(slot);
         // Each item gets an agent of its own, so one going doesn't hold back the next slot.
-        if (checkScript) return checkCandidates(ctx, project, stamp);
+        if (checkScript) {
+          const previous = slotAt(new Date(slot.getTime() - 1));
+          return checkCandidates(ctx, project, stamp, previous ? localStamp(previous) : null);
+        }
         if (busy.has(project.id)) return [];
         return [
           {
