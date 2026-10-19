@@ -436,6 +436,10 @@ describe("check scripts", () => {
       });
       expect(parseCheckOutput('{"key":" "}')).toMatchObject({ ok: false });
       expect(parseCheckOutput('{"key":7}')).toMatchObject({ ok: false });
+      expect(parseCheckOutput(JSON.stringify({ key: "a\nb" }))).toMatchObject({
+        ok: false,
+        error: "Line 1's key has a control character",
+      });
       expect(parseCheckOutput(JSON.stringify({ key: "k".repeat(CHECK_KEY_MAX + 1) }))).toMatchObject({ ok: false });
     });
 

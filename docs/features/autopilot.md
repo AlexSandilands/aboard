@@ -856,8 +856,8 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
 
 - **Output.** The script prints JSON lines on stdout, each an object with a non-empty string `key` (at most
   `CHECK_KEY_MAX`, 200 characters) and any fields of its own; `parseCheckOutput` (contracts) reads them. Blank lines
-  are skipped and a key printed twice counts once; any other line (not JSON, not an object, no key, over
-  `CHECK_LINE_MAX`) fails the whole output with its line number, so a script that prints a stray `Done!` starts nothing.
+  are skipped and a key printed twice counts once; any other line (not JSON, not an object, no key, a key with a
+  control character, which would end up in the run's label and session name, over `CHECK_LINE_MAX`) fails the whole output with its line number, so a script that prints a stray `Done!` starts nothing.
   At most `CHECK_ITEMS_MAX` (500) items are read per run. It gets the same environment and stdin context as a script
   action, with no task, and runs in the project's `workspaceRoot`. A `{{…}}` in it that names a placeholder is refused.
 - **In the engine.** `check` must not wait on a script (the engine awaits each automation's `check` in turn), so the
@@ -865,10 +865,14 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   `CheckContext.wake` (the engine's debounced pass) and the next pass returns what it printed. Where each project's
   check stands (`running`, `done` with the items, `failed`) lives in a `CheckRuns` map made once in `createServices`,
   keyed `<automation id>:<project id>` and stamped with the slot and the automation's `updatedAt`, so it runs once per
-  slot and again after an edit. It is in memory only: after a restart the slot's check runs once more, and the items'
-  dedupe keys keep that from starting anything twice. The check doesn't start while no agent could
-  (`agentHold`: quiet hours, `maxConcurrent`, the daily caps), so it isn't run only for its items to wait; a dry run
-  runs it anyway. The one-run-per-project hold of scheduled agents doesn't apply: each item is a run of its own.
+  slot and again after an edit. One runs at a time per automation and project: a check that outlasts its interval is
+  waited for rather than started again beside itself, what it printed is acted on once though its slot has passed
+  (`offered`), and the slot due then gets a run of its own. It is in memory only: after a restart the slot's check runs
+  once more, and the items' dedupe keys keep that from starting anything twice. The check doesn't start while no
+  agent could (`agentHold`: quiet hours, `maxConcurrent`, the daily caps), so it isn't run only for its items to wait
+  (a dry run runs it anyway), nor while `AUTOPILOT_BACKGROUND_MAX` (4) checks are already running, across automations
+  and projects: the agent caps don't bound scripts. The one-run-per-project hold of scheduled agents doesn't apply:
+  each item is a run of its own.
 - **Items.** Each item becomes a candidate keyed `check:<projectId>:<item key>`. The board is the memory, not the
   script: a key with a run (going, done or failed) is never started again, so a script can print every open item each
   time, and a failed item starts again only through `retry_autopilot_run`. Keys that already have a run are dropped
@@ -876,10 +880,11 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   per-candidate hold as usual: one held by `maxConcurrent` or a cap isn't recorded, and a later pass in the same slot
   takes it from the same output (a finished agent run asks for a pass). Printing nothing is a quiet pass: no run.
 - **A failed check** (non-zero exit, timeout, a missing interpreter, output past `STDOUT_MAX`, a bad line) becomes one
-  candidate `check-failed:<projectId>:<slot stamp>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
+  candidate `check-failed:<projectId>:<slot stamp>:<updatedAt>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
   records as a failed run with the error, the output tail and the exit code. No task, so nothing is flagged; the
   automation's run history shows it. `act` then forgets the failure, and that run's key keeps the slot's check from
-  running again until it is retried (which retires the key) or the next slot comes. Like Fix PRs' give-ups, these runs
+  running again until it is retried (which retires the key), the automation is edited (a new `updatedAt`) or the next
+  slot comes. Like Fix PRs' give-ups, these runs
   (retried or not) don't count towards the daily run cap or `maxConcurrent`.
 - **The agent.** Each item's agent starts headless with no task, like a scheduled one, labelled `<name> · <item key>`.
   `customAgentPrompt` fills `{{item}}` (the item as JSON) and `{{item.<field>}}` (a dotted path; a string as it is,

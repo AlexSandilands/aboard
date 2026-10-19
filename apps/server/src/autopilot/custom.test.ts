@@ -1154,6 +1154,19 @@ describe("custom automations: definitions", () => {
     expect(widened.armedAt > custom.armedAt).toBe(true);
   });
 
+  it("keeps the filters when an edit leaves them out", () => {
+    const { s, project } = setup();
+    const custom = s.customAutomations.create({
+      name: "Ping",
+      trigger: { kind: "status_change", to: "review" },
+      filters: { projectIds: [project.id], labels: ["ui"] },
+      action: { kind: "agent", prompt: "Go" },
+    });
+    const renamed = s.customAutomations.update(custom.id, { name: "Pong" });
+    expect(renamed.filters).toEqual({ projectIds: [project.id], labels: ["ui"], epicId: null });
+    expect(renamed.armedAt).toBe(custom.armedAt);
+  });
+
   it("arms again when the trigger changes, not when only the name does", async () => {
     const { s } = setup();
     const custom = s.customAutomations.create({
@@ -1383,6 +1396,51 @@ describe("custom automations: an agent with a check script", () => {
     await slot(2 * SLOT);
     expect(runsOf()[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/didn't finish within 30/) });
     expect(agentRuns).toHaveLength(0);
+  });
+
+  it("waits for a check that outlasts its slot, acts on what it printed, then runs it for the new slot", async () => {
+    const releases: Array<() => void> = [];
+    const { pass, scriptRuns, agentRuns } = checkSetup(
+      () =>
+        new Promise<ScriptResult>((resolve) => {
+          releases.push(() => resolve(printed({ key: `a${releases.length}` })));
+        }),
+    );
+    await pass(SLOT);
+    // The next slot comes while it runs: no second copy beside it.
+    await pass(2 * SLOT);
+    expect(scriptRuns).toHaveLength(1);
+    releases[0]!();
+    await tick();
+    await pass(2 * SLOT);
+    expect(agentRuns.map((r) => r.label)).toEqual(["Triage · a1"]);
+    // Its items had their pass, so the slot that is due now gets a run of its own.
+    await pass(2 * SLOT);
+    expect(scriptRuns).toHaveLength(2);
+  });
+
+  it("runs at most a few checks at once", async () => {
+    const { s, define, pass, project, scriptRuns } = setup({ script: () => new Promise<ScriptResult>(() => {}) });
+    s.autopilot.updateEngine({ maxConcurrent: 10 });
+    for (let i = 0; i <= AUTOPILOT_BACKGROUND_MAX; i++) {
+      define({ name: `Triage ${i}`, trigger: minutes, filters: { projectIds: [project.id] }, action: agent() });
+    }
+    await pass(SLOT);
+    expect(scriptRuns).toHaveLength(AUTOPILOT_BACKGROUND_MAX);
+  });
+
+  it("runs a failed check again in the same slot once it is edited", async () => {
+    let n = 0;
+    const { s, slot, custom, scriptRuns, agentRuns } = checkSetup(() =>
+      ++n === 1 ? { ...printed(), exitCode: 1 } : printed({ key: "a" }),
+    );
+    await slot(SLOT);
+    expect(scriptRuns).toHaveLength(1);
+    await tick();
+    s.customAutomations.update(custom.id, { action: agent({ check: { ...check, body: "fixed" } }) });
+    await slot(SLOT);
+    expect(scriptRuns.map((r) => r.body)).toEqual(["print items", "fixed"]);
+    expect(agentRuns).toHaveLength(1);
   });
 
   it("never holds up the engine's pass while the check runs", async () => {

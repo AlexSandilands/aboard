@@ -42,6 +42,7 @@ import { InterpreterMissingError, type RunScript } from "../integrations/scriptR
 import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "./automations/orchestrate.ts";
+import { AUTOPILOT_BACKGROUND_MAX } from "./engine.ts";
 import { agentHold } from "./limits.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "./runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Automation, type Candidate, type CheckContext } from "./types.ts";
@@ -153,6 +154,8 @@ interface CheckRun {
   /** The automation's `updatedAt` when it ran: an edit runs the check again. */
   version: string;
   state: CheckState;
+  /** Whether a pass has had what it printed: a run that ends after its slot is still acted on once. */
+  offered: boolean;
 }
 
 /**
@@ -258,16 +261,22 @@ export function customAutomation(
   ): Candidate[] => {
     const { services, engine, now } = ctx;
     const runKey = `${custom.id}:${project.id}`;
-    const failedKey = `${CHECK_FAILED_KEY_PREFIX}${project.id}:${stamp}`;
+    // The version is in the key, so an edit runs a failed check again within the slot.
+    const failedKey = (slot: string) => `${CHECK_FAILED_KEY_PREFIX}${project.id}:${slot}:${custom.updatedAt}`;
     const last = deps.checkRuns.get(runKey);
-    const current = last && last.slot === stamp && last.version === custom.updatedAt ? last : null;
+    // One at a time: a check that outlasts its interval is waited for, not started again beside itself.
+    if (last?.state.kind === "running") return [];
+    const current = last && last.version === custom.updatedAt && (last.slot === stamp || !last.offered) ? last : null;
     if (!current) {
       // Its failure this slot is already recorded (the run's act forgot it, or a restart did): run again only once
       // that run is retried, which retires its key.
-      if (services.autopilot.hasRun(automationKey, failedKey, engine.dryRun)) return [];
+      if (services.autopilot.hasRun(automationKey, failedKey(stamp), engine.dryRun)) return [];
       // No agent could start now, so the items would only wait: run the script once one can. A dry run starts none.
       if (!engine.dryRun && agentHold(services, engine, now)) return [];
-      const run: CheckRun = { slot: stamp, version: custom.updatedAt, state: { kind: "running" } };
+      // Scripts aren't agent runs, so the agent caps don't bound them: this does, across automations and projects.
+      const running = [...deps.checkRuns.values()].filter((r) => r.state.kind === "running").length;
+      if (running >= AUTOPILOT_BACKGROUND_MAX) return [];
+      const run: CheckRun = { slot: stamp, version: custom.updatedAt, state: { kind: "running" }, offered: false };
       deps.checkRuns.set(runKey, run);
       void runCheck(project, customValues(custom, project, null)).then((state) => {
         run.state = state;
@@ -275,13 +284,14 @@ export function customAutomation(
       });
       return [];
     }
+    current.offered = true;
     const { state } = current;
     if (state.kind === "running") return [];
     if (state.kind === "failed") {
       const { failure } = state;
       return [
         {
-          dedupeKey: failedKey,
+          dedupeKey: failedKey(current.slot),
           summary: `run the check of "${custom.name}" in ${project.title}`,
           projectId: project.id,
           startsNoAgent: true,
@@ -434,7 +444,8 @@ export function customAutomation(
       if (action.kind === "agent") {
         if (data.checkFailure) {
           // Recorded now, so the slot's failure needn't be kept in memory too: hasRun stops the check running again.
-          if (project) deps.checkRuns.delete(`${custom.id}:${project.id}`);
+          const runKey = `${custom.id}:${project?.id}`;
+          if (deps.checkRuns.get(runKey)?.state.kind === "failed") deps.checkRuns.delete(runKey);
           const failure = data.checkFailure;
           return {
             status: "failed",

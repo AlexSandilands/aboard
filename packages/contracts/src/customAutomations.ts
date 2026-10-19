@@ -296,7 +296,8 @@ export function customArmedAt(
 export const CreateCustomAutomationInput = z.object(Definition);
 export type CreateCustomAutomationInput = z.input<typeof CreateCustomAutomationInput>;
 
-export const UpdateCustomAutomationInput = z.object(Definition).partial();
+// The filters' default would fill in a patch that leaves them out, widening the automation to every project.
+export const UpdateCustomAutomationInput = z.object({ ...Definition, filters: CustomFilters }).partial();
 export type UpdateCustomAutomationInput = z.input<typeof UpdateCustomAutomationInput>;
 
 // ── Placeholders and the shell environment ──────────────────────────────
@@ -488,6 +489,9 @@ export function parseCheckOutput(stdout: string): CheckOutput {
       return { ok: false, error: `${where} has no "key", or it isn't a non-empty string` };
     }
     if (key.length > CHECK_KEY_MAX) return { ok: false, error: `${where}'s key is over ${CHECK_KEY_MAX} characters` };
+    // The key names the agent's session and run, so it stays on one line.
+    // oxlint-disable-next-line no-control-regex -- matching control characters is the point
+    if (/[\u0000-\u001f\u007f]/.test(key)) return { ok: false, error: `${where}'s key has a control character` };
     if (keys.has(key)) continue;
     keys.add(key);
     if (items.length >= CHECK_ITEMS_MAX) dropped += 1;
