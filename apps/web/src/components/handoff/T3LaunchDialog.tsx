@@ -39,7 +39,15 @@ import {
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { usePlanPrompt } from "./PlanTasksDialog";
-import { AccessPicker, ComposerControl, ModelPicker, RefPicker, TraitsPicker, WorkspaceMenu } from "./T3LaunchPickers";
+import {
+  AccessPicker,
+  ComposerControl,
+  ComposerStrip,
+  ModelPicker,
+  RefPicker,
+  TraitsPicker,
+  WorkspaceMenu,
+} from "./T3LaunchPickers";
 
 /**
  * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
@@ -432,10 +440,10 @@ function Composer({
           </button>
         </div>
       </div>
-      <div className="-mt-3 flex items-center justify-between rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+      <ComposerStrip className="justify-between">
         <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
         <RefPicker options={options} choice={choice} onChange={setChoice} />
-      </div>
+      </ComposerStrip>
       {subject.fixBranch ? (
         <FixBranchNote
           branch={subject.fixBranch}
