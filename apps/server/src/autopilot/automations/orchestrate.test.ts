@@ -17,10 +17,15 @@ const MINUTE = 60_000;
 
 const engines: AutopilotEngine[] = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const engine of engines.splice(0)) engine.stop();
 });
 
 function setup(opts: { agent?: (request: RunnerRequest) => Promise<RunnerResult> } = {}) {
+  // Midday, so the next slot and the daily caps never straddle local midnight, which they do in the last half hour of
+  // a real day (the caps don't hold a slot that falls on the next day).
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 9, 17, 13, 44));
   let offsetMs = 0;
   const h = createTestHarness({ integrations: { automations: [orchestrate] } });
   const agentRuns: RunnerRequest[] = [];
