@@ -1,10 +1,11 @@
-import { AUTOMATION_EXAMPLES, type AutomationBundle } from "@repo/contracts";
+import { AUTOMATION_EXAMPLES, automationBundle, CustomAction, type AutomationBundle } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   bundleFilename,
   draftToRequest,
   importProblem,
   initialDraft,
+  needsScriptConfirm,
   readBundle,
 } from "./customAutomationImport.logic";
 
@@ -34,6 +35,7 @@ describe("filling in an import", () => {
       slots: { jira: "" },
       projectIds: [],
       installSkill: false,
+      confirmScript: false,
     });
   });
 
@@ -54,6 +56,32 @@ describe("filling in an import", () => {
       /enter a number/,
     );
     expect(importProblem(bundle, { ...draft, slots: { jira: "Bash" } })).toMatch(/^Jira tools: /);
+  });
+});
+
+describe("a file with a script", () => {
+  const scripted = (): AutomationBundle =>
+    automationBundle({
+      name: "Check",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      filters: { projectIds: [], labels: [], epicId: null },
+      action: CustomAction.parse({ kind: "script", language: "sh", body: "echo hi" }),
+    });
+
+  it("can't be imported until the importer confirms, and sends the confirmation", () => {
+    const bundle = scripted();
+    const draft = initialDraft(bundle);
+    expect(needsScriptConfirm(bundle, draft)).toBe(true);
+    expect(draftToRequest(bundle, draft).confirmScript).toBe(false);
+    const confirmed = { ...draft, confirmScript: true };
+    expect(needsScriptConfirm(bundle, confirmed)).toBe(false);
+    expect(draftToRequest(bundle, confirmed).confirmScript).toBe(true);
+    expect(importProblem(bundle, confirmed)).toBeNull();
+  });
+
+  it("is read from a file, and a file without a script needs no confirmation", () => {
+    expect(readBundle(JSON.stringify(scripted()))).toMatchObject({ ok: true, bundle: { version: 2 } });
+    expect(needsScriptConfirm(dispatch(), initialDraft(dispatch()))).toBe(false);
   });
 });
 

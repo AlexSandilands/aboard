@@ -1,4 +1,5 @@
 import {
+  actionRunsCode,
   automationBundle,
   BUNDLE_SKILL_BODY_MAX,
   BundleSkill,
@@ -15,18 +16,16 @@ import { installSkill, readInstalledSkill } from "../../skills.ts";
 import { handle, idParam, noContent, parseBody } from "../respond.ts";
 
 /**
- * A shell or script action runs whatever it says, so only the board's own page may write one: browsers always send an Origin
- * (which the guard checks is this board), while agents and scripts usually send none. A guard rail on top of REST
- * only, not a boundary: anything on this machine can set the header.
+ * A shell command, script or check script runs whatever it says, so only the board's own page may write one: browsers
+ * always send an Origin (which the guard checks is this board), while agents and scripts usually send none. A guard
+ * rail on top of REST only, not a boundary: anything on this machine can set the header.
  */
-function assertShellFromBrowser(c: Context, action: Pick<CustomAction, "kind"> | undefined): void {
-  if (action?.kind !== "shell" && action?.kind !== "script") return;
-  if (!c.req.header("origin")) {
-    throw new AppError(
-      "VALIDATION",
-      `${action.kind === "script" ? "Scripts" : "Shell commands"} can only be set from the board's settings page`,
-    );
-  }
+function assertShellFromBrowser(c: Context, action: CustomAction | undefined): void {
+  if (!action || !actionRunsCode(action) || c.req.header("origin")) return;
+  throw new AppError(
+    "VALIDATION",
+    `${action.kind === "shell" ? "Shell commands" : "Scripts"} can only be set from the board's settings page`,
+  );
 }
 
 /**

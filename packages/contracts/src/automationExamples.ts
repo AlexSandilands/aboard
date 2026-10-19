@@ -1,4 +1,4 @@
-import { AutomationBundle, AUTOMATION_BUNDLE_FORMAT, AUTOMATION_BUNDLE_VERSION } from "./automationBundle.ts";
+import { AutomationBundle, AUTOMATION_BUNDLE_FORMAT, PLAIN_BUNDLE_VERSION } from "./automationBundle.ts";
 import { BRAND } from "./brand.ts";
 
 // Automations shipped as files anyone can import (docs/features/autopilot.md#sharing-automations). They are ordinary bundles: the
@@ -30,7 +30,7 @@ Your handover is two short lists. "triaged": each key you added, with its task n
 /** Dispatch: triage recent Jira defects onto the board, with plans a human approves before anything is built. */
 const DISPATCH = AutomationBundle.parse({
   format: AUTOMATION_BUNDLE_FORMAT,
-  version: AUTOMATION_BUNDLE_VERSION,
+  version: PLAIN_BUNDLE_VERSION,
   name: "Dispatch",
   description:
     "Every hour, finds recent Jira defects (restrict it to the one project its JQL is about) that look fixable by an agent, adds them to the board with a plan, and asks you to approve the plans before anything is built. You review the pull requests; nothing merges by itself.",
@@ -151,7 +151,7 @@ Your handover is the skill's: proposed, watch and noticed.`;
 /** Improve: a weekly audit that suggests a few evidence-backed, non-growing changes to the board's prompts and skills. */
 const IMPROVE = AutomationBundle.parse({
   format: AUTOMATION_BUNDLE_FORMAT,
-  version: AUTOMATION_BUNDLE_VERSION,
+  version: PLAIN_BUNDLE_VERSION,
   name: "Improve prompts and skills",
   description:
     "Every Monday morning, reads what happened in the project over the past week (review rounds, failed runs, stalls, and session transcripts where it needs them) and suggests a few rewrites of the review and planning skills and of custom automations' prompts. Each suggestion cites its tasks and keeps the text lean. Nothing changes until you accept it under Settings → Suggestions.",
