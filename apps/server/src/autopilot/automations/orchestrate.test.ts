@@ -18,7 +18,17 @@ const MINUTE = 60_000;
 const engines: AutopilotEngine[] = [];
 afterEach(() => {
   for (const engine of engines.splice(0)) engine.stop();
+  vi.useRealTimers();
 });
+
+/**
+ * The daily cap doesn't hold a slot after midnight (holdAt), so a test asserting it must not run in the last slot of
+ * the day: pin the clock to midday.
+ */
+const middayClock = () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 9, 17, 12, 0));
+};
 
 function setup(opts: { agent?: (request: RunnerRequest) => Promise<RunnerResult> } = {}) {
   let offsetMs = 0;
@@ -271,6 +281,7 @@ describe("Orchestrate's Run now and state", () => {
   });
 
   it("refuses at a daily cap even while every run slot is taken, and drops a request when switched off", async () => {
+    middayClock();
     const { s, project, other, busyTask, pass, on } = setup({ agent: () => new Promise(() => {}) });
     on();
     busyTask(other.id);
@@ -303,6 +314,7 @@ describe("Orchestrate's Run now and state", () => {
   });
 
   it("reports the next slot, the latest run and what holds the next slot back", async () => {
+    middayClock();
     const { s, project, busyTask, pass, on } = setup();
     const now = new Date(2026, 9, 17, 13, 44);
     const state = () => orchestrateState(s, project.id, now);
