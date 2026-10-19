@@ -233,6 +233,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const queryClient = useQueryClient();
   const filters = useBoardFilters();
   const priorityLane = useBoardView((s) => s.showPriorityLane);
+  const pinPriorityLane = useBoardView((s) => s.pinPriorityLane);
   const showArchived = filters.archived;
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
@@ -570,7 +571,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   return (
     <BoardContext value={context}>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} data-board-scroll className="min-h-0 flex-1 overflow-auto">
         <div ref={contentRef} className="relative w-full min-w-min pb-10">
           <div
             ref={columnHeaderRef}
@@ -635,6 +636,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                     selectedTaskId={selectedTaskId}
                     draggingTaskId={activeRowId === PRIORITY_ROW_ID ? (activeTask?.id ?? null) : null}
                     overCell={overHere}
+                    columnHeaderRef={columnHeaderRef}
                   />
                 );
               }
@@ -675,6 +677,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             tasks={lineTasks}
             projects={board.projects}
             priorityLane={lanes.some((lane) => lane.priority)}
+            pinnedLane={pinPriorityLane && lanes.some((lane) => lane.priority)}
             selectedTaskId={selectedTaskId}
             suspended={activeId !== null}
           />

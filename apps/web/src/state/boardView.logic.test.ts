@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { migrateBoardView } from "./boardView.logic";
+import { migrateBoardView, pinnedLaneMaxHeight } from "./boardView.logic";
+
+describe("pinnedLaneMaxHeight", () => {
+  it("maps each size to a share of the viewport", () => {
+    expect(pinnedLaneMaxHeight("small")).toBe("20vh");
+    expect(pinnedLaneMaxHeight("medium")).toBe("30vh");
+    expect(pinnedLaneMaxHeight("large")).toBe("45vh");
+  });
+
+  it("reads anything else as the default size", () => {
+    for (const bad of [undefined, null, "huge", "", 30, "toString", "__proto__"]) {
+      expect(pinnedLaneMaxHeight(bad)).toBe("30vh");
+    }
+  });
+});
 
 describe("migrateBoardView", () => {
   it("drops v0's per-lane expandedDone and the filters, which are URL params now", () => {

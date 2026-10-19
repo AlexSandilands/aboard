@@ -6,6 +6,27 @@ export interface PersistedBoardView extends CollapseState {
   showPriorityLane?: boolean;
   /** Added in version 2 without a bump; a stored view without it gets the default ({}) when merged. */
   collapsedEpics?: Record<string, true>;
+  /** Added without a bump: a stored view without it gets the default (false) when merged. */
+  pinPriorityLane?: boolean;
+  /** Added without a bump: a stored view without it gets the default ("medium") when merged. */
+  pinnedLaneHeight?: PinnedLaneHeight;
+}
+
+/** How much of the viewport the pinned priority lane may take once it is stuck, in viewport heights. */
+export const PINNED_LANE_HEIGHTS = {
+  small: { label: "Small", vh: 20 },
+  medium: { label: "Medium", vh: 30 },
+  large: { label: "Large", vh: 45 },
+} as const;
+
+export type PinnedLaneHeight = keyof typeof PINNED_LANE_HEIGHTS;
+
+export const DEFAULT_PINNED_LANE_HEIGHT: PinnedLaneHeight = "medium";
+
+/** The stuck lane's `max-height`. A stored value that isn't one of the sizes falls back to the default. */
+export function pinnedLaneMaxHeight(height: unknown): string {
+  const known = typeof height === "string" && Object.hasOwn(PINNED_LANE_HEIGHTS, height);
+  return `${PINNED_LANE_HEIGHTS[known ? (height as PinnedLaneHeight) : DEFAULT_PINNED_LANE_HEIGHT].vh}vh`;
 }
 
 export const DEFAULT_COLLAPSE: CollapseState = { collapsedColumns: { done: true }, cellOverrides: {} };

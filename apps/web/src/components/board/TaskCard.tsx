@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskSummary } from "@repo/contracts";
+import type { Project, TaskSummary } from "@repo/contracts";
 import { ArchiveIcon, LockIcon, StarIcon } from "lucide-react";
 import { memo, useCallback, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
@@ -20,7 +20,8 @@ import { ATTENTION_LABELS, jiraKeys, PRIORITY_ROW_ID, topAttention } from "./boa
 import { useBoardContext } from "./BoardContext";
 import { canPickTask, isPickClick } from "./boardSelection.logic";
 import { blockedLabel } from "./dependencies.logic";
-import { CardLinks, chipClassName, hasCardLinks, linkHandlers } from "./CardLinks";
+import { CardLinks, chipClassName, hasCardLinks, linkHandlers, PrStatusChip } from "./CardLinks";
+import { cardLinks } from "./cardLinks.logic";
 import { canStartT3Thread, showHandoffActions } from "~/components/handoff/handoff.logic";
 import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { LabelChip } from "~/components/labels/LabelChip";
@@ -46,12 +47,15 @@ export const TaskCardContent = memo(function TaskCardContent({
   task,
   archivable = false,
   showProject = false,
+  compact = false,
 }: {
   task: TaskSummary;
   /** Shows the quick Archive button on Done cards and the priority star. Off for the drag overlay. */
   archivable?: boolean;
   /** Names the card's project: in the priority lane, where cards of every project mix. */
   showProject?: boolean;
+  /** One line: the pinned priority lane draws its cards like this while it is stuck under the column header. */
+  compact?: boolean;
 }) {
   const attention = topAttention(task.attention);
   const blocked = blockedLabel(task);
@@ -68,6 +72,7 @@ export const TaskCardContent = memo(function TaskCardContent({
       t3,
       settings,
     );
+  if (compact) return <CompactCardLine task={task} project={project} blocked={blocked} attention={attention} />;
   return (
     <div className="flex flex-col gap-1 px-2.5 py-2">
       <div className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
@@ -147,6 +152,47 @@ export const TaskCardContent = memo(function TaskCardContent({
     </div>
   );
 });
+
+/** A card on one line: number, project, title and the cues that matter at a glance (a PR, blocked, needs attention). */
+function CompactCardLine({
+  task,
+  project,
+  blocked,
+  attention,
+}: {
+  task: TaskSummary;
+  project: Project | undefined;
+  blocked: string | null;
+  attention: ReturnType<typeof topAttention>;
+}) {
+  const pr = cardLinks(task.links).find((link) => link.kind === "pr");
+  return (
+    <div className="flex h-7 min-w-0 items-center gap-1.5 px-2 text-xs">
+      <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">#{task.number}</span>
+      {project ? (
+        <span title={project.title} className="flex shrink-0 items-center">
+          <ProjectFavicon title={project.title} icon={project.icon} className="size-3.5" />
+          <span className="sr-only">{project.title}</span>
+        </span>
+      ) : null}
+      <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{task.title}</span>
+      <AutopilotBadge taskId={task.id} />
+      {pr ? <PrStatusChip link={pr} /> : null}
+      {blocked ? (
+        <span title={blocked} className="flex shrink-0 text-muted-foreground">
+          <LockIcon aria-hidden className="size-3.5" />
+          <span className="sr-only">{blocked}</span>
+        </span>
+      ) : null}
+      {attention ? (
+        <span title={attention.message} className="flex shrink-0">
+          <AttentionIcon severity={attention.severity} />
+          <span className="sr-only">{ATTENTION_LABELS[attention.kind]}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 /** The due date, only when one is set: muted until it is due today (amber) or overdue (red). Never on Done cards. */
 function DueChip({ dueDate }: { dueDate: string }) {
@@ -281,11 +327,14 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   task,
   rowId,
   selected,
+  compact = false,
 }: {
   task: TaskSummary;
   /** The row the card shows in (see Row in board.logic). */
   rowId: string;
   selected: boolean;
+  /** Draws the card on one line (see TaskCardContent). */
+  compact?: boolean;
 }) {
   const { openTask, suppressClickRef } = useBoardContext();
   const data: DragData = { type: "task", rowId, status: task.status };
@@ -341,7 +390,8 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         taskCardClassName(task, selected),
         "group/card",
         // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
-        "[contain-intrinsic-size:auto_84px] [content-visibility:auto] motion-reduce:transition-none!",
+        compact ? "[contain-intrinsic-size:auto_28px]" : "[contain-intrinsic-size:auto_84px]",
+        "[content-visibility:auto] motion-reduce:transition-none!",
         isDragging && "opacity-40",
         // Inside the card: content-visibility clips anything drawn outside it.
         picked && "bg-primary/8 ring-2 ring-primary/70 ring-inset",
@@ -354,7 +404,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         open();
       }}
     >
-      <TaskCardContent task={task} archivable showProject={rowId === PRIORITY_ROW_ID} />
+      <TaskCardContent task={task} archivable showProject={rowId === PRIORITY_ROW_ID} compact={compact} />
     </div>
   );
 });

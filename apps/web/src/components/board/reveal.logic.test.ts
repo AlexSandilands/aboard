@@ -7,6 +7,7 @@ import {
   revealHiddenMessage,
   revealProgressFor,
   revealScrollTarget,
+  visibleFrom,
   revealStep,
 } from "./reveal.logic";
 
@@ -224,5 +225,19 @@ describe("revealProgressFor", () => {
     const next = revealProgressFor(first, 2);
     expect(next).not.toBe(first);
     expect(next).toEqual({ nonce: 2, expanded: new Set() });
+  });
+});
+
+describe("visibleFrom", () => {
+  it("starts under the column header", () => {
+    expect(visibleFrom(50, 37, null)).toBe(87);
+  });
+
+  it("starts under the pinned lane when it reaches lower than the header", () => {
+    expect(visibleFrom(50, 37, 260)).toBe(260);
+  });
+
+  it("ignores a lane that ends above the header's bottom", () => {
+    expect(visibleFrom(50, 37, 60)).toBe(87);
   });
 });

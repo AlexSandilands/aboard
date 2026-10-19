@@ -1,18 +1,24 @@
-import { revealScrollTarget } from "./reveal.logic";
+import { revealScrollTarget, visibleFrom } from "./reveal.logic";
 
 /** Longest a smooth scroll is waited on before the card flashes anyway (browsers without `scrollend`). */
 const SCROLL_SETTLE_MS = 1200;
 
 /**
  * Scrolls the board's scroll box to a card (smoothly, or at once under reduced motion), then flashes a ring round it.
- * `header` is the sticky column header, which hides the top of the box.
+ * `header` is the sticky column header, which hides the top of the box; so does the pinned priority lane (found in the
+ * box by its `data-pinned`) for a card that isn't in it.
  */
 export function revealCard(scroller: HTMLElement, header: HTMLElement | null, card: Element): void {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const align = (behavior: ScrollBehavior, el: Element): boolean => {
     const box = scroller.getBoundingClientRect();
+    const lane = scroller.querySelector<HTMLElement>("[data-pinned]");
     const view = {
-      top: box.top + (header?.offsetHeight ?? 0),
+      top: visibleFrom(
+        box.top,
+        header?.offsetHeight ?? 0,
+        lane && !lane.contains(el) ? lane.getBoundingClientRect().bottom : null,
+      ),
       left: box.left,
       bottom: box.top + scroller.clientHeight,
       right: box.left + scroller.clientWidth,
@@ -29,6 +35,14 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
     scroller.scrollTo({ top, left, behavior });
     return true;
   };
+
+  // A card in the stuck lane is reached by scrolling the lane, which keeps its own cards inside its height cap.
+  const stuckLane = card.closest("[data-stuck]");
+  if (stuckLane) {
+    card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduceMotion ? "instant" : "smooth" });
+    flash(card, reduceMotion);
+    return;
+  }
 
   if (reduceMotion) {
     align("instant", card);

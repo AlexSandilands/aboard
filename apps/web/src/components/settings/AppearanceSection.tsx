@@ -12,6 +12,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Slider } from "~/components/ui/slider";
 import { Switch } from "~/components/ui/switch";
 import { cn } from "~/lib/utils";
+import { DEFAULT_PINNED_LANE_HEIGHT, PINNED_LANE_HEIGHTS, type PinnedLaneHeight } from "~/state/boardView.logic";
 import { useAppearance, useBoardView } from "~/state/ui";
 import {
   CONTRAST,
@@ -40,6 +41,7 @@ export function AppearanceSection() {
         <GlassOpacityRow />
         <BannerRow />
         <PriorityLaneRow />
+        <PinnedLaneHeightRow />
         <ScrollToTaskRow />
       </SettingsSection>
       <SettingsSection title="Motion">
@@ -284,6 +286,41 @@ function PriorityLaneRow() {
       title="Priority lane"
       description="Priority tasks from every project, in a lane above the projects."
       control={<Switch checked={show} onCheckedChange={setShow} aria-label="Priority lane" />}
+    />
+  );
+}
+
+function PinnedLaneHeightRow() {
+  const show = useBoardView((s) => s.showPriorityLane);
+  const height = useBoardView((s) => s.pinnedLaneHeight);
+  const setHeight = useBoardView((s) => s.setPinnedLaneHeight);
+  // A stored value that isn't a size reads as the default, as the lane itself does.
+  const shown = Object.hasOwn(PINNED_LANE_HEIGHTS, height) ? height : DEFAULT_PINNED_LANE_HEIGHT;
+  return (
+    <SettingsRow
+      id="board.appearance.pinned-lane-height"
+      title="Pinned lane height"
+      description="The most of the window the priority lane takes while pinned and scrolled."
+      control={
+        <Select
+          value={shown}
+          disabled={!show}
+          onValueChange={(next) => {
+            if (next) setHeight(next);
+          }}
+        >
+          <SelectTrigger size="sm" className="w-36 shrink-0" aria-label="Pinned lane height">
+            <SelectValue>{PINNED_LANE_HEIGHTS[shown].label}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {(Object.keys(PINNED_LANE_HEIGHTS) as PinnedLaneHeight[]).map((key) => (
+              <SelectItem hideIndicator key={key} value={key}>
+                {PINNED_LANE_HEIGHTS[key].label} ({PINNED_LANE_HEIGHTS[key].vh}% of the window)
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
     />
   );
 }

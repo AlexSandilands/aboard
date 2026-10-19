@@ -87,6 +87,15 @@ export function revealScrollTarget(view: Box, card: Box, scroll: ScrollPosition)
   return top === scroll.top && left === scroll.left ? null : { top, left };
 }
 
+/**
+ * How far down the scroll box a card can be seen from, in viewport coordinates: below the sticky column header, and
+ * below the pinned priority lane too when it is there (`laneBottom`, null when the lane isn't pinned or the card is in
+ * it). The lane sits over the project lanes, so a card scrolled under it counts as hidden.
+ */
+export function visibleFrom(boxTop: number, headerHeight: number, laneBottom: number | null): number {
+  return Math.max(boxTop + headerHeight, laneBottom ?? 0);
+}
+
 /** What the board does with an open reveal request on this pass. */
 export type RevealAction =
   /** Nothing yet: the task isn't the open one, or its card isn't drawn; the next change tries again. */
