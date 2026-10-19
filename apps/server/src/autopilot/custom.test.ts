@@ -6,7 +6,7 @@ import {
   type PlanInput,
   type PrSnapshot,
 } from "@repo/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { AUTOPILOT_BACKGROUND_MAX, createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
@@ -20,6 +20,7 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 
 const engines: AutopilotEngine[] = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const engine of engines.splice(0)) engine.stop();
 });
 
@@ -734,6 +735,9 @@ describe("custom automations: filters and scopes", () => {
   });
 
   it("holds agent actions at the caps and in quiet hours, but not shell commands", async () => {
+    // The quiet window below leaves out 23:59, so a run landing in that minute would fail; keep to midday.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 17, 12, 0));
     const { s, task, define, pass, shellRuns, agentRuns, shell } = setup();
     s.autopilot.updateEngine({ quietHours: { enabled: true, start: "00:00", end: "23:59" } });
     define({
