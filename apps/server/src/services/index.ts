@@ -6,6 +6,7 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
+import { runScript, type RunScript } from "../integrations/scriptRunner.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
 import { createActivityService } from "./activity.ts";
 import { createAttentionService } from "./attention.ts";
@@ -45,6 +46,8 @@ export interface ServiceDeps {
   automations?: readonly Automation[];
   /** Runs custom automations' shell commands; tests swap in a fake. */
   runShell?: RunShell;
+  /** Runs custom automations' scripts; tests swap in a fake. */
+  runScript?: RunScript;
   /** Reads each project's git history for the stats' commits; tests swap in a fake. */
   runGit?: RunGit;
   /** Where pasted images are stored: `<data dir>/attachments`; tests use a temp folder. */
@@ -111,8 +114,12 @@ export function createServices(deps: ServiceDeps): Services {
   restartRecurring = (ids) => recurring.restart(ids);
   const customAutomations = createCustomAutomationsService(core);
   const runShell = deps.runShell ?? runShellCommand;
+  const runScriptFile = deps.runScript ?? runScript;
   // Read on every call, so a custom automation's edit applies from the next pass.
-  const automations = () => [...builtIn, ...customAutomations.list().map((c) => customAutomation(c, { runShell }))];
+  const automations = () => [
+    ...builtIn,
+    ...customAutomations.list().map((c) => customAutomation(c, { runShell, runScript: runScriptFile })),
+  ];
 
   return {
     projects,

@@ -13,6 +13,7 @@ export const CUSTOM_AUTOMATION_PREFIX = "custom:";
 export const CUSTOM_NAME_MAX = 80;
 export const CUSTOM_PROMPT_MAX = 20_000;
 export const CUSTOM_COMMAND_MAX = 4_000;
+export const CUSTOM_SCRIPT_MAX = 100_000;
 export const CUSTOM_TIMEOUT_MAX_SECONDS = 3_600;
 export const CUSTOM_STALE_HOURS_MAX = 24 * 30;
 /** The most extra tools an agent action may allow, and the longest rule. */
@@ -164,6 +165,23 @@ export const AutomationSlot = AutomationSlotDecl.extend({
 });
 export type AutomationSlot = z.infer<typeof AutomationSlot>;
 
+export const CustomScriptLanguage = z.enum(["python", "node", "powershell", "sh"]);
+export type CustomScriptLanguage = z.infer<typeof CustomScriptLanguage>;
+
+/**
+ * A script the board runs: a `script` action is one, and an agent action's check can be too. The body is kept as
+ * written (indentation matters to Python), so only a blank one is refused.
+ */
+export const CustomScript = z.object({
+  language: CustomScriptLanguage,
+  body: z
+    .string()
+    .max(CUSTOM_SCRIPT_MAX)
+    .refine((body) => body.trim() !== "", "The script is empty"),
+  timeoutSeconds: z.number().int().min(1).max(CUSTOM_TIMEOUT_MAX_SECONDS).default(300),
+});
+export type CustomScript = z.infer<typeof CustomScript>;
+
 export const CustomAction = z.discriminatedUnion("kind", [
   /** An agent through Autopilot's runners, on the trigger's task. */
   z.object({
@@ -206,6 +224,11 @@ export const CustomAction = z.discriminatedUnion("kind", [
     command: z.string().trim().min(1).max(CUSTOM_COMMAND_MAX),
     timeoutSeconds: z.number().int().min(1).max(CUSTOM_TIMEOUT_MAX_SECONDS).default(300),
   }),
+  /**
+   * A script run in the project's folder by its language's interpreter. Like a shell command it is never filled in:
+   * task values reach it as environment variables (customShellEnv) and, as JSON, on stdin.
+   */
+  z.object({ kind: z.literal("script"), ...CustomScript.shape }),
 ]);
 export type CustomAction = z.infer<typeof CustomAction>;
 
@@ -271,7 +294,7 @@ export interface CustomValues {
   automation: string;
   task?: { id: string; number: number; title: string; status: string } | null;
   pr?: { url: string } | null;
-  project?: { name: string; path: string | null } | null;
+  project?: { id?: string; name: string; path: string | null } | null;
   /** The automation's declared inputs by name, for `{{inputs.<name>}}`. Only a prompt reads them. */
   inputs?: Record<string, string>;
 }
@@ -325,6 +348,32 @@ export function describeShellRun(command: string, values: CustomValues): string 
   return `${command}\n\nwith\n${env.join("\n")}`;
 }
 
+/** What a dry run or the settings form shows a script action will run: the script, then its variables. */
+export function describeScriptRun(script: Pick<CustomScript, "language" | "body">, values: CustomValues): string {
+  const env = Object.entries(customShellEnv(values)).map(([k, v]) => `${k}=${JSON.stringify(v)}`);
+  return `${script.body}\n\nrun by ${script.language}, with the context as JSON on stdin and\n${env.join("\n")}`;
+}
+
+/**
+ * The JSON a script gets on stdin: what the environment variables carry, and the automation's inputs, as one object so
+ * a script in any language can read it without parsing the environment.
+ */
+export function customScriptContext(values: CustomValues): {
+  automation: string;
+  project: { id?: string; name: string; path: string | null } | null;
+  inputs: Record<string, string>;
+  task: NonNullable<CustomValues["task"]> | null;
+  pr: { url: string } | null;
+} {
+  return {
+    automation: values.automation,
+    project: values.project ?? null,
+    inputs: values.inputs ?? {},
+    task: values.task ?? null,
+    pr: values.pr ?? null,
+  };
+}
+
 type PrLink = Extract<TaskLink, { kind: "pr" }>;
 
 /** What a check found that the action needs. */
@@ -356,7 +405,7 @@ export function customTaskMatches(filters: CustomFilters, task: TaskSummary): bo
 /** The values an action is given. */
 export function customValues(
   def: Pick<CustomDefinition, "name"> & { action?: CustomAction },
-  project: Pick<Project, "title" | "workspaceRoot"> | null,
+  project: (Pick<Project, "title" | "workspaceRoot"> & { id?: string }) | null,
   task: TaskSummary | null,
   data: CustomData = {},
 ): CustomValues {
@@ -368,7 +417,7 @@ export function customValues(
       : {}),
     task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
     pr: pr ? { url: pr.url } : null,
-    project: project ? { name: project.title, path: project.workspaceRoot } : null,
+    project: project ? { id: project.id, name: project.title, path: project.workspaceRoot } : null,
   };
 }
 
@@ -543,12 +592,17 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
       if (problem) return `${input.label}: ${problem}`;
     }
   } else {
-    const named = placeholdersIn(action.command)[0];
+    const isScript = action.kind === "script";
+    // A script is long, and `{{x}}` is legitimate text in one (an f-string escape, a template): only a name that is a
+    // placeholder was meant as one.
+    const named = placeholdersIn(isScript ? action.body : action.command).find(
+      (key) => !isScript || KNOWN.has(key) || key.startsWith(INPUT_PREFIX),
+    );
     if (named) {
       const env = CUSTOM_PLACEHOLDERS.find((p) => p.key === named)?.env;
-      return `Shell commands aren't filled in, so values can't be injected into them: read ${
+      return `${isScript ? "Scripts" : "Shell commands"} aren't filled in, so values can't be injected into them: read ${
         env ? `the ${customEnvName(env)} environment variable` : "the environment variables"
-      } instead of {{${named}}}`;
+      }${isScript ? " (or the JSON on stdin)" : ""} instead of {{${named}}}`;
     }
   }
   return null;

@@ -189,8 +189,8 @@ export function CustomAutomationImportForm({
                 ) : null}
               </>
             ) : (
-              <Section title="Command it runs">
-                <Code tall>{action.command}</Code>
+              <Section title={action.kind === "script" ? `Script it runs (${action.language})` : "Command it runs"}>
+                <Code tall>{action.kind === "script" ? action.body : action.command}</Code>
                 <Alert variant="warning">
                   <TriangleAlertIcon />
                   <AlertDescription>

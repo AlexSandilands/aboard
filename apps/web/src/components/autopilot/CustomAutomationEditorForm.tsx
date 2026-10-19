@@ -466,6 +466,10 @@ export function CustomAutomationEditorForm({
               The runner, budget and timeout are this automation&apos;s settings in the Autopilot list, per scope.
             </p>
           </>
+        ) : form.actionKind === "script" ? (
+          <p className="text-sm text-muted-foreground">
+            This runs a {form.language} script, which can&apos;t be edited here yet. Saving keeps it as it is.
+          </p>
         ) : (
           <>
             <Field

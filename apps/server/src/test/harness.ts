@@ -16,6 +16,7 @@ const NO_PROCESSES: IntegrationOverrides = {
   runImport: () => Promise.reject(new Error("Claude Code is not available in tests")),
   runAgent: () => Promise.reject(new Error("Claude Code is not available in tests")),
   runShell: () => Promise.reject(new Error("Shell commands don't run in tests")),
+  runScript: () => Promise.reject(new Error("Scripts don't run in tests")),
   listMcpServers: () => Promise.resolve([]),
 };
 

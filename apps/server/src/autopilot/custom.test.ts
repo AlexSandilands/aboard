@@ -7,6 +7,7 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { InterpreterMissingError, type ScriptRequest, type ScriptResult } from "../integrations/scriptRunner.ts";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { AUTOPILOT_BACKGROUND_MAX, createAutopilotEngine, type AutopilotEngine } from "./engine.ts";
@@ -27,18 +28,26 @@ afterEach(() => {
 function setup(
   opts: {
     shell?: (request: ShellRequest) => ShellResult | Promise<ShellResult>;
+    script?: (request: ScriptRequest) => ScriptResult | Promise<ScriptResult>;
     /** What an agent run returns; it ends when this does. */
     agent?: (request: RunnerRequest) => Promise<RunnerResult>;
   } = {},
 ) {
   let offsetMs = 0;
   const shellRuns: ShellRequest[] = [];
+  const scriptRuns: ScriptRequest[] = [];
   const h = createTestHarness({
     integrations: {
       automations: [],
       runShell: async (request) => {
         shellRuns.push(request);
         return opts.shell ? opts.shell(request) : { exitCode: 0, output: "ok\n", timedOut: false };
+      },
+      runScript: async (request) => {
+        scriptRuns.push(request);
+        return opts.script
+          ? opts.script(request)
+          : { exitCode: 0, output: "ok\n", timedOut: false, stdout: "ok\n", stdoutTruncated: false, stderr: "" };
       },
     },
   });
@@ -77,7 +86,28 @@ function setup(
   };
   const runsOf = (projectId = project.id) => s.autopilot.runsForProject(projectId);
   const shell = (command = "./notify.sh") => ({ kind: "shell" as const, command, timeoutSeconds: 30 });
-  return { ...h, s, engine, project, other, task, define, pass, runsOf, shellRuns, agentRuns, shell };
+  const script = (body = "console.log(1)") => ({
+    kind: "script" as const,
+    language: "node" as const,
+    body,
+    timeoutSeconds: 30,
+  });
+  return {
+    ...h,
+    s,
+    engine,
+    project,
+    other,
+    task,
+    define,
+    pass,
+    runsOf,
+    shellRuns,
+    scriptRuns,
+    agentRuns,
+    shell,
+    script,
+  };
 }
 
 const pr = (patch: Partial<PrSnapshot> = {}): PrSnapshot => ({
@@ -848,6 +878,124 @@ describe("custom automations: actions", () => {
     });
   });
 
+  describe("a script", () => {
+    it("runs in the project's folder with the values as variables and the context for stdin", async () => {
+      const { s, define, pass, scriptRuns, shellRuns, runsOf, project, task } = setup();
+      define({
+        name: "Check",
+        trigger: { kind: "status_change", to: "review" },
+        action: { kind: "script", language: "python", body: "print(1)", timeoutSeconds: 10 },
+      });
+      const t = task("Fix it");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await pass();
+      expect(shellRuns).toHaveLength(0);
+      expect(scriptRuns).toHaveLength(1);
+      expect(scriptRuns[0]).toMatchObject({
+        language: "python",
+        body: "print(1)",
+        cwd: "/work/alpha",
+        timeoutMs: 10_000,
+        env: { [brandEnv("TASK_TITLE")]: "Fix it", [brandEnv("AUTOMATION")]: "Check" },
+        context: {
+          automation: "Check",
+          project: { id: project.id, name: "Alpha", path: "/work/alpha" },
+          inputs: {},
+          task: { id: t.id, number: t.number, title: "Fix it", status: "review" },
+          pr: null,
+        },
+      });
+      expect(runsOf()[0]).toMatchObject({
+        status: "succeeded",
+        exitCode: 0,
+        detail: "ok\n",
+        summary: `Ran "Check" for #${t.number}`,
+      });
+    });
+
+    it("runs on a schedule with no task, once per slot in each project", async () => {
+      const { define, pass, scriptRuns, runsOf, project, other, script } = setup();
+      const custom = define({
+        name: "Hourly",
+        trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+        action: script(),
+      });
+      await pass();
+      expect(scriptRuns).toHaveLength(0);
+      await pass(HOUR);
+      await pass(HOUR);
+      expect(scriptRuns.map((r) => r.cwd).sort()).toEqual(["/work/alpha", "/work/beta"]);
+      expect(scriptRuns[0]).toMatchObject({ context: { task: null, pr: null } });
+      expect(scriptRuns[0]!.env[brandEnv("TASK_NUMBER")]).toBe("");
+      expect(runsOf(project.id)[0]).toMatchObject({ automation: customAutomationKey(custom.id), status: "succeeded" });
+      expect(runsOf(other.id)).toHaveLength(1);
+    });
+
+    it("fails the run and flags the task on a non-zero exit, a timeout and a missing interpreter", async () => {
+      let call = 0;
+      const { s, task, define, pass, runsOf, script } = setup({
+        script: () => {
+          if (++call === 1) {
+            return { exitCode: 2, output: "boom", timedOut: false, stdout: "", stdoutTruncated: false, stderr: "boom" };
+          }
+          if (call === 2) {
+            return { exitCode: null, output: "", timedOut: true, stdout: "", stdoutTruncated: false, stderr: "" };
+          }
+          throw new InterpreterMissingError("python");
+        },
+      });
+      define({ name: "Check", trigger: { kind: "status_change", to: "review" }, action: script() });
+      for (const title of ["A", "B", "C"]) {
+        s.tasks.move(task(title).id, { status: "review" }, "agent");
+        await pass();
+      }
+      const [missing, timedOut, exited] = runsOf();
+      expect(exited).toMatchObject({ status: "failed", exitCode: 2, detail: "boom", needsAttention: true });
+      expect(exited!.error).toBe("The script exited with 2");
+      expect(timedOut).toMatchObject({ status: "failed", exitCode: null, needsAttention: true });
+      expect(timedOut!.error).toMatch(/The script didn't finish within 30 seconds/);
+      expect(missing).toMatchObject({ status: "failed", needsAttention: true });
+      expect(missing!.error).toBe("The script couldn't run: python not found on PATH");
+    });
+
+    it("runs at most a few at once, as a command does, and isn't held by the agent caps", async () => {
+      const releases: Array<() => void> = [];
+      const { s, task, define, engine, scriptRuns, script } = setup({
+        script: () =>
+          new Promise((resolve) =>
+            releases.push(() =>
+              resolve({ exitCode: 0, output: "", timedOut: false, stdout: "", stdoutTruncated: false, stderr: "" }),
+            ),
+          ),
+      });
+      s.autopilot.updateEngine({ maxConcurrent: 1 });
+      define({ name: "Slow", trigger: { kind: "status_change", to: "review" }, action: script() });
+      for (let i = 0; i < AUTOPILOT_BACKGROUND_MAX + 2; i++)
+        s.tasks.move(task(`T${i}`).id, { status: "review" }, "agent");
+      await engine.pass();
+      expect(scriptRuns).toHaveLength(AUTOPILOT_BACKGROUND_MAX);
+      for (const release of releases.splice(0)) release();
+      await new Promise((r) => setTimeout(r, 50));
+      await engine.pass();
+      expect(scriptRuns).toHaveLength(AUTOPILOT_BACKGROUND_MAX + 2);
+      for (const release of releases.splice(0)) release();
+      await engine.idle();
+    });
+
+    it("previews the script in a dry run, and runs nothing", async () => {
+      const { s, task, define, pass, runsOf, scriptRuns, script } = setup();
+      s.autopilot.updateEngine({ dryRun: true });
+      define({ name: "Dry", trigger: { kind: "status_change", to: "review" }, action: script("console.log('check')") });
+      s.tasks.move(task("Dry").id, { status: "review" }, "agent");
+      await pass();
+      expect(scriptRuns).toHaveLength(0);
+      const run = runsOf()[0]!;
+      expect(run).toMatchObject({ dryRun: true, status: "skipped" });
+      expect(run.detail).toContain("console.log('check')");
+      expect(run.detail).toContain(`${brandEnv("TASK_TITLE")}="Dry"`);
+    });
+  });
+
   it("runs at most a few commands at once, and starts the rest as they finish", async () => {
     const releases: Array<() => void> = [];
     const { s, task, define, pass, engine, shellRuns, shell } = setup({
@@ -1043,6 +1191,30 @@ describe("custom automations: REST", () => {
     expect(await (await request("/api/autopilot/custom")).json()).toHaveLength(1);
     expect((await request(`/api/autopilot/custom/${id}`, { method: "DELETE" })).status).toBe(204);
     expect(await (await request("/api/autopilot/custom")).json()).toHaveLength(0);
+  });
+
+  it("only takes a script from the board's page, like a shell command", async () => {
+    const { request } = setup();
+    const script = { kind: "script", language: "sh", body: "echo hi" };
+    const refused = await request("/api/autopilot/custom", { method: "POST", json: { ...body, action: script } });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toMatch(/Scripts can only be set/);
+    const made = await request("/api/autopilot/custom", {
+      method: "POST",
+      json: { ...body, action: script },
+      headers: origin,
+    });
+    expect(made.status).toBe(201);
+    const { id } = (await made.json()) as { id: string };
+    // Any change to a script automation changes what runs or when, so a bare edit is refused as well.
+    const renamed = await request(`/api/autopilot/custom/${id}`, { method: "PATCH", json: { name: "Renamed" } });
+    expect(renamed.status).toBe(400);
+    const fromPage = await request(`/api/autopilot/custom/${id}`, {
+      method: "PATCH",
+      json: { name: "Renamed" },
+      headers: origin,
+    });
+    expect(fromPage.status).toBe(200);
   });
 
   it("only takes a shell command from the board's page", async () => {

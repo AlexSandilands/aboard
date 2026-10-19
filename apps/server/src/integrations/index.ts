@@ -7,6 +7,7 @@ import { createAutopilotEngine } from "../autopilot/engine.ts";
 import { createAutopilotRunner } from "../autopilot/runner.ts";
 import type { Automation, Runner } from "../autopilot/types.ts";
 import type { RunShell } from "./shellCommand.ts";
+import type { RunScript } from "./scriptRunner.ts";
 import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
 import { tasksToPlan } from "../services/planning.ts";
@@ -73,6 +74,8 @@ export interface IntegrationOverrides {
   automations?: readonly Automation[];
   /** Runs custom automations' shell commands (read by the services, see createContext). */
   runShell?: RunShell;
+  /** Runs custom automations' scripts (read by the services, see createContext). */
+  runScript?: RunScript;
   /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
   now?: () => Date;
   log?: Logger;

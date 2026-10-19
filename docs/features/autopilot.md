@@ -99,7 +99,7 @@ so they need no hook of their own. Events published while the engine itself writ
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
    isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
 7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
-   `background` (custom shell commands), go on in the background; other board-only actions are awaited, one
+   `background` (custom shell commands and scripts), go on in the background; other board-only actions are awaited, one
    after another.
 
 The engine never retries a run by itself: once a dedupe key has a run, whatever its outcome, that candidate is done. A
@@ -125,7 +125,7 @@ hide work it only previewed.
 `autopilot_runs` holds one row per run: `queued → running → succeeded | failed | skipped`. The runner fills in
 `runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
 `output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
-verdict there. A custom automation's shell action fills in `exit_code` and `detail` (the output's tail); a dry run
+verdict there. A custom automation's shell or script action fills in `exit_code` and `detail` (the output's tail); a dry run
 of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). Runs are history, so backups
 leave them out.
 
@@ -802,8 +802,26 @@ the automation. Runs stay, under the old key.
   it doesn't end. Non-zero exits and timeouts fail the run and flag the task; the output's last 4,000 characters and
   the exit code go on the run. At most `AUTOPILOT_BACKGROUND_MAX` (4) go at once; the engine skips further
   candidates until one ends, without recording them.
+- **Script action** (`{kind: "script", language: "python" | "node" | "powershell" | "sh", body, timeoutSeconds}`; the
+  body is at most `CUSTOM_SCRIPT_MAX`, 100,000 characters): like a shell action in every other way (`background`, same
+  environment, same results, same cap), but `integrations/scriptRunner.ts` writes the body to a file in a temp folder
+  of its own, removed afterwards, and runs it with the language's interpreter in the project's `workspaceRoot`. `node`
+  is the server's own `process.execPath` (as Node under Electron); `python` is `python -I -X utf8` (`python3` first
+  off Windows; `python`, then `py -3`, on it); `powershell` is `pwsh`, else Windows PowerShell; `sh` is `sh` on the
+  PATH. The interpreter is looked up on the PATH before anything starts, so a missing one fails the run with
+  "python not found on PATH" (and flags the task) rather than a spawn error. The context goes to stdin as JSON
+  (`customScriptContext`: `automation`, `project` with `id`, `name` and `path`, `inputs`, `task` and `pr`, null when the
+  trigger has none), with non-ASCII characters escaped so every runtime reads it the same. The result keeps `stdout`
+  (the first `STDOUT_MAX` characters) and `stderr` apart for a caller that parses what the script printed; the run
+  gets the interleaved tail and exit code as for a shell action. A `{{…}}` in a body that names a placeholder is
+  refused on save, as in a command (other `{{…}}` text is left alone). Known limits: a PowerShell script gets the shell
+  action's two-line prelude (progress and encoding) and exit handling around it, so it can't open with `param(...)`,
+  `[CmdletBinding()]` or `using`; it runs with `-File`, which an execution-policy Group Policy can block, unlike a
+  shell action's `-EncodedCommand`; and on Windows only `.exe` programs are found on the PATH (not `.cmd` shims).
+  The spawn, output buffering and timeout kill are shared with shell actions in `integrations/captureProcess.ts`.
+  The storage is the same `action_json` column, so no migration.
 - **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
-  action is (or stays) a shell command needs an `Origin` header, which browsers send and the guard checks is the
+  action is (or stays) a shell command or a script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
@@ -849,7 +867,7 @@ name (`Name (2)`) and runs the usual definition check **before** writing anythin
 skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
-is saved like any new one, with no switches, so it is off. As when creating one, a shell action needs the board page's
+is saved like any new one, with no switches, so it is off. As when creating one, a shell or script action needs the board page's
 `Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
 the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
 frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
@@ -1098,7 +1116,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
-| `apps/server/src/integrations/shellCommand.ts` | Running a shell action |
+| `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |

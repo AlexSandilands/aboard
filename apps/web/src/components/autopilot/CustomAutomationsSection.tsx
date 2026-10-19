@@ -47,7 +47,11 @@ function IconAction({
 const blockedOf = (custom: CustomAutomation) => customBlockedReason(custom.action);
 
 const actionLabel = (custom: CustomAutomation) =>
-  custom.action.kind === "agent" ? "starts an agent" : `runs ${custom.action.command.split("\n")[0]}`;
+  custom.action.kind === "agent"
+    ? "starts an agent"
+    : custom.action.kind === "script"
+      ? `runs a ${custom.action.language} script`
+      : `runs ${custom.action.command.split("\n")[0]}`;
 
 /**
  * The automations the user defined: what each watches for and does, with edit and delete. Their switches and

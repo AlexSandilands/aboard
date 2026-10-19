@@ -53,7 +53,7 @@ export const AutomationBundle = z
     skill: BundleSkill.optional(),
   })
   .superRefine((bundle, ctx) => {
-    if (bundle.action.kind === "shell" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
+    if (bundle.action.kind !== "agent" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
       ctx.addIssue({ code: "custom", message: "Only an agent can have inputs or tool slots", path: ["action"] });
     }
   });

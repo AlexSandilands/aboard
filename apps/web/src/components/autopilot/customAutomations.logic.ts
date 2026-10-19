@@ -7,12 +7,14 @@ import {
   CUSTOM_MINUTES_MIN,
   customTaskMatches,
   customValues,
+  describeScriptRun,
   describeShellRun,
   normalizeLabels,
   type AutomationInputType,
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
+  type CustomScriptLanguage,
   type CustomTrigger,
   type ModelTier,
   type Project,
@@ -62,7 +64,7 @@ export interface CustomForm {
   labels: string;
   /** "" is any (or no) epic. */
   epicId: string;
-  actionKind: "agent" | "shell";
+  actionKind: "agent" | "shell" | "script";
   prompt: string;
   skill: string;
   /** "" takes the task's tier (a schedule has none, so the default one). */
@@ -73,6 +75,9 @@ export interface CustomForm {
   inputs: FormInput[];
   slots: FormSlot[];
   command: string;
+  /** A script action: not editable here yet, kept so saving the form leaves it as it was. */
+  language: CustomScriptLanguage;
+  body: string;
   timeoutSeconds: string;
 }
 
@@ -126,6 +131,8 @@ export function emptyCustomForm(): CustomForm {
     inputs: [],
     slots: [],
     command: "",
+    language: "sh",
+    body: "",
     timeoutSeconds: "300",
   };
 }
@@ -175,6 +182,8 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
         tools: tools.join("\n"),
       })),
     });
+  } else if (a.kind === "script") {
+    Object.assign(form, { language: a.language, body: a.body, timeoutSeconds: String(a.timeoutSeconds) });
   } else {
     Object.assign(form, { command: a.command, timeoutSeconds: String(a.timeoutSeconds) });
   }
@@ -225,7 +234,7 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
   const trigger = triggerOf(form);
   if (typeof trigger === "string") return { ok: false, error: trigger };
   const timeoutSeconds = wholeNumber(form.timeoutSeconds);
-  if (form.actionKind === "shell" && timeoutSeconds === null) {
+  if (form.actionKind !== "agent" && timeoutSeconds === null) {
     return { ok: false, error: "Enter a timeout in seconds, a whole number" };
   }
   let labels: string[];
@@ -251,7 +260,9 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             inputs: form.inputs,
             slots: form.slots.map((slot) => ({ ...slot, tools: parseAllowedTools(slot.tools) })),
           }
-        : { kind: "shell", command: form.command, timeoutSeconds },
+        : form.actionKind === "script"
+          ? { kind: "script", language: form.language, body: form.body, timeoutSeconds }
+          : { kind: "shell", command: form.command, timeoutSeconds },
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
@@ -319,6 +330,7 @@ export function previewAction(
   const scheduled = input.trigger.kind === "schedule";
   const values = customValues(def, project, scheduled ? null : task);
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
+  if (def.action.kind === "script") return describeScriptRun(def.action, values);
   if (!scheduled && !task) return null;
   const prompt = customAgentPrompt(def, values, scheduled ? null : task, null);
   const tools = customAgentToolsNote(def.action);

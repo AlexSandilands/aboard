@@ -7,10 +7,12 @@ import {
   customArmedAt,
   customAutomationKey,
   customTaskMatches,
+  customScriptContext,
   customValues,
   prLinksOf,
   prOfTask,
   describeCustomTrigger,
+  describeScriptRun,
   describeShellRun,
   latestDue,
   latestHourlySlot,
@@ -28,13 +30,14 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
-import type { RunShell } from "../integrations/shellCommand.ts";
+import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
+import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "./runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Automation, type Candidate, type CheckContext } from "./types.ts";
 
 // A custom automation as a catalogue entry (docs/features/autopilot.md#custom-automations): the trigger is the check,
-// the filters narrow it, and the action is an agent through the runners or a shell command in the project's folder.
+// the filters narrow it, and the action is an agent through the runners, or a shell command or a script in the project's folder.
 
 const latest = (a: string | undefined, b: string | undefined): string | undefined =>
   !a ? b : !b ? a : Date.parse(b) > Date.parse(a) ? b : a;
@@ -112,7 +115,10 @@ function taskEvents(
 const AgentConfig = z.object(RUNNER_OPTION_SHAPE);
 
 /** The catalogue entry for a custom automation. */
-export function customAutomation(custom: CustomAutomation, deps: { runShell: RunShell }): Automation {
+export function customAutomation(
+  custom: CustomAutomation,
+  deps: { runShell: RunShell; runScript: RunScript },
+): Automation {
   const { trigger, filters, action } = custom;
   const isAgent = action.kind === "agent";
 
@@ -123,6 +129,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services, handover?: string | null) => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
+    if (action.kind === "script") return describeScriptRun(action, values);
     const prompt = customAgentPrompt(
       custom,
       values,
@@ -240,7 +247,7 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
   return defineAutomation({
     key: customAutomationKey(custom.id),
     title: custom.name,
-    description: `${describeCustomTrigger(trigger)}: ${isAgent ? "start an agent" : "run a shell command"}.`,
+    description: `${describeCustomTrigger(trigger)}: ${isAgent ? "start an agent" : action.kind === "script" ? "run a script" : "run a shell command"}.`,
     needsAgent: isAgent,
     background: !isAgent,
     // A schedule has no task, so an epic has nothing to switch.
@@ -311,31 +318,54 @@ export function customAutomation(custom: CustomAutomation, deps: { runShell: Run
       if (!project?.workspaceRoot) {
         throw new Error(`${project?.title ?? "The project"} has no workspace folder to run "${custom.name}" in`);
       }
-      const ran = await deps.runShell({
-        command: action.command,
-        cwd: project.workspaceRoot,
-        env: customShellEnv(values),
-        timeoutMs: action.timeoutSeconds * 1000,
-      });
+      // A script's interpreter may be missing: that fails the run with a plain message, like a command that fails.
+      const noun = action.kind === "script" ? "script" : "command";
       const where = task ? ` for #${task.number}` : ` in ${project.title}`;
+      const failed = (summary: string, error: string, base: { detail: string | null; exitCode: number | null }) => ({
+        ...base,
+        status: "failed" as const,
+        summary: `"${custom.name}"${where} ${summary}`,
+        error,
+        needsAttention: task !== null,
+      });
+      let ran: Pick<ShellResult, "exitCode" | "output" | "timedOut">;
+      try {
+        ran =
+          action.kind === "script"
+            ? await deps.runScript({
+                language: action.language,
+                body: action.body,
+                cwd: project.workspaceRoot,
+                env: customShellEnv(values),
+                context: customScriptContext(values),
+                timeoutMs: action.timeoutSeconds * 1000,
+              })
+            : await deps.runShell({
+                command: action.command,
+                cwd: project.workspaceRoot,
+                env: customShellEnv(values),
+                timeoutMs: action.timeoutSeconds * 1000,
+              });
+      } catch (error) {
+        if (error instanceof InterpreterMissingError) {
+          return failed("couldn't start", `The script couldn't run: ${error.message}`, {
+            detail: null,
+            exitCode: null,
+          });
+        }
+        throw error;
+      }
       const base = { detail: ran.output || null, exitCode: ran.exitCode };
       if (ran.timedOut) {
-        return {
-          ...base,
-          status: "failed",
-          summary: `"${custom.name}"${where} timed out`,
-          error: `The command didn't finish within ${action.timeoutSeconds} seconds and was stopped`,
-          needsAttention: task !== null,
-        };
+        return failed(
+          "timed out",
+          `The ${noun} didn't finish within ${action.timeoutSeconds} seconds and was stopped`,
+          base,
+        );
       }
       if (ran.exitCode !== 0) {
-        return {
-          ...base,
-          status: "failed",
-          summary: `"${custom.name}"${where} exited with ${ran.exitCode ?? "a signal"}`,
-          error: `The command exited with ${ran.exitCode ?? "a signal"}`,
-          needsAttention: task !== null,
-        };
+        const code = ran.exitCode ?? "a signal";
+        return failed(`exited with ${code}`, `The ${noun} exited with ${code}`, base);
       }
       return { ...base, summary: `Ran "${custom.name}"${where}` };
     },
