@@ -9,8 +9,8 @@ import {
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, MessageSquarePlusIcon } from "lucide-react";
-import { HarnessIcon, useHandoffClis } from "~/components/sessions/SessionParts";
+import { ClipboardCopyIcon } from "lucide-react";
+import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { MenuItem } from "~/components/ui/menu";
 import { toastManager } from "~/components/ui/toast";
@@ -91,7 +91,7 @@ export function FixInMenuItems({ task, link }: { task: SlotTask; link: PrLink })
     <>
       {t3 ? (
         <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id, link.id)}>
-          <MessageSquarePlusIcon />
+          <T3Icon />
           T3 Code thread…
         </MenuItem>
       ) : null}
