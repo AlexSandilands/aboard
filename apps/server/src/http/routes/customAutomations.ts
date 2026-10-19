@@ -15,14 +15,17 @@ import { installSkill, readInstalledSkill } from "../../skills.ts";
 import { handle, idParam, noContent, parseBody } from "../respond.ts";
 
 /**
- * A shell action runs whatever it says, so only the board's own page may write one: browsers always send an Origin
+ * A shell or script action runs whatever it says, so only the board's own page may write one: browsers always send an Origin
  * (which the guard checks is this board), while agents and scripts usually send none. A guard rail on top of REST
  * only, not a boundary: anything on this machine can set the header.
  */
 function assertShellFromBrowser(c: Context, action: Pick<CustomAction, "kind"> | undefined): void {
-  if (action?.kind !== "shell") return;
+  if (action?.kind !== "shell" && action?.kind !== "script") return;
   if (!c.req.header("origin")) {
-    throw new AppError("VALIDATION", "Shell commands can only be set from the board's settings page");
+    throw new AppError(
+      "VALIDATION",
+      `${action.kind === "script" ? "Scripts" : "Shell commands"} can only be set from the board's settings page`,
+    );
   }
 }
 
@@ -61,7 +64,7 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
     "/api/autopilot/custom/import",
     handle(async (c) => {
       const input = await parseBody(c, ImportAutomationInput);
-      // A file's shell command runs on this machine, so, as when writing one by hand, only the board's page may import it.
+      // A file's shell command or script runs on this machine, so, as when writing one by hand, only the board's page may import it.
       const parsed = parseAutomationBundle(input.bundle);
       if (parsed.ok) assertShellFromBrowser(c, parsed.bundle.action);
       // A skill persists into every later session that reads the user's skills, so it is held to the same rail.
@@ -78,7 +81,7 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
     "/api/autopilot/custom/:id",
     handle(async (c) => {
       const input = await parseBody(c, UpdateCustomAutomationInput);
-      // Any change to a shell automation changes what runs or when.
+      // Any change to a shell or script automation changes what runs or when.
       assertShellFromBrowser(c, input.action ?? custom.get(idParam(c)).action);
       return c.json(custom.update(idParam(c), input));
     }),

@@ -8,11 +8,14 @@ import {
   customAllowedTools,
   CustomAction,
   customBlockedReason,
+  CUSTOM_SCRIPT_MAX,
+  customScriptContext,
   CUSTOM_TOOLS_MAX,
   customShellEnv,
   CustomTrigger,
   customValues,
   describeCustomTrigger,
+  describeScriptRun,
   describeShellRun,
   latestHourlySlot,
   latestMinutesSlot,
@@ -53,6 +56,42 @@ describe("custom automation templates", () => {
   });
 });
 
+describe("a script action", () => {
+  const parse = (action: unknown) => CustomAction.safeParse(action);
+
+  it("takes each language, defaults the timeout and keeps the body as written", () => {
+    for (const language of ["python", "node", "powershell", "sh"]) {
+      expect(parse({ kind: "script", language, body: "x" }).success).toBe(true);
+    }
+    const BODY = "  if x:\n    pass\n";
+    const parsed = parse({ kind: "script", language: "python", body: BODY });
+    expect(parsed.data).toMatchObject({ timeoutSeconds: 300, body: BODY });
+  });
+
+  it("refuses an unknown language, a blank or oversized body and a bad timeout", () => {
+    expect(parse({ kind: "script", language: "ruby", body: "x" }).success).toBe(false);
+    expect(parse({ kind: "script", language: "sh", body: " \n " }).success).toBe(false);
+    expect(parse({ kind: "script", language: "sh", body: "x".repeat(CUSTOM_SCRIPT_MAX) }).success).toBe(true);
+    expect(parse({ kind: "script", language: "sh", body: "x".repeat(CUSTOM_SCRIPT_MAX + 1) }).success).toBe(false);
+    expect(parse({ kind: "script", language: "sh", body: "x", timeoutSeconds: 0 }).success).toBe(false);
+    expect(parse({ kind: "script", language: "sh", body: "x", timeoutSeconds: 3601 }).success).toBe(false);
+  });
+
+  it("hands the script its values on stdin and shows them in a preview", () => {
+    expect(customScriptContext(values)).toEqual({
+      automation: "Ping",
+      project: { name: "Alpha", path: "/work/alpha" },
+      inputs: {},
+      task: { id: "t1", number: 42, title: "Fix it", status: "review" },
+      pr: { url: "https://github.com/o/r/pull/1" },
+    });
+    expect(customScriptContext({ automation: "x" })).toMatchObject({ project: null, task: null, pr: null });
+    const preview = describeScriptRun({ language: "node", body: "run()" }, values);
+    expect(preview).toContain("run()");
+    expect(preview).toContain(`${brandEnv("TASK_TITLE")}="Fix it"`);
+  });
+});
+
 describe("checkCustomDefinition", () => {
   const filters = { projectIds: [], labels: [], epicId: null };
   const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60 };
@@ -90,6 +129,18 @@ describe("checkCustomDefinition", () => {
     );
     expect(checkCustomDefinition({ trigger, filters, action: { ...agent, prompt: "{{task.body}}" } })).toMatch(
       /isn't a placeholder/,
+    );
+  });
+
+  it("refuses placeholders in a script body like in a shell command", () => {
+    const trigger = CustomTrigger.parse({ kind: "blocker_finished" });
+    const script = CustomAction.parse({ kind: "script", language: "node", body: "console.log(1)" }) as Extract<
+      CustomAction,
+      { kind: "script" }
+    >;
+    expect(checkCustomDefinition({ trigger, filters, action: script })).toBeNull();
+    expect(checkCustomDefinition({ trigger, filters, action: { ...script, body: "echo({{task.title}})" } })).toMatch(
+      /Scripts aren't filled in.*TASK_TITLE/,
     );
   });
 

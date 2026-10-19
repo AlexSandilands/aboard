@@ -48,6 +48,7 @@ export function createContext(
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),
     ...(overrides.runShell ? { runShell: overrides.runShell } : {}),
+    ...(overrides.runScript ? { runScript: overrides.runScript } : {}),
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
   });
   return { db, bus, services, integrations, config };
