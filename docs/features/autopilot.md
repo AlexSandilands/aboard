@@ -1006,9 +1006,9 @@ target's recent suggestions with their status, so it can leave an open one alone
 
 **Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
 schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
-`trusted_logins`, `max_rounds`, `max_per_run` (5) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
+`trusted_logins`, `max_rounds`, `look_back_days` (7) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
 (the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
-PR that needs a review (at most `max_per_run`, in the query's order, newest update first; the rest come on later runs, so a first run over many open PRs isn't a flood); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
+PR that needs a review (only PRs whose `updatedAt` is within `look_back_days`, so a first run isn't a flood of old PRs; a cap on printed items would starve the PRs behind five that are already remembered, so the board's own caps do that job); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
 `no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
 (a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
 `trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a

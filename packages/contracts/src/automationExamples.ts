@@ -194,7 +194,8 @@ const { execFileSync } = require("node:child_process");
 const MARKER = "__MARKER__";
 const context = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
 const maxRounds = Math.max(1, parseInt(context.inputs.max_rounds, 10) || 3);
-const perRun = Math.max(1, parseInt(context.inputs.max_per_run, 10) || 5);
+const lookBackDays = Math.max(1, parseInt(context.inputs.look_back_days, 10) || 7);
+const since = Date.now() - lookBackDays * 24 * 3600 * 1000;
 const outsiders = String(context.inputs.review_outside_contributors).toLowerCase() === "true";
 const lower = (login) => String(login || "").toLowerCase();
 const trusted = new Set(String(context.inputs.trusted_logins || "").split(/[\s,]+/).filter(Boolean).map(lower));
@@ -210,7 +211,7 @@ const query = [
   "    pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {",
   "      pageInfo { hasNextPage }",
   "      nodes {",
-  "        number title url isDraft headRefName headRefOid authorAssociation",
+  "        number title url isDraft headRefName headRefOid authorAssociation updatedAt",
   "        author { login }",
   "        labels(first: 50) { nodes { name } }",
   "        reviews(last: 100) { nodes { state body submittedAt commit { oid } author { login } } }",
@@ -227,6 +228,8 @@ if (data.repository.pullRequests.pageInfo.hasNextPage) console.error("More than 
 const items = [];
 for (const pr of data.repository.pullRequests.nodes) {
   if (pr.isDraft || pr.labels.nodes.some((label) => label.name === "no-autopilot")) continue;
+  // Only PRs with recent activity, so switching this on doesn't review every old open PR. A /re-review is activity.
+  if (Date.parse(pr.updatedAt) < since) continue;
 
   // The agent reads the PR with this account's access, so a stranger's PR isn't reviewed unless asked for: only the
   // repository's owner, members and collaborators, this account and the trusted logins are.
@@ -270,9 +273,7 @@ for (const pr of data.repository.pullRequests.nodes) {
     requested,
   });
 }
-// Newest first, and only a few a run, so a repository with many open PRs isn't reviewed all at once the first time.
-// The rest are listed again by the next run.
-for (const item of items.slice(0, perRun)) console.log(JSON.stringify(item));
+for (const item of items) console.log(JSON.stringify(item));
 `.replace("__MARKER__", prReviewMarker());
 
 const REVIEW_PRS_PROMPT = `You review one pull request, running unattended as the user's GitHub account. A script found that it needs a review.
@@ -294,7 +295,7 @@ const REVIEW_REPO_PRS = AutomationBundle.parse({
   version: AUTOMATION_BUNDLE_VERSION,
   name: "Review repo PRs",
   description:
-    "Every 5 minutes, a script lists the open pull requests of the project's repository that have no review of this automation at their head commit, and an agent reviews each one and posts the review as a comment. It covers pull requests whether or not they are linked to a task, from people with write access and your trusted logins (outside contributors only if you turn that on), and starts at most a few new reviews per run. A pull request opts out with a no-autopilot label or /stop-review (from its author, you or a trusted login); /re-review (from you or a trusted login) asks again. It never approves or requests changes. Needs the GitHub CLI (gh), signed in.",
+    "Every 5 minutes, a script lists the open pull requests of the project's repository that have no review of this automation at their head commit, and an agent reviews each one and posts the review as a comment. It covers pull requests whether or not they are linked to a task, from people with write access and your trusted logins (outside contributors only if you turn that on), and only looks at pull requests updated in the last few days. A pull request opts out with a no-autopilot label or /stop-review (from its author, you or a trusted login); /re-review (from you or a trusted login) asks again. It never approves or requests changes. Needs the GitHub CLI (gh), signed in.",
   trigger: { kind: "schedule", schedule: { kind: "minutes", everyMinutes: 5 } },
   action: {
     kind: "agent",
@@ -312,7 +313,7 @@ const REVIEW_REPO_PRS = AutomationBundle.parse({
       default: "",
     },
     { name: "max_rounds", label: "Most automatic reviews per PR", type: "number", default: "3" },
-    { name: "max_per_run", label: "Most new reviews started per run", type: "number", default: "5" },
+    { name: "look_back_days", label: "Only PRs updated in the last (days)", type: "number", default: "7" },
     {
       name: "review_outside_contributors",
       label: "Also review PRs from people with no write access",

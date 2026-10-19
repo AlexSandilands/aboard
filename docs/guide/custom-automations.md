@@ -282,8 +282,9 @@ script, and the agent is told not to.
 It reviews only pull requests from people who can be trusted with your access: the repository's owners, members and
 collaborators, your own account and the **Trusted GitHub logins**. A stranger's pull request is left alone, since its
 text would go to an agent that runs `gh` as you; turn on **Also review PRs from people with no write access** to
-include them. To keep the first run, or a busy repository, from starting a flood of agents, at most **Most new reviews
-started per run** (5 by default) start at once, the most recently updated first, and the rest follow on later runs.
+include them. To keep the first run from reviewing every old open pull request, it only looks at those updated in the
+last **Only PRs updated in the last (days)** (7 by default). The board starts at most 50 new agents in a pass and
+keeps to the agent caps, so the rest follow.
 
 The script leaves a pull request alone when it is a draft or has a `no-autopilot` label. In the comments it reads two
 commands, only at the start of a line, and only from the people who may give each one, never from anyone else:
@@ -323,8 +324,9 @@ A script can do anything you can. Three things to think about before you switch 
 
 - **Who can make it act.** A script that reads text from outside, such as a pull request's comments, must check **who
   wrote it** before acting on it. A comment saying `/re-review` or `/lgtm` is a command only when its author is someone
-  you trust: the pull request's author, or a login on a list you keep (the example's **Trusted GitHub logins** input),
-  never "anyone who can comment", which in a public repository is anyone.
+  you trust: your own account or a login on a list you keep (the example's **Trusted GitHub logins** input), and for a
+  command that only holds back work, such as `/stop-review`, the pull request's author. Never "anyone who can comment",
+  which in a public repository is anyone.
 - **Approving as you.** A script that runs `gh pr review --approve` approves as your GitHub account, and your team reads
   your name on an approval as your judgement. Keep the decision rule-based and narrow (a trusted login, a label, a
   green check), keep it off until you've read what the script does, and don't let an agent's opinion trigger it. The

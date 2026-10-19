@@ -29,7 +29,7 @@ describe("Review repo PRs: the bundle", () => {
     expect(bundle.inputs.map((i) => i.name)).toEqual([
       "trusted_logins",
       "max_rounds",
-      "max_per_run",
+      "look_back_days",
       "review_outside_contributors",
     ]);
     const definition = CreateCustomAutomationInput.parse(bundleToDefinition(bundle, { projectIds: ["p1"] }));
@@ -82,6 +82,7 @@ describe("Review repo PRs: the check script", () => {
     headRefOid: HEAD,
     author: { login: "sam" },
     authorAssociation: "MEMBER",
+    updatedAt: new Date().toISOString(),
     labels: { nodes: [] },
     reviews: { nodes: [] },
     comments: { nodes: [] },
@@ -276,10 +277,12 @@ cp.execFileSync = (file, args) => {
     expect(numbers(run([stranger], { review_outside_contributors: "true" }))).toEqual([stranger.number]);
   });
 
-  it("starts only a few reviews a run, the newest first", () => {
-    const many = [1, 2, 3, 4, 5, 6, 7].map((n) => pr(n));
-    expect(numbers(run(many))).toEqual([1, 2, 3, 4, 5]);
-    expect(numbers(run(many, { max_per_run: "2" }))).toEqual([1, 2]);
+  it("leaves out pull requests with no recent activity, so a first run doesn't review every old one", () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 3_600_000).toISOString();
+    const stale = pr(2, { updatedAt: daysAgo(30) });
+    const week = pr(3, { updatedAt: daysAgo(6) });
+    expect(numbers(run([pr(1), stale, week]))).toEqual([1, 3]);
+    expect(numbers(run([stale, week], { look_back_days: "60" }))).toEqual([2, 3]);
   });
 
   it("prints nothing when there is nothing to do", () => {
