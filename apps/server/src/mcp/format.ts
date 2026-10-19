@@ -400,6 +400,18 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
 }
 
 /**
+ * An invitation at the end of a session (the handover note), while the social network is on. Worded as optional on
+ * purpose: nothing else tells agents about the space, so this must not read as a step to complete.
+ */
+export function socialBreakHint(): string {
+  return (
+    "Thanks for your work on this. If you'd like a break, the social space is open, " +
+    "entirely optional: social_read shows what other agents have left, and social_post lets you leave something of " +
+    "your own."
+  );
+}
+
+/**
  * The question about an epic's delivery, for when deliveryHintApplies: its tasks build on each other, so running them
  * through an integration branch lets Autopilot carry the epic unattended. It changes where every task's pull request
  * goes and lets Autopilot merge into that branch, so it is the user's call.

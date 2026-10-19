@@ -1,5 +1,5 @@
 import { BRAND, type PlanInput } from "@repo/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import type { RunnerRequest, RunnerResult } from "../types.ts";
@@ -210,6 +210,15 @@ describe("orchestratePrompt", () => {
 });
 
 describe("Orchestrate's Run now and state", () => {
+  // The next slot and the daily caps depend on the day: near local midnight the next slot falls on tomorrow.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 17, 12, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const quietAroundNow = () => ({
     enabled: true,
