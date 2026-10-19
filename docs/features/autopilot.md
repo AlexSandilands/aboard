@@ -1007,13 +1007,15 @@ target's recent suggestions with their status, so it can leave an open one alone
 **Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
 schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
 `trusted_logins`, `max_rounds`, `max_per_run` (5) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
-(the first 50 by update: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
+(the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
 PR that needs a review (at most `max_per_run`, in the query's order, newest update first; the rest come on later runs, so a first run over many open PRs isn't a flood); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
-`no-autopilot` label, has a dismissed review of the automation's, or its latest `/stop-review` or `/re-review` (from its
-author, the viewer or `trusted_logins`; a line start; the last command wins) is a stop. A review counts when the viewer
-posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so it also sees those; a review at
+`no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
+(a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
+`trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a
+null author never counts). A review counts when the viewer
+posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so this skips what Review PRs posted (not the reverse: Review PRs decides from the board's runs, so a linked PR can be reviewed twice); a review at
 `headRefOid` ends the PR's turn. Otherwise the PR is listed unless the reviews already number `max_rounds`; a
-`/re-review` newer than the last review lists it regardless. The key is `<repo>#<number>:<head, 7 characters>:<count of
+`/re-review` newer than the last review (by `submittedAt`; a pending review has none) lists it regardless. A dismissed review isn't an opt-out: GitHub only lets a review that approved or requested changes be dismissed, and the example posts comment reviews. The key is `<repo>#<number>:<head, 7 characters>:<count of
 /re-review commands>`, so a push and a request each make a new one, and the board's key memory means a review that
 failed isn't retried every slot. Each item's agent (`untrustedItems: false`, since it runs `gh` to read the PR and
 post one `--comment` review headed `prReviewHeader()`, which an untrusted-item agent can't) is told in its prompt to

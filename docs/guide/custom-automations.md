@@ -270,8 +270,8 @@ the earlier (it stays in the history).
 ### Review repo PRs
 
 The third example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
-project it's on in. It covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't see.
-It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
+project it's on in. It also covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't
+see. It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
 
 Every five minutes a Node script asks GitHub for the project's open pull requests and prints each one that has no
 review of this kind **at its head commit** (every review carries the commit it was made at, so GitHub is the memory,
@@ -285,25 +285,31 @@ text would go to an agent that runs `gh` as you; turn on **Also review PRs from 
 include them. To keep the first run, or a busy repository, from starting a flood of agents, at most **Most new reviews
 started per run** (5 by default) start at once, the most recently updated first, and the rest follow on later runs.
 
-The script leaves a pull request alone when it is a draft, has a `no-autopilot` label, or has a review of this kind
-that someone dismissed. In the comments it reads two commands, only at the start of a line, and only from the **pull
-request's author, the account running `gh` or a login in Trusted GitHub logins**, never from anyone else:
+The script leaves a pull request alone when it is a draft or has a `no-autopilot` label. In the comments it reads two
+commands, only at the start of a line, and only from the people who may give each one, never from anyone else:
 
-- `/stop-review` stops the reviews. The latest command wins, so a later `/re-review` starts them again.
-- `/re-review` asks for another review of the same commit. The number of `/re-review` comments is in the key
-  (`owner/repo#41:3f2a9c1:1`) beside the head commit, so a push and a request each make a new item.
+- `/stop-review` stops the reviews. It counts from the **pull request's author**, the account running `gh` or a login
+  in Trusted GitHub logins. The latest command wins, so a later `/re-review` starts them again.
+- `/re-review` asks for another review of the same commit. It counts only from the **account running `gh` or a trusted
+  login**, not from the pull request's author, because each request starts an agent. The number of `/re-review`
+  comments is in the key (`owner/repo#41:3f2a9c1:1`) beside the head commit, so a push and a request each make a new
+  item.
 
 Only reviews posted by your own account count, so pasting the header into a review can't keep a pull request out. It
 reviews each pull request at most **Most automatic reviews per PR** times (3 by default); a `/re-review` goes past
-that, since a person asked.
+that, since someone you trust asked.
+
+It looks at the 50 most recently updated open pull requests, and at the last 100 comments and reviews of each; a
+repository with more has the rest left out, and the script says so on stderr, which a test run shows.
 
 To use it: **Import → Example: Review repo PRs**, read the script, enter your trusted logins if any, pick the
 projects, and switch it on. It comes in with **Treat the items as untrusted** off, because the agent has to run `gh` to
 read the pull request and post its review, which an agent of untrusted items can't. A pull request's title, description,
 comments and code are text its author wrote, and the agent reads them with your access: that is why outside
 contributors are off by default, and why you should only turn them on for repositories where a stranger's text is
-acceptable to it. If **Review PRs** is on for the same project, a pull request linked to a
-task can be reviewed by both when they run together: each counts the other's review once it is posted.
+acceptable to it. If **Review PRs** is on for the same project, this example skips a pull request that Review PRs
+already reviewed at its head commit (it sees the review on GitHub), but Review PRs doesn't see this one's reviews, so
+a pull request linked to a task can get a second review from it. Switch one of them off for a project to avoid that.
 
 ## Commands and scripts run on your machine
 
