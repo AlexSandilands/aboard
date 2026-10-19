@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  actionScripts,
   bundleToDefinition,
   checkCustomDefinition,
   CUSTOM_NAME_MAX,
@@ -131,10 +132,24 @@ export function createCustomAutomationsService(core: Core): CustomAutomationsSer
     create: (input) => insert(CreateCustomAutomationInput.parse(input)),
 
     importBundle(input, installSkill) {
-      const { bundle: file, inputs, slots, projectIds, installSkill: wantSkill } = ImportAutomationInput.parse(input);
+      const {
+        bundle: file,
+        inputs,
+        slots,
+        projectIds,
+        installSkill: wantSkill,
+        confirmScript,
+      } = ImportAutomationInput.parse(input);
       const parsed = parseAutomationBundle(file);
       if (!parsed.ok) throw new AppError("VALIDATION", parsed.error);
       const { bundle } = parsed;
+      // Here, not in the route, so nothing that imports can skip it: a script is someone else's code, run as the user.
+      if (!confirmScript && actionScripts(bundle.action).length > 0) {
+        throw new AppError(
+          "VALIDATION",
+          "This file runs a script on your machine as you. Read it and confirm (confirmScript) to import it",
+        );
+      }
       const fill = { inputs, slots, projectIds };
       const named = (skill?: string | null) =>
         CreateCustomAutomationInput.parse({

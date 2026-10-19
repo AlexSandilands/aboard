@@ -359,6 +359,19 @@ describe("restore", () => {
     expect(readDumpDir(dir).suggestions).toEqual([]);
   });
 
+  it("keeps a script automation's body as written in the git backup's folder and the dump file", () => {
+    const { s } = seed();
+    const dir = tempDir();
+    const dump = s.backup.dump();
+    writeDumpDir(dir, dump);
+    const actions = (rows: BoardDump["autopilot_custom"]) => rows.map((row) => JSON.parse(String(row.action_json)));
+    const script = { kind: "script", language: "python", body: "print(1)\n  # kept as written\n", timeoutSeconds: 300 };
+    expect(actions(readDumpDir(dir).autopilot_custom)).toContainEqual(script);
+    const file = join(tempDir(), "dump.json");
+    writeFileSync(file, dumpFileJson(dump));
+    expect(actions(readDump(file).autopilot_custom)).toContainEqual(script);
+  });
+
   it("reads a folder written before custom automations, which has no custom-automations.json", () => {
     const { s } = seed();
     const dir = tempDir();

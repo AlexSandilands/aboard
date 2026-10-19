@@ -1,11 +1,13 @@
 import {
   AUTOMATION_BUNDLE_VERSION,
+  PLAIN_BUNDLE_VERSION,
   BRAND,
   AUTOMATION_EXAMPLES,
   customAutomationKey,
   CustomAction,
+  automationBundle as automationBundleOf,
   type AutomationBundle,
-  type CreateCustomAutomationInput,
+  CreateCustomAutomationInput,
   type CustomAutomation,
 } from "@repo/contracts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -92,7 +94,7 @@ describe("exporting a custom automation", () => {
     });
     const bundle = await exportOf(s, custom);
     expect(bundle).toMatchObject({
-      version: AUTOMATION_BUNDLE_VERSION,
+      version: PLAIN_BUNDLE_VERSION,
       name: "Dispatch",
       inputs: [{ name: "jql", default: "type = Bug" }],
       slots: [jira],
@@ -260,6 +262,62 @@ describe("importing a custom automation", () => {
     const s = setup();
     expect((await post(s, { bundle })).status).toBe(400);
     expect((await post(s, { bundle }, ORIGIN)).status).toBe(201);
+  });
+});
+
+describe("sharing a script", () => {
+  const script = { kind: "script", language: "python", body: "print('hi')\n  # as written\n" } as const;
+  const scriptAutomation = (): CreateCustomAutomationInput => ({
+    name: "Check",
+    trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+    filters: { projectIds: [] },
+    action: CustomAction.parse(script),
+  });
+  const post = (s: Setup, body: unknown, headers?: Record<string, string>) =>
+    s.request("/api/autopilot/custom/import", { method: "POST", json: body, ...(headers ? { headers } : {}) });
+
+  it("exports it as a version 2 file, and an agent's file stays at version 1", async () => {
+    const s = setup();
+    const bundle = await exportOf(s, s.services.customAutomations.create(scriptAutomation()));
+    expect(bundle).toMatchObject({ version: AUTOMATION_BUNDLE_VERSION, action: script });
+    expect((await exportOf(s, s.services.customAutomations.create(dispatch()))).version).toBe(PLAIN_BUNDLE_VERSION);
+  });
+
+  it("imports only once the importer confirms, from the board's page, writing nothing otherwise", async () => {
+    const bundle = automationBundleOf(CreateCustomAutomationInput.parse(scriptAutomation()));
+    const s = setup();
+    const unconfirmed = await post(s, { bundle }, ORIGIN);
+    expect(unconfirmed.status).toBe(400);
+    expect(JSON.stringify(await unconfirmed.json())).toMatch(/runs a script on your machine/);
+    const noOrigin = await post(s, { bundle, confirmScript: true });
+    expect(noOrigin.status).toBe(400);
+    expect(JSON.stringify(await noOrigin.json())).toMatch(/Scripts can only be set/);
+    expect(s.services.customAutomations.list()).toHaveLength(0);
+
+    const res = await post(s, { bundle, confirmScript: true }, ORIGIN);
+    expect(res.status).toBe(201);
+    const { automation } = await s.json<{ automation: CustomAutomation }>(res);
+    expect(automation.action).toMatchObject({ ...script, timeoutSeconds: 300 });
+    // Off until the user switches it on.
+    const entry = s.services.autopilot
+      .scope("board", null)
+      .find((e) => e.automation === customAutomationKey(automation.id));
+    expect(entry).toMatchObject({ mode: "inherit", enabled: false });
+  });
+
+  it("refuses a confirmation the service wasn't given, whoever calls it", () => {
+    const s = setup();
+    const bundle = automationBundleOf(CreateCustomAutomationInput.parse(scriptAutomation()));
+    expect(() => s.services.customAutomations.importBundle({ bundle })).toThrow(/runs a script on your machine/);
+    expect(s.services.customAutomations.importBundle({ bundle, confirmScript: true }).automation.action).toMatchObject(
+      script,
+    );
+  });
+
+  it("needs no confirmation for a file without a script", async () => {
+    const s = setup();
+    const bundle = await exportOf(s, s.services.customAutomations.create(dispatch()));
+    expect((await post(s, { bundle })).status).toBe(201);
   });
 });
 
