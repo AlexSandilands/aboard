@@ -31,6 +31,7 @@ import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { planSkillOf } from "./handoff.logic";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { announceSession } from "./SessionLaunchDialog";
+import { ComposerStrip } from "./T3LaunchPickers";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
 
 /** The planning prompt for these tasks, with the skill the project (or the board) chose. */
@@ -287,11 +288,11 @@ function PlanSession({
             </button>
           </div>
         </div>
-        <div className="-mt-3 flex items-center gap-2 rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+        <ComposerStrip className="gap-2">
           <span className="truncate px-2 py-1 text-xs text-muted-foreground" title={project.workspaceRoot ?? undefined}>
             Runs in this checkout: {project.workspaceRoot ?? "no project folder"}
           </span>
-        </div>
+        </ComposerStrip>
       </form>
     </>
   );

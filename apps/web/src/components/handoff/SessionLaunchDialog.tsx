@@ -27,7 +27,7 @@ import { useDialogs } from "~/state/ui";
 import { copyFixPrompt } from "./FixPrMenu";
 import { copyHandoffPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
-import { ComposerControl } from "./T3LaunchPickers";
+import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
   harnessLabel,
   initialModel,
@@ -335,7 +335,7 @@ function Composer({
           </button>
         </div>
       </div>
-      <div className="-mt-3 flex items-center justify-between gap-2 rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+      <ComposerStrip className="justify-between gap-2">
         {fix ? (
           <span className="truncate px-2 py-1 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
             New worktree on the PR's branch <span className="font-mono text-foreground/80">{fix.branch}</span>
@@ -387,7 +387,7 @@ function Composer({
             )}
           </>
         )}
-      </div>
+      </ComposerStrip>
       <p className="mt-2 px-1 text-xs text-muted-foreground">
         {options.tier && !plan ? (
           <span className="block">
