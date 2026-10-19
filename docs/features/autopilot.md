@@ -703,7 +703,9 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 ### Custom automations
 
-Automations the user defines (#97, sharing #135; guide: [custom automations](../guide/custom-automations.md)). Each row of
+Automations the user defines (#97, sharing #135, scripts and checks #225; guide: [custom automations](../guide/custom-automations.md)).
+An action is an agent (on a schedule, optionally gated by a [check script](#check-scripts)), a shell command or a script.
+Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
 (built-ins, then every custom row), so a create, edit or delete applies from the next pass; nothing is reloaded.
@@ -1002,6 +1004,25 @@ inputs. Each run audits its own project (`board_activity` with the project's fol
 `suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
 target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
 
+**Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
+schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
+`trusted_logins`, `max_rounds`, `look_back_days` (7) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
+(the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
+PR that needs a review (only PRs whose `updatedAt` is within `look_back_days`, so a first run isn't a flood of old PRs; the script prints no cap of its own, since the board drops remembered keys only after it, and a failed review would hold a slot; the board's 50 new items per pass and the agent caps do that job); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
+`no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
+(a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
+`trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a
+null author never counts). A review counts when the viewer
+posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so this skips what Review PRs posted (not the reverse: Review PRs decides from the board's runs, so a linked PR can be reviewed twice); a review at
+`headRefOid` ends the PR's turn. Otherwise the PR is listed unless the reviews already number `max_rounds`; a
+`/re-review` newer than the last review (by `submittedAt`; a pending review has none) lists it regardless. A dismissed review isn't an opt-out: GitHub only lets a review that approved or requested changes be dismissed, and the example posts comment reviews. The key is `<repo>#<number>:<head, 7 characters>:<count of
+/re-review commands>`, so a push and a request each make a new one, and the board's key memory means a review that
+failed isn't retried every slot. Each item's agent (`untrustedItems: false`, since it runs `gh` to read the PR and
+post one `--comment` review headed `prReviewHeader()`, which an untrusted-item agent can't) is told in its prompt to
+read only and never approve or request changes; nothing in the bundle approves. The risk of that choice, text from
+anyone who can open a PR read by an agent with the user's access, is stated in the guide and on the import page's
+warning. `reviewRepoPrs.test.ts` runs the script under Node with `child_process.execFileSync` replaced by a fake `gh`.
+
 ### Runners
 
 An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
@@ -1235,6 +1256,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
+| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
+| `apps/server/src/autopilot/reviewRepoPrs.test.ts` | The example's bundle, and its script run against a fake `gh` |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
