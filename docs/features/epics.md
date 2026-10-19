@@ -88,7 +88,9 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
   `subgrid`, so its cards line up with the loose cards below.
-- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. Its threads and
+- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. An epic with an
+  integration branch then gets an info **integration** badge (`EpicBranchBadge`, also on the Done card; the tooltip names
+  the branch, a click opens the delivery popover; epics delivering to main show nothing). Its threads and
   sessions and the start button (`EpicActions.tsx`, the links line of a task card: the same `CardLinks` and
   `HandoffMenu`) come next, then the Autopilot button, which sets what Autopilot does for the epic's tasks. It
   folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the
@@ -141,7 +143,7 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - `get_task` on an epic, and `epic_overview`, list its tasks by status with each one's summary line, live T3
   thread, latest note and newest activity: enough to monitor tasks however they were started. The epic's
   render explains that it has no plan instead of asking for one.
-- List lines mark epics `[epic]` with their roll-up, and tasks in one with `in epic #N`. `board_overview`
+- List lines mark epics `[epic]` with their roll-up (and `integration branch epic/…` when it has one), and tasks in one with `in epic #N`. `board_overview`
   counts only tasks and lists open epics per project.
 
 ### Delivery
