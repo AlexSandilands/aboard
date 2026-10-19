@@ -866,9 +866,10 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   check stands (`running`, `done` with the items, `failed`) lives in a `CheckRuns` map made once in `createServices`,
   keyed `<automation id>:<project id>` and stamped with the slot and the automation's `updatedAt`, so it runs once per
   slot and again after an edit. One runs at a time per automation and project: a check that outlasts its interval is
-  waited for rather than started again beside itself, what it printed is acted on once in the slot after its own
-  (`offered`), and the slot due then gets a run of its own. Output no pass read by then (Autopilot paused, the
-  automation switched off) is dropped rather than acted on late. It is in memory only: after a restart the slot's check runs
+  waited for rather than started again beside itself, what it printed is acted on once (`offered`) in the slot it
+  ended in or the one after (`finishedSlot`, by the engine's clock, `CheckContext.clock`), however many intervals it
+  ran for, and the slot due then gets a run of its own. Output no pass read by then (Autopilot paused, the automation
+  switched off) is dropped rather than acted on late. It is in memory only: after a restart the slot's check runs
   once more, and the items' dedupe keys keep that from starting anything twice. The check doesn't start while no
   agent could (`agentHold`: quiet hours, `maxConcurrent`, the daily caps), so it isn't run only for its items to wait
   (a dry run runs it anyway), nor while `AUTOPILOT_BACKGROUND_MAX` (4) checks are already running, across automations

@@ -42,6 +42,8 @@ export interface CheckContext<C> {
   services: Services;
   engine: AutopilotEngineSettings;
   now: Date;
+  /** The engine's clock, for work a check started that ends after the pass (`now` is the pass's time). */
+  clock?: () => Date;
   /**
    * Projects where the automation is on, or has an epic it is on for (then the check sees the whole project, and the
    * engine drops the tasks the epic's setting doesn't reach). `config` is the project's. Only candidates in these (or

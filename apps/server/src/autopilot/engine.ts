@@ -190,6 +190,7 @@ export function createAutopilotEngine(deps: {
       now: at,
       projects,
       board: boardConfig,
+      clock: now,
       wake: schedule,
     });
     for (const found of candidates) {

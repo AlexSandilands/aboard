@@ -156,6 +156,8 @@ interface CheckRun {
   state: CheckState;
   /** Whether a pass has had what it printed: a run that ends after its slot is still acted on once. */
   offered: boolean;
+  /** The slot it ended in, by the engine's clock; null while it runs. How stale unread output is goes by this. */
+  finishedSlot: string | null;
 }
 
 /**
@@ -258,8 +260,10 @@ export function customAutomation(
     ctx: CheckContext<Record<string, unknown>>,
     project: Project,
     stamp: string,
-    /** The slot before `stamp`: a check that ran over from it is still acted on, but nothing older. */
+    /** The slot before `stamp`: output of a check that ended in it is still acted on, but nothing older. */
     previousStamp: string | null,
+    /** The stamp of the slot `at` falls in, or null. */
+    slotStampAt: (at: Date) => string | null,
   ): Candidate[] => {
     const { services, engine, now } = ctx;
     const runKey = `${custom.id}:${project.id}`;
@@ -271,7 +275,8 @@ export function customAutomation(
     const current =
       last &&
       last.version === custom.updatedAt &&
-      (last.slot === stamp || (!last.offered && last.slot === previousStamp))
+      (last.slot === stamp ||
+        (!last.offered && last.finishedSlot !== null && [stamp, previousStamp].includes(last.finishedSlot)))
         ? last
         : null;
     if (!current) {
@@ -283,10 +288,18 @@ export function customAutomation(
       // Scripts aren't agent runs, so the agent caps don't bound them: this does, across automations and projects.
       const running = [...deps.checkRuns.values()].filter((r) => r.state.kind === "running").length;
       if (running >= AUTOPILOT_BACKGROUND_MAX) return [];
-      const run: CheckRun = { slot: stamp, version: custom.updatedAt, state: { kind: "running" }, offered: false };
+      const run: CheckRun = {
+        slot: stamp,
+        version: custom.updatedAt,
+        state: { kind: "running" },
+        offered: false,
+        finishedSlot: null,
+      };
       deps.checkRuns.set(runKey, run);
       void runCheck(project, customValues(custom, project, null)).then((state) => {
         run.state = state;
+        // When it ended, not when it began: a check that runs for several intervals is still acted on.
+        run.finishedSlot = slotStampAt(ctx.clock?.() ?? new Date());
         return ctx.wake?.();
       });
       return [];
@@ -360,7 +373,10 @@ export function customAutomation(
         // Each item gets an agent of its own, so one going doesn't hold back the next slot.
         if (checkScript) {
           const previous = slotAt(new Date(slot.getTime() - 1));
-          return checkCandidates(ctx, project, stamp, previous ? localStamp(previous) : null);
+          return checkCandidates(ctx, project, stamp, previous ? localStamp(previous) : null, (at) => {
+            const due = slotAt(at);
+            return due ? localStamp(due) : null;
+          });
         }
         if (busy.has(project.id)) return [];
         return [

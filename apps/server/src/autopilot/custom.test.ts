@@ -1398,6 +1398,25 @@ describe("custom automations: an agent with a check script", () => {
     expect(agentRuns).toHaveLength(0);
   });
 
+  it("acts on a check that runs for several intervals, by the slot it ended in", async () => {
+    const releases: Array<() => void> = [];
+    const { pass, scriptRuns, agentRuns } = checkSetup(
+      () =>
+        new Promise<ScriptResult>((resolve) => {
+          releases.push(() => resolve(printed({ key: "long" })));
+        }),
+    );
+    await pass(SLOT);
+    await pass(2 * SLOT);
+    await pass(3 * SLOT);
+    expect(scriptRuns).toHaveLength(1);
+    // It ends during slot 3, two slots after the one it started in.
+    releases[0]!();
+    await tick();
+    await pass(3 * SLOT);
+    expect(agentRuns.map((r) => r.label)).toEqual(["Triage · long"]);
+  });
+
   it("drops output nobody read before the slot after its own, as after a pause", async () => {
     let n = 0;
     const { s, pass, scriptRuns, agentRuns } = checkSetup(() => printed({ key: `old${++n}` }));
