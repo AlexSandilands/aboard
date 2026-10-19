@@ -71,7 +71,7 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
  * tooltip names the branch; a click opens the same delivery popover as the panel's button.
  */
 export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className?: string }) {
-  if (epic.kind !== "epic" || !epic.integrationBranch) return null;
+  if (epic.kind !== "epic" || epic.archivedAt !== null || !epic.integrationBranch) return null;
   const label = `Delivery: integration branch ${epic.integrationBranch}`;
   return (
     <Popover>
@@ -79,7 +79,6 @@ export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className
         <TooltipTrigger
           render={
             <PopoverTrigger
-              aria-label={label}
               render={
                 <Badge
                   variant="info"

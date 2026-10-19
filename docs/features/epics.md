@@ -143,7 +143,7 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - `get_task` on an epic, and `epic_overview`, list its tasks by status with each one's summary line, live T3
   thread, latest note and newest activity: enough to monitor tasks however they were started. The epic's
   render explains that it has no plan instead of asking for one.
-- List lines mark epics `[epic]` with their roll-up (and `integration branch epic/…` when it has one), and tasks in one with `in epic #N`. `board_overview`
+- List lines mark epics `[epic]` with their roll-up (and `integration branch epic/â€¦` when it has one), and tasks in one with `in epic #N`. `board_overview`
   counts only tasks and lists open epics per project.
 
 ### Delivery
