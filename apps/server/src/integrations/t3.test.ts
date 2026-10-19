@@ -998,6 +998,20 @@ describe("T3 thread launch", () => {
       expect(gone.socket.sent).toEqual([]);
     });
 
+    it("never sends an image to another host than T3's", async () => {
+      const t3Uploads = uploads();
+      const elsewhere = (frame: SentFrame) =>
+        frame.tag === "attachments.createUploadUrl"
+          ? success(frame.id, { attachmentId: "p", relativeUrl: "//evil.example/upload", expiresAt: 0 })
+          : reply(frame);
+      const { t3, socket } = setup(elsewhere, "tok", t3Uploads.fetch, images());
+      await expect(t3.startThread("task-1", { ...LAUNCH, attachmentIds: [IMAGE_A] }, "user")).rejects.toThrow(
+        "Unexpected upload URL",
+      );
+      expect(t3Uploads.posts).toEqual([]);
+      expect(socket.sent.map((f) => f.tag)).not.toContain("orchestration.launchThread");
+    });
+
     it("leaves a project thread's images unclaimed, and makes a thread id when none was given", async () => {
       const { t3, socket, claimed } = setup(reply, "tok", uploads().fetch, images());
       await t3.startProjectThread("proj-acme", { ...LAUNCH, attachmentIds: [IMAGE_A] }, "Suggest epics: Acme");

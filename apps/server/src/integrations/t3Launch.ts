@@ -116,7 +116,7 @@ export const WireLaunchResult = z.object({ threadId: z.string().min(1) }).loose(
 
 /** Subset of T3's `attachments.createUploadUrl` result: a pending attachment and where to POST its bytes. */
 export const WireUploadUrl = z
-  .object({ attachmentId: z.string().min(1), relativeUrl: z.string().startsWith("/") })
+  .object({ attachmentId: z.string().min(1), relativeUrl: z.string().regex(/^\/(?![/\\])/) })
   .loose();
 
 // ── Pure mapping ─────────────────────────────────────────────────────────

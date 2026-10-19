@@ -729,9 +729,14 @@ export function createT3Integration(deps: {
       await rpc.request("attachments.createUploadUrl", { type: "image", ...meta }),
       "upload URL",
     );
+    // The bytes go to T3 itself only, whatever the answer says.
+    const target = new URL(url.relativeUrl, origin);
+    if (target.origin !== new URL(origin).origin) {
+      throw new AppError("VALIDATION", "Unexpected upload URL from T3 Code (its protocol may have changed)");
+    }
     let response: Response;
     try {
-      response = await fetchFn(new URL(url.relativeUrl, origin).toString(), {
+      response = await fetchFn(target.toString(), {
         method: "POST",
         headers: { "content-type": image.mime },
         body: bytes,
@@ -803,9 +808,16 @@ export function createT3Integration(deps: {
   ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
     const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`, taskId);
-    // The images now belong to the task: backed up and deleted with it, and listed by get_task.
-    if (input.attachmentIds?.length) deps.services().attachments.claimIds(taskId, input.attachmentIds);
     const link = deps.services().links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId } }, actor);
+    // The images now belong to the task: backed up and deleted with it, and listed by get_task. After the link, so a
+    // failure here can't leave a started thread unlinked; T3 has its own copy either way.
+    if (input.attachmentIds?.length) {
+      try {
+        deps.services().attachments.claimIds(taskId, input.attachmentIds);
+      } catch (error) {
+        log.warn(`[t3] couldn't give the launch's images to the task: ${messageOf(error)}`);
+      }
+    }
     void pollLive();
     return link;
   };
