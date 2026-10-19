@@ -28,7 +28,8 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
   `skills/aboard/` when the workflow changes (then `pnpm skill:embed`, which the installed copies sync from).
 - `dev` and `start` run through `tsx` (`tsx watch`, `node --import tsx`), because some code uses syntax Node's type
   stripping can't run (parameter properties). `dev` must not use `node --watch`: on NTFS it restarts when a
-  file is merely read, which kills Autopilot runs. `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app.
+  file is merely read, which kills Autopilot runs. `scripts/dev.ts` starts `tsx watch` with stdin ignored:
+  under `concurrently` on Windows, an inherited idle stdin pipe hangs the server before it listens. `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app.
 
 ## Tests
 

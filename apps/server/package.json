@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "dev": "node scripts/dev.ts",
     "start": "node --import tsx src/main.ts",
     "bundle": "node scripts/bundle.ts",
     "sandbox": "node --import tsx scripts/sandbox.ts",
