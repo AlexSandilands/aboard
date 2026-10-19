@@ -9,8 +9,10 @@ import { isStuck } from "./stuck.logic";
  * Going stuck shrinks the lane, which would shorten the board and, near its bottom, clamp the scroll position back
  * until the lane unsticks and grows again: a flicker. So the lane's footprint is kept while it is stuck: `spacerRef`
  * is an element after the lane whose height this hook sets to what the lane gave up, and the scroll position is put
- * back if the shorter board clamped it. Attach `sentinelRef`, `sectionRef` and `spacerRef`; `spacerRef` is only ever
- * styled here, so give it no `style`.
+ * back if the shorter board clamped it. The unstuck height can't be read while stuck (the cards are one line then), so
+ * it is the last one seen unstuck: tasks added or removed, or cells folded, while stuck leave the spacer off by the
+ * change until the lane unsticks, which moves the board's scroll extent a little. Attach `sentinelRef`, `sectionRef`
+ * and `spacerRef`; `spacerRef` is only ever styled here, so give it no `style`.
  */
 export function useStuck(pinned: boolean, headerRef: RefObject<HTMLElement | null>) {
   const sentinelRef = useRef<HTMLDivElement>(null);
