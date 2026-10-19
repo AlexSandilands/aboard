@@ -6,6 +6,7 @@ import {
   CreateCustomAutomationInput,
   ImportAutomationInput,
   parseAutomationBundle,
+  TestScriptInput,
   UpdateCustomAutomationInput,
   type CustomAction,
 } from "@repo/contracts";
@@ -36,6 +37,17 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
   app.get(
     "/api/autopilot/custom",
     handle((c) => c.json(custom.list())),
+  );
+  // Runs a draft script for real, so, like writing one, only the board's page may ask for it.
+  app.post(
+    "/api/autopilot/custom/test-script",
+    handle(async (c) => {
+      const input = await parseBody(c, TestScriptInput);
+      if (!c.req.header("origin")) {
+        throw new AppError("VALIDATION", "Test runs can only be started from the board's settings page");
+      }
+      return c.json(await custom.testScript(input));
+    }),
   );
   app.post(
     "/api/autopilot/custom",

@@ -500,6 +500,51 @@ export function parseCheckOutput(stdout: string): CheckOutput {
   return { ok: true, items, dropped };
 }
 
+// ── Test runs ───────────────────────────────────────────────────────────
+
+/** The most of a test run's stdout and stderr sent back for display. */
+export const TEST_OUTPUT_MAX = 50_000;
+
+/**
+ * A draft script run once, now, from the editor: really executed, in a project's folder, so it can do whatever it
+ * does when it runs for real. Nothing is saved or recorded.
+ */
+export const TestScriptInput = z.object({
+  /** The project whose folder it runs in. */
+  projectId: z.string().min(1),
+  script: CustomScript,
+  /** A check prints items for agents (and its first item is shown as the prompt it would start); an action acts. */
+  role: z.enum(["action", "check"]),
+  /** A task to give an action's values of, as when a task trigger fires; none runs it as a schedule would. */
+  taskId: z.string().min(1).nullable().default(null),
+  /** The automation's name and inputs (name to value), as the script gets them. */
+  name: z.string().trim().max(CUSTOM_NAME_MAX).default(""),
+  inputs: z.record(z.string(), z.string().max(CUSTOM_INPUT_VALUE_MAX)).default({}),
+  /** A check's agent: its prompt and skill, to show what its first item would start. */
+  prompt: z.string().max(CUSTOM_PROMPT_MAX).default(""),
+  skill: z.string().trim().max(200).default(""),
+});
+export type TestScriptInput = z.input<typeof TestScriptInput>;
+
+/** What a test run did. */
+export interface TestScriptResult {
+  /** Why it didn't run (no interpreter, no folder), or null when it ran. */
+  error: string | null;
+  /** Null when it timed out, was killed or never started. */
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  /** Cut to TEST_OUTPUT_MAX (the start of stdout, the end of stderr); `truncated` says so. */
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+  /**
+   * A check that exited 0: what it printed, read as the board reads it, and the prompt the first item would start.
+   * `problem` says why the output isn't a list of items.
+   */
+  items: { items: CheckItem[]; dropped: number; prompt: string | null } | { problem: string } | null;
+}
+
 export const prLinksOf = (task: Pick<TaskSummary, "links">): PrLink[] =>
   task.links.filter((l): l is PrLink => l.kind === "pr");
 

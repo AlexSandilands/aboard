@@ -10,18 +10,20 @@ import {
   describeScriptRun,
   describeShellRun,
   normalizeLabels,
+  TestScriptInput,
   type AutomationInputType,
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
-  type CustomScript,
   type CustomScriptLanguage,
   type CustomTrigger,
   type ModelTier,
   type Project,
   type TaskStatus,
   type TaskSummary,
+  type TestScriptInput as TestInput,
 } from "@repo/contracts";
+import { isStarter, scriptStarter, type ScriptRole } from "./scripts.logic";
 
 const NL = String.fromCharCode(10);
 
@@ -75,11 +77,15 @@ export interface CustomForm {
   allowedTools: string;
   inputs: FormInput[];
   slots: FormSlot[];
-  /** An agent's check script and whether its items are untrusted: not editable here yet, kept as they were. */
-  check: CustomScript | null;
+  /** An agent's check script (a schedule's only): whether it has one, and its language, body and timeout as typed. */
+  checkOn: boolean;
+  checkLanguage: CustomScriptLanguage;
+  checkBody: string;
+  checkTimeoutSeconds: string;
+  /** Whether the check's items are untrusted, so their agents run read-only. */
   untrustedItems: boolean;
   command: string;
-  /** A script action: not editable here yet, kept so saving the form leaves it as it was. */
+  /** A script action's language and body; `timeoutSeconds` is shared with a shell command's. */
   language: CustomScriptLanguage;
   body: string;
   timeoutSeconds: string;
@@ -134,10 +140,13 @@ export function emptyCustomForm(): CustomForm {
     allowedTools: "",
     inputs: [],
     slots: [],
-    check: null,
+    checkOn: false,
+    checkLanguage: "node",
+    checkBody: "",
+    checkTimeoutSeconds: "300",
     untrustedItems: true,
     command: "",
-    language: "sh",
+    language: "node",
     body: "",
     timeoutSeconds: "300",
   };
@@ -187,8 +196,15 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
         description,
         tools: tools.join("\n"),
       })),
-      check: a.check,
       untrustedItems: a.untrustedItems,
+      ...(a.check
+        ? {
+            checkOn: true,
+            checkLanguage: a.check.language,
+            checkBody: a.check.body,
+            checkTimeoutSeconds: String(a.check.timeoutSeconds),
+          }
+        : {}),
     });
   } else if (a.kind === "script") {
     Object.assign(form, { language: a.language, body: a.body, timeoutSeconds: String(a.timeoutSeconds) });
@@ -245,6 +261,12 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
   if (form.actionKind !== "agent" && timeoutSeconds === null) {
     return { ok: false, error: "Enter a timeout in seconds, a whole number" };
   }
+  // Only a schedule has a check, and the section is hidden for the others, so what was typed there is left out.
+  const checking = form.actionKind === "agent" && form.triggerKind === "schedule" && form.checkOn;
+  const checkTimeout = wholeNumber(form.checkTimeoutSeconds);
+  if (checking && checkTimeout === null) {
+    return { ok: false, error: "Enter the check's timeout in seconds, a whole number" };
+  }
   let labels: string[];
   try {
     labels = normalizeLabels(form.labels.split(",").filter((l) => l.trim()));
@@ -267,7 +289,9 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             allowedTools: parseAllowedTools(form.allowedTools),
             inputs: form.inputs,
             slots: form.slots.map((slot) => ({ ...slot, tools: parseAllowedTools(slot.tools) })),
-            check: form.check,
+            check: checking
+              ? { language: form.checkLanguage, body: form.checkBody, timeoutSeconds: checkTimeout }
+              : null,
             untrustedItems: form.untrustedItems,
           }
         : form.actionKind === "script"
@@ -291,6 +315,10 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
       if (typeof n === "number") return { ok: false, error: `${what} ${n + 1}: ${issue.message}` };
     }
     const field = String(issue.path[issue.path.length - 1] ?? issue.path[0] ?? "");
+    if (issue.path.includes("check")) {
+      if (field === "body") return { ok: false, error: "Write the check script, or switch the check off" };
+      if (field === "timeoutSeconds") return { ok: false, error: "The check's timeout is 1 to 3600 seconds" };
+    }
     const what: Record<string, string> = {
       name: "Give it a name",
       prompt: "Write the prompt the agent starts with",
@@ -298,11 +326,68 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
       days: "Pick at least one weekday",
       time: "Use a time like 09:00",
       timeoutSeconds: "The timeout is 1 to 3600 seconds",
+      body: "Write the script to run",
     };
     return { ok: false, error: what[field] ?? issue.message };
   }
   const problem = checkCustomDefinition(parsed.data);
   return problem ? { ok: false, error: problem } : { ok: true, input: parsed.data };
+}
+
+/** The form with another kind of action picked: a script with nothing written yet starts from its language's starter. */
+export function withActionKind(form: CustomForm, actionKind: CustomForm["actionKind"]): CustomForm {
+  const seed = actionKind === "script" && form.body.trim() === "";
+  return { ...form, actionKind, ...(seed ? { body: scriptStarter(form.language, "action") } : {}) };
+}
+
+/** The form with the check switched on or off: switching it on with nothing written starts from the starter. */
+export function withCheck(form: CustomForm, checkOn: boolean): CustomForm {
+  const seed = checkOn && form.checkBody.trim() === "";
+  return { ...form, checkOn, ...(seed ? { checkBody: scriptStarter(form.checkLanguage, "check") } : {}) };
+}
+
+/**
+ * The form with a script's language changed. Text the user hasn't touched (still some language's starter) follows the
+ * language, so the example matches; anything they wrote is left as it is.
+ */
+export function withLanguage(form: CustomForm, role: ScriptRole, language: CustomScriptLanguage): CustomForm {
+  if (role === "check") {
+    const checkBody = isStarter(form.checkBody, "check") ? scriptStarter(language, "check") : form.checkBody;
+    return { ...form, checkLanguage: language, checkBody };
+  }
+  return { ...form, language, body: isStarter(form.body, "action") ? scriptStarter(language, "action") : form.body };
+}
+
+/**
+ * What a test run of the form's action script (or check) sends: the script as typed, and what the run needs to read
+ * the way a real one would. A task, for an action only, gives it that task's values.
+ */
+export function testScriptRequest(
+  form: CustomForm,
+  role: ScriptRole,
+  projectId: string,
+  taskId: string | null = null,
+): { ok: true; input: TestInput } | { ok: false; error: string } {
+  const check = role === "check";
+  const timeout = wholeNumber(check ? form.checkTimeoutSeconds : form.timeoutSeconds);
+  if (timeout === null) return { ok: false, error: "Enter a timeout in seconds, a whole number" };
+  const parsed = TestScriptInput.safeParse({
+    projectId,
+    role,
+    taskId: check ? null : taskId,
+    name: form.name,
+    inputs: Object.fromEntries(form.inputs.filter((i) => i.name).map((i) => [i.name, i.value])),
+    prompt: check ? form.prompt : "",
+    skill: check ? form.skill : "",
+    script: check
+      ? { language: form.checkLanguage, body: form.checkBody, timeoutSeconds: timeout }
+      : { language: form.language, body: form.body, timeoutSeconds: timeout },
+  });
+  if (parsed.success) return { ok: true, input: parsed.data };
+  const issue = parsed.error.issues[0]!;
+  if (issue.path.at(-1) === "body") return { ok: false, error: "Write the script first" };
+  if (issue.path.at(-1) === "timeoutSeconds") return { ok: false, error: "The timeout is 1 to 3600 seconds" };
+  return { ok: false, error: issue.message };
 }
 
 export const blankInput = (): FormInput => ({ name: "", label: "", type: "text", value: "", default: "" });
@@ -320,6 +405,21 @@ export function sampleTask(input: Pick<CreateInput, "filters">, tasks: readonly 
       (filters.projectIds.length === 0 || filters.projectIds.includes(t.projectId)) && customTaskMatches(filters, t),
   );
   return [...fits].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+}
+
+/**
+ * The sample task for what the form says so far, even while it can't be saved yet (a script being written has no valid
+ * body): a test run of a task-triggered script is given it. None for a schedule, which has no task.
+ */
+export function formSampleTask(form: CustomForm, tasks: readonly TaskSummary[]): TaskSummary | null {
+  if (form.triggerKind === "schedule") return null;
+  let labels: string[] = [];
+  try {
+    labels = normalizeLabels(form.labels.split(",").filter((l) => l.trim()));
+  } catch {
+    // Labels typed so far that don't parse narrow nothing: the preview and save report them.
+  }
+  return sampleTask({ filters: { projectIds: form.projectIds, labels, epicId: form.epicId || null } }, tasks);
 }
 
 /**

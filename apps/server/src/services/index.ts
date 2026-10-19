@@ -112,9 +112,12 @@ export function createServices(deps: ServiceDeps): Services {
 
   const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
   restartRecurring = (ids) => recurring.restart(ids);
-  const customAutomations = createCustomAutomationsService(core);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
+  const customAutomations = createCustomAutomationsService(core, {
+    runScript: runScriptFile,
+    taskSummary: (id) => tasks.service.summary(id),
+  });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();
   // Read on every call, so a custom automation's edit applies from the next pass.
