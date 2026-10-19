@@ -12,6 +12,7 @@ import { useTestScript } from "~/state/customAutomations";
 import { testScriptRequest, withLanguage, type CustomForm } from "./customAutomations.logic";
 import { Choice, Field } from "./FormFields";
 import { ScriptEditor } from "./ScriptEditor";
+import { SdkPanel } from "./SdkPanel";
 import {
   itemsSummary,
   languageOfFile,
@@ -136,6 +137,7 @@ export function ScriptField({
             : "The context arrives as JSON on stdin and as environment variables."}{" "}
           Press Esc, then Tab, to leave the editor.
         </span>
+        <SdkPanel language={language} scriptRole={kind} />
       </div>
 
       <Field label="Timeout (seconds)" hint="It is stopped after this long, and the run fails.">

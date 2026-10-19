@@ -30,6 +30,7 @@ export * from "./recurring.ts";
 export * from "./automationVariables.ts";
 export * from "./customAutomations.ts";
 export * from "./automationBundle.ts";
+export * from "./automationSdk.ts";
 export * from "./automationExamples.ts";
 export * from "./digest.ts";
 export * from "./stats.ts";

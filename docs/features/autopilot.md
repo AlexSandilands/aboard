@@ -813,7 +813,7 @@ the automation. Runs stay, under the old key.
   off Windows; `python`, then `py -3`, on it); `powershell` is `pwsh`, else Windows PowerShell; `sh` is `sh` on the
   PATH. The interpreter is looked up on the PATH before anything starts, so a missing one fails the run with
   "python not found on PATH" (and flags the task) rather than a spawn error. The context goes to stdin as JSON
-  (`customScriptContext`: `automation`, `project` with `id`, `name` and `path`, `inputs`, `task` and `pr`, null when the
+  (`customScriptContext`: `automation`, `project` with `id`, `name`, `path` and `repoUrl`, `inputs`, `vars`, `task` and `pr`, null when the
   trigger has none), with non-ASCII characters escaped so every runtime reads it the same. The result keeps `stdout`
   (the first `STDOUT_MAX` characters) and `stderr` apart for a caller that parses what the script printed; the run
   gets the interleaved tail and exit code as for a shell action. A `{{…}}` in a body that names a placeholder is
@@ -834,13 +834,14 @@ the automation. Runs stay, under the old key.
 
 #### Inputs and required tool slots
 
-An agent action carries `inputs` and `slots` (`AutomationInput`, `AutomationSlot` in contracts), both empty by default,
-so rows saved before them still parse.
+Every action carries `inputs`, and an agent action `slots` too (`AutomationInput`, `AutomationSlot` in contracts), both
+empty by default, so rows saved before them still parse (#238 added inputs to shell and script actions).
 
-- **Inputs** are `{name, label, type: text | number | boolean, default, value}`. The prompt reads `{{inputs.<name>}}`
-  (`renderCustomPrompt` with `CustomValues.inputs`), for declared names only. A value is data: it isn't filled in again,
-  so one that looks like `{{task.title}}` stays as written. `checkCustomDefinition` refuses an undeclared
-  `{{inputs.x}}`, repeated names and a value that doesn't fit its type (`inputValueProblem`).
+- **Inputs** are `{name, label, type: text | number | boolean, default, value}`. A prompt reads `{{inputs.<name>}}`
+  (`renderCustomPrompt` with `CustomValues.inputs`), for declared names only; every action kind, checks included, also
+  gets each as `<PREFIX>_INPUT_<NAME>` (`inputEnvName`) and in stdin's `inputs`. A value is data: it isn't filled in
+  again, so one that looks like `{{task.title}}` stays as written. `checkCustomDefinition` refuses an undeclared
+  `{{inputs.x}}`, repeated names and a value that doesn't fit its type (`inputValueProblem`), for every kind.
 - **Slots** are `{name, label, description, tools}`; `tools` follow the `allowedTools` rules. `customAllowedTools` is
   the allowed tools and every slot's tools together, which is what `act` passes as `RunnerRequest.tools` and what the
   dry-run note lists. `customAgentPrompt` adds a "Tools to use for this" line per *filled* slot after the prompt.
@@ -849,6 +850,41 @@ so rows saved before them still parse.
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
   finds nothing meanwhile, so emptying a slot of one that is already on stops it rather than starting an agent without
   its tools. Inherit and Off are unaffected.
+
+#### Variables and the repository URL
+
+Named values an automation reads instead of branching on the project (#238): a Jira key, a team, a board id.
+`AutomationVariable` is `{name, value}` (names follow the input rule, values are plain text up to 2,000 characters, at
+most 50 per list; `automationVariables.ts` in contracts).
+
+- **Where they live.** The board's are the `automationVariables` setting (`PATCH /api/settings`, edited under **Settings →
+  Autopilot → Custom automations → Variables**); a project's overrides are `projects.variables_json` (migration 036,
+  `PATCH /api/projects/:id` with `variables`, edited under the project's Autopilot overrides). `effectiveVariables` lays
+  the project's over the board's. Both writes publish `autopilot.changed`, since a row's "Needs" line depends on them.
+- **How they are read.** A prompt reads `{{vars.<name>}}`; a command, script or check reads `<PREFIX>_VAR_<NAME>`
+  (`variableEnvName`) or stdin's `vars`. Like inputs they are filled in once and never read again for placeholders, and
+  a `{{vars.x}}` in a command or script body is refused like any placeholder.
+- **A missing value skips the project.** `variablesNamedBy(action)` lists the names an action needs: the prompt's
+  `{{vars.x}}`, and, best effort, `vars.x`, `vars["x"]` (also `["vars"]["x"]`) and `<PREFIX>_VAR_X` in a check, script or
+  command. A method call such as `vars.get("x")` reads one as optional and isn't counted, and a name built at run time
+  isn't seen. A variable has a value when it is set and not blank, so a project can opt out by overriding one with
+  nothing. The custom automation's `check` drops every project missing one (`missingVariables`): no candidate, no run,
+  no check script. In a dry run it records one skipped run per project and set of names (`needs:<project>:<names>`)
+  saying "Needs `jira_key` in billing". The catalogue entry has `Automation.needs(projects)`, which the overview calls
+  with the projects the automation is on in (directly or through an epic) to give `AutopilotAutomation.needs`, "Needs
+  `jira_key` in: billing", shown in orange on its rows (`NeedsVariablesWarning`). Unlike `blocked`, it doesn't stop the
+  automation being switched on: the other projects still run it.
+- **Repository URL.** `{{project.repo_url}}`, `<PREFIX>_PROJECT_REPO_URL` and stdin's `project.repoUrl` hold
+  `https://<host>/<repo>` from the project folder's `origin` (`repoWebUrl` over `remoteRepo` in
+  `integrations/gitRemote.ts`, credentials dropped). `createRepoUrls` runs `git remote get-url origin` through the
+  services' `runGit`, cached per folder for 10 minutes, and gives "" when there is no folder, no repository or no
+  origin; it never blocks a run. `check` resolves it for the projects in scope (so previews show it) and `act` again for
+  its own project, as `CustomScope.repoUrl`, the fifth argument of `customValues` beside `vars`. The test run gets both.
+- **The editor and import page** list the variables the action reads with the projects that have no value for each
+  (`variableNeeds` in `variables.logic.ts`). The preview fills the sample project's variables and shows the repository
+  URL as a placeholder (the browser can't read `origin`). A bundle never carries values (they are the sharer's); the
+  import page derives the names from the file's action.
+- **Not secrets.** Values show in dry runs, previews, run details and backups, so the editors say to keep tokens out.
 
 #### Check scripts
 
@@ -929,6 +965,12 @@ script** beside **Start an agent** and **Run a command**, and an agent's check. 
   to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
   the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
 - The timeout, and the **test run** below.
+- **What it can read** (`SdkPanel`), folded under the editor (and under a command, in PowerShell on Windows and sh
+  elsewhere): every value with its environment variable and stdin path (`AUTOMATION_SDK_SCOPE`), the rules on exit codes
+  and output (`AUTOMATION_SDK_RULES`), and snippets for the language and role with Copy (`AUTOMATION_SDK_SNIPPETS`).
+  The text is in contracts (`automationSdk.ts`) so the authoring skill can quote it; a test checks that the snippets'
+  variable reads are what `variablesNamedBy` finds. The starters read `project`, `vars` and `inputs` without naming a
+  variable, so starting from one never makes an automation need one.
 
 #### Test runs
 
@@ -954,7 +996,7 @@ row, no event.
 
 An automation is shared as a versioned JSON file, an `AutomationBundle` (`packages/contracts/src/automationBundle.ts`,
 `format: "<brand id>.automation"`, `version: 1`, or `2` for a file that carries a script). It holds the name, description,
-trigger, the filters' labels only, the action, the declared inputs (`{name, label, type, default}`), the declared slots (`{name, label, description}`) and
+trigger, the filters' labels only, the action, the declared inputs of any action kind (`{name, label, type, default}`), an agent's declared slots (`{name, label, description}`) and
 optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
 importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
@@ -1253,6 +1295,11 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
 | `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
+| `packages/contracts/src/automationVariables.ts` | Variables: the schema and `effectiveVariables` |
+| `packages/contracts/src/automationSdk.ts` | What a script can read, and the snippets the editor's panel shows |
+| `apps/server/src/integrations/gitRemote.ts` | `remoteRepo`, `repoWebUrl` and the cached repository URL per folder |
+| `apps/server/src/db/migrations/036_project_variables.sql` | `projects.variables_json`, a project's variable overrides |
+| `apps/web/src/components/autopilot/VariablesEditor.tsx`, `VariablesSection.tsx`, `variables.logic.ts`, `SdkPanel.tsx` | The variables editors, the "Variables it reads" list and the SDK panel |
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |

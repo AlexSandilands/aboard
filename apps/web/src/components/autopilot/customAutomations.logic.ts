@@ -9,9 +9,11 @@ import {
   customValues,
   describeScriptRun,
   describeShellRun,
+  effectiveVariables,
   normalizeLabels,
   TestScriptInput,
   type AutomationInputType,
+  type AutomationVariable,
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
@@ -422,14 +424,19 @@ export function formSampleTask(form: CustomForm, tasks: readonly TaskSummary[]):
   return sampleTask({ filters: { projectIds: form.projectIds, labels, epicId: form.epicId || null } }, tasks);
 }
 
+/** What the preview shows for the repository URL, which the server reads from the folder's `origin` when it runs. */
+export const PREVIEW_REPO_URL = "<the folder's origin, read when it runs>";
+
 /**
  * What the action would run for the sample task (or, for a schedule, the first project in scope): the filled prompt,
- * or the command with its variables. The task's description isn't on the board, so the preview leaves it out.
+ * or the command with its variables, with that project's variables. The task's description isn't on the board, so
+ * the preview leaves it out.
  */
 export function previewAction(
   input: CreateInput,
   task: TaskSummary | null,
   projects: readonly Project[],
+  boardVariables: readonly AutomationVariable[] = [],
 ): string | null {
   const project =
     projects.find((p) => p.id === task?.projectId) ??
@@ -438,7 +445,16 @@ export function previewAction(
     null;
   const def = CreateCustomAutomationInput.parse(input);
   const scheduled = input.trigger.kind === "schedule";
-  const values = customValues(def, project, scheduled ? null : task);
+  const values = customValues(
+    def,
+    project,
+    scheduled ? null : task,
+    {},
+    {
+      vars: effectiveVariables(boardVariables, project),
+      repoUrl: project?.workspaceRoot ? PREVIEW_REPO_URL : "",
+    },
+  );
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
   if (def.action.kind === "script") return describeScriptRun(def.action, values);
   if (!scheduled && !task) return null;

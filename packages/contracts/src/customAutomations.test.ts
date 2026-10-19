@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AUTOMATION_SDK_SCOPE, AUTOMATION_SDK_SNIPPETS } from "./automationSdk.ts";
 import { AutomationVariables, effectiveVariables } from "./automationVariables.ts";
 import { brandEnv } from "./brand.ts";
 import { nextPrChanges, type PrSnapshot } from "./schemas.ts";
@@ -11,6 +12,7 @@ import {
   customAllowedTools,
   CustomAction,
   customBlockedReason,
+  CUSTOM_PLACEHOLDERS,
   CUSTOM_SCRIPT_MAX,
   customScriptContext,
   CUSTOM_TOOLS_MAX,
@@ -655,5 +657,20 @@ describe("inputs on shell and script actions", () => {
     expect(checkCustomDefinition({ trigger, filters, action: bad })).toMatch(/Days: enter a number/);
     const ok = CustomAction.parse({ kind: "script", language: "sh", body: "x", inputs: [input] });
     expect(customValues({ name: "n", action: ok }, null, null).inputs).toEqual({ days: "7" });
+  });
+});
+
+describe("the SDK panel's text", () => {
+  it("names every placeholder, and its snippets read only names a script really gets", () => {
+    for (const p of CUSTOM_PLACEHOLDERS) {
+      expect(AUTOMATION_SDK_SCOPE.find((v) => v.prompt === `{{${p.key}}}`)?.stdin).toBeTruthy();
+    }
+    for (const snippets of Object.values(AUTOMATION_SDK_SNIPPETS)) {
+      expect(snippets.some((s) => s.roles.includes("check"))).toBe(true);
+      // The variables a snippet reads are the ones variablesNamedBy finds: optional reads aren't counted.
+      const all = snippets.map((s) => s.code).join("\n");
+      expect(variablesNamedBy(CustomAction.parse({ kind: "shell", command: all }))).toEqual(["jira_key"]);
+    }
+    expect(AUTOMATION_SDK_SNIPPETS.sh.map((s) => s.code).join("\n")).toContain(`${brandEnv("INPUT_DAYS")}:-7}`);
   });
 });

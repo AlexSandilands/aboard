@@ -23,8 +23,9 @@ and keeps to the same pause, dry run, caps and quiet hours.
    for every task.
 3. **Do**: one of these.
    - **Start an agent** on the task, with your prompt. The prompt can name `{{task.number}}`, `{{task.title}}`,
-     `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}` and
-     `{{automation.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
+     `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}`,
+     `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
+     [inputs](#inputs-and-required-tools) as `{{inputs.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
      skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
@@ -52,7 +53,8 @@ and keeps to the same pause, dry run, caps and quiet hours.
      what: [Check scripts](#check-scripts).
    - **Run a command** in the project's folder, with a timeout. The command is never filled in. It reads the task
      from environment variables instead: `ABOARD_TASK_NUMBER`, `ABOARD_TASK_TITLE`, `ABOARD_TASK_ID`,
-     `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH` and `ABOARD_AUTOMATION`.
+     `ABOARD_TASK_STATUS`, `ABOARD_PR_URL`, `ABOARD_PROJECT_NAME`, `ABOARD_PROJECT_PATH`, `ABOARD_PROJECT_REPO_URL` and `ABOARD_AUTOMATION`, plus
+     `ABOARD_VAR_<NAME>` for each variable and `ABOARD_INPUT_<NAME>` for each input.
      So a task title can't change your command line, even if it contains quotes, `;` or `&`. Commands run in `sh`,
      or in Windows PowerShell on Windows: read a value as `"$ABOARD_TASK_TITLE"` in sh and `$env:ABOARD_TASK_TITLE`
      in PowerShell. (Not cmd.exe: it fills `%VAR%` in before reading the line, so a title could add a command.)
@@ -113,14 +115,22 @@ run.
   ```json
   {
     "automation": "Review repo PRs",
-    "project": { "id": "…", "name": "aboard", "path": "C:/Code/aboard" },
+    "project": {
+      "id": "…",
+      "name": "aboard",
+      "path": "C:/Code/aboard",
+      "repoUrl": "https://github.com/acme/aboard"
+    },
     "inputs": { "trusted_logins": "octocat", "max_rounds": "3" },
+    "vars": { "jira_key": "PROJ" },
     "task": null,
     "pr": null
   }
   ```
 
-  `inputs` holds your [inputs](#inputs-and-required-tools) as text, keyed by name. `task` and `pr` are filled when
+  `inputs` holds your [inputs](#inputs-and-required-tools) as text, keyed by name, and `vars` the project's
+  [variables](#variables). `repoUrl` is the repository the project folder's `origin` points at (empty without one).
+  `task` and `pr` are filled when
   the trigger has them (a schedule has neither). The same values are also in `ABOARD_*` environment variables, which is
   the way to read them in sh. Nothing is ever filled into the script's text: a `{{…}}` that names a placeholder is
   refused when you save, so a task title can't change your code.
@@ -128,7 +138,9 @@ run.
   a [check script](#check-scripts) prints its answer on stdout and keeps stderr for you: when a check fails, what it
   wrote there is kept with the run.
 
-The editor has a code editor with a starter for each language, **Load from file**, and a **Test run**. A test run
+The editor has a code editor with a starter for each language, **Load from file**, **What it can read, with
+examples** (every value, its environment variable and where it is in the JSON, with snippets to copy in the language
+you picked), and a **Test run**. A test run
 **really runs** the script, now, in a project you pick, with the real environment: a script that approves a pull
 request approves it. The editor asks for a second click that names the project.
 
@@ -189,13 +201,52 @@ not start, steer or retry other agents, or merge. It can't be combined with allo
 Turn it off only when the agent has to reach outside, such as running `gh` to read a diff and post a review, and
 everyone who can write the text it reads is someone you trust. The editor warns, and so does the import page.
 
+## Variables
+
+Variables are values your automations read that differ by project, so one automation works everywhere without
+branching on the project's name: a Jira key, a team, a board id. Set them for every project under **Settings →
+Autopilot → Custom automations → Variables**, and override them for one project in its settings (**Autopilot
+overrides → Automation variables**), where you also see the board's value each override replaces.
+
+| Where           | How to read `jira_key`                                                   |
+| --------------- | ------------------------------------------------------------------------ |
+| A prompt        | `{{vars.jira_key}}`                                                      |
+| A command       | `$ABOARD_VAR_JIRA_KEY` in sh, `$env:ABOARD_VAR_JIRA_KEY` in PowerShell   |
+| A script        | `vars` in the JSON on stdin (`ctx["vars"]["jira_key"]`), or the variable |
+
+For example, a Python script that greets the project it runs in:
+
+```python
+import json, sys
+
+ctx = json.load(sys.stdin)
+print(f"Hello world, this is running in {ctx['project']['name']}")
+print("Jira project:", ctx["vars"]["jira_key"])
+```
+
+- **An automation that needs a variable doesn't run where it has none.** If a prompt, command or script names a
+  variable (as above) and a project has no value for it, that project gets no run. Its row says so in orange, "Needs
+  `jira_key` in: billing", and a dry run records the same. A project can opt out of one by overriding it with an empty
+  value. To read a variable as optional, use `ctx["vars"].get("team", "")` in Python (or check the environment
+  variable yourself): a name the board doesn't see isn't required. The editor lists the variables it found under
+  **Variables it reads**, with the projects that have no value.
+- **The repository URL** needs no variable: `{{project.repo_url}}`, `$ABOARD_PROJECT_REPO_URL` and `project.repoUrl`
+  on stdin hold `https://github.com/<owner>/<repo>`, read from the project folder's `origin`. It is empty for a project
+  with no folder or no `origin`, and never stops a run.
+- **Not for secrets.** Values are plain text and show in dry runs, previews, run details and backups. Keep tokens in
+  your own environment or a credential store.
+- A shared file never carries your variables' values; importing one lists the variables it reads and where they are
+  missing.
+
 ## Inputs and required tools
 
-An agent action can declare **Inputs** and **Required tools**, so one prompt works for whoever uses it.
+An agent action can declare **Inputs** and **Required tools**, so one prompt works for whoever uses it. A command or
+script can declare inputs too.
 
 - An **input** is a named value (text, a number or yes / no) that the prompt reads as `{{inputs.name}}`: a JQL query,
-  a look-back in days, whether to ask for approval. Each has a label and a value. Change the value in the editor
-  instead of the prompt.
+  a look-back in days, whether to ask for approval. A command or script reads it as `ABOARD_INPUT_<NAME>`
+  (`$ABOARD_INPUT_LOOK_BACK`), or a script from `inputs` on stdin. Each has a label and a value. Change the value in
+  the editor instead of the prompt or the code. Unlike a variable, an input is the same in every project.
 - A **required tool** is a slot for a kind of tool the automation needs but can't name, since people use different MCP
   servers: "Jira tools", say, for searching issues. You fill the slot with tools of your own servers, one per line, as
   for **Allowed tools**. They are allowed to the agent like any allowed tool, and the prompt is told which tools

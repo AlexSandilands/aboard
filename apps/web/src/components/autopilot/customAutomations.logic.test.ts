@@ -7,6 +7,7 @@ import {
   formFromCustom,
   formSampleTask,
   previewAction,
+  PREVIEW_REPO_URL,
   sampleTask,
   testScriptRequest,
   withActionKind,
@@ -543,5 +544,24 @@ describe("preview", () => {
     expect(scheduled).toContain("Check on Alpha");
     expect(scheduled).toContain("Project folder: /work/alpha");
     expect(scheduled).not.toContain("get_task");
+  });
+});
+
+describe("the preview with variables", () => {
+  it("fills the sample project's variables over the board's, and shows where the repository URL comes from", () => {
+    const billing = {
+      id: "p1",
+      title: "billing",
+      workspaceRoot: "/work/billing",
+      variables: [{ name: "jira_key", value: "BILL" }],
+    } as Project;
+    const input = {
+      name: "Hello",
+      trigger: { kind: "schedule" as const, schedule: { kind: "hourly" as const, everyHours: 1 } },
+      action: { kind: "agent" as const, prompt: "{{vars.jira_key}} {{vars.team}} {{project.repo_url}}" },
+    };
+    expect(previewAction(input, null, [billing], [{ name: "team", value: "core" }])).toContain(
+      `BILL core ${PREVIEW_REPO_URL}`,
+    );
   });
 });

@@ -56,28 +56,34 @@ const ACTION_NOTE = [
   "Runs in the project's folder. A non-zero exit fails the run, and what it prints is kept with it.",
 ];
 
-const CONTEXT_NOTE = `The context arrives as JSON on stdin: { automation, project: { id, name, path }, inputs, task, pr }.`;
+const CONTEXT_NOTE = [
+  "The context arrives as JSON on stdin: { automation, project: { id, name, path, repoUrl }, inputs, vars, task, pr }.",
+  "vars are the project's variables (Settings › Autopilot). Reading one by name means it won't run where that has no value.",
+];
 
 const lines = (...parts: string[]) => `${parts.join("\n")}\n`;
 const commented = (prefix: string, text: readonly string[]) => text.map((t) => `${prefix} ${t}`);
 
 /** A starting script for a language: reads the stdin context and, for a check, prints JSON lines. */
 export function scriptStarter(language: CustomScriptLanguage, role: ScriptRole): string {
-  const note = [...(role === "check" ? CHECK_NOTE : ACTION_NOTE), CONTEXT_NOTE];
+  const note = [...(role === "check" ? CHECK_NOTE : ACTION_NOTE), ...CONTEXT_NOTE];
   switch (language) {
     case "node":
       return lines(
         ...commented("//", note),
-        `const context = JSON.parse(require("node:fs").readFileSync(0, "utf8"));`,
+        `const { project, vars, inputs } = JSON.parse(require("node:fs").readFileSync(0, "utf8"));`,
         "",
         ...(role === "check"
           ? [
               "const items = [",
-              `  { key: "example-1", title: \`Something to look at in \${context.project.name}\` },`,
+              `  { key: "example-1", title: \`Something to look at in \${project.name}\` },`,
               "];",
               "for (const item of items) console.log(JSON.stringify(item));",
             ]
-          : ["console.log(`Ran in ${context.project.name}`);"]),
+          : [
+              'console.log(`Hello world, this is running in ${project.name} (${project.repoUrl || "no origin"})`);',
+              `console.log("Variables:", vars, "Inputs:", inputs);`,
+            ]),
       );
     case "python":
       return lines(
@@ -86,16 +92,20 @@ export function scriptStarter(language: CustomScriptLanguage, role: ScriptRole):
         "import sys",
         "",
         "context = json.load(sys.stdin)",
+        `project, variables, inputs = context["project"], context["vars"], context["inputs"]`,
         "",
         ...(role === "check"
           ? [
               "items = [",
-              `    {"key": "example-1", "title": f"Something to look at in {context['project']['name']}"},`,
+              `    {"key": "example-1", "title": f"Something to look at in {project['name']}"},`,
               "]",
               "for item in items:",
               "    print(json.dumps(item))",
             ]
-          : [`print(f"Ran in {context['project']['name']}")`]),
+          : [
+              `print(f"Hello world, this is running in {project['name']} ({project['repoUrl'] or 'no origin'})")`,
+              `print("Variables:", variables, "Inputs:", inputs)`,
+            ]),
       );
     case "powershell":
       return lines(
@@ -109,18 +119,22 @@ export function scriptStarter(language: CustomScriptLanguage, role: ScriptRole):
               ")",
               "foreach ($item in $items) { $item | ConvertTo-Json -Compress }",
             ]
-          : [`Write-Output "Ran in $($context.project.name)"`]),
+          : [
+              `Write-Output "Hello world, this is running in $($context.project.name) ($($context.project.repoUrl))"`,
+              `Write-Output "Variables: $($context.vars | ConvertTo-Json -Compress) Inputs: $($context.inputs | ConvertTo-Json -Compress)"`,
+            ]),
       );
     case "sh":
       return lines(
         ...commented("#", [
           ...(role === "check" ? CHECK_NOTE : ACTION_NOTE),
-          `sh can't parse JSON: read the values from the environment ($${ENV("PROJECT_NAME")}, $${ENV("PROJECT_PATH")}, $${ENV("TASK_NUMBER")}...), or pipe stdin to jq if you have it.`,
+          `sh can't parse JSON: read the values from the environment ($${ENV("PROJECT_NAME")}, $${ENV("PROJECT_REPO_URL")}, $${ENV("TASK_NUMBER")}...), or pipe stdin to jq if you have it.`,
+          `Each variable is $${ENV("VAR_<NAME>")} and each input $${ENV("INPUT_<NAME>")}; naming a variable means it won't run where it has no value.`,
         ]),
         "",
         ...(role === "check"
           ? [`printf '{"key":"example-1","title":"Something to look at in %s"}\\n' "$${ENV("PROJECT_NAME")}"`]
-          : [`echo "Ran in $${ENV("PROJECT_NAME")}"`]),
+          : [`echo "Hello world, this is running in $${ENV("PROJECT_NAME")}"`]),
       );
   }
 }

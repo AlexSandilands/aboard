@@ -2,6 +2,7 @@ import type { Project } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
 import { ProjectAutopilotSection } from "~/components/autopilot/AutopilotSettingsSection";
+import { ProjectVariablesSection } from "~/components/autopilot/VariablesSection";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { RecurringSection } from "~/components/recurring/RecurringSection";
@@ -268,6 +269,7 @@ function ProjectSections({ project }: { project: Project }) {
       </SettingsSubsection>
       <SettingsSubsection id="project.autopilot">
         <ProjectAutopilotSection projectId={project.id} />
+        <ProjectVariablesSection project={project} />
       </SettingsSubsection>
       <SettingsSubsection id="project.recurring">
         <RecurringSection project={project} />

@@ -6,8 +6,11 @@ import {
   CUSTOM_PLACEHOLDERS,
   CUSTOM_PROMPT_MAX,
   customAutomationKey,
+  CustomAction,
   customEnvName,
+  inputEnvName,
   MODEL_TIERS,
+  variableEnvName,
 } from "@repo/contracts";
 import { useState } from "react";
 import { WEEKDAYS } from "~/components/recurring/recurring.logic";
@@ -19,7 +22,7 @@ import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/customAutomations";
-import { useBoard } from "~/state/queries";
+import { useBoard, useSettings } from "~/state/queries";
 import {
   customFormToInput,
   emptyFormSlots,
@@ -39,6 +42,14 @@ import { BlockedWarning, InputsField, SlotsField } from "./InputsAndSlots";
 import { RunHistoryLink } from "./RunHistoryLink";
 import { ScriptField } from "./ScriptField";
 import { ScriptWarning } from "./ScriptWarning";
+import { SdkPanel } from "./SdkPanel";
+import { VariableNeedsList } from "./VariablesEditor";
+import { variableNeeds } from "./variables.logic";
+
+/** The shell a command runs in here, for the examples: PowerShell on Windows, sh elsewhere. */
+const COMMAND_SHELL = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent) ? "powershell" : "sh";
+
+const INPUTS_FOR_CODE_HINT = `Optional. Values it reads as ${inputEnvName("<name>")} (or inputs on stdin, for a script), declared so whoever imports a shared file fills them in without editing the code.`;
 
 /**
  * The body of the custom automation editor: trigger, filters, action and a preview of what it would run for a task
@@ -75,7 +86,16 @@ export function CustomAutomationEditorForm({
   const checking = isSchedule && form.actionKind === "agent" && form.checkOn;
   const result = customFormToInput(form);
   const sample = result.ok && !isSchedule ? sampleTask(result.input, board?.tasks ?? []) : null;
-  const preview = result.ok ? previewAction(result.input, sample, projects) : null;
+  const boardVariables = useSettings().data?.automationVariables ?? [];
+  const preview = result.ok ? previewAction(result.input, sample, projects, boardVariables) : null;
+  // The variables the action reads, and the projects it could run in that have no value for each.
+  const needs = result.ok
+    ? variableNeeds(
+        CustomAction.parse(result.input.action),
+        boardVariables,
+        projects.filter((p) => form.projectIds.length === 0 || form.projectIds.includes(p.id)),
+      )
+    : [];
 
   const save = () => {
     if (!result.ok) {
@@ -320,6 +340,7 @@ export function CustomAutomationEditorForm({
                       , <code className="font-mono">{`{{inputs.${input.name}}}`}</code>
                     </span>
                   ))}
+                  , <code className="font-mono">{"{{vars.<name>}}"}</code> for a variable
                   {checking ? (
                     <>
                       , <code className="font-mono">{"{{item}}"}</code> (the whole item) and{" "}
@@ -498,6 +519,9 @@ export function CustomAutomationEditorForm({
               projects={projects}
               sample={formSampleTask(form, board?.tasks ?? [])}
             />
+            <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+              <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
+            </Field>
           </>
         ) : (
           <>
@@ -513,7 +537,9 @@ export function CustomAutomationEditorForm({
                       <code className="font-mono">{customEnvName(p.env)}</code>
                     </span>
                   ))}
-                  , as <code className="font-mono">&quot;$NAME&quot;</code> in sh or{" "}
+                  , each input as <code className="font-mono">{inputEnvName("<name>")}</code> and each variable as{" "}
+                  <code className="font-mono">{variableEnvName("<name>")}</code>, as{" "}
+                  <code className="font-mono">&quot;$NAME&quot;</code> in sh or{" "}
                   <code className="font-mono">$env:NAME</code> in PowerShell.
                 </>
               }
@@ -526,6 +552,7 @@ export function CustomAutomationEditorForm({
                 placeholder="./scripts/notify.sh"
                 onChange={(event) => patch({ command: event.currentTarget.value })}
               />
+              <SdkPanel language={COMMAND_SHELL} scriptRole="action" />
             </Field>
             <Field label="Timeout (seconds)" hint="It is stopped after this long, and the run fails.">
               <Input
@@ -538,6 +565,9 @@ export function CustomAutomationEditorForm({
                 value={form.timeoutSeconds}
                 onChange={(event) => patch({ timeoutSeconds: event.currentTarget.value })}
               />
+            </Field>
+            <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+              <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
             </Field>
             <Alert variant="warning">
               <AlertDescription>
@@ -564,6 +594,15 @@ export function CustomAutomationEditorForm({
             {preview ?? (result.ok ? "Nothing to preview." : result.error)}
           </pre>
         </Field>
+
+        {needs.length > 0 ? (
+          <Field
+            label="Variables it reads"
+            hint="Found in what it names; one built at run time isn't seen. A project with no value for one gets no run of it, and the preview fills it in empty."
+          >
+            <VariableNeedsList needs={needs} />
+          </Field>
+        ) : null}
 
         {customId && isSchedule && form.actionKind === "agent" ? (
           <Field

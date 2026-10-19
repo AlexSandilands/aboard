@@ -355,6 +355,19 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "How long a finished headless run's worktree is kept when its PR hasn't merged.",
     ["cleanup", "delete", "days", "git worktree", "disk"],
   ),
+  // Autopilot › custom automations
+  draft(
+    "autopilot.custom.variables",
+    "Variables",
+    "Values custom automations read in every project, which a project can override.",
+    ["vars", "parameters", "jira key", "project name", "custom automations"],
+  ),
+  draft(
+    "autopilot.custom.variables.list",
+    "Automation variables",
+    "Values custom automations read as {{vars.name}}, an environment variable or vars on stdin. An automation that needs one doesn't run in a project where it has no value. Not for secrets.",
+    ["vars", "parameters", "environment variable", "stdin", "{{vars"],
+  ),
   // Integrations › T3 Code
   draft(
     "integrations.t3-code.connection",
@@ -564,6 +577,18 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Switch automations on or off for this project, over the board's setting.",
     ["automations", "inherit", "override", "per project"],
   ),
+  draft(
+    "project.autopilot.variables",
+    "Automation variables",
+    "This project's overrides of the board's automation variables, which custom automations read.",
+    ["vars", "parameters", "jira key", "override", "per project", "custom automations"],
+  ),
+  draft(
+    "project.autopilot.variables.list",
+    "Variables for this project",
+    "Override the board's variables here, or add ones only this project's automations read. An empty value makes automations that need it skip this project.",
+    ["vars", "parameters", "override", "{{vars"],
+  ),
   draft("project.recurring.rules", "Recurring tasks", "Rules that create a task from a template on a schedule.", [
     "schedule",
     "repeat",
@@ -672,6 +697,8 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "tasks.new-tasks.issue-import",
   "models.tiers.list",
   "project.autopilot.automations",
+  "project.autopilot.variables",
+  "autopilot.custom.variables",
   "project.recurring.rules",
   "project.recurring.examples",
 ]);
