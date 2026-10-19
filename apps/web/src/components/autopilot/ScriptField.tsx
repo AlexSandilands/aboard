@@ -185,9 +185,15 @@ function ScriptTest({
   const chosen =
     runnable.find((p) => p.id === projectId) ?? runnable.find((p) => form.projectIds.includes(p.id)) ?? runnable[0];
 
+  // What a run would send now. A result is only shown while it still matches: edit the script, its language, timeout or
+  // prompt, or pick another project, and the last run's output no longer describes what is on screen.
+  const request = chosen ? testScriptRequest(form, kind, chosen.id, withTask && sample ? sample.id : null) : null;
+  const requestKey = request?.ok ? JSON.stringify(request.input) : null;
+  const [ranKey, setRanKey] = useState<string | null>(null);
+  const current = ranKey !== null && ranKey === requestKey;
+
   const run = () => {
-    if (!chosen) return;
-    const request = testScriptRequest(form, kind, chosen.id, withTask && sample ? sample.id : null);
+    if (!request) return;
     if (!request.ok) {
       setProblem(request.error);
       setConfirming(false);
@@ -195,12 +201,13 @@ function ScriptTest({
     }
     setProblem(null);
     setConfirming(false);
+    setRanKey(JSON.stringify(request.input));
     test.mutate(request.input);
   };
 
-  const result = test.data;
+  const result = current ? test.data : undefined;
   const headline = result ? testHeadline(result) : null;
-  const failure = problem ?? (test.error instanceof Error ? test.error.message : null);
+  const failure = problem ?? (current && test.error instanceof Error ? test.error.message : null);
 
   return (
     <div className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-3">
