@@ -38,7 +38,7 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   name: "Ping",
   trigger: { kind: "status_change", to: "review", from: null },
   filters: { projectIds: [], labels: [], epicId: null },
-  action: { kind: "shell", command: "make", timeoutSeconds: 60 },
+  action: { kind: "shell", command: "make", timeoutSeconds: 60, inputs: [] },
   armedAt: "2026-10-01T00:00:00.000Z",
   armedProjects: {},
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -299,6 +299,7 @@ describe("a script automation in the form", () => {
     language: "python" as const,
     body: "if x:\r\n    print(1)\r\n",
     timeoutSeconds: 45,
+    inputs: [],
   };
 
   it("is saved back as it was, indentation and line endings kept", () => {

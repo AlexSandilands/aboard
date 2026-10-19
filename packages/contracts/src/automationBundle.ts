@@ -76,7 +76,7 @@ export const AutomationBundle = z
     trigger: CustomTrigger,
     /** Only what travels: the projects and the epic are the sharer's. */
     filters: z.object({ labels: z.array(z.string().trim().min(1)).default([]) }).default({ labels: [] }),
-    /** An agent's own `inputs` and `slots` are ignored: they are declared next to it. */
+    /** The action's own `inputs` (and an agent's `slots`) are ignored: they are declared next to it. */
     action: CustomAction,
     inputs: z.array(AutomationInputDecl).max(CUSTOM_INPUTS_MAX).default([]),
     slots: z.array(AutomationSlotDecl).max(CUSTOM_SLOTS_MAX).default([]),
@@ -84,8 +84,8 @@ export const AutomationBundle = z
     skill: BundleSkill.optional(),
   })
   .superRefine((bundle, ctx) => {
-    if (bundle.action.kind !== "agent" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
-      ctx.addIssue({ code: "custom", message: "Only an agent can have inputs or tool slots", path: ["action"] });
+    if (bundle.action.kind !== "agent" && bundle.slots.length > 0) {
+      ctx.addIssue({ code: "custom", message: "Only an agent can have tool slots", path: ["action"] });
     }
     // A version 1 reader would read this as a file without its script, so it must say it is a newer one.
     if (bundle.version < AUTOMATION_BUNDLE_VERSION && actionScripts(bundle.action).length > 0) {
@@ -135,11 +135,9 @@ export function automationBundle(
     description: "",
     trigger: def.trigger,
     filters: { labels: def.filters.labels },
-    action: action.kind === "agent" ? { ...action, inputs: [], slots: [] } : action,
-    inputs:
-      action.kind === "agent"
-        ? action.inputs.map(({ name, label, type, value }) => ({ name, label, type, default: value }))
-        : [],
+    // Variables aren't in the file: their values are the sharer's, and the importer's board says which it needs.
+    action: action.kind === "agent" ? { ...action, inputs: [], slots: [] } : { ...action, inputs: [] },
+    inputs: action.inputs.map(({ name, label, type, value }) => ({ name, label, type, default: value })),
     slots:
       action.kind === "agent" ? action.slots.map(({ name, label, description }) => ({ name, label, description })) : [],
     ...(skill && action.kind === "agent" ? { skill } : {}),
@@ -168,6 +166,10 @@ export interface BundleFill {
 /** The definition to save for an imported file. Unchecked: run it through `checkCustomDefinition` like any other. */
 export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = {}): CreateCustomAutomationInput {
   const { action } = bundle;
+  const inputs = bundle.inputs.map((input) => ({
+    ...input,
+    value: fill.inputs?.[input.name] ?? inputStartValue(input),
+  }));
   return {
     name: bundle.name,
     trigger: bundle.trigger,
@@ -177,13 +179,10 @@ export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = 
         ? {
             ...action,
             skill: fill.skill !== undefined ? (fill.skill ?? "") : bundle.skill ? "" : action.skill,
-            inputs: bundle.inputs.map((input) => ({
-              ...input,
-              value: fill.inputs?.[input.name] ?? inputStartValue(input),
-            })),
+            inputs,
             slots: bundle.slots.map((slot) => ({ ...slot, tools: [...(fill.slots?.[slot.name] ?? [])] })),
           }
-        : action,
+        : { ...action, inputs },
   };
 }
 

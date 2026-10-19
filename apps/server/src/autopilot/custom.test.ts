@@ -8,6 +8,7 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RunGit } from "../integrations/backup.ts";
 import { InterpreterMissingError, type ScriptRequest, type ScriptResult } from "../integrations/scriptRunner.ts";
 import type { ShellRequest, ShellResult } from "../integrations/shellCommand.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -32,6 +33,8 @@ function setup(
     script?: (request: ScriptRequest) => ScriptResult | Promise<ScriptResult>;
     /** What an agent run returns; it ends when this does. */
     agent?: (request: RunnerRequest) => Promise<RunnerResult>;
+    /** Answers `git remote get-url origin`; none fails it, as for a folder that isn't a repository. */
+    git?: RunGit;
   } = {},
 ) {
   let offsetMs = 0;
@@ -40,6 +43,7 @@ function setup(
   const h = createTestHarness({
     integrations: {
       automations: [],
+      runGit: opts.git ?? (() => Promise.reject(new Error("git doesn't run in tests"))),
       runShell: async (request) => {
         shellRuns.push(request);
         return opts.shell ? opts.shell(request) : { exitCode: 0, output: "ok\n", timedOut: false };
@@ -1597,5 +1601,105 @@ describe("custom automations: an agent with a check script", () => {
       headers: { origin: "http://127.0.0.1:5317" },
     });
     expect(made.status).toBe(201);
+  });
+});
+
+describe("custom automations: variables and the repository URL", () => {
+  const origin: RunGit = async (_args, cwd) =>
+    cwd === "/work/alpha"
+      ? { code: 0, stdout: "git@github.com:acme/alpha.git\n", stderr: "" }
+      : { code: 2, stdout: "", stderr: "error: No such remote 'origin'" };
+
+  it("gives a script the project's variables over the board's, its inputs and the repository URL", async () => {
+    const { s, project, other, define, pass, scriptRuns, script } = setup({ git: origin });
+    s.settings.update({
+      automationVariables: [
+        { name: "jira_key", value: "BRD" },
+        { name: "team", value: "core" },
+      ],
+    });
+    s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+    define({
+      name: "Hello",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: {
+        ...script("print(f\"Hello world, this is running in {ctx['project']['name']}\")"),
+        inputs: [{ name: "days", label: "Days", type: "number", default: "7" }],
+      },
+    });
+    await pass(HOUR);
+    const alpha = scriptRuns.find((r) => r.cwd === "/work/alpha")!;
+    expect(alpha.env).toMatchObject({
+      [brandEnv("VAR_JIRA_KEY")]: "ALP",
+      [brandEnv("VAR_TEAM")]: "core",
+      [brandEnv("INPUT_DAYS")]: "7",
+      [brandEnv("PROJECT_REPO_URL")]: "https://github.com/acme/alpha",
+    });
+    expect(alpha.context).toMatchObject({
+      project: { id: project.id, name: "Alpha", repoUrl: "https://github.com/acme/alpha" },
+      vars: { jira_key: "ALP", team: "core" },
+      inputs: { days: "7" },
+    });
+    const beta = scriptRuns.find((r) => r.cwd === "/work/beta")!;
+    expect(beta.env[brandEnv("VAR_JIRA_KEY")]).toBe("BRD");
+    // No origin: the URL is empty, and the run goes ahead.
+    expect(beta.context).toMatchObject({ project: { id: other.id, repoUrl: "" } });
+  });
+
+  it("skips a project missing a variable the action names, says so on the row, and runs once it is set", async () => {
+    const { s, project, other, define, pass, runsOf, shellRuns, shell } = setup();
+    s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+    const custom = define({
+      name: "Sync",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: shell(`./sync.sh "$${brandEnv("VAR_JIRA_KEY")}"`),
+    });
+    const row = () => s.autopilot.overview().automations.find((a) => a.key === customAutomationKey(custom.id))!;
+    expect(row().needs).toBe("Needs `jira_key` in: Beta");
+    await pass(HOUR);
+    expect(shellRuns.map((r) => r.cwd)).toEqual(["/work/alpha"]);
+    expect(runsOf(other.id)).toHaveLength(0);
+    // A blank override is no value either.
+    s.settings.update({ automationVariables: [{ name: "jira_key", value: "BRD" }] });
+    expect(row().needs).toBeNull();
+    s.projects.update(project.id, { variables: [{ name: "jira_key", value: " " }] });
+    expect(row().needs).toBe("Needs `jira_key` in: Alpha");
+    // Switched off in Beta, Beta isn't listed.
+    s.autopilot.setScope("project", other.id, customAutomationKey(custom.id), { mode: "off" });
+    s.settings.update({ automationVariables: [] });
+    expect(row().needs).toBe("Needs `jira_key` in: Alpha");
+  });
+
+  it("names the missing variable in a dry run instead of a run", async () => {
+    const { s, other, define, pass, runsOf, agentRuns } = setup();
+    s.autopilot.updateEngine({ dryRun: true });
+    s.projects.update(other.id, { variables: [{ name: "jira_key", value: "BET" }] });
+    define({
+      name: "Triage",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: { kind: "agent", prompt: "Triage {{vars.jira_key}} in {{project.name}}" },
+    });
+    await pass(HOUR);
+    expect(agentRuns).toHaveLength(0);
+    const [alpha] = runsOf();
+    expect(alpha).toMatchObject({ dryRun: true, status: "skipped" });
+    expect(alpha!.detail).toMatch(/Needs `jira_key` in Alpha/);
+    expect(runsOf(other.id)[0]!.detail).toContain("Triage BET in Beta");
+    await pass(HOUR);
+    expect(runsOf()).toHaveLength(1);
+  });
+
+  it("gives a task's shell command its variables and the repository URL", async () => {
+    const { s, task, define, pass, shellRuns, shell } = setup({ git: origin });
+    s.settings.update({ automationVariables: [{ name: "team", value: "core" }] });
+    define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() });
+    const t = task("Moves");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns[0]!.env).toMatchObject({
+      [brandEnv("VAR_TEAM")]: "core",
+      [brandEnv("PROJECT_REPO_URL")]: "https://github.com/acme/alpha",
+      [brandEnv("TASK_TITLE")]: "Moves",
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AutomationVariables, effectiveVariables } from "./automationVariables.ts";
 import { brandEnv } from "./brand.ts";
 import { nextPrChanges, type PrSnapshot } from "./schemas.ts";
 import {
@@ -20,6 +21,11 @@ import {
   describeScriptRun,
   describeShellRun,
   latestHourlySlot,
+  describeMissingVariables,
+  inputEnvName,
+  missingVariables,
+  variableEnvName,
+  variablesNamedBy,
   latestMinutesSlot,
   nextMinutesSlot,
   parseCheckOutput,
@@ -83,8 +89,9 @@ describe("a script action", () => {
   it("hands the script its values on stdin and shows them in a preview", () => {
     expect(customScriptContext(values)).toEqual({
       automation: "Ping",
-      project: { name: "Alpha", path: "/work/alpha" },
+      project: { name: "Alpha", path: "/work/alpha", repoUrl: "" },
       inputs: {},
+      vars: {},
       task: { id: "t1", number: 42, title: "Fix it", status: "review" },
       pr: { url: "https://github.com/o/r/pull/1" },
     });
@@ -97,7 +104,7 @@ describe("a script action", () => {
 
 describe("checkCustomDefinition", () => {
   const filters = { projectIds: [], labels: [], epicId: null };
-  const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60 };
+  const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60, inputs: [] };
   const agent = CustomAction.parse({ kind: "agent", prompt: "Go" }) as Extract<CustomAction, { kind: "agent" }>;
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 4 } });
 
@@ -507,5 +514,146 @@ describe("check scripts", () => {
     expect(prompt.match(/<\/item>/g)).toHaveLength(2);
     expect(prompt).not.toContain("old notes");
     expect(prompt).not.toContain("handover");
+  });
+});
+
+describe("variables", () => {
+  const agent = (prompt: string, check?: string) =>
+    CustomAction.parse({
+      kind: "agent",
+      prompt,
+      ...(check ? { check: { language: "python", body: check } } : {}),
+    });
+  const script = (body: string) => CustomAction.parse({ kind: "script", language: "python", body });
+  const shell = (command: string) => CustomAction.parse({ kind: "shell", command });
+
+  it("validates names, values and repeats", () => {
+    expect(AutomationVariables.safeParse([{ name: "jira_key", value: "ABC" }]).success).toBe(true);
+    expect(AutomationVariables.parse([{ name: "jira_key" }])).toEqual([{ name: "jira_key", value: "" }]);
+    expect(AutomationVariables.safeParse([{ name: "Jira", value: "x" }]).success).toBe(false);
+    expect(AutomationVariables.safeParse([{ name: "9a", value: "x" }]).success).toBe(false);
+    expect(
+      AutomationVariables.safeParse([
+        { name: "a", value: "1" },
+        { name: "a", value: "2" },
+      ]).success,
+    ).toBe(false);
+  });
+
+  it("lets a project's value win over the board's, including a blank one", () => {
+    const board = [
+      { name: "jira_key", value: "BRD" },
+      { name: "team", value: "core" },
+    ];
+    expect(effectiveVariables(board, { variables: [{ name: "jira_key", value: "BILL" }] })).toEqual({
+      jira_key: "BILL",
+      team: "core",
+    });
+    expect(effectiveVariables(board, null)).toEqual({ jira_key: "BRD", team: "core" });
+    const blanked = effectiveVariables(board, { variables: [{ name: "team", value: "" }] });
+    expect(missingVariables(shell(`echo $${variableEnvName("team")}`), blanked)).toEqual(["team"]);
+  });
+
+  it("finds the variables a prompt, check, script or command names", () => {
+    expect(variablesNamedBy(agent("Use {{vars.jira_key}} and {{ vars.team }}, not {{vars.a.b}}"))).toEqual([
+      "jira_key",
+      "team",
+    ]);
+    expect(variablesNamedBy(agent("Go", 'k = ctx["vars"]["board_id"]'))).toEqual(["board_id"]);
+    expect(
+      variablesNamedBy(
+        script(
+          [
+            `import os; os.environ["${brandEnv("VAR_JIRA_KEY")}"]`,
+            "ctx.vars.team",
+            "vars['owner']",
+            'vars.get("optional")',
+          ].join("\n"),
+        ),
+      ),
+    ).toEqual(["jira_key", "team", "owner"]);
+    expect(variablesNamedBy(shell(`echo $env:${brandEnv("var_Region")} \${${brandEnv("VAR_ZONE")}}`))).toEqual([
+      "region",
+      "zone",
+    ]);
+    expect(variablesNamedBy(shell("echo hi"))).toEqual([]);
+  });
+
+  it("fills {{vars.x}} in a prompt once, a missing one empty, and passes them to scripts", () => {
+    const withVars: CustomValues = { ...values, vars: { jira_key: "{{task.title}}" } };
+    expect(renderCustomPrompt("[{{vars.jira_key}}] [{{vars.none}}]", withVars)).toBe("[{{task.title}}] []");
+    expect(customShellEnv({ ...withVars, inputs: { look_back: "7" } })).toMatchObject({
+      [variableEnvName("jira_key")]: "{{task.title}}",
+      [inputEnvName("look_back")]: "7",
+    });
+    expect(variableEnvName("jira_key")).toBe(brandEnv("VAR_JIRA_KEY"));
+    expect(customScriptContext(withVars).vars).toEqual({ jira_key: "{{task.title}}" });
+  });
+
+  it("gives the repository URL as a placeholder, a variable and on stdin", () => {
+    const v = customValues(
+      { name: "x" },
+      { id: "p", title: "Alpha", workspaceRoot: "/a" },
+      null,
+      {},
+      {
+        repoUrl: "https://github.com/acme/app",
+        vars: { k: "v" },
+      },
+    );
+    expect(renderCustomPrompt("{{project.repo_url}}", v)).toBe("https://github.com/acme/app");
+    expect(customShellEnv(v)[brandEnv("PROJECT_REPO_URL")]).toBe("https://github.com/acme/app");
+    expect(customScriptContext(v)).toMatchObject({
+      project: { repoUrl: "https://github.com/acme/app" },
+      vars: { k: "v" },
+    });
+    expect(customScriptContext(customValues({ name: "x" }, { title: "B", workspaceRoot: null }, null)).project).toEqual(
+      {
+        id: undefined,
+        name: "B",
+        path: null,
+        repoUrl: "",
+      },
+    );
+  });
+
+  it("accepts {{vars.x}} in a prompt and refuses it in a script or command", () => {
+    const trigger = CustomTrigger.parse({ kind: "blocker_finished" });
+    const filters = { projectIds: [], labels: [], epicId: null };
+    expect(checkCustomDefinition({ trigger, filters, action: agent("Key {{vars.jira_key}}") })).toBeNull();
+    expect(checkCustomDefinition({ trigger, filters, action: script("print({{vars.jira_key}})") })).toMatch(
+      variableEnvName("jira_key"),
+    );
+    expect(checkCustomDefinition({ trigger, filters, action: shell("echo {{inputs.days}}") })).toMatch(
+      inputEnvName("days"),
+    );
+  });
+
+  it("says which projects need which variables", () => {
+    expect(describeMissingVariables([])).toBeNull();
+    expect(
+      describeMissingVariables([
+        { project: "billing", names: ["jira_key"] },
+        { project: "aboard", names: ["jira_key"] },
+        { project: "ok", names: [] },
+        { project: "web", names: ["jira_key", "team"] },
+      ]),
+    ).toBe("Needs `jira_key` in: billing, aboard; Needs `jira_key`, `team` in: web");
+  });
+});
+
+describe("inputs on shell and script actions", () => {
+  it("parses rows saved before them, and checks their names and values", () => {
+    expect(CustomAction.parse({ kind: "shell", command: "make" })).toMatchObject({ inputs: [] });
+    expect(CustomAction.parse({ kind: "script", language: "sh", body: "x" })).toMatchObject({ inputs: [] });
+    const trigger = CustomTrigger.parse({ kind: "blocker_finished" });
+    const filters = { projectIds: [], labels: [], epicId: null };
+    const input = { name: "days", label: "Days", type: "number", default: "7" };
+    const action = CustomAction.parse({ kind: "shell", command: "make", inputs: [input, input] });
+    expect(checkCustomDefinition({ trigger, filters, action })).toMatch(/declared twice/);
+    const bad = CustomAction.parse({ kind: "script", language: "sh", body: "x", inputs: [{ ...input, value: "x" }] });
+    expect(checkCustomDefinition({ trigger, filters, action: bad })).toMatch(/Days: enter a number/);
+    const ok = CustomAction.parse({ kind: "script", language: "sh", body: "x", inputs: [input] });
+    expect(customValues({ name: "n", action: ok }, null, null).inputs).toEqual({ days: "7" });
   });
 });

@@ -27,6 +27,7 @@ export * from "./autopilot.ts";
 export * from "./autopilotRunHistory.ts";
 export * from "./prReview.ts";
 export * from "./recurring.ts";
+export * from "./automationVariables.ts";
 export * from "./customAutomations.ts";
 export * from "./automationBundle.ts";
 export * from "./automationExamples.ts";

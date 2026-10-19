@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
-import { remoteRepo, shortPrompt } from "./sessionLaunch.ts";
+import { shortPrompt } from "./sessionLaunch.ts";
 import { cmdQuote, shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const WT_SETTINGS = JSON.stringify({
@@ -362,20 +362,6 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
     } finally {
       repo.cleanup();
     }
-  });
-});
-
-describe("remoteRepo", () => {
-  it("reads the host and repository of the URL forms git remotes use", () => {
-    const want = { host: "github.com", repo: "acme/app" };
-    expect(remoteRepo("https://github.com/acme/app.git")).toEqual(want);
-    expect(remoteRepo("https://user:token@GitHub.com/Acme/App/")).toEqual(want);
-    expect(remoteRepo("git@github.com:acme/app.git")).toEqual(want);
-    expect(remoteRepo("ssh://git@github.com:22/acme/app")).toEqual(want);
-    expect(remoteRepo("https://github.example.io/acme/app")).toEqual({ host: "github.example.io", repo: "acme/app" });
-    // A local path names no repository to compare with.
-    expect(remoteRepo(String.raw`C:\Users\me\origin.git`)).toBeNull();
-    expect(remoteRepo("/srv/git/app.git")).toBeNull();
   });
 });
 

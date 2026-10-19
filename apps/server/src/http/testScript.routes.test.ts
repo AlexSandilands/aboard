@@ -56,6 +56,18 @@ describe("POST /api/autopilot/custom/test-script", () => {
     expect(s.runs[0]!.env[customEnvName("PROJECT_NAME")]).toBe("Alpha");
   });
 
+  it("gives the script the project's variables and its inputs as environment variables", async () => {
+    const s = setup();
+    s.h.services.settings.update({ automationVariables: [{ name: "team", value: "core" }] });
+    s.h.services.projects.update(s.project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+    await s.post(s.body({ inputs: { depth: "2" } }));
+    expect(s.runs[0]!.context).toMatchObject({ vars: { team: "core", jira_key: "ALP" }, project: { repoUrl: "" } });
+    expect(s.runs[0]!.env).toMatchObject({
+      [customEnvName("VAR_JIRA_KEY")]: "ALP",
+      [customEnvName("INPUT_DEPTH")]: "2",
+    });
+  });
+
   it("gives an action a task's values when asked, and a check none", async () => {
     const s = setup();
     const task = s.h.services.tasks.create({

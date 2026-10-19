@@ -6,6 +6,7 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { createCheckRuns, customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
+import { createRepoUrls } from "../integrations/gitRemote.ts";
 import { runScript, type RunScript } from "../integrations/scriptRunner.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
 import { createActivityService } from "./activity.ts";
@@ -114,16 +115,23 @@ export function createServices(deps: ServiceDeps): Services {
   restartRecurring = (ids) => recurring.restart(ids);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
+  // One cache for the server's life: custom automations read each project's repository URL on every pass.
+  const repoUrl = createRepoUrls(deps.runGit ?? defaultRunGit);
+  const boardVariables = () => settings.get().automationVariables;
   const customAutomations = createCustomAutomationsService(core, {
     runScript: runScriptFile,
     taskSummary: (id) => tasks.service.summary(id),
+    repoUrl,
+    boardVariables,
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();
   // Read on every call, so a custom automation's edit applies from the next pass.
   const automations = () => [
     ...builtIn,
-    ...customAutomations.list().map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns })),
+    ...customAutomations
+      .list()
+      .map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns, repoUrl, boardVariables })),
   ];
 
   return {

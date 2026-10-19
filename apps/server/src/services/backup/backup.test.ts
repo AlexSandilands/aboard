@@ -111,6 +111,9 @@ function seed() {
   });
   s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
   s.settings.update({ keybindings: { back: { key: "q", when: "" } } });
+  // Automation variables: the board's are a setting, a project's a column.
+  s.settings.update({ automationVariables: [{ name: "jira_key", value: "BRD" }] });
+  s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
   return { ...h, s, project, a, b, idea };
@@ -301,9 +304,20 @@ describe("restore", () => {
         expect.arrayContaining([{ snapshot_json: null }]),
       );
       expect(restored.prepare("SELECT 1 FROM settings WHERE key = 't3Token'").get()).toBeUndefined();
+      expect(createRepos(restored).settings.all().get("automationVariables")).toEqual([
+        { name: "jira_key", value: "BRD" },
+      ]);
+      expect(
+        createRepos(restored)
+          .projects.list()
+          .find((p) => p.title === "Alpha")?.variables,
+      ).toEqual([{ name: "jira_key", value: "ALP" }]);
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
       expect(restored.prepare("SELECT name, action_json FROM autopilot_custom").all()).toEqual([
-        { name: "Notify", action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300 }) },
+        {
+          name: "Notify",
+          action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300, inputs: [] }),
+        },
         {
           name: "Check",
           action_json: JSON.stringify({
@@ -311,6 +325,7 @@ describe("restore", () => {
             language: "python",
             body: "print(1)\n  # kept as written\n",
             timeoutSeconds: 300,
+            inputs: [],
           }),
         },
       ]);
@@ -365,7 +380,13 @@ describe("restore", () => {
     const dump = s.backup.dump();
     writeDumpDir(dir, dump);
     const actions = (rows: BoardDump["autopilot_custom"]) => rows.map((row) => JSON.parse(String(row.action_json)));
-    const script = { kind: "script", language: "python", body: "print(1)\n  # kept as written\n", timeoutSeconds: 300 };
+    const script = {
+      kind: "script",
+      language: "python",
+      body: "print(1)\n  # kept as written\n",
+      timeoutSeconds: 300,
+      inputs: [],
+    };
     expect(actions(readDumpDir(dir).autopilot_custom)).toContainEqual(script);
     const file = join(tempDir(), "dump.json");
     writeFileSync(file, dumpFileJson(dump));
@@ -479,7 +500,7 @@ describe("restore", () => {
       autopilot_recurring: [],
       autopilot_custom: [],
       suggestions: [],
-      projects: dump.projects.map(({ plan_skill_json: _ps, ...project }) => project),
+      projects: dump.projects.map(({ plan_skill_json: _ps, variables_json: _v, ...project }) => project),
       tasks: dump.tasks.map((bundle) => {
         const {
           suggested_tier: _t,

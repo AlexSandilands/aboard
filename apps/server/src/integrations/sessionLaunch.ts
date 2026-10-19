@@ -28,6 +28,7 @@ import { AppError } from "../errors.ts";
 import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import type { RunGit } from "./backup.ts";
+import { remoteRepo } from "./gitRemote.ts";
 import { resolveExecutable } from "./claudeCli.ts";
 import { messageOf } from "./github.ts";
 import {
@@ -99,17 +100,6 @@ export function shortPrompt(
   const fitted = textArgument(text, platform);
   if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);
   return fitted.value;
-}
-
-/**
- * The host and repository an `origin` URL names (`https://github.com/acme/app.git`, `git@github.com:acme/app`),
- * lower-cased, or null for anything else (a local path): then there is nothing to compare a PR's repository with.
- */
-export function remoteRepo(url: string): { host: string; repo: string } | null {
-  const match =
-    /^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i.exec(url) ??
-    /^[^@/\s]+@([^:/\s]+):(.+?)(?:\.git)?\/?$/.exec(url);
-  return match ? { host: match[1]!.toLowerCase(), repo: match[2]!.toLowerCase() } : null;
 }
 
 /**

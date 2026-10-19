@@ -161,9 +161,27 @@ describe("automation bundles that carry a script", () => {
     expect(parseAutomationBundle(withBody("  \n")).ok).toBe(false);
   });
 
-  it("gives a script no inputs or slots, like a command", () => {
+  it("gives a script no tool slots, like a command", () => {
     const file = { ...automationBundle(scripted()), slots: [{ name: "jira", label: "Jira", description: "" }] };
     expect(parseAutomationBundle(file)).toMatchObject({ ok: false, error: expect.stringMatching(/Only an agent/) });
+  });
+
+  it("carries a script's inputs as declarations and fills them on import", () => {
+    const withInputs = scripted();
+    const action = CustomAction.parse({
+      ...withInputs.action,
+      inputs: [{ name: "days", label: "Days", type: "number", default: "7", value: "14" }],
+    });
+    const file = automationBundle({ ...withInputs, action });
+    expect(file.action).toMatchObject({ inputs: [] });
+    expect(file.inputs).toEqual([{ name: "days", label: "Days", type: "number", default: "14" }]);
+    const parsed = parseAutomationBundle(JSON.parse(JSON.stringify(file)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(bundleToDefinition(parsed.bundle, { inputs: { days: "30" } }).action).toMatchObject({
+      kind: "script",
+      inputs: [{ name: "days", value: "30" }],
+    });
   });
 
   it("lists the scripts an action runs: its own body, or an agent's check", () => {

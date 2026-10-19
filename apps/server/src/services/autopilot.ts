@@ -79,13 +79,14 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
   };
 }
 
-export const describeAutomation = (a: Automation): AutopilotAutomation => ({
+export const describeAutomation = (a: Automation, needs: string | null = null): AutopilotAutomation => ({
   key: a.key,
   title: a.title,
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
   blocked: a.blocked ?? null,
+  needs,
   fields: a.fields,
   defaults: a.defaults,
 });
@@ -441,11 +442,30 @@ export function createAutopilotService(
     return run;
   };
 
+  /** Which of the projects an automation is on in (or one of whose epics it is on in) won't run it, and why, or null. */
+  const needsOf = (automation: Automation): string | null => {
+    if (!automation.needs) return null;
+    const settings = repos.autopilotSettings.all();
+    const withEpicOn = new Set(
+      epicScoped(automation)
+        ? settings.flatMap((s) => {
+            if (s.scopeKind !== "epic" || s.mode !== "on" || s.automation !== automation.key) return [];
+            const epic = repos.tasks.get(s.scopeId!);
+            return epic && countsAsScope(epic.id, epic.projectId) ? [epic.projectId] : [];
+          })
+        : [],
+    );
+    const on = repos.projects
+      .list()
+      .filter((p) => withEpicOn.has(p.id) || resolveAutopilot(chainFor(settings, automation.key, p.id, null)).enabled);
+    return automation.needs(on);
+  };
+
   return {
     overview: () => ({
       paused: loadAutopilotStatus(repos).paused,
       engine: loadAutopilotEngine(repos),
-      automations: deps.automations().map(describeAutomation),
+      automations: deps.automations().map((automation) => describeAutomation(automation, needsOf(automation))),
     }),
     status: () => loadAutopilotStatus(repos),
     automations: () => deps.automations(),

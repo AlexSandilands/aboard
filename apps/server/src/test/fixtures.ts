@@ -34,6 +34,7 @@ export const defaultSettings: AppSettings = {
   savedViews: [],
   keybindings: {},
   socialNetwork: false,
+  automationVariables: [],
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

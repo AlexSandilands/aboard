@@ -12,6 +12,7 @@ import {
   normalizeLabels,
   TaskStatus,
   UpdateCustomAutomationInput,
+  type AutomationVariable,
   type BundleSkill,
   type CustomAutomation,
   type CustomDefinition,
@@ -23,6 +24,7 @@ import {
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
+import type { RepoUrls } from "../integrations/gitRemote.ts";
 import type { RunScript } from "../integrations/scriptRunner.ts";
 import type { Core } from "./core.ts";
 import { createTestScript } from "./testScript.ts";
@@ -77,13 +79,20 @@ export interface CustomAutomationsService {
 
 export function createCustomAutomationsService(
   core: Core,
-  deps: { runScript: RunScript; taskSummary: (id: string) => TaskSummary },
+  deps: {
+    runScript: RunScript;
+    taskSummary: (id: string) => TaskSummary;
+    repoUrl: RepoUrls;
+    boardVariables: () => readonly AutomationVariable[];
+  },
 ): CustomAutomationsService {
   const { repos } = core;
   const testScript = createTestScript({
     runScript: deps.runScript,
     project: (id) => repos.projects.get(id),
     task: deps.taskSummary,
+    repoUrl: deps.repoUrl,
+    boardVariables: deps.boardVariables,
   });
 
   const get = (id: string): CustomAutomation => {

@@ -251,6 +251,7 @@ describe("config forms", () => {
     needsAgent: false,
     epicScope: true,
     blocked: null,
+    needs: null,
     fields: [],
     defaults: { budget: 2 },
   } satisfies AutopilotAutomation;

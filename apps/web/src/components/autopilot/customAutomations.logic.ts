@@ -161,6 +161,13 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
     labels: custom.filters.labels.join(", "),
     epicId: custom.filters.epicId ?? "",
     actionKind: custom.action.kind,
+    inputs: custom.action.inputs.map(({ name, label, type, value, default: fallback }) => ({
+      name,
+      label,
+      type,
+      value,
+      default: fallback,
+    })),
   };
   const t = custom.trigger;
   if (t.kind === "status_change") Object.assign(form, { to: t.to, from: t.from ?? "" });
@@ -183,13 +190,6 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
       tier: a.tier ?? "",
       onPrBranch: a.onPrBranch,
       allowedTools: a.allowedTools.join("\n"),
-      inputs: a.inputs.map(({ name, label, type, value, default: fallback }) => ({
-        name,
-        label,
-        type,
-        value,
-        default: fallback,
-      })),
       slots: a.slots.map(({ name, label, description, tools }) => ({
         name,
         label,
@@ -295,8 +295,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             untrustedItems: form.untrustedItems,
           }
         : form.actionKind === "script"
-          ? { kind: "script", language: form.language, body: form.body, timeoutSeconds }
-          : { kind: "shell", command: form.command, timeoutSeconds },
+          ? { kind: "script", language: form.language, body: form.body, timeoutSeconds, inputs: form.inputs }
+          : { kind: "shell", command: form.command, timeoutSeconds, inputs: form.inputs },
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;

@@ -165,6 +165,8 @@ export const AutopilotAutomation = z.object({
   epicScope: z.boolean(),
   /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */
   blocked: z.string().nullable().default(null),
+  /** Which projects it is on in won't run it for lack of a variable ("Needs `jira_key` in: billing"), or null. */
+  needs: z.string().nullable().default(null),
   fields: z.array(AutopilotField),
   /** Every field's value when no scope sets it. */
   defaults: AutopilotConfig,

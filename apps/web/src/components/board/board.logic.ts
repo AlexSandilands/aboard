@@ -47,6 +47,7 @@ export const PRIORITY_PROJECT: Project = {
   t3ProjectId: null,
   reviewSkill: null,
   planSkill: null,
+  variables: [],
   position: "",
   collapsed: false,
   archivedAt: null,

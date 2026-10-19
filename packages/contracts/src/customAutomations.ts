@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VARIABLE_NAME, variableHasValue } from "./automationVariables.ts";
 import { BRAND, brandEnv } from "./brand.ts";
 import { ModelTier } from "./modelTiers.ts";
 import { WeeklySchedule } from "./recurring.ts";
@@ -235,12 +236,19 @@ export const CustomAction = z.discriminatedUnion("kind", [
     kind: z.literal("shell"),
     command: z.string().trim().min(1).max(CUSTOM_COMMAND_MAX),
     timeoutSeconds: z.number().int().min(1).max(CUSTOM_TIMEOUT_MAX_SECONDS).default(300),
+    /** Values it reads as `$<PREFIX>_INPUT_<NAME>`, declared so a shared automation can be set up without editing it. */
+    inputs: z.array(AutomationInput).max(CUSTOM_INPUTS_MAX).default([]),
   }),
   /**
    * A script run in the project's folder by its language's interpreter. Like a shell command it is never filled in:
    * task values reach it as environment variables (customShellEnv) and, as JSON, on stdin.
    */
-  z.object({ kind: z.literal("script"), ...CustomScript.shape }),
+  z.object({
+    kind: z.literal("script"),
+    ...CustomScript.shape,
+    /** Values it reads from stdin's `inputs` or as `<PREFIX>_INPUT_<NAME>`. */
+    inputs: z.array(AutomationInput).max(CUSTOM_INPUTS_MAX).default([]),
+  }),
 ]);
 export type CustomAction = z.infer<typeof CustomAction>;
 
@@ -307,9 +315,12 @@ export interface CustomValues {
   automation: string;
   task?: { id: string; number: number; title: string; status: string } | null;
   pr?: { url: string } | null;
-  project?: { id?: string; name: string; path: string | null } | null;
-  /** The automation's declared inputs by name, for `{{inputs.<name>}}`. Only a prompt reads them. */
+  /** `repoUrl` is `https://<host>/<repo>` from the folder's `origin`, empty without one. */
+  project?: { id?: string; name: string; path: string | null; repoUrl?: string } | null;
+  /** The automation's declared inputs by name: `{{inputs.<name>}}`, `<PREFIX>_INPUT_<NAME>` and stdin's `inputs`. */
   inputs?: Record<string, string>;
+  /** The variables in effect in the project (effectiveVariables): `{{vars.<name>}}`, `<PREFIX>_VAR_<NAME>`, stdin's `vars`. */
+  vars?: Record<string, string>;
   /** The check item an agent was started for, for `{{item}}` and `{{item.<field>}}`. Only a prompt reads it. */
   item?: CheckItem | null;
 }
@@ -323,14 +334,33 @@ export const CUSTOM_PLACEHOLDERS = [
   { key: "pr.url", env: "PR_URL", label: "Pull request URL", read: (v: CustomValues) => v.pr?.url },
   { key: "project.name", env: "PROJECT_NAME", label: "Project name", read: (v: CustomValues) => v.project?.name },
   { key: "project.path", env: "PROJECT_PATH", label: "Project folder", read: (v: CustomValues) => v.project?.path },
+  {
+    key: "project.repo_url",
+    env: "PROJECT_REPO_URL",
+    label: "Repository URL",
+    read: (v: CustomValues) => v.project?.repoUrl,
+  },
   { key: "automation.name", env: "AUTOMATION", label: "Automation name", read: (v: CustomValues) => v.automation },
 ] as const;
 
 const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*\}\}/gi;
 const KNOWN = new Set<string>(CUSTOM_PLACEHOLDERS.map((p) => p.key));
 const INPUT_PREFIX = "inputs.";
+const VARS_PREFIX = "vars.";
 const ITEM = "item";
 const ITEM_PREFIX = "item.";
+
+/** The environment variable an input reaches a command or script as, e.g. `ABOARD_INPUT_LOOK_BACK`. */
+export const inputEnvName = (name: string): string => brandEnv(`INPUT_${name.toUpperCase()}`);
+/** The environment variable a variable reaches a command or script as, e.g. `ABOARD_VAR_JIRA_KEY`. */
+export const variableEnvName = (name: string): string => brandEnv(`VAR_${name.toUpperCase()}`);
+
+/** The variable a `{{vars.<name>}}` placeholder names, or null. Only a single name: `vars.a.b` names nothing. */
+const varOfKey = (key: string): string | null => {
+  if (!key.startsWith(VARS_PREFIX)) return null;
+  const name = key.slice(VARS_PREFIX.length);
+  return name.includes(".") ? null : name;
+};
 
 /** Whether a placeholder reads the check's item: `{{item}}` or `{{item.<field>}}`. */
 const isItemKey = (key: string): boolean => key === ITEM || key.startsWith(ITEM_PREFIX);
@@ -370,6 +400,9 @@ export function renderCustomPrompt(template: string, values: CustomValues): stri
   return template.replace(PLACEHOLDER, (whole, key: string) => {
     if (KNOWN.has(key)) return valueOf(key, values);
     if (isItemKey(key)) return itemValue(key, values.item);
+    // A variable the project has no value for is empty here; the engine doesn't start a run that names one.
+    const variable = varOfKey(key);
+    if (variable !== null) return values.vars && Object.hasOwn(values.vars, variable) ? values.vars[variable]! : "";
     const input = key.startsWith(INPUT_PREFIX) ? key.slice(INPUT_PREFIX.length) : null;
     return input !== null && values.inputs && Object.hasOwn(values.inputs, input) ? values.inputs[input]! : whole;
   });
@@ -378,9 +411,16 @@ export function renderCustomPrompt(template: string, values: CustomValues): stri
 /** The environment variable a placeholder reaches a shell command as, e.g. `ABOARD_TASK_NUMBER`. */
 export const customEnvName = (env: string): string => brandEnv(env);
 
-/** The variables a shell action gets on top of the server's environment (minus the board's own variables). */
+/**
+ * The variables a shell action, script or check gets on top of the server's environment (minus the board's own
+ * variables): every placeholder's, then each input as `<PREFIX>_INPUT_<NAME>` and each variable as `<PREFIX>_VAR_<NAME>`.
+ */
 export function customShellEnv(values: CustomValues): Record<string, string> {
-  return Object.fromEntries(CUSTOM_PLACEHOLDERS.map((p) => [customEnvName(p.env), valueOf(p.key, values)]));
+  return Object.fromEntries([
+    ...CUSTOM_PLACEHOLDERS.map((p) => [customEnvName(p.env), valueOf(p.key, values)]),
+    ...Object.entries(values.inputs ?? {}).map(([name, value]) => [inputEnvName(name), value]),
+    ...Object.entries(values.vars ?? {}).map(([name, value]) => [variableEnvName(name), value]),
+  ]);
 }
 
 /** What a dry run or the settings form shows a shell action will run: the command, then its variables. */
@@ -396,20 +436,22 @@ export function describeScriptRun(script: Pick<CustomScript, "language" | "body"
 }
 
 /**
- * The JSON a script gets on stdin: what the environment variables carry, and the automation's inputs, as one object so
- * a script in any language can read it without parsing the environment.
+ * The JSON a script gets on stdin: what the environment variables carry, the automation's inputs and the project's
+ * variables, as one object so a script in any language can read it without parsing the environment.
  */
 export function customScriptContext(values: CustomValues): {
   automation: string;
-  project: { id?: string; name: string; path: string | null } | null;
+  project: { id?: string; name: string; path: string | null; repoUrl: string } | null;
   inputs: Record<string, string>;
+  vars: Record<string, string>;
   task: NonNullable<CustomValues["task"]> | null;
   pr: { url: string } | null;
 } {
   return {
     automation: values.automation,
-    project: values.project ?? null,
+    project: values.project ? { ...values.project, repoUrl: values.project.repoUrl ?? "" } : null,
     inputs: values.inputs ?? {},
+    vars: values.vars ?? {},
     task: values.task ?? null,
     pr: values.pr ?? null,
   };
@@ -565,24 +607,87 @@ export function customTaskMatches(filters: CustomFilters, task: TaskSummary): bo
   );
 }
 
+/** What an action gets from where it runs, besides the project itself: resolved by the server per project. */
+export interface CustomScope {
+  /** The variables in effect in the project (effectiveVariables). */
+  vars?: Record<string, string>;
+  /** `https://<host>/<repo>` from the project folder's `origin`; empty without one. */
+  repoUrl?: string;
+}
+
 /** The values an action is given. */
 export function customValues(
   def: Pick<CustomDefinition, "name"> & { action?: CustomAction },
   project: (Pick<Project, "title" | "workspaceRoot"> & { id?: string }) | null,
   task: TaskSummary | null,
   data: CustomData = {},
+  scope: CustomScope = {},
 ): CustomValues {
   const pr = task ? prOfTask(task, data.prLinkId) : null;
   return {
     automation: def.name,
-    ...(def.action?.kind === "agent"
-      ? { inputs: Object.fromEntries(def.action.inputs.map((i) => [i.name, i.value])) }
-      : {}),
+    ...(def.action ? { inputs: Object.fromEntries(def.action.inputs.map((i) => [i.name, i.value])) } : {}),
+    vars: scope.vars ?? {},
     task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
     pr: pr ? { url: pr.url } : null,
-    project: project ? { id: project.id, name: project.title, path: project.workspaceRoot } : null,
+    project: project
+      ? { id: project.id, name: project.title, path: project.workspaceRoot, repoUrl: scope.repoUrl ?? "" }
+      : null,
     ...(data.item ? { item: data.item } : {}),
   };
+}
+
+/** Matches `<PREFIX>_VAR_<NAME>` in a body (any case: PowerShell's `$env:` names aren't case-sensitive). */
+const VAR_ENV_IN = new RegExp(`\\b${brandEnv("VAR_")}([A-Za-z0-9_]+)\\b`, "gi");
+/**
+ * `vars.name` and `vars["name"]` (also `["vars"]["name"]`, as Python reads the JSON), but not `vars.get("name")`: a
+ * method call is the script reading it as optional.
+ */
+const VARS_DOT_IN = /\bvars\.([a-z][a-z0-9_]{0,39})\b(?!\s*\()/g;
+const VARS_INDEX_IN = /\bvars(?:["']\])?\[\s*["']([a-z][a-z0-9_]{0,39})["']\s*\]/g;
+
+/** The variable names a script or command body reads, best effort: what it plainly names, never what it builds. */
+function variablesInBody(body: string): string[] {
+  return [
+    ...[...body.matchAll(VAR_ENV_IN)].map((m) => m[1]!.toLowerCase()),
+    ...[...body.matchAll(VARS_DOT_IN)].map((m) => m[1]!),
+    ...[...body.matchAll(VARS_INDEX_IN)].map((m) => m[1]!),
+  ];
+}
+
+/**
+ * The variables an action needs, in order, without repeats: the prompt's `{{vars.<name>}}`, and what its script, check
+ * or command reads (variablesInBody). A project that has no value for one gets no run of it (missingVariables).
+ */
+export function variablesNamedBy(action: CustomAction): string[] {
+  const names =
+    action.kind === "agent"
+      ? [
+          ...placeholdersIn(action.prompt).flatMap((key) => varOfKey(key) ?? []),
+          ...(action.check ? variablesInBody(action.check.body) : []),
+        ]
+      : variablesInBody(action.kind === "script" ? action.body : action.command);
+  return [...new Set(names)].filter((name) => VARIABLE_NAME.test(name));
+}
+
+/** The variables an action names that have no value in a project's variables, in the order it names them. */
+export const missingVariables = (action: CustomAction, vars: Record<string, string>): string[] =>
+  variablesNamedBy(action).filter((name) => !variableHasValue(vars, name));
+
+/**
+ * What an automation's row says about projects missing a variable, or null: "Needs `jira_key` in: billing, aboard".
+ * `missing` is each project's title with the names it lacks.
+ */
+export function describeMissingVariables(missing: ReadonlyArray<{ project: string; names: string[] }>): string | null {
+  const lacking = missing.filter((m) => m.names.length > 0);
+  if (lacking.length === 0) return null;
+  // Grouped by the names, so ten projects missing the same variable read as one line.
+  const byNames = new Map<string, string[]>();
+  for (const { project, names } of lacking) {
+    const key = names.map((n) => `\`${n}\``).join(", ");
+    byNames.set(key, [...(byNames.get(key) ?? []), project]);
+  }
+  return [...byNames].map(([names, projects]) => `Needs ${names} in: ${projects.join(", ")}`).join("; ");
 }
 
 /** Every extra tool an agent action may call unattended: its allowed tools and the ones filling its slots. */
@@ -743,13 +848,19 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
   if (trigger.kind === "status_change" && trigger.from === trigger.to) {
     return "Pick a different column to move from than to";
   }
+  const inputNames = action.inputs.map((i) => i.name);
+  const slotNames = action.kind === "agent" ? action.slots.map((s) => s.name) : [];
+  const repeated =
+    inputNames.find((name, i) => inputNames.indexOf(name) !== i) ??
+    slotNames.find((name, i) => slotNames.indexOf(name) !== i);
+  if (repeated) return `"${repeated}" is declared twice`;
+  for (const input of action.inputs) {
+    const problem =
+      inputValueProblem(input.type, input.value) ??
+      (input.default ? inputValueProblem(input.type, input.default) : null);
+    if (problem) return `${input.label}: ${problem}`;
+  }
   if (action.kind === "agent") {
-    const inputNames = action.inputs.map((i) => i.name);
-    const slotNames = action.slots.map((s) => s.name);
-    const repeated =
-      inputNames.find((name, i) => inputNames.indexOf(name) !== i) ??
-      slotNames.find((name, i) => slotNames.indexOf(name) !== i);
-    if (repeated) return `"${repeated}" is declared twice`;
     if (action.check && trigger.kind !== "schedule") {
       return "Only a schedule can have a check script for now: pick a schedule, or take the check out";
     }
@@ -760,6 +871,7 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
       (key) =>
         !KNOWN.has(key) &&
         !(action.check && isItemKey(key)) &&
+        varOfKey(key) === null &&
         !(key.startsWith(INPUT_PREFIX) && inputNames.includes(key.slice(INPUT_PREFIX.length))),
     );
     if (unknown) {
@@ -772,12 +884,6 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
     }
     const named = action.check && scriptPlaceholder(action.check.body);
     if (named) return notFilledIn(named, "The check script isn't", "it", true);
-    for (const input of action.inputs) {
-      const problem =
-        inputValueProblem(input.type, input.value) ??
-        (input.default ? inputValueProblem(input.type, input.default) : null);
-      if (problem) return `${input.label}: ${problem}`;
-    }
   } else if (action.kind === "script") {
     const named = scriptPlaceholder(action.body);
     if (named) return notFilledIn(named, "Scripts aren't", "them", true);
@@ -790,9 +896,17 @@ export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "f
 
 /** Why a script or command can't name a placeholder, and what to read instead. */
 function notFilledIn(named: string, subject: string, them: string, isScript: boolean): string {
-  const env = CUSTOM_PLACEHOLDERS.find((p) => p.key === named)?.env;
+  const placeholder = CUSTOM_PLACEHOLDERS.find((p) => p.key === named)?.env;
+  const variable = varOfKey(named);
+  const env = placeholder
+    ? customEnvName(placeholder)
+    : variable !== null
+      ? variableEnvName(variable)
+      : named.startsWith(INPUT_PREFIX)
+        ? inputEnvName(named.slice(INPUT_PREFIX.length))
+        : null;
   return `${subject} filled in, so values can't be injected into ${them}: read ${
-    env ? `the ${customEnvName(env)} environment variable` : "the environment variables"
+    env ? `the ${env} environment variable` : "the environment variables"
   }${isScript ? " (or the JSON on stdin)" : ""} instead of {{${named}}}`;
 }
 
@@ -801,7 +915,7 @@ function notFilledIn(named: string, subject: string, them: string, isScript: boo
  * f-string escape, a template): only a name that is a placeholder was meant as one.
  */
 const scriptPlaceholder = (body: string): string | undefined =>
-  placeholdersIn(body).find((key) => KNOWN.has(key) || key.startsWith(INPUT_PREFIX));
+  placeholdersIn(body).find((key) => KNOWN.has(key) || key.startsWith(INPUT_PREFIX) || varOfKey(key) !== null);
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: "Backlog",
