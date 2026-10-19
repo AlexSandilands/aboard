@@ -44,7 +44,8 @@ export function createTestScript(deps: {
     const task = input.role === "action" && input.taskId ? deps.task(input.taskId) : null;
     const values: CustomValues = {
       ...customValues({ name: input.name }, project, task),
-      inputs: input.inputs,
+      // Only an agent (a check's) reads inputs in a real run.
+      inputs: input.role === "check" ? input.inputs : {},
     };
     if (running) throw new AppError("CONFLICT", "A test run is already going: wait for it to finish");
     running = true;

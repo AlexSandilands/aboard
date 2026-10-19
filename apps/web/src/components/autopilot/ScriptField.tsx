@@ -1,4 +1,4 @@
-import type { CustomScriptLanguage, Project, TaskSummary } from "@repo/contracts";
+import { CUSTOM_SCRIPT_MAX, type CustomScriptLanguage, type Project, type TaskSummary } from "@repo/contracts";
 import { CheckIcon, CopyIcon, FileUpIcon, PlayIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -61,6 +61,13 @@ export function ScriptField({
       return;
     }
     const text = await picked.text();
+    if (text.length > CUSTOM_SCRIPT_MAX) {
+      toastManager.add({
+        type: "error",
+        title: `That file is over ${CUSTOM_SCRIPT_MAX} characters, the most a script can be`,
+      });
+      return;
+    }
     const guessed = languageOfFile(picked.name);
     // The file's own language, when its name says it, so it is highlighted and run as what it is.
     patch({
