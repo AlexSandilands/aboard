@@ -23,10 +23,10 @@ export type PinnedLaneHeight = keyof typeof PINNED_LANE_HEIGHTS;
 
 export const DEFAULT_PINNED_LANE_HEIGHT: PinnedLaneHeight = "medium";
 
-/** The stuck lane's `max-height`. A stored value that isn't one of the sizes falls back to the default. */
-export function pinnedLaneMaxHeight(height: unknown): string {
+/** The stuck lane's greatest height, in viewport heights. A stored value that isn't one of the sizes falls back to the default. */
+export function pinnedLaneMaxVh(height: unknown): number {
   const known = typeof height === "string" && Object.hasOwn(PINNED_LANE_HEIGHTS, height);
-  return `${PINNED_LANE_HEIGHTS[known ? (height as PinnedLaneHeight) : DEFAULT_PINNED_LANE_HEIGHT].vh}vh`;
+  return PINNED_LANE_HEIGHTS[known ? (height as PinnedLaneHeight) : DEFAULT_PINNED_LANE_HEIGHT].vh;
 }
 
 export const DEFAULT_COLLAPSE: CollapseState = { collapsedColumns: { done: true }, cellOverrides: {} };

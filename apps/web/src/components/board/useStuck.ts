@@ -1,82 +1,94 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { isStuck } from "./stuck.logic";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { stuckHeight } from "./stuck.logic";
 
 /**
- * Whether a pinned lane is stuck under the column header, found with a sentinel (a zero-height element placed where
- * the lane would be unpinned) that an IntersectionObserver watches against the area below the header, in the board's
- * scroll box (`data-board-scroll`).
+ * Whether a pinned lane is stuck under the column header, in the board's scroll box (`data-board-scroll`), and how
+ * far it has folded up. It sticks as soon as its top reaches the header, and from there gives up one pixel of height
+ * per pixel scrolled down to its settled height (`maxVh` of the window, or its one-line cards if they take less), so
+ * its bottom stays on the lanes under it: no gap opens and nothing jumps, either way.
  *
- * Going stuck shrinks the lane, which would shorten the board and, near its bottom, clamp the scroll position back
- * until the lane unsticks and grows again: a flicker. So while stuck, `spacerRef` (an empty element at the end of the
- * board's content, which this hook styles; give it no `style`) is given just the height that keeps the scroll position
- * the lane stuck at reachable, usually none, and the scroll position is put back if the shorter board clamped it. It
- * is at the end, and not the lane's whole lost height after the lane, so no gap shows between the lane and the
- * projects. Attach `sentinelRef` and `sectionRef`.
+ * `spacerRef` (an element just after the lane) takes up what the lane gave up. The lane's height and the spacer's are
+ * always set together, with nothing measured in between, so the lanes under them never move, not even for one layout:
+ * if they did, the browser's scroll anchoring would scroll the board to follow them. This hook styles the lane and the
+ * spacer; give them no `style`.
+ *
+ * The full height can't be read while stuck (the cards are one line then), so it is the last one seen unstuck: tasks
+ * added or removed while stuck leave the lane off by the change until it unsticks.
+ *
+ * Attach `beforeRef` (a marker just before the lane), `sectionRef`, `bodyRef` (the part of the lane that scrolls
+ * inside it while stuck) and `spacerRef`.
  */
-export function useStuck(
-  pinned: boolean,
-  headerRef: RefObject<HTMLElement | null>,
-  spacerRef: RefObject<HTMLDivElement | null>,
-) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
+export function useStuck(pinned: boolean, headerRef: RefObject<HTMLElement | null>, maxVh: number) {
+  const beforeRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const [stuckNow, setStuck] = useState(false);
   const stuck = pinned && stuckNow;
-  // The scroll position when the sentinel went out of view.
-  const scrollAtStick = useRef(0);
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    const root = sentinel?.closest<HTMLElement>("[data-board-scroll]");
-    if (!pinned || !sentinel || !root) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[entries.length - 1]!;
-        scrollAtStick.current = root.scrollTop;
-        setStuck(
-          isStuck({
-            isIntersecting: entry.isIntersecting,
-            top: entry.boundingClientRect.top,
-            rootTop: entry.rootBounds?.top ?? 0,
-          }),
-        );
-      },
-      // The visible area starts under the column header.
-      { root, rootMargin: `-${headerRef.current?.offsetHeight ?? 0}px 0px 0px 0px` },
-    );
-    observer.observe(sentinel);
-    return () => {
-      observer.disconnect();
-      // Unpinned, or the board remounting: nothing is stuck, and a stick seen earlier mustn't move the scroll later.
-      setStuck(false);
-      scrollAtStick.current = 0;
-    };
-  }, [pinned, headerRef]);
+  // Whether the cards on screen are the one-line ones: until React has swapped them back, the lane holds its height.
+  const renderedStuck = useRef(false);
+  const update = useRef<() => void>(() => {});
 
   useLayoutEffect(() => {
+    const before = beforeRef.current;
     const section = sectionRef.current;
+    const body = bodyRef.current;
     const spacer = spacerRef.current;
-    if (!pinned || !section || !spacer) return;
-    const root = section.closest<HTMLElement>("[data-board-scroll]");
-    const fill = () => {
-      if (!stuck || !root) {
-        spacer.style.height = "0px";
-        return;
+    const root = before?.closest<HTMLElement>("[data-board-scroll]");
+    if (!pinned || !before || !section || !body || !spacer || !root) return;
+    let natural = section.offsetHeight;
+    // The one-line cards' height, once they have been seen.
+    let compact = Infinity;
+    let current = false;
+    const setHeights = (height: number | null) => {
+      section.style.height = height === null ? "" : `${height}px`;
+      // Clip rather than hide, so the lane's header still sticks to the board's left edge.
+      section.style.overflow = height === null ? "" : "clip";
+      spacer.style.height = `${height === null ? 0 : Math.max(0, natural - height)}px`;
+    };
+    // Run straight from the scroll event, not a frame later, so the lane and the lanes under it move together.
+    const run = () => {
+      const rootTop = root.getBoundingClientRect().top + (headerRef.current?.offsetHeight ?? 0);
+      const scrolled = rootTop - before.getBoundingClientRect().top;
+      const cards = body.firstElementChild as HTMLElement | null;
+      if (scrolled > 0 && renderedStuck.current && cards) {
+        compact = section.offsetHeight - body.clientHeight + cards.offsetHeight;
       }
-      // How far the board scrolls without the spacer, against how far it had to for the lane to stick.
-      const reachable = root.scrollHeight - spacer.offsetHeight - root.clientHeight;
-      spacer.style.height = `${Math.max(0, scrollAtStick.current - reachable)}px`;
+      const height = stuckHeight({ natural, scrolled, settled: Math.min(compact, (window.innerHeight * maxVh) / 100) });
+      if (height !== null) setHeights(height);
+      else if (renderedStuck.current) setHeights(natural);
+      else {
+        setHeights(null);
+        natural = section.offsetHeight;
+      }
+      if ((height !== null) !== current) {
+        current = height !== null;
+        setStuck(current);
+      }
     };
-    fill();
-    // The shorter lane may already have clamped the scroll position; the spacer gives the room back.
-    if (stuck && root && root.scrollTop < scrollAtStick.current) root.scrollTop = scrollAtStick.current;
-    const observer = new ResizeObserver(fill);
+    update.current = run;
+    run();
+    const observer = new ResizeObserver(run);
     observer.observe(section);
+    if (body.firstElementChild) observer.observe(body.firstElementChild);
+    root.addEventListener("scroll", run, { passive: true });
+    window.addEventListener("resize", run);
     return () => {
+      root.removeEventListener("scroll", run);
+      window.removeEventListener("resize", run);
       observer.disconnect();
-      spacer.style.height = "0px";
+      update.current = () => {};
+      setHeights(null);
+      // Unpinned, or the board remounting: nothing is stuck.
+      setStuck(false);
     };
-  }, [pinned, stuck, spacerRef]);
+  }, [pinned, headerRef, maxVh]);
 
-  return { sentinelRef, sectionRef, stuck };
+  useLayoutEffect(() => {
+    renderedStuck.current = stuck;
+    // Stuck: measure the one-line cards. Unstuck and showing full cards again: let go of the held height.
+    update.current();
+  }, [stuck]);
+
+  return { beforeRef, sectionRef, bodyRef, spacerRef, stuck };
 }

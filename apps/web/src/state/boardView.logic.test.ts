@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { migrateBoardView, pinnedLaneMaxHeight } from "./boardView.logic";
+import { migrateBoardView, pinnedLaneMaxVh } from "./boardView.logic";
 
-describe("pinnedLaneMaxHeight", () => {
+describe("pinnedLaneMaxVh", () => {
   it("maps each size to a share of the viewport", () => {
-    expect(pinnedLaneMaxHeight("small")).toBe("20vh");
-    expect(pinnedLaneMaxHeight("medium")).toBe("30vh");
-    expect(pinnedLaneMaxHeight("large")).toBe("45vh");
+    expect(pinnedLaneMaxVh("small")).toBe(20);
+    expect(pinnedLaneMaxVh("medium")).toBe(30);
+    expect(pinnedLaneMaxVh("large")).toBe(45);
   });
 
   it("reads anything else as the default size", () => {
     for (const bad of [undefined, null, "huge", "", 30, "toString", "__proto__"]) {
-      expect(pinnedLaneMaxHeight(bad)).toBe("30vh");
+      expect(pinnedLaneMaxVh(bad)).toBe(30);
     }
   });
 });

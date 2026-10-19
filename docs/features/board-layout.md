@@ -46,16 +46,18 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 - **Pinning.** The pin button in the lane's header (`pinPriorityLane` in `board-view`, off by default) makes the lane
   `position: sticky` in the board's scroll box (`data-board-scroll`), under the column header (`top` is the header's
   height) and over the project lanes (z-4: under the header, z-10, and the dependency lines, z-5), with an opaque
-  background. A sentinel placed where the lane would be unpinned and an `IntersectionObserver` rooted in the scroll
-  box and inset by the header's height say when it is **stuck** (`useStuck`, `isStuck` in `stuck.logic.ts`). Stuck, the
-  lane gets `data-stuck`, a shadow and a `max-height` (`pinnedLaneHeight`: Small 20vh, Medium 30vh by default, Large
-  45vh; Settings → Board → Appearance → **Pinned lane height**, disabled while the lane is off), its cells scroll
-  inside it, and its cards are `compact` (`BoardCell` → `SortableTaskCard` → `TaskCardContent`): one line with the number,
-  the project's icon, the title, the Autopilot badge, the first PR chip, and the blocked and attention icons. Scrolling back
-  to the top brings the full lane back. Shrinking the lane would shorten the board, and near its end clamp the scroll
-  position back until the lane unstuck again, so while stuck an empty element at the end of the board's content gets
-  just the height that keeps the scroll position the lane stuck at reachable (usually none, so no gap shows under the
-  lane) and the scroll position is restored if it was clamped. The lines re-measure on scroll (once per frame) while the lane is pinned, since
+  background. It is **stuck** once its top has scrolled past the header (`useStuck`, checked straight from the scroll
+  event against a marker before the lane). Stuck, the lane gets `data-stuck` and a shadow, its cells scroll inside it,
+  and its cards are `compact` (`BoardCell` → `SortableTaskCard` → `TaskCardContent`): one line with the number, the
+  project's icon, the title, the Autopilot badge, the first PR chip, and the blocked and attention icons. It then folds
+  up one pixel per pixel scrolled (`stuckHeight` in `stuck.logic.ts`) down to its settled height: `pinnedLaneHeight`
+  (Small 20vh, Medium 30vh by default, Large 45vh; Settings → Board → Appearance → **Pinned lane height**, disabled
+  while the lane is off), or its one-line cards if they take less. So its bottom stays on the first project's header
+  and nothing jumps as it sticks, folds, unfolds or unsticks. A spacer after the lane takes up the height it gave up,
+  set together with the lane's own height with nothing measured in between: if the lanes under it moved even for one
+  layout, the browser's scroll anchoring would scroll the board to follow them (the lane, its marker and the spacer
+  are `overflow-anchor: none` for the same reason). The full height is the last one seen unstuck, so tasks added or
+  removed while stuck leave the fold off by that much until it unsticks. The lines re-measure on scroll (once per frame) while the lane is pinned, since
   its cards don't scroll with the content (`DependencyLines`' `pinnedLane`). `revealCard` treats the pinned lane's
   bottom as the top of the visible area for cards outside it, and scrolls the lane itself for a card inside it. Drags work
   in and out of a stuck lane as in an unpinned one, with two differences: the drag preview is one line, and the board
@@ -459,7 +461,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
-| `apps/web/src/components/board/useStuck.ts`, `stuck.logic.ts` | Whether the pinned lane is stuck, and keeping its footprint (`isStuck` is tested) |
+| `apps/web/src/components/board/useStuck.ts`, `stuck.logic.ts` | Whether the pinned lane is stuck, how far it has folded, and keeping its footprint (`stuckHeight` is tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |

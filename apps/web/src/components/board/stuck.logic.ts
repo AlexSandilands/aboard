@@ -1,15 +1,18 @@
-/** What the sentinel observer reports: whether it is on screen and where it sits against the visible area. */
-export interface SentinelReading {
-  isIntersecting: boolean;
-  /** The sentinel's top edge, and the visible area's (the scroll box under the column header). */
-  top: number;
-  rootTop: number;
-}
-
 /**
- * Whether a pinned lane is stuck: its sentinel, which sits where the lane would be unpinned, has scrolled up past the
- * column header. A sentinel below the visible area (the lane is where it belongs, just off screen) isn't stuck.
+ * The height of a pinned lane scrolled `scrolled` pixels past the column header, or null while it hasn't been (it
+ * isn't stuck). It gives up one pixel per pixel scrolled, so its bottom stays on the lanes under it, which keep their
+ * place because a spacer takes up what it gave up; it stops at `settled` (the chosen height, or its one-line cards if
+ * they take less) and never grows past its full height.
  */
-export function isStuck({ isIntersecting, top, rootTop }: SentinelReading): boolean {
-  return !isIntersecting && top < rootTop;
+export function stuckHeight({
+  natural,
+  scrolled,
+  settled,
+}: {
+  /** The lane's full height, as last seen unstuck. */
+  natural: number;
+  scrolled: number;
+  settled: number;
+}): number | null {
+  return scrolled > 0 ? Math.max(natural - scrolled, Math.min(natural, settled)) : null;
 }

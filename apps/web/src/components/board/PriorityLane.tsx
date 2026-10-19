@@ -4,7 +4,7 @@ import { memo, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import { pinnedLaneMaxHeight } from "~/state/boardView.logic";
+import { pinnedLaneMaxVh } from "~/state/boardView.logic";
 import { useBoardView } from "~/state/ui";
 import {
   laneCounts,
@@ -23,8 +23,8 @@ import { useStuck } from "./useStuck";
  * The priority lane, above every project: the priority tasks of all of them in their usual columns. Its cards name
  * their project, change column by dragging, and leave the lane when dropped on their own project's lane.
  *
- * Pinned, it sticks under the column header as the board scrolls. Once scrolled it is stuck: its cards are one line
- * each and it takes no more than the chosen share of the window, scrolling inside itself past that.
+ * Pinned, it sticks under the column header as the board scrolls. Stuck, its cards are one line each and it folds up
+ * as the board scrolls, to no more than the chosen share of the window, scrolling inside itself past that.
  */
 export const PriorityLane = memo(function PriorityLane({
   cells,
@@ -32,7 +32,6 @@ export const PriorityLane = memo(function PriorityLane({
   draggingTaskId,
   overCell,
   columnHeaderRef,
-  spacerRef,
 }: {
   cells: LaneCells;
   selectedTaskId: string | null;
@@ -42,33 +41,33 @@ export const PriorityLane = memo(function PriorityLane({
   overCell: OverCell | null;
   /** The sticky column header the pinned lane sits under. */
   columnHeaderRef: RefObject<HTMLElement | null>;
-  /** An empty element at the end of the board's content, which `useStuck` sizes. */
-  spacerRef: RefObject<HTMLDivElement | null>;
 }) {
   const counts = laneCounts({ project: PRIORITY_PROJECT, bands: [], cells });
   const toggleRow = laneHasCollapsibleCell(cells);
   const pinned = useBoardView((s) => s.pinPriorityLane);
   const setPinned = useBoardView((s) => s.setPinPriorityLane);
-  const maxHeight = useBoardView((s) => pinnedLaneMaxHeight(s.pinnedLaneHeight));
-  const { sentinelRef, sectionRef, stuck } = useStuck(pinned, columnHeaderRef, spacerRef);
+  const maxVh = useBoardView((s) => pinnedLaneMaxVh(s.pinnedLaneHeight));
+  const { beforeRef, sectionRef, bodyRef, spacerRef, stuck } = useStuck(pinned, columnHeaderRef, maxVh);
   const pinLabel = pinned ? "Unpin the priority lane" : "Pin the priority lane to the top of the board";
   return (
     <>
-      {pinned ? <div ref={sentinelRef} aria-hidden className="pointer-events-none -mb-px h-px" /> : null}
+      {pinned ? (
+        <div ref={beforeRef} aria-hidden className="pointer-events-none -mb-px h-px [overflow-anchor:none]" />
+      ) : null}
       <section
         ref={sectionRef}
         id={`lane-${PRIORITY_ROW_ID}`}
         aria-label="Priority"
         data-pinned={pinned || undefined}
         data-stuck={stuck || undefined}
-        style={stuck ? { maxHeight } : undefined}
         className={cn(
           "scroll-mt-10 border-b border-border/40 pt-1.5 pb-3",
           pinned
             ? // Under the column header (z-10) and the dependency lines (z-5), over the lanes. Opaque, so the cards
               // scrolling beneath don't show through the tint. `top` is the column header's height (h-9 and its
-              // border, see Board.tsx); useStuck measures the same header for its observer.
-              "sticky top-[calc(var(--spacing)*9+1px)] z-4 bg-background bg-linear-to-b from-warning/4 to-warning/4"
+              // border, see Board.tsx); useStuck measures the same header. Not a scroll anchor (nor its markers): it
+              // moves with the scroll, which the browser would otherwise try to undo.
+              "sticky top-[calc(var(--spacing)*9+1px)] z-4 bg-background bg-linear-to-b from-warning/4 to-warning/4 [overflow-anchor:none]"
             : "bg-warning/4",
           stuck && "flex flex-col shadow-[0_10px_18px_-10px_rgb(0_0_0/0.35)]",
         )}
@@ -102,7 +101,7 @@ export const PriorityLane = memo(function PriorityLane({
             <TooltipPopup>{pinLabel}</TooltipPopup>
           </Tooltip>
         </header>
-        <div className={cn("mt-1", stuck && "min-h-0 flex-1 overflow-y-auto")}>
+        <div ref={bodyRef} className={cn("mt-1", stuck && "min-h-0 flex-1 overflow-y-auto")}>
           <div className={BOARD_GRID_CLASS_NAME}>
             {STATUS_ORDER.map((status) => (
               <BoardCell
@@ -120,6 +119,7 @@ export const PriorityLane = memo(function PriorityLane({
           </div>
         </div>
       </section>
+      {pinned ? <div ref={spacerRef} aria-hidden className="pointer-events-none [overflow-anchor:none]" /> : null}
     </>
   );
 });
