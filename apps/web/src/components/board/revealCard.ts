@@ -1,18 +1,27 @@
-import { revealScrollTarget } from "./reveal.logic";
+import { revealScrollTarget, visibleFrom } from "./reveal.logic";
 
 /** Longest a smooth scroll is waited on before the card flashes anyway (browsers without `scrollend`). */
 const SCROLL_SETTLE_MS = 1200;
+/** How long a pinned priority lane is given to notice it has stuck after an instant scroll. */
+const STICK_SETTLE_MS = 150;
 
 /**
  * Scrolls the board's scroll box to a card (smoothly, or at once under reduced motion), then flashes a ring round it.
- * `header` is the sticky column header, which hides the top of the box.
+ * `header` is the sticky column header, which hides the top of the box; so does the stuck priority lane (found in the
+ * box by its `data-stuck`) for a card that isn't in it.
  */
 export function revealCard(scroller: HTMLElement, header: HTMLElement | null, card: Element): void {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const align = (behavior: ScrollBehavior, el: Element): boolean => {
     const box = scroller.getBoundingClientRect();
+    // Only a stuck lane covers the board: a pinned one still in its place shrinks to its cap when it sticks.
+    const lane = scroller.querySelector<HTMLElement>("[data-stuck]");
     const view = {
-      top: box.top + (header?.offsetHeight ?? 0),
+      top: visibleFrom(
+        box.top,
+        header?.offsetHeight ?? 0,
+        lane && !lane.contains(el) ? lane.getBoundingClientRect().bottom : null,
+      ),
       left: box.left,
       bottom: box.top + scroller.clientHeight,
       right: box.left + scroller.clientWidth,
@@ -30,9 +39,29 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
     return true;
   };
 
+  // A card in the stuck lane is reached by scrolling the lane, which keeps its own cards inside its height cap.
+  // Checked again after each aim, since scrolling the board can be what sticks the lane.
+  const revealInStuckLane = (el: Element): boolean => {
+    if (!el.closest("[data-stuck]")) return false;
+    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduceMotion ? "instant" : "smooth" });
+    flash(el, reduceMotion);
+    return true;
+  };
+  if (revealInStuckLane(card)) return;
+
   if (reduceMotion) {
     align("instant", card);
-    flash(card, true);
+    if (!scroller.querySelector("[data-pinned]")) {
+      flash(card, true);
+      return;
+    }
+    // A pinned lane shrinks and starts covering the board once the scroll has stuck it: aim once more after that.
+    window.setTimeout(() => {
+      const current = liveCard(scroller, card);
+      if (!current || revealInStuckLane(current)) return;
+      align("instant", current);
+      flash(current, true);
+    }, STICK_SETTLE_MS);
     return;
   }
   if (!align("smooth", card)) {
@@ -45,14 +74,14 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
     // An update can swap the card's node meanwhile (it moved row) or remove it (archived, its lane folded): aim at
     // the fresh node, or stop when there is none.
     const current = liveCard(scroller, card);
-    if (!current) return;
+    if (!current || revealInStuckLane(current)) return;
     if (!align("smooth", current)) {
       flash(current, false);
       return;
     }
     whenScrollSettled(scroller, () => {
       const arrived = liveCard(scroller, current);
-      if (arrived) flash(arrived, false);
+      if (arrived && !revealInStuckLane(arrived)) flash(arrived, false);
     });
   });
 }

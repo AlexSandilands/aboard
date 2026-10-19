@@ -30,6 +30,7 @@ export const BoardCell = memo(function BoardCell({
   selectedTaskId,
   draggingTaskId,
   dropState,
+  compact = false,
 }: {
   /** Where Add task puts a task; none in the priority lane, which has no project of its own. */
   projectId?: string;
@@ -49,6 +50,8 @@ export const BoardCell = memo(function BoardCell({
   /** The card being dragged, when it belongs to this lane; a collapsed cell keeps it in view. */
   draggingTaskId: string | null;
   dropState: CellDropState;
+  /** Draws the cards on one line: the pinned priority lane, while it is stuck under the column header. */
+  compact?: boolean;
 }) {
   const data: DragData = { type: "cell", rowId, status };
   const { setNodeRef } = useDroppable({ id: cellDroppableId(rowId, status), data });
@@ -75,7 +78,8 @@ export const BoardCell = memo(function BoardCell({
       style={gridRow ? { gridRow } : undefined}
       data-drop-state={dropState ?? undefined}
       className={cn(
-        "flex min-h-14 min-w-0 flex-col gap-1.5 rounded-xl p-1",
+        "flex min-w-0 flex-col rounded-xl p-1",
+        compact ? "min-h-9 gap-1" : "min-h-14 gap-1.5",
         dropState === "valid" && "bg-accent/30 ring-1 ring-inset ring-primary/30",
         dropState === "invalid" && "cursor-not-allowed bg-error/5 ring-1 ring-inset ring-error/40",
       )}
@@ -103,7 +107,13 @@ export const BoardCell = memo(function BoardCell({
           task.kind === "epic" ? (
             <EpicCard key={task.id} epic={task} tasks={epicChildren?.[task.id] ?? []} selectedTaskId={selectedTaskId} />
           ) : (
-            <SortableTaskCard key={task.id} task={task} rowId={rowId} selected={task.id === selectedTaskId} />
+            <SortableTaskCard
+              key={task.id}
+              task={task}
+              rowId={rowId}
+              selected={task.id === selectedTaskId}
+              compact={compact}
+            />
           ),
         )}
       </SortableContext>

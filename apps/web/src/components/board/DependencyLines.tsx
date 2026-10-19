@@ -31,13 +31,15 @@ interface Layout {
  * get a short stub toward where they are.
  *
  * The overlay sits inside the scrolling content, so scrolling carries it along; it measures the cards' boxes when
- * the focus, the tasks or the content's size change. It never takes the pointer.
+ * the focus, the tasks or the content's size change, and, with the priority lane pinned, as the board scrolls (the
+ * lane's cards don't scroll with it). It never takes the pointer.
  */
 export function DependencyLines({
   containerRef,
   tasks,
   projects,
   priorityLane,
+  pinnedLane,
   selectedTaskId,
   suspended,
 }: {
@@ -47,6 +49,8 @@ export function DependencyLines({
   projects: ReadonlyArray<Project>;
   /** The priority lane is shown, above every project: its cards sit before the first lane. */
   priorityLane: boolean;
+  /** The priority lane is pinned: its cards stay put while the content scrolls, so scrolling moves them in it. */
+  pinnedLane: boolean;
   selectedTaskId: string | null;
   /** Hidden while a card is being dragged, since cards are moving under it. */
   suspended: boolean;
@@ -118,6 +122,10 @@ export function DependencyLines({
       frame = requestAnimationFrame(measure);
     });
     observer.observe(root);
+    // The pinned lane changes size when it sticks or unsticks, which leaves the content's size alone (a spacer
+    // holds it) but moves its cards.
+    const pinned = root.querySelector("[data-pinned]");
+    if (pinned) observer.observe(pinned);
     // Collapsing a cell or filtering the board adds and removes cards without resizing the content.
     const isCard = (node: Node) =>
       node instanceof Element && (node.matches("[data-task-card]") || node.querySelector("[data-task-card]") !== null);
@@ -128,13 +136,27 @@ export function DependencyLines({
     });
     mutations.observe(root, { childList: true, subtree: true });
     const settle = window.setTimeout(measure, SETTLE_MS);
+    // A pinned lane's cards move in the content as it scrolls: measure again, once per frame at most.
+    const scroller = pinnedLane ? root.closest("[data-board-scroll]") : null;
+    let scrollFrame = 0;
+    const onScroll = () => {
+      if (scrollFrame) return;
+      scrollFrame = requestAnimationFrame(() => {
+        scrollFrame = 0;
+        measure();
+      });
+    };
+    // Captured, since scroll events don't bubble: the stuck lane scrolls inside itself as well.
+    scroller?.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
+      scroller?.removeEventListener("scroll", onScroll, { capture: true });
       observer.disconnect();
       mutations.disconnect();
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(scrollFrame);
       window.clearTimeout(settle);
     };
-  }, [containerRef, wanted]);
+  }, [containerRef, wanted, pinnedLane]);
 
   if (!focusId || edges.length === 0 || !layout.boxes.has(focusId)) return null;
 

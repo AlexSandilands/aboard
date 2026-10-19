@@ -4,7 +4,9 @@ import type { Lane } from "./board.logic";
 import {
   canDropIn,
   computeDrop,
+  containersAroundStuckLane,
   homeRowId,
+  hitsAroundStuckLane,
   landsPastPreview,
   parseCellKey,
   placementAfterDrop,
@@ -314,5 +316,49 @@ describe("landsPastPreview", () => {
   it("never applies to Done or to non-moves", () => {
     expect(landsPastPreview({ kind: "move", status: "done", afterId: "d" }, "x", full, 2)).toBe(false);
     expect(landsPastPreview({ kind: "noop" }, "x", full, 2)).toBe(false);
+  });
+});
+
+describe("hitsAroundStuckLane", () => {
+  const hit = (id: string, rowId: string) => ({
+    id,
+    data: { droppableContainer: { data: { current: { type: "task", rowId, status: "planned" } } } },
+  });
+  const lane = { left: 0, top: 37, right: 1000, bottom: 200 };
+  const hits = [hit("under", "p"), hit("inLane", "priority")];
+
+  it("keeps the priority hits when the pointer is on the stuck lane", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 100 }, lane).map((h) => h.id)).toEqual(["inLane"]);
+  });
+
+  it("keeps the other hits when the pointer is below it, where a priority cell may reach clipped", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 300 }, lane).map((h) => h.id)).toEqual(["under"]);
+  });
+
+  it("changes nothing without a stuck lane", () => {
+    expect(hitsAroundStuckLane(hits, { x: 100, y: 100 }, null)).toEqual(hits);
+    expect(hitsAroundStuckLane(hits, null, lane)).toEqual(hits);
+  });
+});
+
+describe("containersAroundStuckLane", () => {
+  const container = (id: string, rowId: string) => ({
+    id,
+    data: { current: { type: "cell", rowId, status: "planned" } },
+  });
+  const lane = { left: 0, top: 37, right: 1000, bottom: 200 };
+  const containers = [container("under", "p"), container("inLane", "priority")];
+
+  it("offers only the lane's droppables to a pointer on it, even over its header or gaps", () => {
+    expect(containersAroundStuckLane(containers, { x: 5, y: 45 }, lane).map((c) => c.id)).toEqual(["inLane"]);
+  });
+
+  it("offers only the others to a pointer off the lane", () => {
+    expect(containersAroundStuckLane(containers, { x: 5, y: 400 }, lane).map((c) => c.id)).toEqual(["under"]);
+  });
+
+  it("offers everything without a stuck lane or a pointer (keyboard drags)", () => {
+    expect(containersAroundStuckLane(containers, { x: 5, y: 45 }, null)).toEqual(containers);
+    expect(containersAroundStuckLane(containers, null, lane)).toEqual(containers);
   });
 });

@@ -139,6 +139,12 @@ shows priority tasks from all projects in their usual columns, each with its pro
 columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
 tasks first. Turn the lane off in Settings → Board → Appearance; priority tasks then stay in their own lanes.
 
+The pin button in the lane's header keeps it under the column headers while you scroll. Once you have scrolled
+past the top, a pinned lane shows each card on one line (number, project, title and whether it has a PR, is blocked or
+needs you), takes at most a share of the window and scrolls inside itself past that, so it doesn't push the rest of
+the board out of view; scroll back to the top and it returns to normal. Choose how much of the window it may take
+(Small 20%, Medium 30%, Large 45%) under **Pinned lane height** in Settings → Board → Appearance.
+
 To see only what is in progress, tick **In progress, all projects** in the filter menu.
 
 ## Manual tasks

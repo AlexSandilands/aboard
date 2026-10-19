@@ -152,6 +152,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["star", "urgent", "pinned", "top", "hide"],
   ),
   draft(
+    "board.appearance.pinned-lane-height",
+    "Pinned lane height",
+    "The most of the window the priority lane takes while it is pinned and the board is scrolled. It scrolls inside itself past that.",
+    ["pin", "sticky", "priority", "max height", "small", "medium", "large", "size"],
+  ),
+  draft(
     "board.appearance.scroll-to-task",
     "Scroll to a task when opening it",
     "Opening a task from search, a link or a notification slides the board to its card. Off, only the panel opens.",

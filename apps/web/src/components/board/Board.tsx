@@ -56,6 +56,8 @@ import {
   canDropIn,
   cellDroppableId,
   homeRowId,
+  containersAroundStuckLane,
+  hitsAroundStuckLane,
   computeDrop,
   landsPastPreview,
   parseCellKey,
@@ -76,12 +78,18 @@ const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.lab
 
 /** Pointer hits prefer cards over the cell beneath them; keyboard drags fall back to corners. */
 const collisionDetection: CollisionDetection = (args) => {
-  const hits = pointerWithin(args);
+  const stuckLane = document.querySelector("[data-stuck]")?.getBoundingClientRect() ?? null;
+  const pointer = args.pointerCoordinates;
+  const hits = hitsAroundStuckLane(pointerWithin(args), pointer, stuckLane);
   if (hits.length > 0) {
     const cards = hits.filter((hit) => !String(hit.id).startsWith("cell:"));
     return cards.length > 0 ? cards : hits;
   }
-  return closestCorners(args);
+  // The lane's header, the gaps between its columns and its padding hit nothing, but still belong to the lane.
+  return closestCorners({
+    ...args,
+    droppableContainers: containersAroundStuckLane(args.droppableContainers, pointer, stuckLane),
+  });
 };
 
 /**
@@ -233,6 +241,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const queryClient = useQueryClient();
   const filters = useBoardFilters();
   const priorityLane = useBoardView((s) => s.showPriorityLane);
+  const pinPriorityLane = useBoardView((s) => s.pinPriorityLane);
   const showArchived = filters.archived;
   const archivedQuery = useArchivedTasks(showArchived);
   const archivedTasks = showArchived ? archivedQuery.data : undefined;
@@ -309,6 +318,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     }),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeCompact, setActiveCompact] = useState(false);
   const [overCell, setOverCell] = useState<OverCell | null>(null);
   // Where the dragged card shows while over another column; the lanes render this preview.
   const [placement, setPlacement] = useState<DragPlacement | null>(null);
@@ -336,6 +346,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   const endDrag = () => {
     setActiveId(null);
+    setActiveCompact(false);
     setOverCell(null);
     setPlacement(null);
     setSettlingFrom(null);
@@ -346,7 +357,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     }, 0);
   };
 
-  const handleDragStart = (event: DragStartEvent) => setActiveId(String(event.active.id));
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+    // A card lifted out of the stuck lane is one line, so the lifted copy is too.
+    const node = document.querySelector(`[data-task-card="${CSS.escape(String(event.active.id))}"]`);
+    setActiveCompact(!!node?.closest("[data-stuck]"));
+  };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
@@ -570,8 +586,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   return (
     <BoardContext value={context}>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} data-board-scroll className="min-h-0 flex-1 overflow-auto">
         <div ref={contentRef} className="relative w-full min-w-min pb-10">
+          {/* Its height (h-9 and the border) is also the pinned priority lane's sticky `top` in PriorityLane. */}
           <div
             ref={columnHeaderRef}
             className="sticky top-0 z-10 border-b border-border/65 bg-background surface-grain"
@@ -622,7 +639,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             onDragEnd={handleDragEnd}
             onDragCancel={endDrag}
             measuring={measuring}
-            autoScroll={autoScroll}
+            // Dragged from the stuck lane, the board's top scroll zone would reach the lane's first rows and scroll the
+            // board up until the lane unsticks; the wheel still scrolls.
+            autoScroll={activeCompact ? false : autoScroll}
             accessibility={{ announcements }}
           >
             {shownLanes.map((lane) => {
@@ -635,6 +654,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                     selectedTaskId={selectedTaskId}
                     draggingTaskId={activeRowId === PRIORITY_ROW_ID ? (activeTask?.id ?? null) : null}
                     overCell={overHere}
+                    columnHeaderRef={columnHeaderRef}
                   />
                 );
               }
@@ -662,7 +682,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
               );
             })}
             <DragOverlay dropAnimation={dropAnimation()}>
-              {activeTask ? <TaskCardOverlay task={activeTask} showProject={activeRowId === PRIORITY_ROW_ID} /> : null}
+              {activeTask ? (
+                <TaskCardOverlay
+                  task={activeTask}
+                  showProject={activeRowId === PRIORITY_ROW_ID}
+                  compact={activeCompact}
+                />
+              ) : null}
             </DragOverlay>
           </DndContext>
           {lanes.length === 0 ? (
@@ -675,6 +701,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
             tasks={lineTasks}
             projects={board.projects}
             priorityLane={lanes.some((lane) => lane.priority)}
+            pinnedLane={pinPriorityLane && lanes.some((lane) => lane.priority)}
             selectedTaskId={selectedTaskId}
             suspended={activeId !== null}
           />
