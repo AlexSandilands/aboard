@@ -434,7 +434,7 @@ describe("restore", () => {
     const { s, a } = seed();
     const dump = s.backup.dump();
     // The board as 005 had it: "idea" instead of "backlog", no suggested model, epic, Autopilot flag, auto-merge,
-    // priority or attention request columns, no project planning skill, no relations, no Autopilot settings.
+    // priority, manual or attention request columns, no project planning skill, no relations, no Autopilot settings.
     const {
       autopilot_settings: _a,
       autopilot_recurring: _rc,
@@ -461,6 +461,7 @@ describe("restore", () => {
           parent_id: _p,
           autopilot: _f,
           priority: _pr,
+          manual: _mn,
           due_date: _dd,
           auto_merge: _am,
           template_id: _m,

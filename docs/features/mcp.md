@@ -50,6 +50,13 @@ changes Autopilot's own settings. See [autopilot.md](autopilot.md#the-per-task-f
 priority lane and makes Autopilot start it first ([board-layout.md](board-layout.md#the-priority-lane)). Agents set it
 only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't be priority.
 
+`add_to_backlog`, `create_task` and `update_task` take `manual: true | false`, which makes a manual task: a to-do for a
+person that needs no plan (so `create_task` takes no plan with it, and lands it in Planned) and that agents and
+Autopilot leave alone ([task-lifecycle.md](task-lifecycle.md#manual-tasks)). `get_task` shows a "Manual task: yes"
+line and `list_tasks` tags it `[manual]`. Its results drop the hints for an agent working on it (Plan progress,
+the Autopilot flag, the suggested model, and every Missing link but Jira keys), and `get_handoff_prompt`,
+`start_task_thread`, `start_review` and an `agentSession` or `t3Thread` link are refused on it.
+
 `update_task` takes `dueDate` (`YYYY-MM-DD`, `null` clears it; [board-layout.md](board-layout.md#the-due-date)). Agents set it
 only when the user gives a date. `get_task` shows a "Due:" line and `list_tasks` lines "due YYYY-MM-DD", only when set.
 

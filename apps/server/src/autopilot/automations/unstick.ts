@@ -52,7 +52,8 @@ export const unstick = defineAutomation({
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks
         .summaries({ projectId: project.id, status: "in_progress" })
-        .filter((t) => t.kind !== "epic")
+        // A manual task is the user's own to-do: reminding them it is quiet is noise.
+        .filter((t) => t.kind !== "epic" && !t.manual)
         .flatMap((t): Candidate[] => {
           const out: Candidate[] = [];
           // Newest first would be cheaper, but the recent window is small and the status change bounds it.

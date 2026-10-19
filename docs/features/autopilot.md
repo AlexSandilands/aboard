@@ -228,6 +228,14 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
   the column restores with every task at Default.
 - Agents can flag tasks but still can't change any Autopilot setting.
 
+### Manual tasks
+
+A manual task (`task.manual`, see [task-lifecycle.md](task-lifecycle.md#manual-tasks)) is for a person, so the
+automations that act on tasks pass it over: Start planned tasks (`notStartable`; `workingAgents` still counts a
+thread that is working on a task turned manual mid-run, since nothing stops that agent), Remind me about stuck tasks, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
+its prompt tells the agent to leave manual tasks alone). Unblock dependents still fires when a manual blocker
+finishes, since the task it unblocks is code; Auto-archive still tidies it away once Done.
+
 ### API
 
 REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on, lift its limits or unpause it. The

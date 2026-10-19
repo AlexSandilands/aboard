@@ -6,7 +6,8 @@ export type AutomationChange =
   | { setting: "autopilot"; choice: AutopilotChoice }
   | { setting: "autoMerge"; choice: AutopilotChoice }
   | { setting: "autoReview"; choice: AutoReviewChoice }
-  | { setting: "priority"; on: boolean };
+  | { setting: "priority"; on: boolean }
+  | { setting: "manual"; on: boolean };
 
 export function automationUpdate(
   change: AutomationChange,
@@ -14,7 +15,8 @@ export function automationUpdate(
   | { autopilot: boolean | null }
   | { autoMerge: boolean | null }
   | { autoReview: boolean | null }
-  | { priority: boolean } {
+  | { priority: boolean }
+  | { manual: boolean } {
   switch (change.setting) {
     case "autopilot":
       return { autopilot: autopilotValue(change.choice) };
@@ -24,5 +26,7 @@ export function automationUpdate(
       return { autoReview: autoReviewValue(change.choice) };
     case "priority":
       return { priority: change.on };
+    case "manual":
+      return { manual: change.on };
   }
 }

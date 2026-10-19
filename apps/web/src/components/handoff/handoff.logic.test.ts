@@ -130,6 +130,11 @@ describe("visibility", () => {
     expect(showHandoffActions({ ...task, archivedAt: "x" })).toBe(false);
   });
 
+  it("offers no hand-off on a manual task, which is for a person", () => {
+    expect(showHandoffActions({ ...task, manual: true })).toBe(false);
+    expect(showHandoffActions({ ...task, manual: false })).toBe(true);
+  });
+
   it("offers hand-off on epics too, whose prompt starts their tasks, finished ones included", () => {
     const epic = { ...task, kind: "epic" as const };
     expect(showHandoffActions(epic)).toBe(true);

@@ -60,6 +60,30 @@ A task can leave Backlog only if its plan has at least one step
 
 The plan side of the gate (a plan can't be emptied outside Backlog) is in [plans.md](plans.md).
 
+A **manual task** (`tasks.manual`, migration 035) skips the gate: it is a to-do for a person, not code, so it can
+sit in any column with no plan. See [Manual tasks](#manual-tasks).
+
+### Manual tasks
+
+A boolean column, not a third `kind`, so a manual task is still a task: it can sit in an epic, block code tasks and
+be blocked by them, and live in any project, General included. The rules are in `services/tasks.ts`:
+
+- No plan gate in `create`, `move` or `plans.gate` (deleting its last step outside Backlog is allowed).
+- It can't be flagged for Autopilot or auto-merge (`VALIDATION`); turning a task manual clears both flags, logged
+  as one `updated` entry naming `manual`, `autopilot` and `autoMerge`. An epic can't be manual, and `makeEpic`
+  refuses a manual task.
+- Turning it back into a code task outside Backlog needs a plan, or it would sit past the gate with none.
+- `reviews.effectiveAutoReview` is false for it, so entering Review opens no round, and `openRound` refuses one
+  (Run review, `start_review`). Turning a task manual closes a round still pending, running or stalled as `failed`, its
+  review raises no attention, and the review watchdog skips it.
+- Creating one skips any T3 thread or agent session link passed with it (agents in T3 Code pass their thread on
+  every create) instead of refusing the whole create.
+- Agents leave it alone: `handoffModeError` refuses every hand-off mode (the prompt, `start_task_thread`, the
+  terminal launcher), `links.add` refuses an `agent_session` or `t3_thread` link, and `planTaskProblem` keeps it out of planning
+  sessions. The web hides the hand-off menu (`showHandoffActions`).
+- Autopilot skips it in every automation that works on tasks (see [autopilot.md](autopilot.md#manual-tasks)),
+  except Unblock dependents and Auto-archive.
+
 ### Entering Review
 
 - If every polled PR of the task is merged or closed (at least one merged), the move goes straight on to
@@ -147,6 +171,9 @@ reliably than on instructions they read once.
 - **Backlog, not Ideas.** Not everything in the first column is an idea: some are known to-dos, Jira
   tickets or GitHub issues. "Backlog" fits all of them, and the MCP tool became `add_to_backlog` with no
   `create_idea` alias, since an alias would keep the old word alive in agents' tool lists.
+- **Manual is a flag, not a kind.** A third `kind` would have meant rebuilding the table and teaching every
+  `kind === "task"` check about it, and a manual task wants everything a task has (epics, relations, columns).
+  The flag only turns things off.
 - **Moving between projects is explicit.** A drag across lanes isn't allowed; changing project is a field
   edit, so a mis-drop can't move work to another repo.
 

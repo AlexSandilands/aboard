@@ -26,6 +26,9 @@ Auto-archive Done on an epic works on the epic as a whole: once the epic is fini
 Done for the set days, it is archived together with its tasks. A task in an epic is never archived on its own, and
 the epic's own switch and days decide.
 
+[Manual tasks](using-the-board.md#manual-tasks) are yours: no automation starts, reviews, fixes or reminds you
+about one. Unblock dependents still tells you when finishing one unblocks a task.
+
 **Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
 section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
 project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the

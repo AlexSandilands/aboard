@@ -440,6 +440,86 @@ describe("priority", () => {
   });
 });
 
+describe("manual tasks", () => {
+  it("leave Backlog and go anywhere without a plan", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "Ask for access", manual: true });
+    expect(task.manual).toBe(true);
+    expect(task.status).toBe("backlog");
+    for (const status of ["planned", "in_progress", "review", "done"] as const) {
+      expect(s.tasks.move(task.id, { status }, "user").status).toBe(status);
+    }
+    expect(s.tasks.create({ projectId: project.id, title: "P", manual: true, status: "planned" }).status).toBe(
+      "planned",
+    );
+  });
+
+  it("let their last step be deleted outside Backlog", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "M", manual: true, status: "planned" });
+    const detail = s.plans.setPlan(task.id, plan("only"), "user");
+    s.plans.deleteStep(detail.phases[0]!.steps[0]!.id, "user");
+    expect(s.tasks.detail(task.id).progress.total).toBe(0);
+  });
+
+  it("refuse the Autopilot and auto-merge flags, and turning manual clears them", () => {
+    const { s, project } = setup();
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "M", manual: true, autopilot: true }),
+      "VALIDATION",
+    );
+    expectCode(
+      () => s.tasks.create({ projectId: project.id, title: "M", manual: true, autoMerge: true }),
+      "VALIDATION",
+    );
+    const flagged = s.tasks.create({ projectId: project.id, title: "F", autopilot: true, autoMerge: true });
+    const manual = s.tasks.update(flagged.id, { manual: true }, "user");
+    expect(manual).toMatchObject({ manual: true, autopilot: null, autoMerge: null });
+    expect(manual.events.findLast((e) => e.type === "updated")?.payload).toEqual({
+      fields: ["manual", "autopilot", "autoMerge"],
+    });
+    expectCode(() => s.tasks.update(flagged.id, { autopilot: true }, "user"), "VALIDATION");
+    expectCode(() => s.tasks.update(flagged.id, { autoMerge: true }, "user"), "VALIDATION");
+  });
+
+  it("are refused on epics, and an epic can't be made from one", () => {
+    const { s, project } = setup();
+    expectCode(() => s.tasks.create({ projectId: project.id, title: "E", kind: "epic", manual: true }), "VALIDATION");
+    const epic = s.tasks.create({ projectId: project.id, title: "E", kind: "epic" });
+    expectCode(() => s.tasks.update(epic.id, { manual: true }, "user"), "VALIDATION");
+    const manual = s.tasks.create({ projectId: project.id, title: "M", manual: true });
+    expect(s.tasks.makeEpic(manual.id, "user")).toBe("it is a manual task");
+  });
+
+  it("become code tasks again only in Backlog or with a plan", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, title: "M", manual: true });
+    s.tasks.move(task.id, { status: "in_progress" }, "user");
+    expectCode(() => s.tasks.update(task.id, { manual: false }, "user"), "VALIDATION");
+    s.plans.setPlan(task.id, plan("a"), "user");
+    expect(s.tasks.update(task.id, { manual: false }, "user").manual).toBe(false);
+  });
+
+  it("open no review round in Review, even with auto-review on", () => {
+    const { s, project } = setup();
+    s.settings.update({ autoReview: true });
+    const task = s.tasks.create({ projectId: project.id, title: "M", manual: true });
+    s.tasks.update(task.id, { autoReview: true }, "user");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    expect(s.reviews.list(task.id)).toHaveLength(0);
+    expectCode(() => s.reviews.openRound(task.id, { trigger: "manual", actor: "user", force: true }), "VALIDATION");
+  });
+
+  it("can block a code task", () => {
+    const { s, project } = setup();
+    const manual = s.tasks.create({ projectId: project.id, title: "Sign off", manual: true });
+    const code = s.tasks.create({ projectId: project.id, title: "Ship", blockedBy: [manual.id] });
+    expect(s.tasks.summary(code.id).blocked).toBe(true);
+    s.tasks.move(manual.id, { status: "done" }, "user");
+    expect(s.tasks.summary(code.id).blocked).toBe(false);
+  });
+});
+
 describe("due date", () => {
   it("starts empty, is set and cleared, and logs a change once", () => {
     const { s, project } = setup();

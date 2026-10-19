@@ -126,6 +126,14 @@ export const priorityField = z
       "before other planned tasks. False takes it out. Set it only when the user has asked for it; never on your own.",
   );
 
+export const manualField = z
+  .boolean()
+  .describe(
+    "True makes a manual task: a to-do for a person (a call to make, something to sign off), not code. It needs no " +
+      "plan, and agents and Autopilot leave it alone: no hand-off, session or review, and no Autopilot or auto-merge " +
+      "flag. It can still block code tasks. False makes it a code task again.",
+  );
+
 export const deliveryField = z
   .enum(["main", "integration"])
   .describe(

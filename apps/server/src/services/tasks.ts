@@ -23,7 +23,7 @@ import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { AttachmentsService } from "./attachments.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
-import type { LinksModule } from "./links.ts";
+import { classifyLinkInput, type LinksModule } from "./links.ts";
 import type { RelationsModule } from "./relations.ts";
 import type {
   CloseInput,
@@ -40,6 +40,9 @@ const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tas
 const EPIC_DUE_DATE_MESSAGE = "An epic has no due date; set it on its tasks instead";
 const EPIC_PRIORITY_MESSAGE = "An epic has no card to put in the priority lane; mark its tasks instead";
 const EPIC_AUTO_MERGE_MESSAGE = "An epic has no pull request of its own to merge; flag its tasks instead";
+const EPIC_MANUAL_MESSAGE = "An epic can't be a manual task; mark its tasks instead";
+const MANUAL_AUTOPILOT_MESSAGE = "A manual task is for people, so Autopilot never starts it; make it a code task first";
+const MANUAL_AUTO_MERGE_MESSAGE = "A manual task has no pull request to merge; make it a code task first";
 
 /** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
@@ -276,6 +279,10 @@ export function createTasksService(
         if (kind === "epic" && input.autopilot != null) throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
         if (kind === "epic" && input.priority) throw new AppError("VALIDATION", EPIC_PRIORITY_MESSAGE);
         if (kind === "epic" && input.autoMerge != null) throw new AppError("VALIDATION", EPIC_AUTO_MERGE_MESSAGE);
+        if (kind === "epic" && input.manual) throw new AppError("VALIDATION", EPIC_MANUAL_MESSAGE);
+        const manual = input.manual ?? false;
+        if (manual && input.autopilot) throw new AppError("VALIDATION", MANUAL_AUTOPILOT_MESSAGE);
+        if (manual && input.autoMerge) throw new AppError("VALIDATION", MANUAL_AUTO_MERGE_MESSAGE);
         if (kind === "epic" && input.sourceUrl) {
           throw new AppError("VALIDATION", "An epic can't be imported from an issue; give it a title");
         }
@@ -340,7 +347,7 @@ export function createTasksService(
         const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
         const status = input.status ?? (input.plan && hasSteps ? "planned" : "backlog");
-        if (status === "planned" && !hasSteps) {
+        if (status === "planned" && !hasSteps && !manual) {
           throw new AppError(
             "VALIDATION",
             "A planned task needs a plan; give one, or start from a template that has one",
@@ -365,9 +372,11 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
-          autopilot: input.autopilot ?? null,
-          autoMerge: input.autoMerge ?? null,
+          // A manual task's explicit Off is the same as Default, and it can't be flagged On (refused above).
+          autopilot: manual ? null : (input.autopilot ?? null),
+          autoMerge: manual ? null : (input.autoMerge ?? null),
           priority: input.priority ?? false,
+          manual,
           dueDate: null,
           attentionRequest: null,
           suggestedModel: null,
@@ -380,6 +389,7 @@ export function createTasksService(
           status,
           ...(template ? { template: template.name } : {}),
           ...(kind === "epic" ? { kind } : {}),
+          ...(manual ? { manual } : {}),
           ...(epic ? { epic: epic.number } : {}),
         });
         if (epic) {
@@ -394,7 +404,13 @@ export function createTasksService(
           deps.links().service.add(task.id, { value: source.url }, actor);
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
         }
-        for (const link of input.links ?? []) deps.links().service.add(task.id, link, actor);
+        for (const link of input.links ?? []) {
+          // No agent works on a manual task, so the session or thread creating it isn't linked (links.add refuses
+          // one). Agents in T3 Code pass their thread on every create, a manual to-do for the user included.
+          const linkKind = manual ? classifyLinkInput(link, deps.settings.get().jiraBaseUrl).kind : null;
+          if (linkKind === "t3_thread" || linkKind === "agent_session") continue;
+          deps.links().service.add(task.id, link, actor);
+        }
         linkTitleKeys(task.id, task.title, actor);
         // Images pasted into the new-task box were uploaded before the task existed.
         deps.attachments.claim(task.id, description);
@@ -434,7 +450,9 @@ export function createTasksService(
                       ? "it has a due date"
                       : task.autoMerge !== null
                         ? "it has an auto-merge flag"
-                        : null;
+                        : task.manual
+                          ? "it is a manual task"
+                          : null;
         if (reason) return reason;
         repos.tasks.update({ ...task, kind: "epic", updatedAt: nowIso() });
         fx.log(id, actor, "became_epic", {});
@@ -472,9 +490,40 @@ export function createTasksService(
           next.autoReview = input.autoReview;
           changed.push("autoReview");
         }
+        if (current.kind === "epic" && input.manual) throw new AppError("VALIDATION", EPIC_MANUAL_MESSAGE);
+        const manual = input.manual ?? current.manual;
+        if (manual && input.autopilot) throw new AppError("VALIDATION", MANUAL_AUTOPILOT_MESSAGE);
+        if (manual && input.autoMerge) throw new AppError("VALIDATION", MANUAL_AUTO_MERGE_MESSAGE);
+        if (manual !== current.manual) {
+          // Back to a code task outside Backlog, it would sit there with no plan, which the plan gate forbids.
+          if (!manual && current.status !== "backlog" && repos.plans.countSteps(id) === 0) {
+            throw new AppError(
+              "VALIDATION",
+              `#${current.number} has no plan, so it can only become a code task in Backlog; add a plan first`,
+            );
+          }
+          next.manual = manual;
+          changed.push("manual");
+          // A round still waiting for a reviewer would wait forever: nothing reviews a manual task.
+          const round = manual ? repos.reviews.latest(id) : null;
+          if (round && (round.status === "pending" || round.status === "running" || round.status === "stalled")) {
+            const error = "The task became a manual task";
+            repos.reviews.update({ ...round, status: "failed", error, updatedAt: now, completedAt: now });
+            fx.log(id, actor, "review_status", { round: round.round, status: "failed", error });
+          }
+          // Agents and Autopilot leave a manual task alone, so its flags for them go.
+          if (manual && current.autopilot !== null) {
+            next.autopilot = null;
+            changed.push("autopilot");
+          }
+          if (manual && current.autoMerge !== null) {
+            next.autoMerge = null;
+            changed.push("autoMerge");
+          }
+        }
         if (current.kind === "epic" && input.autopilot != null)
           throw new AppError("VALIDATION", EPIC_AUTOPILOT_MESSAGE);
-        if (input.autopilot !== undefined && input.autopilot !== current.autopilot) {
+        if (input.autopilot !== undefined && !manual && input.autopilot !== current.autopilot) {
           next.autopilot = input.autopilot;
           changed.push("autopilot");
         }
@@ -491,7 +540,7 @@ export function createTasksService(
         if (current.kind === "epic" && input.autoMerge != null) {
           throw new AppError("VALIDATION", EPIC_AUTO_MERGE_MESSAGE);
         }
-        if (input.autoMerge !== undefined && input.autoMerge !== current.autoMerge) {
+        if (input.autoMerge !== undefined && !manual && input.autoMerge !== current.autoMerge) {
           next.autoMerge = input.autoMerge;
           changed.push("autoMerge");
         }
@@ -628,7 +677,7 @@ export function createTasksService(
             `#${current.number} is an epic; its status follows its child tasks, so move those instead`,
           );
         }
-        if (statusChanged && status !== "backlog" && repos.plans.countSteps(id) === 0) {
+        if (statusChanged && status !== "backlog" && !current.manual && repos.plans.countSteps(id) === 0) {
           throw planRequired(current.number);
         }
         if (!statusChanged && !input.beforeId && !input.afterId) return;

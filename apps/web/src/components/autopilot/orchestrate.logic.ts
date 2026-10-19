@@ -83,7 +83,7 @@ export function lastRunText(lastRun: OrchestrateState["lastRun"]): string {
 
 /** Whether a project has a task Orchestrate would look at; without one its slots don't run. */
 export const projectHasOrchestrateWork = (
-  tasks: ReadonlyArray<Pick<TaskSummary, "projectId" | "archivedAt" | "status" | "attention" | "autoMerge">>,
+  tasks: ReadonlyArray<Pick<TaskSummary, "projectId" | "archivedAt" | "status" | "attention" | "autoMerge" | "manual">>,
   projectId: string,
 ): boolean => tasks.some((t) => t.projectId === projectId && orchestrateNeedsLooking(t));
 

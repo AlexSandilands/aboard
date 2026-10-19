@@ -7,6 +7,7 @@ describe("automationUpdate", () => {
     expect(automationUpdate({ setting: "autoMerge", choice: "off" })).toEqual({ autoMerge: false });
     expect(automationUpdate({ setting: "autoReview", choice: "on" })).toEqual({ autoReview: true });
     expect(automationUpdate({ setting: "priority", on: true })).toEqual({ priority: true });
+    expect(automationUpdate({ setting: "manual", on: true })).toEqual({ manual: true });
   });
 
   it("stores Default and Inherit as null", () => {

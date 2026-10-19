@@ -86,6 +86,15 @@ export const TaskCardContent = memo(function TaskCardContent({
             <span className="truncate">{project.title}</span>
           </span>
         ) : null}
+        {task.manual ? (
+          <Badge
+            variant="outline"
+            size="sm"
+            title="Manual task: a to-do for a person, which agents and Autopilot leave alone"
+          >
+            Manual
+          </Badge>
+        ) : null}
         <ResolutionChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
         <AutopilotBadge taskId={task.id} />

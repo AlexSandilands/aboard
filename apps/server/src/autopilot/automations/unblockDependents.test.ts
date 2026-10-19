@@ -62,6 +62,16 @@ describe("unblock dependents", () => {
     expect(notices()).toHaveLength(1);
   });
 
+  it("notifies when a manual blocker is Done", async () => {
+    const { s, project, task, finish, pass, notices, turnOn } = setup();
+    const blocker = s.tasks.create({ projectId: project.id, title: "Sign off", manual: true });
+    const dependent = task("Dependent", [blocker.id]);
+    turnOn();
+    finish(blocker.id);
+    await pass();
+    expect(notices()).toMatchObject([{ taskId: dependent.id }]);
+  });
+
   it("waits until every blocker is Done, then gives one notification", async () => {
     const { task, finish, pass, notices, turnOn } = setup();
     const a = task("A");

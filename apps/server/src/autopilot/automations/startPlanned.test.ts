@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { NO_GITHUB, RunAbandonedError, type Runner, type RunnerRequest } from "../types.ts";
-import { AUTOPILOT_START_PLANNED, START_POLL_MS, startPlanned } from "./startPlanned.ts";
+import { AUTOPILOT_START_PLANNED, notStartable, START_POLL_MS, startPlanned } from "./startPlanned.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 
@@ -135,6 +135,17 @@ describe("start planned tasks: eligibility", () => {
     turnOn();
     await pass();
     expect(runs()).toEqual([]);
+  });
+
+  it("never starts a manual task", async () => {
+    const { s, task, pass, runs, turnOn } = setup();
+    const manual = task("Manual");
+    s.tasks.update(manual.id, { manual: true }, "user");
+    turnOn();
+    await pass();
+    expect(runs()).toEqual([]);
+    // Turning it manual cleared its flag; the rule refuses it even if one were left.
+    expect(notStartable({ ...s.tasks.summary(manual.id), autopilot: true })).toBe("it's a manual task");
   });
 
   it("leaves a flagged task in a project with no folder, instead of failing a run for it", async () => {
@@ -272,6 +283,21 @@ describe("start planned tasks: limits", () => {
       await pass();
       expect(requests).toHaveLength(1);
     }
+    thread(a.id, "idle");
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);
+  });
+
+  it("keeps counting a working thread whose task was turned manual", async () => {
+    const { s, task, pass, requests, turnOn, thread } = setup();
+    const a = task("A");
+    const b = task("B");
+    turnOn();
+    await pass();
+    thread(a.id, "working");
+    s.tasks.update(a.id, { manual: true }, "user");
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([a.id]);
     thread(a.id, "idle");
     await pass();
     expect(requests.map((r) => r.run.taskId)).toEqual([a.id, b.id]);

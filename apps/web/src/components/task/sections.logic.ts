@@ -106,6 +106,7 @@ export type SectionTask = Pick<
   | "autoReview"
   | "autoMerge"
   | "priority"
+  | "manual"
   | "progress"
   | "currentStep"
   | "description"
@@ -222,8 +223,12 @@ export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks
 }
 
 /** The settings that were changed from their default, or "Defaults" when none were. */
-function automationSummary(task: Pick<SectionTask, "autopilot" | "autoReview" | "autoMerge" | "priority">): string {
+function automationSummary(
+  task: Pick<SectionTask, "autopilot" | "autoReview" | "autoMerge" | "priority" | "manual">,
+): string {
   const on = (value: boolean | null) => (value ? "on" : "off");
+  // A manual task has no Autopilot, review or merge settings that apply to it.
+  if (task.manual) return task.priority ? "Manual task · Priority" : "Manual task";
   const parts = [
     task.autopilot === null ? null : `Autopilot ${on(task.autopilot)}`,
     task.autoReview === null ? null : `Auto-review ${on(task.autoReview)}`,

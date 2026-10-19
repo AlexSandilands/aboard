@@ -37,10 +37,13 @@ export function defaultHandoffMode(
 
 /** Why a mode doesn't fit a task, or null when it does: epics are only orchestrated, and only work prompts go to subagents. */
 export function handoffModeError(
-  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind" | "progress">>,
+  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind" | "progress" | "manual">>,
   mode: HandoffMode,
   subagent = false,
 ): string | null {
+  if (task.manual) {
+    return `#${task.number} is a manual task: it is for people to do, so no agent session is started on it. Make it a code task first (update_task manual: false) if an agent should work on it.`;
+  }
   const epic = task.kind === "epic";
   if (epic && mode !== "orchestrate") {
     return `#${task.number} is an epic: its prompt is mode "orchestrate". Hand off its tasks with their own prompts.`;

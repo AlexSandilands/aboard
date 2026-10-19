@@ -412,7 +412,7 @@ export const fixPrs = defineAutomation({
         // An integration epic's own PR into the default branch is fixed too, for conflicts only: the epic stays open
         // (Done included, once its tasks are) until the user merges it.
         const epicBranch = task.kind === "epic" ? task.integrationBranch : null;
-        if (task.archivedAt !== null) return [];
+        if (task.archivedAt !== null || task.manual) return [];
         if (task.kind === "epic" ? !epicBranch : task.status === "done") return [];
         const links = task.links.flatMap((link) => {
           if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];

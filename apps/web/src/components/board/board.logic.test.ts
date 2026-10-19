@@ -68,6 +68,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     autopilot: null,
     autoMerge: null,
     priority: false,
+    manual: false,
     dueDate: null,
     delivery: null,
     integrationBranch: null,
