@@ -924,7 +924,7 @@ script** beside **Start an agent** and **Run a command**, and an agent's check. 
   bundle; until it loads, a plain text area edits the same value). It has a monospace font, line numbers and highlighting for
   the language, coloured from the theme's tokens so it follows the theme and the Contrast setting. Tab indents with
   spaces; Esc then Tab leaves the editor so a keyboard user is never trapped.
-- **Load from file** (the file's extension picks the language; at most `SCRIPT_FILE_MAX_BYTES`) and **Copy**.
+- **Load from file** (the file's extension picks the language; a file over `CUSTOM_SCRIPT_MAX` characters is refused) and **Copy**.
 - A **starter** per language and role (`scriptStarter`): it shows how to read the JSON context on stdin and, for a check, how
   to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
   the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
@@ -939,7 +939,7 @@ interpreter, environment and stdin context a real run gets, so it can do whateve
 editor says so and asks for a second click ("Run it for real") naming the project. Nothing is saved or recorded: no run
 row, no event.
 
-- An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
+- Inputs reach only a check, as in a real run. An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
   none, like the scheduled agent it belongs to.
 - For a **check** that exits 0 the response also has the output read as the board reads it (`parseCheckOutput`): the items
   and how many were dropped, or `problem` naming the bad line, and the prompt the first item's agent would start with

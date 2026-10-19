@@ -4,6 +4,7 @@ import {
   customAgentPrompt,
   customAgentToolsNote,
   CUSTOM_MINUTES_MAX,
+  CUSTOM_SCRIPT_MAX,
   CUSTOM_MINUTES_MIN,
   customTaskMatches,
   customValues,
@@ -316,7 +317,12 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
     }
     const field = String(issue.path[issue.path.length - 1] ?? issue.path[0] ?? "");
     if (issue.path.includes("check")) {
-      if (field === "body") return { ok: false, error: "Write the check script, or switch the check off" };
+      if (field === "body") {
+        return {
+          ok: false,
+          error: tooLong(issue) ? SCRIPT_TOO_LONG : "Write the check script, or switch the check off",
+        };
+      }
       if (field === "timeoutSeconds") return { ok: false, error: "The check's timeout is 1 to 3600 seconds" };
     }
     const what: Record<string, string> = {
@@ -328,6 +334,7 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
       timeoutSeconds: "The timeout is 1 to 3600 seconds",
       body: "Write the script to run",
     };
+    if (field === "body" && tooLong(issue)) return { ok: false, error: SCRIPT_TOO_LONG };
     return { ok: false, error: what[field] ?? issue.message };
   }
   const problem = checkCustomDefinition(parsed.data);
@@ -376,7 +383,8 @@ export function testScriptRequest(
     role,
     taskId: check ? null : taskId,
     name: form.name,
-    inputs: Object.fromEntries(form.inputs.filter((i) => i.name).map((i) => [i.name, i.value])),
+    // Only an agent's check reads inputs (customValues), so an action is tested without the ones a switched-away agent left.
+    inputs: check ? Object.fromEntries(form.inputs.filter((i) => i.name).map((i) => [i.name, i.value])) : {},
     prompt: check ? form.prompt : "",
     skill: check ? form.skill : "",
     script: check
@@ -385,10 +393,14 @@ export function testScriptRequest(
   });
   if (parsed.success) return { ok: true, input: parsed.data };
   const issue = parsed.error.issues[0]!;
-  if (issue.path.at(-1) === "body") return { ok: false, error: "Write the script first" };
+  if (issue.path.at(-1) === "body")
+    return { ok: false, error: tooLong(issue) ? SCRIPT_TOO_LONG : "Write the script first" };
   if (issue.path.at(-1) === "timeoutSeconds") return { ok: false, error: "The timeout is 1 to 3600 seconds" };
   return { ok: false, error: issue.message };
 }
+
+const SCRIPT_TOO_LONG = `The script is over ${CUSTOM_SCRIPT_MAX} characters`;
+const tooLong = (issue: { code: string }) => issue.code === "too_big";
 
 export const blankInput = (): FormInput => ({ name: "", label: "", type: "text", value: "", default: "" });
 export const blankSlot = (): FormSlot => ({ name: "", label: "", description: "", tools: "" });
