@@ -413,7 +413,16 @@ export const SortableTaskCard = memo(function SortableTaskCard({
  * What the DragOverlay renders while a card is lifted: it rises (scale and shadow) on pickup and
  * settles back while the drop animation lands it (`is-dropping`, see cardMotion).
  */
-export function TaskCardOverlay({ task, showProject = false }: { task: TaskSummary; showProject?: boolean }) {
+export function TaskCardOverlay({
+  task,
+  showProject = false,
+  compact = false,
+}: {
+  task: TaskSummary;
+  showProject?: boolean;
+  /** The card was lifted from the stuck priority lane, where it is one line. */
+  compact?: boolean;
+}) {
   // dnd-kit measures the overlay's first child to aim the drop, so the lift scale sits one level
   // deeper where it can't skew the landing spot.
   return (
@@ -425,7 +434,7 @@ export function TaskCardOverlay({ task, showProject = false }: { task: TaskSumma
           "in-[.is-dropping]:scale-100 in-[.is-dropping]:shadow-sm",
         )}
       >
-        <TaskCardContent task={task} showProject={showProject} />
+        <TaskCardContent task={task} showProject={showProject} compact={compact} />
       </div>
     </div>
   );

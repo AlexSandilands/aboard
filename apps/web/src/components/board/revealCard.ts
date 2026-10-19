@@ -40,12 +40,14 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
   };
 
   // A card in the stuck lane is reached by scrolling the lane, which keeps its own cards inside its height cap.
-  const stuckLane = card.closest("[data-stuck]");
-  if (stuckLane) {
-    card.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduceMotion ? "instant" : "smooth" });
-    flash(card, reduceMotion);
-    return;
-  }
+  // Checked again after each aim, since scrolling the board can be what sticks the lane.
+  const revealInStuckLane = (el: Element): boolean => {
+    if (!el.closest("[data-stuck]")) return false;
+    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduceMotion ? "instant" : "smooth" });
+    flash(el, reduceMotion);
+    return true;
+  };
+  if (revealInStuckLane(card)) return;
 
   if (reduceMotion) {
     align("instant", card);
@@ -56,7 +58,7 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
     // A pinned lane shrinks and starts covering the board once the scroll has stuck it: aim once more after that.
     window.setTimeout(() => {
       const current = liveCard(scroller, card);
-      if (!current) return;
+      if (!current || revealInStuckLane(current)) return;
       align("instant", current);
       flash(current, true);
     }, STICK_SETTLE_MS);
@@ -72,14 +74,14 @@ export function revealCard(scroller: HTMLElement, header: HTMLElement | null, ca
     // An update can swap the card's node meanwhile (it moved row) or remove it (archived, its lane folded): aim at
     // the fresh node, or stop when there is none.
     const current = liveCard(scroller, card);
-    if (!current) return;
+    if (!current || revealInStuckLane(current)) return;
     if (!align("smooth", current)) {
       flash(current, false);
       return;
     }
     whenScrollSettled(scroller, () => {
       const arrived = liveCard(scroller, current);
-      if (arrived) flash(arrived, false);
+      if (arrived && !revealInStuckLane(arrived)) flash(arrived, false);
     });
   });
 }

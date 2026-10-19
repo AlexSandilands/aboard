@@ -122,6 +122,10 @@ export function DependencyLines({
       frame = requestAnimationFrame(measure);
     });
     observer.observe(root);
+    // The pinned lane changes size when it sticks or unsticks, which leaves the content's size alone (a spacer
+    // holds it) but moves its cards.
+    const pinned = root.querySelector("[data-pinned]");
+    if (pinned) observer.observe(pinned);
     // Collapsing a cell or filtering the board adds and removes cards without resizing the content.
     const isCard = (node: Node) =>
       node instanceof Element && (node.matches("[data-task-card]") || node.querySelector("[data-task-card]") !== null);
