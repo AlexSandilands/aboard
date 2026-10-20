@@ -139,10 +139,12 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
           `Import page: ${boardUrl(ctx)}${automationDraftPath(draft.id)}`,
           `It expires ${draft.expiresAt.slice(0, 10)} unless imported.`,
         ];
-        if (actionScripts(bundle.action).length > 0 || bundle.action.kind === "shell") {
+        if (actionScripts(bundle.action).length > 0) {
           lines.push(
-            "It runs code on the user's machine, so they must read it and confirm the script on the import page.",
+            "It runs a script on the user's machine, so they must read it and confirm the script on the import page.",
           );
+        } else if (bundle.action.kind === "shell") {
+          lines.push("It runs a command on the user's machine, so they must read it before importing it.");
         }
         if (bundle.slots.length > 0) {
           lines.push(

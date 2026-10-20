@@ -1127,7 +1127,7 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   are left out of reads and pruned on the next draft. Not in backups: it is a hand-off, not the user's data until it
   is imported.
 - **What the agent is told.** The import page's URL (`automationDraftPath`, `/settings/autopilot/custom/import?draft=<id>`
-  on the board's URL), the expiry, whether a script or command needs confirming, the slots to fill and, per variable
+  on the board's URL), the expiry, whether a script needs confirming (or, for a command, reading), the slots to fill and, per variable
   the action reads, the projects with no value for it, so the agent can tell the user. The result says nothing is set
   up until the user imports it. Orchestrate's agent is denied the tool.
 - **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Custom automations).

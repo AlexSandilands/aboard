@@ -147,6 +147,16 @@ describe("draft_automation", () => {
     expect((await h.request(`/api/autopilot/drafts/${draft!.id}`)).status).toBe(404);
   });
 
+  it("asks the user to read a drafted command, which has no script to confirm", async () => {
+    const { text, isError } = await call({
+      automation: { ...nightlyScript, action: { kind: "shell", command: "git gc" } },
+    });
+
+    expect(isError).toBe(false);
+    expect(text).toContain("runs a command on the user's machine, so they must read it before importing it");
+    expect(text).not.toContain("confirm the script");
+  });
+
   it("drops a draft once it expires", async () => {
     await call({ automation: nightlyScript });
     const [draft] = await drafts();
