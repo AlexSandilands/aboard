@@ -299,14 +299,20 @@ export const reviewPrs = defineAutomation({
         { value: "headless", label: "Headless (claude -p in a worktree)" },
       ],
     },
+    {
+      key: "modelChoice",
+      label: "Model",
+      kind: "model",
+      help: "From the task: a custom model one of its labels picks, else its suggested tier. The reviewer runs its Claude Code model.",
+    },
     { key: "budgetUsd", label: "Budget", kind: "number", min: 0.5, max: 100, step: 0.5, unit: "USD" },
     { key: "timeoutMinutes", label: "Timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
     {
       key: "model",
-      label: "Model",
+      label: "Model override",
       kind: "text",
-      placeholder: "From the task's tier",
-      help: "As claude --model takes it, e.g. sonnet. Blank uses the task's tier when it maps to a Claude model.",
+      placeholder: "The model above",
+      help: "As claude --model takes it, e.g. sonnet. Blank uses the Claude Code model of the model above.",
     },
   ],
   defaults: {

@@ -1,6 +1,10 @@
 import {
   describeInherited,
   isRetried,
+  MODEL_TIERS,
+  ModelChoice,
+  modelChoiceKey,
+  type ModelProfile,
   ScheduledAgentRunOutput,
   type AutopilotActiveRun,
   type AutopilotAutomation,
@@ -216,6 +220,32 @@ export function isClockTime(text: string): boolean {
 /** A field's value as an input shows it. */
 export function fieldText(value: unknown): string {
   return typeof value === "number" || typeof value === "string" ? String(value) : "";
+}
+
+/**
+ * What a Model field offers: the task's model, each tier, then each custom model, keyed by modelChoiceKey. A saved
+ * custom model that has since been deleted stays listed, so the field still says what is saved.
+ */
+export function modelChoiceItems(
+  profiles: readonly Pick<ModelProfile, "id" | "name">[],
+  value: unknown,
+): Array<{ value: string; label: string }> {
+  const items = [
+    { value: "task", label: "From the task" },
+    ...MODEL_TIERS.map((t) => ({ value: `tier:${t.value}`, label: `${t.label} tier` })),
+    ...profiles.map((p) => ({ value: `profile:${p.id}`, label: p.name })),
+  ];
+  const key = modelChoiceFieldKey(value);
+  if (!items.some((item) => item.value === key)) {
+    items.push({ value: key, label: `${key.slice("profile:".length)} (deleted, runs on the task's model)` });
+  }
+  return items;
+}
+
+/** A Model field's saved value as its select key; anything that isn't a ModelChoice reads as From the task. */
+export function modelChoiceFieldKey(value: unknown): string {
+  const parsed = ModelChoice.safeParse(value);
+  return parsed.success ? modelChoiceKey(parsed.data) : "task";
 }
 
 // ── Engine limits ────────────────────────────────────────────────────────

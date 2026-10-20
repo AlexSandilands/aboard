@@ -750,7 +750,7 @@ the automation. Runs stay, under the old key.
   (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
-  It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
+  It goes to `ctx.runner.start` with the action's tier as its `modelChoice` (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
   set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
   the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
   `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
@@ -758,7 +758,7 @@ the automation. Runs stay, under the old key.
   headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
   default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
   read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
-  folder gets the safety note without a branch name and the generic denials). The tier is the action's, else the default for the runner's model tiers. One at a time per
+  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's tier, else the CLI's default. One at a time per
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
@@ -1077,11 +1077,12 @@ Every agent automation spreads the shared runner options into its config (`autop
 | `runner`         | auto    | auto, t3 or headless                                                             |
 | `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
 | `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
-| `model`          | blank   | Headless: `--model`; blank takes the task's tier when it maps to a Claude model  |
+| `modelChoice`    | task    | The model runs start on: the task's, a tier or a custom model ([Models](#models)) |
+| `model`          | blank   | Headless: a typed `--model` that wins over `modelChoice`                         |
 | `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
 
 **T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
-so the model is the one the user mapped to the task's suggested tier. The thread gets a new T3 worktree; for a
+so the model is the run's model ([Models](#models)) when its T3 model is ready, else T3's default. The thread gets a new T3 worktree; for a
 `branch` it starts from origin's copy of it. The prompt ends with a note on where to push and the safety rules.
 
 - **One launch per repository at a time.** T3 answers the launch at once and prepares the workspace afterwards,
@@ -1128,6 +1129,29 @@ so the model is the one the user mapped to the task's suggested tier. The thread
 once the task has a merged PR, or `worktreeRetentionDays` after the run finished. It uses `git worktree remove`
 without `--force`, so a worktree with uncommitted changes is kept and logged once. The branch is deleted with
 `git branch -d`, which keeps a branch that has unmerged commits.
+
+### Models
+
+Which model a run starts on is decided by one rule, `resolveRunModel` (`packages/contracts/src/modelProfiles.ts`),
+which the T3 launch dialog and the terminal session launcher use too:
+
+1. **The automation's choice.** Every agent automation has a **Model** field (kind `model`, config key
+   `modelChoice`: `{from: "task"} | {tier} | {profile}`; default From the task). A custom agent action's own tier
+   comes next (`RunnerRequest.modelChoice`), and Orchestrate and the digest pass a fixed tier.
+2. **A task label.** **Settings → Model tiers → Custom models** (`modelProfiles`) are named models with a tier's
+   fields (description, T3 model, CLI models) and labels. A task carrying one of a model's labels runs on it, whatever
+   its tier; when several models claim a label, the first in the list wins.
+3. **The task's suggested tier.**
+4. **The harness's default.**
+
+A **headless** run takes, in order: a model typed in the automation's **Headless model override**, the chosen
+model's Claude Code model, its T3 model when that is a Claude model `claude` accepts (`profileHeadlessModel`), else the
+CLI's default. A model set only for T3 Code (a Codex model, say) falls back to the CLI's default, and the run's detail
+says so; otherwise the detail names the model and what picked it. A **T3** launch passes an automation's choice on to
+`launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
+(`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
+task's model is used. Running a custom model's Codex or Copilot model headless is out of scope: only `claude -p` runs
+headless.
 
 ### Writing an automation
 

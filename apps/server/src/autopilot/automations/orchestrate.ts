@@ -3,6 +3,7 @@ import {
   BRAND,
   capHandover,
   inQuietHours,
+  FROM_TASK,
   isRetried,
   latestMinutesSlot,
   localStamp,
@@ -49,6 +50,7 @@ const schema = z.object({
   budgetUsd: RUNNER_OPTION_SHAPE.budgetUsd,
   timeoutMinutes: RUNNER_OPTION_SHAPE.timeoutMinutes,
   model: RUNNER_OPTION_SHAPE.model,
+  modelChoice: RUNNER_OPTION_SHAPE.modelChoice,
 });
 type OrchestrateConfig = z.infer<typeof schema>;
 
@@ -59,6 +61,7 @@ const defaults: OrchestrateConfig = {
   budgetUsd: 3,
   timeoutMinutes: 30,
   model: "",
+  modelChoice: FROM_TASK,
 };
 
 /** Run now's dedupe key: its own per request, apart from the slots' `orchestrate:<projectId>:<slot stamp>`. */
@@ -217,8 +220,12 @@ export const orchestrate = defineAutomation({
       placeholder: "E.g. hold PRs that change the board's layout for me to check.",
       help: "Added to the end of the built-in prompt, and win where they differ.",
     },
-    ...RUNNER_FIELDS.filter((f) => f.key === "budgetUsd" || f.key === "timeoutMinutes" || f.key === "model").map((f) =>
-      f.key === "model" ? { ...f, placeholder: "The CLI's default", help: "As claude --model takes it." } : f,
+    ...RUNNER_FIELDS.filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes", "model"].includes(f.key)).map((f) =>
+      f.key === "modelChoice"
+        ? { ...f, help: "It has no task, so From the task means the Standard tier." }
+        : f.key === "model"
+          ? { ...f, placeholder: "The model above", help: "As claude --model takes it." }
+          : f,
     ),
   ],
   defaults,

@@ -30,7 +30,7 @@ the epic's own switch and days decide.
 about one. Unblock dependents still tells you when finishing one unblocks a task.
 
 **Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
-section with its options: which skill it follows, which runner, the model tier, and budgets and timeouts. A
+section with its options: which skill it follows, which runner, the model, and budgets and timeouts. A
 project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the
 board to inherit from, so an automation you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button).
 
@@ -108,11 +108,17 @@ You can add your own automations too: a trigger you pick and an agent prompt or 
 An automation that needs an agent picks its **runner** in its settings:
 
 - **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
-- **T3 Code only**: the thread gets the model you set for the task's tier, and never more access than T3 Code's
+- **T3 Code only**: the thread gets the task's model (below), and never more access than T3 Code's
   own default. You can lower it further.
 - **Headless only**: `claude -p` in a git worktree of its own under the board's data folder, never your
   checkout, on a new `autopilot/…` branch. It has a budget and a timeout. Its session is linked on the card,
   so **Open in terminal** picks it up where it stopped.
+
+Each agent automation also has a **Model**: **From the task** (the default), a tier, or one of your **Custom
+models** from Settings → Model tiers. From the task means a custom model one of the task's labels picks (say a
+`codex61` label on a model set to T3 Code's Codex), else the task's suggested tier. A headless run uses the model's
+Claude Code model; one set only for T3 Code runs headless on the CLI's default, and the run says so. **Headless model
+override** still takes a model typed as `claude --model` takes it.
 
 Headless agents can't force-push, push to the default branch or merge a pull request. A worktree is removed
 once the task's PR merges, or after **Worktree retention** days (7 by default). One with uncommitted changes is
@@ -129,8 +135,8 @@ limits below leave room. [Priority](using-the-board.md#priority) tasks go first,
 in the Planned column, so drag the one you want first to the top.
 
 The agent gets the same prompt as the **Copy prompt** hand-off in work mode, plus a note that nobody is watching:
-if it needs an answer it marks the step blocked and stops. It runs on the model you mapped to the task's
-suggested tier. Its settings:
+if it needs an answer it marks the step blocked and stops. It runs on the task's model: a custom model one of its labels
+picks, else the one you mapped to its suggested tier. Its settings:
 
 - **Implement skill**: what the agent follows; the default is the board's own workflow.
 - **Runner**, **budget**, **timeout** and **T3 Code access**, as in [How agents run](#how-agents-run).

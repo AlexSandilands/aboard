@@ -1,4 +1,11 @@
-import { MODEL_TIERS, ModelTier, modelTierDescription, type TaskDetail } from "@repo/contracts";
+import {
+  describeRunModel,
+  MODEL_TIERS,
+  ModelTier,
+  modelTierDescription,
+  resolveTaskModel,
+  type TaskDetail,
+} from "@repo/contracts";
 import { PencilIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -44,12 +51,18 @@ export function DetailsSection({ task }: { task: TaskDetail }) {
 const NO_TIER = "none";
 const TIER_ITEMS = [{ value: NO_TIER, label: "None" }, ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label }))];
 
-/** The model tier the planner suggested for implementing the task, which the user can change or clear. */
+/**
+ * The model tier the planner suggested for implementing the task, which the user can change or clear, and the custom
+ * model one of its labels picks over the tier, when one does.
+ */
 function SuggestedModelField({ task }: { task: TaskDetail }) {
   const { mutate: updateTask } = useUpdateTask();
-  const modelTiers = useSettings().data?.modelTiers;
+  const settings = useSettings().data;
+  const modelTiers = settings?.modelTiers;
   const suggestion = task.suggestedModel;
   const mapped = suggestion && modelTiers ? modelTierDescription(modelTiers, suggestion.tier) : null;
+  const picked = settings ? resolveTaskModel(task, settings) : null;
+  const byLabel = picked?.source === "label" ? picked : null;
   return (
     <div className="px-1.5 pb-1">
       <div className="flex min-h-6 items-center gap-2">
@@ -83,6 +96,12 @@ function SuggestedModelField({ task }: { task: TaskDetail }) {
       </div>
       {suggestion?.reason ? (
         <p className="mt-1 text-xs leading-snug text-muted-foreground/80">{suggestion.reason}</p>
+      ) : null}
+      {byLabel ? (
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">
+          Runs on {describeRunModel({ ...byLabel, source: "tier" })}, picked by its label {byLabel.label}
+          {suggestion ? " over the tier" : ""}. An automation set to a model of its own still uses that.
+        </p>
       ) : null}
     </div>
   );

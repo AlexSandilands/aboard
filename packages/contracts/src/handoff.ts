@@ -1,4 +1,5 @@
 import { BRAND } from "./brand.ts";
+import { describeRunModel, resolveRunModel, type ModelProfile } from "./modelProfiles.ts";
 import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
 
@@ -10,7 +11,9 @@ export type HandoffMode = "work" | "plan" | "orchestrate";
 
 export interface HandoffPromptInput {
   task: Pick<TaskSummary, "id" | "number" | "title"> &
-    Partial<Pick<TaskSummary, "suggestedModel" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>;
+    Partial<
+      Pick<TaskSummary, "suggestedModel" | "labels" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">
+    >;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
   mode: HandoffMode;
@@ -20,6 +23,8 @@ export interface HandoffPromptInput {
   linkedSession?: boolean;
   /** Names the task's suggested tier in a copied work prompt; without it the line shows the bare tier. */
   modelTiers?: ModelTiers;
+  /** With `modelTiers`, names a custom model one of the task's labels picks instead of the tier. */
+  modelProfiles?: readonly ModelProfile[];
   /**
    * A work prompt for a subagent started by an epic's orchestrator: it can't ask the user or run its own
    * review loop, so it reports back instead.
@@ -80,13 +85,25 @@ export function taskReferenceLine({
 
 /**
  * "Suggested model: standard (Sonnet 5.5): reason. ..." for a copied work prompt, or null when the task has no
- * suggestion. A board-started thread already runs on the model picked in the dialog, so callers skip it there.
+ * suggestion. A custom model one of the task's labels picks (`modelProfiles`) is named instead of the tier. A
+ * board-started thread already runs on the model picked in the dialog, so callers skip it there.
  */
 export function suggestedModelLine(
-  task: Partial<Pick<TaskSummary, "suggestedModel">>,
+  task: Partial<Pick<TaskSummary, "suggestedModel" | "labels">>,
   modelTiers: ModelTiers | undefined,
   advice = "Switch your session's model if it differs.",
+  modelProfiles: readonly ModelProfile[] = [],
 ): string | null {
+  if (modelTiers && modelProfiles.length > 0) {
+    const model = resolveRunModel(
+      { labels: task.labels ?? [], tier: task.suggestedModel?.tier ?? null },
+      { modelTiers, modelProfiles },
+    );
+    if (model.source === "label" && model.profile) {
+      const named = describeRunModel({ ...model, source: "tier" });
+      return `Model: ${named}, picked by the task's label ${model.label}. ${advice}`;
+    }
+  }
   const suggestion = task.suggestedModel;
   if (!suggestion) return null;
   const description = modelTiers ? modelTierDescription(modelTiers, suggestion.tier) : null;
@@ -122,6 +139,7 @@ export function taskHandoffPrompt({
   linkedThread = false,
   linkedSession = false,
   modelTiers,
+  modelProfiles,
   subagent = false,
 }: HandoffPromptInput): string {
   const ref = `#${task.number} "${task.title}"`;
@@ -157,7 +175,10 @@ export function taskHandoffPrompt({
   const branch = mode === "work" ? integrationBranchLine(task) : null;
   if (branch) lines.push("", branch);
   // Planning sessions ignore the suggestion: it is about implementing, and planning is often a stronger model.
-  const model = mode === "work" && !linkedThread && !linkedSession ? suggestedModelLine(task, modelTiers) : null;
+  const model =
+    mode === "work" && !linkedThread && !linkedSession
+      ? suggestedModelLine(task, modelTiers, undefined, modelProfiles)
+      : null;
   if (model) lines.push("", model);
   if (linkedSession) {
     lines.push(

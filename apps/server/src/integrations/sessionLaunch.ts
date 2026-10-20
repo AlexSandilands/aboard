@@ -14,7 +14,8 @@ import {
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
-  tierCliModel,
+  profileCliModel,
+  resolveTaskModel,
   type AgentCliStatus,
   type AppSettings,
   type SessionLaunchOptions,
@@ -317,6 +318,8 @@ export function createSessionLaunch(deps: {
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
+      const model = resolveTaskModel(task, settings);
+      const picked = model.source === "label" || model.source === "tier" ? model.profile : null;
       const resolved = terminal(settings, h);
       return {
         clis: AgentHarness.options.map((harness) => cliStatus(settings, harness, h)),
@@ -325,10 +328,11 @@ export function createSessionLaunch(deps: {
         branches,
         defaultBaseRef,
         models: {
-          "claude-code": tierCliModel(settings.modelTiers, tier, "claude-code"),
-          "copilot-cli": tierCliModel(settings.modelTiers, tier, "copilot-cli"),
+          "claude-code": profileCliModel(model.profile, "claude-code"),
+          "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
         },
         tier,
+        model: picked ? { name: picked.name, source: model.source as "label" | "tier", label: model.label } : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
       };
     },

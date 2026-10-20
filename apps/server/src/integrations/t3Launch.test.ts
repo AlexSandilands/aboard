@@ -1,4 +1,11 @@
-import { EMPTY_MODEL_TIERS, type ModelTiers, type Project } from "@repo/contracts";
+import {
+  EMPTY_MODEL_TIERS,
+  type ModelProfile,
+  type ModelTier,
+  type ModelTiers,
+  type Project,
+  resolveRunModel,
+} from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
 import {
@@ -69,7 +76,13 @@ const config = (settings: Record<string, unknown> = {}, providers?: unknown[]) =
 const shell = (threads: unknown[] = []): ShellSnapshot =>
   ({ projects: [t3Project], threads, archivedThreads: [] }) as unknown as ShellSnapshot;
 
-const noSuggestion = { suggestedModel: null, modelTiers: EMPTY_MODEL_TIERS };
+const noSuggestion = { model: null, reason: null };
+/** The task's model as the board resolves it: its labels, then its tier. */
+const taskModel = (
+  tier: ModelTier | null,
+  modelTiers: ModelTiers,
+  { labels = [], profiles = [] }: { labels?: string[]; profiles?: ModelProfile[] } = {},
+) => resolveRunModel({ labels, tier }, { modelTiers, modelProfiles: profiles });
 
 const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isDefault: true, worktreePath: null }] };
 
@@ -179,12 +192,15 @@ describe("resolveSuggestion", () => {
   };
 
   it("is null without a suggestion", () => {
-    expect(resolveSuggestion(null, tiers(sonnet), providers)).toBeNull();
+    expect(resolveSuggestion(taskModel(null, tiers(sonnet)), null, providers)).toBeNull();
   });
 
   it("uses the tier's model, dropping options the model doesn't support", () => {
-    expect(resolveSuggestion({ tier: "deep", reason: "Risky" }, tiers(sonnet), providers)).toEqual({
+    expect(resolveSuggestion(taskModel("deep", tiers(sonnet)), "Risky", providers)).toEqual({
       tier: "deep",
+      name: "Deep",
+      source: "tier",
+      label: null,
       reason: "Risky",
       modelSelection: { instanceId: "claudeAgent", model: "sonnet", options: [{ id: "effort", value: "low" }] },
       unavailable: null,
@@ -193,7 +209,7 @@ describe("resolveSuggestion", () => {
 
   it("says why when the tier has no model, its provider isn't ready or the model is gone", () => {
     const why = (t3: ModelTiers["deep"]["t3"]) =>
-      resolveSuggestion({ tier: "deep", reason: null }, tiers(t3), providers)?.unavailable;
+      resolveSuggestion(taskModel("deep", tiers(t3)), null, providers)?.unavailable;
     expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Model tiers.");
     expect(why({ selection: { instanceId: "codex", model: "gpt", options: [] }, label: "GPT" })).toBe(
       "Codex isn't ready in T3 Code.",
@@ -206,14 +222,39 @@ describe("resolveSuggestion", () => {
     );
   });
 
+  it("takes a custom model a task label picks over the tier, saying which label", () => {
+    const codex: ModelProfile = {
+      id: "codex61",
+      name: "Codex 6.1",
+      labels: ["codex61"],
+      description: null,
+      t3: { selection: { instanceId: "claudeAgent", model: "opus", options: [] }, label: "Opus" },
+    };
+    const resolved = taskModel("deep", tiers(sonnet), { labels: ["ui", "codex61"], profiles: [codex] });
+    expect(resolveSuggestion(resolved, "Risky", providers)).toEqual({
+      tier: null,
+      name: "Codex 6.1",
+      source: "label",
+      label: "codex61",
+      reason: null,
+      modelSelection: { instanceId: "claudeAgent", model: "opus", options: [] },
+      unavailable: null,
+    });
+    const bare = { ...codex, t3: null };
+    expect(
+      resolveSuggestion(taskModel(null, tiers(sonnet), { labels: ["codex61"], profiles: [bare] }), null, providers)
+        ?.unavailable,
+    ).toBe("No T3 Code model is set for Codex 6.1 in Settings → Model tiers.");
+  });
+
   it("is part of the launch options, leaving T3's default alone", () => {
     const options = buildLaunchOptions({
       config: config(),
       refs: repo,
       shell: shell(),
       t3Project,
-      suggestedModel: { tier: "deep", reason: null },
-      modelTiers: tiers(sonnet),
+      model: taskModel("deep", tiers(sonnet)),
+      reason: null,
     });
     expect(options.suggestion?.modelSelection?.model).toBe("sonnet");
     expect(options.defaults.modelSelection?.model).toBe("opus");
@@ -293,8 +334,11 @@ describe("autoLaunchSettings", () => {
       refs: opts.refs === undefined ? repo : opts.refs,
       shell: shell(),
       t3Project,
-      suggestedModel: opts.suggest ? { tier: "light", reason: null } : null,
-      modelTiers: { ...EMPTY_MODEL_TIERS, light: { description: null, t3: sonnet } },
+      model: taskModel(opts.suggest ? "light" : null, {
+        ...EMPTY_MODEL_TIERS,
+        light: { description: null, t3: sonnet },
+      }),
+      reason: null,
     });
 
   it("starts work on the suggested model in a new worktree from the default branch", () => {

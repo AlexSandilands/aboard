@@ -11,6 +11,7 @@ import {
 } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
+import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
@@ -837,6 +838,8 @@ export const AppSettings = z
     issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Named models beyond the tiers, in the user's order; a task label can pick one (modelProfiles.ts). */
+    modelProfiles: ModelProfiles,
     /** Where "Open in terminal" resumes agent sessions. */
     terminal: TerminalSetting,
     /** Windows Terminal only: a tab in its last window, or a new window. */
@@ -877,6 +880,8 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  /** Replaces the whole list of custom models. */
+  modelProfiles: ModelProfiles.optional(),
   terminal: TerminalSetting.optional(),
   terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */

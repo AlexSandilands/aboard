@@ -7,10 +7,12 @@ import {
   BRAND,
   type ConnectT3Result,
   isT3ThreadId,
+  type ModelChoice,
   normalizeWorkspaceKey,
   parseT3ThreadInput,
   ProjectIcon,
   type Project,
+  resolveRunModel,
   type StartT3ThreadInput,
   type T3IntegrationStatus,
   type T3LaunchOptions,
@@ -673,6 +675,7 @@ export function createT3Integration(deps: {
   /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
   const loadLaunchOptions = async (
     target: { taskId: string } | { projectId: string },
+    choice?: ModelChoice,
   ): Promise<{ options: T3LaunchOptions; refsListed: boolean; refsUnreachable: boolean }> => {
     const ctx = await launchContext(target);
     return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
@@ -691,8 +694,13 @@ export function createT3Integration(deps: {
         refs,
         shell: ctx.shell,
         t3Project: ctx.t3Project,
-        suggestedModel: ctx.task?.suggestedModel ?? null,
-        modelTiers: deps.services().settings.get().modelTiers,
+        model: ctx.task
+          ? resolveRunModel(
+              { labels: ctx.task.labels, tier: ctx.task.suggestedModel?.tier, choice },
+              deps.services().settings.get(),
+            )
+          : null,
+        reason: ctx.task?.suggestedModel?.reason ?? null,
       });
       return { options, refsListed: refs !== null, refsUnreachable };
     });
@@ -769,7 +777,7 @@ export function createT3Integration(deps: {
     { prompt, commandId, title, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
-    const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId });
+    const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId }, choice.modelChoice);
     // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
     if (!refsListed) {
       const reason = "T3 Code couldn't list the project's branches, so the thread can't get its own worktree";
