@@ -1,4 +1,11 @@
-import { BOARD_AGENTS_SNIPPET, boardSkillFile, BRAND, brandEnv, type SkillSyncStatus } from "@repo/contracts";
+import {
+  automationsSkillFile,
+  BOARD_AGENTS_SNIPPET,
+  boardSkillFile,
+  BRAND,
+  brandEnv,
+  type SkillSyncStatus,
+} from "@repo/contracts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,13 +19,14 @@ function setup() {
   const home = mkdtempSync(join(tmpdir(), "skill-sync-home-"));
   const h = createTestHarness({ userHome: home });
   const path = join(home, ".claude/skills", BRAND.id, "SKILL.md");
-  const put = (text: string) => {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, text);
+  const automationsPath = join(home, ".claude/skills", `${BRAND.id}-automations`, "SKILL.md");
+  const put = (text: string, at = path) => {
+    mkdirSync(dirname(at), { recursive: true });
+    writeFileSync(at, text);
   };
-  const read = () => readFileSync(path, "utf8");
+  const read = (at = path) => readFileSync(at, "utf8");
   const claude = (status: SkillSyncStatus) => status.harnesses.find((s) => s.harness === "claude")!;
-  return { home, h, path, put, read, claude, sync: h.services.skillSync };
+  return { home, h, path, automationsPath, put, read, claude, sync: h.services.skillSync };
 }
 
 describe("skill sync", () => {
@@ -29,11 +37,21 @@ describe("skill sync", () => {
     expect(existsSync(join(home, ".claude"))).toBe(false);
   });
 
-  it("installs when turned on, then leaves an up-to-date copy alone", () => {
-    const { sync, claude, read, path } = setup();
-    expect(claude(sync.enable("claude"))).toMatchObject({ enabled: true, state: "up_to_date", path });
+  it("installs every shipped skill when turned on, then leaves up-to-date copies alone", () => {
+    const { home, sync, claude, read, path, automationsPath } = setup();
+    expect(claude(sync.enable("claude"))).toMatchObject({
+      enabled: true,
+      state: "up_to_date",
+      path: join(home, ".claude/skills"),
+      skills: [
+        { id: BRAND.id, state: "up_to_date", path },
+        { id: `${BRAND.id}-automations`, state: "up_to_date", path: automationsPath },
+      ],
+    });
     expect(read()).toBe(boardSkillFile());
     expect(read()).toContain(`name: ${BRAND.id}\n`);
+    expect(read(automationsPath)).toBe(automationsSkillFile());
+    expect(read(automationsPath)).toContain(`name: ${BRAND.id}-automations\n`);
     sync.syncAll();
     expect(claude(sync.status()).state).toBe("up_to_date");
   });
@@ -43,12 +61,27 @@ describe("skill sync", () => {
     const old = "---\nname: old\n---\n\nThe old workflow.\n";
     put(old);
     createRepos(h.db).settings.set(SKILL_SYNC_KEY, {
-      harnesses: { claude: { enabled: true, installedHash: promptHash(old) } },
+      harnesses: { claude: { enabled: true, installedHashes: { board: promptHash(old) } } },
       snippetCopiedHash: null,
     });
     expect(claude(sync.status()).state).toBe("out_of_date");
     sync.syncAll();
     expect(read()).toBe(boardSkillFile());
+    expect(claude(sync.status()).state).toBe("up_to_date");
+  });
+
+  it("adds a skill the app gained to a harness that synced only the board skill", () => {
+    const { h, sync, claude, read, put, automationsPath } = setup();
+    // The record as saved when the board shipped one skill: a single installedHash.
+    put(boardSkillFile());
+    createRepos(h.db).settings.set(SKILL_SYNC_KEY, {
+      harnesses: { claude: { enabled: true, installedHash: promptHash(boardSkillFile()) } },
+      snippetCopiedHash: null,
+    });
+    expect(claude(sync.status())).toMatchObject({ state: "out_of_date", installedByBoard: true });
+    expect(existsSync(automationsPath)).toBe(false);
+    sync.syncAll();
+    expect(read(automationsPath)).toBe(automationsSkillFile());
     expect(claude(sync.status()).state).toBe("up_to_date");
   });
 
@@ -65,14 +98,36 @@ describe("skill sync", () => {
     expect(read()).toBe(boardSkillFile());
   });
 
+  it("keeps updating the other skill while one is edited", () => {
+    const { h, sync, claude, read, put, automationsPath } = setup();
+    sync.enable("claude");
+    const edited = `${automationsSkillFile()}\nMy own rule.\n`;
+    put(edited, automationsPath);
+    const old = "---\nname: old\n---\n\nThe old workflow.\n";
+    put(old);
+    createRepos(h.db).settings.set(SKILL_SYNC_KEY, {
+      harnesses: {
+        claude: {
+          enabled: true,
+          installedHashes: { board: promptHash(old), automations: promptHash(automationsSkillFile()) },
+        },
+      },
+      snippetCopiedHash: null,
+    });
+    expect(claude(sync.status())).toMatchObject({ state: "edited", installedByBoard: true });
+    sync.syncAll();
+    expect(read()).toBe(boardSkillFile());
+    expect(read(automationsPath)).toBe(edited);
+  });
+
   it("adopts an identical copy already there, CRLF or not, and keeps it current", () => {
     const { h, sync, claude, put } = setup();
     put(boardSkillFile().replace(/\n/g, "\r\n"));
     expect(claude(sync.enable("claude")).state).toBe("up_to_date");
     const stored = createRepos(h.db).settings.all().get(SKILL_SYNC_KEY) as {
-      harnesses: { claude: { installedHash: string } };
+      harnesses: { claude: { installedHashes: { board: string } } };
     };
-    expect(stored.harnesses.claude.installedHash).toBe(promptHash(boardSkillFile()));
+    expect(stored.harnesses.claude.installedHashes.board).toBe(promptHash(boardSkillFile()));
   });
 
   it("treats a different copy already there as edited and leaves it", () => {
@@ -147,8 +202,9 @@ describe("skill sync", () => {
 
     const h = createTestHarness({ userHome: home, harnessHomes: homes });
     const status = h.services.skillSync.enable("copilot").harnesses.find((s) => s.harness === "copilot")!;
-    expect(status.path).toBe(join(copilotHome, "skills", BRAND.id, "SKILL.md"));
-    expect(readFileSync(status.path, "utf8")).toBe(boardSkillFile());
+    expect(status.path).toBe(join(copilotHome, "skills"));
+    expect(readFileSync(status.skills[0]!.path, "utf8")).toBe(boardSkillFile());
+    expect(readFileSync(status.skills[1]!.path, "utf8")).toBe(automationsSkillFile());
     expect(existsSync(join(home, ".copilot"))).toBe(false);
   });
 

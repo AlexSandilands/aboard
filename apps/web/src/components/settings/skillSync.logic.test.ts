@@ -13,7 +13,8 @@ const status = (state: SkillSyncState, enabled = true): SkillSyncHarnessStatus =
   enabled,
   state,
   installedByBoard: true,
-  path: "/home/me/.claude/skills/x/SKILL.md",
+  path: "/home/me/.claude/skills",
+  skills: [],
 });
 
 describe("skill sync logic", () => {
@@ -27,12 +28,12 @@ describe("skill sync logic", () => {
   });
 
   it("names the folder and asks for a choice when the copy was edited", () => {
-    expect(skillSyncDescription(status("up_to_date"))).toContain("/home/me/.claude/skills/x and");
-    expect(skillSyncFolder({ path: String.raw`C:\Users\me\.copilot\skills\x\SKILL.md` })).toBe(
-      String.raw`C:\Users\me\.copilot\skills\x`,
+    expect(skillSyncDescription(status("up_to_date"))).toContain("/home/me/.claude/skills and");
+    expect(skillSyncFolder({ path: String.raw`C:\Users\me\.copilot\skills` })).toBe(
+      String.raw`C:\Users\me\.copilot\skills`,
     );
     expect(skillSyncDescription(status("edited"))).toMatch(/Overwrite it, or keep yours/);
-    expect(skillSyncDescription(status("edited", false))).toMatch(/^Install it/);
+    expect(skillSyncDescription(status("edited", false))).toMatch(/^Install them/);
   });
 
   it("doesn't call a copy the board never wrote the user's edits", () => {

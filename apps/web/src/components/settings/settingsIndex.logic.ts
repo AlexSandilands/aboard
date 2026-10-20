@@ -103,8 +103,8 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 const MCP = `Register the ${BRAND.id} MCP server.`;
 const MODELS_PER_TIER = "The model each suggested tier starts a new session on is set on the Model tiers page.";
 const BOARD_SKILL =
-  "Install the board's skill, which teaches agents the workflow, and keep it updated with the app. A copy you edited is never overwritten without asking.";
-const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow"];
+  "Install the board's skills, which teach agents the workflow and how to write custom automations, and keep them updated with the app. A copy you edited is never overwritten without asking.";
+const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow", "automations"];
 
 const WRITTEN: ReadonlyArray<Draft> = [
   // Board › Appearance
@@ -420,7 +420,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
   ]),
   draft(
     "integrations.claude-code.skill",
-    "Claude Code board skill",
+    "Claude Code board skills",
     `${BOARD_SKILL} In ~/.claude/skills.`,
     BOARD_SKILL_KEYWORDS,
   ),
@@ -458,7 +458,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Add the MCP server to your VS Code user profile, or to .vscode/mcp.json.",
     ["github copilot", "mcp.json", "editor", "servers"],
   ),
-  draft("integrations.copilot.skill", "Copilot board skill", `${BOARD_SKILL} In ~/.copilot/skills.`, [
+  draft("integrations.copilot.skill", "Copilot board skills", `${BOARD_SKILL} In ~/.copilot/skills.`, [
     "github copilot",
     ...BOARD_SKILL_KEYWORDS,
   ]),
@@ -491,7 +491,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "What headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
     ["openai", "executable", "binary", "headless", "autopilot"],
   ),
-  draft("integrations.codex.skill", "Codex board skill", `${BOARD_SKILL} In ~/.codex/skills.`, [
+  draft("integrations.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
     "openai",
     ...BOARD_SKILL_KEYWORDS,
   ]),

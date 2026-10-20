@@ -21,7 +21,7 @@ same services, so an agent's change reaches open browsers within a second.
 | `apps/server`        | Hono on Node 24: REST, SSE, MCP, services, `node:sqlite`, and the GitHub, T3 Code and review integrations                         |
 | `apps/web`           | React 19 + Vite. Server state in the TanStack Query cache, kept fresh by SSE; UI-only state in zustand                            |
 | `apps/desktop`       | Electron shell that runs or attaches to the server and shows the web app. See [features/desktop.md](features/desktop.md)          |
-| `skills/`            | The skills and `AGENTS.md` snippet shipped to agents that use the board. Not loaded by the app, except that a test keeps `skills/aboard-review/SKILL.md` identical to the built-in review skill. |
+| `skills/`            | The skills and `AGENTS.md` snippet shipped to agents that use the board. Not loaded by the app, except that a test keeps `skills/aboard-review/SKILL.md` identical to the built-in review skill and `skills/aboard/` and `skills/aboard-automations/` identical to the texts embedded in contracts. |
 
 The product name, id and version come only from the root `package.json`, through `BRAND` in
 `packages/contracts/src/brand.ts`. Env vars (`brandEnv`), browser storage keys (`storageKey`), the

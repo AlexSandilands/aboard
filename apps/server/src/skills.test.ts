@@ -1,8 +1,14 @@
 import {
+  AUTOMATION_SDK_SCOPE,
+  AUTOMATION_SDK_SNIPPETS,
+  automationsSkillFile,
   BOARD_AGENTS_SNIPPET,
   boardSkillFile,
+  BRAND,
+  checkAutomationDraft,
   BUILTIN_PLAN_SKILL_BODY,
   BUILTIN_REVIEW_SKILL_BODY,
+  SHIPPED_SKILLS,
 } from "@repo/contracts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,12 +61,58 @@ describe("skills", () => {
     expect(body).toBe(BUILTIN_PLAN_SKILL_BODY);
   });
 
-  // The server installs and syncs the board skill from contracts; the repo ships the same files. After editing
-  // skills/aboard, `pnpm skill:embed` regenerates contracts' copy.
+  // The server installs and syncs the board's skills from contracts; the repo ships the same files. After editing
+  // skills/aboard or skills/aboard-automations, `pnpm skill:embed` regenerates contracts' copy.
+  const shipped = (folder: string, name: string) =>
+    readFileSync(new URL(`../../../skills/${folder}/${name}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
   it("keeps skills/aboard/SKILL.md and AGENTS-snippet.md identical to the embedded text", () => {
-    const read = (name: string) =>
-      readFileSync(new URL(`../../../skills/aboard/${name}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
-    expect(read("SKILL.md")).toBe(boardSkillFile());
-    expect(read("AGENTS-snippet.md")).toBe(BOARD_AGENTS_SNIPPET);
+    expect(shipped("aboard", "SKILL.md")).toBe(boardSkillFile());
+    expect(shipped("aboard", "AGENTS-snippet.md")).toBe(BOARD_AGENTS_SNIPPET);
+  });
+
+  it("keeps skills/aboard-automations/SKILL.md identical to the embedded text", () => {
+    expect(shipped("aboard-automations", "SKILL.md")).toBe(automationsSkillFile());
+  });
+
+  it("ships a folder for each skill the board installs, named after its id", () => {
+    expect(SHIPPED_SKILLS.map((s) => s.id)).toEqual([BRAND.id, `${BRAND.id}-automations`]);
+    for (const shippedSkill of SHIPPED_SKILLS) {
+      expect(shippedSkill.file()).toContain(`name: ${shippedSkill.id}\n`);
+    }
+  });
+
+  // The editor's reference sheet and the authoring skill teach the same snippets; one source keeps them from drifting.
+  it("lists every value an action is given in skills/aboard-automations/SKILL.md", () => {
+    const text = shipped("aboard-automations", "SKILL.md");
+    const names = AUTOMATION_SDK_SCOPE.flatMap((v) => [v.prompt, v.env, v.stdin]).filter((n): n is string => !!n);
+    expect(names.filter((name) => !text.includes(name))).toEqual([]);
+  });
+
+  // The worked examples are drafts: each must be one the board accepts, with the script above it as its body.
+  it("only shows drafts in skills/aboard-automations/SKILL.md that the board accepts", () => {
+    const text = shipped("aboard-automations", "SKILL.md");
+    const blocks = [...text.matchAll(/```(\w+)\n([\s\S]*?)\n```/g)].map((m) => ({ lang: m[1]!, code: m[2]! }));
+    const drafts = blocks.flatMap((block, i) => {
+      if (block.lang !== "json" || !block.code.includes('"trigger"')) return [];
+      const script = blocks
+        .slice(0, i)
+        .reverse()
+        .find((b) => ["python", "js", "powershell", "sh"].includes(b.lang));
+      return [JSON.parse(block.code.replace('"<the script above>"', JSON.stringify(script?.code ?? ""))) as object];
+    });
+    expect(drafts.length).toBeGreaterThanOrEqual(3);
+    for (const draft of drafts) {
+      expect(checkAutomationDraft(draft as Record<string, unknown>)).toMatchObject({ ok: true });
+    }
+  });
+
+  it("quotes the editor's script snippets in skills/aboard-automations/SKILL.md", () => {
+    const text = shipped("aboard-automations", "SKILL.md");
+    for (const [language, snippets] of Object.entries(AUTOMATION_SDK_SNIPPETS)) {
+      for (const snippet of snippets) {
+        expect(text, `${language}: ${snippet.title}`).toContain(snippet.code);
+      }
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** The harnesses the board can install its skill for, each reading global skills from its own folder. */
+/** The harnesses the board can install its skills for, each reading global skills from its own folder. */
 export const SkillSyncHarness = z.enum(["claude", "copilot", "codex"]);
 export type SkillSyncHarness = z.infer<typeof SkillSyncHarness>;
 
@@ -10,18 +10,34 @@ export type SkillSyncHarness = z.infer<typeof SkillSyncHarness>;
  */
 export type SkillSyncState = "not_installed" | "up_to_date" | "out_of_date" | "edited";
 
-export interface SkillSyncHarnessStatus {
-  harness: SkillSyncHarness;
-  /** The user turned sync on for this harness: the board installs the skill and rewrites it when the app changes. */
-  enabled: boolean;
+/** One shipped skill's installed copy in a harness. */
+export interface SkillSyncSkillStatus {
+  /** The skill's folder name under the harness's `skills/`. */
+  id: string;
   state: SkillSyncState;
   /**
    * The board wrote (or adopted) a copy here. An `edited` copy it never wrote is one put there by hand, often an older
    * version from before sync existed, rather than one the user changed.
    */
   installedByBoard: boolean;
-  /** The installed file's absolute path. */
+  /** The installed `SKILL.md`'s absolute path. */
   path: string;
+}
+
+export interface SkillSyncHarnessStatus {
+  harness: SkillSyncHarness;
+  /** The user turned sync on for this harness: the board installs its skills and rewrites them when the app changes. */
+  enabled: boolean;
+  /**
+   * All the skills together: `edited` while any is, else `out_of_date` while any differs or is missing from an
+   * otherwise installed set (sync installs it on the next start), else `not_installed` when none is.
+   */
+  state: SkillSyncState;
+  /** For `edited`: every edited skill was written by the board. Otherwise: the board wrote any of them. */
+  installedByBoard: boolean;
+  /** The harness's `skills/` folder, which holds each skill's own folder. */
+  path: string;
+  skills: SkillSyncSkillStatus[];
 }
 
 export interface SkillSyncStatus {

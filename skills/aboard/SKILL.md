@@ -117,7 +117,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    ..."), `draft_automation(automation, note)` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
    fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
-   A refused draft lists every problem with where it is; fix them all and call again.
+   A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
+   `aboard-automations` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
+   contract, and how to test a script and hand the draft over.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
@@ -309,5 +311,6 @@ copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
 code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```
 
-Install this skill from the board's Settings (Board skill, under Claude Code, Copilot or Codex), which keeps it
-in step with the app, or copy the folder to `~/.claude/skills/aboard/`.
+Install this skill from the board's Settings (Board skills, under Claude Code, Copilot or Codex), which keeps it
+(and `aboard-automations`, for writing custom automations) in step with the app, or copy the folder to
+`~/.claude/skills/aboard/`.
