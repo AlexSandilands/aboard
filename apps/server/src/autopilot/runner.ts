@@ -413,6 +413,7 @@ export function createAutopilotRunner(deps: {
       untrusted: request.untrustedInput,
       tools: request.tools,
       deniedTools: request.deniedTools,
+      unguarded: !where.hooksPath,
     });
     const { driver } = plan;
     const preset = driver.capabilities.presetSessionId ? newSessionId() : null;

@@ -110,11 +110,10 @@ export async function installPushGuard(
  * The environment that points the agent's git at the guard's hooks: `core.hooksPath` the way `git -c` passes it on
  * (`GIT_CONFIG_PARAMETERS`), so every git the agent starts gets it and nothing is written to any config. Not
  * `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`: Codex drops variables with `KEY` in their name from its shell, and git
- * fails outright when a counted key is missing. Kept after any parameters already set, which they would otherwise
- * override.
+ * fails outright when a counted key is missing. One quoted `'key=value'` entry, the form every git reads (the
+ * `'key'='value'` form needs git 2.31). Kept after any parameters already set, which they would otherwise override.
  */
 export function pushGuardEnv(hooks: string, existing: string | undefined): { GIT_CONFIG_PARAMETERS: string } {
-  const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  const own = `${quote("core.hooksPath")}=${quote(hooks)}`;
+  const own = `'core.hooksPath=${hooks.replace(/'/g, `'\\''`)}'`;
   return { GIT_CONFIG_PARAMETERS: existing?.trim() ? `${existing.trim()} ${own}` : own };
 }

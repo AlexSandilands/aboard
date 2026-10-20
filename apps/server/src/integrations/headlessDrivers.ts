@@ -202,11 +202,19 @@ export interface DriverNeeds {
   untrusted?: boolean | undefined;
   tools?: readonly string[] | undefined;
   deniedTools?: readonly string[] | undefined;
+  /**
+   * The run works where no push guard is installed (a task-less run, in an empty folder): only Claude Code's own deny
+   * rules can keep an editing agent from force-pushing or merging there.
+   */
+  unguarded?: boolean | undefined;
 }
 
 /** What `needs` asks that the driver can't do, in words, or null when it can do all of it. */
 export function missingCapability(driver: HeadlessDriver, needs: DriverNeeds): string | null {
   const c = driver.capabilities;
+  if (needs.unguarded && needs.access === "edit" && !c.toolRules) {
+    return "push rules of its own, as a run with no worktree has no push guard";
+  }
   if (needs.outputSchema && !c.outputSchema) return "structured output";
   if (needs.untrusted && !c.untrusted) return "the lockdown for untrusted input";
   if (needs.access === "none" && !c.noTools) return "a run with no tools";

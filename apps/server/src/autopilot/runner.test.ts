@@ -435,7 +435,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       ]);
       expect(job.args.join(" ")).toContain("--model gpt-5.5-codex");
       // Its git uses the worktree's push guard.
-      expect(job.env?.GIT_CONFIG_PARAMETERS).toMatch(/^'core.hooksPath'='.*autopilot-hooks'$/);
+      expect(job.env?.GIT_CONFIG_PARAMETERS).toMatch(/^'core.hooksPath=.*autopilot-hooks'$/);
       expect(linkedWhileRunning).toEqual([CODEX_ID]);
       expect(out).toMatchObject({ runner: "headless", sessionId: CODEX_ID, result: "Pushed" });
       expect(out).not.toHaveProperty("costUsd");
@@ -924,6 +924,19 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(job.prompt).toContain("empty temporary folder");
         expect(job.args).toContain("Bash(git push * main)");
         expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+      });
+
+      it("runs an editing agent on Claude Code even when its model runs on Codex: there is no push guard", async () => {
+        const { h, run, jobs, start, patches } = setup({ t3: T3_UP });
+        h.services.settings.update({
+          modelTiers: { light: { description: null, t3: null, cli: { codex: "gpt-5.5-codex" }, headless: "codex" } },
+        });
+        await start({ run: { ...run, taskId: null }, tier: "light", options: {}, repo: repo.checkout });
+        const job = jobs[0]!;
+        expect(job.args[0]).toBe("-p");
+        expect(job.args).toContain("Bash(git push * main)");
+        expect(job.env).toBeUndefined();
+        expect(patches.some((p) => p.detail?.includes("as a run with no worktree has no push guard"))).toBe(true);
       });
 
       it("with a null repo, still tells the agent not to push to the default branch", async () => {

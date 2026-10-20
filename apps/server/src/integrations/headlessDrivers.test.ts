@@ -189,6 +189,12 @@ describe("choosing a driver", () => {
       "its own tool rules",
     );
     expect(missingCapability(claudeDriver, { access: "none", outputSchema: {}, untrusted: true })).toBeNull();
+    // With no worktree there is no push guard: only Claude Code's deny rules hold an editing agent back.
+    expect(missingCapability(codexDriver, { access: "edit", unguarded: true })).toBe(
+      "push rules of its own, as a run with no worktree has no push guard",
+    );
+    expect(missingCapability(copilotDriver, { access: "read-only", unguarded: true })).toBeNull();
+    expect(missingCapability(claudeDriver, { access: "edit", unguarded: true })).toBeNull();
   });
 
   it("falls back to Claude Code, saying why, when the harness can't do what the run needs", () => {

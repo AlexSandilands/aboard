@@ -91,6 +91,15 @@ describe("Autopilot worktrees", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   });
 
   describe("the push guard", () => {
+    it("passes core.hooksPath on as one quoted key=value, after any parameters already set", () => {
+      expect(pushGuardEnv("C:/w/.git/worktrees/x/autopilot-hooks", undefined)).toEqual({
+        GIT_CONFIG_PARAMETERS: "'core.hooksPath=C:/w/.git/worktrees/x/autopilot-hooks'",
+      });
+      expect(pushGuardEnv("/r/it's/hooks", " 'user.name=A' ").GIT_CONFIG_PARAMETERS).toBe(
+        "'user.name=A' 'core.hooksPath=/r/it'\\''s/hooks'",
+      );
+    });
+
     /** git as the agent runs it: with the guard's hooks in its environment. */
     const agentGit = (wt: Worktree, ...args: string[]) =>
       execFileSync("git", args, {
