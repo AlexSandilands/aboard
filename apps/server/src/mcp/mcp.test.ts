@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -496,7 +497,8 @@ describe("MCP endpoint", () => {
     expect(listed).toContain(`#${unplanned.number} Search titles — done by #${shipped.number}`);
   });
 
-  it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
+  it("lists missing ticket and T3 thread links until they are added, and never on done tasks", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const workspacePath = "C:/Fake/proj";
     const project = h.services.projects.create({ workspaceRoot: workspacePath });
     const task = h.services.tasks.create({
@@ -531,7 +533,41 @@ describe("MCP endpoint", () => {
     expect(text(closed)).not.toContain("Missing links:");
   });
 
+  it("hints a title key only for a system that doesn't link title keys itself", async () => {
+    h.services.settings.update({ ticketSystems: [{ ...TEST_JIRA, autoLink: false }] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-5 Fix login" });
+    const ref = `#${task.number}`;
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
+    expect(detail).toContain(`Jira CORE-5: link(task: "${ref}", value: "CORE-5")`);
+  });
+
+  it("doesn't hint a title key of a system that links title keys itself", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-5 Fix login" });
+    const ref = `#${task.number}`;
+    await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-5" } });
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
+    expect(detail).not.toContain("CORE-5: link(");
+  });
+
+  it("unlink removes a link and refuses one the task doesn't have", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-9 Fix login" });
+    const ref = `#${task.number}`;
+    const removed = await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-9" } });
+    expect(removed.isError).toBeFalsy();
+    expect(text(removed)).toContain(`Unlinked from ${ref}: Jira CORE-9`);
+    expect(h.services.tasks.detail(task.id).links).toEqual([]);
+    const again = await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-9" } });
+    expect(again.isError).toBe(true);
+    expect(text(again)).toContain("NOT_FOUND");
+  });
+
   it("add_to_backlog attaches links and the T3 thread", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const created = await client.callTool({
       name: "add_to_backlog",
       arguments: {
@@ -544,7 +580,24 @@ describe("MCP endpoint", () => {
     expect(created.isError).toBeFalsy();
     const number = Number(/#(\d+)/.exec(text(created))?.[1]);
     const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
-    expect(links.sort()).toEqual(["jira", "t3_thread", "url"]);
+    expect(links.sort()).toEqual(["t3_thread", "ticket", "url"]);
+  });
+
+  it("creates a task without a key no ticket system matches, and says so", async () => {
+    const created = await client.callTool({
+      name: "create_task",
+      arguments: {
+        title: "Add login",
+        workspacePath: "C:/Fake/proj",
+        markdown: "## Build\n- [ ] Write it",
+        links: ["PAY-12", "https://example.com/spec"],
+      },
+    });
+    expect(created.isError).toBeFalsy();
+    expect(text(created)).toContain("Not linked: PAY-12 (no ticket system set up in Settings matches it).");
+    const number = Number(/#(\d+)/.exec(text(created))?.[1]);
+    const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
+    expect(links).toEqual(["url"]);
   });
 
   it("move_task says when a task with merged PRs went on to Done", async () => {

@@ -1,4 +1,4 @@
-import type { TaskImport } from "@repo/contracts";
+import { TICKET_SYSTEM_PRESETS, type TaskImport } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { epicImportProgress, importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
 
@@ -8,10 +8,13 @@ const imp = (
   sourceUrl = "PROJ-1",
 ): { import: TaskImport } => ({ import: { status, error, sourceUrl } });
 
+const systems = [TICKET_SYSTEM_PRESETS[0]!.system];
+
 describe("import labels", () => {
   it("names where the import reads from", () => {
-    expect(importSourceLabel("PROJ-1")).toBe("Jira PROJ-1");
-    expect(importSourceLabel("https://jira.example.com/browse/PROJ-2")).toBe("Jira PROJ-2");
+    expect(importSourceLabel("PROJ-1", systems)).toBe("Jira PROJ-1");
+    expect(importSourceLabel("https://jira.example.com/browse/PROJ-2", systems)).toBe("Jira PROJ-2");
+    expect(importSourceLabel("PROJ-1")).toBe("PROJ-1");
     expect(importSourceLabel("https://github.com/acme/app/issues/45")).toBe("GitHub acme/app#45");
   });
 
@@ -22,9 +25,9 @@ describe("import labels", () => {
   });
 
   it("explains a failure with the reason", () => {
-    expect(importFailure(imp("failed", "No Jira tool available"))).toEqual({
+    expect(importFailure(imp("failed", "No import tool available"), systems)).toEqual({
       title: "Couldn't import Jira PROJ-1",
-      reason: "No Jira tool available",
+      reason: "No import tool available",
     });
     expect(importFailure(imp("pending"))).toBeNull();
     expect(importFailure({ import: null })).toBeNull();

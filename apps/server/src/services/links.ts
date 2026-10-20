@@ -8,6 +8,8 @@ import {
   type PrSnapshot,
   type T3ThreadSnapshot,
   type TaskLink,
+  type TicketRef,
+  type TicketSystem,
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso, parseJson } from "../db/database.ts";
@@ -19,7 +21,7 @@ import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
-export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null): ClassifiedLink {
+export function classifyLinkInput(input: LinkInput, ticketSystems: readonly TicketSystem[]): ClassifiedLink {
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
   }
@@ -29,10 +31,11 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
   }
   const value = input.value?.trim();
   if (!value) {
-    throw new AppError("VALIDATION", "Provide a link value (URL or Jira key), a t3Thread or an agentSession");
+    throw new AppError("VALIDATION", "Provide a link value (URL or ticket key), a t3Thread or an agentSession");
   }
-  const looksLikeKey = /^[a-z][a-z0-9_]+-\d+$/i.test(value);
-  const classified = classifyLink(looksLikeKey ? value.toUpperCase() : value, { jiraBaseUrl });
+  // Keys are usually upper case; one an agent typed in lower case ("abc-12") counts when only its upper case matches.
+  const asUpper = classifyLink(value.toUpperCase(), { ticketSystems });
+  const classified = classifyLink(value, { ticketSystems }) ?? (asUpper?.kind === "ticket" ? asUpper : null);
   if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${value}`);
   const canonical: ClassifiedLink =
     classified.kind === "t3_thread" ? { ...classified, url: t3DesktopThreadUrl(classified.ref) } : classified;
@@ -47,8 +50,7 @@ const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
   switch (c.kind) {
     case "pr":
       return c.ref ? JSON.stringify(c.ref) : null;
-    case "jira":
-      return JSON.stringify({ key: c.key });
+    case "ticket":
     case "t3_thread":
     case "issue":
       return JSON.stringify(c.ref);
@@ -58,6 +60,27 @@ const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
       return null;
   }
 };
+
+/** The link `value` (a URL or ticket key, as `link` takes them) names among a task's links, if any. */
+function matchingLink(rows: readonly LinkRow[], value: string, ticketSystems: readonly TicketSystem[]): LinkRow | null {
+  let classified: ClassifiedLink | null = null;
+  try {
+    classified = classifyLinkInput({ value }, ticketSystems);
+  } catch {
+    // Not something `link` would take; it can still equal a stored URL.
+  }
+  const sameTicket = (row: LinkRow): boolean => {
+    if (classified?.kind !== "ticket" || row.kind !== "ticket") return false;
+    const ref = parseJson<TicketRef>(row.ref_json);
+    return ref?.system === classified.ref.system && ref.key === classified.ref.key;
+  };
+  return (
+    rows.find((r) => r.url === value) ??
+    rows.find((r) => classified && r.kind === classified.kind && r.url === classified.url) ??
+    rows.find(sameTicket) ??
+    null
+  );
+}
 
 /** Actor recorded when merged pull requests move a task to Done. */
 export const GITHUB_ACTOR = "github";
@@ -92,7 +115,7 @@ export interface LinksModule {
   completeIfPrsDone(taskId: string): void;
 }
 
-/** Task links (PRs, Jira, T3 threads, URLs) and their poller snapshots. */
+/** Task links (PRs, tickets, T3 threads, URLs) and their poller snapshots. */
 export function createLinksService(
   core: Core,
   deps: {
@@ -197,7 +220,11 @@ export function createLinksService(
     add(taskId, input, actor, opts = {}) {
       return core.write((fx) => {
         const task = deps.task(taskId);
-        const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
+        const systems = deps.settings.get().ticketSystems;
+        const classified = classifyLinkInput(
+          input,
+          opts.ticketSystem ? systems.filter((t) => t.id === opts.ticketSystem) : systems,
+        );
         if ((classified.kind === "agent_session" || classified.kind === "t3_thread") && task.manual) {
           throw new AppError(
             "VALIDATION",
@@ -207,13 +234,19 @@ export function createLinksService(
         }
         const existing =
           repos.links.find(task.id, classified.kind, classified.url) ??
-          // A Jira issue is one link however it was written: a bare key, or a URL on any host.
-          (classified.kind === "jira"
-            ? repos.links
-                .forTasks([task.id])
-                .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
+          // A ticket is one link however it was written: a bare key, or any of its URLs.
+          (classified.kind === "ticket"
+            ? repos.links.forTasks([task.id]).find((l) => {
+                const ref = l.kind === "ticket" ? parseJson<TicketRef>(l.ref_json) : null;
+                return ref?.system === classified.ref.system && ref.key === classified.ref.key;
+              })
             : undefined);
         if (existing) {
+          // Asking for a link the board added by itself makes it one asked for, which a rename leaves alone.
+          if (existing.auto && !opts.auto) {
+            repos.links.setAuto(existing.id, false);
+            fx.task(task.id);
+          }
           // A session is one link however often it is linked, but an agent may correct the folder it gave (Claude
           // finds a conversation to resume by its folder) or rename the session as its work changes (planning, then
           // implementing): the newest one wins.
@@ -248,6 +281,7 @@ export function createLinksService(
           snapshot_json: null,
           synced_at: null,
           created_at: nowIso(),
+          auto: opts.auto ? 1 : 0,
         };
         repos.links.insert(row);
         fx.log(task.id, actor, "link_added", { linkId: row.id, kind: row.kind, url: row.url });
@@ -260,6 +294,39 @@ export function createLinksService(
         const row = rowOrThrow(linkId);
         repos.links.delete(linkId);
         fx.log(row.task_id, actor, "link_removed", { kind: row.kind, url: row.url });
+      });
+    },
+
+    unlink(taskId, value, actor) {
+      return core.write((fx) => {
+        const task = deps.task(taskId);
+        const wanted = value.trim();
+        const rows = repos.links.forTasks([task.id]);
+        const row = rows.find((l) => l.id === wanted) ?? matchingLink(rows, wanted, deps.settings.get().ticketSystems);
+        if (!row) {
+          throw new AppError("NOT_FOUND", `#${task.number} has no link matching "${wanted}"`);
+        }
+        const link = toLink(row);
+        repos.links.delete(row.id);
+        fx.log(task.id, actor, "link_removed", { kind: row.kind, url: row.url });
+        fx.task(task.id);
+        return link;
+      });
+    },
+
+    removeAutoTickets(taskId, keep, actor) {
+      core.write((fx) => {
+        let removed = false;
+        const kept = new Set(keep.map((r) => `${r.system}:${r.key}`));
+        for (const row of repos.links.forTasks([taskId])) {
+          if (row.kind !== "ticket" || !row.auto) continue;
+          const ref = parseJson<TicketRef>(row.ref_json);
+          if (!ref || kept.has(`${ref.system}:${ref.key}`)) continue;
+          repos.links.delete(row.id);
+          removed = true;
+          fx.log(taskId, actor, "link_removed", { kind: row.kind, url: row.url, auto: true });
+        }
+        if (removed) fx.task(taskId);
       });
     },
 

@@ -35,7 +35,7 @@ export function createAttachmentsRepo(sql: Sql) {
     orphansBefore(before: string): TaskAttachment[] {
       return sql
         .all<AttachmentRow>(
-          "SELECT * FROM task_attachments WHERE task_id IS NULL AND created_at < ? ORDER BY created_at, id",
+          "SELECT * FROM task_attachments WHERE task_id IS NULL AND created_at < ? ORDER BY created_at, rowid",
           before,
         )
         .map(toAttachment);

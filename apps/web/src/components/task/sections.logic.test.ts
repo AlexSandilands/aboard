@@ -364,7 +364,7 @@ describe("relationChipGroups", () => {
 
 describe("linkSummaryChips", () => {
   const pr = (id: string) => ({ id, kind: "pr" }) as PlainLink;
-  const jira = (id: string) => ({ id, kind: "jira" }) as PlainLink;
+  const jira = (id: string) => ({ id, kind: "ticket" }) as PlainLink;
 
   it("shows PRs and counts every other link as the rest", () => {
     expect(linkSummaryChips([pr("a"), jira("b"), jira("c")])).toEqual({ prs: [pr("a")], rest: 2 });

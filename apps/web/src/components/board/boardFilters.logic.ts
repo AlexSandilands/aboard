@@ -34,7 +34,7 @@ export interface FilterState {
   autopilot: ReadonlyArray<AutopilotChoice>;
   labels: ReadonlyArray<string>;
   epicId: string | null;
-  /** Free text: title, `#number`, Jira key or label. */
+  /** Free text: title, `#number`, ticket key or label. */
   text: string;
   attention: boolean;
   hasPr: boolean;

@@ -154,7 +154,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | -------------------- | ------------------------------------------------- |
 | Labels, Plan         | Never: one row either way, and an empty plan is the prompt to write one |
 | Sessions             | The task has no T3 threads or agent sessions      |
-| Links                | The task has no PRs, issues, Jira keys or URLs    |
+| Links                | The task has no PRs, issues, tickets or URLs      |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Automation           | Never: the settings are its content               |
 | Local review         | No review rounds                                  |
@@ -215,7 +215,7 @@ starts collapsed.
 
 #### The Links section
 
-PRs, then issues, Jira keys and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
+PRs, then issues, tickets and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
 and the list ends with **Add link**; pasting a T3 thread there still works, and the thread lands in Sessions.
 
 Row labels in Links and Sessions (`PanelLabel`) are one line with an ellipsis. They clip on x (`overflow-x-clip`) instead of using `truncate`, whose `overflow: hidden` would turn the `overflow-y-visible` that keeps trimmed text from being cut into a scroll container. While a truncated label is hovered it pans to show its end, pauses, and jumps back (`label-pan` in `index.css`, distance from `labelPan` in `labelPan.logic.ts`); it stays still under `prefers-reduced-motion`.
@@ -293,8 +293,8 @@ chain. The overlay and its rules are in [relations.md](relations.md#on-the-board
 ### Links on cards
 
 The card's link row shows PRs and **active** T3 threads, in the panel's order (`cardLinks`). A thread
-with no snapshot yet counts as active, since it may be. The first Jira key shows as a badge in the card's
-top row. Settled and archived threads, other Jira keys and plain URLs appear in the panel only, where
+with no snapshot yet counts as active, since it may be. The first ticket key shows as a badge in the card's
+top row. Settled and archived threads, other ticket keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
 ### The settings page

@@ -39,7 +39,7 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
   what's moving, what's stuck and what's waiting on you.
 - **Agents do the bookkeeping.** Over MCP they capture ideas, write a plan before they start, tick off
   steps as they go and leave a handover note when they stop. You don't have to update anything.
-- **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, Jira issue and
+- **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, ticket and
   agent thread. Resume it yourself, or hand it to a fresh agent with one click.
 - **Problems come to you.** Failing checks, requested changes and blocked steps collect under
   **Needs attention**, so you don't have to go looking.
@@ -98,7 +98,7 @@ per repo.
 | [Recurring tasks](docs/guide/recurring-tasks.md)       | Tasks made from a template on a schedule                               |
 | [Digest of what changed](docs/guide/digest.md)         | A daily summary of the board, plain or written by an agent             |
 | [Custom automations](docs/guide/custom-automations.md) | Your own Autopilot triggers and actions: an agent or a command         |
-| [Importing issues](docs/guide/importing-issues.md)     | Create a task from a Jira or GitHub issue URL                          |
+| [Importing issues](docs/guide/importing-issues.md)     | Create a task from a ticket or GitHub issue URL                        |
 | [Connecting agents](docs/guide/connect-agents.md)      | MCP setup for Claude Code, Codex, Copilot and VS Code                  |
 | [Local review](docs/guide/local-review.md)             | Have agents' work reviewed on the board before they open a PR          |
 | [Autopilot](docs/guide/autopilot.md)                   | Let the board act on its own: switch automations on, set limits, pause |

@@ -113,7 +113,10 @@ export function createReviewFallbacks(deps: {
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,
-          taskText: renderTaskDetail(s.tasks.detail(task.id), project, { events: 0 }),
+          taskText: renderTaskDetail(s.tasks.detail(task.id), project, {
+            events: 0,
+            ticketSystems: s.settings.get().ticketSystems,
+          }),
           skill: s.reviews.skillFor(task.id),
           baseRef: null,
         }),

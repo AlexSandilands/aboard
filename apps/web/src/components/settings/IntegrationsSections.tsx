@@ -18,7 +18,7 @@ import { api } from "~/lib/api";
 import { useRecheckAgentIntegrations, useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useAgentIntegrations } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { agentDot, githubDot, jiraDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
+import { agentDot, githubDot, SNIPPET_DOT, t3Dot, type IntegrationDot } from "./integrations.logic";
 import { CommandSnippet, SettingsRow, SettingsSection, StatusDot, StatusLine } from "./settingsLayout";
 import { AgentsSnippetRow, BoardSkillRow } from "./SkillSyncRows";
 import { useOpenSettings } from "./settingsNavigation";
@@ -282,43 +282,6 @@ export function GithubSection({
             aria-label="Poll PR status"
             checked={settings.githubPolling}
             onCheckedChange={(checked) => updateSettings.mutate({ githubPolling: checked })}
-          />
-        }
-      />
-    </SettingsSection>
-  );
-}
-
-export function JiraSection({ settings }: { settings: AppSettings }) {
-  const updateSettings = useUpdateSettings();
-  const [baseUrl, setBaseUrl] = useState(settings.jiraBaseUrl ?? "");
-
-  function save() {
-    const next = baseUrl.trim() || null;
-    if (next !== settings.jiraBaseUrl) updateSettings.mutate({ jiraBaseUrl: next });
-  }
-
-  return (
-    <SettingsSection id="integrations.jira.status" title="Jira" status={<Dot dot={jiraDot(settings.jiraBaseUrl)} />}>
-      <SettingsRow
-        id="integrations.jira.base-url"
-        title="Base URL"
-        description="Used to link keys like ABC-123."
-        control={
-          <Input
-            aria-label="Jira base URL"
-            size="sm"
-            className="sm:w-64"
-            placeholder="https://example.atlassian.net"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            onBlur={save}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                event.currentTarget.blur();
-              }
-            }}
           />
         }
       />

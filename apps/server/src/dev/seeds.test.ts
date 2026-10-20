@@ -164,7 +164,7 @@ describe("seed scenarios", () => {
     expect(tasks.some((t) => t.labels.length > 0)).toBe(true);
     expect(tasks.some((t) => t.stepStatuses.includes("blocked"))).toBe(true);
     const kinds = details.flatMap((t) => t.links.map((l) => l.kind));
-    expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "jira"]));
+    expect(kinds).toEqual(expect.arrayContaining(["pr", "t3_thread", "ticket"]));
     expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
   });
 

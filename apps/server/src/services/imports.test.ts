@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { renderTaskDetail } from "../mcp/format.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { importLabels } from "./imports.ts";
 
 function setup() {
   const h = createTestHarness();
   const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+  h.services.settings.update({ ticketSystems: [TEST_JIRA] });
   return { ...h, s: h.services, project };
 }
 
@@ -33,14 +35,13 @@ describe("creating a task from an issue", () => {
     ]);
   });
 
-  it("links a Jira key once, however it is written", () => {
+  it("links a ticket key once, however it is written", () => {
     const { s, project } = setup();
-    s.settings.update({ jiraBaseUrl: "https://jira.example.com" });
     const task = s.tasks.create({ projectId: project.id, sourceUrl: "https://other.example.com/browse/PROJ-7" });
     expect(task.title).toBe("PROJ-7");
     expect(task.import?.status).toBe("pending");
     s.links.add(task.id, { value: "PROJ-7" }, "user");
-    expect(s.tasks.detail(task.id).links.filter((l) => l.kind === "jira")).toHaveLength(1);
+    expect(s.tasks.detail(task.id).links.filter((l) => l.kind === "ticket")).toHaveLength(1);
   });
 
   it("rejects text that is not an issue, and a plan", () => {

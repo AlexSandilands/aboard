@@ -53,10 +53,6 @@ export function githubDot(status: GithubStatus | undefined): IntegrationDot {
   return dot("success", "Ready");
 }
 
-export function jiraDot(baseUrl: string | null): IntegrationDot {
-  return baseUrl ? dot("success", "Base URL set") : dot("muted", "Not set up");
-}
-
 export function terminalDot(info: TerminalInfo | undefined): IntegrationDot {
   if (!info) return dot("muted", "Checking");
   return info.error ? dot("warning", info.error) : dot("success", "Ready");

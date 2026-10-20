@@ -123,4 +123,82 @@ describe("migrations", () => {
       { id: "plain", kind: "url", ref_json: null },
     ]);
   });
+  describe("ticket systems (036)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "035_task_manual.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at)
+          VALUES ('t', 1, 'p', 'T', 'backlog', 'a0', 'user', '', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const setting = (db: DatabaseSync, key: string): unknown => {
+      const row = db.prepare("SELECT value_json FROM settings WHERE key = ?").get(key) as
+        | { value_json: string }
+        | undefined;
+      return row ? JSON.parse(row.value_json) : undefined;
+    };
+
+    it("turns Jira links, imports and settings into a Jira ticket system", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES
+          ('jiraBaseUrl', '"https://jira.example.com/"'),
+          ('issueImportJiraTools', '["mcp__atlassian__getJiraIssue","not a rule"]');
+        INSERT INTO task_links (id, task_id, kind, url, ref_json, created_at) VALUES
+          ('key', 't', 'jira', 'https://jira.example.com/browse/ABC-1', '{"key":"ABC-1"}', ''),
+          ('bare', 't', 'jira', 'ABC-2', NULL, ''),
+          ('pr', 't', 'pr', 'https://github.com/a/b/pull/1', '{"host":"github.com","repo":"a/b","number":1}', '');
+        INSERT INTO task_imports (task_id, source_url, source_kind, status, created_at, updated_at)
+          VALUES ('t', 'ABC-1', 'jira', 'done', '', '');
+        INSERT INTO task_events (task_id, at, actor, type, payload_json)
+          VALUES ('t', '', 'user', 'link_added', '{"kind":"jira","url":"ABC-2"}');
+      `);
+      expect(db.prepare("SELECT id, kind, ref_json, auto FROM task_links ORDER BY id").all()).toEqual([
+        { id: "bare", kind: "ticket", ref_json: '{"system":"jira","key":"ABC-2"}', auto: 0 },
+        { id: "key", kind: "ticket", ref_json: '{"system":"jira","key":"ABC-1"}', auto: 0 },
+        { id: "pr", kind: "pr", ref_json: '{"host":"github.com","repo":"a/b","number":1}', auto: 0 },
+      ]);
+      expect(db.prepare("SELECT source_kind, system_id FROM task_imports").all()).toEqual([
+        { source_kind: "ticket", system_id: "jira" },
+      ]);
+      expect(db.prepare("SELECT payload_json FROM task_events").get()).toEqual({
+        payload_json: '{"kind":"ticket","url":"ABC-2"}',
+      });
+      expect(setting(db, "ticketSystems")).toEqual([
+        expect.objectContaining({
+          id: "jira",
+          name: "Jira",
+          linkTemplate: "https://jira.example.com/browse/{key}",
+          autoLink: false,
+          importTools: ["mcp__atlassian__getJiraIssue"],
+        }),
+      ]);
+      expect(setting(db, "jiraBaseUrl")).toBeUndefined();
+      expect(setting(db, "issueImportJiraTools")).toBeUndefined();
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      db.close();
+    });
+
+    it("makes a system for Jira links even without a base URL, and none without any Jira data", () => {
+      const linked = before(`
+        INSERT INTO settings (key, value_json) VALUES ('jiraBaseUrl', 'null'), ('issueImportJiraTools', '[]');
+        INSERT INTO task_links (id, task_id, kind, url, ref_json, created_at) VALUES ('k', 't', 'jira', 'ABC-1', '{"key":"ABC-1"}', '');
+      `);
+      const systems = setting(linked, "ticketSystems") as Array<Record<string, unknown>>;
+      expect(systems.map((s) => s.id)).toEqual(["jira"]);
+      expect(systems[0]).not.toHaveProperty("linkTemplate");
+      linked.close();
+      rmSync(dir!, { recursive: true, force: true });
+
+      const unused = before(`INSERT INTO settings (key, value_json) VALUES ('jiraBaseUrl', 'null');`);
+      expect(setting(unused, "ticketSystems")).toBeUndefined();
+      expect(setting(unused, "jiraBaseUrl")).toBeUndefined();
+      unused.close();
+    });
+  });
 });

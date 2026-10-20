@@ -4,6 +4,7 @@ import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { useRetryImport } from "~/state/mutations";
+import { useSettings } from "~/state/queries";
 import { epicImportProgress, importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
 
 /**
@@ -13,7 +14,8 @@ import { epicImportProgress, importFailure, importPendingLabel, importSourceLabe
 export function ImportCallout({ task }: { task: TaskDetail }) {
   const { mutate: retry, isPending } = useRetryImport();
   const pending = importPendingLabel(task);
-  const failure = importFailure(task);
+  const ticketSystems = useSettings().data?.ticketSystems ?? [];
+  const failure = importFailure(task, ticketSystems);
   const epicProgress = epicImportProgress(task);
   if (!pending && !failure && !epicProgress) return null;
   return (
@@ -37,7 +39,8 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="font-semibold text-foreground/90">{pending}</span>
             <span className="text-muted-foreground">
-              Reading {importSourceLabel(task.import!.sourceUrl)} to fill in the title, description and labels.
+              Reading {importSourceLabel(task.import!.sourceUrl, ticketSystems)} to fill in the title, description and
+              labels.
             </span>
           </div>
           {/* An import can be left pending with nothing running it (its task was archived over a restart). */}
@@ -59,8 +62,8 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
               Importing the epic&apos;s tasks: {epicProgress!.done} of {epicProgress!.total}
             </span>
             <span className="text-muted-foreground">
-              {importSourceLabel(task.import!.sourceUrl)} is an epic. Each of its tasks fills in its details as its
-              issue is read.
+              {importSourceLabel(task.import!.sourceUrl, ticketSystems)} is an epic. Each of its tasks fills in its
+              details as its issue is read.
             </span>
           </div>
         </>

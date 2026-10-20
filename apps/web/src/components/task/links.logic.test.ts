@@ -41,7 +41,7 @@ const issue = (id: string): TaskLink => ({
   ref: { host: "github.com", repo: "o/r", number: 1 },
   snapshot: null,
 });
-const jira = (id: string): TaskLink => ({ ...base, id, kind: "jira", url: id, ref: { key: id } });
+const jira = (id: string): TaskLink => ({ ...base, id, kind: "ticket", url: id, ref: { system: "jira", key: id } });
 
 const SESSION_ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
 const session = (
@@ -145,7 +145,7 @@ describe("adding a pasted T3 thread id", () => {
 });
 
 describe("groupLinks", () => {
-  it("orders the Links group PRs, issues, Jira, then URLs, each in its own order", () => {
+  it("orders the Links group PRs, issues, tickets, then URLs, each in its own order", () => {
     const links = [url("u1"), jira("J-1"), issue("i1"), pr("p1"), url("u2"), pr("p2")];
     expect(ids(groupLinks(links).links)).toEqual(["p1", "p2", "i1", "J-1", "u1", "u2"]);
   });

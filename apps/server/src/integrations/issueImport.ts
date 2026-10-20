@@ -1,15 +1,9 @@
-import { parseIssueSource, resolveHeadlessEffort, resolveHeadlessModel, type TaskLink } from "@repo/contracts";
+import { parseImportSource, resolveHeadlessEffort, resolveHeadlessModel, type TaskLink } from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
 import { messageOf, type IssueDetails } from "./github.ts";
-import {
-  jiraToolRules,
-  listConnectedMcpServers,
-  runIssueImport,
-  writeToolDenyRules,
-  type RunImport,
-} from "./headlessImport.ts";
+import { listConnectedMcpServers, runIssueImport, writeToolDenyRules, type RunImport } from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 
 /** Runs an import may start before it is given up on; each restart mid-import counts as one. */
@@ -30,10 +24,10 @@ export interface IssueImporter {
 }
 
 /**
- * Fills in tasks created from a Jira or GitHub issue: reads the issue, has a small model turn it into a title,
+ * Fills in tasks created from a ticket or a GitHub issue: reads the issue, has a small model turn it into a title,
  * description and labels, and records the result (or why it failed) on the task's import. A GitHub issue still
- * imports, as its raw title and body, when the model can't run. A Jira issue can only be read by the model,
- * through the user's own Jira MCP server.
+ * imports, as its raw title and body, when the model can't run. A ticket can only be read by the model, through the
+ * user's own MCP server for its system.
  */
 export function createIssueImporter(deps: {
   services: () => Services;
@@ -50,8 +44,6 @@ export function createIssueImporter(deps: {
   const log = deps.log ?? console;
   /** `claude mcp list` health-checks every server, which takes seconds; the answer is kept for a while. */
   let listing: { at: number; list: Promise<string[]> } | null = null;
-  /** Why the last listing failed, to say so when no Jira tool turns up. */
-  let listError: string | null = null;
   const queue: string[] = [];
   const running = new Set<string>();
   let idleWaiters: Array<() => void> = [];
@@ -69,7 +61,7 @@ export function createIssueImporter(deps: {
 
   const importGithub = async (record: ImportRecord): Promise<ImportResult> => {
     const s = deps.services();
-    const source = parseIssueSource(record.sourceUrl, s.settings.get());
+    const source = parseImportSource(record.sourceUrl, s.settings.get().ticketSystems);
     if (source?.kind !== "issue") throw new Error(`${record.sourceUrl} is not a GitHub issue`);
     const issue = await deps.github.fetchIssue(source.ref);
     const link = issueLink(record.taskId);
@@ -110,7 +102,7 @@ export function createIssueImporter(deps: {
           labels: issue.labels,
         },
         boardLabels: s.labels.usage().map((l) => l.name),
-        jiraTools: [],
+        importTools: [],
         denyTools: [],
       });
       return { title: outcome.title, description: outcome.description, labels: outcome.labels, ...epic };
@@ -129,13 +121,8 @@ export function createIssueImporter(deps: {
     const entry = {
       at: Date.now(),
       list: listServers(cli, tmpdir())
-        .then((list) => {
-          listError = null;
-          return list;
-        })
         .catch((error: unknown) => {
-          listError = messageOf(error);
-          log.warn(`[import] couldn't list Claude Code's MCP servers: ${listError}`);
+          log.warn(`[import] couldn't list Claude Code's MCP servers: ${messageOf(error)}`);
           return [];
         })
         .then((list) => {
@@ -147,21 +134,25 @@ export function createIssueImporter(deps: {
     return entry.list;
   };
 
-  const importJira = async (record: ImportRecord): Promise<ImportResult> => {
+  const importTicket = async (record: ImportRecord): Promise<ImportResult> => {
     const s = deps.services();
     const settings = s.settings.get();
     if (!settings.issueImportEnabled) {
-      throw new Error("Importing a Jira issue needs Claude Code, and issue import is turned off in Settings");
+      throw new Error("Importing a ticket needs Claude Code, and issue import is turned off in Settings");
     }
-    const source = parseIssueSource(record.sourceUrl, settings);
-    if (source?.kind !== "jira") throw new Error(`${record.sourceUrl} is not a Jira issue`);
+    // The system recorded when the task was created, so reordering or editing the others since doesn't move it.
+    const recorded = settings.ticketSystems.filter((t) => t.id === record.systemId);
+    const systems = record.systemId ? recorded : settings.ticketSystems;
+    const source = parseImportSource(record.sourceUrl, systems);
+    const system = source?.kind === "ticket" ? systems.find((t) => t.id === source.ref.system) : undefined;
+    if (source?.kind !== "ticket" || !system) {
+      throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
+    }
+    // Only the tools the system lists are allowed: the board doesn't guess which tools read tickets.
+    if (system.importTools.length === 0) {
+      throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);
+    }
     const servers = await connectedServers(settings.headlessReviewCli);
-    const jiraTools = settings.issueImportJiraTools.length ? settings.issueImportJiraTools : jiraToolRules(servers);
-    if (jiraTools.length === 0) {
-      throw new Error(
-        `No Jira tool available${listError ? ` (couldn't list Claude Code's MCP servers: ${listError})` : ""}: connect a Jira MCP server to Claude Code (claude mcp add --scope user), or list its tools in Settings`,
-      );
-    }
     const outcome = await runImport({
       cli: settings.headlessReviewCli,
       // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
@@ -169,10 +160,15 @@ export function createIssueImporter(deps: {
       model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),
       effort: resolveHeadlessEffort(settings.modelTiers, settings.issueImportModel),
       budgetUsd: settings.issueImportBudgetUsd,
-      source: { kind: "jira", key: source.key, url: source.url },
+      source: {
+        kind: "ticket",
+        key: source.ref.key,
+        url: source.url,
+        system: { name: system.name, importInstructions: system.importInstructions },
+      },
       boardLabels: s.labels.usage().map((l) => l.name),
-      jiraTools,
-      denyTools: writeToolDenyRules(servers, jiraTools),
+      importTools: system.importTools,
+      denyTools: writeToolDenyRules(servers, system.importTools),
     });
     return {
       title: outcome.title,
@@ -191,7 +187,7 @@ export function createIssueImporter(deps: {
       if (record.attempts > MAX_IMPORT_ATTEMPTS) {
         throw new Error(`Gave up after ${MAX_IMPORT_ATTEMPTS} attempts; use Retry to try again`);
       }
-      const result = await (record.sourceKind === "jira" ? importJira(record) : importGithub(record));
+      const result = await (record.sourceKind === "ticket" ? importTicket(record) : importGithub(record));
       // An epic's children each run their own import, through the same queue.
       for (const child of s.imports.complete(taskId, result).childImports) enqueue(child);
     } catch (error) {
