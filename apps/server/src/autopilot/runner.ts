@@ -288,8 +288,19 @@ export function createAutopilotRunner(deps: {
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
     const model = runModel(request, options, task, deps.services().settings.get());
     const described = describeRunModel(model);
-    const note = [model.note, described ? `Model: ${described}` : null].filter(Boolean).join("\n");
-    if (note) update({ detail: note });
+    // What the run says about its model, and why T3's default ran instead when the model's T3 model couldn't be used.
+    const t3Note = (unavailable: string | null) =>
+      [
+        model.note,
+        described && unavailable ? `Model: ${described}. ${unavailable} T3 Code's default ran.` : null,
+        described && !unavailable ? `Model: ${described}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    const before = t3Note(
+      model.profile && !model.profile.setting.t3 ? "It has no T3 Code model in Settings → Model tiers." : null,
+    );
+    if (before) update({ detail: before });
     const launchThread = () =>
       deps.t3.launchTaskThread(
         task.id,
@@ -320,6 +331,8 @@ export function createAutopilotRunner(deps: {
     const launchAndSettle = async () => {
       const launch = await launchThread();
       update({ runner: "t3", threadUrl: launch.link.url });
+      // The launch knows best: the model's provider may not be ready, or T3 may no longer offer it.
+      if (launch.suggestionUnavailable && described) update({ detail: t3Note(launch.suggestionUnavailable) });
       if (launch.link.kind === "t3_thread") await settle(launch.link, request.run.id);
       return launch;
     };

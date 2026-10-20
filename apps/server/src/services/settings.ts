@@ -5,8 +5,8 @@ import {
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
-  type ModelProfile,
-  ModelProfiles,
+  MODEL_PROFILES_MAX,
+  ModelProfile,
   type ModelTiers,
   type ModelTierSetting,
   type NotificationSettings,
@@ -130,6 +130,19 @@ const storedProfiles = (profiles: readonly ModelProfile[]): ModelProfile[] =>
     return { ...rest, description: profile.description?.trim() || null, ...(cli ? { cli } : {}) };
   });
 
+/**
+ * The stored custom models, each read on its own: one that no longer parses (a hand edit, a limit changed since) is
+ * dropped rather than the whole list, which the next edit would then overwrite. A repeated id keeps its first.
+ */
+export function storedProfileList(stored: unknown): ModelProfile[] {
+  const profiles: ModelProfile[] = [];
+  for (const entry of Array.isArray(stored) ? stored : []) {
+    const parsed = ModelProfile.safeParse(entry);
+    if (parsed.success && !profiles.some((p) => p.id === parsed.data.id)) profiles.push(parsed.data);
+  }
+  return profiles.slice(0, MODEL_PROFILES_MAX);
+}
+
 /** The stored notification settings over the defaults, so a kind added later starts on. */
 const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
   muteInQuietHours: stored?.muteInQuietHours ?? DEFAULT_NOTIFICATION_SETTINGS.muteInQuietHours,
@@ -148,8 +161,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     // Saved as a bare model name before tiers were an option.
     headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
-    // A hand-edited list that no longer parses is dropped rather than breaking every run.
-    modelProfiles: ModelProfiles.safeParse(stored.get("modelProfiles") ?? []).data ?? [],
+    modelProfiles: storedProfileList(stored.get("modelProfiles")),
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
     handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },

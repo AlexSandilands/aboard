@@ -394,6 +394,21 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(patches).toContainEqual({ detail: "Model: Fast, from label quick" });
   });
 
+  it("says when a T3 run's model has no T3 Code model, so T3's default ran", async () => {
+    const { h, task, start, patches } = setup({ t3: T3_UP });
+    h.services.settings.update({
+      modelProfiles: [
+        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "claude-code": "haiku" } },
+      ],
+    });
+    h.services.tasks.update(task.id, { labels: ["quick"] }, "test");
+    await start({ options: { runner: "t3" } });
+    expect(patches).toContainEqual({
+      detail:
+        "Model: Fast, from label quick. It has no T3 Code model in Settings → Model tiers. T3 Code's default ran.",
+    });
+  });
+
   it("passes an automation's model choice to a T3 launch", async () => {
     const { launches, start } = setup({ t3: T3_UP });
     await start({ options: { runner: "t3", modelChoice: { tier: "deep" } } });
