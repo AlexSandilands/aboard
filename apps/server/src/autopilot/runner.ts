@@ -6,8 +6,10 @@ import {
   AUTOPILOT_ACTOR,
   autopilotSessionName,
   BRAND,
-  type ModelTier,
-  type ModelTiers,
+  describeRunModel,
+  profileHeadlessModel,
+  resolveRunModel,
+  type RunModel,
   type TaskSummary,
 } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
@@ -47,10 +49,42 @@ import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "
 /** The T3 command id of a run's launch or nudge: T3 de-duplicates by it, so a retry never starts a second thread. */
 export const runCommandId = (runId: string) => `autopilot-${runId}`;
 
-/** A tier's T3 model, when it is a Claude model `claude --model` can take; null otherwise. */
-export function tierModel(tiers: ModelTiers, tier: ModelTier | null): string | null {
-  const model = tier ? tiers[tier].t3?.selection.model : null;
-  return model && /^(claude-|opus|sonnet|haiku)/i.test(model) ? model : null;
+/**
+ * The model a run starts on: the automation's choice (its config's, else the action's own), else what the task's labels
+ * or suggested tier pick (resolveRunModel).
+ */
+export function runModel(
+  request: Pick<RunnerRequest, "tier" | "modelChoice">,
+  options: RunnerOptions,
+  task: Pick<TaskSummary, "labels"> | null,
+  settings: Parameters<typeof resolveRunModel>[1],
+): RunModel {
+  const configured = "from" in options.modelChoice ? null : options.modelChoice;
+  const input = { labels: task?.labels ?? [], tier: request.tier };
+  const model = resolveRunModel({ ...input, choice: configured ?? request.modelChoice ?? null }, settings);
+  // The Model setting names a custom model since deleted: the action's own choice still comes before the task's.
+  if (model.note && configured && request.modelChoice) {
+    return { ...resolveRunModel({ ...input, choice: request.modelChoice }, settings), note: model.note };
+  }
+  return model;
+}
+
+/**
+ * A headless run's `--model` and what to note on the run about it: a model typed in the automation's config wins,
+ * then the chosen model's Claude Code model; a chosen model with none runs on the CLI's default, and says so.
+ */
+export function headlessModel(model: RunModel, typed: string): { model: string | null; note: string | null } {
+  if (typed.trim()) return { model: typed.trim(), note: null };
+  const cli = profileHeadlessModel(model.profile);
+  const described = describeRunModel(model);
+  const lines = [model.note];
+  // A model set only for T3 Code is worth a word; one with nothing set is the CLI's default as always.
+  if (described && cli) lines.push(`Model: ${described}`);
+  else if (described && model.profile?.setting.t3) {
+    lines.push(`Model: ${described} has no Claude Code model in Settings → Model tiers, so the CLI's default ran`);
+  }
+  const note = lines.filter(Boolean).join("\n") || null;
+  return { model: cli, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -252,6 +286,21 @@ export function createAutopilotRunner(deps: {
       throw new Error(`${project.title} has neither a workspace folder nor a T3 project to start a thread in`);
     }
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
+    const model = runModel(request, options, task, deps.services().settings.get());
+    const described = describeRunModel(model);
+    // What the run says about its model, and why T3's default ran instead when the model's T3 model couldn't be used.
+    const t3Note = (unavailable: string | null) =>
+      [
+        model.note,
+        described && unavailable ? `Model: ${described}. ${unavailable} T3 Code's default ran.` : null,
+        described && !unavailable ? `Model: ${described}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    const before = t3Note(
+      model.profile && !model.profile.setting.t3 ? "It has no T3 Code model in Settings → Model tiers." : null,
+    );
+    if (before) update({ detail: before });
     const launchThread = () =>
       deps.t3.launchTaskThread(
         task.id,
@@ -260,6 +309,10 @@ export function createAutopilotRunner(deps: {
           commandId: runCommandId(request.run.id),
           ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
           work: true,
+          // The task's labels and tier are read again where the launch resolves its model; only a choice is passed.
+          ...(model.source === "automation" && model.profile
+            ? { modelChoice: model.profile.tier ? { tier: model.profile.tier } : { profile: model.profile.id } }
+            : {}),
           // A pull request's branch is on origin, and origin's copy is the one to build on.
           ...(branch
             ? { baseRef: branch, startFromOrigin: true }
@@ -278,6 +331,8 @@ export function createAutopilotRunner(deps: {
     const launchAndSettle = async () => {
       const launch = await launchThread();
       update({ runner: "t3", threadUrl: launch.link.url });
+      // The launch knows best: the model's provider may not be ready, or T3 may no longer offer it.
+      if (launch.suggestionUnavailable && described) update({ detail: t3Note(launch.suggestionUnavailable) });
       if (launch.link.kind === "t3_thread") await settle(launch.link, request.run.id);
       return launch;
     };
@@ -354,6 +409,8 @@ export function createAutopilotRunner(deps: {
     }
 
     const settings = s.settings.get();
+    const chosen = headlessModel(runModel(request, options, task, settings), options.model);
+    if (chosen.note) update({ detail: chosen.note });
     const readOnly = request.access === "read-only" || request.access === "none";
     const stdout = await runAgent({
       cli: settings.headlessReviewCli,
@@ -364,7 +421,7 @@ export function createAutopilotRunner(deps: {
         access: request.access ?? "edit",
         budgetUsd: options.budgetUsd,
         sessionId,
-        model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
+        model: chosen.model,
         name: autopilotSessionName(request.label),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
@@ -395,6 +452,8 @@ export function createAutopilotRunner(deps: {
     if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
+    const chosen = headlessModel(runModel(request, options, null, settings), options.model);
+    if (chosen.note) update({ detail: chosen.note });
     const defaultBranch = request.repo ? await defaultBranchOf(runGit, request.repo).catch(() => null) : null;
     // A scheduled agent passes `repo` (null when its project has no folder), so it always gets the note.
     const prompt =
@@ -428,7 +487,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
           access: request.access ?? "edit",
           budgetUsd: options.budgetUsd,
           sessionId,
-          model: options.model.trim() || tierModel(settings.modelTiers, request.tier),
+          model: chosen.model,
           name: autopilotSessionName(request.label),
           defaultBranch,
           ...(request.tools ? { tools: request.tools } : {}),

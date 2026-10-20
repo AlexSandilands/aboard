@@ -1,4 +1,12 @@
-import { prReviewHeader, type AppSettings, type PrSnapshot, type TaskLink, type TaskStatus } from "@repo/contracts";
+import {
+  prFixedReply,
+  prReviewHeader,
+  prReviewMarker,
+  type AppSettings,
+  type PrSnapshot,
+  type TaskLink,
+  type TaskStatus,
+} from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createFakeGithub, fakePr } from "../test/fakeGithub.ts";
@@ -8,6 +16,7 @@ import {
   createGithubIntegration,
   isGithubHost,
   mapPrSnapshot,
+  mapReviewThreadDetails,
   MergeTargetError,
   pollQuery,
   StaleReviewError,
@@ -51,6 +60,8 @@ describe("mapPrSnapshot", () => {
       isCrossRepository: false,
       reviews: [],
       reviewComments: [],
+      reviewThreads: [],
+      unresolvedThreads: 0,
     });
     expect(mapPrSnapshot(fakePr({ isCrossRepository: true }), repo).isCrossRepository).toBe(true);
     expect(mapPrSnapshot(fakePr({ isDraft: true }), repo).state).toBe("draft");
@@ -149,12 +160,105 @@ describe("mapPrSnapshot", () => {
     ]);
   });
 
-  it("asks for the reviews and the unresolved threads' comments without their bodies", () => {
+  it("asks for the reviews and the newest 30 threads, without bodies", () => {
     const { query } = pollQuery([1]);
     expect(query).toContain("reviews(last: 20)");
-    expect(query).toContain("reviewThreads(last: 30)");
+    expect(query).toContain("reviewThreads(last: 30) { nodes { id isResolved viewerCanResolve");
     expect(query).toContain("viewerDidAuthor");
-    expect(query).not.toMatch(/body/);
+    expect(query).not.toContain("body");
+    // One comments connection per thread: each is a request in GitHub's rate-limit cost, and the poll runs often.
+    expect(query.match(/comments\(/g)).toHaveLength(1);
+  });
+
+  const comment = (id: number, own = false) => ({
+    databaseId: id,
+    createdAt: `2026-10-01T10:00:0${id % 10}Z`,
+    authorAssociation: "MEMBER",
+    viewerDidAuthor: own,
+    author: { login: own ? "me" : "ana" },
+    pullRequestReview: { databaseId: 900 },
+  });
+  /** A thread opened by a colleague's comment; `reply` is the user's account answering last. */
+  const thread = (id: string, reply: string | null, extra: Record<string, unknown> = {}) => {
+    const n = Number(id.slice(1));
+    return {
+      id,
+      isResolved: false,
+      viewerCanResolve: true,
+      root: { nodes: [{ databaseId: n * 10, pullRequestReview: { databaseId: 900 } }] },
+      comments: { nodes: [comment(n * 10), ...(reply !== null ? [comment(n * 10 + 1, true)] : [])] },
+      latest: {
+        nodes: [
+          reply !== null ? { body: reply, viewerDidAuthor: true } : { body: "Please fix", viewerDidAuthor: false },
+        ],
+      },
+      ...extra,
+    };
+  };
+
+  it("maps unresolved threads with who spoke last, and leaves out comments on ones the user's account answered", () => {
+    const reviewThreads = {
+      nodes: [
+        thread("T1", prFixedReply("abc1234")),
+        thread("T2", null),
+        thread("T3", null, { isResolved: true }),
+        thread("T4", null, { viewerCanResolve: null }),
+        null,
+        { ...thread("T5", null), id: null },
+      ],
+    };
+    const snapshot = mapPrSnapshot(fakePr({ reviewThreads }), repo);
+    expect(snapshot.reviewThreads).toEqual([
+      { id: "T1", canResolve: true, lastCommentId: 11, ownLast: true, lastReviewId: 900 },
+      { id: "T2", canResolve: true, lastCommentId: 20, ownLast: false, lastReviewId: 900 },
+      { id: "T4", canResolve: false, lastCommentId: 40, ownLast: false, lastReviewId: 900 },
+    ]);
+    expect(snapshot.unresolvedThreads).toBe(4);
+    expect(snapshot.reviewComments!.map((c) => c.id)).toEqual([20, 40, 50]);
+  });
+
+  it("reads what Autopilot's newest reply says, and whose review opened the thread, on the fresh read", () => {
+    const details = mapReviewThreadDetails([
+      thread(
+        "T1",
+        `${prFixedReply("ABC1234")}
+
+Moved the check.`,
+      ),
+      thread("T2", `${prReviewMarker()} · declined: out of scope`),
+      // Written before the format was fixed: the mark, then "Fixed in" on a line of its own.
+      thread(
+        "T3",
+        `${prReviewMarker()}
+
+Fixed in 8bbe435: renamed it.`,
+      ),
+      thread(
+        "T4",
+        `${prReviewMarker()} · major
+
+**A point**`,
+      ),
+      // The user's own words without the mark aren't Autopilot's reply, nor is the mark in someone else's comment.
+      thread("T5", "fixed in abc1234"),
+      { ...thread("T6", null), latest: { nodes: [{ body: prFixedReply("abc1234"), viewerDidAuthor: false }] } },
+    ]);
+    expect(
+      details.map(({ id, reply, fixedIn, rootCommentId, rootReviewId }) => ({
+        id,
+        reply,
+        fixedIn,
+        rootCommentId,
+        rootReviewId,
+      })),
+    ).toEqual([
+      { id: "T1", reply: "fixed", fixedIn: "abc1234", rootCommentId: 10, rootReviewId: 900 },
+      { id: "T2", reply: "declined", fixedIn: null, rootCommentId: 20, rootReviewId: 900 },
+      { id: "T3", reply: "fixed", fixedIn: "8bbe435", rootCommentId: 30, rootReviewId: 900 },
+      { id: "T4", reply: "other", fixedIn: null, rootCommentId: 40, rootReviewId: 900 },
+      { id: "T5", reply: null, fixedIn: null, rootCommentId: 50, rootReviewId: 900 },
+      { id: "T6", reply: null, fixedIn: null, rootCommentId: 60, rootReviewId: 900 },
+    ]);
   });
 
   it("maps the repo's merge settings and the viewer's permission", () => {
@@ -671,6 +775,52 @@ describe("github merge into the default branch", () => {
     gh.prs.set("o/r#7", fakePr({ baseRefName: "main", headRefOid: "head-2" }));
     await expect(github.mergeIntoDefaultBranch(link(), input)).rejects.toMatchObject({ code: "CONFLICT" });
     expect(gh.mutations).toEqual([]);
+  });
+});
+
+describe("review threads", () => {
+  it("reads a PR's threads and commits fresh, and resolves one", async () => {
+    const { gh, github } = setup([]);
+    gh.prs.set("o/r#7", {
+      ...fakePr({
+        reviewThreads: {
+          nodes: [
+            {
+              id: "T1",
+              isResolved: false,
+              viewerCanResolve: true,
+              comments: { nodes: [] },
+              latest: { nodes: [{ body: prFixedReply("abc1234"), viewerDidAuthor: true }] },
+            },
+          ],
+        },
+      }),
+      history: ["abc1234ffff", "head-1"],
+    });
+    const ref = { host: "github.com", repo: "o/r", number: 7 };
+    expect(await github.reviewThreads(ref)).toEqual({
+      headOid: "head-1",
+      commits: ["abc1234ffff", "head-1"],
+      threads: [
+        {
+          id: "T1",
+          canResolve: true,
+          lastCommentId: null,
+          ownLast: false,
+          lastReviewId: null,
+          rootCommentId: null,
+          rootReviewId: null,
+          reply: "fixed",
+          fixedIn: "abc1234",
+        },
+      ],
+    });
+    await github.resolveReviewThread("github.com", "T1");
+    expect(gh.mutations).toEqual([{ operation: "ResolveReviewThread", input: { threadId: "T1" } }]);
+    expect((await github.reviewThreads(ref)).threads).toEqual([]);
+    await expect(github.resolveReviewThread("github.com", "nope")).rejects.toThrow(
+      /GitHub couldn't resolve the review thread/,
+    );
   });
 });
 

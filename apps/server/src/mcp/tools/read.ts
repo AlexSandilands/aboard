@@ -318,6 +318,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           progress: { now: Date.now() },
           images: services.attachments.forTask(task.id),
           ticketSystems: services.settings.get().ticketSystems,
+          modelSettings: services.settings.get(),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));
@@ -358,7 +359,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         const hint = epicDeliveryHint(services, epic.id);
         const ask = hint ? `\n\nEpic delivery not chosen:\n- ${hint}` : "";
         return textResult(
-          `${header}\n${delivery}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic))}${ask}`,
+          `${header}\n${delivery}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic), services.settings.get())}${ask}`,
         );
       }),
   );
@@ -418,12 +419,17 @@ ${prompt}
         const mode: HandoffMode = args.mode ?? (subagent ? "work" : defaultHandoffMode(task));
         const problem = handoffModeError(task, mode, subagent);
         if (problem) throw new AppError("VALIDATION", problem);
-        const modelTiers = services.settings.get().modelTiers;
-        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers });
+        const { modelTiers, modelProfiles } = services.settings.get();
+        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers, modelProfiles });
         const head = `${mode[0]!.toUpperCase()}${mode.slice(1)} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
         // A subagent can't switch its own model, so the suggestion goes to the orchestrator that starts it.
         const model = subagent
-          ? suggestedModelLine(task, modelTiers, "Start the subagent on that model if you can choose one.")
+          ? suggestedModelLine(
+              task,
+              modelTiers,
+              "Start the subagent on that model if you can choose one.",
+              modelProfiles,
+            )
           : null;
         const tail = model
           ? `

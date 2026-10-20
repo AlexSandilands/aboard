@@ -168,7 +168,7 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
       <SettingsRow
         id="autopilot.engine.pr-review-rounds"
         title="PR review rounds"
-        description="How many review rounds the PR review automation runs."
+        description="How many review rounds the PR review automation runs, and Fix PRs' attempts on its review and failing checks."
         control={
           <LimitInput
             label="PR review rounds"
@@ -179,6 +179,23 @@ function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngi
             required
             unit="rounds"
             onSave={(next) => save({ prReviewRounds: next ?? 3 })}
+          />
+        }
+      />
+      <SettingsRow
+        id="autopilot.engine.pr-comment-rounds"
+        title="PR comment rounds"
+        description="How many attempts Fix PRs makes on other people's review comments and requests for changes."
+        control={
+          <LimitInput
+            label="PR comment rounds"
+            value={engine.prCommentRounds}
+            min={1}
+            max={10}
+            integer
+            required
+            unit="rounds"
+            onSave={(next) => save({ prCommentRounds: next ?? 5 })}
           />
         }
       />

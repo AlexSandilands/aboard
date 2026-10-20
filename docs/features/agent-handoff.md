@@ -128,11 +128,20 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   overwrite each other; the server replaces a whole tier, so a second edit within a tier builds on the one still
   saving rather than on the cache (`createTierEdits`). The T3 Code, Claude Code and Copilot integration sections each have a
   **Models per tier** row that opens the page.
+- **Custom models.** Under the tiers, **Custom models** (`modelProfiles`, `services/settings.ts` stores the whole
+  list; `modelProfiles.logic.ts` builds each edit on the one still saving) are named models with a tier's fields
+  plus task labels. A task carrying one of a model's labels runs on it instead of its tier everywhere a model is
+  picked (`resolveRunModel`; the first model in the list wins a label several claim): the copied prompt names it
+  (`Model: Codex 6.1 (…), picked by the task's label codex61.`), the T3 dialog starts on its T3 model, the session
+  dialog fills in its CLI model, the task panel's Details says "Runs on …", and `get_task` / `epic_overview` show
+  **Runs on**. Autopilot uses the same rule, under an automation's own Model setting
+  ([autopilot.md](autopilot.md#models)).
 - **Copied work prompts** get one line: `Suggested model: standard (Sonnet 5.5, medium effort): <reason>.
   Switch your session's model if it differs.` The tier is named by its description, else its T3 label, else
   just the tier (`suggestedModelLine`).
-- **The T3 launch dialog** starts a work launch on the tier's T3 model, and shows the suggestion under the
-  composer. When the tier has no T3 model, its provider isn't ready or T3 no longer offers the model, it stays
+- **The T3 launch dialog** starts a work launch on the task's model's T3 model (a label's custom model, else the
+  tier's), and shows it under the composer (`T3LaunchSuggestion`: its name, and whether a label or the tier picked
+  it). When the model has no T3 model, its provider isn't ready or T3 no longer offers the model, it stays
   on T3's default and says why. Effort and fast mode values the model no longer supports are dropped.
 - **Planning ignores it.** Planning prompts leave the line out, and turning on **Plan with me** switches the
   dialog to T3's default model (and back when turned off), unless you picked a model by hand. A
@@ -194,6 +203,8 @@ there yet from one that refused. Autopilot waits on those ([Runners](autopilot.m
 **New T3 Code thread…** opens a dialog modelled on T3's own new-thread screen:
 
 - the prompt, editable before sending, and the **Plan with me** toggle;
+- **images**: paste or drop them into the prompt, or pick them with the image button; up to 10, sent with the first
+  message (see [attachments.md](attachments.md#in-the-launch-dialogs));
 - **model**: providers down the side with favorites first, search, a Legacy models section and NEW badges;
 - **effort** (and fast mode where the model has it) and **access**: Supervised, Auto-accept edits, Auto or
   Full access, limited to what the provider supports;
@@ -208,10 +219,11 @@ worktree default and "start new worktrees from origin" come from the same settin
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
 
-Launches carry a `commandId`, which T3 uses to de-duplicate them. After a timeout or lost connection the
-dialog keeps it, so pressing Send again returns the thread T3 may already have started instead of a second
-one (with that first attempt's settings, even if you changed them). After T3 rejects a launch, T3 would
-keep rejecting that id, so the dialog starts the next attempt with a fresh one.
+Launches carry a `commandId`, which T3 uses to de-duplicate them, and a `threadId` the dialog makes with it
+(T3 files uploaded images under the thread, so it needs the id up front). After a timeout or lost connection the
+dialog keeps both, so pressing Send again returns the thread T3 may already have started instead of a second
+one (with that first attempt's settings and images, even if you changed them). After T3 rejects a launch, T3 would
+keep rejecting that id, so the dialog starts the next attempt with a fresh pair.
 
 Not mirrored from T3 (yet): defaults from a repo's `t3.json`, per-project provider enable/disable
 overrides, and hidden or reordered models. The dialog shows every model of every enabled provider.
@@ -226,10 +238,15 @@ own web client uses:
 3. Send Effect-RPC JSON requests and wait for each reply:
    - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog, and
      `server.getConfig` alone fills the model pickers in Settings → Model tiers;
-   - `orchestration.launchThread` creates the thread and sends the prompt as its first message, which starts
-     the agent.
-4. On success, add a `t3_thread` link to the task. The card shows the thread straight away, and the
-   20-second live status poll takes over from there.
+   - for each pasted image, `attachments.createUploadUrl` (`{type: "image", name, mimeType, sizeBytes}`) returns a
+     pending attachment id and a signed `relativeUrl`; the server `POST`s the image's bytes to `<t3-origin><relativeUrl>`
+     (no token: the URL carries its own, valid for 10 minutes). A refused upload stops the launch before anything starts;
+   - `orchestration.launchThread` creates the thread and sends the prompt, with the images as
+     `initialMessage.attachments` and an explicit `threadId`, as its first message, which starts the agent. T3
+     passes the images on to the harness itself (Claude and Codex get the image; others a path line).
+4. On success, give the images to the task (they are then backed up, deleted with it and listed by `get_task`) and add
+   a `t3_thread` link to it. The card shows the thread straight away, and the 20-second live status poll takes over
+   from there. A Suggest epics or Plan tasks thread has no one task, so its images stay unclaimed.
 
 The browser only talks to the board's REST API (`GET /api/tasks/:id/t3-launch-options`,
 `POST /api/tasks/:id/t3-thread`, and `GET /api/integrations/t3/models` for settings). Each request opens one WebSocket session and closes it when done.
@@ -325,10 +342,11 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
 | `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
+| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveRunModel`, the rule that picks a run's or session's model (tested) |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
-| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pure logic in `handoff.logic.ts` |
+| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards to plan |
 | `apps/web/src/components/settings/ModelTiersSection.tsx`, `modelTiers.logic.ts` | Settings → Model tiers; which providers' fields show and the per-tier update (`modelTiers.logic.ts` is tested) |

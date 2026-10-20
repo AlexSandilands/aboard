@@ -145,7 +145,8 @@ text when both are present.
 - **Missing suggested model** appears in `set_plan` and `create_task` results for a planned, open task with
   no suggested model, asking the agent to set one with `update_task`. Unlike labels it needs no approval, and
   `get_task` leaves it out so implementing agents aren't nagged. The task render shows
-  `Suggested model: deep (reason)` once set.
+  `Suggested model: deep (reason)` once set, and `Runs on: <custom model>, from label <label>` when one of the
+  task's labels picks a custom model over the tier (`runsOnText`; `epic_overview` shows it per task).
 - **Epic delivery not chosen** appears in `create_epic`, in `set_plan` and `create_task` results for a task in
   the epic, and in `epic_overview`, while `deliveryHintApplies` holds for the epic (no delivery chosen, and its
   open tasks block each other or three or more are Planned). It explains both deliveries in a sentence each and tells
@@ -159,7 +160,7 @@ text when both are present.
   (`socialBreakHint`). See [social.md](social.md#what-agents-see).
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`. An epic's line shows `[epic]` and its roll-up
-  (`0/3 done · 2 In Progress, 1 Backlog`); a task in one ends with `in epic #N`. `board_overview` counts only
+  (`0/3 done · 2 In Progress, 1 Backlog`, then `integration branch epic/…` when it has one); a task in one ends with `in epic #N`. `board_overview` counts only
   tasks and lists each project's open epics under it.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`); `set_plan` adds one to `CONFLICT` (use

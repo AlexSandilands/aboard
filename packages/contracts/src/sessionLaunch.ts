@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentHarness, AGENT_HARNESSES } from "./agentSessions.ts";
+import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { ModelTier, ModelTiers } from "./modelTiers.ts";
 
@@ -52,10 +53,23 @@ export const SessionLaunchOptions = z.object({
   branches: z.array(z.string()),
   /** The default branch, or the current one when there is no telling. */
   defaultBaseRef: z.string().nullable(),
-  /** Each harness's model for the task's suggested tier, from Settings; null when none is set. */
+  /**
+   * Each harness's model for the task's model (resolveRunModel: a custom model one of its labels picks, else its
+   * suggested tier), from Settings; null when none is set.
+   */
   models: z.record(AgentHarness, CliModel.nullable()),
-  /** The task's suggested tier, if any, to say where the model came from. */
+  /** The task's suggested tier, if any. */
   tier: z.enum(["light", "standard", "deep"]).nullable(),
+  /** The model the task runs on and what picked it, to say where `models` came from; null when nothing does. */
+  model: z
+    .object({
+      /** The tier's or the custom model's name. */
+      name: z.string(),
+      source: z.enum(["label", "tier"]),
+      /** The task label that picked it. */
+      label: z.string().nullable(),
+    })
+    .nullable(),
   /** Whether sessions open in a Windows Terminal window named after the task (and can be brought back). */
   namedWindow: z.boolean(),
 });
@@ -66,6 +80,8 @@ export const StartSessionInput = z.object({
   /** Picks the session's label: "Planning #N", "Implementing #N", "Fixing the PR of #N" or, for an epic, "Orchestrating #N". */
   mode: z.enum(["work", "plan", "orchestrate", "fix"]),
   prompt: z.string().trim().min(1).max(100_000),
+  /** Images pasted into the dialog: claimed onto the task, and their paths added to the prompt. */
+  attachmentIds: LaunchAttachmentIds.optional(),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
   workspace: SessionWorkspace,

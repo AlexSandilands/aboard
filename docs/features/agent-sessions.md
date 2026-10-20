@@ -147,14 +147,19 @@ The hand-off menu on a card and in the panel offers **New Claude Code session…
 on any open task, and on an epic (finished ones too), for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
 path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
-model for the task's tier, and whether sessions get a named window) and offers:
+model for the task's model, which model that is and what picked it (a label's custom model, else the tier:
+`resolveTaskModel`), and whether sessions get a named window) and offers:
 
 - the hand-off prompt, editable, with **Plan with me** swapping the work and planning prompts. It is the prompt
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Model tiers** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
+- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
+  its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
+  lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
+  session's images stay unclaimed, in the pending folder (see [attachments.md](attachments.md#in-the-launch-dialogs));
 - **New worktree** from a branch, or **This checkout**. (A fix from a PR's **Fix in →** has neither choice: it runs in a
   new worktree on the PR's own branch, below.) The branch starts on the task's integration branch when its
   epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch

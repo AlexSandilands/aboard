@@ -1,5 +1,4 @@
 import {
-  modelTierLabel,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
@@ -26,7 +25,8 @@ import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/stat
 import { useDialogs } from "~/state/ui";
 import { copyFixPrompt } from "./FixPrMenu";
 import { copyHandoffPrompt } from "./HandoffActions";
-import { ComposerControl } from "./T3LaunchPickers";
+import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
+import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
   harnessLabel,
   initialModel,
@@ -81,7 +81,7 @@ function SessionLaunch({
 }) {
   const options = useSessionLaunchOptions(task.id);
   const fix = usePrFix(fixLinkId);
-  const modelTiers = useSettings().data?.modelTiers;
+  const modelSettings = useSettings().data;
   const pending = options.isPending || (!!fixLinkId && fix.isPending);
   const error = options.error ?? (fixLinkId ? fix.error : null);
   return (
@@ -122,7 +122,7 @@ function SessionLaunch({
                   // A fix copies the fix prompt (read again, and its error shown), never the task's work prompt.
                   fixLinkId
                     ? void copyFixPrompt(fixLinkId)
-                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)
+                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings)
                 }
               >
                 Copy prompt instead
@@ -224,6 +224,7 @@ function Composer({
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
   const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
   const start = useStartSession({ silent: true });
+  const images = useLaunchImages();
   const cli = options.clis.find((c) => c.harness === harness);
 
   // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
@@ -241,7 +242,7 @@ function Composer({
         ? fix
           ? "The project's folder isn't a git repository"
           : "Choose a branch"
-        : badModel;
+        : (badModel ?? images.blocker);
 
   const togglePlan = () => {
     const next = !plan;
@@ -259,6 +260,7 @@ function Composer({
         harness,
         mode: fix ? "fix" : epic ? "orchestrate" : plan ? "plan" : "work",
         prompt,
+        ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
         workspace,
       },
@@ -293,10 +295,13 @@ function Composer({
               submit();
             }
           }}
+          {...images.handlers}
           aria-label="First message"
           className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
+        <LaunchImageThumbs state={images} />
         <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+          <AddImageControl state={images} />
           <Input
             size="sm"
             className="w-56"
@@ -329,7 +334,7 @@ function Composer({
           </button>
         </div>
       </div>
-      <div className="-mt-3 flex items-center justify-between gap-2 rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+      <ComposerStrip className="justify-between gap-2">
         {fix ? (
           <span className="truncate px-2 py-1 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
             New worktree on the PR's branch <span className="font-mono text-foreground/80">{fix.branch}</span>
@@ -381,14 +386,18 @@ function Composer({
             )}
           </>
         )}
-      </div>
+      </ComposerStrip>
       <p className="mt-2 px-1 text-xs text-muted-foreground">
-        {options.tier && !plan ? (
+        {options.model && !plan ? (
           <span className="block">
-            <span className="font-medium text-foreground">Suggested model: {modelTierLabel(options.tier)}</span>
+            <span className="font-medium text-foreground">
+              {options.model.source === "label"
+                ? `Model: ${options.model.name}, from label ${options.model.label}`
+                : `Suggested model: ${options.model.name}`}
+            </span>
             {options.models[harness]
               ? null
-              : ` · no ${harnessLabel(harness)} model is set for this tier in Settings → Model tiers`}
+              : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
           </span>
         ) : null}
         {options.namedWindow

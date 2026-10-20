@@ -1,5 +1,6 @@
 import type { AutopilotAutomation, AutopilotRun, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
+import { modelChoiceFieldKey, modelChoiceItems } from "./autopilot.logic";
 import {
   AUTOPILOT_MODES,
   BOARD_MODES,
@@ -395,5 +396,22 @@ describe("scheduled agent runs", () => {
     expect(scheduledAnswerOf({ output })).toEqual(output);
     expect(scheduledAnswerOf({ output: null })).toBeNull();
     expect(scheduledAnswerOf({ output: { kind: "pr_review", summary: "x" } })).toBeNull();
+  });
+});
+
+describe("model field", () => {
+  it("lists the task's model, the tiers and the custom models, keeping a deleted one", () => {
+    const items = modelChoiceItems([{ id: "codex61", name: "Codex 6.1" }], { tier: "deep" });
+    expect(items.map((i) => i.value)).toEqual(["task", "tier:light", "tier:standard", "tier:deep", "profile:codex61"]);
+    expect(modelChoiceItems([], { profile: "gone" }).at(-1)).toEqual({
+      value: "profile:gone",
+      label: "gone (deleted, runs on the task's model)",
+    });
+  });
+
+  it("reads anything that isn't a choice as From the task", () => {
+    expect(modelChoiceFieldKey(undefined)).toBe("task");
+    expect(modelChoiceFieldKey("opus")).toBe("task");
+    expect(modelChoiceFieldKey({ profile: "codex61" })).toBe("profile:codex61");
   });
 });

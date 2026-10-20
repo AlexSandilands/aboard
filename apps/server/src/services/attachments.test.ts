@@ -109,6 +109,34 @@ describe("attachment files", () => {
     expect(services.attachments.get(stray.id).taskId).toBeNull();
   });
 
+  it("resolve for a launch in order, and are claimed onto the task by id", async () => {
+    const { upload, project, task, services } = setup();
+    const first = (await (await upload(null)).json()) as { id: string };
+    const second = (await (await upload(null)).json()) as { id: string };
+    const pending = services.attachments.forLaunch([second.id, first.id, second.id], null);
+    expect(pending.map((a) => a.id)).toEqual([second.id, first.id]);
+    expect(pending.every((a) => existsSync(a.path) && a.path.includes("_pending"))).toBe(true);
+
+    const claimed = services.attachments.claimIds(task.id, [first.id, second.id]);
+    expect(claimed.map((a) => a.taskId)).toEqual([task.id, task.id]);
+    expect(claimed.every((a) => existsSync(a.path) && a.path.includes(task.id))).toBe(true);
+    expect(pending.some((a) => existsSync(a.path))).toBe(false);
+    expect(services.attachments.forTask(task.id).map((a) => a.id)).toEqual([first.id, second.id]);
+    // Its own task's images resolve again (a retried launch); another task's don't, nor do they without a task.
+    expect(services.attachments.forLaunch([first.id], task.id)).toHaveLength(1);
+    const other = services.tasks.create({ projectId: project.id, title: "Other" });
+    expect(() => services.attachments.forLaunch([first.id], other.id)).toThrow(/another task/);
+    expect(() => services.attachments.forLaunch([first.id], null)).toThrow(/another task/);
+    expect(() => services.attachments.claimIds(other.id, [first.id])).toThrow(/another task/);
+  });
+
+  it("refuse a launch with an image that is gone", () => {
+    const { services } = setup();
+    expect(() => services.attachments.forLaunch(["0b6c1f0e-3a4d-4c1e-9d7a-2f5b8c9e1a11"], null)).toThrow(
+      /paste it again/,
+    );
+  });
+
   it("sweep removes old files waiting for a task that have no row, and keeps recent ones", async () => {
     const { upload, services, task } = setup();
     await upload(task.id);

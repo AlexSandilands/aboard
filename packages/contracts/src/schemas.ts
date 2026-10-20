@@ -11,6 +11,7 @@ import {
 } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
+import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
@@ -215,6 +216,24 @@ export const PrReviewCommentInfo = z.object({
 });
 export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
 
+/**
+ * A review thread that isn't resolved, as the poll reads it: no bodies. A thread whose newest comment is the signed-in
+ * account's (Autopilot posts as the user) may be one Autopilot answered; Fix PRs reads it fresh to find out.
+ */
+export const PrReviewThreadInfo = z.object({
+  /** GitHub's node id, which resolveReviewThread takes. */
+  id: z.string(),
+  /** Whether the signed-in account may resolve it. */
+  canResolve: z.boolean(),
+  /** The newest comment's databaseId, so a new comment makes the thread worth another look. */
+  lastCommentId: z.number().int().nullable(),
+  /** The newest comment is the signed-in account's. */
+  ownLast: z.boolean(),
+  /** The review the newest comment was posted in: one of Autopilot's own reviews is a point, not a reply. */
+  lastReviewId: z.number().int().nullable(),
+});
+export type PrReviewThreadInfo = z.infer<typeof PrReviewThreadInfo>;
+
 /** GitHub's `mergeStateStatus`, lowercased: what its merge box says about the PR right now. */
 export const PrMergeState = z.enum([
   "clean",
@@ -267,8 +286,12 @@ export const PrSnapshot = z.object({
   isCrossRepository: z.boolean().optional(),
   /** The newest reviews, oldest first. Optional, as below, so older snapshots still parse. */
   reviews: z.array(PrReviewInfo).optional(),
-  /** Comments on the newest unresolved review threads, oldest first. */
+  /** Comments on the newest unresolved review threads the signed-in account didn't answer last, oldest first. */
   reviewComments: z.array(PrReviewCommentInfo).optional(),
+  /** The newest unresolved review threads (of the last 30). */
+  reviewThreads: z.array(PrReviewThreadInfo).optional(),
+  /** How many of the threads read are unresolved: a repository can require them all resolved before a merge. */
+  unresolvedThreads: z.number().int().nonnegative().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
@@ -834,6 +857,8 @@ export const AppSettings = z
     issueImportBudgetUsd: z.number().positive().max(100),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Named models beyond the tiers, in the user's order; a task label can pick one (modelProfiles.ts). */
+    modelProfiles: ModelProfiles,
     /** Where "Open in terminal" resumes agent sessions. */
     terminal: TerminalSetting,
     /** Windows Terminal only: a tab in its last window, or a new window. */
@@ -874,6 +899,8 @@ export const UpdateSettingsInput = z.object({
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  /** Replaces the whole list of custom models. */
+  modelProfiles: ModelProfiles.optional(),
   terminal: TerminalSetting.optional(),
   terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */

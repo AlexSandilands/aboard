@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentHarness } from "./agentSessions.ts";
+import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { PlanSkillRef } from "./reviews.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
@@ -173,6 +174,8 @@ export type StartPlanningThreadInput = z.infer<typeof StartPlanningThreadInput>;
 export const StartPlanningSessionInput = z.object({
   harness: AgentHarness,
   prompt: z.string().trim().min(1).max(100_000),
+  /** Images pasted into the dialog; they stay unclaimed (swept after a day), and their paths go in the prompt. */
+  attachmentIds: LaunchAttachmentIds.optional(),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
   taskIds: PlanTaskIds,

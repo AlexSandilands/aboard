@@ -6,6 +6,7 @@ import {
   AUTOPILOT_UNSTICK,
   CHECK_FAILED_KEY_PREFIX,
   FIX_GAVE_UP_KEY_PREFIX,
+  FIX_RESOLVE_KEY_PREFIX,
   RETRIED_PREFIX,
   type AutopilotRun,
   type AutopilotRunFilter,
@@ -351,11 +352,11 @@ export function createAutopilotRunsRepo(sql: Sql) {
     },
     /**
      * Real runs of these automations that started at or after `since`, leaving out the ones that start no agent: Fix
-     * PRs give-ups and failed check scripts, retried or not.
+     * PRs give-ups and thread resolving, and failed check scripts, retried or not.
      */
     startedSince(automations: readonly string[], since: string): number {
       // A retried run's key is `retried:<id>:<key>`, and an id has no colon.
-      const noAgent = [FIX_GAVE_UP_KEY_PREFIX, CHECK_FAILED_KEY_PREFIX].flatMap((prefix) => [
+      const noAgent = [FIX_GAVE_UP_KEY_PREFIX, FIX_RESOLVE_KEY_PREFIX, CHECK_FAILED_KEY_PREFIX].flatMap((prefix) => [
         `${prefix}%`,
         `${RETRIED_PREFIX}%:${prefix}%`,
       ]);

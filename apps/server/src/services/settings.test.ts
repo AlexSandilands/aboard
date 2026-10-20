@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
 
+describe("custom models", () => {
+  it("keeps the stored models that still parse when one doesn't, and the first of a repeated id", () => {
+    const h = createTestHarness();
+    const ok = { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null };
+    createRepos(h.db).settings.set("modelProfiles", [ok, { id: "deep", name: "Bad" }, { ...ok, name: "Again" }, 7]);
+    expect(h.services.settings.get().modelProfiles).toEqual([ok]);
+    createRepos(h.db).settings.set("modelProfiles", "not a list");
+    expect(h.services.settings.get().modelProfiles).toEqual([]);
+  });
+});
+
 describe("headless job models", () => {
   it("defaults to haiku for imports and the CLI's own model for the board reviewer", () => {
     const { services } = createTestHarness();
