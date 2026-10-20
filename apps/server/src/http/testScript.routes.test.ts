@@ -51,9 +51,21 @@ describe("POST /api/autopilot/custom/test-script", () => {
       language: "node",
       cwd: "/work/alpha",
       timeoutMs: 30_000,
-      context: { automation: "Ping", project: { name: "Alpha", path: "/work/alpha" }, inputs: {} },
+      context: { automation: "Ping", project: { name: "Alpha", path: "/work/alpha" }, inputs: { depth: "2" } },
     });
     expect(s.runs[0]!.env[customEnvName("PROJECT_NAME")]).toBe("Alpha");
+  });
+
+  it("gives the script the project's variables and its inputs as environment variables", async () => {
+    const s = setup();
+    s.h.services.settings.update({ automationVariables: [{ name: "team", value: "core" }] });
+    s.h.services.projects.update(s.project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+    await s.post(s.body({ inputs: { depth: "2" } }));
+    expect(s.runs[0]!.context).toMatchObject({ vars: { team: "core", jira_key: "ALP" }, project: { repoUrl: "" } });
+    expect(s.runs[0]!.env).toMatchObject({
+      [customEnvName("VAR_JIRA_KEY")]: "ALP",
+      [customEnvName("INPUT_DEPTH")]: "2",
+    });
   });
 
   it("gives an action a task's values when asked, and a check none", async () => {
@@ -154,11 +166,11 @@ describe("POST /api/autopilot/custom/test-script", () => {
     expect((await again).status).toBe(200);
   });
 
-  it("gives a check its inputs and an action none, as a real run would", async () => {
+  it("gives an action and a check their inputs, as a real run would", async () => {
     const s = setup();
     await s.post(s.body({ inputs: { depth: "2" } }));
     await s.post(s.body({ role: "check", inputs: { depth: "2" } }));
-    expect(s.runs[0]!.context).toMatchObject({ inputs: {} });
+    expect(s.runs[0]!.context).toMatchObject({ inputs: { depth: "2" } });
     expect(s.runs[1]!.context).toMatchObject({ inputs: { depth: "2" } });
   });
 

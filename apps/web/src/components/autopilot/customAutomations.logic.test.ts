@@ -7,6 +7,7 @@ import {
   formFromCustom,
   formSampleTask,
   previewAction,
+  PREVIEW_REPO_URL,
   sampleTask,
   testScriptRequest,
   withActionKind,
@@ -38,7 +39,7 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   name: "Ping",
   trigger: { kind: "status_change", to: "review", from: null },
   filters: { projectIds: [], labels: [], epicId: null },
-  action: { kind: "shell", command: "make", timeoutSeconds: 60 },
+  action: { kind: "shell", command: "make", timeoutSeconds: 60, inputs: [] },
   armedAt: "2026-10-01T00:00:00.000Z",
   armedProjects: {},
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -299,6 +300,7 @@ describe("a script automation in the form", () => {
     language: "python" as const,
     body: "if x:\r\n    print(1)\r\n",
     timeoutSeconds: 45,
+    inputs: [],
   };
 
   it("is saved back as it was, indentation and line endings kept", () => {
@@ -431,7 +433,7 @@ describe("a test run's request", () => {
         role: "action",
         taskId: "t1",
         name: "Triage",
-        inputs: {},
+        inputs: { depth: "3" },
         prompt: "",
         skill: "",
         script: { language: "sh", body: "echo hi", timeoutSeconds: 20 },
@@ -553,5 +555,24 @@ describe("preview", () => {
     expect(scheduled).toContain("Check on Alpha");
     expect(scheduled).toContain("Project folder: /work/alpha");
     expect(scheduled).not.toContain("get_task");
+  });
+});
+
+describe("the preview with variables", () => {
+  it("fills the sample project's variables over the board's, and shows where the repository URL comes from", () => {
+    const billing = {
+      id: "p1",
+      title: "billing",
+      workspaceRoot: "/work/billing",
+      variables: [{ name: "jira_key", value: "BILL" }],
+    } as Project;
+    const input = {
+      name: "Hello",
+      trigger: { kind: "schedule" as const, schedule: { kind: "hourly" as const, everyHours: 1 } },
+      action: { kind: "agent" as const, prompt: "{{vars.jira_key}} {{vars.team}} {{project.repo_url}}" },
+    };
+    expect(previewAction(input, null, [billing], [{ name: "team", value: "core" }])).toContain(
+      `BILL core ${PREVIEW_REPO_URL}`,
+    );
   });
 });

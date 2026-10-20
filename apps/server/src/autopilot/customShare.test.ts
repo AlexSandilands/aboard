@@ -1,5 +1,6 @@
 import {
   AUTOMATION_BUNDLE_VERSION,
+  SCRIPT_BUNDLE_VERSION,
   PLAIN_BUNDLE_VERSION,
   BRAND,
   AUTOMATION_EXAMPLES,
@@ -279,7 +280,7 @@ describe("sharing a script", () => {
   it("exports it as a version 2 file, and an agent's file stays at version 1", async () => {
     const s = setup();
     const bundle = await exportOf(s, s.services.customAutomations.create(scriptAutomation()));
-    expect(bundle).toMatchObject({ version: AUTOMATION_BUNDLE_VERSION, action: script });
+    expect(bundle).toMatchObject({ version: SCRIPT_BUNDLE_VERSION, action: script });
     expect((await exportOf(s, s.services.customAutomations.create(dispatch()))).version).toBe(PLAIN_BUNDLE_VERSION);
   });
 

@@ -108,6 +108,7 @@ describe("applyBoardEvent project archiving", () => {
       t3ProjectId: null,
       reviewSkill: null,
       planSkill: null,
+      variables: [],
       position: "a0",
       collapsed: false,
       archivedAt: null,

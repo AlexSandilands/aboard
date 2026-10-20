@@ -19,6 +19,7 @@ const project = (id: string, collapsed = false): Project => ({
   icon: null,
   t3ProjectId: null,
   planSkill: null,
+  variables: [],
   reviewSkill: null,
   position: id,
   collapsed,

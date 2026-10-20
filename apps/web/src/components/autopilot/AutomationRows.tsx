@@ -26,7 +26,7 @@ import {
   UnitInput,
 } from "~/components/settings/settingsLayout";
 import { cn } from "~/lib/utils";
-import { BlockedWarning } from "./InputsAndSlots";
+import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSettings, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
@@ -152,6 +152,11 @@ export function AutomationSections() {
                 <BlockedWarning reason={automation.blocked} />
               </div>
             ) : null}
+            {automation.needs ? (
+              <div className="px-3 pb-3 sm:px-4">
+                <NeedsVariablesWarning needs={automation.needs} />
+              </div>
+            ) : null}
             {automation.fields.map((field) => (
               <AutomationField
                 key={field.key}
@@ -216,6 +221,11 @@ function AutomationRow({
       {automation.blocked ? (
         <div className="mt-2">
           <BlockedWarning reason={automation.blocked} />
+        </div>
+      ) : null}
+      {automation.needs ? (
+        <div className="mt-2">
+          <NeedsVariablesWarning needs={automation.needs} />
         </div>
       ) : null}
       {automation.fields.length ? (

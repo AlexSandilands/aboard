@@ -1,4 +1,10 @@
-import { AUTOPILOT_RECURRING, customAutomationId, epicArmKey, type T3IntegrationStatus } from "@repo/contracts";
+import {
+  AUTOPILOT_RECURRING,
+  customAutomationId,
+  effectiveVariables,
+  epicArmKey,
+  type T3IntegrationStatus,
+} from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -6,6 +12,7 @@ import { AUTOMATIONS } from "../autopilot/automations/index.ts";
 import { createCheckRuns, customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
+import { createRepoUrls } from "../integrations/gitRemote.ts";
 import { runScript, type RunScript } from "../integrations/scriptRunner.ts";
 import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
 import { createActivityService } from "./activity.ts";
@@ -114,17 +121,46 @@ export function createServices(deps: ServiceDeps): Services {
   restartRecurring = (ids) => recurring.restart(ids);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
+  // One cache for the server's life: custom automations read each project's repository URL on every pass.
+  const repoUrl = createRepoUrls(deps.runGit ?? defaultRunGit);
+  const boardVariables = () => settings.get().automationVariables;
   const customAutomations = createCustomAutomationsService(core, {
     runScript: runScriptFile,
     taskSummary: (id) => tasks.service.summary(id),
+    repoUrl,
+    boardVariables,
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();
   // Read on every call, so a custom automation's edit applies from the next pass.
   const automations = () => [
     ...builtIn,
-    ...customAutomations.list().map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns })),
+    ...customAutomations
+      .list()
+      .map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns, repoUrl, boardVariables })),
   ];
+
+  // A project that gets the last variable an automation needs starts it afresh there, rather than acting on everything
+  // that happened while the value was missing.
+  const variablesNow = () =>
+    new Map(
+      projects.list({ includeArchived: true }).map((p) => [p.id, effectiveVariables(boardVariables(), p)] as const),
+    );
+  const rearmingVariables =
+    <A extends unknown[], R>(write: (...args: A) => R, changes: (...args: A) => boolean) =>
+    (...args: A): R => {
+      if (!changes(...args)) return write(...args);
+      const before = variablesNow();
+      const result = write(...args);
+      customAutomations.rearmWhereFilled(before, variablesNow());
+      return result;
+    };
+
+  // Wrapped in place, so every service holding these objects goes through it.
+  const updateProject = projects.update.bind(projects);
+  const updateSettings = settings.update.bind(settings);
+  projects.update = rearmingVariables(updateProject, (_id, input) => input.variables !== undefined);
+  settings.update = rearmingVariables(updateSettings, (input) => input.automationVariables !== undefined);
 
   return {
     projects,

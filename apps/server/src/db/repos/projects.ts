@@ -1,4 +1,10 @@
-import type { PlanSkillRef, Project, ProjectIcon, ReviewSkillRef } from "@repo/contracts";
+import {
+  AutomationVariables,
+  type PlanSkillRef,
+  type Project,
+  type ProjectIcon,
+  type ReviewSkillRef,
+} from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import type { Sql } from "./sql.ts";
 
@@ -11,6 +17,7 @@ interface ProjectRow {
   t3_project_id: string | null;
   review_skill_json: string | null;
   plan_skill_json: string | null;
+  variables_json: string;
   position: string;
   collapsed: number;
   archived_at: string | null;
@@ -27,6 +34,8 @@ const toProject = (r: ProjectRow): Project => ({
   t3ProjectId: r.t3_project_id,
   reviewSkill: parseJson<ReviewSkillRef>(r.review_skill_json),
   planSkill: parseJson<PlanSkillRef>(r.plan_skill_json),
+  // A row that no longer parses (a cap lowered later) reads as no overrides rather than breaking the board.
+  variables: AutomationVariables.catch([]).parse(parseJson(r.variables_json) ?? []),
   position: r.position,
   collapsed: r.collapsed !== 0,
   archivedAt: r.archived_at,
@@ -43,6 +52,7 @@ const toRow = (p: Project): ProjectRow => ({
   t3_project_id: p.t3ProjectId,
   review_skill_json: p.reviewSkill ? JSON.stringify(p.reviewSkill) : null,
   plan_skill_json: p.planSkill ? JSON.stringify(p.planSkill) : null,
+  variables_json: JSON.stringify(p.variables),
   position: p.position,
   collapsed: p.collapsed ? 1 : 0,
   archived_at: p.archivedAt,

@@ -4,6 +4,7 @@ import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
 import type { AgentHarness } from "./agentSessions.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
+import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
@@ -139,6 +140,8 @@ export const Project = z.object({
   reviewSkill: ReviewSkillRef.nullable(),
   /** Overrides the global planning skill for this project's bulk-planning sessions; null inherits it. */
   planSkill: PlanSkillRef.nullable(),
+  /** Overrides of the board's automation variables in this project (effectiveVariables). */
+  variables: AutomationVariables,
   position: z.string(),
   collapsed: z.boolean(),
   archivedAt: IsoDate.nullable(),
@@ -665,6 +668,8 @@ export const UpdateProjectInput = z.object({
   archived: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.nullable().optional(),
   planSkill: PlanSkillRef.nullable().optional(),
+  /** Replaces the project's automation variable overrides. */
+  variables: AutomationVariables.optional(),
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
@@ -871,6 +876,8 @@ export const AppSettings = z
     keybindings: KeybindingOverrides,
     /** The agents' social network (docs/features/social.md). Off by default; its tools only exist while it is on. */
     socialNetwork: z.boolean(),
+    /** Custom automations' variables for every project; a project's own override them (effectiveVariables). */
+    automationVariables: AutomationVariables,
   })
   .extend(BackupSettings.shape);
 
@@ -920,6 +927,8 @@ export const UpdateSettingsInput = z.object({
   /** Replaces the overrides: a command left out goes back to its default. */
   keybindings: KeybindingOverrides.optional(),
   socialNetwork: z.boolean().optional(),
+  /** Replaces the board's automation variables. */
+  automationVariables: AutomationVariables.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

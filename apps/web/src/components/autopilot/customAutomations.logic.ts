@@ -10,9 +10,11 @@ import {
   customValues,
   describeScriptRun,
   describeShellRun,
+  effectiveVariables,
   normalizeLabels,
   TestScriptInput,
   type AutomationInputType,
+  type AutomationVariable,
   type CreateCustomAutomationInput as CreateInput,
   type CustomAutomation,
   type CustomPrEvent,
@@ -162,6 +164,13 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
     labels: custom.filters.labels.join(", "),
     epicId: custom.filters.epicId ?? "",
     actionKind: custom.action.kind,
+    inputs: custom.action.inputs.map(({ name, label, type, value, default: fallback }) => ({
+      name,
+      label,
+      type,
+      value,
+      default: fallback,
+    })),
   };
   const t = custom.trigger;
   if (t.kind === "status_change") Object.assign(form, { to: t.to, from: t.from ?? "" });
@@ -184,13 +193,6 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
       tier: a.tier ?? "",
       onPrBranch: a.onPrBranch,
       allowedTools: a.allowedTools.join("\n"),
-      inputs: a.inputs.map(({ name, label, type, value, default: fallback }) => ({
-        name,
-        label,
-        type,
-        value,
-        default: fallback,
-      })),
       slots: a.slots.map(({ name, label, description, tools }) => ({
         name,
         label,
@@ -296,8 +298,8 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             untrustedItems: form.untrustedItems,
           }
         : form.actionKind === "script"
-          ? { kind: "script", language: form.language, body: form.body, timeoutSeconds }
-          : { kind: "shell", command: form.command, timeoutSeconds },
+          ? { kind: "script", language: form.language, body: form.body, timeoutSeconds, inputs: form.inputs }
+          : { kind: "shell", command: form.command, timeoutSeconds, inputs: form.inputs },
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
@@ -383,8 +385,8 @@ export function testScriptRequest(
     role,
     taskId: check ? null : taskId,
     name: form.name,
-    // Only an agent's check reads inputs (customValues), so an action is tested without the ones a switched-away agent left.
-    inputs: check ? Object.fromEntries(form.inputs.filter((i) => i.name).map((i) => [i.name, i.value])) : {},
+    // Every kind of action declares inputs now, and a script action is saved with the form's, so both roles read them.
+    inputs: Object.fromEntries(form.inputs.filter((i) => i.name).map((i) => [i.name, i.value])),
     prompt: check ? form.prompt : "",
     skill: check ? form.skill : "",
     script: check
@@ -434,14 +436,19 @@ export function formSampleTask(form: CustomForm, tasks: readonly TaskSummary[]):
   return sampleTask({ filters: { projectIds: form.projectIds, labels, epicId: form.epicId || null } }, tasks);
 }
 
+/** What the preview shows for the repository URL, which the server reads from the folder's `origin` when it runs. */
+export const PREVIEW_REPO_URL = "<the folder's origin, read when it runs>";
+
 /**
  * What the action would run for the sample task (or, for a schedule, the first project in scope): the filled prompt,
- * or the command with its variables. The task's description isn't on the board, so the preview leaves it out.
+ * or the command with its variables, with that project's variables. The task's description isn't on the board, so
+ * the preview leaves it out.
  */
 export function previewAction(
   input: CreateInput,
   task: TaskSummary | null,
   projects: readonly Project[],
+  boardVariables: readonly AutomationVariable[] = [],
 ): string | null {
   const project =
     projects.find((p) => p.id === task?.projectId) ??
@@ -450,7 +457,16 @@ export function previewAction(
     null;
   const def = CreateCustomAutomationInput.parse(input);
   const scheduled = input.trigger.kind === "schedule";
-  const values = customValues(def, project, scheduled ? null : task);
+  const values = customValues(
+    def,
+    project,
+    scheduled ? null : task,
+    {},
+    {
+      vars: effectiveVariables(boardVariables, project),
+      repoUrl: project?.workspaceRoot ? PREVIEW_REPO_URL : "",
+    },
+  );
   if (def.action.kind === "shell") return describeShellRun(def.action.command, values);
   if (def.action.kind === "script") return describeScriptRun(def.action, values);
   if (!scheduled && !task) return null;

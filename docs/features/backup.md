@@ -49,7 +49,8 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
   The T3 token and the backup settings themselves (they describe this machine) stay out, and so does any key
   nobody has added to the list. A test fails when a new setting is in neither the allow-list nor the
   machine-only list. Saved board views (`savedViews`, [saved-views](saved-views.md)) and Autopilot's engine
-  settings (`autopilotEngine`) are exported, and so is `generalProjectId` (which project is General), so a
+  settings (`autopilotEngine`) and custom automations' board-wide variables (`automationVariables`; a project's own
+  are its `variables_json` column, which goes with the project) are exported, and so is `generalProjectId` (which project is General), so a
   restore doesn't make a second one; a dump from before General existed gets a new one on the next start;
   its pause (`autopilotPaused`) isn't, so restoring a backup can't lift Pause all.
 - **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)). The same

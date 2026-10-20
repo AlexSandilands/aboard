@@ -290,6 +290,7 @@ describe("resolveT3Project", () => {
     t3ProjectId: null,
     reviewSkill: null,
     planSkill: null,
+    variables: [],
     position: "a0",
     collapsed: false,
     archivedAt: null,

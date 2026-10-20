@@ -218,6 +218,20 @@ export function SlotsField({ slots, onChange }: { slots: FormSlot[]; onChange: (
   );
 }
 
+/** The notice for an automation that names a variable some projects it is on in have no value for: it skips them. */
+export function NeedsVariablesWarning({ needs }: { needs: string }) {
+  return (
+    <Alert variant="warning">
+      <TriangleAlertIcon />
+      <AlertTitle className="text-sm">{needs}</AlertTitle>
+      <AlertDescription>
+        It doesn&apos;t run in those projects until the variable has a value there: set it in the project&apos;s
+        settings, or for every project under Settings → Autopilot → Custom automations.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /** The orange notice for an automation with a required tool slot nobody has filled: it can't be switched on. */
 export function BlockedWarning({ reason }: { reason: string }) {
   return (

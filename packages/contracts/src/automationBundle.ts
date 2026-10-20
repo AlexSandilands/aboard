@@ -9,6 +9,7 @@ import {
   CustomAction,
   CustomScript,
   CustomTrigger,
+  variablesNamedBy,
   type CreateCustomAutomationInput,
   type CustomAutomation,
   type CustomDefinition,
@@ -22,11 +23,14 @@ import {
 export const AUTOMATION_BUNDLE_FORMAT = `${BRAND.id}.automation`;
 /** Every file without a script, so a board from before scripts reads what a newer one writes. */
 export const PLAIN_BUNDLE_VERSION = 1 as const;
+/** A file carrying a script: an older board would drop a check script and refuse a script action. */
+export const SCRIPT_BUNDLE_VERSION = 2 as const;
 /**
- * The newest version this board reads, and the one a file carrying a script is written as: an older board would drop a
- * check script and refuse a script action. Bumped when the file's shape changes in a way an older reader can't take.
+ * The newest version this board reads, and the one a file is written as when it needs variables or declares inputs on a
+ * command or script: a board from before them would refuse it as invalid rather than say it is newer. Bumped when the
+ * file's shape changes in a way an older reader can't take.
  */
-export const AUTOMATION_BUNDLE_VERSION = 2 as const;
+export const AUTOMATION_BUNDLE_VERSION = 3 as const;
 export const BUNDLE_SKILL_BODY_MAX = 100_000;
 
 /** A skill carried in the file by its text, written to the importer's skills on import after they confirm. */
@@ -62,21 +66,33 @@ export function actionScripts(action: CustomAction): BundleScript[] {
 export const actionRunsCode = (action: CustomAction): boolean =>
   action.kind === "shell" || actionScripts(action).length > 0;
 
+/** Whether an action needs what version 3 added: inputs on a command or script, or variables. */
+const needsVariablesVersion = (action: CustomAction, inputs: number): boolean =>
+  (action.kind !== "agent" && inputs > 0) || variablesNamedBy(action).length > 0;
+
 /** The version a file for this action is written as: the oldest that can hold it. */
 export const bundleVersionFor = (action: CustomAction): AutomationBundle["version"] =>
-  actionScripts(action).length > 0 ? AUTOMATION_BUNDLE_VERSION : PLAIN_BUNDLE_VERSION;
+  needsVariablesVersion(action, action.inputs.length)
+    ? AUTOMATION_BUNDLE_VERSION
+    : actionScripts(action).length > 0
+      ? SCRIPT_BUNDLE_VERSION
+      : PLAIN_BUNDLE_VERSION;
 
 export const AutomationBundle = z
   .object({
     format: z.literal(AUTOMATION_BUNDLE_FORMAT),
-    version: z.union([z.literal(PLAIN_BUNDLE_VERSION), z.literal(AUTOMATION_BUNDLE_VERSION)]),
+    version: z.union([
+      z.literal(PLAIN_BUNDLE_VERSION),
+      z.literal(SCRIPT_BUNDLE_VERSION),
+      z.literal(AUTOMATION_BUNDLE_VERSION),
+    ]),
     name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
     /** What it does, for the person importing it. */
     description: z.string().trim().max(1_000).default(""),
     trigger: CustomTrigger,
     /** Only what travels: the projects and the epic are the sharer's. */
     filters: z.object({ labels: z.array(z.string().trim().min(1)).default([]) }).default({ labels: [] }),
-    /** An agent's own `inputs` and `slots` are ignored: they are declared next to it. */
+    /** The action's own `inputs` (and an agent's `slots`) are ignored: they are declared next to it. */
     action: CustomAction,
     inputs: z.array(AutomationInputDecl).max(CUSTOM_INPUTS_MAX).default([]),
     slots: z.array(AutomationSlotDecl).max(CUSTOM_SLOTS_MAX).default([]),
@@ -84,14 +100,22 @@ export const AutomationBundle = z
     skill: BundleSkill.optional(),
   })
   .superRefine((bundle, ctx) => {
-    if (bundle.action.kind !== "agent" && (bundle.inputs.length > 0 || bundle.slots.length > 0)) {
-      ctx.addIssue({ code: "custom", message: "Only an agent can have inputs or tool slots", path: ["action"] });
+    if (bundle.action.kind !== "agent" && bundle.slots.length > 0) {
+      ctx.addIssue({ code: "custom", message: "Only an agent can have tool slots", path: ["action"] });
     }
     // A version 1 reader would read this as a file without its script, so it must say it is a newer one.
-    if (bundle.version < AUTOMATION_BUNDLE_VERSION && actionScripts(bundle.action).length > 0) {
+    if (bundle.version < SCRIPT_BUNDLE_VERSION && actionScripts(bundle.action).length > 0) {
       ctx.addIssue({
         code: "custom",
-        message: `A script needs a version ${AUTOMATION_BUNDLE_VERSION} file`,
+        message: `A script needs a version ${SCRIPT_BUNDLE_VERSION} file`,
+        path: ["version"],
+      });
+    }
+    // Inputs on a command or script are new in version 3; an older reader refuses them, so the file must say it is newer.
+    if (bundle.version < AUTOMATION_BUNDLE_VERSION && bundle.action.kind !== "agent" && bundle.inputs.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Inputs on a command or script need a version ${AUTOMATION_BUNDLE_VERSION} file`,
         path: ["version"],
       });
     }
@@ -135,11 +159,9 @@ export function automationBundle(
     description: "",
     trigger: def.trigger,
     filters: { labels: def.filters.labels },
-    action: action.kind === "agent" ? { ...action, inputs: [], slots: [] } : action,
-    inputs:
-      action.kind === "agent"
-        ? action.inputs.map(({ name, label, type, value }) => ({ name, label, type, default: value }))
-        : [],
+    // Variables aren't in the file: their values are the sharer's, and the importer's board says which it needs.
+    action: action.kind === "agent" ? { ...action, inputs: [], slots: [] } : { ...action, inputs: [] },
+    inputs: action.inputs.map(({ name, label, type, value }) => ({ name, label, type, default: value })),
     slots:
       action.kind === "agent" ? action.slots.map(({ name, label, description }) => ({ name, label, description })) : [],
     ...(skill && action.kind === "agent" ? { skill } : {}),
@@ -168,6 +190,10 @@ export interface BundleFill {
 /** The definition to save for an imported file. Unchecked: run it through `checkCustomDefinition` like any other. */
 export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = {}): CreateCustomAutomationInput {
   const { action } = bundle;
+  const inputs = bundle.inputs.map((input) => ({
+    ...input,
+    value: fill.inputs?.[input.name] ?? inputStartValue(input),
+  }));
   return {
     name: bundle.name,
     trigger: bundle.trigger,
@@ -177,13 +203,10 @@ export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = 
         ? {
             ...action,
             skill: fill.skill !== undefined ? (fill.skill ?? "") : bundle.skill ? "" : action.skill,
-            inputs: bundle.inputs.map((input) => ({
-              ...input,
-              value: fill.inputs?.[input.name] ?? inputStartValue(input),
-            })),
+            inputs,
             slots: bundle.slots.map((slot) => ({ ...slot, tools: [...(fill.slots?.[slot.name] ?? [])] })),
           }
-        : action,
+        : { ...action, inputs },
   };
 }
 

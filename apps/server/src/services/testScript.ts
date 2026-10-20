@@ -1,5 +1,7 @@
 import {
   customAgentPrompt,
+  effectiveVariables,
+  type AutomationVariable,
   customScriptContext,
   customShellEnv,
   customValues,
@@ -14,6 +16,7 @@ import {
 } from "@repo/contracts";
 import type { z } from "zod";
 import { AppError, notFound } from "../errors.ts";
+import type { RepoUrls } from "../integrations/gitRemote.ts";
 import { messageOf } from "../integrations/github.ts";
 import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
 
@@ -28,6 +31,8 @@ export function createTestScript(deps: {
   runScript: RunScript;
   project: (id: string) => Project | null;
   task: (id: string) => TaskSummary;
+  repoUrl: RepoUrls;
+  boardVariables: () => readonly AutomationVariable[];
   now?: () => number;
 }): (input: TestScriptInput) => Promise<TestScriptResult> {
   let running = false;
@@ -42,11 +47,17 @@ export function createTestScript(deps: {
     }
     // A check has no task, like the scheduled agent it belongs to; an action may be given one to read its values.
     const task = input.role === "action" && input.taskId ? deps.task(input.taskId) : null;
-    const values: CustomValues = {
-      ...customValues({ name: input.name }, project, task),
-      // Only an agent (a check's) reads inputs in a real run.
-      inputs: input.role === "check" ? input.inputs : {},
+    // The project's variables and repository URL, as a real run gets them. A variable the draft names that has no
+    // value here is simply absent: a test runs anyway, where a real run would be skipped.
+    const scope = {
+      vars: effectiveVariables(deps.boardVariables(), project),
+      repoUrl: await deps.repoUrl(project.workspaceRoot).catch(() => ""),
     };
+    const values: CustomValues = {
+      ...customValues({ name: input.name }, project, task, {}, scope),
+      inputs: input.inputs,
+    };
+    // Only now: resolving the repository URL awaits, and a throw before here must not leave the flag set.
     if (running) throw new AppError("CONFLICT", "A test run is already going: wait for it to finish");
     running = true;
     const started = now();

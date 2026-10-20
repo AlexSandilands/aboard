@@ -1,4 +1,4 @@
-import { customEnvName, CustomScriptLanguage, parseCheckOutput } from "@repo/contracts";
+import { CustomAction, customEnvName, CustomScriptLanguage, parseCheckOutput, variablesNamedBy } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   isStarter,
@@ -52,6 +52,17 @@ describe("the starters", () => {
     for (const { value } of SCRIPT_LANGUAGES) {
       expect(scriptStarter(value, "check")).not.toMatch(/\{\{\s*(?:task|pr|project|automation|inputs)\./);
     }
+  });
+
+  it("read the project, variables and inputs without needing any variable", () => {
+    for (const { value } of SCRIPT_LANGUAGES) {
+      for (const role of ["action", "check"] as const) {
+        const body = scriptStarter(value, role);
+        expect(variablesNamedBy(CustomAction.parse({ kind: "script", language: value, body }))).toEqual([]);
+      }
+    }
+    expect(scriptStarter("python", "action")).toContain("ctx['vars']");
+    expect(scriptStarter("node", "action")).toContain("Hello world, this is running in");
   });
 
   it("print lines the board reads as items", () => {

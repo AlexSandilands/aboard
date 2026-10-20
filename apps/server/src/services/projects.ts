@@ -143,6 +143,7 @@ export function createProjectsService(
           t3ProjectId: input.t3ProjectId ?? null,
           reviewSkill: null,
           planSkill: null,
+          variables: [],
           position: nextPosition(),
           collapsed: false,
           archivedAt: null,
@@ -168,6 +169,11 @@ export function createProjectsService(
         if (input.icon !== undefined) next.icon = input.icon;
         if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
         if (input.planSkill !== undefined) next.planSkill = input.planSkill;
+        // Which projects a custom automation still needs a variable in shows on its row.
+        if (input.variables !== undefined) {
+          next.variables = input.variables;
+          fx.autopilot();
+        }
         if (input.collapsed !== undefined) next.collapsed = input.collapsed;
         if (input.archived !== undefined)
           next.archivedAt = input.archived ? (current.archivedAt ?? next.updatedAt) : null;

@@ -52,6 +52,7 @@ const DEFAULTS: StoredSettings = {
   savedViews: [],
   keybindings: {},
   socialNetwork: false,
+  automationVariables: [],
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -93,6 +94,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "notifications",
     "savedViews",
     "keybindings",
+    "automationVariables",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -284,6 +286,11 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
         if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.socialNetwork !== undefined) repos.settings.set("socialNetwork", input.socialNetwork);
+        if (input.automationVariables !== undefined) {
+          repos.settings.set("automationVariables", input.automationVariables);
+          // Which projects a custom automation still needs a variable in shows on its row.
+          fx.autopilot();
+        }
         if (input.notifications !== undefined) {
           const current = load().notifications;
           repos.settings.set("notifications", {

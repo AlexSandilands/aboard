@@ -12,7 +12,10 @@ import {
   normalizeLabels,
   TaskStatus,
   UpdateCustomAutomationInput,
+  type AutomationVariable,
   type BundleSkill,
+  variableHasValue,
+  variablesNamedBy,
   type CustomAutomation,
   type CustomDefinition,
   type ImportedAutomation,
@@ -23,6 +26,7 @@ import {
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
+import type { RepoUrls } from "../integrations/gitRemote.ts";
 import type { RunScript } from "../integrations/scriptRunner.ts";
 import type { Core } from "./core.ts";
 import { createTestScript } from "./testScript.ts";
@@ -61,6 +65,15 @@ export interface CustomAutomationsService {
    */
   rearm(id: string, scopeKeys: readonly string[]): void;
   /**
+   * Variables changed: each automation that names one starts afresh in the projects (and their epics with an arming
+   * of their own) that lacked one of its variables before and have them all now, so what happened while a value was
+   * missing doesn't all fire at once. `before` and `after` are each project's effective variables.
+   */
+  rearmWhereFilled(
+    before: ReadonlyMap<string, Record<string, string>>,
+    after: ReadonlyMap<string, Record<string, string>>,
+  ): void;
+  /**
    * These epics now have a setting of their own, so their tasks no longer read the project's arming time. Carry it
    * over to the epic (the later of the project's and any the epic has), so an epic that was already on keeps the
    * same floor: neither older events (from before the project was switched on) nor newer (dropping held ones).
@@ -77,13 +90,20 @@ export interface CustomAutomationsService {
 
 export function createCustomAutomationsService(
   core: Core,
-  deps: { runScript: RunScript; taskSummary: (id: string) => TaskSummary },
+  deps: {
+    runScript: RunScript;
+    taskSummary: (id: string) => TaskSummary;
+    repoUrl: RepoUrls;
+    boardVariables: () => readonly AutomationVariable[];
+  },
 ): CustomAutomationsService {
   const { repos } = core;
   const testScript = createTestScript({
     runScript: deps.runScript,
     project: (id) => repos.projects.get(id),
     task: deps.taskSummary,
+    repoUrl: deps.repoUrl,
+    boardVariables: deps.boardVariables,
   });
 
   const get = (id: string): CustomAutomation => {
@@ -143,7 +163,7 @@ export function createCustomAutomationsService(
     }
   };
 
-  return {
+  const service: CustomAutomationsService = {
     list: () => repos.autopilotCustom.all(),
 
     testScript,
@@ -198,10 +218,11 @@ export function createCustomAutomationsService(
         );
         const now = nowIso();
         // Under another trigger, or over tasks it didn't cover, what happened before isn't what the user asked to act
-        // on.
+        // on. Nor when it needs other variables: projects it skipped for lack of one would act on everything held.
         const rearmed =
           JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ||
-          JSON.stringify(def.filters) !== JSON.stringify(current.filters);
+          JSON.stringify(def.filters) !== JSON.stringify(current.filters) ||
+          JSON.stringify(variablesNamedBy(def.action)) !== JSON.stringify(variablesNamedBy(current.action));
         const next: CustomAutomation = {
           ...current,
           ...def,
@@ -244,6 +265,36 @@ export function createCustomAutomationsService(
       });
     },
 
+    rearmWhereFilled(before, after) {
+      for (const custom of repos.autopilotCustom.all()) {
+        const named = variablesNamedBy(custom.action);
+        if (named.length === 0) continue;
+        const filled = [...after].flatMap(([projectId, vars]) =>
+          named.some((n) => !variableHasValue(before.get(projectId) ?? {}, n)) &&
+          named.every((n) => variableHasValue(vars, n))
+            ? [projectId]
+            : [],
+        );
+        if (filled.length === 0) continue;
+        // An epic with a setting or arming of its own reads its own time instead of the project's, so it starts afresh too.
+        const key = customAutomationKey(custom.id);
+        const epicIds = new Set([
+          ...repos.autopilotSettings
+            .all()
+            .filter((s) => s.scopeKind === "epic" && s.automation === key && s.scopeId)
+            .map((s) => s.scopeId!),
+          ...Object.keys(custom.armedProjects)
+            .filter((k) => k.startsWith(epicArmKey("")))
+            .map((k) => k.slice(epicArmKey("").length)),
+        ]);
+        const epics = [...epicIds].filter((epicId) => {
+          const epic = repos.tasks.get(epicId);
+          return epic !== null && filled.includes(epic.projectId);
+        });
+        service.rearm(custom.id, [...filled, ...epics.map(epicArmKey)]);
+      }
+    },
+
     inheritEpicArming(id, epicIds) {
       core.write(() => {
         const current = repos.autopilotCustom.get(id);
@@ -282,4 +333,5 @@ export function createCustomAutomationsService(
       );
     },
   };
+  return service;
 }

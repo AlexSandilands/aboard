@@ -16,7 +16,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { toastManager } from "~/components/ui/toast";
 import { useImportCustomAutomation } from "~/state/customAutomations";
-import { useBoard } from "~/state/queries";
+import { useBoard, useSettings } from "~/state/queries";
 import {
   draftToRequest,
   importProblem,
@@ -27,6 +27,8 @@ import {
 } from "./customAutomationImport.logic";
 import { InputValueControl } from "./InputsAndSlots";
 import { ScriptWarning } from "./ScriptWarning";
+import { VariableNeedsList } from "./VariablesEditor";
+import { variableNeeds } from "./variables.logic";
 
 /** A file bigger than this isn't an automation. */
 const FILE_MAX_BYTES = 500_000;
@@ -72,6 +74,15 @@ export function CustomAutomationImportForm({
   const board = useBoard().data;
   const importing = useImportCustomAutomation();
   const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
+  const boardVariables = useSettings().data?.automationVariables ?? [];
+  const needs =
+    bundle && draft
+      ? variableNeeds(
+          bundle.action,
+          boardVariables,
+          projects.filter((p) => draft.projectIds.length === 0 || draft.projectIds.includes(p.id)),
+        )
+      : [];
 
   const load = (next: AutomationBundle) => {
     setBundle(next);
@@ -266,7 +277,14 @@ export function CustomAutomationImportForm({
             ) : null}
 
             {bundle.inputs.length > 0 ? (
-              <Section title="Inputs" hint="The prompt reads these as {{inputs.name}}. Start from the author's values.">
+              <Section
+                title="Inputs"
+                hint={
+                  bundle.action.kind === "agent"
+                    ? "The prompt reads these as {{inputs.name}}. Start from the author's values."
+                    : "It reads these as environment variables. Start from the author's values."
+                }
+              >
                 <div className="flex flex-col gap-3">
                   {bundle.inputs.map((input) => (
                     <div key={input.name} className="flex flex-col gap-1">
@@ -307,6 +325,15 @@ export function CustomAutomationImportForm({
                     </div>
                   ))}
                 </div>
+              </Section>
+            ) : null}
+
+            {needs.length > 0 ? (
+              <Section
+                title="Variables it reads"
+                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Custom automations, or in a project's settings. It doesn't run in a project where one has no value."
+              >
+                <VariableNeedsList needs={needs} />
               </Section>
             ) : null}
 
