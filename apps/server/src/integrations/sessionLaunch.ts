@@ -5,6 +5,8 @@ import {
   AGENT_HARNESSES,
   AgentHarness,
   BRAND,
+  harnessCliSetting,
+  LAUNCHABLE_HARNESSES,
   handoffModeError,
   isAbsolutePath,
   newSessionArgv,
@@ -76,7 +78,7 @@ type LaunchImage = { filename: string; path: string };
 
 /** The CLI a harness runs: the path set in Settings, else its name on PATH. */
 const configuredCli = (settings: AppSettings, harness: AgentHarness): string =>
-  (harness === "claude-code" ? settings.headlessReviewCli : settings.copilotCli) ?? AGENT_HARNESSES[harness].cli;
+  harnessCliSetting(settings, harness) ?? AGENT_HARNESSES[harness].cli;
 
 /**
  * The first message when the prompt can't go on the command line: a pointer to the task, made from the stored task
@@ -219,6 +221,12 @@ export function createSessionLaunch(deps: {
   const prepare = (harnessId: AgentHarness) => {
     const settings = deps.services().settings.get();
     const h = deps.host();
+    if (!AGENT_HARNESSES[harnessId].presetSessionId) {
+      throw new AppError(
+        "VALIDATION",
+        `The board can't start ${AGENT_HARNESSES[harnessId].label} sessions: it picks its own session id`,
+      );
+    }
     const cli = cliStatus(settings, harnessId, h);
     if (!cli.available) {
       throw new AppError(
@@ -352,17 +360,19 @@ export function createSessionLaunch(deps: {
       const picked = model.source === "label" || model.source === "tier" ? model.profile : null;
       const resolved = terminal(settings, h);
       return {
-        clis: AgentHarness.options.map((harness) => cliStatus(settings, harness, h)),
+        clis: LAUNCHABLE_HARNESSES.map((harness) => cliStatus(settings, harness, h)),
         workspaceRoot: root,
         isRepo,
         branches,
         defaultBaseRef,
         models: {
           "claude-code": profileCliModel(model.profile, "claude-code"),
+          codex: profileCliModel(model.profile, "codex"),
           "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
         },
         efforts: {
           "claude-code": profileCliEffort(model.profile, "claude-code"),
+          codex: profileCliEffort(model.profile, "codex"),
           "copilot-cli": profileCliEffort(model.profile, "copilot-cli"),
         },
         tier,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialModel, initialWhere, modelError, startedDescription, toSessionWorkspace } from "./sessionLaunch.logic";
 
-const options = { models: { "claude-code": "opus", "copilot-cli": null } };
+const options = { models: { "claude-code": "opus", codex: null, "copilot-cli": null } };
 
 describe("new session dialog", () => {
   it("starts in a new worktree from the default branch, or in the checkout when it isn't a repository", () => {

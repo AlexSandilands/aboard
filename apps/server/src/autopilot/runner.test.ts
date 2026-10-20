@@ -358,6 +358,24 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     // The effort goes with the Claude Code model; a T3 model standing in for it, and a typed model, carry none.
     expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "").effort).toBe("medium");
     expect(headlessModel(runModel({ tier: "deep" }, options(), null, settings), "").effort).toBeNull();
+    // A model that runs headless on Copilot CLI takes its Copilot effort.
+    const copilot = {
+      ...settings,
+      modelTiers: {
+        ...settings.modelTiers,
+        standard: {
+          description: null,
+          t3: null,
+          headless: "copilot-cli" as const,
+          cli: { "copilot-cli": "gpt-5.4" },
+          cliEffort: { "claude-code": "medium" as const, "copilot-cli": "none" as const },
+        },
+      },
+    };
+    expect(headlessModel(runModel({ tier: "standard" }, options(), null, copilot), "")).toMatchObject({
+      model: "gpt-5.4",
+      effort: "none",
+    });
     expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "opus").effort).toBeNull();
     const light = headlessModel(runModel({ tier: "light" }, options(), null, settings), "");
     expect(light.model).toBeNull();
@@ -414,6 +432,123 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(jobs[0]!.args.join(" ")).toContain("--model haiku");
     expect(jobs[0]!.args.join(" ")).toContain("--effort low");
     expect(patches).toContainEqual({ detail: "Model: Fast, from label quick" });
+  });
+
+  describe("on another harness", () => {
+    const CODEX_ID = "0199a213-81c0-7800-8aa1-bbab2a035a53";
+    const codexProfile = (headless: "codex" | "copilot-cli") => ({
+      id: "other",
+      name: "Other",
+      labels: ["other"],
+      description: null,
+      t3: null,
+      cli: { codex: "gpt-5.5-codex", "copilot-cli": "gpt-5.4" },
+      headless,
+    });
+    const codexOutput = [
+      JSON.stringify({ type: "thread.started", thread_id: CODEX_ID }),
+      JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: "Pushed" } }),
+      JSON.stringify({ type: "turn.completed" }),
+    ];
+
+    it("runs codex exec, links the session as soon as Codex names it, and records no cost", async () => {
+      let linkedWhileRunning: string[] = [];
+      const { h, task, jobs, linked, start, patches } = setup({
+        agent: async (job) => {
+          for (const line of codexOutput) job.onStdoutLine?.(line);
+          linkedWhileRunning = [...linked];
+          return codexOutput.join("\n");
+        },
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")], codexCli: "/opt/codex" });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      const out = await start({ options: { runner: "headless" } });
+
+      const job = jobs[0]!;
+      expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex" });
+      expect(job.args.slice(0, 5)).toEqual([
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "danger-full-access",
+      ]);
+      expect(job.args.join(" ")).toContain("--model gpt-5.5-codex");
+      // Its git uses the worktree's push guard.
+      expect(job.env?.GIT_CONFIG_PARAMETERS).toMatch(/^'core.hooksPath=.*autopilot-hooks'$/);
+      expect(linkedWhileRunning).toEqual([CODEX_ID]);
+      expect(out).toMatchObject({ runner: "headless", sessionId: CODEX_ID, result: "Pushed" });
+      expect(out).not.toHaveProperty("costUsd");
+      expect(patches).toContainEqual({ sessionId: CODEX_ID });
+      expect(patches).toContainEqual({ detail: "Model: Other, from label other, on Codex" });
+      const session = h.services.links.listByKind("agent_session")[0];
+      expect(session).toMatchObject({ ref: { harness: "codex", sessionId: CODEX_ID } });
+    });
+
+    it("runs Copilot CLI with a session id given up front", async () => {
+      const { h, task, jobs, start, patches } = setup({
+        agent: async () =>
+          [
+            JSON.stringify({ type: "session.start", data: { sessionId: SESSION } }),
+            JSON.stringify({ type: "assistant.message", data: { content: "Done" } }),
+          ].join("\n"),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("copilot-cli")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await start({ options: { runner: "headless" } });
+      expect(jobs[0]).toMatchObject({ command: "copilot", label: "Copilot CLI" });
+      expect(jobs[0]!.args[jobs[0]!.args.indexOf("--session-id") + 1]).toBe(SESSION);
+      expect(patches[0]).toMatchObject({ runner: "headless", sessionId: SESSION });
+      expect(h.services.links.listByKind("agent_session")[0]).toMatchObject({ ref: { harness: "copilot-cli" } });
+    });
+
+    it("runs on Claude Code, saying why, when the action needs structured output", async () => {
+      const { h, task, jobs, start, patches } = setup({
+        agent: async () => result({ result: "ok", structured_output: { ok: true }, session_id: SESSION }),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await start({ options: { runner: "headless" }, access: "read-only", outputSchema: { type: "object" } });
+      expect(jobs[0]!.args[0]).toBe("-p");
+      expect(jobs[0]!.args).not.toContain("--model");
+      expect(patches).toContainEqual({
+        detail:
+          "Model: Other, from label other\nCodex can't run this action headless (it needs structured output), so Claude Code ran it. It ran on the CLI's default model.",
+      });
+    });
+
+    it("falls back on the model's own Claude Code model, or a typed Claude model, never a Codex one", async () => {
+      const setupWith = async (typed: string) => {
+        const { h, task, jobs, start, patches } = setup({
+          agent: async () => result({ result: "ok", structured_output: { ok: true }, session_id: SESSION }),
+        });
+        const profile = { ...codexProfile("codex"), cli: { codex: "gpt-5.5-codex", "claude-code": "opus" } };
+        h.services.settings.update({ modelProfiles: [profile] });
+        h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+        await start({
+          options: { runner: "headless", model: typed },
+          access: "read-only",
+          outputSchema: { type: "object" },
+        });
+        const args = jobs[0]!.args;
+        return { model: args[args.indexOf("--model") + 1], patches };
+      };
+      const own = await setupWith("");
+      expect(own.model).toBe("opus");
+      expect(own.patches.some((p) => p.detail?.endsWith("It ran on opus."))).toBe(true);
+      expect((await setupWith("sonnet")).model).toBe("sonnet");
+      // A typed model meant for Codex would fail claude: the model's Claude Code model runs instead.
+      expect((await setupWith("gpt-5.5-codex")).model).toBe("opus");
+    });
+
+    it("fails with the harness's own name", async () => {
+      const { h, task, start } = setup({
+        agent: async () => JSON.stringify({ type: "turn.failed", error: { message: "rate limited" } }),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await expect(start({ options: { runner: "headless" } })).rejects.toThrow("Codex stopped: rate limited");
+    });
   });
 
   it("says when a T3 run's model has no T3 Code model, so T3's default ran", async () => {
@@ -853,6 +988,19 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(job.prompt).toContain("empty temporary folder");
         expect(job.args).toContain("Bash(git push * main)");
         expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+      });
+
+      it("runs an editing agent on Claude Code even when its model runs on Codex: there is no push guard", async () => {
+        const { h, run, jobs, start, patches } = setup({ t3: T3_UP });
+        h.services.settings.update({
+          modelTiers: { light: { description: null, t3: null, cli: { codex: "gpt-5.5-codex" }, headless: "codex" } },
+        });
+        await start({ run: { ...run, taskId: null }, tier: "light", options: {}, repo: repo.checkout });
+        const job = jobs[0]!;
+        expect(job.args[0]).toBe("-p");
+        expect(job.args).toContain("Bash(git push * main)");
+        expect(job.env).toBeUndefined();
+        expect(patches.some((p) => p.detail?.includes("as a run with no worktree has no push guard"))).toBe(true);
       });
 
       it("with a null repo, still tells the agent not to push to the default branch", async () => {

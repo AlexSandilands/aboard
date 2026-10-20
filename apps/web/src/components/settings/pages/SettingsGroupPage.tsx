@@ -134,7 +134,7 @@ function IntegrationsContent() {
         <WithSettings>{(settings) => <CopilotSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.codex">
-        <CodexSection />
+        <WithSettings>{(settings) => <CodexSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.github">
         <WithSettings>

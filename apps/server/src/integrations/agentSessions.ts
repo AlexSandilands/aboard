@@ -5,6 +5,7 @@ import {
   AGENT_HARNESSES,
   AgentSessionRef,
   canFork,
+  harnessCliSetting,
   isRunningSession,
   ResumeSessionInput as ResumeSessionInputSchema,
   resumeArgv,
@@ -217,7 +218,11 @@ export function createSessionStatusReader(deps: {
         refs.filter((r) => r.harness === "claude-code"),
         out,
       );
-      for (const ref of refs) if (ref.harness === "copilot-cli") out.set(sessionKey(ref), copilot(ref));
+      for (const ref of refs) {
+        if (ref.harness === "copilot-cli") out.set(sessionKey(ref), copilot(ref));
+        // Codex leaves no trace of a live process to read: only an Autopilot run says how its session is doing.
+        else if (ref.harness === "codex") out.set(sessionKey(ref), { status: "unknown", inApp: false });
+      }
       return out;
     },
   };
@@ -426,8 +431,7 @@ export function createAgentSessionsIntegration(deps: {
 
   /** The CLI path set in Settings for a harness, else null: then the bare name is left for the terminal's PATH. */
   const configuredCli = (harness: AgentHarness): string | null => {
-    const settings = deps.services().settings.get();
-    return (harness === "claude-code" ? settings.headlessReviewCli : settings.copilotCli)?.trim() || null;
+    return harnessCliSetting(deps.services().settings.get(), harness);
   };
 
   /** The resume argv with the CLI the user configured, so a CLI that isn't on PATH still starts (as a new session does). */

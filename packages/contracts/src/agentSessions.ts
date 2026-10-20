@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-// An agent session is a Claude Code or Copilot CLI conversation linked to a task, so the board can show whether it is
+// An agent session is a Claude Code, Codex or Copilot CLI conversation linked to a task, so the board can show whether it is
 // still running and reopen it in a terminal. See docs/features/agent-sessions.md.
 
-export const AgentHarness = z.enum(["claude-code", "copilot-cli"]);
+export const AgentHarness = z.enum(["claude-code", "codex", "copilot-cli"]);
 export type AgentHarness = z.infer<typeof AgentHarness>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,6 +72,11 @@ export interface HarnessInfo {
   resumeArgs: (sessionId: string) => string[];
   /** Resumes into a new session that starts from this one's history; null when the harness can't. */
   forkArgs: ((sessionId: string) => string[]) | null;
+  /**
+   * Whether the CLI takes a session id it is given (`--session-id`), so the board can start a session and link it
+   * before it runs. Codex picks its own, so the board doesn't start Codex sessions in a terminal.
+   */
+  presetSessionId: boolean;
 }
 
 export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
@@ -81,6 +86,16 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
     cli: "claude",
     resumeArgs: (id) => ["--resume", id],
     forkArgs: (id) => ["--resume", id, "--fork-session"],
+    presetSessionId: true,
+  },
+  codex: {
+    label: "Codex",
+    // Codex puts the thread's id in its tools' environment. Unverified against a real Codex (#252).
+    idEnvVar: "CODEX_THREAD_ID",
+    cli: "codex",
+    resumeArgs: (id) => ["resume", id],
+    forkArgs: null,
+    presetSessionId: false,
   },
   "copilot-cli": {
     label: "Copilot CLI",
@@ -88,6 +103,7 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
     cli: "copilot",
     resumeArgs: (id) => [`--resume=${id}`],
     forkArgs: null,
+    presetSessionId: true,
   },
 };
 
@@ -98,6 +114,11 @@ export function resumeArgv(ref: Pick<AgentSessionRef, "harness" | "sessionId">, 
   if (!args) throw new Error(`${harness.label} sessions can't be forked`);
   return [harness.cli, ...args];
 }
+
+/** The harnesses the board can start a new terminal session in. */
+export const LAUNCHABLE_HARNESSES: readonly AgentHarness[] = AgentHarness.options.filter(
+  (h) => AGENT_HARNESSES[h].presetSessionId,
+);
 
 export const canFork = (harness: AgentHarness): boolean => AGENT_HARNESSES[harness].forkArgs !== null;
 

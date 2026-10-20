@@ -1,8 +1,9 @@
 import {
   MODEL_PROFILES_MAX,
   MODEL_TIERS,
+  AGENT_HARNESSES,
+  AgentHarness,
   modelEffortLevels,
-  type AgentHarness,
   type AgentModel,
   type AgentModels,
   type AppSettings,
@@ -19,6 +20,7 @@ import { CliEffortPicker } from "~/components/handoff/CliEffortPicker";
 import { ModelPicker, TraitsPicker } from "~/components/handoff/T3LaunchPickers";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { Button } from "~/components/ui/button";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { useRescanAgentModels, useUpdateSettings } from "~/state/mutations";
 import { useAgentIntegrations, useAgentModels, useT3ModelCatalog } from "~/state/queries";
@@ -35,6 +37,7 @@ import {
 import {
   createTierEdits,
   saveTierChange,
+  TIER_PROVIDERS,
   visibleTierProviders,
   type TierChange,
   type TierProvider,
@@ -43,10 +46,13 @@ import { SettingsLink, SettingsNote, SettingsRow, SettingsSection } from "./sett
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
   "claude-code": "Choose or type, e.g. sonnet",
+  codex: "e.g. gpt-5.5-codex",
   "copilot-cli": "Choose or type, e.g. gpt-5.4",
 };
 
-const CLI_LABELS: Record<AgentHarness, string> = { "claude-code": "Claude Code", "copilot-cli": "Copilot CLI" };
+const CLI_LABELS: Record<AgentHarness, string> = Object.fromEntries(
+  AgentHarness.options.map((h) => [h, AGENT_HARNESSES[h].label]),
+) as Record<AgentHarness, string>;
 
 /**
  * What each suggested model tier means, in one place for every provider: a description named in copied prompts, the
@@ -126,7 +132,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                     />
                   </TierField>
                 ) : null}
-                {(["claude-code", "copilot-cli"] as const).map((harness) =>
+                {AgentHarness.options.map((harness) =>
                   shown.has(harness) ? (
                     <TierField key={harness} label={CLI_LABELS[harness]}>
                       <CliModelField
@@ -139,6 +145,11 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                     </TierField>
                   ) : null,
                 )}
+                <HeadlessHarness
+                  name={`${label} tier`}
+                  value={setting.headless}
+                  onChange={(value) => save(tier, { field: "headless", value })}
+                />
               </div>
             </SettingsRow>
           );
@@ -152,7 +163,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
           ) : null;
         })}
         {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
-        {shown.size < 3 && !agents.isPending ? (
+        {shown.size < TIER_PROVIDERS.length && !agents.isPending ? (
           <p className="px-3 py-3 text-xs text-muted-foreground/80 sm:px-4">
             A provider's model shows here once it is set up. See{" "}
             <SettingsLink to="integrations">Integrations</SettingsLink>.
@@ -294,7 +305,7 @@ function CustomModelsSection({
                 />
               </TierField>
             ) : null}
-            {(["claude-code", "copilot-cli"] as const).map((harness) =>
+            {AgentHarness.options.map((harness) =>
               shown.has(harness) ? (
                 <TierField key={harness} label={CLI_LABELS[harness]}>
                   <CliModelField
@@ -307,6 +318,11 @@ function CustomModelsSection({
                 </TierField>
               ) : null,
             )}
+            <HeadlessHarness
+              name={profile.name}
+              value={profile.headless}
+              onChange={(value) => change(profile.id, { field: "headless", value })}
+            />
           </div>
         </SettingsRow>
       ))}
@@ -374,6 +390,49 @@ function CliModelField({
 }
 
 /** One line of a tier row: the provider's name, then its field. */
+const HEADLESS_ITEMS = AgentHarness.options.map((harness) => ({
+  value: harness,
+  label: AGENT_HARNESSES[harness].label,
+}));
+
+/**
+ * The harness headless Autopilot runs on this model use, with the model set for it above. Runs that need what only
+ * Claude Code can do (structured output, a review of untrusted text) still run there.
+ */
+function HeadlessHarness({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: AgentHarness | undefined;
+  onChange: (value: AgentHarness) => void;
+}) {
+  return (
+    <TierField label="Headless runs">
+      <Select
+        items={HEADLESS_ITEMS}
+        value={value ?? "claude-code"}
+        onValueChange={(next) => {
+          const parsed = AgentHarness.safeParse(next);
+          if (parsed.success) onChange(parsed.data);
+        }}
+      >
+        <SelectTrigger size="sm" className="sm:w-40" aria-label={`${name} headless harness`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {HEADLESS_ITEMS.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </TierField>
+  );
+}
+
 function TierField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">

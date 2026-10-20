@@ -319,8 +319,16 @@ describe("starting a session from the board", () => {
     const res = await app.request("/api/agent-clis");
     expect(await res.json()).toEqual([
       { harness: "claude-code", available: true, path: join(app.root, "bin", "claude") },
+      { harness: "codex", available: false, path: null },
       { harness: "copilot-cli", available: false, path: null },
     ]);
+  });
+
+  it("refuses to start a Codex session, which picks its own id", async () => {
+    const app = appWith();
+    const res = await app.start({ harness: "codex" });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain("picks its own session id");
   });
 
   it("offers the tier's CLI model and the checkout when the folder isn't a repository", async () => {

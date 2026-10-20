@@ -142,9 +142,11 @@ export function newSessionArgv(input: {
   name: string;
   prompt: string;
 }): string[] {
+  // An effort the CLI doesn't take (Codex has none) is left off rather than failing the session at once.
+  const effort = cliEffortFor(input.harness, input.effort);
   const model = [
     ...(input.model ? ["--model", input.model] : []),
-    ...(input.effort ? [input.harness === "claude-code" ? "--effort" : "--reasoning-effort", input.effort] : []),
+    ...(effort ? [input.harness === "claude-code" ? "--effort" : "--reasoning-effort", effort] : []),
   ];
   const cli = AGENT_HARNESSES[input.harness].cli;
   return input.harness === "claude-code"

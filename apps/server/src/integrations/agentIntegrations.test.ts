@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import {
   createAgentIntegrations,
+  codexMcpEntries,
   mcpEntriesOf,
   parseClaudeMcpList,
   parseClaudeMcpScope,
@@ -127,6 +128,7 @@ function service(
   const settings = {
     headlessReviewCli: null as string | null,
     copilotCli: null as string | null,
+    codexCli: null as string | null,
   };
   const svc = createAgentIntegrations({
     services: () => ({ settings: { get: () => settings } }) as never,
@@ -299,6 +301,36 @@ describe("agent integrations: Copilot CLI", () => {
   });
 });
 
+describe("agent integrations: Codex", () => {
+  const TOML = [
+    'model = "gpt-5.5"',
+    "[mcp_servers.other]",
+    'command = "npx"',
+    '[mcp_servers."my board"]',
+    'url = "http://localhost:4317/mcp"',
+    '[mcp_servers."my board".http_headers]',
+    'Authorization = "Bearer x"',
+    'url = "http://elsewhere/mcp"',
+  ].join("\n");
+
+  it("reads server names and their urls from config.toml, and nothing in sub-tables", () => {
+    expect(codexMcpEntries(TOML)).toEqual([
+      { name: "other", url: null },
+      { name: "my board", url: "http://localhost:4317/mcp" },
+    ]);
+  });
+
+  it("finds the board in config.toml under CODEX_HOME", async () => {
+    const read = (p: string) => (p.replace(/\\/g, "/") === "/x/config.toml" ? TOML : null);
+    const { svc } = service({ readFile: read }, { env: { CODEX_HOME: "/x" } });
+    const codex = (await svc.status()).harnesses.find((h) => h.harness === "codex")!;
+    expect(codex.cli).toMatchObject({ found: true, path: "/bin/codex" });
+    expect(codex.mcp).toMatchObject({ registered: true, name: "my board", scope: "user" });
+    const none = (await service({}).svc.status()).harnesses.find((h) => h.harness === "codex")!;
+    expect(none.mcp).toMatchObject({ registered: false, detail: "No Codex config yet" });
+  });
+});
+
 describe("agent integrations: refresh", () => {
   it("joins a check that is still running instead of starting another", async () => {
     let release: (() => void) | undefined;
@@ -329,15 +361,15 @@ describe("agent integrations: cache", () => {
     const { svc, settings } = service({ version }, { now: () => time });
     await svc.status();
     await svc.status();
-    expect(version).toHaveBeenCalledTimes(2); // claude and copilot, once
+    expect(version).toHaveBeenCalledTimes(3); // claude, codex and copilot, once
     time = 61_000;
     await svc.status();
-    expect(version).toHaveBeenCalledTimes(4);
-    await svc.status(true);
     expect(version).toHaveBeenCalledTimes(6);
+    await svc.status(true);
+    expect(version).toHaveBeenCalledTimes(9);
     settings.copilotCli = "/opt/copilot";
     await svc.status();
-    expect(version).toHaveBeenCalledTimes(8);
+    expect(version).toHaveBeenCalledTimes(12);
   });
 });
 
@@ -356,11 +388,11 @@ describe("GET /api/agent-integrations", () => {
     });
     const first = await h.request("/api/agent-integrations");
     const body = (await first.json()) as AgentIntegrations;
-    expect(body.harnesses.map((x) => x.harness)).toEqual(["claude-code", "copilot-cli"]);
+    expect(body.harnesses.map((x) => x.harness)).toEqual(["claude-code", "codex", "copilot-cli"]);
     expect(body.mcpUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     await h.request("/api/agent-integrations");
     const calls = version.mock.calls.length;
     await h.request("/api/agent-integrations?refresh=1");
-    expect(version.mock.calls.length).toBe(calls + 2);
+    expect(version.mock.calls.length).toBe(calls + 3);
   });
 });

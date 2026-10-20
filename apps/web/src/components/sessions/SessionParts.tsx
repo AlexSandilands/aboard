@@ -1,6 +1,6 @@
 import { canFork, type AgentHarness } from "@repo/contracts";
 import { CopyIcon, GitForkIcon, SquareTerminalIcon } from "lucide-react";
-import { ClaudeAI, CopilotCli, T3Code } from "~/components/handoff/providerIcons";
+import { ClaudeAI, CopilotCli, OpenAI, T3Code } from "~/components/handoff/providerIcons";
 import { MenuItem } from "~/components/ui/menu";
 import { cn } from "~/lib/utils";
 import { handoffClis } from "~/components/handoff/handoff.logic";
@@ -8,9 +8,9 @@ import { useAgentClis, useSettings } from "~/state/queries";
 import { harnessAvailable, type SessionLink } from "./sessions.logic";
 import { copyResumeCommand } from "./useSessionActions";
 
-/** The harness's mark: Claude's logo, or the stand-in Copilot mark. */
+/** The harness's mark: Claude's logo, OpenAI's for Codex, or the stand-in Copilot mark. */
 export function HarnessIcon({ harness, className }: { harness: AgentHarness; className?: string }) {
-  const Icon = harness === "claude-code" ? ClaudeAI : CopilotCli;
+  const Icon = harness === "claude-code" ? ClaudeAI : harness === "codex" ? OpenAI : CopilotCli;
   return <Icon aria-hidden className={cn("size-3.5 shrink-0", className)} />;
 }
 

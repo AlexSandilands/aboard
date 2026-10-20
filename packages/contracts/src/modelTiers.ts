@@ -53,6 +53,8 @@ export type CliEffort = z.infer<typeof CliEffort>;
  */
 export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
+  // Codex has no effort of its own here: `codex exec` takes none on its command line.
+  codex: [],
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 
@@ -83,6 +85,11 @@ export const ModelTierSetting = z.object({
    * harness has a model set here.
    */
   cliEffort: CliEfforts.optional(),
+  /**
+   * The harness a headless Autopilot run on this model uses, with its `cli` model. Unset (and settings saved before it
+   * existed) is Claude Code.
+   */
+  headless: AgentHarness.optional(),
 });
 export type ModelTierSetting = z.infer<typeof ModelTierSetting>;
 

@@ -14,6 +14,7 @@ export interface TierProviderState {
 export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: string }> = [
   { provider: "t3", label: "T3 Code" },
   { provider: "claude-code", label: "Claude Code" },
+  { provider: "codex", label: "Codex" },
   { provider: "copilot-cli", label: "Copilot CLI" },
 ];
 
@@ -43,7 +44,7 @@ export function visibleTierProviders(
   });
 }
 
-/** One edit to a tier: the description, T3 Code's model, or the `--model` or effort of one CLI. */
+/** One edit to a tier: the description, T3 Code's model, the `--model` or effort of one CLI, or its headless harness. */
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
@@ -54,7 +55,9 @@ export type TierChange =
       /** The efforts the new model takes, when known: the tier's effort is dropped if it isn't one of them. */
       levels?: readonly CliEffort[];
     }
-  | { field: "cliEffort"; harness: AgentHarness; value: CliEffort | null };
+  | { field: "cliEffort"; harness: AgentHarness; value: CliEffort | null }
+  /** The harness headless Autopilot runs use; Claude Code is stored as no choice. */
+  | { field: "headless"; value: AgentHarness };
 
 /** The efforts without the harness's: null clears it, and nothing is left behind as an empty record. */
 function withEffort(
@@ -88,6 +91,10 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       const { cliEffort: _cliEffort, ...rest } = current;
       const cliEffort = withEffort(current.cliEffort, change.harness, change.value);
       return cliEffort ? { ...rest, cliEffort } : rest;
+    }
+    case "headless": {
+      const { headless: _headless, ...rest } = current;
+      return change.value === "claude-code" ? rest : { ...rest, headless: change.value };
     }
   }
 }
