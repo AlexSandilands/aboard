@@ -120,17 +120,27 @@ An automation that needs an agent picks its **runner** in its settings:
 - **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
 - **T3 Code only**: the thread gets the task's model (below), and never more access than T3 Code's
   own default. You can lower it further.
-- **Headless only**: `claude -p` in a git worktree of its own under the board's data folder, never your
-  checkout, on a new `autopilot/…` branch. It has a budget and a timeout. Its session is linked on the card,
-  so **Open in terminal** picks it up where it stopped.
+- **Headless only**: a CLI in a git worktree of its own under the board's data folder, never your checkout, on
+  a new `autopilot/…` branch: `claude -p` unless the run's model says otherwise (below). It has a timeout, and
+  on Claude Code a budget. Its session is linked on the card, so **Open in terminal** picks it up where it stopped.
 
 Each agent automation also has a **Model**: **From the task** (the default), a tier, or one of your **Custom
 models** from Settings → Model tiers. From the task means a custom model one of the task's labels picks (say a
-`codex61` label on a model set to T3 Code's Codex), else the task's suggested tier. A headless run uses the model's
-Claude Code model; one set only for T3 Code runs headless on the CLI's default, and the run says so. **Headless model
-override** still takes a model typed as `claude --model` takes it.
+`codex61` label on a model set to T3 Code's Codex), else the task's suggested tier.
 
-Headless agents can't force-push, push to the default branch or merge a pull request. A worktree is removed
+A headless run runs on the model's **Headless runs** harness (Settings → Model tiers, on each tier and custom model):
+Claude Code by default, or **Codex** (`codex exec`) or **Copilot CLI**, with the model you set for that harness. So a
+`codex61` label can mean Codex in T3 Code and headless alike. Set the CLI's path in Settings → Integrations if it
+isn't on your PATH, and register the board's MCP server with it ([connecting agents](connect-agents.md)) so the agent
+can move its task. Some things only Claude Code can do: a reviewer's verdict, reading untrusted text locked down, a
+digest with no tools. Those runs stay on Claude Code (its default model), and the run says why. Codex and Copilot
+have no budget and report no cost, so only the timeout stops them and the spend cap doesn't count them. A model
+with none set for its harness runs on the CLI's default, and the run says so. **Headless model override** still
+takes a model typed as the CLI's `--model` takes it.
+
+Headless agents can't force-push, delete a branch or push to the default branch: their worktree's `pre-push` hook
+refuses it, whatever the CLI (your repository's own hooks still run). Claude Code and Copilot CLI are also refused
+`gh pr merge`; Codex is only told not to merge. A worktree is removed
 once the task's PR merges, or after **Worktree retention** days (7 by default). One with uncommitted changes is
 kept.
 
