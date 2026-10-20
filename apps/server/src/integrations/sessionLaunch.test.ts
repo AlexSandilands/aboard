@@ -344,6 +344,41 @@ describe("starting a session from the board", () => {
     });
   });
 
+  it("saves a tier's and a custom model's CLI efforts, dropping one whose model isn't set", () => {
+    const app = appWith();
+    const saved = app.services.settings.update({
+      modelTiers: {
+        deep: {
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus", "copilot-cli": " " },
+          cliEffort: { "claude-code": "high", "copilot-cli": "low" },
+        },
+      },
+      modelProfiles: [
+        {
+          id: "fast",
+          name: "Fast",
+          labels: [],
+          description: null,
+          t3: null,
+          cliEffort: { "claude-code": "low" },
+        },
+        {
+          id: "slow",
+          name: "Slow",
+          labels: [],
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus" },
+          cliEffort: { "claude-code": "max" },
+        },
+      ],
+    });
+    expect(saved.modelTiers.deep.cliEffort).toEqual({ "claude-code": "high" });
+    expect(saved.modelProfiles.map((p) => p.cliEffort)).toEqual([undefined, { "claude-code": "max" }]);
+  });
+
   it("won't save a tier's CLI model that isn't a model name", () => {
     const app = appWith();
     expect(() =>

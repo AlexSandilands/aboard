@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "./brand.ts";
-import { EMPTY_MODEL_TIERS } from "./modelTiers.ts";
+import { EMPTY_MODEL_TIERS, ModelTiers } from "./modelTiers.ts";
 import {
   CliModel,
   isTaskWindowName,
   newSessionArgv,
   sessionLabel,
   taskWindowName,
+  tierCliEffort,
   tierCliModel,
 } from "./sessionLaunch.ts";
 
@@ -49,6 +50,22 @@ describe("models and windows", () => {
     expect(tierCliModel(tiers, "deep", "copilot-cli")).toBeNull();
     expect(tierCliModel(tiers, "light", "claude-code")).toBeNull();
     expect(tierCliModel(tiers, null, "claude-code")).toBeNull();
+  });
+
+  it("reads a tier's effort for a CLI only while it has a model there", () => {
+    const tiers = ModelTiers.parse({
+      ...EMPTY_MODEL_TIERS,
+      deep: {
+        description: null,
+        t3: null,
+        cli: { "claude-code": "opus" },
+        cliEffort: { "claude-code": "max", "copilot-cli": "low" },
+      },
+    });
+    expect(tierCliEffort(tiers, "deep", "claude-code")).toBe("max");
+    expect(tierCliEffort(tiers, "deep", "copilot-cli")).toBeNull();
+    expect(tierCliEffort(tiers, "light", "claude-code")).toBeNull();
+    expect(tierCliEffort(tiers, null, "claude-code")).toBeNull();
   });
 
   it("names a task's window after the product and the task, in characters wt takes as a name", () => {

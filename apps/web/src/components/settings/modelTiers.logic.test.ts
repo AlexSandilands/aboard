@@ -147,4 +147,33 @@ describe("applyTierChange", () => {
     const next = applyTierChange({ description: null, t3: null }, { field: "cli", harness: "claude-code", value: "x" });
     expect(next).toEqual({ description: null, t3: null, cli: { "claude-code": "x" } });
   });
+
+  it("sets and clears one CLI's effort, leaving no empty record behind", () => {
+    const base = { description: null, t3: null, cli: { "claude-code": "opus", "copilot-cli": "gpt-5" } };
+    const high = applyTierChange(base, { field: "cliEffort", harness: "claude-code", value: "high" });
+    expect(high.cliEffort).toEqual({ "claude-code": "high" });
+    const both = applyTierChange(high, { field: "cliEffort", harness: "copilot-cli", value: "none" });
+    expect(both.cliEffort).toEqual({ "claude-code": "high", "copilot-cli": "none" });
+    const one = applyTierChange(both, { field: "cliEffort", harness: "copilot-cli", value: null });
+    expect(one.cliEffort).toEqual({ "claude-code": "high" });
+    expect(applyTierChange(one, { field: "cliEffort", harness: "claude-code", value: null })).toEqual(base);
+  });
+
+  it("drops a CLI's effort when its model is cleared, and keeps it when the model changes", () => {
+    const withEffort = {
+      description: null,
+      t3: null,
+      cli: { "claude-code": "opus", "copilot-cli": "gpt-5" },
+      cliEffort: { "claude-code": "high" as const, "copilot-cli": "low" as const },
+    };
+    expect(applyTierChange(withEffort, { field: "cli", harness: "claude-code", value: "sonnet" }).cliEffort).toEqual({
+      "claude-code": "high",
+      "copilot-cli": "low",
+    });
+    const cleared = applyTierChange(withEffort, { field: "cli", harness: "claude-code", value: null });
+    expect(cleared.cli).toEqual({ "claude-code": null, "copilot-cli": "gpt-5" });
+    expect(cleared.cliEffort).toEqual({ "copilot-cli": "low" });
+    const lastCleared = applyTierChange(cleared, { field: "cli", harness: "copilot-cli", value: " " });
+    expect(lastCleared).not.toHaveProperty("cliEffort");
+  });
 });

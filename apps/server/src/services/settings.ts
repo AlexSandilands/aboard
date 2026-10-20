@@ -110,14 +110,36 @@ function cliModels(cli: ModelTierSetting["cli"]): ModelTierSetting["cli"] {
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
+/**
+ * A tier's CLI efforts for the harnesses that have a model set: without one there is nothing for the effort to go
+ * with, so a leftover from a cleared model is dropped. The levels themselves are checked by the schema.
+ */
+function cliEfforts(
+  efforts: ModelTierSetting["cliEffort"],
+  cli: ModelTierSetting["cli"],
+): ModelTierSetting["cliEffort"] {
+  if (!efforts || !cli) return undefined;
+  const entries = Object.entries(efforts).filter(([harness]) => cli[harness as keyof typeof cli]);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 /** The given tiers over the current ones. Blank descriptions are stored as none, so the T3 label fallback applies. */
 const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): ModelTiers => ({
   ...current,
   ...Object.fromEntries(
     Object.entries(input).map(([tier, setting]) => {
-      const { cli: _cli, ...rest } = setting;
+      const { cli: _cli, cliEffort: _cliEffort, ...rest } = setting;
       const cli = cliModels(setting.cli);
-      return [tier, { ...rest, description: setting.description?.trim() || null, ...(cli ? { cli } : {}) }];
+      const cliEffort = cliEfforts(setting.cliEffort, cli);
+      return [
+        tier,
+        {
+          ...rest,
+          description: setting.description?.trim() || null,
+          ...(cli ? { cli } : {}),
+          ...(cliEffort ? { cliEffort } : {}),
+        },
+      ];
     }),
   ),
 });
@@ -125,9 +147,15 @@ const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): Model
 /** Custom models as stored: blank descriptions as none and CLI models checked, like a tier's. */
 const storedProfiles = (profiles: readonly ModelProfile[]): ModelProfile[] =>
   profiles.map((profile) => {
-    const { cli: _cli, ...rest } = profile;
+    const { cli: _cli, cliEffort: _cliEffort, ...rest } = profile;
     const cli = cliModels(profile.cli);
-    return { ...rest, description: profile.description?.trim() || null, ...(cli ? { cli } : {}) };
+    const cliEffort = cliEfforts(profile.cliEffort, cli);
+    return {
+      ...rest,
+      description: profile.description?.trim() || null,
+      ...(cli ? { cli } : {}),
+      ...(cliEffort ? { cliEffort } : {}),
+    };
   });
 
 /**

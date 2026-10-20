@@ -1,5 +1,5 @@
 // Pure helpers for the Model tiers page: which providers' fields a tier row shows, and the tier one edit sends.
-import type { AgentHarness, ModelProfile, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
+import type { AgentHarness, CliEffort, ModelProfile, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
 
 export type TierProvider = "t3" | AgentHarness;
 
@@ -43,11 +43,23 @@ export function visibleTierProviders(
   });
 }
 
-/** One edit to a tier: the description, T3 Code's model, or the `--model` of one CLI. */
+/** One edit to a tier: the description, T3 Code's model, or the `--model` or effort of one CLI. */
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
-  | { field: "cli"; harness: AgentHarness; value: string | null };
+  | { field: "cli"; harness: AgentHarness; value: string | null }
+  | { field: "cliEffort"; harness: AgentHarness; value: CliEffort | null };
+
+/** The efforts without the harness's: null clears it, and nothing is left behind as an empty record. */
+function withEffort(
+  efforts: ModelTierSetting["cliEffort"],
+  harness: AgentHarness,
+  value: CliEffort | null,
+): ModelTierSetting["cliEffort"] {
+  const { [harness]: _old, ...others } = efforts ?? {};
+  const next = value ? { ...others, [harness]: value } : others;
+  return Object.keys(next).length ? next : undefined;
+}
 
 /** The tier with the change applied, leaving every other field (and the other CLI's model) as it was. */
 export function applyTierChange(current: ModelTierSetting, change: TierChange): ModelTierSetting {
@@ -56,8 +68,19 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       return { ...current, description: change.value };
     case "t3":
       return { ...current, t3: change.value };
-    case "cli":
-      return { ...current, cli: { ...current.cli, [change.harness]: change.value } };
+    case "cli": {
+      const next = { ...current, cli: { ...current.cli, [change.harness]: change.value } };
+      // Clearing the model leaves its effort nothing to go with.
+      if (change.value?.trim()) return next;
+      const { cliEffort: _cliEffort, ...rest } = next;
+      const cliEffort = withEffort(current.cliEffort, change.harness, null);
+      return cliEffort ? { ...rest, cliEffort } : rest;
+    }
+    case "cliEffort": {
+      const { cliEffort: _cliEffort, ...rest } = current;
+      const cliEffort = withEffort(current.cliEffort, change.harness, change.value);
+      return cliEffort ? { ...rest, cliEffort } : rest;
+    }
   }
 }
 

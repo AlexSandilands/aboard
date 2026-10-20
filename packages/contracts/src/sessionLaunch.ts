@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentHarness, AGENT_HARNESSES } from "./agentSessions.ts";
 import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
-import type { ModelTier, ModelTiers } from "./modelTiers.ts";
+import type { CliEffort, ModelTier, ModelTiers } from "./modelTiers.ts";
 
 // Starting a new Claude Code or Copilot CLI session on a task from the board: the CLI opens in a terminal with the
 // hand-off prompt, in a new worktree or the project's checkout. See docs/features/agent-sessions.md.
@@ -147,3 +147,7 @@ export function newSessionArgv(input: {
 /** The model a harness's CLI runs for a tier, from Settings → Model tiers, or null for the CLI's default. */
 export const tierCliModel = (tiers: ModelTiers, tier: ModelTier | null, harness: AgentHarness): string | null =>
   (tier && tiers[tier].cli?.[harness]?.trim()) || null;
+
+/** The effort that goes with a tier's CLI model, or null for the CLI's default. None without a model set. */
+export const tierCliEffort = (tiers: ModelTiers, tier: ModelTier | null, harness: AgentHarness): CliEffort | null =>
+  (tierCliModel(tiers, tier, harness) && tier && tiers[tier].cliEffort?.[harness]) || null;
