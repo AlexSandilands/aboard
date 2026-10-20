@@ -226,7 +226,8 @@ print("Jira project:", ctx["vars"]["jira_key"])
 
 - **An automation that needs a variable doesn't run where it has none.** If a prompt, command or script names a
   variable (as above) and a project has no value for it, that project gets no run. Its row says so in orange, "Needs
-  `jira_key` in: billing", and a dry run records the same. A project can opt out of one by overriding it with an empty
+  `jira_key` in: billing", and a dry run records the same. Once you set the value it starts from that moment, like
+  switching it on: what happened while the value was missing doesn't all run at once. A project can opt out of one by overriding it with an empty
   value. To read a variable as optional, use `ctx["vars"].get("team", "")` in Python (or check the environment
   variable yourself): a name the board doesn't see isn't required. The editor lists the variables it found under
   **Variables it reads**, with the projects that have no value.

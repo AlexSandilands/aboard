@@ -1646,7 +1646,7 @@ describe("custom automations: variables and the repository URL", () => {
     expect(beta.context).toMatchObject({ project: { id: other.id, repoUrl: "" } });
   });
 
-  it("skips a project missing a variable the action names, says so on the row, and runs once it is set", async () => {
+  it("skips a project missing a variable the action names, and says so on the row", async () => {
     const { s, project, other, define, pass, runsOf, shellRuns, shell } = setup();
     s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
     const custom = define({
@@ -1668,6 +1668,48 @@ describe("custom automations: variables and the repository URL", () => {
     s.autopilot.setScope("project", other.id, customAutomationKey(custom.id), { mode: "off" });
     s.settings.update({ automationVariables: [] });
     expect(row().needs).toBe("Needs `jira_key` in: Alpha");
+  });
+
+  it("starts afresh once the variable is set: what happened meanwhile doesn't fire, what happens next does", async () => {
+    const { s, other, task, define, pass, shellRuns, shell } = setup();
+    define({
+      name: "Ping",
+      trigger: { kind: "status_change", to: "review" },
+      action: shell(`./ping.sh "$${brandEnv("VAR_JIRA_KEY")}"`),
+    });
+    const early = task("Moved while the key was missing", { projectId: other.id });
+    s.tasks.move(early.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    await tick();
+    s.projects.update(other.id, { variables: [{ name: "jira_key", value: "BET" }] });
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    await tick();
+    const later = task("Moved once it was set", { projectId: other.id });
+    s.tasks.move(later.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_TITLE")])).toEqual(["Moved once it was set"]);
+    expect(shellRuns[0]!.env[brandEnv("VAR_JIRA_KEY")]).toBe("BET");
+  });
+
+  it("re-arms only the projects a board-wide value fills, so a schedule's missed slot doesn't run", async () => {
+    const { s, project, other, define, shell } = setup();
+    s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+    const custom = define({
+      name: "Sync",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: shell(`./sync.sh "$${brandEnv("VAR_JIRA_KEY")}"`),
+    });
+    const before = s.customAutomations.get(custom.id).armedProjects;
+    await tick();
+    s.settings.update({ automationVariables: [{ name: "jira_key", value: "BRD" }] });
+    const armed = s.customAutomations.get(custom.id).armedProjects;
+    expect(armed[project.id]).toBe(before[project.id]);
+    expect(Date.parse(armed[other.id]!)).toBeGreaterThan(Date.parse(before[other.id]!));
+    // A later change that leaves every project with a value re-arms nothing.
+    s.settings.update({ automationVariables: [{ name: "jira_key", value: "NEW" }] });
+    expect(s.customAutomations.get(custom.id).armedProjects).toEqual(armed);
   });
 
   it("names the missing variable in a dry run instead of a run", async () => {

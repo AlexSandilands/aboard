@@ -869,7 +869,10 @@ most 50 per list; `automationVariables.ts` in contracts).
   command. A method call such as `vars.get("x")` reads one as optional and isn't counted, and a name built at run time
   isn't seen. A variable has a value when it is set and not blank, so a project can opt out by overriding one with
   nothing. The custom automation's `check` drops every project missing one (`missingVariables`): no candidate, no run,
-  no check script. In a dry run it records one skipped run per project and set of names (`needs:<project>:<names>`)
+  no check script. What happened meanwhile is dropped, not held: when a settings or project write leaves a project with
+  every variable an automation needs where it lacked one before, `rearmWhereFilled` (wrapped around both updates in
+  `createServices`) re-arms the automation there (`rearm`, with the project's epics that have an arming of their own),
+  so it starts from that moment rather than firing every move, PR event or missed slot of the gap. In a dry run it records one skipped run per project and set of names (`needs:<project>:<names>`)
   saying "Needs `jira_key` in billing". The catalogue entry has `Automation.needs(projects)`, which the overview calls
   with the projects the automation is on in (directly or through an epic) to give `AutopilotAutomation.needs`, "Needs
   `jira_key` in: billing", shown in orange on its rows (`NeedsVariablesWarning`). Unlike `blocked`, it doesn't stop the

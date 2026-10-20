@@ -47,8 +47,6 @@ export function createTestScript(deps: {
     }
     // A check has no task, like the scheduled agent it belongs to; an action may be given one to read its values.
     const task = input.role === "action" && input.taskId ? deps.task(input.taskId) : null;
-    if (running) throw new AppError("CONFLICT", "A test run is already going: wait for it to finish");
-    running = true;
     // The project's variables and repository URL, as a real run gets them. A variable the draft names that has no
     // value here is simply absent: a test runs anyway, where a real run would be skipped.
     const scope = {
@@ -59,6 +57,9 @@ export function createTestScript(deps: {
       ...customValues({ name: input.name }, project, task, {}, scope),
       inputs: input.inputs,
     };
+    // Only now: resolving the repository URL awaits, and a throw before here must not leave the flag set.
+    if (running) throw new AppError("CONFLICT", "A test run is already going: wait for it to finish");
+    running = true;
     const started = now();
     const result = (patch: Partial<TestScriptResult>): TestScriptResult => ({
       error: null,

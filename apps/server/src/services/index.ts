@@ -1,4 +1,10 @@
-import { AUTOPILOT_RECURRING, customAutomationId, epicArmKey, type T3IntegrationStatus } from "@repo/contracts";
+import {
+  AUTOPILOT_RECURRING,
+  customAutomationId,
+  effectiveVariables,
+  epicArmKey,
+  type T3IntegrationStatus,
+} from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -133,6 +139,28 @@ export function createServices(deps: ServiceDeps): Services {
       .list()
       .map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns, repoUrl, boardVariables })),
   ];
+
+  // A project that gets the last variable an automation needs starts it afresh there, rather than acting on everything
+  // that happened while the value was missing.
+  const variablesNow = () =>
+    new Map(
+      projects.list({ includeArchived: true }).map((p) => [p.id, effectiveVariables(boardVariables(), p)] as const),
+    );
+  const rearmingVariables =
+    <A extends unknown[], R>(write: (...args: A) => R, changes: (...args: A) => boolean) =>
+    (...args: A): R => {
+      if (!changes(...args)) return write(...args);
+      const before = variablesNow();
+      const result = write(...args);
+      customAutomations.rearmWhereFilled(before, variablesNow());
+      return result;
+    };
+
+  // Wrapped in place, so every service holding these objects goes through it.
+  const updateProject = projects.update.bind(projects);
+  const updateSettings = settings.update.bind(settings);
+  projects.update = rearmingVariables(updateProject, (_id, input) => input.variables !== undefined);
+  settings.update = rearmingVariables(updateSettings, (input) => input.automationVariables !== undefined);
 
   return {
     projects,

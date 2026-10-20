@@ -14,6 +14,8 @@ import {
   UpdateCustomAutomationInput,
   type AutomationVariable,
   type BundleSkill,
+  variableHasValue,
+  variablesNamedBy,
   type CustomAutomation,
   type CustomDefinition,
   type ImportedAutomation,
@@ -62,6 +64,15 @@ export interface CustomAutomationsService {
    * or a cap).
    */
   rearm(id: string, scopeKeys: readonly string[]): void;
+  /**
+   * Variables changed: each automation that names one starts afresh in the projects (and their epics with an arming
+   * of their own) that lacked one of its variables before and have them all now, so what happened while a value was
+   * missing doesn't all fire at once. `before` and `after` are each project's effective variables.
+   */
+  rearmWhereFilled(
+    before: ReadonlyMap<string, Record<string, string>>,
+    after: ReadonlyMap<string, Record<string, string>>,
+  ): void;
   /**
    * These epics now have a setting of their own, so their tasks no longer read the project's arming time. Carry it
    * over to the epic (the later of the project's and any the epic has), so an epic that was already on keeps the
@@ -152,7 +163,7 @@ export function createCustomAutomationsService(
     }
   };
 
-  return {
+  const service: CustomAutomationsService = {
     list: () => repos.autopilotCustom.all(),
 
     testScript,
@@ -253,6 +264,27 @@ export function createCustomAutomationsService(
       });
     },
 
+    rearmWhereFilled(before, after) {
+      for (const custom of repos.autopilotCustom.all()) {
+        const named = variablesNamedBy(custom.action);
+        if (named.length === 0) continue;
+        const filled = [...after].flatMap(([projectId, vars]) =>
+          named.some((n) => !variableHasValue(before.get(projectId) ?? {}, n)) &&
+          named.every((n) => variableHasValue(vars, n))
+            ? [projectId]
+            : [],
+        );
+        if (filled.length === 0) continue;
+        // An epic with its own arming reads that instead of the project's, so it starts afresh too.
+        const epics = Object.keys(custom.armedProjects).filter((key) => {
+          if (!key.startsWith(epicArmKey(""))) return false;
+          const epic = repos.tasks.get(key.slice(epicArmKey("").length));
+          return epic !== null && filled.includes(epic.projectId);
+        });
+        service.rearm(custom.id, [...filled, ...epics]);
+      }
+    },
+
     inheritEpicArming(id, epicIds) {
       core.write(() => {
         const current = repos.autopilotCustom.get(id);
@@ -291,4 +323,5 @@ export function createCustomAutomationsService(
       );
     },
   };
+  return service;
 }
