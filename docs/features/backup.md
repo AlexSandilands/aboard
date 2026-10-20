@@ -56,6 +56,8 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
 - **Autopilot runs** are history, so they stay out; Autopilot's settings go in ([autopilot](autopilot.md)). The same
   goes for deleting them: the run history page deletes runs by hand ([autopilot](autopilot.md#run-history)), and a
   backup can't bring them back.
+- **Automation drafts** (`autopilot_drafts`, [autopilot](autopilot.md#drafts)) are a hand-off from an agent that
+  expires; only importing one makes it the user's, as a custom automation, which is backed up.
 - **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on
   every poll (`pr_changes_json` is when each PR state began, for Autopilot's custom PR triggers).
   Dumping them would make every scheduled run a commit; the pollers refill them after a restore.

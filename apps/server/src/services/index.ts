@@ -129,6 +129,7 @@ export function createServices(deps: ServiceDeps): Services {
     taskSummary: (id) => tasks.service.summary(id),
     repoUrl,
     boardVariables,
+    notifications,
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();

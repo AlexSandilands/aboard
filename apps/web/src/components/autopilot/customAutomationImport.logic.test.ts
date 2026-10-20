@@ -79,6 +79,12 @@ describe("a file with a script", () => {
     expect(importProblem(bundle, confirmed)).toBeNull();
   });
 
+  it("names the agent's draft it came from, so the import deletes it", () => {
+    const bundle = scripted();
+    expect(draftToRequest(bundle, initialDraft(bundle), "draft-1").draftId).toBe("draft-1");
+    expect(draftToRequest(bundle, initialDraft(bundle))).not.toHaveProperty("draftId");
+  });
+
   it("is read from a file, and a file without a script needs no confirmation", () => {
     expect(readBundle(JSON.stringify(scripted()))).toMatchObject({ ok: true, bundle: { version: 2 } });
     expect(needsScriptConfirm(dispatch(), initialDraft(dispatch()))).toBe(false);

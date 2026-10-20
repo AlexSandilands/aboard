@@ -113,6 +113,12 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    `retry_autopilot_run(task)` hands it back to Autopilot, which acts again on its next pass if there is still
    work. Retry once the cause is gone, and never push an empty commit to re-trigger a review.
 
+   When the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges,
+   ..."), `draft_automation(automation, note)` writes it as a draft in the shape of a shared automation file and
+   returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
+   fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
+   A refused draft lists every problem with where it is; fix them all and call again.
+
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once

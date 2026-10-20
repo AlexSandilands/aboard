@@ -120,6 +120,8 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "list_editable_prompts",
   "get_editable_prompt",
   "suggest_change",
+  // Orchestrating never needs to set up an automation for the user.
+  "draft_automation",
   // Read-only, but orchestrating doesn't need it, and a transcript holds whatever a session read.
   "get_session_transcript",
 ] as const;

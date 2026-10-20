@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
   actionScripts,
+  AUTOMATION_DRAFT_TTL_DAYS,
+  AUTOMATION_DRAFTS_MAX,
   bundleToDefinition,
+  checkAutomationDraft,
+  DraftAutomationInput,
   checkCustomDefinition,
   CUSTOM_NAME_MAX,
   ImportAutomationInput,
@@ -12,6 +16,7 @@ import {
   normalizeLabels,
   TaskStatus,
   UpdateCustomAutomationInput,
+  type AutomationDraft,
   type AutomationVariable,
   type BundleSkill,
   variableHasValue,
@@ -29,11 +34,13 @@ import { AppError, notFound } from "../errors.ts";
 import type { RepoUrls } from "../integrations/gitRemote.ts";
 import type { RunScript } from "../integrations/scriptRunner.ts";
 import type { Core } from "./core.ts";
+import type { NotificationsService } from "./notifications.ts";
 import { createTestScript } from "./testScript.ts";
 
 /**
  * The automations the user defines (docs/features/autopilot.md#custom-automations). Each is a catalogue entry
- * `custom:<id>`; its switches are ordinary Autopilot settings. Edited over REST only, never MCP.
+ * `custom:<id>`; its switches are ordinary Autopilot settings. Edited over REST only; over MCP an agent can only
+ * draft one, which the user imports.
  */
 export interface CustomAutomationsService {
   /** Oldest first. */
@@ -48,6 +55,16 @@ export interface CustomAutomationsService {
    * for a file that isn't one, is from a newer version or doesn't make a definition that can run.
    */
   importBundle(input: ImportAutomationInput, installSkill?: (skill: BundleSkill) => InstalledSkill): ImportedAutomation;
+  /**
+   * Keeps an automation an agent drafted for the user to review and import (docs/features/autopilot.md#drafts). Saves
+   * no automation: only the user's import does. Throws VALIDATION listing every problem, so the agent can fix them all.
+   */
+  draft(input: DraftAutomationInput, createdBy: string): AutomationDraft;
+  /** The drafts waiting, newest first; expired ones are left out. */
+  drafts(): AutomationDraft[];
+  /** Throws NOT_FOUND once it has expired or was imported or dismissed. */
+  getDraft(id: string): AutomationDraft;
+  dismissDraft(id: string): void;
   /** A changed trigger or filters arm it again, so events before the change don't fire. */
   update(id: string, input: UpdateCustomAutomationInput): CustomAutomation;
   /** Its switches go with it; its runs stay as history. */
@@ -95,6 +112,7 @@ export function createCustomAutomationsService(
     taskSummary: (id: string) => TaskSummary;
     repoUrl: RepoUrls;
     boardVariables: () => readonly AutomationVariable[];
+    notifications?: NotificationsService;
   },
 ): CustomAutomationsService {
   const { repos } = core;
@@ -163,6 +181,17 @@ export function createCustomAutomationsService(
     }
   };
 
+  const unexpired = (draft: AutomationDraft | null): draft is AutomationDraft =>
+    draft !== null && Date.parse(draft.expiresAt) > core.now().getTime();
+
+  const getDraft = (id: string): AutomationDraft => {
+    const draft = repos.autopilotDrafts.get(id);
+    if (!unexpired(draft)) {
+      throw new AppError("NOT_FOUND", "This draft is gone: it was imported or dismissed, or it expired");
+    }
+    return draft;
+  };
+
   const service: CustomAutomationsService = {
     list: () => repos.autopilotCustom.all(),
 
@@ -180,6 +209,7 @@ export function createCustomAutomationsService(
         projectIds,
         installSkill: wantSkill,
         confirmScript,
+        draftId,
       } = ImportAutomationInput.parse(input);
       const parsed = parseAutomationBundle(file);
       if (!parsed.ok) throw new AppError("VALIDATION", parsed.error);
@@ -200,7 +230,61 @@ export function createCustomAutomationsService(
       // Check everything before writing a skill, so a file that can't run leaves nothing behind.
       checked(named(bundle.skill?.name));
       const installed = bundle.skill && wantSkill && installSkill ? installSkill(bundle.skill) : null;
-      return { automation: insert(named(installed?.name)), skill: installed };
+      const automation = insert(named(installed?.name));
+      if (draftId) {
+        core.write((fx) => {
+          if (repos.autopilotDrafts.delete(draftId)) fx.autopilot();
+        });
+      }
+      return { automation, skill: installed };
+    },
+
+    draft(input, createdBy) {
+      const { automation, note } = DraftAutomationInput.parse(input);
+      const checkedDraft = checkAutomationDraft(automation);
+      if (!checkedDraft.ok) {
+        const { errors } = checkedDraft;
+        throw new AppError(
+          "VALIDATION",
+          errors.length === 1
+            ? `The automation can't be drafted: ${errors[0]}`
+            : `The automation can't be drafted, ${errors.length} problems:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+        );
+      }
+      return core.write((fx) => {
+        const now = core.now();
+        const draft: AutomationDraft = {
+          id: randomUUID(),
+          bundle: checkedDraft.bundle,
+          note,
+          createdBy,
+          createdAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + AUTOMATION_DRAFT_TTL_DAYS * 86_400_000).toISOString(),
+        };
+        repos.autopilotDrafts.insert(draft);
+        // Pruned here rather than on a timer: nothing is added without passing through, and reads skip expired rows.
+        repos.autopilotDrafts.prune(draft.createdAt, AUTOMATION_DRAFTS_MAX);
+        deps.notifications?.notify({
+          kind: "automation_draft",
+          title: `Automation drafted: ${draft.bundle.name}`,
+          body: `${createdBy} drafted it for you to review. Nothing runs until you import it.`,
+          dedupeKey: `automation_draft:${draft.id}`,
+        });
+        fx.autopilot();
+        return draft;
+      });
+    },
+
+    drafts: () => repos.autopilotDrafts.all().filter(unexpired),
+
+    getDraft,
+
+    dismissDraft(id) {
+      core.write((fx) => {
+        getDraft(id);
+        repos.autopilotDrafts.delete(id);
+        fx.autopilot();
+      });
     },
 
     update(id, input) {

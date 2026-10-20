@@ -1,7 +1,7 @@
 # Autopilot
 
 Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations).
+(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations); #241 (agents' drafts).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -240,7 +240,8 @@ finishes, since the task it unblocks is code; Auto-archive still tidies it away 
 ### API
 
 REST only, for the UI. There is no MCP tool, so agents can't switch Autopilot on, lift its limits or unpause it. The
-one exception is `retry_autopilot_run`, which only frees a run's work for the engine to judge again.
+one exception is `retry_autopilot_run`, which only frees a run's work for the engine to judge again; `draft_automation`
+switches nothing on either, since only the user's import saves the automation it drafts ([drafts](#drafts)).
 
 | Route                                           | Does                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
@@ -852,7 +853,8 @@ the automation. Runs stay, under the old key.
   shell action's `-EncodedCommand`; and on Windows only `.exe` programs are found on the PATH (not `.cmd` shims).
   The spawn, output buffering and timeout kill are shared with shell actions in `integrations/captureProcess.ts`.
   The storage is the same `action_json` column, so no migration.
-- **REST only**, no MCP: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. A write whose
+- **REST only**: `GET/POST /api/autopilot/custom`, `PATCH/DELETE /api/autopilot/custom/:id`. Over MCP an agent can
+  only [draft](#drafts) one, which the user imports. A write whose
   action is (or stays) a shell command, a script or an agent with a check script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
@@ -1051,7 +1053,7 @@ script is refused, since an older board would read it without the script. Langua
 are, the body held to `CUSTOM_SCRIPT_MAX` by the contract. Importing a file with a script needs `confirmScript: true` (the
 service refuses with a reason otherwise, whoever calls it) and, like creating one, the board page's `Origin`
 (`actionRunsCode`, in the route's guard, also covers a check script on create and patch). There is no MCP path that
-writes one, and a suggestion (which can only change an agent's prompt) leaves the check as it was. Dump, restore and
+writes one (an agent's [draft](#drafts) only reaches this import, from the board's page), and a suggestion (which can only change an agent's prompt) leaves the check as it was. Dump, restore and
 the git backup keep the whole `action_json`, so a script comes back as written.
 
 | Route                                  | Does                                                                                                      |
@@ -1107,6 +1109,33 @@ post one `--comment` review headed `prReviewHeader()`, which an untrusted-item a
 read only and never approve or request changes; nothing in the bundle approves. The risk of that choice, text from
 anyone who can open a PR read by an agent with the user's access, is stated in the guide and on the import page's
 warning. `reviewRepoPrs.test.ts` runs the script under Node with `child_process.execFileSync` replaced by a fake `gh`.
+
+### Drafts
+
+Agents can't save a custom automation, but they can write one for the user (#241): `draft_automation` (in
+`mcp/tools/autopilot.ts`) keeps it as a draft, and only the user's import on the board's page saves it. The Origin guard
+on the REST writes is unchanged, so this opens no path to setting up a command or script without the user.
+
+- **The shape is a shared file's.** The tool takes `automation`, an `AutomationBundle` without `format` and `version`
+  (they are filled in, at the newest version, so the agent needn't work out which), and a `note` to the user.
+  `checkAutomationDraft` (`automationDrafts.ts` in contracts) parses it and runs what an import runs on it with the
+  inputs at their defaults and the slots empty (labels, `checkCustomDefinition`), and lists **every** problem with
+  where it is, so the agent can fix them all in one go; a newer `version` is told as such. Capped at 500,000
+  characters of JSON and a 2,000-character note.
+- **Stored apart.** `autopilot_drafts` (migration 037: id, `bundle_json`, note, `created_by`, `created_at`,
+  `expires_at`) holds it for 14 days (`AUTOMATION_DRAFT_TTL_DAYS`), at most 20 at once (the oldest go). Expired ones
+  are left out of reads and pruned on the next draft. Not in backups: it is a hand-off, not the user's data until it
+  is imported.
+- **What the agent is told.** The import page's URL (`automationDraftPath`, `/settings/autopilot/custom/import?draft=<id>`
+  on the board's URL), the expiry, whether a script or command needs confirming, the slots to fill and, per variable
+  the action reads, the projects with no value for it, so the agent can tell the user. The result says nothing is set
+  up until the user imports it. Orchestrate's agent is denied the tool.
+- **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Custom automations).
+  That section lists the drafts with **Review** and **Dismiss**. The import page with `?draft=` loads it
+  (`GET /api/autopilot/drafts/:id`, NOT_FOUND once gone) into the same untrusted preview, script confirmation, inputs and
+  slots as a file, under a banner naming who drafted it and their note, and sends `draftId` with the import, which
+  deletes the draft once the automation is saved. **Dismiss draft** is `DELETE /api/autopilot/drafts/:id`. Every change
+  publishes `autopilot.changed`.
 
 ### Runners
 
@@ -1408,7 +1437,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
-| `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run` |
+| `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
 | `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
@@ -1433,6 +1462,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
 | `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
 | `apps/server/src/autopilot/reviewRepoPrs.test.ts` | The example's bundle, and its script run against a fake `gh` |
+| `packages/contracts/src/automationDrafts.ts`, `apps/server/src/db/repos/autopilotDrafts.ts` | Agents' drafts: the input, the check, the caps, and their table (migration 037) |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |

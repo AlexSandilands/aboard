@@ -6,8 +6,8 @@ import {
   MODEL_TIERS,
   type AutomationExample,
 } from "@repo/contracts";
-import { FileUpIcon, TriangleAlertIcon } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { BotIcon, FileUpIcon, TriangleAlertIcon } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -15,7 +15,7 @@ import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { toastManager } from "~/components/ui/toast";
-import { useImportCustomAutomation } from "~/state/customAutomations";
+import { useAutomationDraft, useDismissAutomationDraft, useImportCustomAutomation } from "~/state/customAutomations";
 import { useBoard, useSettings } from "~/state/queries";
 import {
   draftToRequest,
@@ -56,13 +56,17 @@ function Code({ children, tall }: { children: string; tall?: boolean }) {
 /**
  * Importing a shared automation: pick the file, read everything it would run (it is someone else's, and runs on this
  * machine), fill in its inputs and tool slots, choose projects. Nothing is saved until Import, and it comes in off.
+ * With `draftId` it opens an automation an agent drafted (docs/features/autopilot.md#drafts), read with the same care.
  */
 export function CustomAutomationImportForm({
   examples,
+  draftId,
   onDone,
   onCancel,
 }: {
   examples?: readonly AutomationExample[];
+  /** An agent's draft to open; importing it deletes it. */
+  draftId?: string | undefined;
   /** Called with the new automation's id. */
   onDone: (id: string) => void;
   onCancel: () => void;
@@ -73,6 +77,11 @@ export function CustomAutomationImportForm({
   const fileInput = useRef<HTMLInputElement>(null);
   const board = useBoard().data;
   const importing = useImportCustomAutomation();
+  const agentDraft = useAutomationDraft(draftId);
+  const dismissing = useDismissAutomationDraft();
+  // The draft shown, until another file or example replaces it.
+  const [fromDraft, setFromDraft] = useState<string | null>(null);
+  const opened = useRef<string | null>(null);
   const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
   const boardVariables = useSettings().data?.automationVariables ?? [];
   const needs =
@@ -84,11 +93,24 @@ export function CustomAutomationImportForm({
         )
       : [];
 
-  const load = (next: AutomationBundle) => {
+  const load = (next: AutomationBundle, draftFrom: string | null = null) => {
     setBundle(next);
     setDraft(initialDraft(next));
     setError(null);
+    setFromDraft(draftFrom);
   };
+
+  // Once per draft: a refetch (another window's change) mustn't wipe what the user filled in.
+  const loaded = agentDraft.data;
+  useEffect(() => {
+    if (!loaded || opened.current === loaded.id) return;
+    opened.current = loaded.id;
+    setBundle(loaded.bundle);
+    setDraft(initialDraft(loaded.bundle));
+    setError(null);
+    setFromDraft(loaded.id);
+  }, [loaded]);
+  const shownDraft = fromDraft && loaded?.id === fromDraft ? loaded : null;
 
   const readFile = async (file: File) => {
     if (file.size > FILE_MAX_BYTES) {
@@ -100,6 +122,7 @@ export function CustomAutomationImportForm({
     else {
       setBundle(null);
       setDraft(null);
+      setFromDraft(null);
       setError(read.error);
     }
   };
@@ -109,7 +132,7 @@ export function CustomAutomationImportForm({
 
   const submit = () => {
     if (!bundle || !draft || problem || needsScriptConfirm(bundle, draft)) return;
-    importing.mutate(draftToRequest(bundle, draft), {
+    importing.mutate(draftToRequest(bundle, draft, shownDraft?.id), {
       onSuccess: ({ automation, skill }) => {
         if (skill?.renamed) {
           toastManager.add({
@@ -164,6 +187,26 @@ export function CustomAutomationImportForm({
           <p role="alert" className="text-xs text-destructive-foreground">
             {error}
           </p>
+        ) : null}
+        {draftId && agentDraft.isError ? (
+          <p role="alert" className="text-xs text-destructive-foreground">
+            {agentDraft.error.message}
+          </p>
+        ) : draftId && agentDraft.isPending ? (
+          <p className="text-xs text-muted-foreground">Loading the draft...</p>
+        ) : null}
+        {shownDraft ? (
+          <Alert variant="info">
+            <BotIcon />
+            <AlertTitle>Drafted by an agent ({shownDraft.createdBy})</AlertTitle>
+            <AlertDescription>
+              {shownDraft.note ? <p className="whitespace-pre-wrap">{shownDraft.note}</p> : null}
+              <p>
+                An agent can only draft an automation: nothing runs until you import it and switch it on. Read it as
+                carefully as a file from someone else. It is kept until {shownDraft.expiresAt.slice(0, 10)}.
+              </p>
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {bundle && draft && action ? (
@@ -365,6 +408,15 @@ export function CustomAutomationImportForm({
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
+        {shownDraft ? (
+          <Button
+            variant="outline"
+            disabled={dismissing.isPending}
+            onClick={() => dismissing.mutate(shownDraft.id, { onSuccess: onCancel })}
+          >
+            Dismiss draft
+          </Button>
+        ) : null}
         <Button
           disabled={!bundle || !draft || Boolean(problem) || needsScriptConfirm(bundle, draft) || importing.isPending}
           onClick={submit}

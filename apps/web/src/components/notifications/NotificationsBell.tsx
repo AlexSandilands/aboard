@@ -77,6 +77,8 @@ function Inbox({ onClose }: { onClose: () => void }) {
     if (!n.readAt) markRead.mutate(n.id);
     if (n.taskId) void openTask(n.taskId);
     else if (n.kind === "suggestion") openSettings("tasks.suggestions");
+    // The section lists the drafts waiting, each with a link to its import page.
+    else if (n.kind === "automation_draft") openSettings("autopilot.custom");
     onClose();
   };
 
