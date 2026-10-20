@@ -313,7 +313,8 @@ describe("restore", () => {
           .find((p) => p.title === "Alpha")?.variables,
       ).toEqual([{ name: "jira_key", value: "ALP" }]);
       expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
-      expect(restored.prepare("SELECT name, action_json FROM autopilot_custom").all()).toEqual([
+      // By name: the two are made in the same millisecond, so their stored order is their random ids'.
+      expect(restored.prepare("SELECT name, action_json FROM autopilot_custom ORDER BY name DESC").all()).toEqual([
         {
           name: "Notify",
           action_json: JSON.stringify({ kind: "shell", command: "./notify.sh", timeoutSeconds: 300, inputs: [] }),
