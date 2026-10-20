@@ -176,4 +176,27 @@ describe("applyTierChange", () => {
     const lastCleared = applyTierChange(cleared, { field: "cli", harness: "copilot-cli", value: " " });
     expect(lastCleared).not.toHaveProperty("cliEffort");
   });
+
+  it("drops a CLI's effort when the new model's levels don't include it", () => {
+    const withEffort = {
+      description: null,
+      t3: null,
+      cli: { "claude-code": "opus" },
+      cliEffort: { "claude-code": "xhigh" as const },
+    };
+    const narrower = applyTierChange(withEffort, {
+      field: "cli",
+      harness: "claude-code",
+      value: "haiku",
+      levels: ["low", "high"],
+    });
+    expect(narrower).toEqual({ description: null, t3: null, cli: { "claude-code": "haiku" } });
+    const wider = applyTierChange(withEffort, {
+      field: "cli",
+      harness: "claude-code",
+      value: "sonnet",
+      levels: ["low", "xhigh"],
+    });
+    expect(wider.cliEffort).toEqual({ "claude-code": "xhigh" });
+  });
 });

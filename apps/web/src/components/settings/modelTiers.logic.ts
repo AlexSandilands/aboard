@@ -47,7 +47,13 @@ export function visibleTierProviders(
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
-  | { field: "cli"; harness: AgentHarness; value: string | null }
+  | {
+      field: "cli";
+      harness: AgentHarness;
+      value: string | null;
+      /** The efforts the new model takes, when known: the tier's effort is dropped if it isn't one of them. */
+      levels?: readonly CliEffort[];
+    }
   | { field: "cliEffort"; harness: AgentHarness; value: CliEffort | null };
 
 /** The efforts without the harness's: null clears it, and nothing is left behind as an empty record. */
@@ -70,8 +76,10 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       return { ...current, t3: change.value };
     case "cli": {
       const next = { ...current, cli: { ...current.cli, [change.harness]: change.value } };
-      // Clearing the model leaves its effort nothing to go with.
-      if (change.value?.trim()) return next;
+      // Clearing the model leaves its effort nothing to go with, and a model may not take the one the last did.
+      const effort = current.cliEffort?.[change.harness];
+      const keep = !!change.value?.trim() && (!effort || !change.levels || change.levels.includes(effort));
+      if (keep) return next;
       const { cliEffort: _cliEffort, ...rest } = next;
       const cliEffort = withEffort(current.cliEffort, change.harness, null);
       return cliEffort ? { ...rest, cliEffort } : rest;

@@ -1,7 +1,10 @@
 import {
   MODEL_PROFILES_MAX,
   MODEL_TIERS,
+  modelEffortLevels,
   type AgentHarness,
+  type AgentModel,
+  type AgentModels,
   type AppSettings,
   type ModelProfile,
   type ModelTier,
@@ -10,14 +13,18 @@ import {
   type T3ModelSelection,
   type ModelTierSetting,
 } from "@repo/contracts";
-import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useRef, type ReactNode } from "react";
+import { CliEffortPicker } from "~/components/handoff/CliEffortPicker";
 import { ModelPicker, TraitsPicker } from "~/components/handoff/T3LaunchPickers";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { Button } from "~/components/ui/button";
-import { useUpdateSettings } from "~/state/mutations";
-import { useAgentIntegrations, useT3ModelCatalog } from "~/state/queries";
+import { Spinner } from "~/components/ui/spinner";
+import { useRescanAgentModels, useUpdateSettings } from "~/state/mutations";
+import { useAgentIntegrations, useAgentModels, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
+import { findSuggestion } from "./cliModelPicker.logic";
+import { CliModelPicker } from "./CliModelPicker";
 import {
   createProfileEdits,
   labelConflicts,
@@ -35,8 +42,8 @@ import {
 import { SettingsLink, SettingsNote, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
-  "claude-code": "e.g. sonnet",
-  "copilot-cli": "e.g. gpt-5.4",
+  "claude-code": "Choose or type, e.g. sonnet",
+  "copilot-cli": "Choose or type, e.g. gpt-5.4",
 };
 
 const CLI_LABELS: Record<AgentHarness, string> = { "claude-code": "Claude Code", "copilot-cli": "Copilot CLI" };
@@ -57,6 +64,10 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   const shown = new Set<TierProvider>(
     visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }, settings.modelProfiles),
   );
+  // Asked only once a CLI's field is on the page: scanning starts the CLI.
+  const anyCli = shown.has("claude-code") || shown.has("copilot-cli");
+  const scanned = useAgentModels(anyCli);
+  const rescan = useRescanAgentModels();
   const edits = useRef(createTierEdits()).current;
   // mutateAsync, since mutate's per-call callbacks only run for the latest of overlapping saves, and each must settle.
   // The hook's own onError already reports a failure.
@@ -65,7 +76,24 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
 
   return (
     <>
-      <SettingsSection id="models.tiers.list" title="Model tiers">
+      <SettingsSection
+        id="models.tiers.list"
+        title="Model tiers"
+        headerAction={
+          anyCli ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={rescan.isPending || scanned.isFetching}
+              onClick={() => rescan.mutate()}
+              title="Ask Claude Code and Copilot CLI which models they offer"
+            >
+              {rescan.isPending || scanned.isFetching ? <Spinner /> : <RefreshCwIcon />}
+              Rescan models
+            </Button>
+          ) : null
+        }
+      >
         {MODEL_TIERS.map(({ value: tier, label, description }) => {
           const setting = settings.modelTiers[tier];
           return (
@@ -101,13 +129,12 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                 {(["claude-code", "copilot-cli"] as const).map((harness) =>
                   shown.has(harness) ? (
                     <TierField key={harness} label={CLI_LABELS[harness]}>
-                      <BlurInput
-                        size="sm"
-                        className="w-full sm:max-w-sm"
-                        aria-label={`${label} tier ${CLI_LABELS[harness]} model`}
-                        placeholder={CLI_PLACEHOLDERS[harness]}
-                        value={setting.cli?.[harness] ?? ""}
-                        onSave={(next) => save(tier, { field: "cli", harness, value: next.trim() || null })}
+                      <CliModelField
+                        harness={harness}
+                        name={`${label} tier`}
+                        setting={setting}
+                        models={modelsOf(scanned.data, harness)}
+                        onChange={(change) => save(tier, change)}
                       />
                     </TierField>
                   ) : null,
@@ -115,6 +142,14 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
               </div>
             </SettingsRow>
           );
+        })}
+        {(["claude-code", "copilot-cli"] as const).map((harness) => {
+          const status = scanned.data?.harnesses.find((h) => h.harness === harness);
+          return shown.has(harness) && status?.error ? (
+            <SettingsNote key={harness}>
+              Couldn't list {CLI_LABELS[harness]}'s models: {status.error}. A model can still be typed.
+            </SettingsNote>
+          ) : null;
         })}
         {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
         {shown.size < 3 && !agents.isPending ? (
@@ -130,6 +165,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
         t3Ready={t3Ready}
         catalog={catalog.data}
         catalogError={catalog.error?.message ?? null}
+        scanned={scanned.data}
       />
     </>
   );
@@ -145,12 +181,14 @@ function CustomModelsSection({
   t3Ready,
   catalog,
   catalogError,
+  scanned,
 }: {
   profiles: readonly ModelProfile[];
   shown: ReadonlySet<TierProvider>;
   t3Ready: boolean;
   catalog: T3ModelCatalog | undefined;
   catalogError: string | null;
+  scanned: AgentModels | undefined;
 }) {
   const updateSettings = useUpdateSettings();
   const edits = useRef(createProfileEdits()).current;
@@ -259,13 +297,12 @@ function CustomModelsSection({
             {(["claude-code", "copilot-cli"] as const).map((harness) =>
               shown.has(harness) ? (
                 <TierField key={harness} label={CLI_LABELS[harness]}>
-                  <BlurInput
-                    size="sm"
-                    className="w-full sm:max-w-sm"
-                    aria-label={`${profile.name} ${CLI_LABELS[harness]} model`}
-                    placeholder={CLI_PLACEHOLDERS[harness]}
-                    value={profile.cli?.[harness] ?? ""}
-                    onSave={(next) => change(profile.id, { field: "cli", harness, value: next.trim() || null })}
+                  <CliModelField
+                    harness={harness}
+                    name={profile.name}
+                    setting={profile}
+                    models={modelsOf(scanned, harness)}
+                    onChange={(next) => change(profile.id, next)}
                   />
                 </TierField>
               ) : null,
@@ -279,6 +316,59 @@ function CustomModelsSection({
         </SettingsNote>
       ))}
     </SettingsSection>
+  );
+}
+
+const modelsOf = (scanned: AgentModels | undefined, harness: AgentHarness): readonly AgentModel[] =>
+  scanned?.harnesses.find((h) => h.harness === harness)?.models ?? [];
+
+/**
+ * A CLI's `--model` for a tier or custom model, with its `--effort` beside it once a model is set. The effort offers
+ * what the model's scan lists, else the CLI's own levels; a new model that doesn't take the saved effort clears it.
+ */
+function CliModelField({
+  harness,
+  name,
+  setting,
+  models,
+  onChange,
+}: {
+  harness: AgentHarness;
+  name: string;
+  setting: ModelTierSetting;
+  models: readonly AgentModel[];
+  onChange: (change: TierChange) => void;
+}) {
+  const model = setting.cli?.[harness] ?? "";
+  const levels = modelEffortLevels(harness, findSuggestion(models, model));
+  return (
+    <>
+      <CliModelPicker
+        className="w-full sm:max-w-sm"
+        label={`${name} ${CLI_LABELS[harness]} model`}
+        placeholder={CLI_PLACEHOLDERS[harness]}
+        value={model}
+        models={models}
+        onSave={(next) =>
+          onChange({
+            field: "cli",
+            harness,
+            value: next,
+            ...(next ? { levels: modelEffortLevels(harness, findSuggestion(models, next)) } : {}),
+          })
+        }
+      />
+      {model.trim() ? (
+        <CliEffortPicker
+          label={`${name} ${CLI_LABELS[harness]} effort`}
+          value={setting.cliEffort?.[harness] ?? null}
+          levels={levels}
+          variant="ghost"
+          className="w-auto"
+          onChange={(value) => onChange({ field: "cliEffort", harness, value })}
+        />
+      ) : null}
+    </>
   );
 }
 
