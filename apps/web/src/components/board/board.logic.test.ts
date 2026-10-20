@@ -106,13 +106,13 @@ describe("matchesTaskSearch", () => {
         label: null,
         syncedAt: null,
         createdAt: "",
-        kind: "jira",
-        ref: { key: "ABC-123" },
+        kind: "ticket",
+        ref: { system: "jira", key: "ABC-123" },
       },
     ],
   });
 
-  it("matches title, number and Jira key", () => {
+  it("matches title, number and ticket key", () => {
     expect(matchesTaskSearch(jira, "login")).toBe(true);
     expect(matchesTaskSearch(jira, "#42")).toBe(true);
     expect(matchesTaskSearch(jira, "4")).toBe(true);

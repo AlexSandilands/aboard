@@ -10,14 +10,7 @@ import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
-import {
-  ClaudeCodeSection,
-  CodexSection,
-  CopilotSection,
-  GithubSection,
-  JiraSection,
-  T3Section,
-} from "../IntegrationsSections";
+import { ClaudeCodeSection, CodexSection, CopilotSection, GithubSection, T3Section } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
 import { ModelTiersSection } from "../ModelTiersSection";
@@ -29,6 +22,7 @@ import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
 import { TerminalSection } from "../TerminalSection";
+import { TicketSystemsSection } from "../TicketSystemsSection";
 import { ProjectSettingsPage } from "./ProjectSettingsPage";
 
 /** Route component for `/settings/$group`: the group's sections in one scrolling page. */
@@ -143,8 +137,8 @@ function IntegrationsContent() {
           {(settings) => <GithubSection settings={settings} status={integrations.data?.github} />}
         </WithSettings>
       </SettingsSubsection>
-      <SettingsSubsection id="integrations.jira">
-        <WithSettings>{(settings) => <JiraSection settings={settings} />}</WithSettings>
+      <SettingsSubsection id="integrations.tickets">
+        <WithSettings>{(settings) => <TicketSystemsSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.terminal">
         <WithSettings>{(settings) => <TerminalSection settings={settings} />}</WithSettings>

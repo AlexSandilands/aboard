@@ -3,6 +3,7 @@ import { VARIABLE_NAME, variableHasValue } from "./automationVariables.ts";
 import { BRAND, brandEnv } from "./brand.ts";
 import { ModelTier } from "./modelTiers.ts";
 import { WeeklySchedule } from "./recurring.ts";
+import { CustomToolRule } from "./toolRules.ts";
 import { TaskStatus, type Project, type TaskLink, type TaskSummary } from "./schemas.ts";
 
 // Custom automations: Autopilot automations the user defines (docs/features/autopilot.md#custom-automations). Each
@@ -17,9 +18,8 @@ export const CUSTOM_COMMAND_MAX = 4_000;
 export const CUSTOM_SCRIPT_MAX = 100_000;
 export const CUSTOM_TIMEOUT_MAX_SECONDS = 3_600;
 export const CUSTOM_STALE_HOURS_MAX = 24 * 30;
-/** The most extra tools an agent action may allow, and the longest rule. */
+/** The most extra tools an agent action may allow. */
 export const CUSTOM_TOOLS_MAX = 20;
-export const CUSTOM_TOOL_MAX = 200;
 
 /** The catalogue key of a custom automation. Stored in settings and runs. */
 export const customAutomationKey = (id: string): string => `${CUSTOM_AUTOMATION_PREFIX}${id}`;
@@ -77,43 +77,6 @@ export const CustomFilters = z.object({
   epicId: z.string().min(1).nullable().default(null),
 });
 export type CustomFilters = z.infer<typeof CustomFilters>;
-
-/**
- * A tool an agent action is allowed to call without asking, as Claude Code's `--allowedTools` takes it: a whole MCP
- * server (`mcp__issue-tracker`), one of its tools (`mcp__issue-tracker__search_jira`, or `mcp__issue-tracker__search_*`), or a
- * built-in tool with an optional specifier (`Skill(name)`). A `*` is only allowed in the tool part of
- * an MCP rule: Claude Code skips one in the server part.
- */
-const MCP_TOOL_RULE = /^mcp__[A-Za-z0-9_-]+(?:__[A-Za-z0-9_*-]+)?$/;
-
-/**
- * The built-in tools a rule may name. Not the shell tools (Bash, PowerShell, ...): the push and merge deny rules are
- * `Bash(...)` patterns, so allowing another shell tool would sidestep them, and an edit run already has Bash.
- */
-export const CUSTOM_BUILT_IN_TOOLS = [
-  "Read",
-  "Grep",
-  "Glob",
-  "Edit",
-  "Write",
-  "NotebookEdit",
-  "WebFetch",
-  "WebSearch",
-  "TodoWrite",
-  "Task",
-  "Agent",
-  "Skill",
-] as const;
-const BUILT_IN_TOOL_RULE = new RegExp(`^(?:${CUSTOM_BUILT_IN_TOOLS.join("|")})(?:\\([^()\\r\\n]+\\))?$`);
-
-export const CustomToolRule = z
-  .string()
-  .trim()
-  .max(CUSTOM_TOOL_MAX)
-  .refine(
-    (rule) => MCP_TOOL_RULE.test(rule) || BUILT_IN_TOOL_RULE.test(rule),
-    "Use mcp__<server>, mcp__<server>__<tool> or a built-in tool such as WebFetch (not Bash or another shell)",
-  );
 
 /** At most this many declared inputs and tool slots on an automation. */
 export const CUSTOM_INPUTS_MAX = 20;

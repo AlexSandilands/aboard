@@ -1,6 +1,6 @@
 ---
 name: aboard
-description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/Jira/T3 thread links and handover notes.
+description: Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/ticket/T3 thread links and handover notes.
 ---
 
 # Aboard (task board)
@@ -24,11 +24,11 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    stalls and notes, each section capped, with task numbers to open with `get_task`.
 2. **Resume.** Before continuing an existing task, call `get_task`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
-   **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
+   **Missing links**, add them now: the task's ticket, your own T3 thread when you're in T3 Code, and your own
    session when you're in Claude Code or Copilot CLI. If it lists **Images** (a screenshot the user pasted into the
    text, shown there as `![..](attachment:id)`), open each file path with your file tools: they are often the bug.
 3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
-   follow-up, a Jira ticket for later), call `add_to_backlog` once and carry on with your current work.
+   follow-up, a ticket for later), call `add_to_backlog` once and carry on with your current work.
    Don't derail.
 4. **Plan before implementing.** A task can't leave Backlog without a plan. Use `set_plan` on an existing
    task, or `create_task` for new work (plan included, lands in Planned). A good plan has phases with
@@ -137,9 +137,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    other steps, is refused with `CONFLICT` unless you pass
    `allowDeletes: true`; when it deletes anything, the result lists it.
 
-6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in
-   `links` to `create_task` / `add_to_backlog`, or call `link`. Keys in the title are linked
-   automatically. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
+6. **Link on creation and pickup.** Link the task's ticket when the task is created: pass its key in
+   `links` to `create_task` / `add_to_backlog`, or call `link`. Keys in the title may be linked
+   automatically; if a link is wrong (a key that is no ticket), `unlink` it. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
    as soon as the PR is open; GitHub PRs show live checks/review state on the board. `link` is
    idempotent, so linking twice is harmless.
 7. **Status transitions.** `in_progress` while implementing → `review` when the work is done → `done`

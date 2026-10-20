@@ -78,7 +78,8 @@ and to this table.
 | Themes, contrast, glass, panel animations, fonts               | [docs/features/appearance.md](docs/features/appearance.md)                          |
 | Board filters, URL params, saved views                         | [docs/features/saved-views.md](docs/features/saved-views.md)                        |
 | PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
-| Creating tasks from Jira or GitHub issue URLs                  | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
+| Ticket systems: ticket links, key patterns, presets            | [docs/features/ticket-systems.md](docs/features/ticket-systems.md)                  |
+| Creating tasks from ticket or GitHub issue URLs                | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
 | The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
 | Agent session links, their status, the terminal launcher       | [docs/features/agent-sessions.md](docs/features/agent-sessions.md), ADRs 0009, 0010 |
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |

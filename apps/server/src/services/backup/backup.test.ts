@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type BoardDump, type PlanInput } from "@repo/contracts";
+import { BRAND, TICKET_SYSTEM_PRESETS, type BoardDump, type PlanInput } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase, type Db } from "../../db/database.ts";
 import { AppError } from "../../errors.ts";
@@ -28,12 +28,15 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+const jiraPreset = TICKET_SYSTEM_PRESETS.find((p) => p.system.id === "jira")!.system;
+
 /** A board with a bit of everything a dump has to carry. */
 function seed() {
   const h = createTestHarness();
   const s = h.services;
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   s.projects.ensureGeneral();
+  s.settings.update({ ticketSystems: [{ ...jiraPreset, linkTemplate: "https://jira.example.com/browse/{key}" }] });
   const a = s.tasks.create({
     projectId: project.id,
     title: "Feature",
@@ -109,7 +112,7 @@ function seed() {
     candidate: { dedupeKey: "k", summary: "do it", taskId: a.id },
     dryRun: false,
   });
-  s.settings.update({ jiraBaseUrl: "https://jira.example.com", t3Token: "secret-value", backupDir: "/somewhere" });
+  s.settings.update({ t3Token: "secret-value", backupDir: "/somewhere" });
   s.settings.update({ keybindings: { back: { key: "q", when: "" } } });
   // Automation variables: the board's are a setting, a project's a column.
   s.settings.update({ automationVariables: [{ name: "jira_key", value: "BRD" }] });
@@ -176,7 +179,7 @@ describe("settings export", () => {
     const { s, db } = seed();
     db.prepare("INSERT INTO settings (key, value_json) VALUES ('someFutureSecret', '\"x\"')").run();
     const keys = s.backup.dump().settings.map((r) => r.key);
-    expect(keys).toContain("jiraBaseUrl");
+    expect(keys).toContain("ticketSystems");
     expect(keys).toContain("keybindings");
     expect(keys).not.toContain("t3Token");
     expect(keys).not.toContain("backupDir");
@@ -527,6 +530,20 @@ describe("restore", () => {
         e.type === "created" ? { ...e, payload_json: String(e.payload_json).replace('"backlog"', '"idea"') } : e,
       ),
     };
+    // Before ticket systems: Jira links and a Jira base URL.
+    old.settings = [
+      ...dump.settings.filter((r) => r.key !== "ticketSystems"),
+      { key: "jiraBaseUrl", value_json: '"https://jira.example.com"' },
+    ];
+    old.manifest.counts.settings = old.settings.length;
+    old.tasks = old.tasks.map((bundle) => ({
+      ...bundle,
+      task_links: bundle.task_links.map(({ auto: _auto, ...link }) =>
+        link.kind === "ticket"
+          ? { ...link, kind: "jira", ref_json: JSON.stringify({ key: JSON.parse(String(link.ref_json)).key }) }
+          : link,
+      ),
+    }));
     expect(old.tasks.some((b) => b.task.status === "idea")).toBe(true);
 
     const dbPath = join(tempDir(), "data.sqlite");
@@ -542,6 +559,19 @@ describe("restore", () => {
         .prepare("SELECT payload_json FROM task_events WHERE task_id = ? AND type = 'created'")
         .get(a.id) as { payload_json: string };
       expect(created.payload_json).not.toContain("idea");
+      expect(
+        restored.prepare("SELECT kind, ref_json FROM task_links WHERE task_id = ? ORDER BY kind").all(a.id),
+      ).toEqual([
+        { kind: "pr", ref_json: expect.any(String) },
+        { kind: "ticket", ref_json: '{"system":"jira","key":"ABC-1"}' },
+      ]);
+      const systems = restored.prepare("SELECT value_json FROM settings WHERE key = 'ticketSystems'").get() as {
+        value_json: string;
+      };
+      expect(JSON.parse(systems.value_json)).toEqual([
+        expect.objectContaining({ id: "jira", linkTemplate: "https://jira.example.com/browse/{key}" }),
+      ]);
+      expect(restored.prepare("SELECT key FROM settings WHERE key = 'jiraBaseUrl'").get()).toBeUndefined();
       expect(restored.prepare("SELECT max(name) AS v FROM migrations").get()).toEqual({
         v: dump.manifest.schemaVersion,
       });

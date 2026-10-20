@@ -1,3 +1,4 @@
+import { TICKET_SYSTEM_PRESETS } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   filterBrowseEntries,
@@ -13,6 +14,8 @@ import {
   taskSearchTerms,
   trimTrailingSeparators,
 } from "./palette.logic";
+
+const systems = [TICKET_SYSTEM_PRESETS[0]!.system];
 
 describe("isPathQuery", () => {
   it("recognises POSIX, home, UNC and drive paths", () => {
@@ -178,12 +181,12 @@ describe("normalizeDescription", () => {
 });
 
 describe("issueImportRow", () => {
-  it("offers to import a Jira key, a Jira URL and a GitHub issue", () => {
-    expect(issueImportRow("PROJ-123", "backlog")).toMatchObject({
+  it("offers to import a ticket key, a ticket URL and a GitHub issue", () => {
+    expect(issueImportRow("PROJ-123", "backlog", systems)).toMatchObject({
       sourceUrl: "PROJ-123",
       title: "Import PROJ-123 from Jira",
     });
-    expect(issueImportRow("  https://jira.example.com/browse/PROJ-9 ", "backlog")).toMatchObject({
+    expect(issueImportRow("  https://jira.example.com/browse/PROJ-9 ", "backlog", systems)).toMatchObject({
       sourceUrl: "https://jira.example.com/browse/PROJ-9",
       title: "Import PROJ-9 from Jira",
     });
@@ -193,9 +196,10 @@ describe("issueImportRow", () => {
   });
 
   it("leaves ordinary titles, pull requests and planned tasks alone", () => {
-    expect(issueImportRow("Fix PROJ-123 login", "backlog")).toBeNull();
+    expect(issueImportRow("Fix PROJ-123 login", "backlog", systems)).toBeNull();
     expect(issueImportRow("https://github.com/acme/app/pull/45", "backlog")).toBeNull();
-    expect(issueImportRow("UTF-8", "backlog")).toBeNull();
-    expect(issueImportRow("PROJ-123", "planned")).toBeNull();
+    expect(issueImportRow("PROJ-123", "backlog")).toBeNull();
+    expect(issueImportRow("UTF-8", "backlog", systems)).toBeNull();
+    expect(issueImportRow("PROJ-123", "planned", systems)).toBeNull();
   });
 });

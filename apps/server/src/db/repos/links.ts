@@ -10,6 +10,7 @@ import type {
   T3ThreadRef,
   T3ThreadSnapshot,
   TaskLink,
+  TicketRef,
 } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
@@ -24,6 +25,8 @@ export interface LinkRow {
   snapshot_json: string | null;
   synced_at: string | null;
   created_at: string;
+  /** 1 on a link the board added by itself (a key in the title) rather than on request. */
+  auto: number;
 }
 
 /** Maps a task_links row to the contract's discriminated TaskLink. */
@@ -44,8 +47,8 @@ export function toLink(r: LinkRow): TaskLink {
         ref: parseJson<PrRef>(r.ref_json),
         snapshot: parseJson<PrSnapshot>(r.snapshot_json),
       };
-    case "jira":
-      return { ...base, kind: "jira", ref: parseJson<{ key: string }>(r.ref_json) ?? { key: r.url } };
+    case "ticket":
+      return { ...base, kind: "ticket", ref: parseJson<TicketRef>(r.ref_json) ?? { system: "", key: r.url } };
     case "t3_thread":
       return {
         ...base,
@@ -92,9 +95,10 @@ export function createLinksRepo(sql: Sql) {
         null
       );
     },
+    /** In the order they were added: rowid breaks a tie in created_at (one call adds several links), a random id can't. */
     forTasks(taskIds: readonly string[]): LinkRow[] {
       return sql.all<LinkRow>(
-        "SELECT * FROM task_links WHERE task_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, id",
+        "SELECT * FROM task_links WHERE task_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, rowid",
         jsonList(taskIds),
       );
     },
@@ -102,7 +106,7 @@ export function createLinksRepo(sql: Sql) {
     byKindActive(kind: LinkKind): LinkRow[] {
       return sql.all<LinkRow>(
         `SELECT l.* FROM task_links l JOIN tasks t ON t.id = l.task_id
-         WHERE l.kind = ? AND t.archived_at IS NULL ORDER BY l.created_at, l.id`,
+         WHERE l.kind = ? AND t.archived_at IS NULL ORDER BY l.created_at, l.rowid`,
         kind,
       );
     },
@@ -111,6 +115,9 @@ export function createLinksRepo(sql: Sql) {
     },
     setRef(id: string, refJson: string): void {
       sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
+    },
+    setAuto(id: string, auto: boolean): void {
+      sql.run("UPDATE task_links SET auto = ? WHERE id = ?", auto ? 1 : 0, id);
     },
     setLabel(id: string, label: string | null): void {
       sql.run("UPDATE task_links SET label = ? WHERE id = ?", label, id);

@@ -45,7 +45,7 @@ describe("cardLinks", () => {
       other("u"),
       pr("1"),
       thread("t", {}),
-      { ...base, id: "j", kind: "jira", url: "J-1", ref: { key: "J-1" } } as TaskLink,
+      { ...base, id: "j", kind: "ticket", url: "J-1", ref: { system: "jira", key: "J-1" } } as TaskLink,
     ];
     expect(ids(cardLinks(links))).toEqual(["1", "t"]);
   });

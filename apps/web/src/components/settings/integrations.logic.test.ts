@@ -1,6 +1,6 @@
 import type { AgentIntegrationStatus, GithubStatus, T3IntegrationStatus, TerminalInfo } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { agentDot, githubDot, jiraDot, t3Dot, terminalDot } from "./integrations.logic";
+import { agentDot, githubDot, t3Dot, terminalDot } from "./integrations.logic";
 
 const t3 = (patch: Partial<T3IntegrationStatus> = {}): T3IntegrationStatus => ({
   detected: true,
@@ -74,9 +74,7 @@ describe("integration dots", () => {
     );
   });
 
-  it("Jira and Terminal", () => {
-    expect(jiraDot(null).tone).toBe("muted");
-    expect(jiraDot("https://x.atlassian.net").tone).toBe("success");
+  it("Terminal", () => {
     const info = { error: null } as TerminalInfo;
     expect(terminalDot(info).tone).toBe("success");
     expect(terminalDot({ ...info, error: "No terminal" }).tone).toBe("warning");
