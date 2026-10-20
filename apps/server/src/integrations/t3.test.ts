@@ -9,6 +9,7 @@ import type {
   Project,
   StartT3ThreadInput,
   T3ThreadSnapshot,
+  TaskAttachment,
   TaskLink,
   TaskSummary,
 } from "@repo/contracts";
@@ -249,8 +250,14 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
   };
 }
 
-function fakeServices(opts: { token?: string | null; links?: TaskLink[]; projects?: Project[] } = {}) {
+/** An image pasted into a launch dialog, as the attachments service resolves it. */
+type FakeImage = TaskAttachment & { path: string };
+
+function fakeServices(
+  opts: { token?: string | null; links?: TaskLink[]; projects?: Project[]; images?: FakeImage[] } = {},
+) {
   const snapshots = new Map<string, LinkSnapshot | null>();
+  const claimed: Array<{ taskId: string; ids: readonly string[] }> = [];
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
   let token = opts.token ?? null;
@@ -273,6 +280,18 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
     },
     tasks: {
       summary: (id) => ({ id, number: 9, title: "Hand off", projectId: projects[0]?.id ?? "none" }) as TaskSummary,
+    },
+    attachments: {
+      forLaunch: (ids, taskId) =>
+        ids.map((id) => {
+          const image = opts.images?.find((i) => i.id === id);
+          if (!image || (image.taskId !== null && image.taskId !== taskId)) throw new AppError("VALIDATION", "gone");
+          return image;
+        }),
+      claimIds: (taskId, ids) => {
+        claimed.push({ taskId, ids });
+        return [];
+      },
     },
     projects: {
       get: (id) => projects.find((p) => p.id === id)!,
@@ -301,7 +320,7 @@ function fakeServices(opts: { token?: string | null; links?: TaskLink[]; project
       },
     },
   };
-  return { services, snapshots, projects, added };
+  return { services, snapshots, projects, added, claimed };
 }
 
 const SHELL_FIXTURE = {
@@ -629,8 +648,13 @@ describe("T3 thread launch", () => {
     updatedAt: "",
   };
 
-  const setup = (reply: (frame: SentFrame) => unknown, token: string | null = "tok", fetch: FetchFn = t3Fetch()) => {
-    const fake = fakeServices({ token, projects: [acme] });
+  const setup = (
+    reply: (frame: SentFrame) => unknown,
+    token: string | null = "tok",
+    fetch: FetchFn = t3Fetch(),
+    images: FakeImage[] = [],
+  ) => {
+    const fake = fakeServices({ token, projects: [acme], images });
     const socket = fakeSocket(reply);
     const t3 = createT3Integration({
       t3Home: makeT3Home(),
@@ -866,6 +890,143 @@ describe("T3 thread launch", () => {
         .catch((e) => e);
       expect(error.message).toContain("couldn't list the project's branches");
       expect(isT3Unavailable(error)).toBe(false);
+    });
+  });
+
+  describe("with pasted images", () => {
+    const IMAGE_A = "0b6c1f0e-3a4d-4c1e-9d7a-2f5b8c9e1a11";
+    const IMAGE_B = "7d3e9a52-1c8f-4b6a-a0e4-5c2d7f8b3e22";
+    const THREAD_ID = "5a1d7c3e-8f2b-4e6a-9c0d-1b2e3f4a5b6c";
+    const COMMAND_ID = "6f1c7f2e-2d8f-4f0b-9a57-0c7f0e5b1d2a";
+
+    const images = (): FakeImage[] => {
+      const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-launch-images-`));
+      tempDirs.push(dir);
+      return [
+        { id: IMAGE_A, mime: "image/png", filename: "bug.png", bytes: "png-bytes" },
+        { id: IMAGE_B, mime: "image/webp", filename: "after", bytes: "webp!" },
+      ].map(({ bytes, ...image }) => {
+        const path = join(dir, image.id);
+        writeFileSync(path, bytes);
+        return { ...image, taskId: null, size: bytes.length, createdAt: "", path };
+      });
+    };
+
+    /** T3's upload endpoint: records each POST, answering 204 unless `status` says otherwise. */
+    const uploads = (status = 204) => {
+      const posts: Array<{ url: string; type: string | null; body: string }> = [];
+      const base = t3Fetch();
+      const fetch: FetchFn = async (url, init) => {
+        if (!url.includes("/api/attachments/upload/")) return base(url, init);
+        posts.push({
+          url,
+          type: new Headers(init?.headers).get("content-type"),
+          body: Buffer.from(init?.body as Uint8Array).toString(),
+        });
+        return new Response(status === 204 ? null : "Content-Length must match", { status });
+      };
+      return { posts, fetch };
+    };
+
+    const reply = (frame: SentFrame) => {
+      if (frame.tag === "attachments.createUploadUrl") {
+        const name = (frame.payload as { name: string }).name;
+        return success(frame.id, {
+          attachmentId: `pending-${name}`,
+          relativeUrl: `/api/attachments/upload/${name}?token=t`,
+          expiresAt: 0,
+        });
+      }
+      return success(frame.id, { threadId: THREAD_ID, resumed: false });
+    };
+
+    it("uploads each image to T3 Code, launches with the thread id and attachments, then claims them", async () => {
+      const t3Uploads = uploads();
+      const { t3, socket, claimed, added } = setup(reply, "tok", t3Uploads.fetch, images());
+      const input = { ...LAUNCH, commandId: COMMAND_ID, threadId: THREAD_ID, attachmentIds: [IMAGE_A, IMAGE_B] };
+      await t3.startThread("task-1", input, "user");
+
+      expect(socket.sent.map((f) => [f.tag, f.payload])).toEqual([
+        ["attachments.createUploadUrl", { type: "image", name: "bug.png", mimeType: "image/png", sizeBytes: 9 }],
+        ["attachments.createUploadUrl", { type: "image", name: "after", mimeType: "image/webp", sizeBytes: 5 }],
+        ["orchestration.launchThread", expect.anything()],
+      ]);
+      expect(t3Uploads.posts).toEqual([
+        { url: `${ORIGIN}/api/attachments/upload/bug.png?token=t`, type: "image/png", body: "png-bytes" },
+        { url: `${ORIGIN}/api/attachments/upload/after?token=t`, type: "image/webp", body: "webp!" },
+      ]);
+      expect(socket.sent[2]!.payload).toMatchObject({
+        commandId: COMMAND_ID,
+        threadId: THREAD_ID,
+        initialMessage: {
+          text: "Let us work on #9",
+          attachments: [
+            { type: "image", id: "pending-bug.png", name: "bug.png", mimeType: "image/png", sizeBytes: 9 },
+            { type: "image", id: "pending-after", name: "after", mimeType: "image/webp", sizeBytes: 5 },
+          ],
+        },
+      });
+      expect(claimed).toEqual([{ taskId: "task-1", ids: [IMAGE_A, IMAGE_B] }]);
+      expect(added).toHaveLength(1);
+    });
+
+    it("sends the same command and thread id again on a retry", async () => {
+      const { t3, socket } = setup(reply, "tok", uploads().fetch, images());
+      const input = { ...LAUNCH, commandId: COMMAND_ID, threadId: THREAD_ID, attachmentIds: [IMAGE_A] };
+      await t3.startThread("task-1", input, "user");
+      await t3.startThread("task-1", input, "user");
+      const launches = socket.sent
+        .filter((f) => f.tag === "orchestration.launchThread")
+        .map((f) => f.payload as { commandId: string; threadId: string });
+      expect(launches.map((p) => [p.commandId, p.threadId])).toEqual([
+        [COMMAND_ID, THREAD_ID],
+        [COMMAND_ID, THREAD_ID],
+      ]);
+    });
+
+    it("starts nothing when T3 refuses an upload or an image is gone", async () => {
+      const refused = setup(reply, "tok", uploads(400).fetch, images());
+      await expect(
+        refused.t3.startThread("task-1", { ...LAUNCH, attachmentIds: [IMAGE_A, IMAGE_B] }, "user"),
+      ).rejects.toThrow("T3 Code refused bug.png (400: Content-Length must match)");
+      expect(refused.socket.sent.map((f) => f.tag)).toEqual(["attachments.createUploadUrl"]);
+      expect(refused.added).toEqual([]);
+      expect(refused.claimed).toEqual([]);
+
+      const gone = setup(reply, "tok", uploads().fetch, []);
+      await expect(gone.t3.startThread("task-1", { ...LAUNCH, attachmentIds: [IMAGE_A] }, "user")).rejects.toThrow(
+        "gone",
+      );
+      expect(gone.socket.sent).toEqual([]);
+    });
+
+    it("never sends an image to another host than T3's", async () => {
+      const t3Uploads = uploads();
+      const elsewhere = (frame: SentFrame) =>
+        frame.tag === "attachments.createUploadUrl"
+          ? success(frame.id, { attachmentId: "p", relativeUrl: "//evil.example/upload", expiresAt: 0 })
+          : reply(frame);
+      const { t3, socket } = setup(elsewhere, "tok", t3Uploads.fetch, images());
+      await expect(t3.startThread("task-1", { ...LAUNCH, attachmentIds: [IMAGE_A] }, "user")).rejects.toThrow(
+        "Unexpected upload URL",
+      );
+      expect(t3Uploads.posts).toEqual([]);
+      expect(socket.sent.map((f) => f.tag)).not.toContain("orchestration.launchThread");
+    });
+
+    it("leaves a project thread's images unclaimed, and makes a thread id when none was given", async () => {
+      const { t3, socket, claimed } = setup(reply, "tok", uploads().fetch, images());
+      await t3.startProjectThread("proj-acme", { ...LAUNCH, attachmentIds: [IMAGE_A] }, "Suggest epics: Acme");
+      const launch = socket.sent.find((f) => f.tag === "orchestration.launchThread")!.payload as { threadId: string };
+      expect(launch.threadId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(claimed).toEqual([]);
+    });
+
+    it("sends no thread id and no attachments without images", async () => {
+      const { t3, socket } = setup(reply);
+      await t3.startThread("task-1", LAUNCH, "user");
+      expect(socket.sent[0]!.payload).not.toHaveProperty("threadId");
+      expect(socket.sent[0]!.payload).toMatchObject({ initialMessage: { attachments: [] } });
     });
   });
 

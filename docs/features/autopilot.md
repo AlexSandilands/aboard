@@ -963,7 +963,7 @@ script** beside **Start an agent** and **Run a command**, and an agent's check. 
   bundle; until it loads, a plain text area edits the same value). It has a monospace font, line numbers and highlighting for
   the language, coloured from the theme's tokens so it follows the theme and the Contrast setting. Tab indents with
   spaces; Esc then Tab leaves the editor so a keyboard user is never trapped.
-- **Load from file** (the file's extension picks the language; at most `SCRIPT_FILE_MAX_BYTES`) and **Copy**.
+- **Load from file** (the file's extension picks the language; a file over `CUSTOM_SCRIPT_MAX` characters is refused) and **Copy**.
 - A **starter** per language and role (`scriptStarter`): it shows how to read the JSON context on stdin and, for a check, how
   to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
   the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
@@ -984,7 +984,7 @@ interpreter, environment and stdin context a real run gets, so it can do whateve
 editor says so and asks for a second click ("Run it for real") naming the project. Nothing is saved or recorded: no run
 row, no event.
 
-- An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
+- Inputs reach an action and a check alike, as in a real run, with the project's variables and repository URL. An **action** may be given a task (the form's sample task, or none) and then reads that task's values; a **check** has
   none, like the scheduled agent it belongs to.
 - For a **check** that exits 0 the response also has the output read as the board reads it (`parseCheckOutput`): the items
   and how many were dropped, or `problem` naming the bad line, and the prompt the first item's agent would start with
@@ -998,15 +998,18 @@ row, no event.
 ### Sharing automations
 
 An automation is shared as a versioned JSON file, an `AutomationBundle` (`packages/contracts/src/automationBundle.ts`,
-`format: "<brand id>.automation"`, `version: 1`, or `2` for a file that carries a script). It holds the name, description,
+`format: "<brand id>.automation"`, `version: 1`, `2` for a file that carries a script (`SCRIPT_BUNDLE_VERSION`), or `3`
+(`AUTOMATION_BUNDLE_VERSION`) for one whose action reads a [variable](#variables-and-the-repository-url) or is a command
+or script with inputs, so a board from before those says the file is newer instead of refusing it as invalid; a file
+below 3 that declares inputs on a command or script is refused). It holds the name, description,
 trigger, the filters' labels only, the action, the declared inputs of any action kind (`{name, label, type, default}`), an agent's declared slots (`{name, label, description}`) and
 optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
 importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
 
 **Scripts** (a `script` action, or an agent's `check`; `actionScripts` lists them) are someone else's code run as the
-importer, so they get more care. A file is written as version 2 only when it carries one (`bundleVersionFor`), so
-every other file stays version 1 and a board from before scripts still reads it; a version 1 file that carries a
+importer, so they get more care. A file is written as version 2 only when it carries one and needs nothing of version 3
+(`bundleVersionFor`), so every other file stays version 1 and a board from before scripts still reads it; a version 1 file that carries a
 script is refused, since an older board would read it without the script. Language, body and timeout travel as they
 are, the body held to `CUSTOM_SCRIPT_MAX` by the contract. Importing a file with a script needs `confirmScript: true` (the
 service refuses with a reason otherwise, whoever calls it) and, like creating one, the board page's `Origin`

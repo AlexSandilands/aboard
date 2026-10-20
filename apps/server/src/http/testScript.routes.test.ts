@@ -165,4 +165,56 @@ describe("POST /api/autopilot/custom/test-script", () => {
     release();
     expect((await again).status).toBe(200);
   });
+
+  it("gives an action and a check their inputs, as a real run would", async () => {
+    const s = setup();
+    await s.post(s.body({ inputs: { depth: "2" } }));
+    await s.post(s.body({ role: "check", inputs: { depth: "2" } }));
+    expect(s.runs[0]!.context).toMatchObject({ inputs: { depth: "2" } });
+    expect(s.runs[1]!.context).toMatchObject({ inputs: { depth: "2" } });
+  });
+
+  it("lists a check's items without a prompt when none was written, and says when it printed none", async () => {
+    const printed = setup(async () => ran({ stdout: JSON.stringify({ key: "a" }) }));
+    const withItems = (await (await printed.post(printed.body({ role: "check" }))).json()) as TestScriptResult;
+    expect(withItems.items).toEqual({ items: [{ key: "a" }], dropped: 0, prompt: null });
+    const quiet = setup();
+    const none = (await (await quiet.post(quiet.body({ role: "check", prompt: "x" }))).json()) as TestScriptResult;
+    expect(none.items).toEqual({ items: [], dropped: 0, prompt: null });
+  });
+
+  it("refuses to read the items of a check that printed more than the board keeps", async () => {
+    const s = setup(async () => ran({ stdout: JSON.stringify({ key: "a" }), stdoutTruncated: true }));
+    const result = (await (await s.post(s.body({ role: "check", prompt: "x" }))).json()) as TestScriptResult;
+    expect(result.items).toEqual({ problem: "It printed more than the board reads" });
+    expect(result.truncated).toBe(true);
+  });
+
+  it("keeps the end of a long stderr, and shows no items for an action", async () => {
+    const stderr = `start${"e".repeat(60_000)}end`;
+    const s = setup(async () => ran({ stderr }));
+    const result = (await (await s.post(s.body())).json()) as TestScriptResult;
+    expect(result.stderr).toHaveLength(50_000);
+    expect(result.stderr.endsWith("end")).toBe(true);
+    expect(result.truncated).toBe(true);
+    expect(result.items).toBeNull();
+  });
+
+  it("is a 404 for an unknown task, running nothing", async () => {
+    const s = setup();
+    expect((await s.post(s.body({ taskId: "nope" }))).status).toBe(404);
+    expect(s.runs).toHaveLength(0);
+  });
+
+  it("answers with the error when the runner throws, and is free for the next test", async () => {
+    let calls = 0;
+    const s = setup(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("spawn exploded");
+      return ran();
+    });
+    const failed = (await (await s.post(s.body())).json()) as TestScriptResult;
+    expect(failed).toMatchObject({ error: "spawn exploded", exitCode: null });
+    expect((await s.post(s.body())).status).toBe(200);
+  });
 });

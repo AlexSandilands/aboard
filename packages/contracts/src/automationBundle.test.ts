@@ -4,6 +4,7 @@ import {
   actionScripts,
   AUTOMATION_BUNDLE_FORMAT,
   AUTOMATION_BUNDLE_VERSION,
+  SCRIPT_BUNDLE_VERSION,
   automationBundle,
   bundleToDefinition,
   inputStartValue,
@@ -123,7 +124,7 @@ describe("automation bundles that carry a script", () => {
   const scripted = (): CustomDefinition => ({ ...definition(), action: CustomAction.parse(script) });
 
   it("is written as the version that holds a script, and a file without one stays at version 1", () => {
-    expect(automationBundle(scripted()).version).toBe(AUTOMATION_BUNDLE_VERSION);
+    expect(automationBundle(scripted()).version).toBe(SCRIPT_BUNDLE_VERSION);
     expect(automationBundle(definition()).version).toBe(PLAIN_BUNDLE_VERSION);
     expect(
       automationBundle({ ...definition(), action: CustomAction.parse({ kind: "shell", command: "make" }) }).version,
@@ -166,6 +167,15 @@ describe("automation bundles that carry a script", () => {
     expect(parseAutomationBundle(file)).toMatchObject({ ok: false, error: expect.stringMatching(/Only an agent/) });
   });
 
+  it("writes the newest version for a command with inputs or an action that reads a variable, and the oldest otherwise", () => {
+    const shell = (extra: Record<string, unknown> = {}) =>
+      automationBundle({ ...definition(), action: CustomAction.parse({ kind: "shell", command: "make", ...extra }) });
+    expect(shell().version).toBe(PLAIN_BUNDLE_VERSION);
+    expect(shell({ inputs: [{ name: "days", label: "Days" }] }).version).toBe(AUTOMATION_BUNDLE_VERSION);
+    const agent = CustomAction.parse({ kind: "agent", prompt: "Triage {{vars.jira_key}}" });
+    expect(automationBundle({ ...definition(), action: agent }).version).toBe(AUTOMATION_BUNDLE_VERSION);
+  });
+
   it("carries a script's inputs as declarations and fills them on import", () => {
     const withInputs = scripted();
     const action = CustomAction.parse({
@@ -175,6 +185,12 @@ describe("automation bundles that carry a script", () => {
     const file = automationBundle({ ...withInputs, action });
     expect(file.action).toMatchObject({ inputs: [] });
     expect(file.inputs).toEqual([{ name: "days", label: "Days", type: "number", default: "14" }]);
+    // A board from before inputs on scripts would refuse the file as invalid, so it says it is newer.
+    expect(file.version).toBe(AUTOMATION_BUNDLE_VERSION);
+    expect(parseAutomationBundle({ ...file, version: SCRIPT_BUNDLE_VERSION })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/need a version 3 file/),
+    });
     const parsed = parseAutomationBundle(JSON.parse(JSON.stringify(file)));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;

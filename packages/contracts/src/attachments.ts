@@ -62,3 +62,22 @@ export const isAttachmentPathId = (value: unknown): value is string =>
 /** The file extension an image of this type is stored with; undefined for any other type. */
 export const attachmentExtension = (mime: string): string | undefined =>
   Object.hasOwn(ATTACHMENT_EXTENSIONS, mime) ? ATTACHMENT_EXTENSIONS[mime] : undefined;
+
+/** The most images one hand-off launch (a T3 thread or a CLI session) takes. */
+export const MAX_LAUNCH_IMAGES = 10;
+
+/** The images pasted into a launch dialog, uploaded beforehand (`POST /api/attachments`), in order. */
+export const LaunchAttachmentIds = z.array(z.uuid()).max(MAX_LAUNCH_IMAGES);
+
+/**
+ * The lines that point an agent at images saved on disk, in T3 Code's own wording, for a CLI that can't take an image
+ * on its command line. Empty for no images.
+ */
+export const attachedImagesLines = (images: ReadonlyArray<{ filename: string; path: string }>): string =>
+  images.map((image) => `[Attached image "${image.filename}" is saved at: ${image.path}]`).join("\n\n");
+
+/** The prompt with the pointers to its images after it, as T3 Code adds them. */
+export const withAttachedImages = (
+  prompt: string,
+  images: ReadonlyArray<{ filename: string; path: string }>,
+): string => (images.length === 0 ? prompt : `${prompt}\n\n${attachedImagesLines(images)}`);

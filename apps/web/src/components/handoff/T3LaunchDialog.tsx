@@ -38,8 +38,17 @@ import {
   type WorkspaceChoice,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
+import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { usePlanPrompt } from "./PlanTasksDialog";
-import { AccessPicker, ComposerControl, ModelPicker, RefPicker, TraitsPicker, WorkspaceMenu } from "./T3LaunchPickers";
+import {
+  AccessPicker,
+  ComposerControl,
+  ComposerStrip,
+  ModelPicker,
+  RefPicker,
+  TraitsPicker,
+  WorkspaceMenu,
+} from "./T3LaunchPickers";
 
 /**
  * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
@@ -325,7 +334,9 @@ function Composer({
       ? { mode: "new_worktree", ref: null }
       : initial;
   });
-  const [commandId, setCommandId] = useState(() => crypto.randomUUID());
+  // Kept or reset together: a retry with the same pair returns the same thread, images and all.
+  const [launchIds, setLaunchIds] = useState(newLaunchIds);
+  const images = useLaunchImages();
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
 
@@ -339,7 +350,7 @@ function Composer({
         : subject.fixBranch && workspace.mode !== "new_worktree"
           ? // The prompt has the agent fast-forward its branch to the PR's: that must never move one of yours.
             "Fix the PR in a new worktree, not in your checkout"
-          : null;
+          : images.blocker;
 
   const changeSelection = (next: T3ModelSelection | null) => {
     setSelection(next);
@@ -359,8 +370,9 @@ function Composer({
     if (blocker || !selection || !workspace || !prompt.trim()) return;
     starter.start(
       {
-        commandId,
+        ...launchIds,
         prompt,
+        ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         modelSelection: selection,
         runtimeMode,
         workspace,
@@ -377,7 +389,7 @@ function Composer({
           onDone();
         },
         onError: (error) => {
-          if (error instanceof ApiError && !keepsCommandId(error.details)) setCommandId(crypto.randomUUID());
+          if (error instanceof ApiError && !keepsCommandId(error.details)) setLaunchIds(newLaunchIds());
           toastManager.add({ type: "error", title: "Couldn't start the thread", description: error.message });
         },
       },
@@ -402,10 +414,13 @@ function Composer({
               submit();
             }
           }}
+          {...images.handlers}
           aria-label="First message"
           className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
+        <LaunchImageThumbs state={images} />
         <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+          <AddImageControl state={images} />
           <ModelPicker options={options} selection={selection} onChange={changeSelection} />
           {selection ? <TraitsPicker options={options} selection={selection} onChange={setSelection} /> : null}
           <AccessPicker provider={provider} value={runtimeMode} onChange={setRuntimeMode} />
@@ -432,10 +447,10 @@ function Composer({
           </button>
         </div>
       </div>
-      <div className="-mt-3 flex items-center justify-between rounded-b-xl border border-t-0 border-border bg-muted/30 px-2 pt-4 pb-1.5">
+      <ComposerStrip className="justify-between">
         <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
         <RefPicker options={options} choice={choice} onChange={setChoice} />
-      </div>
+      </ComposerStrip>
       {subject.fixBranch ? (
         <FixBranchNote
           branch={subject.fixBranch}
@@ -446,6 +461,9 @@ function Composer({
     </form>
   );
 }
+
+/** The ids a launch is sent with; T3 de-duplicates by the command and files uploaded images under the thread. */
+const newLaunchIds = () => ({ commandId: crypto.randomUUID(), threadId: crypto.randomUUID() });
 
 /**
  * Says the thread works on a PR's branch, and warns when its worktree doesn't start from it (T3 listed no such ref, or

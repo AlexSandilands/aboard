@@ -1,4 +1,4 @@
-import { customEnvName, type CustomScriptLanguage, type TestScriptResult } from "@repo/contracts";
+import { CUSTOM_SCRIPT_MAX, customEnvName, type CustomScriptLanguage, type TestScriptResult } from "@repo/contracts";
 
 /** The languages a script can be written in, with what each needs on this machine (the board checks when it runs). */
 export const SCRIPT_LANGUAGES: ReadonlyArray<{ value: CustomScriptLanguage; label: string; needs: string }> = [
@@ -38,8 +38,8 @@ const EXTENSIONS: ReadonlyArray<readonly [RegExp, CustomScriptLanguage]> = [
 export const languageOfFile = (name: string): CustomScriptLanguage | null =>
   EXTENSIONS.find(([pattern]) => pattern.test(name))?.[1] ?? null;
 
-/** The most a loaded file may be, read as text; the script's own limit is checked on save. */
-export const SCRIPT_FILE_MAX_BYTES = 200_000;
+/** The most a loaded file may be in bytes, so a huge file isn't read into the page; its text is then held to CUSTOM_SCRIPT_MAX. */
+export const SCRIPT_FILE_MAX_BYTES = CUSTOM_SCRIPT_MAX * 4;
 
 /** Whether a script is a check (prints items for agents) or an action (does something). */
 export type ScriptRole = "action" | "check";

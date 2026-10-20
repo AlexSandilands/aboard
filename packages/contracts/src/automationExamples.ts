@@ -1,7 +1,7 @@
 import {
   AutomationBundle,
   AUTOMATION_BUNDLE_FORMAT,
-  AUTOMATION_BUNDLE_VERSION,
+  SCRIPT_BUNDLE_VERSION,
   PLAIN_BUNDLE_VERSION,
 } from "./automationBundle.ts";
 import { BRAND } from "./brand.ts";
@@ -292,7 +292,7 @@ End with a one-line summary of what you posted.`;
 /** Review repo PRs: a script lists the pull requests that need a review, and an agent reviews each one. */
 const REVIEW_REPO_PRS = AutomationBundle.parse({
   format: AUTOMATION_BUNDLE_FORMAT,
-  version: AUTOMATION_BUNDLE_VERSION,
+  version: SCRIPT_BUNDLE_VERSION,
   name: "Review repo PRs",
   description:
     "Every 5 minutes, a script lists the open pull requests of the project's repository that have no review of this automation at their head commit, and an agent reviews each one and posts the review as a comment. It covers pull requests whether or not they are linked to a task, from people with write access and your trusted logins (outside contributors only if you turn that on), and only looks at pull requests updated in the last few days. A pull request opts out with a no-autopilot label or /stop-review (from its author, you or a trusted login); /re-review (from you or a trusted login) asks again. It never approves or requests changes. Needs the GitHub CLI (gh), signed in.",

@@ -22,6 +22,7 @@ import {
   type StartSessionInput,
   type StartSessionResult,
   type TaskSummary,
+  withAttachedImages,
 } from "@repo/contracts";
 import { createWorktree, defaultBranchOf } from "../autopilot/worktrees.ts";
 import { AppError } from "../errors.ts";
@@ -65,7 +66,10 @@ export interface SessionLaunchIntegration {
   startPlanning(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
 }
 
-type SessionServices = Pick<Services, "tasks" | "projects" | "links" | "settings">;
+type SessionServices = Pick<Services, "tasks" | "projects" | "links" | "settings" | "attachments">;
+
+/** An image pasted into the launch dialog, where the CLI can open it. */
+type LaunchImage = { filename: string; path: string };
 
 /** The CLI a harness runs: the path set in Settings, else its name on PATH. */
 const configuredCli = (settings: AppSettings, harness: AgentHarness): string =>
@@ -81,6 +85,8 @@ export function shortPrompt(
   platform: NodeJS.Platform,
   /** The pull request's branch, for a fix. */
   branch?: string,
+  /** Pasted images, pointed at after the text: the full prompt, which also has them, is only on the clipboard. */
+  images: readonly LaunchImage[] = [],
 ): string {
   const verb = mode === "plan" ? "Let's plan" : mode === "orchestrate" ? "Let's run the epic" : "Let's work on";
   // An epic's steps live only in its orchestrating prompt, which get_task doesn't carry.
@@ -97,6 +103,11 @@ export function shortPrompt(
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
       : "");
+  return fitShort(withAttachedImages(text, images), platform);
+}
+
+/** A short prompt as this command line takes it. */
+function fitShort(text: string, platform: NodeJS.Platform): string {
   const fitted = textArgument(text, platform);
   if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);
   return fitted.value;
@@ -331,6 +342,9 @@ export function createSessionLaunch(deps: {
       if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const ready = prepare(input.harness);
+      const imageIds = input.attachmentIds ?? [];
+      // Checked before a worktree is made, so an image that is gone leaves nothing behind.
+      deps.services().attachments.forLaunch(imageIds, task.id);
 
       const sessionId = randomUUID();
       let cwd = root;
@@ -364,16 +378,25 @@ export function createSessionLaunch(deps: {
         }
       }
 
+      // Claimed before the prompt is built, so it points at where the files will stay: under the task's folder,
+      // backed up and deleted with it.
+      const images = imageIds.length > 0 ? deps.services().attachments.claimIds(task.id, imageIds) : [];
       return launch(ready, {
         sessionId,
         model: input.model,
-        prompt: input.prompt,
+        prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
         label: sessionLabel(input.mode, task.number),
         windowTask: task.number,
         short: (platform) =>
-          shortPrompt(input.mode, task, platform, workspace.mode === "pr_branch" ? workspace.branch : undefined),
+          shortPrompt(
+            input.mode,
+            task,
+            platform,
+            workspace.mode === "pr_branch" ? workspace.branch : undefined,
+            images,
+          ),
         taskIds: [task.id],
         actor,
       });
@@ -386,20 +409,19 @@ export function createSessionLaunch(deps: {
       const root = projectRoot(projectId);
       if (!root) throw new AppError("VALIDATION", "The project has no folder to start a session in");
       const ready = prepare(input.harness);
+      // Not claimed: there is no one task to give them to, so they wait in the pending folder and are swept after a
+      // day, by when the session has read them.
+      const images = deps.services().attachments.forLaunch(input.attachmentIds ?? [], null);
       // Planning writes no code, so it runs in the project's own checkout.
       return launch(ready, {
         sessionId: randomUUID(),
         model: input.model,
-        prompt: input.prompt,
+        prompt: withAttachedImages(input.prompt, images),
         cwd: root,
         branch: null,
         label: planningSessionLabel(tasks),
         windowTask: tasks[0]!.number,
-        short: (platform) => {
-          const fitted = textArgument(planTasksShortPrompt(tasks), platform);
-          if ("error" in fitted) throw new Error(`The short prompt can't go on a command line: ${fitted.error}`);
-          return fitted.value;
-        },
+        short: (platform) => fitShort(withAttachedImages(planTasksShortPrompt(tasks), images), platform),
         taskIds: tasks.map((task) => task.id),
         actor,
       });

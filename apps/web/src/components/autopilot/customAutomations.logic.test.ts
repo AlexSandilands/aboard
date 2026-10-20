@@ -1,4 +1,4 @@
-import { brandEnv, type CustomAutomation, type Project, type TaskSummary } from "@repo/contracts";
+import { brandEnv, CUSTOM_SCRIPT_MAX, type CustomAutomation, type Project, type TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   customFormToInput,
@@ -447,11 +447,22 @@ describe("a test run's request", () => {
       input: {
         role: "check",
         taskId: null,
+        inputs: { depth: "3" },
         prompt: "Look at {{item.title}}",
         skill: "triage",
         script: { language: "python", body: "print('{}')", timeoutSeconds: 40 },
       },
     });
+  });
+
+  it("says a script is too long rather than empty", () => {
+    const body = "x".repeat(CUSTOM_SCRIPT_MAX + 1);
+    const long = `The script is over ${CUSTOM_SCRIPT_MAX} characters`;
+    expect(testScriptRequest({ ...form, body }, "action", "p")).toEqual({ ok: false, error: long });
+    expect(customFormToInput({ ...form, body })).toEqual({ ok: false, error: long });
+    expect(
+      customFormToInput({ ...form, actionKind: "agent", triggerKind: "schedule", checkOn: true, checkBody: body }),
+    ).toEqual({ ok: false, error: long });
   });
 
   it("says what to fix first", () => {
