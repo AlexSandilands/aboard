@@ -1,5 +1,8 @@
 import {
+  AGENT_HARNESSES,
+  type AgentHarness,
   CliModel,
+  cliEffortFor,
   DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
@@ -119,6 +122,11 @@ function cliEfforts(
   cli: ModelTierSetting["cli"],
 ): ModelTierSetting["cliEffort"] {
   if (!efforts || !cli) return undefined;
+  for (const [harness, effort] of Object.entries(efforts)) {
+    if (cli[harness as AgentHarness] && !cliEffortFor(harness as AgentHarness, effort)) {
+      throw new AppError("VALIDATION", `${AGENT_HARNESSES[harness as AgentHarness].label} has no effort ${effort}`);
+    }
+  }
   const entries = Object.entries(efforts).filter(([harness]) => cli[harness as keyof typeof cli]);
   return entries.length ? Object.fromEntries(entries) : undefined;
 }

@@ -400,6 +400,17 @@ describe("starting a session from the board", () => {
     expect(saved.modelProfiles.map((p) => p.cliEffort)).toEqual([undefined, { "claude-code": "max" }]);
   });
 
+  it("won't save an effort the harness's CLI doesn't take", () => {
+    const app = appWith();
+    expect(() =>
+      app.services.settings.update({
+        modelTiers: {
+          light: { description: null, t3: null, cli: { "claude-code": "haiku" }, cliEffort: { "claude-code": "none" } },
+        },
+      }),
+    ).toThrow(/Claude Code has no effort none/);
+  });
+
   it("won't save a tier's CLI model that isn't a model name", () => {
     const app = appWith();
     expect(() =>

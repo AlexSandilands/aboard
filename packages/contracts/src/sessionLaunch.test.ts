@@ -127,6 +127,12 @@ describe("models and windows", () => {
     expect(tierCliEffort(tiers, "deep", "copilot-cli")).toBeNull();
     expect(tierCliEffort(tiers, "light", "claude-code")).toBeNull();
     expect(tierCliEffort(tiers, null, "claude-code")).toBeNull();
+    // A level only Copilot takes, stored under Claude Code, falls back to the CLI's default.
+    const stale = ModelTiers.parse({
+      ...EMPTY_MODEL_TIERS,
+      deep: { description: null, t3: null, cli: { "claude-code": "opus" }, cliEffort: { "claude-code": "none" } },
+    });
+    expect(tierCliEffort(stale, "deep", "claude-code")).toBeNull();
   });
 
   it("names a task's window after the product and the task, in characters wt takes as a name", () => {

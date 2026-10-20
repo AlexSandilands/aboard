@@ -3,6 +3,7 @@ import type { AgentHarness } from "./agentSessions.ts";
 import { LABEL_MAX_LENGTH, normalizeLabel } from "./labels.ts";
 import {
   type CliEffort,
+  cliEffortFor,
   MODEL_TIERS,
   ModelTier,
   ModelTierSetting,
@@ -169,9 +170,9 @@ export const resolveTaskModel = (
 export const profileCliModel = (profile: RunProfile | null, harness: AgentHarness): string | null =>
   profile?.setting.cli?.[harness]?.trim() || null;
 
-/** The effort that goes with a profile's CLI model, or null for the CLI's default. None without a model set. */
+/** The effort that goes with a profile's CLI model, or null for the CLI's default. None without a model set, or one the CLI doesn't take. */
 export const profileCliEffort = (profile: RunProfile | null, harness: AgentHarness): CliEffort | null =>
-  (profileCliModel(profile, harness) && profile?.setting.cliEffort?.[harness]) || null;
+  (profileCliModel(profile, harness) && cliEffortFor(harness, profile?.setting.cliEffort?.[harness])) || null;
 
 /**
  * The `--model` a headless `claude -p` run takes for a profile: its Claude Code model, else its T3 model when that is a

@@ -56,6 +56,10 @@ export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 
+/** The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's, and `claude --effort` refuses them. */
+export const cliEffortFor = (harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null =>
+  effort && CLI_EFFORTS[harness].includes(effort) ? effort : null;
+
 /** Each harness's effort for a tier or custom model; a harness with none runs the CLI's default effort. */
 export const CliEfforts = z.partialRecord(AgentHarness, CliEffort);
 export type CliEfforts = z.infer<typeof CliEfforts>;

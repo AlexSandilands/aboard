@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLI_EFFORTS, CliEffort, ModelTierSetting } from "./modelTiers.ts";
+import { CLI_EFFORTS, CliEffort, cliEffortFor, ModelTierSetting } from "./modelTiers.ts";
 import { ModelProfile } from "./modelProfiles.ts";
 
 describe("cli effort", () => {
@@ -18,6 +18,14 @@ describe("cli effort", () => {
     expect(ModelProfile.parse({ ...profile, cliEffort: { "copilot-cli": "none" } }).cliEffort).toEqual({
       "copilot-cli": "none",
     });
+  });
+
+  it("takes a level only for a CLI that accepts it", () => {
+    expect(cliEffortFor("claude-code", "high")).toBe("high");
+    expect(cliEffortFor("claude-code", "none")).toBeNull();
+    expect(cliEffortFor("claude-code", "minimal")).toBeNull();
+    expect(cliEffortFor("copilot-cli", "none")).toBe("none");
+    expect(cliEffortFor("copilot-cli", null)).toBeNull();
   });
 
   it("lists only valid levels for each harness", () => {
