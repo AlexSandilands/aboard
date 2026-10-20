@@ -12,7 +12,7 @@ import { claudeOutput, executableVersion, resolveExecutable } from "./claudeCli.
 import { messageOf } from "./github.ts";
 import type { TerminalHost } from "./terminal.ts";
 
-// Whether Claude Code and Copilot CLI run here and have the board's MCP server registered, for Settings →
+// Whether Claude Code, Codex and Copilot CLI run here and have the board's MCP server registered, for Settings →
 // Integrations. The MCP entry is found by its URL, not its name: it is the user's to name. Config files are read for
 // server names and URLs only; headers and tokens in them are never looked at. See docs/features/agent-sessions.md.
 
@@ -116,6 +116,29 @@ export function projectMcpEntriesOf(json: unknown): McpEntry[] {
   const projects = json && typeof json === "object" ? (json as { projects?: unknown }).projects : null;
   if (!projects || typeof projects !== "object") return [];
   return Object.values(projects as Record<string, unknown>).flatMap(mcpEntriesOf);
+}
+
+/**
+ * The servers Codex's `config.toml` names, from its `[mcp_servers.<name>]` tables and the `url` in each. A line-based
+ * read of the few shapes Codex writes, not a TOML parser: only table headers and `url` lines are looked at, so
+ * `http_headers` and `env`, where tokens live, are never read.
+ */
+export function codexMcpEntries(toml: string): McpEntry[] {
+  const entries: McpEntry[] = [];
+  let current: McpEntry | null = null;
+  for (const raw of toml.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("[")) {
+      // `[mcp_servers.board]` or `[mcp_servers."my board"]`; a sub-table such as `[mcp_servers.board.env]` isn't one.
+      const header = /^\[\s*mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))\s*\]$/.exec(line);
+      current = header ? { name: (header[1] ?? header[2])!, url: null } : null;
+      if (current) entries.push(current);
+      continue;
+    }
+    const url = current && /^url\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(line);
+    if (current && url) current.url = url[1] ?? url[2] ?? null;
+  }
+  return entries;
 }
 
 const entriesInFile = (read: (path: string) => string | null, path: string): McpEntry[] => {
@@ -283,9 +306,20 @@ export function createAgentIntegrations(deps: {
       : NOT_REGISTERED("No MCP server in Copilot CLI's config points at the board");
   };
 
+  const codexMcp = (boardUrl: string): AgentIntegrationStatus["mcp"] => {
+    const home = deps.host().env.CODEX_HOME ?? join(deps.userHome, ".codex");
+    const text = probes.readFile(join(home, "config.toml"));
+    if (text === null) return NOT_REGISTERED("No Codex config yet");
+    const found = matching(codexMcpEntries(text), boardUrl);
+    return found
+      ? { registered: true, connected: null, scope: "user", name: found.name, detail: "In Codex's config.toml" }
+      : NOT_REGISTERED("No MCP server in Codex's config.toml points at the board");
+  };
+
   const compute = async (settings: AppSettings, boardUrl: string): Promise<AgentIntegrations> => {
-    const [claudeCli, copilotCli] = await Promise.all([
+    const [claudeCli, codexCli, copilotCli] = await Promise.all([
       cliOf("claude-code", settings.headlessReviewCli),
+      cliOf("codex", settings.codexCli),
       cliOf("copilot-cli", settings.copilotCli),
     ]);
     return {
@@ -296,6 +330,7 @@ export function createAgentIntegrations(deps: {
           cli: claudeCli,
           mcp: await claudeMcp(claudeCli.found ? claudeCli.path : null, boardUrl),
         },
+        { harness: "codex", cli: codexCli, mcp: codexMcp(boardUrl) },
         { harness: "copilot-cli", cli: copilotCli, mcp: copilotMcp(boardUrl) },
       ],
     };
@@ -313,7 +348,7 @@ export function createAgentIntegrations(deps: {
     status(refresh = false) {
       const settings = deps.services().settings.get();
       const boardUrl = deps.mcpUrl();
-      const key = JSON.stringify([settings.headlessReviewCli, settings.copilotCli, boardUrl]);
+      const key = JSON.stringify([settings.headlessReviewCli, settings.codexCli, settings.copilotCli, boardUrl]);
       if (cached?.key === key && (cached.pending || (!refresh && now() - cached.at < CACHE_MS))) return cached.result;
       const result = compute(settings, boardUrl);
       const entry = { key, at: now(), result, pending: true };

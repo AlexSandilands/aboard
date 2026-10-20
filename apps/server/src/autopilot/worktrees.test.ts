@@ -88,6 +88,64 @@ describe("Autopilot worktrees", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(git(repo.checkout, "branch", "--list", "autopilot/*")).toContain("autopilot/7-abcdef12");
   });
 
+  describe("the push guard", () => {
+    const push = (cwd: string, ...args: string[]) => {
+      try {
+        git(cwd, "push", "--quiet", "origin", ...args);
+        return "pushed";
+      } catch (error) {
+        return String((error as { stderr?: unknown }).stderr ?? error);
+      }
+    };
+    const commit = (cwd: string, file: string) => {
+      writeFileSync(join(cwd, file), `${file}\n`);
+      git(cwd, "add", file);
+      git(cwd, "commit", "--quiet", "-m", file);
+    };
+
+    it("refuses force, delete and default-branch pushes, and allows the run's own branch", async () => {
+      const wt = await createWorktree(defaultRunGit, {
+        repo: repo.checkout,
+        root: repo.worktrees,
+        taskNumber: 7,
+        runId: RUN_ID,
+        pushGuard: true,
+      });
+      commit(wt.path, "one.txt");
+      expect(push(wt.path, "-u", wt.branch)).toBe("pushed");
+      commit(wt.path, "two.txt");
+      expect(push(wt.path, wt.branch)).toBe("pushed");
+
+      expect(push(wt.path, "HEAD:main")).toContain("default branch (main)");
+      expect(push(wt.path, "HEAD:refs/heads/main")).toContain("default branch (main)");
+      expect(push(wt.path, ":feature")).toContain("it deletes refs/heads/feature");
+      expect(push(wt.path, "--delete", "feature")).toContain("it deletes");
+      git(wt.path, "commit", "--quiet", "--amend", "-m", "rewritten");
+      expect(push(wt.path, "--force", wt.branch)).toContain("force-push");
+      expect(push(wt.path, `+HEAD:${wt.branch}`)).toContain("force-push");
+      // The user's checkout keeps its own hooks.
+      expect(() => git(repo.checkout, "config", "--get", "core.hooksPath")).toThrow("Command failed");
+    });
+
+    it("still runs the repository's own hooks", async () => {
+      const hooks = join(repo.checkout, ".git", "hooks");
+      writeFileSync(join(hooks, "pre-commit"), '#!/bin/sh\necho ran > "$(git rev-parse --show-toplevel)/hook-ran"\n', {
+        mode: 0o755,
+      });
+      writeFileSync(join(hooks, "pre-push"), "#!/bin/sh\necho 'repo hook says no' >&2\nexit 1\n", { mode: 0o755 });
+      const wt = await createWorktree(defaultRunGit, {
+        repo: repo.checkout,
+        root: repo.worktrees,
+        taskNumber: 7,
+        runId: RUN_ID,
+        pushGuard: true,
+      });
+      commit(wt.path, "one.txt");
+      expect(existsSync(join(wt.path, "hook-ran"))).toBe(true);
+      expect(push(wt.path, wt.branch)).toContain("repo hook says no");
+    });
+  });
+
   it("tells whether a folder is inside another", () => {
     expect(isInside(join("a", "b"), "a")).toBe(true);
     expect(isInside("a", "a")).toBe(true);

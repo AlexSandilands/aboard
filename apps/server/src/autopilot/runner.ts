@@ -477,6 +477,7 @@ export function createAutopilotRunner(deps: {
       branch: request.workspace?.branch,
       // A reviewer can't push, so it may read the default branch too.
       readOnly: request.access === "read-only",
+      pushGuard: true,
     });
     // Before the agent costs anything: it must be reading the commit it was asked about.
     if (request.expectHead) {
