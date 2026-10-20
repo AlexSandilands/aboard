@@ -28,7 +28,7 @@ export function createAttachmentsRepo(sql: Sql) {
     },
     forTask(taskId: string): TaskAttachment[] {
       return sql
-        .all<AttachmentRow>("SELECT * FROM task_attachments WHERE task_id = ? ORDER BY created_at, id", taskId)
+        .all<AttachmentRow>("SELECT * FROM task_attachments WHERE task_id = ? ORDER BY created_at, rowid", taskId)
         .map(toAttachment);
     },
     /** Attachments uploaded for no task yet, created before `before`. */
