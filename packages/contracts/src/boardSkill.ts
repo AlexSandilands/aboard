@@ -375,7 +375,8 @@ it there (every script, command and prompt), confirms any script, fills in input
 
 Statuses are \`backlog\`, \`planned\`, \`in_progress\`, \`review\`, \`done\`. Things to know:
 
-- It only acts on what happens **after** the user switches it on, so don't design around history.
+- It only acts on what happens **after** the user switches it on, so don't design around history. The exception is
+  \`stale\`: it also fires for every task already past the limit, so suggest a dry run first in your \`note\`.
 - A **schedule has no task**: it runs once in each project it is switched on in, with no task or PR, and can't filter
   by label. Its agent runs headless in an empty temporary folder and is told the project's name and folder.
 - \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels. The user picks the projects and
@@ -413,20 +414,22 @@ These keep an automation reusable, so it needn't be edited for each project or p
 - **Variables** (\`{{vars.jira_key}}\`) are values the **user** sets per project, or for the whole board, under Settings →
   Autopilot → Custom automations → Variables: a Jira key, a team, a board id. You can't set or read them. Just name
   the one you need. **An automation that names a variable doesn't run in a project with no value for it**, so say in
-  your \`note\` which variables to set; the draft's result also lists the projects that have none. Read one as optional
-  (so it never blocks a project) with \`.get("team", "")\` in Python, \`?? ""\` in Node or the environment variable in
-  sh. A variable is plain text: **never use one for a secret**; a script reads tokens from the user's own environment.
+  your \`note\` which variables to set; the draft's result also lists the projects that have none. Only some reads
+  count as optional (so they never block a project): \`.get("team", "")\` in Python and a destructure with a default in
+  Node (\`const { team = "" } = ctx.vars\`). Any other read counts as needed, including \`ctx.vars.team ?? ""\` and every
+  environment-variable read, so sh can't read a variable as optional. A variable is plain text: **never use one for a secret**; a script reads tokens from the user's own environment.
 - **Inputs** (\`inputs: [{name, label, type, default}]\`, read as \`{{inputs.<name>}}\`) are values that are the same in
   every project and that the user may want to change without touching the prompt or code: a look-back in days, a JQL
   query, a threshold, whether to ask for approval. \`type\` is \`text\`, \`number\` or \`boolean\` (\`default\` is the text as
-  typed: \`"7"\`, \`"true"\`). A name is lowercase letters, digits and underscores. A script reads them as strings.
+  typed, and must be valid for the type: a \`number\` needs one such as \`"7"\`, a \`boolean\` \`"true"\` or \`"false"\`).
+  A name starts with a lowercase letter, then letters, digits and underscores, up to 40 characters. A script reads them as strings.
   Prefer an input to a literal buried in a prompt or script.
 - **The repository** needs no variable: \`{{project.repo_url}}\`, \`project.repoUrl\` on stdin and
   \`${brandEnv("")}PROJECT_REPO_URL\` hold \`https://github.com/<owner>/<repo>\` from the project folder's \`origin\`, empty when
   there is none.
 - **Tool slots** (\`slots: [{name, label, description}]\`, agent only) declare a _kind_ of tool the agent needs from the
-  user's own MCP servers ("Jira tools": search issues). People use different servers, so **never name a server or tool
-  in the prompt or \`allowedTools\`**; write the purpose ("use the Jira tools to search for issues"), and the user fills
+  user's own MCP servers ("Jira tools": search issues). People use different servers, so **never name the user's own server or
+  tool in the prompt or \`allowedTools\`**; write the purpose ("use the Jira tools to search for issues"), and the user fills
   the slot on import. The prompt is told which tools fill each slot. An empty slot keeps the automation from being
   switched on, and it can't be combined with untrusted check items.
 - \`allowedTools\` (\`["mcp__server__tool"]\`) is for tools you know exist for everyone. Prefer a slot.

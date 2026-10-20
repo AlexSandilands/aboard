@@ -170,6 +170,54 @@ describe("skill sync", () => {
     expect(readFileSync(other, "utf8")).toContain("review-loop");
   });
 
+  it("refuses to remove while only the automations skill is edited, then removes both", async () => {
+    const { h, sync, claude, read, path, automationsPath, put } = setup();
+    sync.enable("claude");
+    put("edited", automationsPath);
+    writeFileSync(join(dirname(automationsPath), "notes.md"), "mine");
+
+    const refused = await h.request("/api/skill-sync/claude/disable", { method: "POST", json: { remove: true } });
+    expect(refused.status).toBe(409);
+    expect(existsSync(path)).toBe(true);
+    expect(read(automationsPath)).toBe("edited");
+
+    const removed = await h.request("/api/skill-sync/claude/disable", {
+      method: "POST",
+      json: { remove: true, force: true },
+    });
+    expect(claude((await removed.json()) as SkillSyncStatus).state).toBe("not_installed");
+    expect(existsSync(dirname(path))).toBe(false);
+    expect(existsSync(automationsPath)).toBe(false);
+    // The automations folder held a file of the user's, so it stays.
+    expect(readFileSync(join(dirname(automationsPath), "notes.md"), "utf8")).toBe("mine");
+  });
+
+  it("removes both skills when none is edited", () => {
+    const { sync, claude, path, automationsPath } = setup();
+    sync.enable("claude");
+    expect(claude(sync.disable("claude", { remove: true })).state).toBe("not_installed");
+    expect(existsSync(dirname(path))).toBe(false);
+    expect(existsSync(dirname(automationsPath))).toBe(false);
+  });
+
+  it("overwrite restores both skills and records both hashes", () => {
+    const { h, sync, claude, read, put, automationsPath } = setup();
+    sync.enable("claude");
+    put("edited");
+    put("edited too", automationsPath);
+    expect(claude(sync.status()).state).toBe("edited");
+    expect(claude(sync.overwrite("claude"))).toMatchObject({ enabled: true, state: "up_to_date" });
+    expect(read()).toBe(boardSkillFile());
+    expect(read(automationsPath)).toBe(automationsSkillFile());
+    const stored = createRepos(h.db).settings.all().get(SKILL_SYNC_KEY) as {
+      harnesses: { claude: { installedHashes: Record<string, string> } };
+    };
+    expect(stored.harnesses.claude.installedHashes).toEqual({
+      board: promptHash(boardSkillFile()),
+      automations: promptHash(automationsSkillFile()),
+    });
+  });
+
   it("each harness has its own folder and switch", async () => {
     const { h, home } = setup();
     const res = await h.request("/api/skill-sync/codex/enable", { method: "POST" });
