@@ -5,7 +5,7 @@ import { BRAND } from "./brand.ts";
  * The board skill agents install to learn the workflow. `skills/aboard/SKILL.md` ships the same text (a test keeps
  * them identical); it lives here so the bundled server can install and keep it in sync without the repo's files.
  */
-export const BOARD_SKILL_DESCRIPTION = `Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/Jira/T3 thread links and handover notes.`;
+export const BOARD_SKILL_DESCRIPTION = `Track work on the user's local task board (kanban over MCP). Use when starting or resuming meaningful work in a repo, when an idea, follow-up or ticket to pick up later comes up mid-task, when writing an implementation plan, when splitting a large feature into tasks, when finishing steps, opening PRs, or ending a session. Covers the backlog, plans, epics, blocking between tasks, step progress, PR/ticket/T3 thread links and handover notes.`;
 
 export const BOARD_SKILL_BODY = `# ${BRAND.name} (task board)
 

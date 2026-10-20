@@ -542,6 +542,16 @@ describe("MCP endpoint", () => {
     expect(detail).toContain(`Jira CORE-5: link(task: "${ref}", value: "CORE-5")`);
   });
 
+  it("doesn't hint a title key of a system that links title keys itself", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-5 Fix login" });
+    const ref = `#${task.number}`;
+    await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-5" } });
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
+    expect(detail).not.toContain("CORE-5: link(");
+  });
+
   it("unlink removes a link and refuses one the task doesn't have", async () => {
     h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });

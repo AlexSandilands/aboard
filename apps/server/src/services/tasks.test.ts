@@ -178,6 +178,15 @@ describe("tasks", () => {
     expect(keys(task.id)).toEqual(["CORE-2"]);
   });
 
+  it("a ticket linked on request after the board linked it stays when the title changes", () => {
+    const { s, project } = setup();
+    s.settings.update({ ticketSystems: [TEST_JIRA] });
+    const task = s.tasks.create({ projectId: project.id, title: "CORE-1 Fix login" });
+    s.links.add(task.id, { value: "CORE-1" }, "agent");
+    s.tasks.update(task.id, { title: "Fix login" }, "agent");
+    expect(s.tasks.detail(task.id).links.map((l) => l.kind)).toEqual(["ticket"]);
+  });
+
   it("unlink removes a link by key, URL or id, and refuses one the task doesn't have", () => {
     const { s, project } = setup();
     s.settings.update({ ticketSystems: [TEST_JIRA] });

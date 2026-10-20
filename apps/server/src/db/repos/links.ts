@@ -115,6 +115,9 @@ export function createLinksRepo(sql: Sql) {
     setRef(id: string, refJson: string): void {
       sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
     },
+    setAuto(id: string, auto: boolean): void {
+      sql.run("UPDATE task_links SET auto = ? WHERE id = ?", auto ? 1 : 0, id);
+    },
     setLabel(id: string, label: string | null): void {
       sql.run("UPDATE task_links SET label = ? WHERE id = ?", label, id);
     },

@@ -238,6 +238,11 @@ export function createLinksService(
               })
             : undefined);
         if (existing) {
+          // Asking for a link the board added by itself makes it one asked for, which a rename leaves alone.
+          if (existing.auto && !opts.auto) {
+            repos.links.setAuto(existing.id, false);
+            fx.task(task.id);
+          }
           // A session is one link however often it is linked, but an agent may correct the folder it gave (Claude
           // finds a conversation to resume by its folder) or rename the session as its work changes (planning, then
           // implementing): the newest one wins.
@@ -307,15 +312,17 @@ export function createLinksService(
 
     removeAutoTickets(taskId, keep, actor) {
       core.write((fx) => {
+        let removed = false;
         const kept = new Set(keep.map((r) => `${r.system}:${r.key}`));
         for (const row of repos.links.forTasks([taskId])) {
           if (row.kind !== "ticket" || !row.auto) continue;
           const ref = parseJson<TicketRef>(row.ref_json);
           if (!ref || kept.has(`${ref.system}:${ref.key}`)) continue;
           repos.links.delete(row.id);
+          removed = true;
           fx.log(taskId, actor, "link_removed", { kind: row.kind, url: row.url, auto: true });
         }
-        fx.task(taskId);
+        if (removed) fx.task(taskId);
       });
     },
 

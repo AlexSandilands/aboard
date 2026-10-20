@@ -17,7 +17,7 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
 `get_task` before resuming, plan before leaving Backlog (with a suggested model tier, and suggest labels if
 the task has none, and whether to flag it for Autopilot), keep
-steps current, group large features into epics, link the Jira issue and the T3 thread, finish with `add_note`.
+steps current, group large features into epics, link the task's ticket and the T3 thread, finish with `add_note`.
 
 ### Tools
 
