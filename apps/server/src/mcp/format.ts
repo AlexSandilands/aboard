@@ -331,8 +331,8 @@ export function eventText(event: TaskEvent): string {
 }
 
 /**
- * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the title or
- * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
+ * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the description
+ * (and in the title, for a system that doesn't link them itself), the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
 export function missingLinkHints(
@@ -343,7 +343,13 @@ export function missingLinkHints(
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
   const linked = new Set(task.links.flatMap((l) => (l.kind === "ticket" ? [`${l.ref.system}:${l.ref.key}`] : [])));
-  const found = [...findTicketKeys(task.title, ticketSystems), ...findTicketKeys(task.description, ticketSystems)];
+  // Only keys the configured systems recognise are hinted, as when linking. The board links title keys of a system
+  // with autoLink itself, so a hint for one would tell an agent to restore a link someone removed.
+  const autoLinked = new Set(ticketSystems.filter((s) => s.autoLink).map((s) => s.id));
+  const found = [
+    ...findTicketKeys(task.title, ticketSystems).filter((t) => !autoLinked.has(t.system)),
+    ...findTicketKeys(task.description, ticketSystems),
+  ];
   const hints = found
     .filter((t, i) => !linked.has(`${t.system}:${t.key}`) && found.findIndex((o) => o.key === t.key) === i)
     .map((t) => `${ticketLabel(ticketSystems, t)}: link(task: ${ref}, value: "${t.key}")`);

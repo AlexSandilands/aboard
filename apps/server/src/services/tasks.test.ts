@@ -153,6 +153,49 @@ describe("tasks", () => {
     expect(s.tasks.detail(backlog.id).events.filter((e) => e.type === "link_added")).toHaveLength(2);
   });
 
+  it("on rename, removes auto links whose key left the title, keeps explicit ones and doesn't re-add removed ones", () => {
+    const { s, project } = setup();
+    s.settings.update({ ticketSystems: [TEST_JIRA] });
+    const keys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : []));
+    const task = s.tasks.create({
+      projectId: project.id,
+      title: "CORE-1 and CORE-2 Fix login",
+      links: [{ value: "CORE-2" }],
+    });
+    expect(keys(task.id)).toEqual(["CORE-2", "CORE-1"]);
+
+    // CORE-1 was linked by the board, CORE-2 on request: only the first goes with its key.
+    s.tasks.update(task.id, { title: "Fix login" }, "agent");
+    expect(keys(task.id)).toEqual(["CORE-2"]);
+    const removed = s.tasks.detail(task.id).events.find((e) => e.type === "link_removed");
+    expect(removed).toMatchObject({ actor: "agent", payload: { auto: true } });
+
+    // A link removed by hand stays removed while its key stays in the title.
+    s.tasks.update(task.id, { title: "CORE-3 Fix login" }, "agent");
+    const three = s.tasks.detail(task.id).links.find((l) => l.kind === "ticket" && l.ref.key === "CORE-3")!;
+    s.links.remove(three.id, "user");
+    s.tasks.update(task.id, { title: "CORE-3 Fix the login page" }, "agent");
+    expect(keys(task.id)).toEqual(["CORE-2"]);
+  });
+
+  it("unlink removes a link by key, URL or id, and refuses one the task doesn't have", () => {
+    const { s, project } = setup();
+    s.settings.update({ ticketSystems: [TEST_JIRA] });
+    const task = s.tasks.create({
+      projectId: project.id,
+      title: "CORE-1 Fix login",
+      links: [{ value: "https://example.com/spec" }, { value: "https://github.com/acme/app/pull/3" }],
+    });
+    const ticket = s.tasks.detail(task.id).links.find((l) => l.kind === "ticket")!;
+    expect(s.links.unlink(task.id, "core-1", "agent").id).toBe(ticket.id);
+    expect(s.links.unlink(task.id, "https://example.com/spec", "agent").kind).toBe("url");
+    const pr = s.tasks.detail(task.id).links.find((l) => l.kind === "pr")!;
+    expect(s.links.unlink(task.id, pr.id, "agent").kind).toBe("pr");
+    expect(s.tasks.detail(task.id).links).toEqual([]);
+    expect(s.tasks.detail(task.id).events.filter((e) => e.type === "link_removed")).toHaveLength(3);
+    expectCode(() => s.links.unlink(task.id, "CORE-1", "agent"), "NOT_FOUND");
+  });
+
   it("links title keys only for systems that ask for it, and none without a system", () => {
     const { s, project } = setup();
     const keys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : []));

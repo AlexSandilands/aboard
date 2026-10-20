@@ -533,6 +533,29 @@ describe("MCP endpoint", () => {
     expect(text(closed)).not.toContain("Missing links:");
   });
 
+  it("hints a title key only for a system that doesn't link title keys itself", async () => {
+    h.services.settings.update({ ticketSystems: [{ ...TEST_JIRA, autoLink: false }] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-5 Fix login" });
+    const ref = `#${task.number}`;
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
+    expect(detail).toContain(`Jira CORE-5: link(task: "${ref}", value: "CORE-5")`);
+  });
+
+  it("unlink removes a link and refuses one the task doesn't have", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
+    const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
+    const task = h.services.tasks.create({ projectId: project.id, title: "CORE-9 Fix login" });
+    const ref = `#${task.number}`;
+    const removed = await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-9" } });
+    expect(removed.isError).toBeFalsy();
+    expect(text(removed)).toContain(`Unlinked from ${ref}: Jira CORE-9`);
+    expect(h.services.tasks.detail(task.id).links).toEqual([]);
+    const again = await client.callTool({ name: "unlink", arguments: { task: ref, value: "CORE-9" } });
+    expect(again.isError).toBe(true);
+    expect(text(again)).toContain("NOT_FOUND");
+  });
+
   it("add_to_backlog attaches links and the T3 thread", async () => {
     h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const created = await client.callTool({

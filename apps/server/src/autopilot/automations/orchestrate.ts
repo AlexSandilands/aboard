@@ -110,6 +110,7 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "add_steps",
   "update_step",
   "link",
+  "unlink",
   "start_review",
   "submit_review",
   "resolve_finding",

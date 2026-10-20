@@ -163,7 +163,7 @@ export function taskHandoffPrompt({
     lines.push(
       "",
       "The board started this session and already linked it to the task; don't link it again. Link the task to its " +
-        "Jira issue with link if it has one.",
+        "ticket with link if it has one.",
     );
     return lines.join("\n");
   }
@@ -171,7 +171,7 @@ export function taskHandoffPrompt({
     "",
     linkedThread
       ? "This thread is already linked to the task; don't link it again."
-      : "Link the task to its Jira issue with link if it has one, and, if you're running in T3 Code, to this " +
+      : "Link the task to its ticket with link if it has one, and, if you're running in T3 Code, to this " +
           "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
     "In Claude Code or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
       `label: "${mode === "plan" ? "Planning" : "Implementing"} #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID or ` +
@@ -197,7 +197,7 @@ function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): str
     "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
     "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",
     "",
-    "Link the task to its Jira issue with link if it has one. Don't link a T3 thread: you run inside the orchestrator's session.",
+    "Link the task to its ticket with link if it has one. Don't link a T3 thread: you run inside the orchestrator's session.",
   ].join("\n");
 }
 

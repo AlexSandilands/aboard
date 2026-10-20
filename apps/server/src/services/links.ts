@@ -61,6 +61,27 @@ const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
   }
 };
 
+/** The link `value` (a URL or ticket key, as `link` takes them) names among a task's links, if any. */
+function matchingLink(rows: readonly LinkRow[], value: string, ticketSystems: readonly TicketSystem[]): LinkRow | null {
+  let classified: ClassifiedLink | null = null;
+  try {
+    classified = classifyLinkInput({ value }, ticketSystems);
+  } catch {
+    // Not something `link` would take; it can still equal a stored URL.
+  }
+  const sameTicket = (row: LinkRow): boolean => {
+    if (classified?.kind !== "ticket" || row.kind !== "ticket") return false;
+    const ref = parseJson<TicketRef>(row.ref_json);
+    return ref?.system === classified.ref.system && ref.key === classified.ref.key;
+  };
+  return (
+    rows.find((r) => r.url === value) ??
+    rows.find((r) => classified && r.kind === classified.kind && r.url === classified.url) ??
+    rows.find(sameTicket) ??
+    null
+  );
+}
+
 /** Actor recorded when merged pull requests move a task to Done. */
 export const GITHUB_ACTOR = "github";
 
@@ -251,7 +272,7 @@ export function createLinksService(
           snapshot_json: null,
           synced_at: null,
           created_at: nowIso(),
-          auto: 0,
+          auto: opts.auto ? 1 : 0,
         };
         repos.links.insert(row);
         fx.log(task.id, actor, "link_added", { linkId: row.id, kind: row.kind, url: row.url });
@@ -264,6 +285,37 @@ export function createLinksService(
         const row = rowOrThrow(linkId);
         repos.links.delete(linkId);
         fx.log(row.task_id, actor, "link_removed", { kind: row.kind, url: row.url });
+      });
+    },
+
+    unlink(taskId, value, actor) {
+      return core.write((fx) => {
+        const task = deps.task(taskId);
+        const wanted = value.trim();
+        const rows = repos.links.forTasks([task.id]);
+        const row = rows.find((l) => l.id === wanted) ?? matchingLink(rows, wanted, deps.settings.get().ticketSystems);
+        if (!row) {
+          throw new AppError("NOT_FOUND", `#${task.number} has no link matching "${wanted}"`);
+        }
+        const link = toLink(row);
+        repos.links.delete(row.id);
+        fx.log(task.id, actor, "link_removed", { kind: row.kind, url: row.url });
+        fx.task(task.id);
+        return link;
+      });
+    },
+
+    removeAutoTickets(taskId, keep, actor) {
+      core.write((fx) => {
+        const kept = new Set(keep.map((r) => `${r.system}:${r.key}`));
+        for (const row of repos.links.forTasks([taskId])) {
+          if (row.kind !== "ticket" || !row.auto) continue;
+          const ref = parseJson<TicketRef>(row.ref_json);
+          if (!ref || kept.has(`${ref.system}:${ref.key}`)) continue;
+          repos.links.delete(row.id);
+          fx.log(taskId, actor, "link_removed", { kind: row.kind, url: row.url, auto: true });
+        }
+        fx.task(taskId);
       });
     },
 

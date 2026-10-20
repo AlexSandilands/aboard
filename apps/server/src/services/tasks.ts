@@ -136,13 +136,20 @@ export function createTasksService(
   // A key in the title is a strong signal, so it is linked outright, for the systems that ask for it. Keys in a
   // description are only hinted at (mcp/format.ts), since prose there gives too many false positives. Keys are found
   // with every system, so a key goes to the same system it would when pasted. links.add is idempotent.
-  const linkTitleKeys = (taskId: string, title: string, actor: string): void => {
+  // A rename links only the keys the title didn't have, so a link someone removed isn't brought back by an edit that
+  // leaves its key alone, and takes away the links the board added for keys that left the title. Links added on
+  // request stay.
+  const linkTitleKeys = (taskId: string, title: string, actor: string, previousTitle?: string): void => {
     const systems = deps.settings.get().ticketSystems;
-    for (const ref of findTicketKeys(title, systems)) {
+    const keys = findTicketKeys(title, systems);
+    const before = new Set(findTicketKeys(previousTitle, systems).map((r) => `${r.system}:${r.key}`));
+    for (const ref of keys) {
+      if (before.has(`${ref.system}:${ref.key}`)) continue;
       if (systems.find((s) => s.id === ref.system)?.autoLink) {
-        deps.links().service.add(taskId, { value: ref.key }, actor);
+        deps.links().service.add(taskId, { value: ref.key }, actor, { auto: true });
       }
     }
+    if (previousTitle !== undefined) deps.links().service.removeAutoTickets(taskId, keys, actor);
   };
 
   /** Validates the resolution/by-task pairing for `close` and returns the by-task, if any. */
@@ -640,7 +647,7 @@ export function createTasksService(
         if (input.removeBlockedBy?.length) deps.relations().removeBlockersIn(id, input.removeBlockedBy, actor, fx);
         if (input.addBlockedBy?.length) deps.relations().addBlockersIn(id, input.addBlockedBy, actor, fx);
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
-        if (changed.includes("title")) linkTitleKeys(id, next.title, actor);
+        if (changed.includes("title")) linkTitleKeys(id, next.title, actor, current.title);
         fx.task(id);
       });
       return service.detail(id);

@@ -28,11 +28,11 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    stalls and notes, each section capped, with task numbers to open with \`get_task\`.
 2. **Resume.** Before continuing an existing task, call \`get_task\`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
-   **Missing links**, add them now: the Jira issue, your own T3 thread when you're in T3 Code, and your own
+   **Missing links**, add them now: the task's ticket, your own T3 thread when you're in T3 Code, and your own
    session when you're in Claude Code or Copilot CLI. If it lists **Images** (a screenshot the user pasted into the
    text, shown there as \`![..](attachment:id)\`), open each file path with your file tools: they are often the bug.
 3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
-   follow-up, a Jira ticket for later), call \`add_to_backlog\` once and carry on with your current work.
+   follow-up, a ticket for later), call \`add_to_backlog\` once and carry on with your current work.
    Don't derail.
 4. **Plan before implementing.** A task can't leave Backlog without a plan. Use \`set_plan\` on an existing
    task, or \`create_task\` for new work (plan included, lands in Planned). A good plan has phases with
@@ -141,9 +141,9 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    other steps, is refused with \`CONFLICT\` unless you pass
    \`allowDeletes: true\`; when it deletes anything, the result lists it.
 
-6. **Link on creation and pickup.** Link the Jira issue when the task is created: pass its key in
-   \`links\` to \`create_task\` / \`add_to_backlog\`, or call \`link\`. Keys in the title are linked
-   automatically. Link your T3 thread whenever you start or resume a task (see below). \`link\` PR URLs
+6. **Link on creation and pickup.** Link the task's ticket when the task is created: pass its key in
+   \`links\` to \`create_task\` / \`add_to_backlog\`, or call \`link\`. Keys in the title may be linked
+   automatically; if a link is wrong (a key that is no ticket), \`unlink\` it. Link your T3 thread whenever you start or resume a task (see below). \`link\` PR URLs
    as soon as the PR is open; GitHub PRs show live checks/review state on the board. \`link\` is
    idempotent, so linking twice is harmless.
 7. **Status transitions.** \`in_progress\` while implementing → \`review\` when the work is done → \`done\`
@@ -330,7 +330,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Auto-merge:** \`autoMerge: "on"\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` lets \`merge_task_pr(task)\` merge the task's PR into the default branch once it's reviewed, green and mergeable (the board refuses, with the reason, until then). Set it only when the user says so; never merge with \`gh\`/\`git\` instead. A failed or interrupted Autopilot run on a task: \`retry_autopilot_run(task)\`, never an empty commit.
 - **Templates:** the user keeps task templates (Bug, Spike, Feature, their own). \`list_templates\` shows them; \`template: "Bug"\` on \`add_to_backlog\` / \`create_task\` starts from one: description, labels and plan fill in what you leave out (a \`labels\` you pass replaces the template's), \`create_task\` needs no plan when the template has one. \`add_to_backlog\` keeps it in Backlog. You can't create or edit templates.
 - **Keep steps current:** \`update_step\` → \`in_progress\` when starting, \`done\` when finished, one call per step the moment it changes, never saved up for the end of a phase (if steps can only be verified together, still mark each \`in_progress\` as you start it and \`done\` once written, with testing as its own step); \`blocked\` + \`appendNotes\` when stuck or before asking the user a question and waiting (say what you need; back to \`in_progress\` once answered). \`add_steps\` for new work, \`update_plan\` to change many steps at once (notes, moves, phase renames), not to catch up on statuses. \`set_plan\` REPLACES the whole plan (steps not passed back with their id are deleted, status and notes too): only for writing or rewriting a plan, never to update a few steps.
-- **Links:** link the Jira key when the task is created (\`links\` on \`create_task\` / \`add_to_backlog\`, or \`link\`); keys in the title are linked automatically. \`link\` PRs as soon as they're open.
+- **Links:** link the task's ticket when the task is created (\`links\` on \`create_task\` / \`add_to_backlog\`, or \`link\`); keys in the title may be linked automatically, and \`unlink\` removes a wrong link. \`link\` PRs as soon as they're open.
 - **Status:** \`review\` when the work is done, \`done\` when merged/verified. On \`PLAN_REQUIRED\`, call \`set_plan\` first.
 - **Local review:** if moving to \`review\` says a review round is open, run the loop it describes before opening the PR: a fresh reviewer subagent per round (\`submit_review\`), fix and \`resolve_finding\` each blocking/major finding (the board then opens the next round: \`start_review\` returns its brief), until clean or the limit, and only then always open and link the PR (at the limit too, listing open findings in it), or push to the one already linked. Without auto-review, open and link the PR before moving to \`review\`.
 - **Epics:** a large feature split into several tasks in one project. \`create_epic\` (with \`tasks: ["#4", "#5"]\` to group existing ones), then \`epic: "#N"\` on \`create_task\` / \`add_to_backlog\`, or \`update_task(epic: "#N" | null)\`. An epic has no plan or column of its own; its status follows its tasks, so plan, move and review the tasks. \`epic_overview\` (or \`get_task\` on the epic) shows each task's progress, current step, last note and thread. To start an epic's tasks, \`start_task_thread(task)\` when \`epic_overview\` says T3 Code is available (\`message_task_thread\` talks to the thread), else \`get_handoff_prompt(task, subagent: true)\` gives each subagent its prompt; a subagent stops at an open review round and the orchestrator runs the loop. When a result says **Epic delivery not chosen**, ask the user whether to deliver the epic through pull requests to main or an integration branch, then \`update_task(epic, delivery)\`; never choose unasked. In an integration epic, branch from its branch and open your PR against it (\`get_task\`'s Delivery line); Autopilot merges it there.
