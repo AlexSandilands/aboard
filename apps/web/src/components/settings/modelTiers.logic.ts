@@ -1,5 +1,5 @@
 // Pure helpers for the Model tiers page: which providers' fields a tier row shows, and the tier one edit sends.
-import type { AgentHarness, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
+import type { AgentHarness, ModelProfile, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
 
 export type TierProvider = "t3" | AgentHarness;
 
@@ -17,19 +17,29 @@ export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: stri
   { provider: "copilot-cli", label: "Copilot CLI" },
 ];
 
-/** Whether any tier already has a value saved for the provider. */
-export function hasSavedTierValue(tiers: ModelTiers, provider: TierProvider): boolean {
-  return Object.values(tiers).some((tier) => (provider === "t3" ? tier.t3 !== null : !!tier.cli?.[provider]));
+/** Whether any tier (or custom model) already has a value saved for the provider. */
+export function hasSavedTierValue(
+  tiers: ModelTiers,
+  provider: TierProvider,
+  profiles: readonly ModelProfile[] = [],
+): boolean {
+  return [...Object.values(tiers), ...profiles].some((tier) =>
+    provider === "t3" ? tier.t3 !== null : !!tier.cli?.[provider],
+  );
 }
 
 /**
  * The providers whose fields the page shows: those that are set up or detected (T3 Code connected, a CLI found), and
  * any with a value already saved, so a value can still be seen and cleared when its integration has gone away.
  */
-export function visibleTierProviders(tiers: ModelTiers, state: TierProviderState): TierProvider[] {
+export function visibleTierProviders(
+  tiers: ModelTiers,
+  state: TierProviderState,
+  profiles: readonly ModelProfile[] = [],
+): TierProvider[] {
   return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => {
     const ready = provider === "t3" ? state.t3Ready : state.cliFound[provider] === true;
-    return ready || hasSavedTierValue(tiers, provider);
+    return ready || hasSavedTierValue(tiers, provider, profiles);
   });
 }
 

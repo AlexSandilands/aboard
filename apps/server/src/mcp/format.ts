@@ -4,13 +4,16 @@ import {
   TASK_STATUSES,
   autopilotRunEventText,
   describeEpicRollup,
+  describeRunModel,
   findJiraKeys,
   formatBytes,
   formatPlanText,
   isGatingSeverity,
   type LabelUsage,
+  type ModelSettings,
   reviewBadgeLabel,
   reviewFixedAtLimit,
+  resolveTaskModel,
   reviewIsDone,
   type ReviewFinding,
   type PlanPhase,
@@ -575,7 +578,11 @@ export type ChildActivity = ReadonlyMap<string, TaskEvent>;
  * newest activity: what an orchestrating agent checks to see how each child is getting on, whichever way it was
  * started.
  */
-export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = new Map()): string {
+export function renderEpicChildren(
+  epic: TaskDetail,
+  activity: ChildActivity = new Map(),
+  modelSettings?: ModelSettings,
+): string {
   const lines = [`Tasks (${epic.rollup ? describeEpicRollup(epic.rollup) : "none"}):`];
   if (epic.children.length === 0) {
     lines.push(
@@ -593,6 +600,8 @@ export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = n
       const threads = child.links.flatMap((l) => (l.kind === "t3_thread" && l.snapshot ? [l.snapshot] : []));
       const live = threads.find((t) => !t.settled && !t.archived);
       if (live) lines.push(`      thread: ${live.title} (${live.status})`);
+      const runsOn = modelSettings ? runsOnText(child, modelSettings) : null;
+      if (runsOn) lines.push(`      runs on: ${runsOn}`);
       if (child.lastNote) {
         const text = child.lastNote.text.replace(/\s+/g, " ").trim();
         lines.push(
@@ -618,6 +627,18 @@ export function deliveryLine(task: Pick<TaskSummary, "kind" | "delivery" | "inte
     : `Delivery: start from ${task.integrationBranch} and open your pull request against it, not the default branch`;
 }
 
+/**
+ * The model a task runs on when one of its labels picks a custom model over its suggested tier (resolveTaskModel), or
+ * null when the tier (or nothing) decides. An automation's own Model setting can still win; this is the task's part.
+ */
+export function runsOnText(
+  task: Pick<TaskSummary, "labels" | "suggestedModel">,
+  settings: ModelSettings,
+): string | null {
+  const model = resolveTaskModel(task, settings);
+  return model.source === "label" ? describeRunModel(model) : null;
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
@@ -638,6 +659,8 @@ export function renderTaskDetail(
     childActivity?: ChildActivity;
     /** Images pasted into the task's text, with where they are on disk. */
     images?: ReadonlyArray<{ path: string; filename: string; size: number }>;
+    /** The tier and custom model settings, to say when a label picks the task's model ("Runs on"). */
+    modelSettings?: ModelSettings;
   } = {},
 ): string {
   const lines: string[] = [];
@@ -653,6 +676,8 @@ export function renderTaskDetail(
     const { tier, reason } = task.suggestedModel;
     lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
   }
+  const runsOn = opts.modelSettings ? runsOnText(task, opts.modelSettings) : null;
+  if (runsOn) lines.push(`Runs on: ${runsOn}`);
   if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
   if (task.autoMerge !== null) {
     lines.push(`Auto-merge: ${task.autoMerge ? "on (merge_task_pr may merge its PR)" : "off"}`);
@@ -705,7 +730,7 @@ export function renderTaskDetail(
       "An epic has no plan of its own and its status follows its tasks (the furthest-back open one sets it; Done " +
         "once they all are). Plan, move and review the tasks instead.",
       "",
-      renderEpicChildren(task, opts.childActivity),
+      renderEpicChildren(task, opts.childActivity, opts.modelSettings),
     );
   } else if (task.phases.some((p) => p.steps.length > 0)) {
     lines.push("Plan:", formatPlanText(task.phases, task.currentStep));

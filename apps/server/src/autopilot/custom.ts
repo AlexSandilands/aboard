@@ -540,7 +540,9 @@ export function customAutomation(
           run: ctx.run,
           label: `${custom.name} · #${task.number}`,
           prompt,
-          tier: action.tier ?? task.suggestedModel?.tier ?? null,
+          tier: task.suggestedModel?.tier ?? null,
+          // The action's tier is its author's choice, so a task label doesn't override it; the Model setting does.
+          modelChoice: action.tier ? { tier: action.tier } : null,
           options: ctx.config,
           // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
           ...(tools.length > 0 ? { tools } : {}),

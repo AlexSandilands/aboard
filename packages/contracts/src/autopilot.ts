@@ -145,6 +145,11 @@ export const AutopilotField = z.discriminatedUnion("kind", [
   }),
   /** A time of day, "HH:MM" on a 24-hour clock in the server's local time. */
   z.object({ ...FieldBase, kind: z.literal("time") }),
+  /**
+   * Which model a run starts on (a ModelChoice): the task's, a tier or a custom model from Settings → Model tiers. The
+   * UI lists them live.
+   */
+  z.object({ ...FieldBase, kind: z.literal("model") }),
   /** A skill reference, picked the way the review skill is. */
   z.object({
     ...FieldBase,

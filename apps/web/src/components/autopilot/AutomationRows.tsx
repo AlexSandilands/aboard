@@ -1,5 +1,6 @@
 import {
   AUTOPILOT_ORCHESTRATE,
+  parseModelChoiceKey,
   ReviewSkillRef,
   type AutopilotConfig,
   type AutopilotAutomation,
@@ -27,7 +28,7 @@ import {
 import { cn } from "~/lib/utils";
 import { BlockedWarning } from "./InputsAndSlots";
 import { useSetAutopilotScope } from "~/state/mutations";
-import { useAutopilotOverview, useAutopilotScope, useSkills } from "~/state/queries";
+import { useAutopilotOverview, useAutopilotScope, useSettings, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import {
   BOARD_MODES,
@@ -37,6 +38,8 @@ import {
   entryFor,
   fieldText,
   inheritLabel,
+  modelChoiceFieldKey,
+  modelChoiceItems,
   isClockTime,
   parentEntry,
   parseNumberField,
@@ -386,6 +389,8 @@ function FieldControl({
           onSave={onSave}
         />
       );
+    case "model":
+      return <ModelField value={value} label={label} onSave={onSave} />;
     case "skill":
       return (
         <SkillField
@@ -397,6 +402,31 @@ function FieldControl({
         />
       );
   }
+}
+
+/** Which model runs start on: the task's, a tier, or a custom model from Settings → Model tiers, listed live. */
+function ModelField({ value, label, onSave }: { value: unknown; label: string; onSave: (next: unknown) => boolean }) {
+  const items = modelChoiceItems(useSettings().data?.modelProfiles ?? [], value);
+  return (
+    <Select
+      items={items}
+      value={modelChoiceFieldKey(value)}
+      onValueChange={(next) => {
+        if (next !== null) onSave(parseModelChoiceKey(next));
+      }}
+    >
+      <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
+  );
 }
 
 /** A number saved on blur or Enter. Empty clears the key, so it inherits again; a value out of range is put back. */

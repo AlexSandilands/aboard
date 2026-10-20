@@ -1,5 +1,4 @@
 import {
-  modelTierLabel,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
@@ -82,7 +81,7 @@ function SessionLaunch({
 }) {
   const options = useSessionLaunchOptions(task.id);
   const fix = usePrFix(fixLinkId);
-  const modelTiers = useSettings().data?.modelTiers;
+  const modelSettings = useSettings().data;
   const pending = options.isPending || (!!fixLinkId && fix.isPending);
   const error = options.error ?? (fixLinkId ? fix.error : null);
   return (
@@ -123,7 +122,7 @@ function SessionLaunch({
                   // A fix copies the fix prompt (read again, and its error shown), never the task's work prompt.
                   fixLinkId
                     ? void copyFixPrompt(fixLinkId)
-                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers)
+                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings)
                 }
               >
                 Copy prompt instead
@@ -389,12 +388,16 @@ function Composer({
         )}
       </ComposerStrip>
       <p className="mt-2 px-1 text-xs text-muted-foreground">
-        {options.tier && !plan ? (
+        {options.model && !plan ? (
           <span className="block">
-            <span className="font-medium text-foreground">Suggested model: {modelTierLabel(options.tier)}</span>
+            <span className="font-medium text-foreground">
+              {options.model.source === "label"
+                ? `Model: ${options.model.name}, from label ${options.model.label}`
+                : `Suggested model: ${options.model.name}`}
+            </span>
             {options.models[harness]
               ? null
-              : ` · no ${harnessLabel(harness)} model is set for this tier in Settings → Model tiers`}
+              : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
           </span>
         ) : null}
         {options.namedWindow

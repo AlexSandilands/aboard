@@ -5,8 +5,8 @@ import {
   suggestEpicsPrompt,
   taskHandoffPrompt,
   taskReferenceLine,
+  type AppSettings,
   type HandoffMode,
-  type ModelTiers,
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
@@ -31,18 +31,21 @@ const chipClassName =
 const stop = (event: SyntheticEvent) => event.stopPropagation();
 const cardHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
 
-/** `modelTiers` names the task's suggested model in a work prompt; without it the line shows the bare tier. */
+/**
+ * `modelSettings` names the task's model in a work prompt (a custom model its label picks, else its tier's); without it
+ * the line shows the bare tier.
+ */
 export function copyHandoffPrompt(
   task: Pick<TaskSummary, "id" | "number" | "title" | "suggestedModel"> &
-    Partial<Pick<TaskSummary, "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>,
+    Partial<Pick<TaskSummary, "labels" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>,
   mode: HandoffMode,
-  modelTiers: ModelTiers | undefined,
+  modelSettings: Pick<AppSettings, "modelTiers" | "modelProfiles"> | undefined,
 ) {
   const prompt = taskHandoffPrompt({
     task,
     boardUrl: window.location.origin,
     mode,
-    ...(modelTiers ? { modelTiers } : {}),
+    ...(modelSettings ? { modelTiers: modelSettings.modelTiers, modelProfiles: modelSettings.modelProfiles } : {}),
   });
   copyToClipboard(
     prompt,
@@ -165,7 +168,7 @@ export function HandoffMenu({
   canStartT3: boolean;
 }) {
   const suggested = defaultHandoffMode(task);
-  const modelTiers = useSettings().data?.modelTiers;
+  const modelSettings = useSettings().data;
   const sessionClis = useHandoffClis();
   return (
     <Menu>
@@ -203,20 +206,20 @@ export function HandoffMenu({
         {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
         {suggested === "orchestrate" ? (
           // An epic has one prompt: the one that starts its tasks.
-          <MenuItem onClick={() => copyHandoffPrompt(task, "orchestrate", modelTiers)}>
+          <MenuItem onClick={() => copyHandoffPrompt(task, "orchestrate", modelSettings)}>
             <ClipboardCopyIcon />
             Copy prompt to start its tasks
           </MenuItem>
         ) : (
           <>
-            <MenuItem onClick={() => copyHandoffPrompt(task, "work", modelTiers)}>
+            <MenuItem onClick={() => copyHandoffPrompt(task, "work", modelSettings)}>
               <ClipboardCopyIcon />
               Copy prompt
               {suggested === "work" ? (
                 <span className="ms-auto ps-3 text-xs text-muted-foreground">Suggested</span>
               ) : null}
             </MenuItem>
-            <MenuItem onClick={() => copyHandoffPrompt(task, "plan", modelTiers)}>
+            <MenuItem onClick={() => copyHandoffPrompt(task, "plan", modelSettings)}>
               <LightbulbIcon />
               Copy planning prompt
               {suggested === "plan" ? (

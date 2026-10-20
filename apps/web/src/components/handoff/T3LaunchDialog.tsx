@@ -155,7 +155,7 @@ function TaskLaunch({ task, fixLinkId, onDone }: { task: TaskSummary; fixLinkId:
 
 function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFixInfo | null; onDone: () => void }) {
   const options = useT3LaunchOptions(task.id);
-  const modelTiers = useSettings().data?.modelTiers;
+  const modelSettings = useSettings().data;
   const mutation = useStartT3Thread({ silent: true });
   // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me".
   const epic = task.kind === "epic";
@@ -184,7 +184,7 @@ function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFi
         // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
         initialPlan: defaultHandoffMode(task) === "plan",
         successDescription: `#${task.number} is linked to the new thread.`,
-        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelTiers),
+        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings),
         offerOpen: false,
         integrationBranch: epic ? null : task.integrationBranch,
       };
@@ -484,7 +484,7 @@ function FixBranchNote({ branch, startsFrom }: { branch: string; startsFrom: str
   );
 }
 
-/** Which model tier the task's planner suggested, and whether the dialog is using it. */
+/** The task's model (a custom model its label picks, else its suggested tier), and whether the dialog is using it. */
 function SuggestionNote({ suggestion, planWithMe }: { suggestion: T3LaunchSuggestion; planWithMe: boolean }) {
   const status = planWithMe
     ? "Not used while planning."
@@ -493,7 +493,11 @@ function SuggestionNote({ suggestion, planWithMe }: { suggestion: T3LaunchSugges
       : null;
   return (
     <p className="mt-2 px-1 text-xs text-muted-foreground">
-      <span className="font-medium text-foreground">Suggested model: {suggestion.tier}</span>
+      <span className="font-medium text-foreground">
+        {suggestion.source === "label"
+          ? `Model: ${suggestion.name}, from label ${suggestion.label}`
+          : `Suggested model: ${suggestion.tier ?? suggestion.name}`}
+      </span>
       {suggestion.reason ? ` · ${suggestion.reason}` : null}
       {status ? (
         <span className={cn("block", !planWithMe && suggestion.unavailable && "text-warning")}>{status}</span>

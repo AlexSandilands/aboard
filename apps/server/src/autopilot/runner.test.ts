@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BRAND, EMPTY_MODEL_TIERS, type AutopilotRun, type T3IntegrationStatus } from "@repo/contracts";
+import {
+  BRAND,
+  EMPTY_MODEL_TIERS,
+  type AutopilotRun,
+  type ModelProfile,
+  type T3IntegrationStatus,
+} from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
 import { t3Unavailable, type T3Integration, type TaskThreadInput, type ThreadWorkspace } from "../integrations/t3.ts";
@@ -11,7 +17,8 @@ import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 
 /** Built at runtime, so it reads as no credential to anything scanning the source. */
 const BOARD_TOKEN = ["board", "test", "value"].join("-");
-import { createAutopilotRunner, tierModel } from "./runner.ts";
+import { createAutopilotRunner, headlessModel, runModel } from "./runner.ts";
+import { RUNNER_DEFAULTS, readRunnerOptions } from "./runnerOptions.ts";
 import { RunAbandonedError, WorktreeHeadError, type RunnerRequest, type RunPatch } from "./types.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
@@ -323,19 +330,89 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(existsSync(patches[0]!.worktreePath!)).toBe(true);
   });
 
-  it("takes the model from the task's tier when it is a Claude model", () => {
-    const tiers = {
-      ...EMPTY_MODEL_TIERS,
-      deep: {
-        description: null,
-        t3: { selection: { instanceId: "c", model: "claude-opus-5-5", options: [] }, label: "Opus" },
+  it("takes the model from the automation, then a task label, then the task's tier", () => {
+    const settings = {
+      modelTiers: {
+        ...EMPTY_MODEL_TIERS,
+        deep: {
+          description: null,
+          t3: { selection: { instanceId: "c", model: "claude-opus-5-5", options: [] }, label: "Opus" },
+        },
+        light: { description: null, t3: { selection: { instanceId: "x", model: "gpt-5", options: [] }, label: "GPT" } },
+        standard: { description: null, t3: null, cli: { "claude-code": "sonnet" } },
       },
-      light: { description: null, t3: { selection: { instanceId: "x", model: "gpt-5", options: [] }, label: "GPT" } },
+      modelProfiles: [
+        { id: "codex61", name: "Codex 6.1", labels: ["codex61"], description: null, t3: null },
+      ] satisfies ModelProfile[],
     };
-    expect(tierModel(tiers, "deep")).toBe("claude-opus-5-5");
-    expect(tierModel(tiers, "light")).toBeNull();
-    expect(tierModel(tiers, "standard")).toBeNull();
-    expect(tierModel(tiers, null)).toBeNull();
+    const options = (config: Record<string, unknown> = {}) => readRunnerOptions(config);
+    const task = { labels: ["codex61"] };
+    // The tier's T3 model when it is a Claude model, the tier's Claude Code model, else the CLI's default.
+    expect(headlessModel(runModel({ tier: "deep" }, options(), null, settings), "").model).toBe("claude-opus-5-5");
+    expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "").model).toBe("sonnet");
+    const light = headlessModel(runModel({ tier: "light" }, options(), null, settings), "");
+    expect(light.model).toBeNull();
+    expect(light.note).toContain("no Claude Code model");
+    expect(headlessModel(runModel({ tier: null }, options(), null, settings), "")).toEqual({ model: null, note: null });
+    // A label beats the tier; the automation's Model setting beats both, and a typed override beats everything.
+    expect(runModel({ tier: "deep" }, options(), task, settings)).toMatchObject({
+      source: "label",
+      label: "codex61",
+      profile: { id: "codex61" },
+    });
+    expect(runModel({ tier: "deep" }, options({ modelChoice: { tier: "standard" } }), task, settings)).toMatchObject({
+      source: "automation",
+      profile: { id: "standard" },
+    });
+    expect(runModel({ tier: "deep", modelChoice: { tier: "light" } }, options(), task, settings).profile?.id).toBe(
+      "light",
+    );
+    // A Model setting naming a deleted custom model falls back to the action's own choice, with a note.
+    const deleted = runModel(
+      { tier: "deep", modelChoice: { tier: "light" } },
+      options({ modelChoice: { profile: "gone" } }),
+      task,
+      settings,
+    );
+    expect(deleted).toMatchObject({ source: "automation", profile: { id: "light" } });
+    expect(deleted.note).toContain('"gone" no longer exists');
+    expect(headlessModel(runModel({ tier: "deep" }, options(), task, settings), "haiku").model).toBe("haiku");
+    // Configs saved before the setting existed take the task's model.
+    expect(options({ model: "opus" })).toEqual({ ...RUNNER_DEFAULTS, model: "opus", modelChoice: { from: "task" } });
+  });
+
+  it("runs headless on the model a task label picks, and notes it on the run", async () => {
+    const { h, task, jobs, start, patches } = setup();
+    h.services.settings.update({
+      modelProfiles: [
+        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "claude-code": "haiku" } },
+      ],
+    });
+    h.services.tasks.update(task.id, { labels: ["quick"] }, "test");
+    await start({ options: { runner: "headless" } });
+    expect(jobs[0]!.args.join(" ")).toContain("--model haiku");
+    expect(patches).toContainEqual({ detail: "Model: Fast, from label quick" });
+  });
+
+  it("says when a T3 run's model has no T3 Code model, so T3's default ran", async () => {
+    const { h, task, start, patches } = setup({ t3: T3_UP });
+    h.services.settings.update({
+      modelProfiles: [
+        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "claude-code": "haiku" } },
+      ],
+    });
+    h.services.tasks.update(task.id, { labels: ["quick"] }, "test");
+    await start({ options: { runner: "t3" } });
+    expect(patches).toContainEqual({
+      detail:
+        "Model: Fast, from label quick. It has no T3 Code model in Settings → Model tiers. T3 Code's default ran.",
+    });
+  });
+
+  it("passes an automation's model choice to a T3 launch", async () => {
+    const { launches, start } = setup({ t3: T3_UP });
+    await start({ options: { runner: "t3", modelChoice: { tier: "deep" } } });
+    expect(launches[0]).toMatchObject({ work: true, modelChoice: { tier: "deep" } });
   });
 
   describe("runner choice", () => {
