@@ -359,7 +359,7 @@ function CliModelField({
           }
         />
       </div>
-      {model.trim() ? (
+      {model.trim() && levels.length > 0 ? (
         <CliEffortPicker
           label={`${name} ${CLI_LABELS[harness]} effort`}
           value={setting.cliEffort?.[harness] ?? null}

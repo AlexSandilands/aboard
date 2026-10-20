@@ -12,8 +12,8 @@ export const AgentModel = z.object({
   label: z.string().nullable(),
   description: z.string().nullable(),
   /**
-   * The effort levels this model supports. Null when the CLI doesn't say per model (Copilot CLI): then the CLI's own
-   * list applies (`CLI_EFFORTS`).
+   * The effort levels this model supports; empty for a model that takes no effort. Null when the CLI doesn't say per
+   * model (Copilot CLI): then the CLI's own list applies (`CLI_EFFORTS`).
    */
   effortLevels: z.array(CliEffort).nullable(),
 });
@@ -35,6 +35,6 @@ export type AgentModelsStatus = z.infer<typeof AgentModelsStatus>;
 export const AgentModels = z.object({ harnesses: z.array(AgentModelsStatus) });
 export type AgentModels = z.infer<typeof AgentModels>;
 
-/** The levels to offer for a model: its own when the scan listed them, else the harness's. */
+/** The levels to offer for a model: its own when the scan listed them (none for a model that takes no effort), else the harness's. */
 export const modelEffortLevels = (harness: AgentHarness, model: AgentModel | undefined): readonly CliEffort[] =>
-  model?.effortLevels?.length ? model.effortLevels : CLI_EFFORTS[harness];
+  model?.effortLevels ?? CLI_EFFORTS[harness];

@@ -204,11 +204,17 @@ export async function runClaude({ cli, cwd, prompt, args, timeoutMs, env }: Clau
 export async function claudeOutput(
   cli: string | null,
   args: string[],
-  opts: { timeoutMs: number; cwd?: string },
+  opts: {
+    timeoutMs: number;
+    cwd?: string;
+    /** Names the CLI in a timeout message; Claude Code when absent. */ label?: string;
+  },
 ): Promise<string> {
   const result = await run(cliPath(cli), args, opts);
   if (result.code !== 0) {
-    throw new Error(result.stderr.trim() || `claude ${args[0] ?? ""} exited with code ${result.code}`);
+    throw new Error(
+      result.stderr.trim() || `${opts.label ?? "claude"} ${args[0] ?? ""} exited with code ${result.code}`,
+    );
   }
   return result.stdout;
 }

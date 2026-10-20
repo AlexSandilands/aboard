@@ -20,6 +20,7 @@ import {
   type AgentCliStatus,
   type AppSettings,
   type CliEffort,
+  cliEffortFor,
   type SessionLaunchOptions,
   type StartPlanningSessionInput,
   type StartSessionInput,
@@ -148,6 +149,14 @@ function isDirectory(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The effort a launch asked for, when the harness's CLI takes it. Refused otherwise: it would only fail in the terminal. */
+function launchEffort(harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null {
+  if (!effort) return null;
+  const level = cliEffortFor(harness, effort);
+  if (!level) throw new AppError("VALIDATION", `${AGENT_HARNESSES[harness].label} has no effort ${effort}`);
+  return level;
 }
 
 export function createSessionLaunch(deps: {
@@ -370,6 +379,7 @@ export function createSessionLaunch(deps: {
       if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const ready = prepare(input.harness);
+      const effort = launchEffort(input.harness, input.effort);
       const imageIds = input.attachmentIds ?? [];
       // Checked before a worktree is made, so an image that is gone leaves nothing behind.
       deps.services().attachments.forLaunch(imageIds, task.id);
@@ -412,7 +422,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId,
         model: input.model,
-        effort: input.effort ?? null,
+        effort,
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
@@ -438,6 +448,7 @@ export function createSessionLaunch(deps: {
       const root = projectRoot(projectId);
       if (!root) throw new AppError("VALIDATION", "The project has no folder to start a session in");
       const ready = prepare(input.harness);
+      const effort = launchEffort(input.harness, input.effort);
       // Not claimed: there is no one task to give them to, so they wait in the pending folder and are swept after a
       // day, by when the session has read them.
       const images = deps.services().attachments.forLaunch(input.attachmentIds ?? [], null);
@@ -445,7 +456,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId: randomUUID(),
         model: input.model,
-        effort: input.effort ?? null,
+        effort,
         prompt: withAttachedImages(input.prompt, images),
         cwd: root,
         branch: null,

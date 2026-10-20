@@ -299,7 +299,8 @@ export function useAgentModels(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.agentModels,
     queryFn: ({ signal }) => api<AgentModels>("/api/agent-models", { signal }),
-    staleTime: 10 * 60_000,
+    // A scan that failed comes back as a reply with an error; the server doesn't keep it, so neither does this.
+    staleTime: (query) => (query.state.data?.harnesses.some((h) => h.error) ? 0 : 10 * 60_000),
     enabled,
   });
 }

@@ -78,7 +78,7 @@ export function parseClaudeModels(stdout: string): { models: AgentModel[]; cliVe
           value,
           label: textOf(model.displayName),
           description: textOf(model.description),
-          effortLevels: model.supportsEffort === false ? null : effortLevelsOf(model.supportedEffortLevels),
+          effortLevels: model.supportsEffort === false ? [] : effortLevelsOf(model.supportedEffortLevels),
         },
       ];
     });
@@ -145,7 +145,8 @@ export function createAgentModels(deps: {
         args: ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
         timeoutMs: CLAUDE_SCAN_TIMEOUT_MS,
       }),
-    copilotHelp: (exe, cwd) => claudeOutput(exe, ["help", "config"], { timeoutMs: COPILOT_SCAN_TIMEOUT_MS, cwd }),
+    copilotHelp: (exe, cwd) =>
+      claudeOutput(exe, ["help", "config"], { timeoutMs: COPILOT_SCAN_TIMEOUT_MS, cwd, label: "Copilot CLI" }),
     ...deps.probes,
   };
 

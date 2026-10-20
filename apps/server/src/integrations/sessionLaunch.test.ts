@@ -146,6 +146,8 @@ describe("starting a session from the board", () => {
     await app.start({ harness: "copilot-cli", model: "gpt-5.4", effort: "none" });
     expect(app.spawned[1]!.args).toContain("--reasoning-effort");
     expect((await app.start({ effort: "huge" })).status).toBe(400);
+    // A level only Copilot takes is refused for Claude Code before any terminal opens.
+    expect((await app.start({ effort: "none" })).status).toBe(400);
     expect(app.spawned).toHaveLength(2);
   });
 

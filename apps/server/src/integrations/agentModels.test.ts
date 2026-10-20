@@ -77,9 +77,9 @@ describe("parseClaudeModels", () => {
     });
   });
 
-  it("has no levels for a model that takes no effort, or lists none", () => {
+  it("lists no levels for a model that takes no effort, and says nothing for one that lists none", () => {
     const { models } = parseClaudeModels(CLAUDE_OUTPUT);
-    expect(models[1]?.effortLevels).toBeNull();
+    expect(models[1]?.effortLevels).toEqual([]);
     expect(models[2]).toEqual({ value: "opus[1m]", label: null, description: null, effortLevels: null });
   });
 
