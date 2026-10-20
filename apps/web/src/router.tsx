@@ -48,6 +48,8 @@ export const boardRoute = createRoute({
 
 /** `?project=` on the project settings page and its rule editor: the project shown. */
 const SettingsProjectSearch = z.object({ project: z.string().optional() });
+/** `draft` opens an automation an agent drafted (docs/features/autopilot.md#drafts). */
+const ImportSearch = z.object({ draft: z.string().optional() });
 
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -102,6 +104,7 @@ export const templateEditorRoute = createRoute({
 export const customAutomationImportRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "autopilot/custom/import",
+  validateSearch: (search) => ImportSearch.parse(search),
   component: CustomAutomationImportPage,
 });
 

@@ -31,7 +31,7 @@ steps current, group large features into epics, link the task's ticket and the T
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
 | `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
-| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)) |
+| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)); `draft_automation`: keeps a custom automation as a draft for the user to import (see [autopilot.md](autopilot.md#drafts)) |
 | `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and

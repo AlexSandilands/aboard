@@ -28,8 +28,9 @@ function assertShellFromBrowser(c: Context, action: CustomAction | undefined): v
 }
 
 /**
- * Custom automations (docs/features/autopilot.md#custom-automations). REST only, like the rest of Autopilot: there is
- * no MCP tool, so an agent can't define work for itself or a command to run.
+ * Custom automations (docs/features/autopilot.md#custom-automations). REST only, like the rest of Autopilot: over MCP an
+ * agent can only draft one (draft_automation), which the user reviews and imports here, so it can't define work for
+ * itself or a command to run.
  */
 export function registerCustomAutomationRoutes(app: Hono, { services, config }: AppContext): void {
   const custom = services.customAutomations;
@@ -84,6 +85,23 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
         custom.importBundle(input, (skill) => installSkill(config.userHome, skill)),
         201,
       );
+    }),
+  );
+  // Drafts agents wrote (docs/features/autopilot.md#drafts). Reading and dismissing one saves nothing; importing goes
+  // through the import route above, with its guards, and deletes the draft.
+  app.get(
+    "/api/autopilot/drafts",
+    handle((c) => c.json(custom.drafts())),
+  );
+  app.get(
+    "/api/autopilot/drafts/:id",
+    handle((c) => c.json(custom.getDraft(idParam(c)))),
+  );
+  app.delete(
+    "/api/autopilot/drafts/:id",
+    handle((c) => {
+      custom.dismissDraft(idParam(c));
+      return noContent(c);
     }),
   );
   app.patch(

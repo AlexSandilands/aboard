@@ -42,9 +42,14 @@ export function initialDraft(bundle: AutomationBundle): ImportDraft {
   };
 }
 
-/** What the server is sent. */
-export function draftToRequest(bundle: AutomationBundle, draft: ImportDraft): ImportAutomationInput {
+/** What the server is sent. `agentDraftId` is the agent's draft the file came from, deleted once imported. */
+export function draftToRequest(
+  bundle: AutomationBundle,
+  draft: ImportDraft,
+  agentDraftId?: string,
+): ImportAutomationInput {
   return {
+    ...(agentDraftId ? { draftId: agentDraftId } : {}),
     bundle,
     inputs: draft.inputs,
     slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),

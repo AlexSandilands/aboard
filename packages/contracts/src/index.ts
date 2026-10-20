@@ -34,6 +34,7 @@ export * from "./automationVariables.ts";
 export * from "./toolRules.ts";
 export * from "./customAutomations.ts";
 export * from "./automationBundle.ts";
+export * from "./automationDrafts.ts";
 export * from "./automationSdk.ts";
 export * from "./automationExamples.ts";
 export * from "./digest.ts";

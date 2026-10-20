@@ -221,6 +221,8 @@ export const ImportAutomationInput = z.object({
   installSkill: z.boolean().default(false),
   /** The importer has read the file's scripts and agrees they run on their machine. Required when it has one. */
   confirmScript: z.boolean().default(false),
+  /** The agent's draft this file came from, deleted once it is imported (docs/features/autopilot.md#drafts). */
+  draftId: z.string().min(1).optional(),
 });
 export type ImportAutomationInput = z.input<typeof ImportAutomationInput>;
 

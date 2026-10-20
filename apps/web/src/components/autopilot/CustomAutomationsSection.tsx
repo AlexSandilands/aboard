@@ -1,6 +1,6 @@
 import { customBlockedReason, describeCustomTrigger, type CustomAutomation } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { DownloadIcon, FileUpIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { DownloadIcon, EyeIcon, FileUpIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { SettingsNote, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
@@ -10,7 +10,13 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
-import { useCustomAutomations, useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
+import {
+  useAutomationDrafts,
+  useCustomAutomations,
+  useDeleteCustomAutomation,
+  useDismissAutomationDraft,
+  useExportCustomAutomation,
+} from "~/state/customAutomations";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning } from "./InputsAndSlots";
 
@@ -79,6 +85,10 @@ export function CustomAutomationsSection() {
     });
   const [deleting, setDeleting] = useState<CustomAutomation | null>(null);
   const list = customs.data ?? [];
+  const drafts = useAutomationDrafts().data ?? [];
+  const dismiss = useDismissAutomationDraft();
+  const onReview = (draft: string) =>
+    void navigate({ to: "/settings/autopilot/custom/import", search: { draft }, state: FROM_SETTINGS_LIST });
   return (
     <SettingsSection
       title="Custom automations"
@@ -99,9 +109,33 @@ export function CustomAutomationsSection() {
         </div>
       }
     >
+      {drafts.map((draft) => (
+        <SettingsRow
+          key={draft.id}
+          title={
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{draft.bundle.name}</span>
+              <Badge variant="info" size="sm">
+                Draft
+              </Badge>
+            </span>
+          }
+          description={`Drafted by ${draft.createdBy} for you to review. Nothing runs until you import it; kept until ${draft.expiresAt.slice(0, 10)}.`}
+          control={
+            <div className="flex items-center gap-1">
+              <IconAction label={`Review ${draft.bundle.name}`} onClick={() => onReview(draft.id)}>
+                <EyeIcon />
+              </IconAction>
+              <IconAction destructive label={`Dismiss ${draft.bundle.name}`} onClick={() => dismiss.mutate(draft.id)}>
+                <XIcon />
+              </IconAction>
+            </div>
+          }
+        />
+      ))}
       {customs.isPending ? (
         <SettingsNote>Loading custom automations...</SettingsNote>
-      ) : list.length === 0 ? (
+      ) : list.length === 0 && drafts.length > 0 ? null : list.length === 0 ? (
         <SettingsRow
           title={customs.error ? "Couldn't load custom automations" : "No custom automations"}
           description={

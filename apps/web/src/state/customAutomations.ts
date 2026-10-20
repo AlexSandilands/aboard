@@ -1,5 +1,6 @@
 import type {
   AutomationBundle,
+  AutomationDraft,
   CreateCustomAutomationInput,
   CustomAutomation,
   ImportAutomationInput,
@@ -61,6 +62,29 @@ export const useExportCustomAutomation = () =>
 
 export const useDeleteCustomAutomation = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/custom/${enc(id)}`, { method: "DELETE" }));
+
+/** Automations agents drafted for the user to review and import, newest first. */
+export function useAutomationDrafts() {
+  return useQuery({
+    queryKey: queryKeys.automationDrafts,
+    queryFn: ({ signal }) => api<AutomationDraft[]>("/api/autopilot/drafts", { signal }),
+    staleTime: 0,
+  });
+}
+
+/** One draft; an error once it was imported, dismissed or expired. */
+export function useAutomationDraft(id: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.automationDrafts, id],
+    queryFn: ({ signal }) => api<AutomationDraft>(`/api/autopilot/drafts/${enc(id ?? "")}`, { signal }),
+    enabled: Boolean(id),
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export const useDismissAutomationDraft = () =>
+  useCustomMutation((id: string) => api<void>(`/api/autopilot/drafts/${enc(id)}`, { method: "DELETE" }));
 
 /**
  * Runs a draft script once, for real (it can act): the result is shown where it was asked for, so a failure is

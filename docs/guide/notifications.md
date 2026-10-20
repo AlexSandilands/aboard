@@ -13,6 +13,7 @@ The board tells you when something needs you, so you don't have to keep it open.
   The task also shows under **Needs attention** with what they asked, and a **Dismiss** button in its panel.
 - A new [digest of what changed](digest.md) is ready.
 - An agent **suggests a change** to one of your prompts or skills ([suggested changes](settings.md#suggested-changes)).
+- An agent **drafts an automation** for you to review and import ([custom automations](custom-automations.md#asking-an-agent-for-one)).
 
 Each change is announced once. A pull request or thread you link is not announced for the state it already
 has; only for what changes after.

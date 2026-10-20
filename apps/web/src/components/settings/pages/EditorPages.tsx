@@ -145,14 +145,16 @@ export function AutopilotRunsPage() {
   );
 }
 
-/** Route component for `/settings/autopilot/custom/import`. */
+/** Route component for `/settings/autopilot/custom/import`, `?draft=` for an agent's draft. */
 export function CustomAutomationImportPage() {
   const leaveEditor = useLeaveEditor();
   const navigate = useNavigate();
+  const draftId = useSearch({ from: "/_app/settings/autopilot/custom/import", select: (search) => search.draft });
   return (
-    <EditorShell group="autopilot" label="Import automation">
+    <EditorShell group="autopilot" label={draftId ? "Review a draft" : "Import automation"}>
       <CustomAutomationImportForm
         examples={AUTOMATION_EXAMPLES}
+        draftId={draftId}
         onCancel={() => leaveEditor("autopilot")}
         // Straight to the new automation: it comes in off, with its tools still to check.
         onDone={(customId) =>

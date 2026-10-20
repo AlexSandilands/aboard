@@ -364,6 +364,17 @@ acceptable to it. If **Review PRs** is on for the same project, this example ski
 already reviewed at its head commit (it sees the review on GitHub), but Review PRs doesn't see this one's reviews, so
 a pull request linked to a task can get a second review from it. Switch one of them off for a project to avoid that.
 
+## Asking an agent for one
+
+You can ask an agent connected to the board to write an automation for you: "every weekday at 8, triage the new
+defects in Jira", "when a PR merges, run the release notes script". The agent can't set one up itself. It drafts it,
+and you get a notification and a link to the import page, where the draft opens like a shared file, with a banner
+saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
+import it; it comes in off, like any import.
+
+Drafts waiting for you are listed at the top of **Custom automations**, with **Review** and **Dismiss**. Importing a
+draft removes it; one you leave is dropped after 14 days. Drafts aren't backed up.
+
 ## Commands and scripts run on your machine
 
 A command or script runs as you, in sh (Windows PowerShell on Windows) or its language's interpreter, whenever its

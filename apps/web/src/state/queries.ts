@@ -80,6 +80,8 @@ export const queryKeys = {
   recurring: ["recurring"] as const,
   recurringRules: (projectId: string) => ["recurring", projectId] as const,
   customAutomations: ["customAutomations"] as const,
+  /** Every draft agents wrote, and each one (`["automationDrafts", id]`). */
+  automationDrafts: ["automationDrafts"] as const,
   digests: ["digests"] as const,
   suggestions: ["suggestions"] as const,
 };
@@ -452,6 +454,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
         void queryClient.invalidateQueries({ queryKey: queryKeys.customAutomations });
+        // An agent drafted an automation, or one was imported or dismissed.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.automationDrafts });
         // A digest is made, read or dropped.
         void queryClient.invalidateQueries({ queryKey: queryKeys.digests });
       }

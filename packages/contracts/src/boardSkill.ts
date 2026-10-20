@@ -117,6 +117,12 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    \`retry_autopilot_run(task)\` hands it back to Autopilot, which acts again on its next pass if there is still
    work. Retry once the cause is gone, and never push an empty commit to re-trigger a review.
 
+   When the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges,
+   ..."), \`draft_automation(automation, note)\` writes it as a draft in the shape of a shared automation file and
+   returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
+   fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
+   A refused draft lists every problem with where it is; fix them all and call again.
+
 5. **Keep steps current.** \`update_step\` to \`in_progress\` when you start a step and \`done\` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
    board shows your progress live, so doing steps 3.1 to 3.4 and then marking all four done at once
@@ -324,6 +330,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Planning several tasks:** a session the board starts from a lane's **Plan tasks** plans each task it lists with the user; \`get_handoff_prompt(tasks: ["#3", "#4"])\` gives the same prompt. Approve simple tasks as a set, complex ones one at a time; \`set_plan\` each, then \`move_task\` → \`planned\`.
 - **Labels:** tag tasks with the kind of work (\`labels: ["ui"]\`, \`["backend", "bug"]\`) on \`create_task\` / \`add_to_backlog\` or \`update_task\` (replaces the list). Reuse the labels \`board_overview\` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
 - **Autopilot:** when a planning result says **Autopilot flag not set**, ask the user whether to flag the task, then \`update_task(autopilot: "on" | "off")\`; never set it unasked. You can flag tasks but never change Autopilot's own settings.
+- **Custom automations:** when the user asks for an automation of their own ("every morning, ...", "when a PR merges, ..."), \`draft_automation(automation, note)\` keeps it as a draft and returns a link to its import page. Only the user can import it and switch it on: give them the link and never say it is set up. A refused draft lists every problem; fix them all and call again.
 - **Manual tasks:** \`manual: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` makes a to-do for a person (an access request, a sign-off). It needs no plan, and agents and Autopilot leave it alone: never work on a task marked manual. Block your own task on one with \`blockedBy\` when your work waits on a person.
 - **Due date:** \`update_task(dueDate: "YYYY-MM-DD" | null)\`. Set it only when the user gives a date.
 - **Priority:** \`priority: true | false\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` puts a task in the lane above every project, and Autopilot starts it first. Set it only when the user asks.
