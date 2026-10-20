@@ -26,6 +26,67 @@ describe("new session argv", () => {
     ).toEqual(["copilot", "--session-id", ID, "--name", "Planning #4", "-i", "Plan"]);
   });
 
+  it("passes the effort after the model, as each CLI names the flag", () => {
+    expect(
+      newSessionArgv({
+        harness: "claude-code",
+        sessionId: ID,
+        model: "opus",
+        effort: "high",
+        name: "Implementing #4",
+        prompt: "Go",
+      }),
+    ).toEqual([
+      "claude",
+      "--model",
+      "opus",
+      "--effort",
+      "high",
+      "--session-id",
+      ID,
+      "--name",
+      "Implementing #4",
+      "--",
+      "Go",
+    ]);
+    expect(
+      newSessionArgv({
+        harness: "copilot-cli",
+        sessionId: ID,
+        model: "gpt-5.4",
+        effort: "none",
+        name: "Planning #4",
+        prompt: "Plan",
+      }),
+    ).toEqual([
+      "copilot",
+      "--model",
+      "gpt-5.4",
+      "--reasoning-effort",
+      "none",
+      "--session-id",
+      ID,
+      "--name",
+      "Planning #4",
+      "-i",
+      "Plan",
+    ]);
+    // An effort alone is still passed: the CLI applies it to its default model.
+    expect(
+      newSessionArgv({
+        harness: "claude-code",
+        sessionId: ID,
+        model: null,
+        effort: "low",
+        name: "n",
+        prompt: "p",
+      }).slice(0, 3),
+    ).toEqual(["claude", "--effort", "low"]);
+    expect(
+      newSessionArgv({ harness: "claude-code", sessionId: ID, model: null, effort: null, name: "n", prompt: "p" }),
+    ).not.toContain("--effort");
+  });
+
   it("labels sessions by mode", () => {
     expect(sessionLabel("work", 4)).toBe("Implementing #4");
     expect(sessionLabel("plan", 4)).toBe("Planning #4");

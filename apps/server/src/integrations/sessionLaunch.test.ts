@@ -136,6 +136,19 @@ describe("starting a session from the board", () => {
     );
   });
 
+  it("passes the chosen effort after the model, and refuses a level no CLI takes", async () => {
+    const app = appWith();
+    const { status } = await app.start({ model: "opus", effort: "high" });
+    expect(status).toBe(201);
+    const args = app.spawned[0]!.args;
+    const at = args.indexOf("--model");
+    expect(args.slice(at, at + 4)).toEqual(["--model", "opus", "--effort", "high"]);
+    await app.start({ harness: "copilot-cli", model: "gpt-5.4", effort: "none" });
+    expect(app.spawned[1]!.args).toContain("--reasoning-effort");
+    expect((await app.start({ effort: "huge" })).status).toBe(400);
+    expect(app.spawned).toHaveLength(2);
+  });
+
   it("starts Copilot CLI with -i, labels a planning session and lets the task's other sessions share its window", async () => {
     const app = appWith();
     await app.start({});
@@ -311,7 +324,14 @@ describe("starting a session from the board", () => {
   it("offers the tier's CLI model and the checkout when the folder isn't a repository", async () => {
     const app = appWith();
     app.services.settings.update({
-      modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus", "copilot-cli": " " } } },
+      modelTiers: {
+        deep: {
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus", "copilot-cli": " " },
+          cliEffort: { "claude-code": "high" },
+        },
+      },
     });
     app.services.tasks.update(app.task.id, { suggestedModel: { tier: "deep" } }, "u");
     const res = await app.request(`/api/tasks/${app.task.id}/session-launch-options`);
@@ -321,6 +341,7 @@ describe("starting a session from the board", () => {
       branches: [],
       defaultBaseRef: null,
       models: { "claude-code": "opus", "copilot-cli": null },
+      efforts: { "claude-code": "high", "copilot-cli": null },
       tier: "deep",
       model: { name: "Deep", source: "tier", label: null },
       namedWindow: true,

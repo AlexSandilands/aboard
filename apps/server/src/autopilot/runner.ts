@@ -6,7 +6,9 @@ import {
   AUTOPILOT_ACTOR,
   autopilotSessionName,
   BRAND,
+  type CliEffort,
   describeRunModel,
+  profileCliEffort,
   profileHeadlessModel,
   resolveRunModel,
   type RunModel,
@@ -73,8 +75,11 @@ export function runModel(
  * A headless run's `--model` and what to note on the run about it: a model typed in the automation's config wins,
  * then the chosen model's Claude Code model; a chosen model with none runs on the CLI's default, and says so.
  */
-export function headlessModel(model: RunModel, typed: string): { model: string | null; note: string | null } {
-  if (typed.trim()) return { model: typed.trim(), note: null };
+export function headlessModel(
+  model: RunModel,
+  typed: string,
+): { model: string | null; effort: CliEffort | null; note: string | null } {
+  if (typed.trim()) return { model: typed.trim(), effort: null, note: null };
   const cli = profileHeadlessModel(model.profile);
   const described = describeRunModel(model);
   const lines = [model.note];
@@ -84,7 +89,8 @@ export function headlessModel(model: RunModel, typed: string): { model: string |
     lines.push(`Model: ${described} has no Claude Code model in Settings → Model tiers, so the CLI's default ran`);
   }
   const note = lines.filter(Boolean).join("\n") || null;
-  return { model: cli, note };
+  // Only the Claude Code model has an effort of its own; a T3 model that stood in for it carries none.
+  return { model: cli, effort: profileCliEffort(model.profile, "claude-code"), note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -422,6 +428,7 @@ export function createAutopilotRunner(deps: {
         budgetUsd: options.budgetUsd,
         sessionId,
         model: chosen.model,
+        effort: chosen.effort,
         name: autopilotSessionName(request.label),
         defaultBranch: worktree.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
@@ -488,6 +495,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
           budgetUsd: options.budgetUsd,
           sessionId,
           model: chosen.model,
+          effort: chosen.effort,
           name: autopilotSessionName(request.label),
           defaultBranch,
           ...(request.tools ? { tools: request.tools } : {}),

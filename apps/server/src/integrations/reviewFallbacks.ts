@@ -4,6 +4,7 @@ import {
   reviewFixInstructions,
   reviewIsDone,
   reviewLoopInstructions,
+  resolveHeadlessEffort,
   resolveHeadlessModel,
   type TaskLink,
   type TaskSummary,
@@ -108,6 +109,7 @@ export function createReviewFallbacks(deps: {
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
         model: resolveHeadlessModel(settings.modelTiers, settings.headlessReviewModel),
+        effort: resolveHeadlessEffort(settings.modelTiers, settings.headlessReviewModel),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,

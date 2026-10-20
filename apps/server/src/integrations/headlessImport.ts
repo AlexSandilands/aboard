@@ -1,4 +1,4 @@
-import { BRAND } from "@repo/contracts";
+import { BRAND, type CliEffort } from "@repo/contracts";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -59,6 +59,8 @@ export interface ImportJob {
   cwd: string;
   /** As `--model` takes it; null keeps the CLI's default. */
   model: string | null;
+  /** As `--effort` takes it; absent or null keeps the CLI's default. */
+  effort?: CliEffort | null;
   budgetUsd: number;
   source: IssueSource;
   /** Labels in use on the board, so the model reuses them instead of inventing near-duplicates. */
@@ -94,7 +96,7 @@ export function importSettings(job: Pick<ImportJob, "jiraTools" | "denyTools">):
  * can't take a command line past 8191.
  */
 export function importArgs(
-  job: Pick<ImportJob, "model" | "budgetUsd" | "source"> & { settingsPath: string | null },
+  job: Pick<ImportJob, "model" | "effort" | "budgetUsd" | "source"> & { settingsPath: string | null },
 ): string[] {
   const args = [
     "-p",
@@ -103,6 +105,7 @@ export function importArgs(
     "--json-schema",
     JSON.stringify(IMPORT_OUTPUT_SCHEMA),
     ...(job.model ? ["--model", job.model] : []),
+    ...(job.effort ? ["--effort", job.effort] : []),
     // Anything not allowed below is denied, since nobody is there to answer a prompt.
     "--permission-mode",
     "dontAsk",

@@ -14,10 +14,12 @@ import {
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
+  profileCliEffort,
   profileCliModel,
   resolveTaskModel,
   type AgentCliStatus,
   type AppSettings,
+  type CliEffort,
   type SessionLaunchOptions,
   type StartPlanningSessionInput,
   type StartSessionInput,
@@ -234,6 +236,7 @@ export function createSessionLaunch(deps: {
     session: {
       sessionId: string;
       model: string | null;
+      effort: CliEffort | null;
       prompt: string;
       cwd: string;
       branch: string | null;
@@ -248,7 +251,14 @@ export function createSessionLaunch(deps: {
   ): Promise<StartSessionResult> => {
     const { sessionId, cwd, label } = session;
     const argvFor = (prompt: string) => {
-      const argv = newSessionArgv({ harness, sessionId, model: session.model, name: label, prompt });
+      const argv = newSessionArgv({
+        harness,
+        sessionId,
+        model: session.model,
+        effort: session.effort,
+        name: label,
+        prompt,
+      });
       return [exe, ...argv.slice(1)];
     };
     const window = resolved.focus ? taskWindowName(session.windowTask) : undefined;
@@ -342,6 +352,10 @@ export function createSessionLaunch(deps: {
           "claude-code": profileCliModel(model.profile, "claude-code"),
           "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
         },
+        efforts: {
+          "claude-code": profileCliEffort(model.profile, "claude-code"),
+          "copilot-cli": profileCliEffort(model.profile, "copilot-cli"),
+        },
         tier,
         model: picked ? { name: picked.name, source: model.source as "label" | "tier", label: model.label } : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
@@ -398,6 +412,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId,
         model: input.model,
+        effort: input.effort ?? null,
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
@@ -430,6 +445,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId: randomUUID(),
         model: input.model,
+        effort: input.effort ?? null,
         prompt: withAttachedImages(input.prompt, images),
         cwd: root,
         branch: null,

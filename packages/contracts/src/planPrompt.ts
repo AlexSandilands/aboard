@@ -4,6 +4,7 @@ import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { PlanSkillRef } from "./reviews.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
+import { CliEffort } from "./modelTiers.ts";
 import { CliModel } from "./sessionLaunch.ts";
 import { StartT3ThreadInput } from "./t3Launch.ts";
 
@@ -178,6 +179,8 @@ export const StartPlanningSessionInput = z.object({
   attachmentIds: LaunchAttachmentIds.optional(),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
+  /** `--effort` / `--reasoning-effort`; null or absent runs the CLI's own default. */
+  effort: CliEffort.nullable().optional(),
   taskIds: PlanTaskIds,
 });
 export type StartPlanningSessionInput = z.infer<typeof StartPlanningSessionInput>;

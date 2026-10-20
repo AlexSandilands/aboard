@@ -1,4 +1,4 @@
-import { BRAND } from "@repo/contracts";
+import { BRAND, type CliEffort } from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
 import { READ_ONLY_TOOLS } from "./headlessReview.ts";
 
@@ -85,6 +85,8 @@ export interface AgentArgsInput {
   sessionId: string;
   /** As `--model` takes it; null keeps the CLI's default. */
   model: string | null;
+  /** As `--effort` takes it; absent or null keeps the CLI's default. */
+  effort?: CliEffort | null;
   /** The session's display name (`--name`), so it reads as something in `claude --resume` and Claude Code's UI. */
   name?: string | null;
   defaultBranch: string | null;
@@ -167,6 +169,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // Nothing to resume: a no-tools run has no worktree or card, so its transcript would only pile up.
     ...(none ? ["--no-session-persistence"] : []),
     ...(input.model ? ["--model", input.model] : []),
+    ...(input.effort ? ["--effort", input.effort] : []),
     ...(input.name ? ["--name", input.name] : []),
   ];
 }
