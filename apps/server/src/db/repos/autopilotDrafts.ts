@@ -29,7 +29,7 @@ export function createAutopilotDraftsRepo(sql: Sql) {
     },
     /** Newest first. */
     all(): AutomationDraft[] {
-      return sql.all<DraftRow>("SELECT * FROM autopilot_drafts ORDER BY created_at DESC, id").map(toDraft);
+      return sql.all<DraftRow>("SELECT * FROM autopilot_drafts ORDER BY created_at DESC, rowid DESC").map(toDraft);
     },
     insert(draft: AutomationDraft): void {
       sql.insert("autopilot_drafts", {
@@ -48,7 +48,7 @@ export function createAutopilotDraftsRepo(sql: Sql) {
     prune(now: string, keep: number): void {
       sql.run("DELETE FROM autopilot_drafts WHERE expires_at <= ?", now);
       sql.run(
-        "DELETE FROM autopilot_drafts WHERE id NOT IN (SELECT id FROM autopilot_drafts ORDER BY created_at DESC, id LIMIT ?)",
+        "DELETE FROM autopilot_drafts WHERE id NOT IN (SELECT id FROM autopilot_drafts ORDER BY created_at DESC, rowid DESC LIMIT ?)",
         keep,
       );
     },

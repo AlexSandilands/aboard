@@ -135,7 +135,7 @@ export function CustomAutomationsSection() {
       ))}
       {customs.isPending ? (
         <SettingsNote>Loading custom automations...</SettingsNote>
-      ) : list.length === 0 ? (
+      ) : list.length === 0 && drafts.length > 0 ? null : list.length === 0 ? (
         <SettingsRow
           title={customs.error ? "Couldn't load custom automations" : "No custom automations"}
           description={

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { AutomationDraft } from "@repo/contracts";
+import { AUTOMATION_DRAFTS_MAX, type AutomationDraft } from "@repo/contracts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -157,6 +157,25 @@ describe("draft_automation", () => {
     // The next draft prunes it from the table.
     await call({ automation: morningAgent });
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_drafts").get()).toEqual({ n: 1 });
+  });
+
+  it("says when no project has a variable the draft reads", async () => {
+    h.services.projects.create({ title: "Alpha" });
+
+    const { text } = await call({ automation: morningAgent });
+
+    expect(text).toContain("- jira_key: not set on the board or in any project");
+  });
+
+  it("keeps only the newest drafts", async () => {
+    for (let n = 1; n <= AUTOMATION_DRAFTS_MAX + 2; n++) {
+      await call({ automation: { ...nightlyScript, name: `Cleanup ${n}` } });
+    }
+
+    const kept = (await drafts()).map((d) => d.bundle.name);
+    expect(kept).toHaveLength(AUTOMATION_DRAFTS_MAX);
+    expect(kept).toContain(`Cleanup ${AUTOMATION_DRAFTS_MAX + 2}`);
+    expect(kept).not.toContain("Cleanup 1");
   });
 
   it("lets the user dismiss a draft", async () => {
