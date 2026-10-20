@@ -36,14 +36,14 @@ and a click tries again.
 | **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
-| **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI) |
+| **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI). **Custom models** add named models picked by a task label |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Jira, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
-  when it isn't set up or the board can't tell (Codex is set up on its side, so its dot stays grey).
-- Claude Code and GitHub Copilot are green only when their CLI runs (`--version`) and the board's MCP server is
+  when it isn't set up or the board can't tell (Codex's stays grey until its CLI is found, since many use it only through T3 Code).
+- Claude Code, GitHub Copilot and Codex (once its CLI is found) are green only when their CLI runs (`--version`) and the board's MCP server is
   registered with them. The board finds the server by its address (`localhost` and `127.0.0.1` count as the same,
   the port must match), so it doesn't matter what you named it. Hover the dot for the reason when it's amber.
   The rows beside it show the CLI's version and path and where the MCP server was found; **Re-check** runs it all

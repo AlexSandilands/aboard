@@ -822,7 +822,7 @@ describe("custom automations: actions", () => {
     expect(request.prompt).toContain("Use the fix-ci skill.");
     expect(request.prompt).toContain(`Fix #${t.number} Flaky test at https://github.com/o/r/pull/9 in /work/alpha`);
     expect(request.prompt).toContain("The suite fails on Windows.");
-    expect(request.tier).toBe("light");
+    expect(request.modelChoice).toEqual({ tier: "light" });
     expect(request.workspace).toEqual({ branch: "feature/x" });
     expect(request.options).toMatchObject({ runner: "auto", budgetUsd: 5 });
     expect(runsOf()[0]).toMatchObject({ status: "succeeded", threadUrl: "t3code://threads/env/t1" });

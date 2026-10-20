@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { deriveCurrentStep, type PlanPhase, type StepStatus, type TaskDetail, type TaskStatus } from "@repo/contracts";
+import {
+  deriveCurrentStep,
+  EMPTY_MODEL_TIERS,
+  type PlanPhase,
+  type StepStatus,
+  type TaskDetail,
+  type TaskStatus,
+  type TaskSummary,
+} from "@repo/contracts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
-import { STALE_PLAN_MS, batchedCompletionHint, progressHints, renderTranscript } from "./format.ts";
+import {
+  STALE_PLAN_MS,
+  batchedCompletionHint,
+  progressHints,
+  renderTranscript,
+  runsOnText,
+  summaryLine,
+} from "./format.ts";
 
 const NOW = Date.parse("2026-01-01T12:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -38,6 +53,20 @@ function task(status: TaskStatus, phases: PlanPhase[], over: Partial<TaskDetail>
     ...over,
   } as TaskDetail;
 }
+
+describe("runsOnText", () => {
+  const settings = {
+    modelTiers: EMPTY_MODEL_TIERS,
+    modelProfiles: [{ id: "codex61", name: "Codex 6.1", labels: ["codex61"], description: null, t3: null }],
+  };
+
+  it("names the custom model a label picks, and nothing when the tier decides", () => {
+    expect(runsOnText({ labels: ["codex61"], suggestedModel: { tier: "deep", reason: null } }, settings)).toBe(
+      "Codex 6.1, from label codex61",
+    );
+    expect(runsOnText({ labels: ["ui"], suggestedModel: { tier: "deep", reason: null } }, settings)).toBeNull();
+  });
+});
 
 describe("progressHints", () => {
   it("asks to start the current step when an In Progress task has none started", () => {
@@ -169,5 +198,37 @@ describe("renderTranscript", () => {
     const out = renderTranscript(transcript({}, `run ${["TOK", "EN"].join("")}=${value}`));
     expect(out.includes(value)).toBe(false);
     expect(out.includes("[redacted]")).toBe(true);
+  });
+});
+
+describe("summaryLine", () => {
+  const epic = (over: Partial<TaskSummary>) =>
+    ({
+      number: 5,
+      title: "Checkout",
+      kind: "epic",
+      status: "in_progress",
+      labels: [],
+      links: [],
+      attention: [],
+      blockedBy: [],
+      blocked: false,
+      parent: null,
+      dueDate: null,
+      resolution: null,
+      review: null,
+      progress: { done: 0, total: 0 },
+      rollup: { total: 2, done: 1, byStatus: { backlog: 0, planned: 0, in_progress: 1, review: 0, done: 1 } },
+      ...over,
+    }) as unknown as TaskSummary;
+
+  it("names the integration branch of an epic that has one", () => {
+    expect(summaryLine(epic({ integrationBranch: "epic/5-checkout" }))).toContain(
+      "· integration branch epic/5-checkout",
+    );
+  });
+
+  it("says nothing for an epic delivering to main", () => {
+    expect(summaryLine(epic({ integrationBranch: null }))).not.toContain("integration");
   });
 });

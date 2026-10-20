@@ -1,36 +1,51 @@
 import {
+  MODEL_PROFILES_MAX,
   MODEL_TIERS,
-  type AgentHarness,
+  AGENT_HARNESSES,
+  AgentHarness,
   type AppSettings,
+  type ModelProfile,
   type ModelTier,
   type T3IntegrationStatus,
   type T3ModelCatalog,
   type T3ModelSelection,
   type ModelTierSetting,
 } from "@repo/contracts";
-import { XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { ModelPicker, TraitsPicker } from "~/components/handoff/T3LaunchPickers";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { Button } from "~/components/ui/button";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useUpdateSettings } from "~/state/mutations";
 import { useAgentIntegrations, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import {
+  createProfileEdits,
+  labelConflicts,
+  parseLabelList,
+  saveProfileEdit,
+  type ProfileEdit,
+} from "./modelProfiles.logic";
+import {
   createTierEdits,
   saveTierChange,
+  TIER_PROVIDERS,
   visibleTierProviders,
   type TierChange,
   type TierProvider,
 } from "./modelTiers.logic";
-import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
+import { SettingsLink, SettingsNote, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
   "claude-code": "e.g. sonnet",
+  codex: "e.g. gpt-5.5-codex",
   "copilot-cli": "e.g. gpt-5.4",
 };
 
-const CLI_LABELS: Record<AgentHarness, string> = { "claude-code": "Claude Code", "copilot-cli": "Copilot CLI" };
+const CLI_LABELS: Record<AgentHarness, string> = Object.fromEntries(
+  AgentHarness.options.map((h) => [h, AGENT_HARNESSES[h].label]),
+) as Record<AgentHarness, string>;
 
 /**
  * What each suggested model tier means, in one place for every provider: a description named in copied prompts, the
@@ -44,7 +59,10 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
   const catalog = useT3ModelCatalog(t3Ready);
   const cliFound: Partial<Record<AgentHarness, boolean>> = {};
   for (const harness of agents.data?.harnesses ?? []) cliFound[harness.harness] = harness.cli.found;
-  const shown = new Set<TierProvider>(visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }));
+  // A provider set on a custom model shows too, so its value can be seen and cleared.
+  const shown = new Set<TierProvider>(
+    visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }, settings.modelProfiles),
+  );
   const edits = useRef(createTierEdits()).current;
   // mutateAsync, since mutate's per-call callbacks only run for the latest of overlapping saves, and each must settle.
   // The hook's own onError already reports a failure.
@@ -52,69 +70,278 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
     void saveTierChange(edits, updateSettings.mutateAsync, settings.modelTiers[tier], tier, change);
 
   return (
-    <SettingsSection id="models.tiers.list" title="Model tiers">
-      {MODEL_TIERS.map(({ value: tier, label, description }) => {
-        const setting = settings.modelTiers[tier];
-        return (
-          <SettingsRow
-            key={tier}
-            id={`models.tiers.${tier}`}
-            title={label}
-            description={description}
-            info="The description is named in prompts copied from a task. Each model below starts a new session on that provider when a task suggests this tier; empty uses the provider's default."
-          >
-            <div className="mt-3 space-y-2">
-              <TierField label="Description">
-                <BlurInput
-                  size="sm"
-                  className="w-full sm:max-w-sm"
-                  aria-label={`${label} tier description`}
-                  placeholder={setting.t3?.label ?? "e.g. Sonnet, medium effort"}
-                  value={setting.description ?? ""}
-                  onSave={(next) => save(tier, { field: "description", value: next.trim() || null })}
-                />
-              </TierField>
-              {shown.has("t3") ? (
-                <TierField label="T3 Code">
-                  <T3TierModel
-                    catalog={catalog.data}
-                    error={catalog.error?.message ?? null}
-                    setting={setting}
-                    canPick={t3Ready}
-                    onChange={(value) => save(tier, { field: "t3", value })}
+    <>
+      <SettingsSection id="models.tiers.list" title="Model tiers">
+        {MODEL_TIERS.map(({ value: tier, label, description }) => {
+          const setting = settings.modelTiers[tier];
+          return (
+            <SettingsRow
+              key={tier}
+              id={`models.tiers.${tier}`}
+              title={label}
+              description={description}
+              info="The description is named in prompts copied from a task. Each model below starts a new session on that provider when a task suggests this tier; empty uses the provider's default."
+            >
+              <div className="mt-3 space-y-2">
+                <TierField label="Description">
+                  <BlurInput
+                    size="sm"
+                    className="w-full sm:max-w-sm"
+                    aria-label={`${label} tier description`}
+                    placeholder={setting.t3?.label ?? "e.g. Sonnet, medium effort"}
+                    value={setting.description ?? ""}
+                    onSave={(next) => save(tier, { field: "description", value: next.trim() || null })}
                   />
                 </TierField>
-              ) : null}
-              {(["claude-code", "copilot-cli"] as const).map((harness) =>
-                shown.has(harness) ? (
-                  <TierField key={harness} label={CLI_LABELS[harness]}>
-                    <BlurInput
-                      size="sm"
-                      className="w-full sm:max-w-sm"
-                      aria-label={`${label} tier ${CLI_LABELS[harness]} model`}
-                      placeholder={CLI_PLACEHOLDERS[harness]}
-                      value={setting.cli?.[harness] ?? ""}
-                      onSave={(next) => save(tier, { field: "cli", harness, value: next.trim() || null })}
+                {shown.has("t3") ? (
+                  <TierField label="T3 Code">
+                    <T3TierModel
+                      catalog={catalog.data}
+                      error={catalog.error?.message ?? null}
+                      setting={setting}
+                      canPick={t3Ready}
+                      onChange={(value) => save(tier, { field: "t3", value })}
                     />
                   </TierField>
-                ) : null,
-              )}
-            </div>
-          </SettingsRow>
-        );
-      })}
-      {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
-      {shown.size < 3 && !agents.isPending ? (
-        <p className="px-3 py-3 text-xs text-muted-foreground/80 sm:px-4">
-          A provider's model shows here once it is set up. See{" "}
-          <SettingsLink to="integrations">Integrations</SettingsLink>.
-        </p>
+                ) : null}
+                {AgentHarness.options.map((harness) =>
+                  shown.has(harness) ? (
+                    <TierField key={harness} label={CLI_LABELS[harness]}>
+                      <BlurInput
+                        size="sm"
+                        className="w-full sm:max-w-sm"
+                        aria-label={`${label} tier ${CLI_LABELS[harness]} model`}
+                        placeholder={CLI_PLACEHOLDERS[harness]}
+                        value={setting.cli?.[harness] ?? ""}
+                        onSave={(next) => save(tier, { field: "cli", harness, value: next.trim() || null })}
+                      />
+                    </TierField>
+                  ) : null,
+                )}
+                <HeadlessHarness
+                  name={`${label} tier`}
+                  value={setting.headless}
+                  onChange={(value) => save(tier, { field: "headless", value })}
+                />
+              </div>
+            </SettingsRow>
+          );
+        })}
+        {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
+        {shown.size < TIER_PROVIDERS.length && !agents.isPending ? (
+          <p className="px-3 py-3 text-xs text-muted-foreground/80 sm:px-4">
+            A provider's model shows here once it is set up. See{" "}
+            <SettingsLink to="integrations">Integrations</SettingsLink>.
+          </p>
+        ) : null}
+      </SettingsSection>
+      <CustomModelsSection
+        profiles={settings.modelProfiles}
+        shown={shown}
+        t3Ready={t3Ready}
+        catalog={catalog.data}
+        catalogError={catalog.error?.message ?? null}
+      />
+    </>
+  );
+}
+
+/**
+ * Named models beyond the tiers: each has the fields a tier has, and task labels that pick it whatever the task's
+ * tier. An automation's Model setting can pick one too.
+ */
+function CustomModelsSection({
+  profiles,
+  shown,
+  t3Ready,
+  catalog,
+  catalogError,
+}: {
+  profiles: readonly ModelProfile[];
+  shown: ReadonlySet<TierProvider>;
+  t3Ready: boolean;
+  catalog: T3ModelCatalog | undefined;
+  catalogError: string | null;
+}) {
+  const updateSettings = useUpdateSettings();
+  const edits = useRef(createProfileEdits()).current;
+  const save = (edit: ProfileEdit) => void saveProfileEdit(edits, updateSettings.mutateAsync, profiles, edit);
+  const change = (id: string, next: Extract<ProfileEdit, { kind: "change" }>["change"]) =>
+    save({ kind: "change", id, change: next });
+  const conflicts = labelConflicts(profiles);
+  return (
+    <SettingsSection
+      id="models.tiers.custom"
+      title="Custom models"
+      headerAction={
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={profiles.length >= MODEL_PROFILES_MAX}
+          onClick={() => save({ kind: "add", name: "New model" })}
+        >
+          <PlusIcon />
+          Add model
+        </Button>
+      }
+    >
+      {profiles.length === 0 ? (
+        <SettingsNote>
+          None yet. Add one to run tasks that carry its label (say codex61) on it whatever their tier, or to pick it in
+          an automation's Model setting.
+        </SettingsNote>
       ) : null}
+      {profiles.map((profile, index) => (
+        <SettingsRow
+          key={profile.id}
+          id={`models.tiers.custom.${profile.id}`}
+          title={
+            <BlurInput
+              size="sm"
+              className="w-full sm:max-w-56"
+              aria-label="Model name"
+              value={profile.name}
+              onSave={(next) => change(profile.id, { field: "name", value: next })}
+            />
+          }
+          control={
+            <>
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label={`Move ${profile.name} up`}
+                disabled={index === 0}
+                onClick={() => save({ kind: "move", id: profile.id, delta: -1 })}
+              >
+                <ArrowUpIcon />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label={`Move ${profile.name} down`}
+                disabled={index === profiles.length - 1}
+                onClick={() => save({ kind: "move", id: profile.id, delta: 1 })}
+              >
+                <ArrowDownIcon />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label={`Remove ${profile.name}`}
+                onClick={() => save({ kind: "remove", id: profile.id })}
+              >
+                <Trash2Icon />
+              </Button>
+            </>
+          }
+        >
+          <div className="mt-3 space-y-2">
+            <TierField label="Labels">
+              <BlurInput
+                size="sm"
+                className="w-full sm:max-w-sm"
+                aria-label={`${profile.name} labels`}
+                placeholder="e.g. codex61 (comma-separated)"
+                value={profile.labels.join(", ")}
+                onSave={(next) => change(profile.id, { field: "labels", value: parseLabelList(next) })}
+              />
+            </TierField>
+            <TierField label="Description">
+              <BlurInput
+                size="sm"
+                className="w-full sm:max-w-sm"
+                aria-label={`${profile.name} description`}
+                placeholder={profile.t3?.label ?? "e.g. Codex, high effort"}
+                value={profile.description ?? ""}
+                onSave={(next) => change(profile.id, { field: "description", value: next.trim() || null })}
+              />
+            </TierField>
+            {shown.has("t3") ? (
+              <TierField label="T3 Code">
+                <T3TierModel
+                  catalog={catalog}
+                  error={catalogError}
+                  setting={profile}
+                  canPick={t3Ready}
+                  onChange={(value) => change(profile.id, { field: "t3", value })}
+                />
+              </TierField>
+            ) : null}
+            {AgentHarness.options.map((harness) =>
+              shown.has(harness) ? (
+                <TierField key={harness} label={CLI_LABELS[harness]}>
+                  <BlurInput
+                    size="sm"
+                    className="w-full sm:max-w-sm"
+                    aria-label={`${profile.name} ${CLI_LABELS[harness]} model`}
+                    placeholder={CLI_PLACEHOLDERS[harness]}
+                    value={profile.cli?.[harness] ?? ""}
+                    onSave={(next) => change(profile.id, { field: "cli", harness, value: next.trim() || null })}
+                  />
+                </TierField>
+              ) : null,
+            )}
+            <HeadlessHarness
+              name={profile.name}
+              value={profile.headless}
+              onChange={(value) => change(profile.id, { field: "headless", value })}
+            />
+          </div>
+        </SettingsRow>
+      ))}
+      {conflicts.map(({ label, winner, shadowed }) => (
+        <SettingsNote key={label}>
+          Label {label} is on {[winner, ...shadowed].join(" and ")}: {winner} wins, being first in the list.
+        </SettingsNote>
+      ))}
     </SettingsSection>
   );
 }
 
 /** One line of a tier row: the provider's name, then its field. */
+const HEADLESS_ITEMS = AgentHarness.options.map((harness) => ({
+  value: harness,
+  label: AGENT_HARNESSES[harness].label,
+}));
+
+/**
+ * The harness headless Autopilot runs on this model use, with the model set for it above. Runs that need what only
+ * Claude Code can do (structured output, a review of untrusted text) still run there.
+ */
+function HeadlessHarness({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: AgentHarness | undefined;
+  onChange: (value: AgentHarness) => void;
+}) {
+  return (
+    <TierField label="Headless runs">
+      <Select
+        items={HEADLESS_ITEMS}
+        value={value ?? "claude-code"}
+        onValueChange={(next) => {
+          const parsed = AgentHarness.safeParse(next);
+          if (parsed.success) onChange(parsed.data);
+        }}
+      >
+        <SelectTrigger size="sm" className="sm:w-40" aria-label={`${name} headless harness`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {HEADLESS_ITEMS.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </TierField>
+  );
+}
+
 function TierField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">

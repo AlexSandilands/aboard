@@ -2,7 +2,7 @@ import { pickMergeMethod, type MergeMethod, type TaskSummary } from "@repo/contr
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../autopilot/mergeGate.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
-import type { GithubIntegration } from "./github.ts";
+import { describeUnresolved, type GithubIntegration } from "./github.ts";
 
 export interface MergeTaskPrResult {
   task: TaskSummary;
@@ -72,7 +72,15 @@ export async function mergeTaskPr(
   if (reason) throw refuse(task, reason);
   // notMergeable passed, so the snapshot is there with a head and a base.
   const { headOid, baseRef } = snapshot as { headOid: string; baseRef: string };
-  if (snapshot?.reviewDecision === "review_required") throw refuse(task, "it still needs an approving review");
+  if (snapshot?.reviewDecision === "review_required") {
+    const unresolved = snapshot.mergeState === "blocked" ? (snapshot.unresolvedThreads ?? 0) : 0;
+    throw refuse(
+      task,
+      unresolved > 0
+        ? `it still needs an approving review, and it has ${describeUnresolved(unresolved)} the repository may require resolved`
+        : "it still needs an approving review",
+    );
+  }
   if (snapshot?.canMerge === false) throw refuse(task, "the signed-in GitHub account can't merge it");
   const allowed = snapshot?.mergeMethods ?? [];
   if (input.method && allowed.length > 0 && !allowed.includes(input.method)) {

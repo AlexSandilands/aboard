@@ -79,12 +79,17 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 | `headOid`          | The head commit, checked again before merging                                                      |
 | `isCrossRepository` | Whether the head branch is in a fork; Autopilot's PR review skips those                           |
 | `reviews`          | The last 20 submitted reviews, oldest first: `id` (databaseId), `author`, `state`, `submittedAt`, `own` (`viewerDidAuthor`), `trusted` |
-| `reviewComments`   | Comments on the last 30 review threads that aren't resolved (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
+| `reviewComments`   | Comments on the last 30 review threads that aren't resolved and that the signed-in account didn't answer last (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
+| `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId`, `ownLast` and `lastReviewId` (the newest comment, whether it is the signed-in account's, and the review it is in) |
+| `unresolvedThreads` | How many of the threads read aren't resolved                                                     |
 
-`trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. Bodies aren't read: the
-fix automation only needs who wrote what when, and Autopilot's own inline comments can be long.
+`trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. The poll reads no bodies and
+one comments connection per thread: each connection is a request in GitHub's rate-limit cost, and the poll reads up to
+25 PRs every 20 seconds. What resolving a thread needs (its first comment, its newest comment's body to match
+Autopilot's marked reply with `parseAutopilotReply`, the PR's newest 100 commits) is read fresh by `reviewThreads(ref)`
+(`ReviewThreadDetail`), only when there is a thread to look at, and never goes into a prompt.
 
-`optionalChecks`, `mergeState` and the last eight are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
+`optionalChecks`, `mergeState` and the last ten are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
 no merge until the next poll). `links.setSnapshot` stores the snapshot, and publishes the card only
 when it changed.
 
@@ -101,7 +106,13 @@ used by the epic merge) reads to tell what is worth another try. See
 [Autopilot](autopilot.md#automations).
 
 **Fix PRs** reads `checks`, `mergeable`, `reviewDecision`, `reviews` and `reviewComments` to decide when a PR needs
-fixing, and leaves out what `own` marks: Autopilot posts under the same login.
+fixing, and leaves out what `own` marks: Autopilot posts under the same login. It reads `reviewThreads` to find
+threads the account answered last, then `reviewThreads(ref)` and `resolveReviewThread` to resolve the ones it replied
+it fixed; Review PRs resolves its own threads a later round confirms fixed the same way.
+
+A repository can require every conversation resolved before a merge. When GitHub says the PR is blocked and it has
+unresolved threads, the merge gate, merge_task_pr's refusals and the refusal at merge time say "N unresolved review
+conversations", apart from a missing approval.
 
 ### Attention
 

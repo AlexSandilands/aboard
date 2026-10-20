@@ -2,16 +2,12 @@ import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import {
-  AgentHarness,
-  AgentSessionRef,
-  AgentSessionSnapshot,
-  TerminalOpenIn,
-  TerminalSetting,
-} from "./agentSessions.ts";
+import type { AgentHarness } from "./agentSessions.ts";
+import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
+import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
@@ -217,6 +213,24 @@ export const PrReviewCommentInfo = z.object({
 });
 export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
 
+/**
+ * A review thread that isn't resolved, as the poll reads it: no bodies. A thread whose newest comment is the signed-in
+ * account's (Autopilot posts as the user) may be one Autopilot answered; Fix PRs reads it fresh to find out.
+ */
+export const PrReviewThreadInfo = z.object({
+  /** GitHub's node id, which resolveReviewThread takes. */
+  id: z.string(),
+  /** Whether the signed-in account may resolve it. */
+  canResolve: z.boolean(),
+  /** The newest comment's databaseId, so a new comment makes the thread worth another look. */
+  lastCommentId: z.number().int().nullable(),
+  /** The newest comment is the signed-in account's. */
+  ownLast: z.boolean(),
+  /** The review the newest comment was posted in: one of Autopilot's own reviews is a point, not a reply. */
+  lastReviewId: z.number().int().nullable(),
+});
+export type PrReviewThreadInfo = z.infer<typeof PrReviewThreadInfo>;
+
 /** GitHub's `mergeStateStatus`, lowercased: what its merge box says about the PR right now. */
 export const PrMergeState = z.enum([
   "clean",
@@ -269,8 +283,12 @@ export const PrSnapshot = z.object({
   isCrossRepository: z.boolean().optional(),
   /** The newest reviews, oldest first. Optional, as below, so older snapshots still parse. */
   reviews: z.array(PrReviewInfo).optional(),
-  /** Comments on the newest unresolved review threads, oldest first. */
+  /** Comments on the newest unresolved review threads the signed-in account didn't answer last, oldest first. */
   reviewComments: z.array(PrReviewCommentInfo).optional(),
+  /** The newest unresolved review threads (of the last 30). */
+  reviewThreads: z.array(PrReviewThreadInfo).optional(),
+  /** How many of the threads read are unresolved: a repository can require them all resolved before a merge. */
+  unresolvedThreads: z.number().int().nonnegative().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 
@@ -784,8 +802,11 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-/** What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness. */
-export const HandoffTarget = z.enum(["t3-code", ...AgentHarness.options]);
+/**
+ * What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness the board can start
+ * (LAUNCHABLE_HARNESSES: not Codex, which picks its own session id).
+ */
+export const HandoffTarget = z.enum(["t3-code", "claude-code", "copilot-cli"]);
 export type HandoffTarget = z.infer<typeof HandoffTarget>;
 
 /** Every target shown, as a target added later starts. */
@@ -819,6 +840,8 @@ export const AppSettings = z
     headlessReviewCli: z.string().nullable(),
     /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
     copilotCli: z.string().nullable(),
+    /** The Codex CLI headless runs and resumed Codex sessions start; null looks up `codex` on PATH. */
+    codexCli: z.string().nullable(),
     /**
      * Whether the hand-off menus offer each target when it can start here; false hides it. Existing sessions still
      * reopen, and agents can still start threads (agentT3Threads).
@@ -842,6 +865,8 @@ export const AppSettings = z
     issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
+    /** Named models beyond the tiers, in the user's order; a task label can pick one (modelProfiles.ts). */
+    modelProfiles: ModelProfiles,
     /** Where "Open in terminal" resumes agent sessions. */
     terminal: TerminalSetting,
     /** Windows Terminal only: a tab in its last window, or a new window. */
@@ -861,6 +886,15 @@ export const AppSettings = z
 
 export type AppSettings = z.infer<typeof AppSettings>;
 
+/** The CLI path set in Settings for a harness, or null to look its name up on PATH. */
+export const harnessCliSetting = (
+  settings: Pick<AppSettings, "headlessReviewCli" | "copilotCli" | "codexCli">,
+  harness: AgentHarness,
+): string | null =>
+  ({ "claude-code": settings.headlessReviewCli, codex: settings.codexCli, "copilot-cli": settings.copilotCli })[
+    harness
+  ]?.trim() || null;
+
 export const UpdateSettingsInput = z.object({
   jiraBaseUrl: z.string().trim().nullable().optional(),
   githubPolling: z.boolean().optional(),
@@ -873,6 +907,7 @@ export const UpdateSettingsInput = z.object({
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
   copilotCli: z.string().trim().nullable().optional(),
+  codexCli: z.string().trim().nullable().optional(),
   /** Merges into the switches: targets left out keep theirs. */
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
@@ -884,6 +919,8 @@ export const UpdateSettingsInput = z.object({
   issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
+  /** Replaces the whole list of custom models. */
+  modelProfiles: ModelProfiles.optional(),
   terminal: TerminalSetting.optional(),
   terminalOpenIn: TerminalOpenIn.optional(),
   /** Merges into the notification settings: kinds left out keep their switch. */

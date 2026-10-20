@@ -73,7 +73,8 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dailySpendCapUsd`     | none            | What agent runs created today may cost before no more start          |
 | `quietHours`           | off, 22:00–07:00 | No agent runs start in the window (local time; may wrap midnight; equal ends are no window) |
 | `dryRun`               | off             | Record what would run, and do nothing                                |
-| `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR                          |
+| `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks |
+| `prCommentRounds`      | 5               | Fix PRs' attempts per PR on other people's review comments and requests for changes |
 | `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
 | `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 
@@ -370,7 +371,14 @@ as comments only.
   pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
   setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
   posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (Fix PRs) counts its
-  own attempts against the same limit; each fix is followed by at most one new head and so one review.
+  attempts on Autopilot's review and failing checks against the same limit; each fix is followed by at most one new
+  head and so one review. Other people's comments have a budget of their own (`prCommentRounds`, below).
+- **Resolving its own threads.** From round 2 the prompt asks the reviewer to list, in the verdict's optional `fixed`,
+  the comment ids of earlier Autopilot inline comments whose point is fixed at this commit. After posting,
+  `resolveConfirmedThreads` reads the threads fresh (`reviewThreads`) and resolves those (`resolveReviewThread`), only where the thread's first comment is in
+  one of the earlier rounds' reviews (`rootReviewId`), so a reviewer can't close someone else's point. A failure leaves
+  the thread open and doesn't fail the review; the count goes on the output as `resolvedThreads`. This covers points
+  fixed by hand, which Fix PRs' resolver (below) never sees a reply for.
 - **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
   `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
   write (the PR's description and comments), the request sets `untrustedInput`, which gives it the least it needs:
@@ -451,8 +459,9 @@ to fix a pull request linked to a task.
     `trusted` author that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
   - review comments: comments on unresolved threads that aren't `own`, are `trusted`, aren't in one of Autopilot's
     reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. Autopilot
-    posts as the user, and the poller doesn't read bodies, so the user's own comments can't be told from its
-    replies and never count;
+    posts as the user, so the user's own comments can't be told from its replies and never count. A thread whose
+    newest comment is the user's account's (`ownLast`: Autopilot's reply, or the user's own) is left out altogether:
+    it was answered, and asking again would let two review bots ping-pong;
   - Autopilot's review: `currentPrReview(...)` with `handoff: "fix"`: `review@<reviewId>`.
 
   Autopilot's own reviews are told apart by the `reviewId`s on Review PRs' runs.
@@ -471,8 +480,9 @@ to fix a pull request linked to a task.
   `prHead` says the PR moved (a force-push). The prompt has a section per trigger with the `gh` commands to read
   it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
   above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
-  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and replies on the threads it addressed,
-  each reply starting with `prReviewMarker()`. The reply goes in a file posted with `gh api … -F body=@file`,
+  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and then replies on
+  each thread it was sent to, the reply's first line exactly `prFixedReply(sha)` ("📋 … Autopilot · fixed in <sha>")
+  for a point it fixed or `prDeclinedReply(reason)` for one it won't. The reply goes in a file posted with `gh api … -F body=@file`,
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
   is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
   via: "nudge" | "t3" | "headless" }`.
@@ -480,12 +490,31 @@ to fix a pull request linked to a task.
   with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
   for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
   (it may start an attempt of its own on the branch while one is at work).
-- **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
-  attempt that wasn't skipped or conflict-only (below). When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
-  per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
-  it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A new head
-  commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency cap, a
-  daily cap or quiet hours don't hold it back.
+- **Resolving threads it fixed** (switch `resolveThreads`, on by default). The poll reads no bodies, so with no agent
+  a candidate keyed `fix:resolve:<linkId>:<headOid>:<hash of thread@newest comment ids>` (`resolveDedupeKey`,
+  `startsNoAgent`) picks the snapshot's unresolved threads the account can resolve and answered last (`ownLast`), but
+  not one whose newest comment is in one of Autopilot's own reviews (a point it just raised, not a reply). The
+  action reads them fresh with `reviewThreads` (`ReviewThreadDetail`: the newest comment's body, and the PR's newest 100
+  commits) and resolves each whose newest comment is Autopilot's reply saying `fixed in <sha>` (`reply: "fixed"`,
+  `parseAutopilotReply`, lenient enough for replies written before the format was fixed) with that sha prefixing one
+  of the commits. The others (declined, the user's own words, Autopilot's review comment) go on the run's
+  `output.settled` as `thread@newestCommentId` and aren't read again until someone comments; one whose commit isn't on
+  the PR is read again after the next push. A thread GitHub refuses to resolve flags the run under Needs attention;
+  the ones that did resolve drop out of the next poll, so the refused ones form a new set and are tried once more. It doesn't wait for a fix or review of the PR to finish, isn't an attempt
+  and isn't counted as an agent run (`FIX_RESOLVE_KEY_PREFIX` is left out of the caps like the give-ups). The fix
+  prompt tells the agent not to resolve threads itself; with the switch off it says the reviewer does.
+- **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`), counting every attempt that wasn't skipped or
+  conflict-only (below), and per PR as many as each budget allows (`FixBudget`; `attemptBudgets` reads an attempt's
+  budgets back from its key): `review` (`prReviewRounds`) for Autopilot's review and failing checks, `comments`
+  (`prCommentRounds`, default 5) for other people's comments and requests for changes, and `conflicts` (below). An
+  attempt given triggers of both uses one of each. A colleague's review bot thus can't use up the attempts Autopilot's own loop needs, nor
+  the other way round. When a budget is used up, a gave-up run `fix:gave_up:<linkId>:review` or `:comments` gives up
+  on that budget's triggers and the others still go ahead (a conflict that came with them becomes a conflict-only
+  attempt); past the per-head limit, `fix:gave_up:<linkId>:<headOid>`. Each ends flagged "Autopilot gave up on PR #N:
+  …". That puts it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A
+  new head commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency
+  cap, a daily cap or quiet hours don't hold it back. (Before the budgets were split the key was
+  `fix:gave_up:<linkId>`; a PR given up on under it gets a fresh look.)
 
   An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
   counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict
@@ -494,8 +523,8 @@ to fix a pull request linked to a task.
   a merge that keeps failing or a PR that never stops conflicting; failed and successful ones count, skipped ones
   don't. When only a conflict is fresh, only that budget applies, so a PR
   that used up its rounds is still kept merged; past it, a gave-up run `fix:gave_up:<linkId>:conflicts` says "N
-  conflict-only attempts used, still to fix: merge conflicts". A mixed attempt (`checks+conflict`) counts as a normal
-  round. Conflict-only runs are labelled "conflict attempt N of 5" in the summary and the prompt. An integration
+  conflict-only attempts used, still to fix: merge conflicts". A mixed attempt (`checks+conflict`) counts against the
+  budgets of its other triggers. Conflict-only runs are labelled "conflict attempt N of 5" in the summary and the prompt. An integration
   epic's PR, fixed for conflicts only, uses only this budget.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
@@ -750,7 +779,7 @@ the automation. Runs stay, under the old key.
   (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
-  It goes to `ctx.runner.start` with the action's tier (else the task's) and, with `onPrBranch`, `workspace.branch`
+  It goes to `ctx.runner.start` with the action's tier as its `modelChoice` (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
   set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
   the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
   `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
@@ -758,7 +787,7 @@ the automation. Runs stay, under the old key.
   headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
   default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
   read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
-  folder gets the safety note without a branch name and the generic denials). The tier is the action's, else the default for the runner's model tiers. One at a time per
+  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's tier, else the CLI's default. One at a time per
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
@@ -1114,7 +1143,7 @@ with that error.
 - **`workspace`**: `{ baseRef }` starts a new branch from that ref (default: the default branch); `{ branch }`
   starts from an existing branch, such as a pull request's, and the agent pushes back to it. The default
   branch is refused either way, except for a read-only run, which can't push.
-- **No task.** A run with no task (a digest's) is headless only: `claude -p` in an empty temporary folder that is
+- **No task.** A run with no task (a digest's) is headless only: its CLI in an empty temporary folder that is
   removed afterwards, with no worktree and no session link. T3 Code and `nudge` fail for it.
 - Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
   must work from its prompt alone.
@@ -1133,11 +1162,12 @@ Every agent automation spreads the shared runner options into its config (`autop
 | `runner`         | auto    | auto, t3 or headless                                                             |
 | `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
 | `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
-| `model`          | blank   | Headless: `--model`; blank takes the task's tier when it maps to a Claude model  |
+| `modelChoice`    | task    | The model runs start on: the task's, a tier or a custom model ([Models](#models)) |
+| `model`          | blank   | Headless: a typed `--model` that wins over `modelChoice`                         |
 | `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
 
 **T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
-so the model is the one the user mapped to the task's suggested tier. The thread gets a new T3 worktree; for a
+so the model is the run's model ([Models](#models)) when its T3 model is ready, else T3's default. The thread gets a new T3 worktree; for a
 `branch` it starts from origin's copy of it. The prompt ends with a note on where to push and the safety rules.
 
 - **One launch per repository at a time.** T3 answers the launch at once and prepares the workspace afterwards,
@@ -1157,15 +1187,18 @@ so the model is the one the user mapped to the task's suggested tier. The thread
   "T3 Code couldn't prepare the thread's workspace: <T3's error>". T3 refuses the retry for a run that failed for
   another reason, which fails the run with "T3 Code couldn't start the thread: …".
 
-**Headless.** `claude -p` in a worktree of its own (`autopilot/worktrees.ts`):
+**Headless.** A CLI in a worktree of its own (`autopilot/worktrees.ts`): `claude -p` by default, or `codex exec` or
+the Copilot CLI when the run's model says so ([Headless drivers](#headless-drivers)):
 
 1. `git worktree add --no-track -b autopilot/<task#>-<run8> <data dir>/worktrees/<repo>/<task#>-<run8> <start>`,
    where `<start>` is the base ref, `origin/<default branch>` or `origin/<branch>`, after a best-effort fetch.
    The new branch tracks nothing, so a bare `git push` can't land on the branch it started from. A worktree
-   folder that overlaps the project's checkout is refused.
-2. The board picks the session id and records it on the run, with the worktree, before the agent starts. It
+   folder that overlaps the project's checkout is refused. The worktree then gets its [push guard](#the-push-guard).
+2. The board picks the session id and records it on the run, with the worktree, before the agent starts (Codex
+   picks its own: it is recorded and linked as soon as its first JSONL event names it). It
    also links the session to the task as an `agent_session` link ([agent sessions](agent-sessions.md)) with the
-   run's name as its label and the worktree as its folder, so the card offers Open in terminal (`claude --resume <id>`). Sessions are kept:
+   run's name as its label and the worktree as its folder, under the harness that ran it, so the card offers Open
+   in terminal (`claude --resume <id>`, `codex resume <id>`, `copilot --resume=<id>`). Sessions are kept:
    there is no `--no-session-persistence`. The link's status comes from the run, not the harness's files:
    Working while the run goes, then Finished or Failed with the time it ended
    ([agent sessions](agent-sessions.md#live-status)).
@@ -1178,12 +1211,91 @@ so the model is the one the user mapped to the task's suggested tier. The thread
    also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
    not a sandbox; the prompt states the same rules.
 5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
-   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`).
+   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`); Codex's is
+   `codexCli` and Copilot's `copilotCli` (Settings → Integrations).
+
+#### Headless drivers
+
+Each harness has a `HeadlessDriver` (`integrations/headlessAgent.ts` for Claude Code, `integrations/headlessDrivers.ts`
+for the others): the argv, a parser that turns its output into an outcome, and what it can be held to.
+
+| Capability                             | Claude Code | Codex | Copilot CLI |
+| -------------------------------------- | ----------- | ----- | ----------- |
+| Structured output (`outputSchema`)     | yes         | no    | no          |
+| Untrusted-input lockdown               | yes         | no    | no          |
+| No tools (`access: "none"`)            | yes         | no    | no          |
+| Extra tool rules (`tools`, `deniedTools`) | yes      | no    | no          |
+| Spending cap (`budgetUsd`) and cost    | yes         | no    | no          |
+| Session id given up front              | yes         | no    | yes         |
+
+- **Which one.** The run's model ([Models](#models)) names the harness: a tier or custom model's **Headless runs**
+  setting (`ModelTierSetting.headless`, unset is Claude Code), with that harness's model from the same tier or model
+  (`profileHeadless`).
+- **Falling back.** A run that needs something its harness can't do (a reviewer's structured verdict, the untrusted
+  lockdown, a no-tools digest, or an editing run with no task, which has no worktree and so no push guard) runs on
+  Claude Code instead, and the run's detail says why (`headlessDriverFor`) and which model ran: a typed override that
+  is a Claude model, else the model's Claude Code model (`profileHeadlessModel`), else the CLI's default. So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
+  agent actions without tool rules) run on Codex or Copilot.
+- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] -` (read-only runs
+  use `--sandbox read-only`), prompt on stdin. Edit runs leave Codex's sandbox off because its `workspace-write`
+  keeps git's folders read-only, and a worktree's git dir lies outside it anyway, so the agent couldn't commit or
+  push. That is the access a Claude Code edit run has (Bash allowed outright); the push guard still applies. The parser reads `thread.started` (the session id), the last completed `agent_message` item (the answer)
+  and `turn.failed` or `error`; a run with no `turn.completed` failed. Written from Codex's docs and source, not
+  checked against a real Codex yet (#252).
+- **Copilot CLI:** `copilot --output-format json --no-ask-user --session-id <id> --allow-tool write --allow-tool shell
+  --allow-tool <board> --deny-tool 'shell(gh pr merge)' [--model <m>] [--name <name>]`, prompt on stdin. Read-only
+  runs allow only `git status`, `log`, `diff`, `show` and `rev-parse` and deny `write`. The parser takes the last
+  `assistant.message` or `session.task_complete` summary as the answer, and `session.error` or a printed `Error:`
+  line as the failure. Copilot's rules match a command's first-level subcommand (`git push`), so they can refuse
+  merging but not a force-push alone: the push guard does that.
+- **Cost:** Codex and Copilot report none and take no cap. Only `timeoutMinutes` stops them, the run records no cost,
+  and the spend cap doesn't count them.
+
+#### The push guard
+
+Codex and Copilot can't be given Claude Code's deny rules, so git refuses the pushes itself. Every headless worktree
+(`createWorktree({ pushGuard: true })`, `autopilot/pushGuard.ts`) gets a hooks folder of its own inside its git dir
+(`<git dir>/autopilot-hooks`, removed with the worktree). The agent's process is pointed at it with
+`core.hooksPath` in `GIT_CONFIG_PARAMETERS` (how `git -c` passes config on, `pushGuardEnv`), so every git the agent
+runs uses it and no config file changes: not the repository's (turning on `extensions.worktreeConfig` would break
+a bare repository's worktrees), not the user's. `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` would be the documented way,
+but Codex drops variables with `KEY` in their name from its shell, and git then fails outright. Its `pre-push`
+refuses a delete, a push to `refs/heads/<default branch>`, and a push whose remote commit isn't an ancestor of the
+local one (a force-push; a remote commit the worktree hasn't fetched is refused too, as it can't be told apart). It
+then runs the repository's own `pre-push`; every other hook just runs the repository's own (where git would look:
+`git rev-parse --git-path hooks`, so a `~` in `core.hooksPath` is expanded), so its lint and commit-message checks
+still apply. Git run by the board itself, or by the user in that worktree, doesn't use the guard. If the guard can't be installed the
+worktree is removed and the run fails. It is a guard rail, not a sandbox: `git push --no-verify` skips it. Codex has
+nothing that refuses `gh pr merge`; only the prompt says not to.
 
 **Cleanup** (`autopilot/cleanup.ts`) runs hourly with the pollers. It removes a finished headless run's worktree
 once the task has a merged PR, or `worktreeRetentionDays` after the run finished. It uses `git worktree remove`
 without `--force`, so a worktree with uncommitted changes is kept and logged once. The branch is deleted with
 `git branch -d`, which keeps a branch that has unmerged commits.
+
+### Models
+
+Which model a run starts on is decided by one rule, `resolveRunModel` (`packages/contracts/src/modelProfiles.ts`),
+which the T3 launch dialog and the terminal session launcher use too:
+
+1. **The automation's choice.** Every agent automation has a **Model** field (kind `model`, config key
+   `modelChoice`: `{from: "task"} | {tier} | {profile}`; default From the task). A custom agent action's own tier
+   comes next (`RunnerRequest.modelChoice`), and Orchestrate and the digest pass a fixed tier.
+2. **A task label.** **Settings → Model tiers → Custom models** (`modelProfiles`) are named models with a tier's
+   fields (description, T3 model, CLI models) and labels. A task carrying one of a model's labels runs on it, whatever
+   its tier; when several models claim a label, the first in the list wins.
+3. **The task's suggested tier.**
+4. **The harness's default.**
+
+A **headless** run runs on the chosen model's **Headless runs** harness (Claude Code unless set; see
+[Headless drivers](#headless-drivers)) and takes, in order: a model typed in the automation's **Headless model
+override**, the chosen model's model for that harness (for Claude Code also its T3 model when that is a Claude model
+`claude` accepts, `profileHeadlessModel`), else the CLI's default. A model with none for its harness falls back to the
+CLI's default, and the run's detail says so; otherwise the detail names the model, what picked it and, off Claude
+Code, the harness. A **T3** launch passes an automation's choice on to
+`launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
+(`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
+task's model is used.
 
 ### Writing an automation
 
@@ -1285,8 +1397,10 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |
 | `apps/server/src/autopilot/runnerOptions.ts` | The runner options every agent automation shares |
 | `apps/server/src/autopilot/worktrees.ts`, `cleanup.ts` | Headless runs' worktrees and their removal |
+| `apps/server/src/autopilot/pushGuard.ts` | The worktree's pre-push hook and the hooks that pass on to the repository's |
 | `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
-| `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome |
+| `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome, the driver interface |
+| `apps/server/src/integrations/headlessDrivers.ts` | The Codex and Copilot CLI drivers, capabilities and the fallback to Claude Code |
 | `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
 | `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |

@@ -20,7 +20,13 @@ var the agent reads with its shell:
 | Harness | `harness` | Id from | Resume | Fork |
 | --- | --- | --- | --- | --- |
 | Claude Code | `claude-code` | `$CLAUDE_CODE_SESSION_ID` | `claude --resume <id>` | `claude --resume <id> --fork-session` |
+| Codex | `codex` | `$CODEX_THREAD_ID` (unverified, #252) | `codex resume <id>` | none |
 | Copilot CLI | `copilot-cli` | `$COPILOT_AGENT_SESSION_ID` | `copilot --resume=<id>` | none |
+
+Codex sessions are linked by Autopilot's headless runs ([autopilot](autopilot.md#headless-drivers)), which read
+the id from `codex exec`'s first event. Agents aren't asked to link their own Codex session yet: the env var is
+unverified. Codex picks its own session id, so the board can't start a Codex session in a terminal
+(`AGENT_HARNESSES.codex.presetSessionId` is false, and the hand-off menus leave it out); it can only resume one.
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
@@ -57,7 +63,8 @@ polling until the server restarted.
 | `failed` | Failed 5m ago | an Autopilot run's session whose run failed | |
 
 - Claude Code's folder is `$CLAUDE_CONFIG_DIR`, else `~/.claude`; Copilot's is `$COPILOT_HOME`, else
-  `~/.copilot`. Neither format is documented, so anything unexpected reads as unknown rather than a guess.
+  `~/.copilot`. Codex leaves nothing the board reads, so a Codex session is `unknown` unless an Autopilot run says
+  how it is. Neither format is documented, so anything unexpected reads as unknown rather than a guess.
 - A pid counts only while `process.kill(pid, 0)` finds it. Claude Code removes its file on a clean exit; after
   a crash the file stays and the pid can be reused. On Windows `procStart` is the process's creation time as a
   FILETIME, compared with `Get-Process`'s start time in one PowerShell call for all pids, cached for five
@@ -133,7 +140,9 @@ the port and path, and ignores a trailing slash and the query (which may carry a
 `claude mcp list` (and `mcp get` for the scope), run from the home folder, which doesn't list servers added to one
 project (local scope), so `~/.claude.json` is also read for those (reported as local scope, with a hint to use
 `--scope user`); if the CLI fails or times out, that file is all there is. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
-`$COPILOT_HOME/mcp-config.json`) is read. Config files are only read for server names and `url` strings, never
+`$COPILOT_HOME/mcp-config.json`) is read, and for Codex `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`):
+`codexMcpEntries` reads only its `[mcp_servers.<name>]` headers and their `url` lines. Settings shows the Codex dot
+only once its CLI is found, as many use Codex only through T3 Code. Config files are only read for server names and `url` strings, never
 headers or env, and no URL or token is put in the result.
 
 The dot is green when the CLI runs and the MCP entry exists (a project-only entry, local scope that the CLI can't
@@ -147,13 +156,14 @@ The hand-off menu on a card and in the panel offers **New Claude Code session…
 on any open task, and on an epic (finished ones too), for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
 path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
-model for the task's tier, and whether sessions get a named window) and offers:
+model for the task's model, which model that is and what picked it (a label's custom model, else the tier:
+`resolveTaskModel`), and whether sessions get a named window) and offers:
 
 - the hand-off prompt, editable, with **Plan with me** swapping the work and planning prompts. It is the prompt
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Model tiers** (`modelTiers[tier].cli[harness]`) for a work prompt; blank, and
+- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
 - images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
   its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`

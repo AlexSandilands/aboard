@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
 
@@ -61,7 +62,14 @@ interface RunResult {
 function run(
   exe: string,
   args: string[],
-  opts: { cwd?: string; input?: string; timeoutMs: number; env?: NodeJS.ProcessEnv; label?: string },
+  opts: {
+    cwd?: string;
+    input?: string;
+    timeoutMs: number;
+    env?: NodeJS.ProcessEnv;
+    label?: string;
+    onStdoutLine?: (line: string) => void;
+  },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
@@ -77,11 +85,21 @@ function run(
     if (group !== undefined) liveGroups.add(group);
     let stdout = "";
     let stderr = "";
+    // What came after the last newline, for onStdoutLine.
+    let partial = "";
     const timer = setTimeout(() => {
       killTree(child);
       reject(new Error(`${opts.label ?? "Claude Code"} didn't finish within ${formatDuration(opts.timeoutMs)}`));
     }, opts.timeoutMs);
-    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
+    const decoder = new StringDecoder("utf8");
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = decoder.write(chunk);
+      stdout += text;
+      if (!opts.onStdoutLine) return;
+      const lines = (partial + text).split(/\r?\n/);
+      partial = lines.pop() ?? "";
+      for (const line of lines) opts.onStdoutLine(line);
+    });
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -91,6 +109,7 @@ function run(
     child.on("close", (code) => {
       clearTimeout(timer);
       if (group !== undefined) liveGroups.delete(group);
+      if (partial) opts.onStdoutLine?.(partial);
       resolve({ code, stdout, stderr });
     });
     child.stdin.end(opts.input ?? "");
@@ -176,8 +195,13 @@ export function parseClaudeOutput<T>(
 }
 
 export interface ClaudeJob {
-  /** The CLI to run; null looks up `claude` on PATH. */
+  /** The CLI to run; null looks up `command` on PATH. */
   cli: string | null;
+  /** The CLI's name on PATH, and how errors name it: `claude` and "Claude Code" unless given. */
+  command?: string;
+  label?: string;
+  /** Each line of stdout as it comes, for a run that learns its session id as it goes. */
+  onStdoutLine?: (line: string) => void;
   cwd: string;
   /** Goes over stdin, which has no length limit unlike the command line. */
   prompt: string;
@@ -187,17 +211,34 @@ export interface ClaudeJob {
   env?: NodeJS.ProcessEnv;
 }
 
-const cliPath = (cli: string | null): string => {
-  const exe = resolveExecutable(cli?.trim() || "claude");
-  if (!exe) throw new Error(cli ? `Claude Code CLI not found at ${cli}` : "Claude Code CLI (claude) not found on PATH");
+const cliPath = (cli: string | null, command = "claude", label = "Claude Code"): string => {
+  const exe = resolveExecutable(cli?.trim() || command);
+  if (!exe) throw new Error(cli ? `${label} CLI not found at ${cli}` : `${label} CLI (${command}) not found on PATH`);
   return exe;
 };
 
 /** Runs one headless job and returns its stdout. Throws when the CLI can't run or printed nothing. */
-export async function runClaude({ cli, cwd, prompt, args, timeoutMs, env }: ClaudeJob): Promise<string> {
-  const result = await run(cliPath(cli), args, { cwd, input: prompt, timeoutMs, ...(env ? { env } : {}) });
+export async function runClaude({
+  cli,
+  command,
+  label = "Claude Code",
+  cwd,
+  prompt,
+  args,
+  timeoutMs,
+  env,
+  onStdoutLine,
+}: ClaudeJob): Promise<string> {
+  const result = await run(cliPath(cli, command, label), args, {
+    cwd,
+    input: prompt,
+    timeoutMs,
+    label,
+    ...(env ? { env } : {}),
+    ...(onStdoutLine ? { onStdoutLine } : {}),
+  });
   if (result.stdout.trim()) return result.stdout;
-  throw new Error(`Claude Code exited with code ${result.code}: ${result.stderr.trim().slice(0, 300) || "no output"}`);
+  throw new Error(`${label} exited with code ${result.code}: ${result.stderr.trim().slice(0, 300) || "no output"}`);
 }
 
 /** Runs `claude <args>` for its stdout (e.g. `mcp list`). Throws when the CLI can't run or exits non-zero. */

@@ -5,6 +5,8 @@ import {
   AGENT_HARNESSES,
   AgentHarness,
   BRAND,
+  harnessCliSetting,
+  LAUNCHABLE_HARNESSES,
   handoffModeError,
   isAbsolutePath,
   newSessionArgv,
@@ -14,7 +16,8 @@ import {
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
-  tierCliModel,
+  profileCliModel,
+  resolveTaskModel,
   type AgentCliStatus,
   type AppSettings,
   type SessionLaunchOptions,
@@ -73,7 +76,7 @@ type LaunchImage = { filename: string; path: string };
 
 /** The CLI a harness runs: the path set in Settings, else its name on PATH. */
 const configuredCli = (settings: AppSettings, harness: AgentHarness): string =>
-  (harness === "claude-code" ? settings.headlessReviewCli : settings.copilotCli) ?? AGENT_HARNESSES[harness].cli;
+  harnessCliSetting(settings, harness) ?? AGENT_HARNESSES[harness].cli;
 
 /**
  * The first message when the prompt can't go on the command line: a pointer to the task, made from the stored task
@@ -197,6 +200,12 @@ export function createSessionLaunch(deps: {
   const prepare = (harnessId: AgentHarness) => {
     const settings = deps.services().settings.get();
     const h = deps.host();
+    if (!AGENT_HARNESSES[harnessId].presetSessionId) {
+      throw new AppError(
+        "VALIDATION",
+        `The board can't start ${AGENT_HARNESSES[harnessId].label} sessions: it picks its own session id`,
+      );
+    }
     const cli = cliStatus(settings, harnessId, h);
     if (!cli.available) {
       throw new AppError(
@@ -318,18 +327,22 @@ export function createSessionLaunch(deps: {
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
+      const model = resolveTaskModel(task, settings);
+      const picked = model.source === "label" || model.source === "tier" ? model.profile : null;
       const resolved = terminal(settings, h);
       return {
-        clis: AgentHarness.options.map((harness) => cliStatus(settings, harness, h)),
+        clis: LAUNCHABLE_HARNESSES.map((harness) => cliStatus(settings, harness, h)),
         workspaceRoot: root,
         isRepo,
         branches,
         defaultBaseRef,
         models: {
-          "claude-code": tierCliModel(settings.modelTiers, tier, "claude-code"),
-          "copilot-cli": tierCliModel(settings.modelTiers, tier, "copilot-cli"),
+          "claude-code": profileCliModel(model.profile, "claude-code"),
+          codex: profileCliModel(model.profile, "codex"),
+          "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
         },
         tier,
+        model: picked ? { name: picked.name, source: model.source as "label" | "tier", label: model.label } : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
       };
     },

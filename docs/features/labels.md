@@ -64,6 +64,9 @@ Cards show the first three labels and `+N` for the rest.
 - `labels` on `create_task`, `add_to_backlog` and `update_task`; `list_tasks` takes a `labels` filter, and
   summary lines show `[ui] [backend]` after the title.
 - `board_overview` ends with **Labels in use** and counts, so agents reuse the board's vocabulary.
+- **Labels can pick a model.** A custom model in Settings → Model tiers lists labels; a task carrying one runs on
+  that model instead of its suggested tier, in Autopilot runs and launches alike, and `get_task` shows **Runs on**
+  ([autopilot.md](autopilot.md#models)).
 - **Missing labels.** `set_plan`, `create_task` and `get_task` results add a hint when the task has no
   labels and isn't resolved, done or archived. The hint names the labels in use (or offers generic
   examples on a board with none) and asks the agent to suggest 1–3 and call `update_task` once the user

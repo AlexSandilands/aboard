@@ -10,6 +10,7 @@ import {
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
+import { describeUnresolved } from "../integrations/github.ts";
 import type { Services } from "../services/types.ts";
 
 // The gate every board-made merge passes: Autopilot's into an epic's branch (automations/mergeEpicPrs.ts) and
@@ -93,7 +94,11 @@ export function notMergeable(
   // is blocked. A required review is the other usual cause and is the reviewer's to give, not a check, so it's left to
   // GitHub's own refusal at merge time.
   if (snapshot.mergeState === "blocked" && snapshot.reviewDecision !== "review_required") {
-    return `GitHub says PR #${link.ref.number} is blocked: a required check or rule isn't met yet`;
+    // Unresolved conversations are the usual rule a PR with green checks still trips over (a repository can require
+    // every one resolved); naming them tells the user what to do, where "a rule" sends them looking.
+    return snapshot.unresolvedThreads
+      ? `GitHub says PR #${link.ref.number} is blocked: it has ${describeUnresolved(snapshot.unresolvedThreads)}, and the repository may require them resolved`
+      : `GitHub says PR #${link.ref.number} is blocked: a required check or rule isn't met yet`;
   }
   if (snapshot.mergeable !== "mergeable") {
     return snapshot.mergeable === "conflicting"

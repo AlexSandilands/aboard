@@ -128,11 +128,20 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   overwrite each other; the server replaces a whole tier, so a second edit within a tier builds on the one still
   saving rather than on the cache (`createTierEdits`). The T3 Code, Claude Code and Copilot integration sections each have a
   **Models per tier** row that opens the page.
+- **Custom models.** Under the tiers, **Custom models** (`modelProfiles`, `services/settings.ts` stores the whole
+  list; `modelProfiles.logic.ts` builds each edit on the one still saving) are named models with a tier's fields
+  plus task labels. A task carrying one of a model's labels runs on it instead of its tier everywhere a model is
+  picked (`resolveRunModel`; the first model in the list wins a label several claim): the copied prompt names it
+  (`Model: Codex 6.1 (…), picked by the task's label codex61.`), the T3 dialog starts on its T3 model, the session
+  dialog fills in its CLI model, the task panel's Details says "Runs on …", and `get_task` / `epic_overview` show
+  **Runs on**. Autopilot uses the same rule, under an automation's own Model setting
+  ([autopilot.md](autopilot.md#models)).
 - **Copied work prompts** get one line: `Suggested model: standard (Sonnet 5.5, medium effort): <reason>.
   Switch your session's model if it differs.` The tier is named by its description, else its T3 label, else
   just the tier (`suggestedModelLine`).
-- **The T3 launch dialog** starts a work launch on the tier's T3 model, and shows the suggestion under the
-  composer. When the tier has no T3 model, its provider isn't ready or T3 no longer offers the model, it stays
+- **The T3 launch dialog** starts a work launch on the task's model's T3 model (a label's custom model, else the
+  tier's), and shows it under the composer (`T3LaunchSuggestion`: its name, and whether a label or the tier picked
+  it). When the model has no T3 model, its provider isn't ready or T3 no longer offers the model, it stays
   on T3's default and says why. Effort and fast mode values the model no longer supports are dropped.
 - **Planning ignores it.** Planning prompts leave the line out, and turning on **Plan with me** switches the
   dialog to T3's default model (and back when turned off), unless you picked a model by hand. A
@@ -333,6 +342,7 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
 | `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
+| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveRunModel`, the rule that picks a run's or session's model (tested) |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |

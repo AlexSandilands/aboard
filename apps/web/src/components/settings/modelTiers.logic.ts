@@ -1,5 +1,5 @@
 // Pure helpers for the Model tiers page: which providers' fields a tier row shows, and the tier one edit sends.
-import type { AgentHarness, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
+import type { AgentHarness, ModelProfile, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
 
 export type TierProvider = "t3" | AgentHarness;
 
@@ -14,30 +14,43 @@ export interface TierProviderState {
 export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: string }> = [
   { provider: "t3", label: "T3 Code" },
   { provider: "claude-code", label: "Claude Code" },
+  { provider: "codex", label: "Codex" },
   { provider: "copilot-cli", label: "Copilot CLI" },
 ];
 
-/** Whether any tier already has a value saved for the provider. */
-export function hasSavedTierValue(tiers: ModelTiers, provider: TierProvider): boolean {
-  return Object.values(tiers).some((tier) => (provider === "t3" ? tier.t3 !== null : !!tier.cli?.[provider]));
+/** Whether any tier (or custom model) already has a value saved for the provider. */
+export function hasSavedTierValue(
+  tiers: ModelTiers,
+  provider: TierProvider,
+  profiles: readonly ModelProfile[] = [],
+): boolean {
+  return [...Object.values(tiers), ...profiles].some((tier) =>
+    provider === "t3" ? tier.t3 !== null : !!tier.cli?.[provider],
+  );
 }
 
 /**
  * The providers whose fields the page shows: those that are set up or detected (T3 Code connected, a CLI found), and
  * any with a value already saved, so a value can still be seen and cleared when its integration has gone away.
  */
-export function visibleTierProviders(tiers: ModelTiers, state: TierProviderState): TierProvider[] {
+export function visibleTierProviders(
+  tiers: ModelTiers,
+  state: TierProviderState,
+  profiles: readonly ModelProfile[] = [],
+): TierProvider[] {
   return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => {
     const ready = provider === "t3" ? state.t3Ready : state.cliFound[provider] === true;
-    return ready || hasSavedTierValue(tiers, provider);
+    return ready || hasSavedTierValue(tiers, provider, profiles);
   });
 }
 
-/** One edit to a tier: the description, T3 Code's model, or the `--model` of one CLI. */
+/** One edit to a tier: the description, T3 Code's model, the `--model` of one CLI, or its headless harness. */
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
-  | { field: "cli"; harness: AgentHarness; value: string | null };
+  | { field: "cli"; harness: AgentHarness; value: string | null }
+  /** The harness headless Autopilot runs use; Claude Code is stored as no choice. */
+  | { field: "headless"; value: AgentHarness };
 
 /** The tier with the change applied, leaving every other field (and the other CLI's model) as it was. */
 export function applyTierChange(current: ModelTierSetting, change: TierChange): ModelTierSetting {
@@ -48,6 +61,10 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       return { ...current, t3: change.value };
     case "cli":
       return { ...current, cli: { ...current.cli, [change.harness]: change.value } };
+    case "headless": {
+      const { headless: _headless, ...rest } = current;
+      return change.value === "claude-code" ? rest : { ...rest, headless: change.value };
+    }
   }
 }
 

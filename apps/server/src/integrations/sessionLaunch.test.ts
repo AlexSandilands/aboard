@@ -304,8 +304,16 @@ describe("starting a session from the board", () => {
     const res = await app.request("/api/agent-clis");
     expect(await res.json()).toEqual([
       { harness: "claude-code", available: true, path: join(app.root, "bin", "claude") },
+      { harness: "codex", available: false, path: null },
       { harness: "copilot-cli", available: false, path: null },
     ]);
+  });
+
+  it("refuses to start a Codex session, which picks its own id", async () => {
+    const app = appWith();
+    const res = await app.start({ harness: "codex" });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain("picks its own session id");
   });
 
   it("offers the tier's CLI model and the checkout when the folder isn't a repository", async () => {
@@ -322,7 +330,25 @@ describe("starting a session from the board", () => {
       defaultBaseRef: null,
       models: { "claude-code": "opus", "copilot-cli": null },
       tier: "deep",
+      model: { name: "Deep", source: "tier", label: null },
       namedWindow: true,
+    });
+  });
+
+  it("offers the model a task label picks over its tier, and says which label", async () => {
+    const app = appWith();
+    app.services.settings.update({
+      modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus" } } },
+      modelProfiles: [
+        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "copilot-cli": "gpt-5" } },
+      ],
+    });
+    app.services.tasks.update(app.task.id, { suggestedModel: { tier: "deep" }, labels: ["quick"] }, "u");
+    const res = await app.request(`/api/tasks/${app.task.id}/session-launch-options`);
+    expect(await res.json()).toMatchObject({
+      models: { "claude-code": null, "copilot-cli": "gpt-5" },
+      tier: "deep",
+      model: { name: "Fast", source: "label", label: "quick" },
     });
   });
 
