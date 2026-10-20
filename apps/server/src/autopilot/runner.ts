@@ -6,21 +6,29 @@ import {
   AUTOPILOT_ACTOR,
   autopilotSessionName,
   BRAND,
+  AGENT_HARNESSES,
   describeRunModel,
+  harnessCliSetting,
+  isClaudeModel,
+  profileHeadless,
   profileHeadlessModel,
   resolveRunModel,
+  type AgentHarness,
+  type AppSettings,
   type RunModel,
   type TaskSummary,
 } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import {
-  agentArgs,
   boardMcpConfig,
-  parseAgentOutput,
   runHeadlessAgent,
+  type AgentArgsInput,
+  type AgentOutcome,
+  type HeadlessDriver,
   type RunAgent,
 } from "../integrations/headlessAgent.ts";
+import { headlessDriverFor, type DriverNeeds } from "../integrations/headlessDrivers.ts";
 import { latestThread } from "../integrations/reviewFallbacks.ts";
 import {
   isT3Unavailable,
@@ -31,6 +39,7 @@ import {
 } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
+import { pushGuardEnv } from "./pushGuard.ts";
 import { createRepoGate, gateFetches } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
@@ -71,20 +80,49 @@ export function runModel(
 
 /**
  * A headless run's `--model` and what to note on the run about it: a model typed in the automation's config wins,
- * then the chosen model's Claude Code model; a chosen model with none runs on the CLI's default, and says so.
+ * then the chosen model's model for its headless harness; a chosen model with none runs on the CLI's default, and
+ * says so.
  */
 export function headlessModel(model: RunModel, typed: string): { model: string | null; note: string | null } {
   if (typed.trim()) return { model: typed.trim(), note: null };
-  const cli = profileHeadlessModel(model.profile);
+  const { harness, model: cli } = profileHeadless(model.profile);
+  const label = AGENT_HARNESSES[harness].label;
+  const on = harness === "claude-code" ? "" : `, on ${label}`;
   const described = describeRunModel(model);
   const lines = [model.note];
   // A model set only for T3 Code is worth a word; one with nothing set is the CLI's default as always.
-  if (described && cli) lines.push(`Model: ${described}`);
-  else if (described && model.profile?.setting.t3) {
-    lines.push(`Model: ${described} has no Claude Code model in Settings → Model tiers, so the CLI's default ran`);
+  if (described && cli) lines.push(`Model: ${described}${on}`);
+  else if (described && (model.profile?.setting.t3 || harness !== "claude-code")) {
+    lines.push(`Model: ${described} has no ${label} model in Settings → Model tiers, so the CLI's default ran${on}`);
   }
   const note = lines.filter(Boolean).join("\n") || null;
   return { model: cli, note };
+}
+
+/**
+ * The driver, `--model` and note of a headless run: the harness the chosen model names, unless the run needs something
+ * that harness can't do (headlessDriverFor), in which case Claude Code runs it on the model a run on Claude Code would
+ * take: a typed override that is a Claude model, else the chosen model's Claude Code model, else the CLI's default. A
+ * typed model for another harness (say a Codex model) would fail `claude`, so it is passed over.
+ */
+export function headlessRun(
+  model: RunModel,
+  typed: string,
+  needs: DriverNeeds,
+): { driver: HeadlessDriver; model: string | null; note: string | null } {
+  const { driver, fallback } = headlessDriverFor(profileHeadless(model.profile).harness, needs);
+  if (!fallback) return { driver, ...headlessModel(model, typed) };
+  const claudeTyped = isClaudeModel(typed.trim()) ? typed.trim() : null;
+  const cli = claudeTyped ?? profileHeadlessModel(model.profile);
+  const described = describeRunModel(model);
+  const note = [
+    model.note,
+    described ? `Model: ${described}` : null,
+    `${fallback} ${cli ? `It ran on ${cli}.` : "It ran on the CLI's default model."}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { driver, model: cli, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -359,6 +397,87 @@ export function createAutopilotRunner(deps: {
     );
   };
 
+  /**
+   * Runs the headless agent on the driver the run's model picks (headlessRun). A driver that takes a preset session id
+   * has it recorded and linked before the run starts; one whose CLI picks its own (Codex) has it linked as soon as its
+   * output names it, so the card shows the session while it works.
+   */
+  const runOnDriver = async (
+    request: RunnerRequest,
+    model: RunModel,
+    options: RunnerOptions,
+    settings: AppSettings,
+    where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig"> & {
+      cwd: string;
+      prompt: string;
+      /** The push guard's hooks folder, for the agent's git. */
+      hooksPath?: string | null;
+    },
+    /** The run's first patch, which a preset session id joins. */
+    started: RunPatch,
+    update: (patch: RunPatch) => void,
+    link: (harness: AgentHarness, sessionId: string) => void,
+  ): Promise<{ outcome: AgentOutcome; sessionId: string | null }> => {
+    const access = request.access ?? "edit";
+    const plan = headlessRun(model, options.model, {
+      access,
+      outputSchema: request.outputSchema,
+      untrusted: request.untrustedInput,
+      tools: request.tools,
+      deniedTools: request.deniedTools,
+      unguarded: !where.hooksPath,
+    });
+    const { driver } = plan;
+    const preset = driver.capabilities.presetSessionId ? newSessionId() : null;
+    let sessionId: string | null = preset;
+    update({ ...started, ...(preset ? { sessionId: preset } : {}) });
+    if (preset) link(driver.harness, preset);
+    if (plan.note) update({ detail: plan.note });
+    const found = (id: string) => {
+      if (sessionId) return;
+      sessionId = id;
+      update({ sessionId: id });
+      link(driver.harness, id);
+    };
+    const stdout = await runAgent({
+      cli: harnessCliSetting(settings, driver.harness),
+      command: driver.command,
+      label: driver.label,
+      cwd: where.cwd,
+      prompt: where.prompt,
+      timeoutMs: options.timeoutMinutes * 60_000,
+      ...(where.hooksPath ? { env: pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) } : {}),
+      ...(driver.sessionIdOf
+        ? {
+            onStdoutLine: (line: string) => {
+              const id = driver.sessionIdOf?.(line);
+              if (id) found(id);
+            },
+          }
+        : {}),
+      args: driver.args({
+        access,
+        budgetUsd: options.budgetUsd,
+        // Ignored by a driver that can't preset one.
+        sessionId: preset ?? "",
+        model: plan.model,
+        name: autopilotSessionName(request.label),
+        defaultBranch: where.defaultBranch,
+        ...(request.tools ? { tools: request.tools } : {}),
+        ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
+        ...(request.untrustedInput ? { untrusted: true } : {}),
+        ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
+        ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
+      }),
+    });
+    const outcome = driver.parse(stdout, Boolean(request.outputSchema));
+    // A run whose id came only in its final output (a fake, or a line the stream split oddly) is still linked.
+    if (outcome.sessionId && !driver.capabilities.presetSessionId) found(outcome.sessionId);
+    if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
+    if (!outcome.ok) throw new Error(`${driver.label} stopped: ${outcome.error ?? "unknown error"}`);
+    return { outcome, sessionId };
+  };
+
   const startHeadless = async (
     request: RunnerRequest,
     task: TaskSummary,
@@ -378,6 +497,7 @@ export function createAutopilotRunner(deps: {
       branch: request.workspace?.branch,
       // A reviewer can't push, so it may read the default branch too.
       readOnly: request.access === "read-only",
+      pushGuard: true,
     });
     // Before the agent costs anything: it must be reading the commit it was asked about.
     if (request.expectHead) {
@@ -391,51 +511,41 @@ export function createAutopilotRunner(deps: {
         throw error;
       }
     }
-    const sessionId = newSessionId();
-    update({ runner: "headless", worktreePath: worktree.path, sessionId });
-    try {
-      // So the card offers "Open in terminal" to resume the session in its worktree.
-      s.links.add(
-        task.id,
-        {
-          agentSession: { harness: "claude-code", sessionId, cwd: worktree.path },
-          label: autopilotSessionName(request.label),
-        },
-        AUTOPILOT_ACTOR,
-      );
-      deps.sessionLinked?.(sessionId);
-    } catch (error) {
-      log.warn(`[autopilot] couldn't link the session of #${task.number}: ${messageOf(error)}`);
-    }
-
     const settings = s.settings.get();
-    const chosen = headlessModel(runModel(request, options, task, settings), options.model);
-    if (chosen.note) update({ detail: chosen.note });
     const readOnly = request.access === "read-only" || request.access === "none";
-    const stdout = await runAgent({
-      cli: settings.headlessReviewCli,
-      cwd: worktree.path,
-      prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
-      timeoutMs: options.timeoutMinutes * 60_000,
-      args: agentArgs({
-        access: request.access ?? "edit",
-        budgetUsd: options.budgetUsd,
-        sessionId,
-        model: chosen.model,
-        name: autopilotSessionName(request.label),
+    const { outcome, sessionId } = await runOnDriver(
+      request,
+      runModel(request, options, task, settings),
+      options,
+      settings,
+      {
+        cwd: worktree.path,
+        prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
         defaultBranch: worktree.defaultBranch,
-        ...(request.tools ? { tools: request.tools } : {}),
-        ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
-        ...(request.untrustedInput ? { untrusted: true } : {}),
-        ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
-      }),
-    });
-    const outcome = parseAgentOutput(stdout, Boolean(request.outputSchema));
-    if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
-    if (!outcome.ok) throw new Error(`Claude Code stopped: ${outcome.error ?? "unknown error"}`);
+        hooksPath: worktree.hooksPath,
+      },
+      { runner: "headless", worktreePath: worktree.path },
+      update,
+      (harness, id) => {
+        try {
+          // So the card offers "Open in terminal" to resume the session in its worktree.
+          s.links.add(
+            task.id,
+            {
+              agentSession: { harness, sessionId: id, cwd: worktree.path },
+              label: autopilotSessionName(request.label),
+            },
+            AUTOPILOT_ACTOR,
+          );
+          deps.sessionLinked?.(id);
+        } catch (error) {
+          log.warn(`[autopilot] couldn't link the session of #${task.number}: ${messageOf(error)}`);
+        }
+      },
+    );
     return {
       runner: "headless",
-      sessionId,
+      ...(sessionId ? { sessionId } : {}),
       worktreePath: worktree.path,
       ...(outcome.costUsd !== null ? { costUsd: outcome.costUsd } : {}),
       result: outcome.result,
@@ -445,15 +555,14 @@ export function createAutopilotRunner(deps: {
 
   /**
    * A run with no task (a digest, a scheduled agent): headless, in an empty folder of its own that is removed
-   * afterwards. With a `repo` it can use git there, so it gets the same push guard as a run in a worktree.
+   * afterwards. With a `repo` it can use git there, so it gets Claude Code's push deny rules: there is no worktree for
+   * the pre-push guard, so an editing run never goes to a harness that lacks them (DriverNeeds.unguarded).
    */
   const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
     const options = readRunnerOptions(request.options);
     if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
-    const chosen = headlessModel(runModel(request, options, null, settings), options.model);
-    if (chosen.note) update({ detail: chosen.note });
     const defaultBranch = request.repo ? await defaultBranchOf(runGit, request.repo).catch(() => null) : null;
     // A scheduled agent passes `repo` (null when its project has no folder), so it always gets the note.
     const prompt =
@@ -465,8 +574,6 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
     const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
     // The board's MCP config carries its token, so it sits outside the folder the agent may read.
     const mcpDir = request.boardTools ? await mkdtemp(join(tmpdir(), `${BRAND.id}-mcp-`)) : null;
-    const sessionId = newSessionId();
-    update({ runner: "headless", sessionId });
     try {
       let mcpConfig: string | null = null;
       if (mcpDir) {
@@ -478,31 +585,20 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         mcpConfig = join(mcpDir, "mcp.json");
         await writeFile(mcpConfig, boardMcpConfig(board.url, board.token), { mode: 0o600 });
       }
-      const stdout = await runAgent({
-        cli: settings.headlessReviewCli,
-        cwd,
-        prompt,
-        timeoutMs: options.timeoutMinutes * 60_000,
-        args: agentArgs({
-          access: request.access ?? "edit",
-          budgetUsd: options.budgetUsd,
-          sessionId,
-          model: chosen.model,
-          name: autopilotSessionName(request.label),
-          defaultBranch,
-          ...(request.tools ? { tools: request.tools } : {}),
-          ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
-          ...(request.untrustedInput ? { untrusted: true } : {}),
-          ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}),
-          ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
-        }),
-      });
-      const outcome = parseAgentOutput(stdout, Boolean(request.outputSchema));
-      if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
-      if (!outcome.ok) throw new Error(`Claude Code stopped: ${outcome.error ?? "unknown error"}`);
+      // No task to link the session to.
+      const { outcome, sessionId } = await runOnDriver(
+        request,
+        runModel(request, options, null, settings),
+        options,
+        settings,
+        { cwd, prompt, defaultBranch, ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}) },
+        { runner: "headless" },
+        update,
+        () => {},
+      );
       return {
         runner: "headless",
-        sessionId,
+        ...(sessionId ? { sessionId } : {}),
         ...(outcome.costUsd !== null ? { costUsd: outcome.costUsd } : {}),
         result: outcome.result,
         ...(request.outputSchema ? { output: outcome.output } : {}),

@@ -2,13 +2,8 @@ import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import {
-  AgentHarness,
-  AgentSessionRef,
-  AgentSessionSnapshot,
-  TerminalOpenIn,
-  TerminalSetting,
-} from "./agentSessions.ts";
+import type { AgentHarness } from "./agentSessions.ts";
+import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { BackupSettings } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
@@ -802,8 +797,11 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-/** What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness. */
-export const HandoffTarget = z.enum(["t3-code", ...AgentHarness.options]);
+/**
+ * What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness the board can start
+ * (LAUNCHABLE_HARNESSES: not Codex, which picks its own session id).
+ */
+export const HandoffTarget = z.enum(["t3-code", "claude-code", "copilot-cli"]);
 export type HandoffTarget = z.infer<typeof HandoffTarget>;
 
 /** Every target shown, as a target added later starts. */
@@ -837,6 +835,8 @@ export const AppSettings = z
     headlessReviewCli: z.string().nullable(),
     /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
     copilotCli: z.string().nullable(),
+    /** The Codex CLI headless runs and resumed Codex sessions start; null looks up `codex` on PATH. */
+    codexCli: z.string().nullable(),
     /**
      * Whether the hand-off menus offer each target when it can start here; false hides it. Existing sessions still
      * reopen, and agents can still start threads (agentT3Threads).
@@ -879,6 +879,15 @@ export const AppSettings = z
 
 export type AppSettings = z.infer<typeof AppSettings>;
 
+/** The CLI path set in Settings for a harness, or null to look its name up on PATH. */
+export const harnessCliSetting = (
+  settings: Pick<AppSettings, "headlessReviewCli" | "copilotCli" | "codexCli">,
+  harness: AgentHarness,
+): string | null =>
+  ({ "claude-code": settings.headlessReviewCli, codex: settings.codexCli, "copilot-cli": settings.copilotCli })[
+    harness
+  ]?.trim() || null;
+
 export const UpdateSettingsInput = z.object({
   jiraBaseUrl: z.string().trim().nullable().optional(),
   githubPolling: z.boolean().optional(),
@@ -891,6 +900,7 @@ export const UpdateSettingsInput = z.object({
   headlessReviewEnabled: z.boolean().optional(),
   headlessReviewCli: z.string().trim().nullable().optional(),
   copilotCli: z.string().trim().nullable().optional(),
+  codexCli: z.string().trim().nullable().optional(),
   /** Merges into the switches: targets left out keep theirs. */
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),

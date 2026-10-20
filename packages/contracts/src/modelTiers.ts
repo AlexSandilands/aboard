@@ -57,6 +57,11 @@ export const ModelTierSetting = z.object({
    * it existed have none. Checked as a CliModel when saved (sessionLaunch.ts imports this file).
    */
   cli: z.partialRecord(AgentHarness, z.string().nullable()).optional(),
+  /**
+   * The harness a headless Autopilot run on this model uses, with its `cli` model. Unset (and settings saved before it
+   * existed) is Claude Code.
+   */
+  headless: AgentHarness.optional(),
 });
 export type ModelTierSetting = z.infer<typeof ModelTierSetting>;
 

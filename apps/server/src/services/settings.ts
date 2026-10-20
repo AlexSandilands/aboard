@@ -36,6 +36,7 @@ const DEFAULTS: StoredSettings = {
   headlessReviewEnabled: false,
   headlessReviewCli: null,
   copilotCli: null,
+  codexCli: null,
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
   headlessReviewModel: null,
@@ -80,6 +81,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "headlessReviewEnabled",
     "headlessReviewCli",
     "copilotCli",
+    "codexCli",
     "handoffMenus",
     "headlessReviewBudgetUsd",
     "headlessReviewModel",
@@ -220,6 +222,7 @@ export function createSettingsService(core: Core): SettingsService {
           repos.settings.set("headlessReviewCli", blankToNull(input.headlessReviewCli));
         }
         if (input.copilotCli !== undefined) repos.settings.set("copilotCli", blankToNull(input.copilotCli));
+        if (input.codexCli !== undefined) repos.settings.set("codexCli", blankToNull(input.codexCli));
         if (input.handoffMenus !== undefined) {
           repos.settings.set("handoffMenus", { ...load().handoffMenus, ...input.handoffMenus });
         }

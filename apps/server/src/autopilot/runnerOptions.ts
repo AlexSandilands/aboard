@@ -11,7 +11,7 @@ export type RunnerChoice = z.infer<typeof RunnerChoice>;
 
 export const RUNNER_OPTION_SHAPE = {
   runner: RunnerChoice,
-  /** Headless: `--max-budget-usd`. */
+  /** Headless: `--max-budget-usd`, for Claude Code only (Codex and Copilot CLI have no cap). */
   budgetUsd: z.number().positive().max(100),
   /** Headless: the run is stopped after this long. */
   timeoutMinutes: z
@@ -24,7 +24,7 @@ export const RUNNER_OPTION_SHAPE = {
    * or a custom model (resolveRunModel). Configs saved before it existed take the task's.
    */
   modelChoice: ModelChoice,
-  /** Headless: a `--model` typed here wins over `modelChoice`; blank takes the chosen model's Claude Code model. */
+  /** Headless: a `--model` typed here wins over `modelChoice`; blank takes the chosen model's model for its harness. */
   model: z.string(),
   /** T3: the most access a thread gets; "default" is T3's own default, which is also the ceiling. */
   t3Access: z.union([z.literal("default"), T3RuntimeMode]),
@@ -50,7 +50,7 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     options: [
       { value: "auto", label: "Auto (T3 Code when connected, else headless)" },
       { value: "t3", label: "T3 Code only" },
-      { value: "headless", label: "Headless only (claude -p in a worktree)" },
+      { value: "headless", label: "Headless only (a CLI in a worktree)" },
     ],
   },
   {
@@ -59,14 +59,23 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     kind: "model",
     help: "From the task: a custom model one of its labels picks, else its suggested tier. Set in Settings → Model tiers.",
   },
-  { key: "budgetUsd", label: "Headless budget", kind: "number", min: 0.5, max: 100, step: 0.5, unit: "USD" },
+  {
+    key: "budgetUsd",
+    label: "Headless budget",
+    kind: "number",
+    min: 0.5,
+    max: 100,
+    step: 0.5,
+    unit: "USD",
+    help: "Claude Code only. Codex and Copilot CLI runs have no spending cap and report no cost: only the timeout stops them.",
+  },
   { key: "timeoutMinutes", label: "Headless timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
   {
     key: "model",
     label: "Headless model override",
     kind: "text",
     placeholder: "The model above",
-    help: "As claude --model takes it, e.g. sonnet. Blank uses the Claude Code model of the model above.",
+    help: "As the headless CLI's --model takes it, e.g. sonnet. Blank uses the model above's model for the harness it runs headless on.",
   },
   {
     key: "t3Access",
