@@ -722,7 +722,7 @@ the automation. Runs stay, under the old key.
 
 - **Arming.** Events before a task came into the automation's scope don't fire, so switching it on doesn't act on
   the board's history. `customArmedAt` takes the latest of:
-  - `armed_at`: set at creation and when the trigger or filters change (which also clears the times below);
+  - `armed_at`: set at creation and when the trigger, the filters or the [variables](#variables-and-the-repository-url) the action needs change (which also clears the times below);
   - the scope's time in `armed_projects_json`: a project's when its switch turns on there (`onEnabled`), an epic's
     (`epic:<id>`) when its effective state goes from off to on for an epic with a setting of its own
     (`onEpicEnabled`, which also covers it going back to Inherit). Lifting Pause all stamps every project and such

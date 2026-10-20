@@ -1712,6 +1712,44 @@ describe("custom automations: variables and the repository URL", () => {
     expect(s.customAutomations.get(custom.id).armedProjects).toEqual(armed);
   });
 
+  it("starts an epic with its own setting afresh too", async () => {
+    const { s, other, task, define, pass, shellRuns, shell } = setup();
+    const custom = define(
+      {
+        name: "Ping",
+        trigger: { kind: "status_change", to: "review" },
+        action: shell(`./ping.sh "$${brandEnv("VAR_JIRA_KEY")}"`),
+      },
+      null,
+    );
+    const epic = s.tasks.create({ projectId: other.id, title: "Epic", kind: "epic" });
+    s.autopilot.setScope("epic", epic.id, customAutomationKey(custom.id), { mode: "on" }, other.id);
+    await tick();
+    const early = task("Moved while missing", { projectId: other.id });
+    s.tasks.update(early.id, { epicId: epic.id }, "agent");
+    s.tasks.move(early.id, { status: "review" }, "agent");
+    await pass();
+    await tick();
+    s.projects.update(other.id, { variables: [{ name: "jira_key", value: "BET" }] });
+    expect(Object.keys(s.customAutomations.get(custom.id).armedProjects)).toContain(`epic:${epic.id}`);
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+  });
+
+  it("arms again when an edit changes the variables the action needs", async () => {
+    const { s, define, shell } = setup();
+    const custom = define({
+      name: "Ping",
+      trigger: { kind: "status_change", to: "review" },
+      action: shell(`./ping.sh "$${brandEnv("VAR_JIRA_KEY")}"`),
+    });
+    await tick();
+    s.customAutomations.update(custom.id, { action: shell(`./ping.sh "$${brandEnv("VAR_JIRA_KEY")}" --quiet`) });
+    expect(s.customAutomations.get(custom.id).armedAt).toBe(custom.armedAt);
+    s.customAutomations.update(custom.id, { action: shell("./ping.sh") });
+    expect(Date.parse(s.customAutomations.get(custom.id).armedAt)).toBeGreaterThan(Date.parse(custom.armedAt));
+  });
+
   it("names the missing variable in a dry run instead of a run", async () => {
     const { s, other, define, pass, runsOf, agentRuns } = setup();
     s.autopilot.updateEngine({ dryRun: true });

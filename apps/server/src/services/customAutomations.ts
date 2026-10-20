@@ -218,10 +218,11 @@ export function createCustomAutomationsService(
         );
         const now = nowIso();
         // Under another trigger, or over tasks it didn't cover, what happened before isn't what the user asked to act
-        // on.
+        // on. Nor when it needs other variables: projects it skipped for lack of one would act on everything held.
         const rearmed =
           JSON.stringify(def.trigger) !== JSON.stringify(current.trigger) ||
-          JSON.stringify(def.filters) !== JSON.stringify(current.filters);
+          JSON.stringify(def.filters) !== JSON.stringify(current.filters) ||
+          JSON.stringify(variablesNamedBy(def.action)) !== JSON.stringify(variablesNamedBy(current.action));
         const next: CustomAutomation = {
           ...current,
           ...def,
@@ -275,13 +276,22 @@ export function createCustomAutomationsService(
             : [],
         );
         if (filled.length === 0) continue;
-        // An epic with its own arming reads that instead of the project's, so it starts afresh too.
-        const epics = Object.keys(custom.armedProjects).filter((key) => {
-          if (!key.startsWith(epicArmKey(""))) return false;
-          const epic = repos.tasks.get(key.slice(epicArmKey("").length));
+        // An epic with a setting or arming of its own reads its own time instead of the project's, so it starts afresh too.
+        const key = customAutomationKey(custom.id);
+        const epicIds = new Set([
+          ...repos.autopilotSettings
+            .all()
+            .filter((s) => s.scopeKind === "epic" && s.automation === key && s.scopeId)
+            .map((s) => s.scopeId!),
+          ...Object.keys(custom.armedProjects)
+            .filter((k) => k.startsWith(epicArmKey("")))
+            .map((k) => k.slice(epicArmKey("").length)),
+        ]);
+        const epics = [...epicIds].filter((epicId) => {
+          const epic = repos.tasks.get(epicId);
           return epic !== null && filled.includes(epic.projectId);
         });
-        service.rearm(custom.id, [...filled, ...epics]);
+        service.rearm(custom.id, [...filled, ...epics.map(epicArmKey)]);
       }
     },
 
