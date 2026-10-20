@@ -152,7 +152,11 @@ export function createIssueImporter(deps: {
     if (!settings.issueImportEnabled) {
       throw new Error("Importing a ticket needs Claude Code, and issue import is turned off in Settings");
     }
-    const source = parseIssueSource(record.sourceUrl, { ticketSystems: settings.ticketSystems });
+    // The system recorded when the task was created, so reordering or editing the others since doesn't move it.
+    const recorded = settings.ticketSystems.filter((t) => t.id === record.systemId);
+    const source = parseIssueSource(record.sourceUrl, {
+      ticketSystems: record.systemId ? recorded : settings.ticketSystems,
+    });
     if (source?.kind !== "ticket") throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
     const system = settings.ticketSystems.find((t) => t.id === source.ref.system);
     const servers = await connectedServers(settings.headlessReviewCli);
