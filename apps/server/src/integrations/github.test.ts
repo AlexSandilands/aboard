@@ -160,10 +160,10 @@ describe("mapPrSnapshot", () => {
     ]);
   });
 
-  it("asks for the reviews and the newest 50 threads, without bodies", () => {
+  it("asks for the reviews and the newest 30 threads, without bodies", () => {
     const { query } = pollQuery([1]);
     expect(query).toContain("reviews(last: 20)");
-    expect(query).toContain("reviewThreads(last: 50) { nodes { id isResolved viewerCanResolve");
+    expect(query).toContain("reviewThreads(last: 30) { nodes { id isResolved viewerCanResolve");
     expect(query).toContain("viewerDidAuthor");
     expect(query).not.toContain("body");
     // One comments connection per thread: each is a request in GitHub's rate-limit cost, and the poll runs often.
@@ -209,9 +209,9 @@ describe("mapPrSnapshot", () => {
     };
     const snapshot = mapPrSnapshot(fakePr({ reviewThreads }), repo);
     expect(snapshot.reviewThreads).toEqual([
-      { id: "T1", canResolve: true, lastCommentId: 11, ownLast: true },
-      { id: "T2", canResolve: true, lastCommentId: 20, ownLast: false },
-      { id: "T4", canResolve: false, lastCommentId: 40, ownLast: false },
+      { id: "T1", canResolve: true, lastCommentId: 11, ownLast: true, lastReviewId: 900 },
+      { id: "T2", canResolve: true, lastCommentId: 20, ownLast: false, lastReviewId: 900 },
+      { id: "T4", canResolve: false, lastCommentId: 40, ownLast: false, lastReviewId: 900 },
     ]);
     expect(snapshot.unresolvedThreads).toBe(4);
     expect(snapshot.reviewComments!.map((c) => c.id)).toEqual([20, 40, 50]);
@@ -807,6 +807,7 @@ describe("review threads", () => {
           canResolve: true,
           lastCommentId: null,
           ownLast: false,
+          lastReviewId: null,
           rootCommentId: null,
           rootReviewId: null,
           reply: "fixed",

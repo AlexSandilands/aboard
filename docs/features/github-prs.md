@@ -79,8 +79,8 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 | `headOid`          | The head commit, checked again before merging                                                      |
 | `isCrossRepository` | Whether the head branch is in a fork; Autopilot's PR review skips those                           |
 | `reviews`          | The last 20 submitted reviews, oldest first: `id` (databaseId), `author`, `state`, `submittedAt`, `own` (`viewerDidAuthor`), `trusted` |
-| `reviewComments`   | Comments on the last 50 review threads that aren't resolved and that the signed-in account didn't answer last (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
-| `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId` and `ownLast` (the newest comment, and whether it is the signed-in account's) |
+| `reviewComments`   | Comments on the last 30 review threads that aren't resolved and that the signed-in account didn't answer last (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
+| `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId`, `ownLast` and `lastReviewId` (the newest comment, whether it is the signed-in account's, and the review it is in) |
 | `unresolvedThreads` | How many of the threads read aren't resolved                                                     |
 
 `trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. The poll reads no bodies and

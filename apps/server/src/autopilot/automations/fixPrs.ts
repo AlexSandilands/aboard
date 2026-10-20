@@ -617,7 +617,14 @@ export const fixPrs = defineAutomation({
             ),
           );
           const resolvable = config.resolveThreads
-            ? (snapshot.reviewThreads ?? []).filter((t) => t.ownLast && t.canResolve && !settled.has(threadKey(t)))
+            ? (snapshot.reviewThreads ?? []).filter(
+                (t) =>
+                  t.ownLast &&
+                  t.canResolve &&
+                  // A thread Autopilot's own review just opened is a point, not a reply.
+                  (t.lastReviewId === null || !ownReviewIds.has(t.lastReviewId)) &&
+                  !settled.has(threadKey(t)),
+              )
             : [];
           const resolve: Candidate[] =
             resolvable.length > 0

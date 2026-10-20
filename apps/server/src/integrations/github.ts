@@ -229,6 +229,7 @@ export function mapReviewThreads(nodes: ReadonlyArray<ReviewThreadNode | null> |
         canResolve: thread.viewerCanResolve ?? false,
         lastCommentId: newest?.databaseId ?? null,
         ownLast: newest?.viewerDidAuthor === true,
+        lastReviewId: newest?.pullRequestReview?.databaseId ?? null,
       },
     ];
   });
@@ -371,10 +372,10 @@ const COMMENT_FIELDS = `comments(last: 5) { nodes {
           databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
         } }`;
 /**
- * What every poll reads of a PR's threads: the newest 50, with no bodies. Each thread's comments are a connection of
+ * What every poll reads of a PR's threads: the newest 30, with no bodies. Each thread's comments are a connection of
  * their own in GitHub's rate-limit cost, and the poll reads up to 25 PRs every 20 seconds, so it stays this lean.
  */
-const THREAD_FIELDS = `reviewThreads(last: 50) { nodes { id isResolved viewerCanResolve
+const THREAD_FIELDS = `reviewThreads(last: 30) { nodes { id isResolved viewerCanResolve
         ${COMMENT_FIELDS}
       } }`;
 /**

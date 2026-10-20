@@ -227,6 +227,8 @@ export const PrReviewThreadInfo = z.object({
   lastCommentId: z.number().int().nullable(),
   /** The newest comment is the signed-in account's. */
   ownLast: z.boolean(),
+  /** The review the newest comment was posted in: one of Autopilot's own reviews is a point, not a reply. */
+  lastReviewId: z.number().int().nullable(),
 });
 export type PrReviewThreadInfo = z.infer<typeof PrReviewThreadInfo>;
 
@@ -284,7 +286,7 @@ export const PrSnapshot = z.object({
   reviews: z.array(PrReviewInfo).optional(),
   /** Comments on the newest unresolved review threads the signed-in account didn't answer last, oldest first. */
   reviewComments: z.array(PrReviewCommentInfo).optional(),
-  /** The newest unresolved review threads (of the last 50). */
+  /** The newest unresolved review threads (of the last 30). */
   reviewThreads: z.array(PrReviewThreadInfo).optional(),
   /** How many of the threads read are unresolved: a repository can require them all resolved before a merge. */
   unresolvedThreads: z.number().int().nonnegative().optional(),

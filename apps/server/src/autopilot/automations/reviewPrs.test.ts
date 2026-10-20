@@ -881,6 +881,7 @@ describe("review PRs: verdict, threshold and hand-off", () => {
       canResolve: true,
       lastCommentId: rootCommentId,
       ownLast: false,
+      lastReviewId: rootReviewId,
       rootCommentId,
       rootReviewId,
       reply: null,

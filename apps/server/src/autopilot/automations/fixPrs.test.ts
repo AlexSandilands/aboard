@@ -81,6 +81,7 @@ const thread = (id: string, over: Partial<ReviewThreadDetail> = {}): ReviewThrea
   canResolve: true,
   lastCommentId: 10,
   ownLast: true,
+  lastReviewId: 700,
   rootCommentId: 1,
   rootReviewId: 500,
   reply: "fixed",
@@ -89,11 +90,12 @@ const thread = (id: string, over: Partial<ReviewThreadDetail> = {}): ReviewThrea
 });
 
 /** The same thread as the poll keeps it: no bodies. */
-const polled = ({ id, canResolve, lastCommentId, ownLast }: ReviewThreadDetail): PrReviewThreadInfo => ({
+const polled = ({ id, canResolve, lastCommentId, ownLast, lastReviewId }: ReviewThreadDetail): PrReviewThreadInfo => ({
   id,
   canResolve,
   lastCommentId,
   ownLast,
+  lastReviewId,
 });
 
 const engines: AutopilotEngine[] = [];
@@ -861,6 +863,15 @@ describe("fix PRs: resolving threads it fixed", () => {
     setPr({ headOid: SHA_B, reviewThreads: [polled(thread("T1", { lastCommentId: 11 })), ...threads.map(polled)] });
     await pass();
     expect(resolved).toEqual(["T1"]);
+  });
+
+  it("doesn't read the threads Autopilot's own review just opened", async () => {
+    const { setPr, pass, turnOn, runs, reviewed } = setup();
+    turnOn({ onAutopilotReview: false });
+    reviewed({ handoff: "clean", actionable: 0 });
+    setPr({ reviewThreads: [polled(thread("T1", { lastReviewId: 900 }))] });
+    await pass();
+    expect(runs()).toHaveLength(0);
   });
 
   it("does nothing with the switch off", async () => {

@@ -492,7 +492,8 @@ to fix a pull request linked to a task.
   (it may start an attempt of its own on the branch while one is at work).
 - **Resolving threads it fixed** (switch `resolveThreads`, on by default). The poll reads no bodies, so with no agent
   a candidate keyed `fix:resolve:<linkId>:<headOid>:<hash of thread@newest comment ids>` (`resolveDedupeKey`,
-  `startsNoAgent`) picks the snapshot's unresolved threads the account can resolve and answered last (`ownLast`). The
+  `startsNoAgent`) picks the snapshot's unresolved threads the account can resolve and answered last (`ownLast`), but
+  not one whose newest comment is in one of Autopilot's own reviews (a point it just raised, not a reply). The
   action reads them fresh with `reviewThreads` (`ReviewThreadDetail`: the newest comment's body, and the PR's newest 100
   commits) and resolves each whose newest comment is Autopilot's reply saying `fixed in <sha>` (`reply: "fixed"`,
   `parseAutopilotReply`, lenient enough for replies written before the format was fixed) with that sha prefixing one
