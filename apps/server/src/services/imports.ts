@@ -2,9 +2,9 @@ import {
   LABEL_MAX_LENGTH,
   LABELS_PER_TASK_MAX,
   normalizeLabel,
-  parseIssueSource,
+  parseImportSource,
   type IssueRef,
-  type IssueSource,
+  type ImportSource,
   type TicketRef,
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
@@ -28,7 +28,7 @@ export const IMPORT_CHILDREN_MAX = 50;
 export interface ImportsModule {
   service: ImportsService;
   /** Inside an open write: records that the task was created from `source` and is waiting for its details. */
-  beginIn(taskId: string, source: IssueSource, sourceUrl: string, fx: Effects): void;
+  beginIn(taskId: string, source: ImportSource, sourceUrl: string, fx: Effects): void;
 }
 
 /** Normalised, deduped labels from model output; labels that don't survive normalising are dropped, not errors. */
@@ -83,7 +83,7 @@ export function createImportsService(
   const fillEpic = (
     taskId: string,
     sourceLabel: string,
-    sourceKind: IssueSource["kind"],
+    source: Pick<ImportRecord, "sourceKind" | "systemId">,
     epic: NonNullable<ImportResult["epic"]>,
   ): string[] => {
     const tasks = deps.tasks();
@@ -118,13 +118,16 @@ export function createImportsService(
       if (seen.size >= IMPORT_CHILDREN_MAX) break;
       // Ticket children come from the model, which has just read text anyone could write: anything but a ticket
       // (a GitHub URL, say, which would be read with the user's gh) is dropped rather than trusted. A child is always
-      // the same kind of issue as its epic.
-      const source = parseIssueSource(child, { ticketSystems: settings.ticketSystems });
-      if (source?.kind !== sourceKind) {
+      // the same kind of issue as its epic, and a ticket's children are tickets of its own system.
+      const childSource = parseImportSource(child, settings.ticketSystems);
+      if (
+        childSource?.kind !== source.sourceKind ||
+        (childSource.kind === "ticket" && childSource.ref.system !== source.systemId)
+      ) {
         unreadable++;
         continue;
       }
-      const id = issueIdentity(source);
+      const id = issueIdentity(childSource);
       if (seen.has(id)) continue;
       seen.add(id);
       const matches = (existing.get(id) ?? []).filter((t) => t !== taskId).map((t) => repos.tasks.get(t)!);
@@ -139,7 +142,7 @@ export function createImportsService(
       if (other) {
         const where =
           other.kind === "epic" ? "is an epic" : `is in epic #${repos.tasks.get(other.parentId!)?.number ?? "?"}`;
-        elsewhere.push(`${source.placeholder} (#${other.number} ${where})`);
+        elsewhere.push(`${childSource.placeholder} (#${other.number} ${where})`);
         continue;
       }
       created.push(
@@ -158,7 +161,7 @@ export function createImportsService(
     }
     if (unreadable) {
       lines.push(
-        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${sourceKind === "ticket" ? "a ticket" : "a GitHub issue"}.`,
+        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${source.sourceKind === "ticket" ? "a ticket of its system" : "a GitHub issue"}.`,
       );
     }
     if (lines.length) tasks.addNote(taskId, lines.join("\n\n"), IMPORT_ACTOR);
@@ -191,7 +194,7 @@ export function createImportsService(
       return core.write((fx) => {
         const record = recordOf(taskId);
         const task = deps.tasks().detail(taskId);
-        const source = parseIssueSource(record.sourceUrl, { ticketSystems: deps.settings.get().ticketSystems });
+        const source = parseImportSource(record.sourceUrl, deps.settings.get().ticketSystems);
         // The user may have renamed or described the placeholder while the fetch ran; their words stand.
         const title = result.title.trim().slice(0, TITLE_MAX);
         const description = result.description?.trim().slice(0, DESCRIPTION_MAX);
@@ -205,7 +208,7 @@ export function createImportsService(
           IMPORT_ACTOR,
         );
         const childImports = result.epic
-          ? fillEpic(taskId, source?.placeholder ?? record.sourceUrl, record.sourceKind, result.epic)
+          ? fillEpic(taskId, source?.placeholder ?? record.sourceUrl, record, result.epic)
           : [];
         repos.imports.update({ ...record, status: "done", error: null, updatedAt: nowIso() });
         fx.log(taskId, IMPORT_ACTOR, "imported", { source: record.sourceUrl });

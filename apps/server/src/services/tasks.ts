@@ -3,7 +3,7 @@ import {
   deriveEpicStatus,
   findTicketKeys,
   normalizeLabel,
-  parseIssueSource,
+  parseImportSource,
   renderTemplateText,
   resolutionNeedsTask,
   startedEpicTasks,
@@ -296,9 +296,7 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
         }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
-        const source = input.sourceUrl
-          ? parseIssueSource(input.sourceUrl, { ticketSystems: deps.settings.get().ticketSystems })
-          : null;
+        const source = input.sourceUrl ? parseImportSource(input.sourceUrl, deps.settings.get().ticketSystems) : null;
         if (input.sourceUrl && !source) {
           throw new AppError(
             "VALIDATION",

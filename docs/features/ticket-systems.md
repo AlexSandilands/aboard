@@ -96,7 +96,7 @@ A backup taken before 036 still restores: the restore loads its `jiraBaseUrl` an
 | -------------------------------------------------------- | ------------------------------------------------------------ |
 | `packages/contracts/src/ticketSystems.ts`                | Schema, `ticketHref`, `ticketLabel`, matching, `findTicketKeys` |
 | `packages/contracts/src/ticketPresets.ts`                | Jira and Linear presets                                      |
-| `packages/contracts/src/links.ts`                        | `classifyLink`, `parseIssueSource`                           |
+| `packages/contracts/src/links.ts`                        | `classifyLink`, `parseImportSource`                           |
 | `apps/server/src/db/migrations/036_ticket_systems.sql`   | Table rebuilds and the `jira` conversion                     |
 | `apps/server/src/db/codeMigrations.ts`                   | Jira settings into a system                                  |
 | `apps/server/src/services/settings.ts`                   | Normalizing, export, retired keys                            |

@@ -1,8 +1,8 @@
-import { parseIssueSource, ticketLabel, type TaskImport, type TaskKind, type TicketSystem } from "@repo/contracts";
+import { parseImportSource, ticketLabel, type TaskImport, type TaskKind, type TicketSystem } from "@repo/contracts";
 
 /** Where a task's import reads from: "<System> PROJ-1" or "GitHub acme/app#45". */
 export function importSourceLabel(sourceUrl: string, ticketSystems: readonly TicketSystem[] = []): string {
-  const source = parseIssueSource(sourceUrl, { ticketSystems });
+  const source = parseImportSource(sourceUrl, ticketSystems);
   if (source?.kind === "ticket") return ticketLabel(ticketSystems, source.ref);
   if (source?.kind === "issue") return `GitHub ${source.placeholder}`;
   return sourceUrl;
