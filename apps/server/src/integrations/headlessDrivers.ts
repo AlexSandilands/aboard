@@ -48,20 +48,20 @@ const LIMITED: Omit<DriverCapabilities, "presetSessionId"> = {
 // ── Codex ────────────────────────────────────────────────────────────────
 
 /**
- * `codex exec` arguments. Edit access runs in the workspace-write sandbox with the network on, so it can push; Codex
- * has no rule that could refuse `gh pr merge`, so only the prompt and the worktree's pre-push hook stand in the way.
- * `-` reads the prompt from stdin. Written from Codex's docs and source, not against a real Codex (#252).
+ * `codex exec` arguments. Edit access runs without Codex's sandbox: its workspace-write sandbox keeps git's own
+ * folders read-only (and a worktree's live outside it), so the agent couldn't commit or push. That is the access a
+ * Claude Code edit run has too (Bash allowed outright); the push guard still refuses force, delete and default-branch
+ * pushes, and only the prompt says not to run `gh pr merge`. Read-only runs keep the read-only sandbox. `-` reads the
+ * prompt from stdin. Written from Codex's docs and source, not against a real Codex (#252).
  */
 export function codexArgs(input: AgentArgsInput): string[] {
-  const edit = input.access === "edit";
   return [
     "exec",
     "--json",
     // A task-less run works in an empty folder that isn't a repository.
     "--skip-git-repo-check",
     "--sandbox",
-    edit ? "workspace-write" : "read-only",
-    ...(edit ? ["--config", "sandbox_workspace_write.network_access=true"] : []),
+    input.access === "edit" ? "danger-full-access" : "read-only",
     ...(input.model ? ["--model", input.model] : []),
     "-",
   ];

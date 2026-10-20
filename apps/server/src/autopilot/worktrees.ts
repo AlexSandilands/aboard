@@ -37,6 +37,8 @@ export interface Worktree {
   /** The branch on origin the work goes to: `branch` itself, or the existing branch asked for. */
   pushTo: string;
   defaultBranch: string | null;
+  /** The push guard's hooks folder, with `pushGuard`: the agent's git is pointed at it (pushGuardEnv). */
+  hooksPath: string | null;
 }
 
 /** Whether `child` is `parent` or inside it. */
@@ -143,9 +145,10 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   mkdirSync(dirname(path), { recursive: true });
   const added = await runGit(["worktree", "add", "--no-track", "-b", branch, path, start], checkout);
   if (added.code !== 0) throw gitError(`Couldn't add a worktree from ${start}`, added);
+  let hooksPath: string | null = null;
   if (req.pushGuard) {
     try {
-      await installPushGuard(runGit, path, defaultBranch);
+      hooksPath = await installPushGuard(runGit, path, defaultBranch);
     } catch (error) {
       // An agent must not work where its pushes aren't guarded; nothing has happened in the worktree yet.
       await runGit(["worktree", "remove", "--force", path], checkout).catch(() => null);
@@ -153,7 +156,7 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
       throw error;
     }
   }
-  return { path, branch, pushTo: pushTo ?? branch, defaultBranch };
+  return { path, branch, pushTo: pushTo ?? branch, defaultBranch, hooksPath };
 }
 
 export type RemoveOutcome = "removed" | "dirty" | "missing";

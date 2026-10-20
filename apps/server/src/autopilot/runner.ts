@@ -37,6 +37,7 @@ import {
 } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
+import { pushGuardEnv } from "./pushGuard.ts";
 import { createRepoGate, gateFetches } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
@@ -394,7 +395,12 @@ export function createAutopilotRunner(deps: {
     model: RunModel,
     options: RunnerOptions,
     settings: AppSettings,
-    where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig"> & { cwd: string; prompt: string },
+    where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig"> & {
+      cwd: string;
+      prompt: string;
+      /** The push guard's hooks folder, for the agent's git. */
+      hooksPath?: string | null;
+    },
     /** The run's first patch, which a preset session id joins. */
     started: RunPatch,
     update: (patch: RunPatch) => void,
@@ -427,6 +433,7 @@ export function createAutopilotRunner(deps: {
       cwd: where.cwd,
       prompt: where.prompt,
       timeoutMs: options.timeoutMinutes * 60_000,
+      ...(where.hooksPath ? { env: pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) } : {}),
       ...(driver.sessionIdOf
         ? {
             onStdoutLine: (line: string) => {
@@ -502,6 +509,7 @@ export function createAutopilotRunner(deps: {
         cwd: worktree.path,
         prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
         defaultBranch: worktree.defaultBranch,
+        hooksPath: worktree.hooksPath,
       },
       { runner: "headless", worktreePath: worktree.path },
       update,

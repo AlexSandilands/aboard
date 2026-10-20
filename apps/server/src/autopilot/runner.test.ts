@@ -426,8 +426,16 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
 
       const job = jobs[0]!;
       expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex" });
-      expect(job.args.slice(0, 5)).toEqual(["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write"]);
+      expect(job.args.slice(0, 5)).toEqual([
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "danger-full-access",
+      ]);
       expect(job.args.join(" ")).toContain("--model gpt-5.5-codex");
+      // Its git uses the worktree's push guard.
+      expect(job.env?.GIT_CONFIG_PARAMETERS).toMatch(/^'core.hooksPath'='.*autopilot-hooks'$/);
       expect(linkedWhileRunning).toEqual([CODEX_ID]);
       expect(out).toMatchObject({ runner: "headless", sessionId: CODEX_ID, result: "Pushed" });
       expect(out).not.toHaveProperty("costUsd");

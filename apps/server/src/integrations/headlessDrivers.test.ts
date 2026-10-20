@@ -33,15 +33,13 @@ describe("the Claude Code driver", () => {
 });
 
 describe("the Codex driver", () => {
-  it("runs codex exec in the workspace-write sandbox with the network on, reading the prompt from stdin", () => {
+  it("runs codex exec outside its sandbox for edits, so git can commit, reading the prompt from stdin", () => {
     expect(codexArgs(input({ model: "gpt-5.5-codex" }))).toEqual([
       "exec",
       "--json",
       "--skip-git-repo-check",
       "--sandbox",
-      "workspace-write",
-      "--config",
-      "sandbox_workspace_write.network_access=true",
+      "danger-full-access",
       "--model",
       "gpt-5.5-codex",
       "-",

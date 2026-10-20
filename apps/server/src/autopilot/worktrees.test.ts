@@ -1,10 +1,12 @@
-import { existsSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultRunGit } from "../integrations/backup.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
-import { canonicalPath, createWorktree, isInside, removeWorktree } from "./worktrees.ts";
+import { pushGuardEnv } from "./pushGuard.ts";
+import { canonicalPath, createWorktree, isInside, removeWorktree, type Worktree } from "./worktrees.ts";
 
 const RUN_ID = "abcdef12-3456-4789-8abc-def012345678";
 
@@ -89,60 +91,85 @@ describe("Autopilot worktrees", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   });
 
   describe("the push guard", () => {
-    const push = (cwd: string, ...args: string[]) => {
+    /** git as the agent runs it: with the guard's hooks in its environment. */
+    const agentGit = (wt: Worktree, ...args: string[]) =>
+      execFileSync("git", args, {
+        cwd: wt.path,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, ...pushGuardEnv(wt.hooksPath!, process.env.GIT_CONFIG_PARAMETERS) },
+      }).trim();
+    const push = (wt: Worktree, ...args: string[]) => {
       try {
-        git(cwd, "push", "--quiet", "origin", ...args);
+        agentGit(wt, "push", "--quiet", "origin", ...args);
         return "pushed";
       } catch (error) {
         return String((error as { stderr?: unknown }).stderr ?? error);
       }
     };
-    const commit = (cwd: string, file: string) => {
-      writeFileSync(join(cwd, file), `${file}\n`);
-      git(cwd, "add", file);
-      git(cwd, "commit", "--quiet", "-m", file);
+    const commit = (wt: Worktree, file: string) => {
+      writeFileSync(join(wt.path, file), `${file}\n`);
+      agentGit(wt, "add", file);
+      agentGit(wt, "commit", "--quiet", "-m", file);
     };
-
-    it("refuses force, delete and default-branch pushes, and allows the run's own branch", async () => {
-      const wt = await createWorktree(defaultRunGit, {
-        repo: repo.checkout,
+    const guarded = (repoPath = repo.checkout) =>
+      createWorktree(defaultRunGit, {
+        repo: repoPath,
         root: repo.worktrees,
         taskNumber: 7,
         runId: RUN_ID,
         pushGuard: true,
       });
-      commit(wt.path, "one.txt");
-      expect(push(wt.path, "-u", wt.branch)).toBe("pushed");
-      commit(wt.path, "two.txt");
-      expect(push(wt.path, wt.branch)).toBe("pushed");
 
-      expect(push(wt.path, "HEAD:main")).toContain("default branch (main)");
-      expect(push(wt.path, "HEAD:refs/heads/main")).toContain("default branch (main)");
-      expect(push(wt.path, ":feature")).toContain("it deletes refs/heads/feature");
-      expect(push(wt.path, "--delete", "feature")).toContain("it deletes");
-      git(wt.path, "commit", "--quiet", "--amend", "-m", "rewritten");
-      expect(push(wt.path, "--force", wt.branch)).toContain("force-push");
-      expect(push(wt.path, `+HEAD:${wt.branch}`)).toContain("force-push");
-      // The user's checkout keeps its own hooks.
-      expect(() => git(repo.checkout, "config", "--get", "core.hooksPath")).toThrow("Command failed");
+    it("refuses force, delete and default-branch pushes, and allows the run's own branch", async () => {
+      const wt = await guarded();
+      commit(wt, "one.txt");
+      expect(push(wt, "-u", wt.branch)).toBe("pushed");
+      commit(wt, "two.txt");
+      expect(push(wt, wt.branch)).toBe("pushed");
+
+      expect(push(wt, "HEAD:main")).toContain("default branch (main)");
+      expect(push(wt, "HEAD:refs/heads/main")).toContain("default branch (main)");
+      expect(push(wt, ":feature")).toContain("it deletes refs/heads/feature");
+      expect(push(wt, "--delete", "feature")).toContain("it deletes");
+      agentGit(wt, "commit", "--quiet", "--amend", "-m", "rewritten");
+      expect(push(wt, "--force", wt.branch)).toContain("force-push");
+      expect(push(wt, `+HEAD:${wt.branch}`)).toContain("force-push");
     });
 
-    it("still runs the repository's own hooks", async () => {
-      const hooks = join(repo.checkout, ".git", "hooks");
+    it("changes no config: the repository's and the worktree's stay as they were", async () => {
+      const wt = await guarded();
+      for (const key of ["core.hooksPath", "extensions.worktreeConfig"]) {
+        expect(() => git(wt.path, "config", "--get", key)).toThrow("Command failed");
+        expect(() => git(repo.checkout, "config", "--get", key)).toThrow("Command failed");
+      }
+    });
+
+    it("guards a worktree of a bare repository, whose other worktrees keep working", async () => {
+      const bare = join(repo.root, "bare.git");
+      git(repo.root, "clone", "--quiet", "--bare", join(repo.root, "origin.git"), bare);
+      const mine = join(repo.root, "mine");
+      git(bare, "worktree", "add", "--quiet", mine, "feature");
+      const wt = await guarded(mine);
+      expect(git(mine, "status", "--short")).toBe("");
+      expect(push(wt, ":feature")).toContain("it deletes");
+    });
+
+    it("still runs the repository's own hooks, wherever its hooksPath points", async () => {
+      const hooks = join(repo.root, "my-hooks");
+      mkdirSync(hooks);
       writeFileSync(join(hooks, "pre-commit"), '#!/bin/sh\necho ran > "$(git rev-parse --show-toplevel)/hook-ran"\n', {
         mode: 0o755,
       });
       writeFileSync(join(hooks, "pre-push"), "#!/bin/sh\necho 'repo hook says no' >&2\nexit 1\n", { mode: 0o755 });
-      const wt = await createWorktree(defaultRunGit, {
-        repo: repo.checkout,
-        root: repo.worktrees,
-        taskNumber: 7,
-        runId: RUN_ID,
-        pushGuard: true,
-      });
-      commit(wt.path, "one.txt");
+      // A `~` path, as a global setup would write it: git expands it, and so must the guard.
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      const tilde = relative(home, hooks).startsWith("..") ? hooks : `~/${relative(home, hooks).replace(/\\/g, "/")}`;
+      git(repo.checkout, "config", "core.hooksPath", tilde);
+      const wt = await guarded();
+      commit(wt, "one.txt");
       expect(existsSync(join(wt.path, "hook-ran"))).toBe(true);
-      expect(push(wt.path, wt.branch)).toContain("repo hook says no");
+      expect(push(wt, wt.branch)).toContain("repo hook says no");
     });
   });
 

@@ -209,6 +209,8 @@ export interface AgentJob {
   timeoutMs: number;
   /** Each line of stdout as it comes. */
   onStdoutLine?: (line: string) => void;
+  /** Added to the server's environment, e.g. the push guard's (pushGuardEnv). */
+  env?: Record<string, string>;
 }
 
 /** What a harness's headless CLI can be held to, beyond doing work in a folder. */
@@ -264,4 +266,4 @@ export type RunAgent = (job: AgentJob) => Promise<string>;
 
 export const runHeadlessAgent: RunAgent = (job) =>
   // A missing credential must fail the push instead of waiting for input nobody will type.
-  runClaude({ ...job, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  runClaude({ ...job, env: { ...process.env, ...job.env, GIT_TERMINAL_PROMPT: "0" } });

@@ -1179,9 +1179,10 @@ for the others): the argv, a parser that turns its output into an outcome, and w
   lockdown, a no-tools digest) runs on Claude Code on its default model instead, and the run's detail says why
   (`headlessDriverFor`). So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
   agent actions without tool rules) run on Codex or Copilot.
-- **Codex:** `codex exec --json --skip-git-repo-check --sandbox workspace-write --config
-  sandbox_workspace_write.network_access=true [--model <m>] -` (read-only runs use `--sandbox read-only`), prompt on
-  stdin. The parser reads `thread.started` (the session id), the last completed `agent_message` item (the answer)
+- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] -` (read-only runs
+  use `--sandbox read-only`), prompt on stdin. Edit runs leave Codex's sandbox off because its `workspace-write`
+  keeps git's folders read-only, and a worktree's git dir lies outside it anyway, so the agent couldn't commit or
+  push. That is the access a Claude Code edit run has (Bash allowed outright); the push guard still applies. The parser reads `thread.started` (the session id), the last completed `agent_message` item (the answer)
   and `turn.failed` or `error`; a run with no `turn.completed` failed. Written from Codex's docs and source, not
   checked against a real Codex yet (#252).
 - **Copilot CLI:** `copilot --output-format json --no-ask-user --session-id <id> --allow-tool write --allow-tool shell
@@ -1197,12 +1198,16 @@ for the others): the argv, a parser that turns its output into an outcome, and w
 
 Codex and Copilot can't be given Claude Code's deny rules, so git refuses the pushes itself. Every headless worktree
 (`createWorktree({ pushGuard: true })`, `autopilot/pushGuard.ts`) gets a hooks folder of its own inside its git dir
-(`<git dir>/autopilot-hooks`, removed with the worktree), set with `git config --worktree core.hooksPath` after
-turning on `extensions.worktreeConfig` for the repository. Its `pre-push` refuses a delete, a push to
-`refs/heads/<default branch>`, and a push whose remote commit isn't an ancestor of the local one (a force-push; a
-remote commit the worktree hasn't fetched is refused too, as it can't be told apart). It then runs the repository's
-own `pre-push`; every other hook just runs the repository's own (its `core.hooksPath`, else `.git/hooks`), so its
-lint and commit-message checks still apply. The user's checkout isn't touched. If the guard can't be installed the
+(`<git dir>/autopilot-hooks`, removed with the worktree). The agent's process is pointed at it with
+`core.hooksPath` in `GIT_CONFIG_PARAMETERS` (how `git -c` passes config on, `pushGuardEnv`), so every git the agent
+runs uses it and no config file changes: not the repository's (turning on `extensions.worktreeConfig` would break
+a bare repository's worktrees), not the user's. `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` would be the documented way,
+but Codex drops variables with `KEY` in their name from its shell, and git then fails outright. Its `pre-push`
+refuses a delete, a push to `refs/heads/<default branch>`, and a push whose remote commit isn't an ancestor of the
+local one (a force-push; a remote commit the worktree hasn't fetched is refused too, as it can't be told apart). It
+then runs the repository's own `pre-push`; every other hook just runs the repository's own (where git would look:
+`git rev-parse --git-path hooks`, so a `~` in `core.hooksPath` is expanded), so its lint and commit-message checks
+still apply. Git run by the board itself, or by the user in that worktree, doesn't use the guard. If the guard can't be installed the
 worktree is removed and the run fails. It is a guard rail, not a sandbox: `git push --no-verify` skips it. Codex has
 nothing that refuses `gh pr merge`; only the prompt says not to.
 
