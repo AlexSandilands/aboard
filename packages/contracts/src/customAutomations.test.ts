@@ -660,7 +660,7 @@ describe("inputs on shell and script actions", () => {
   });
 });
 
-describe("the SDK panel's text", () => {
+describe("the SDK reference's text", () => {
   it("names every placeholder, and its snippets read only names a script really gets", () => {
     for (const p of CUSTOM_PLACEHOLDERS) {
       expect(AUTOMATION_SDK_SCOPE.find((v) => v.prompt === `{{${p.key}}}`)?.stdin).toBeTruthy();

@@ -968,9 +968,17 @@ script** beside **Start an agent** and **Run a command**, and an agent's check. 
   to print JSON lines. A new script starts from it, and changing the language swaps it for the new language's only while
   the text is still some starter (`withLanguage`), so nothing the user wrote is lost.
 - The timeout, and the **test run** below.
-- **What it can read** (`SdkPanel`), folded under the editor (and under a command, in PowerShell on Windows and sh
-  elsewhere): every value with its environment variable and stdin path (`AUTOMATION_SDK_SCOPE`), the rules on exit codes
-  and output (`AUTOMATION_SDK_RULES`), and snippets for the language and role with Copy (`AUTOMATION_SDK_SNIPPETS`).
+- **Insert chips** over the code (`InsertChips`, `insertChips.logic.ts`), coloured by group (`sdkStyle.tsx`): project,
+  task and PR (left out for a schedule, which has no task), automation, the variables set on the board or any project,
+  and the automation's inputs. A chip puts the value's read at the cursor. There is one convention, shared by the
+  starters, the examples and the authoring skill: a script parses the stdin JSON into `ctx` and reads from it
+  (`ctx.project.name`, `ctx['project']['name']`, `$ctx.project.name`); only sh and a command read the environment
+  (`"$X"`), since they can't parse JSON. The same chips sit over a command and an agent's prompt (`{{…}}` placeholders,
+  plus the item for a check's agent), in place of hints that listed every name.
+- A **status line** under the code and under a command (`SdkStatusBar`): how values arrive, exit 0 succeeds, the
+  output kept, and two links. **Examples** opens the snippets for the language and role (`AUTOMATION_SDK_SNIPPETS`)
+  to copy or insert at the cursor. **Full reference** opens a side sheet with every value by stdin path or environment
+  variable (`AUTOMATION_SDK_SCOPE`), the rules as titled cards (`AUTOMATION_SDK_RULES`) and the examples.
   The text is in contracts (`automationSdk.ts`) so the authoring skill can quote it; a test checks that the snippets'
   variable reads are what `variablesNamedBy` finds. The starters read `project`, `vars` and `inputs` without naming a
   variable, so starting from one never makes an automation need one.
@@ -1305,7 +1313,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/automationSdk.ts` | What a script can read, and the snippets the editor's panel shows |
 | `apps/server/src/integrations/gitRemote.ts` | `remoteRepo`, `repoWebUrl` and the cached repository URL per folder |
 | `apps/server/src/db/migrations/036_project_variables.sql` | `projects.variables_json`, a project's variable overrides |
-| `apps/web/src/components/autopilot/VariablesEditor.tsx`, `VariablesSection.tsx`, `variables.logic.ts`, `SdkPanel.tsx` | The variables editors, the "Variables it reads" list and the SDK panel |
+| `apps/web/src/components/autopilot/VariablesEditor.tsx`, `VariablesSection.tsx`, `variables.logic.ts`, `SdkStatusBar.tsx`, `InsertChips.tsx` | The variables editors, the "Variables it reads" list, the insert chips and the status line |
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |

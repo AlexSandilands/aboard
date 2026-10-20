@@ -15,7 +15,8 @@ import { Compartment, EditorSelection, EditorState, type Extension } from "@code
 import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers, placeholder } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import type { CustomScriptLanguage } from "@repo/contracts";
-import { useEffect, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import type { Inserter } from "./InsertChips";
 
 // The editor behind ScriptEditor. It is a separate file so CodeMirror stays out of the main bundle: the board only
 // loads it when a script field is shown.
@@ -79,6 +80,7 @@ export interface ScriptEditorImplProps {
   onChange: (value: string) => void;
   label: string;
   placeholder?: string;
+  inserter?: Ref<Inserter>;
 }
 
 export default function ScriptEditorImpl({
@@ -87,6 +89,7 @@ export default function ScriptEditorImpl({
   onChange,
   label,
   placeholder: hint,
+  inserter,
 }: ScriptEditorImplProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -154,6 +157,24 @@ export default function ScriptEditorImpl({
     // The view is made once; the props below are applied by the effects after it.
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- value, language and label are synced by their own effects
   }, []);
+
+  useImperativeHandle(
+    inserter,
+    () => ({
+      insert: (text) => {
+        const v = view.current;
+        if (!v) return;
+        const { from, to } = v.state.selection.main;
+        v.dispatch({
+          changes: { from, to, insert: text },
+          selection: { anchor: from + text.length },
+          userEvent: "input",
+        });
+        v.focus();
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     view.current?.dispatch({ effects: languageSlot.current.reconfigure(LANGUAGES[language]()) });

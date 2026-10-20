@@ -57,7 +57,7 @@ const ACTION_NOTE = [
 ];
 
 const CONTEXT_NOTE = [
-  "The context arrives as JSON on stdin: { automation, project: { id, name, path, repoUrl }, inputs, vars, task, pr }.",
+  "The context arrives as JSON on stdin, read here into ctx: { automation, project: { id, name, path, repoUrl }, inputs, vars, task, pr }.",
   "vars are the project's variables (Settings › Autopilot). Reading one by name means it won't run where that has no value.",
 ];
 
@@ -71,18 +71,18 @@ export function scriptStarter(language: CustomScriptLanguage, role: ScriptRole):
     case "node":
       return lines(
         ...commented("//", note),
-        `const { project, vars, inputs } = JSON.parse(require("node:fs").readFileSync(0, "utf8"));`,
+        `const ctx = JSON.parse(require("node:fs").readFileSync(0, "utf8"));`,
         "",
         ...(role === "check"
           ? [
               "const items = [",
-              `  { key: "example-1", title: \`Something to look at in \${project.name}\` },`,
+              `  { key: "example-1", title: \`Something to look at in \${ctx.project.name}\` },`,
               "];",
               "for (const item of items) console.log(JSON.stringify(item));",
             ]
           : [
-              'console.log(`Hello world, this is running in ${project.name} (${project.repoUrl || "no origin"})`);',
-              `console.log("Variables:", vars, "Inputs:", inputs);`,
+              'console.log(`Hello world, this is running in ${ctx.project.name} (${ctx.project.repoUrl || "no origin"})`);',
+              `console.log("Variables:", ctx.vars, "Inputs:", ctx.inputs);`,
             ]),
       );
     case "python":
@@ -91,37 +91,36 @@ export function scriptStarter(language: CustomScriptLanguage, role: ScriptRole):
         "import json",
         "import sys",
         "",
-        "context = json.load(sys.stdin)",
-        `project, variables, inputs = context["project"], context["vars"], context["inputs"]`,
+        "ctx = json.load(sys.stdin)",
         "",
         ...(role === "check"
           ? [
               "items = [",
-              `    {"key": "example-1", "title": f"Something to look at in {project['name']}"},`,
+              `    {"key": "example-1", "title": f"Something to look at in {ctx['project']['name']}"},`,
               "]",
               "for item in items:",
               "    print(json.dumps(item))",
             ]
           : [
-              `print(f"Hello world, this is running in {project['name']} ({project['repoUrl'] or 'no origin'})")`,
-              `print("Variables:", variables, "Inputs:", inputs)`,
+              `print(f"Hello world, this is running in {ctx['project']['name']} ({ctx['project']['repoUrl'] or 'no origin'})")`,
+              `print("Variables:", ctx['vars'], "Inputs:", ctx['inputs'])`,
             ]),
       );
     case "powershell":
       return lines(
         ...commented("#", note),
-        "$context = [Console]::In.ReadToEnd() | ConvertFrom-Json",
+        "$ctx = [Console]::In.ReadToEnd() | ConvertFrom-Json",
         "",
         ...(role === "check"
           ? [
               "$items = @(",
-              `  @{ key = "example-1"; title = "Something to look at in $($context.project.name)" }`,
+              `  @{ key = "example-1"; title = "Something to look at in $($ctx.project.name)" }`,
               ")",
               "foreach ($item in $items) { $item | ConvertTo-Json -Compress }",
             ]
           : [
-              `Write-Output "Hello world, this is running in $($context.project.name) ($($context.project.repoUrl))"`,
-              `Write-Output "Variables: $($context.vars | ConvertTo-Json -Compress) Inputs: $($context.inputs | ConvertTo-Json -Compress)"`,
+              `Write-Output "Hello world, this is running in $($ctx.project.name) ($($ctx.project.repoUrl))"`,
+              `Write-Output "Variables: $($ctx.vars | ConvertTo-Json -Compress) Inputs: $($ctx.inputs | ConvertTo-Json -Compress)"`,
             ]),
       );
     case "sh":

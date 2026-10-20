@@ -7,8 +7,10 @@ import {
   type CustomScriptLanguage,
 } from "./customAutomations.ts";
 
-// What a custom automation's script or command can read, and how, per language (docs/features/autopilot.md#the-sdk-panel).
-// The editor's panel shows it, and the authoring skill can quote the same text, so the two never disagree.
+// What a custom automation's script or command can read, and how, per language (docs/features/autopilot.md#the-script-editor).
+// The editor's status line and reference sheet show it, and the authoring skill can quote the same text, so the two never disagree.
+// One convention throughout: a script parses the stdin JSON into `ctx` and reads from it; only sh (and a command) reads
+// the environment, since it can't parse JSON.
 
 /** One value in scope: how a prompt, the environment and the stdin JSON each name it (null where it can't). */
 export interface SdkValue {
@@ -77,8 +79,6 @@ export const AUTOMATION_SDK_SNIPPETS: Record<CustomScriptLanguage, readonly SdkS
         "key = ctx['vars']['jira_key']  # needed: no run where it has no value",
         "team = ctx['vars'].get('team', '')  # optional: .get() isn't counted as needed",
         "days = int(ctx['inputs']['days'])",
-        "# or from the environment:",
-        `import os; key = os.environ["${VAR}"]`,
       ].join("\n"),
     },
     {
@@ -108,8 +108,6 @@ export const AUTOMATION_SDK_SNIPPETS: Record<CustomScriptLanguage, readonly SdkS
       code: [
         "const key = ctx.vars.jira_key; // needed: no run where it has no value",
         'const days = Number(ctx.inputs.days ?? "7");',
-        "// or from the environment:",
-        `const fromEnv = process.env.${VAR};`,
       ].join("\n"),
     },
     {
@@ -136,12 +134,9 @@ export const AUTOMATION_SDK_SNIPPETS: Record<CustomScriptLanguage, readonly SdkS
     {
       title: "A variable and an input",
       roles: ["action", "check"],
-      code: [
-        "$key = $ctx.vars.jira_key  # needed: no run where it has no value",
-        "$days = [int]$ctx.inputs.days",
-        "# or from the environment:",
-        `$key = $env:${VAR}`,
-      ].join("\n"),
+      code: ["$key = $ctx.vars.jira_key  # needed: no run where it has no value", "$days = [int]$ctx.inputs.days"].join(
+        "\n",
+      ),
     },
     {
       title: "Print the items for agents",
@@ -182,10 +177,28 @@ export const AUTOMATION_SDK_SNIPPETS: Record<CustomScriptLanguage, readonly SdkS
   ],
 };
 
+/** A rule of the panel: a short title and what it says. */
+export interface SdkRule {
+  title: string;
+  text: string;
+}
+
 /** What the panel says about exit codes and output, the same for every language. */
-export const AUTOMATION_SDK_RULES: readonly string[] = [
-  "It runs in the project's folder. Exit 0 and the run succeeds; any other exit, or running past the timeout, fails it, and a task it was about is flagged.",
-  'What it prints is kept with the run (the last 4,000 characters). A check prints one JSON object per line, each with a "key"; anything else on stdout fails the check.',
-  "Nothing is filled into the code itself: values arrive only through the environment and the JSON on stdin, so a task title can't change what runs.",
-  'A variable it names (vars.x, vars["x"] or the environment variable) must have a value in a project for it to run there; vars.get("x") reads one as optional.',
+export const AUTOMATION_SDK_RULES: readonly SdkRule[] = [
+  {
+    title: "Exit code",
+    text: "It runs in the project's folder. Exit 0 and the run succeeds; any other exit, or running past the timeout, fails it, and a task it was about is flagged.",
+  },
+  {
+    title: "Output",
+    text: 'What it prints is kept with the run (the last 4,000 characters). A check prints one JSON object per line, each with a "key"; anything else on stdout fails the check.',
+  },
+  {
+    title: "Values, not code",
+    text: "Nothing is filled into the code itself: values arrive only through the environment and the JSON on stdin, so a task title can't change what runs.",
+  },
+  {
+    title: "Variables",
+    text: 'A variable it names (vars.x, vars["x"] or the environment variable) must have a value in a project for it to run there; vars.get("x") reads one as optional.',
+  },
 ];

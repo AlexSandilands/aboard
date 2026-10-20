@@ -9,10 +9,14 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useTestScript } from "~/state/customAutomations";
+import { useSettings } from "~/state/queries";
 import { testScriptRequest, withLanguage, type CustomForm } from "./customAutomations.logic";
 import { Choice, Field } from "./FormFields";
 import { ScriptEditor } from "./ScriptEditor";
-import { SdkPanel } from "./SdkPanel";
+import { InsertChips, type Inserter } from "./InsertChips";
+import { insertChips, knownVariables } from "./insertChips.logic";
+import { SdkStatusBar } from "./SdkStatusBar";
+import { LanguageBadge } from "./sdkStyle";
 import {
   itemsSummary,
   languageOfFile,
@@ -52,6 +56,15 @@ export function ScriptField({
   const setBody = (next: string) => patch(check ? { checkBody: next } : { body: next });
   const file = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+  const inserter = useRef<Inserter | null>(null);
+  const boardVariables = useSettings().data?.automationVariables ?? [];
+  const chips = insertChips({
+    target: language,
+    hasTask: form.triggerKind !== "schedule",
+    inputs: form.inputs.map((i) => i.name),
+    variables: knownVariables(boardVariables, projects),
+  });
+  const insert = (text: string) => inserter.current?.insert(text);
 
   const setLanguage = (next: CustomScriptLanguage) => patch(withLanguage(form, kind, next));
 
@@ -99,7 +112,8 @@ export function ScriptField({
           }}
         >
           {SCRIPT_LANGUAGES.map((l) => (
-            <Toggle key={l.value} value={l.value}>
+            <Toggle key={l.value} value={l.value} className="gap-1.5">
+              <LanguageBadge language={l.value} />
               {l.label}
             </Toggle>
           ))}
@@ -137,14 +151,11 @@ export function ScriptField({
           onChange={setBody}
           label={label}
           placeholder="Write the script"
+          inserter={inserter}
+          header={<InsertChips chips={chips} onInsert={insert} />}
+          footer={<SdkStatusBar language={language} scriptRole={kind} onInsert={insert} />}
         />
-        <span className="text-2xs text-muted-foreground">
-          {check
-            ? 'Print one JSON object per line, each with a "key". The context arrives as JSON on stdin and as environment variables.'
-            : "The context arrives as JSON on stdin and as environment variables."}{" "}
-          Press Esc, then Tab, to leave the editor.
-        </span>
-        <SdkPanel language={language} scriptRole={kind} />
+        <span className="text-2xs text-muted-foreground">Press Esc, then Tab, to leave the editor.</span>
       </div>
 
       <Field label="Timeout (seconds)" hint="It is stopped after this long, and the run fails.">

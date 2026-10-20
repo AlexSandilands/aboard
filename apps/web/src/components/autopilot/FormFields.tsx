@@ -2,10 +2,28 @@ import type { ReactNode } from "react";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 /** A labelled form row with an optional hint under it. */
-export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  action,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  /** A control on the label's row, at its end. */
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
+      {action ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-foreground/80">{label}</span>
+          {action}
+        </div>
+      ) : (
+        <span className="text-xs font-medium text-foreground/80">{label}</span>
+      )}
       {children}
       {hint ? <span className="text-2xs text-muted-foreground">{hint}</span> : null}
     </div>

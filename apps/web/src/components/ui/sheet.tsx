@@ -9,6 +9,8 @@ import { Button } from "~/components/ui/button";
 
 const Sheet = SheetPrimitive.Root;
 
+const SheetTrigger = SheetPrimitive.Trigger;
+
 const SheetPortal = SheetPrimitive.Portal;
 
 // Sheets are docked panels, not dialogs: their layer (--z-sheet) sits under dialogs that open
@@ -159,6 +161,7 @@ function SheetDescription({ className, ...props }: SheetPrimitive.Description.Pr
 
 export {
   Sheet,
+  SheetTrigger,
   SheetPortal,
   SheetBackdrop,
   SheetBackdrop as SheetOverlay,

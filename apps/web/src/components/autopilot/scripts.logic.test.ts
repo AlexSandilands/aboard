@@ -61,7 +61,7 @@ describe("the starters", () => {
         expect(variablesNamedBy(CustomAction.parse({ kind: "script", language: value, body }))).toEqual([]);
       }
     }
-    expect(scriptStarter("python", "action")).toContain('context["vars"]');
+    expect(scriptStarter("python", "action")).toContain("ctx['vars']");
     expect(scriptStarter("node", "action")).toContain("Hello world, this is running in");
   });
 
