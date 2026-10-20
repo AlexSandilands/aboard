@@ -84,7 +84,7 @@ export function headlessModel(model: RunModel, typed: string): { model: string |
   if (typed.trim()) return { model: typed.trim(), note: null };
   const { harness, model: cli } = profileHeadless(model.profile);
   const label = AGENT_HARNESSES[harness].label;
-  const on = harness === "claude-code" ? "" : ` on ${label}`;
+  const on = harness === "claude-code" ? "" : `, on ${label}`;
   const described = describeRunModel(model);
   const lines = [model.note];
   // A model set only for T3 Code is worth a word; one with nothing set is the CLI's default as always.

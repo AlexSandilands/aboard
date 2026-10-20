@@ -44,11 +44,13 @@ export function visibleTierProviders(
   });
 }
 
-/** One edit to a tier: the description, T3 Code's model, or the `--model` of one CLI. */
+/** One edit to a tier: the description, T3 Code's model, the `--model` of one CLI, or its headless harness. */
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
-  | { field: "cli"; harness: AgentHarness; value: string | null };
+  | { field: "cli"; harness: AgentHarness; value: string | null }
+  /** The harness headless Autopilot runs use; Claude Code is stored as no choice. */
+  | { field: "headless"; value: AgentHarness };
 
 /** The tier with the change applied, leaving every other field (and the other CLI's model) as it was. */
 export function applyTierChange(current: ModelTierSetting, change: TierChange): ModelTierSetting {
@@ -59,6 +61,10 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       return { ...current, t3: change.value };
     case "cli":
       return { ...current, cli: { ...current.cli, [change.harness]: change.value } };
+    case "headless": {
+      const { headless: _headless, ...rest } = current;
+      return change.value === "claude-code" ? rest : { ...rest, headless: change.value };
+    }
   }
 }
 

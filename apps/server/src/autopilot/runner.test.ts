@@ -394,6 +394,91 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(patches).toContainEqual({ detail: "Model: Fast, from label quick" });
   });
 
+  describe("on another harness", () => {
+    const CODEX_ID = "0199a213-81c0-7800-8aa1-bbab2a035a53";
+    const codexProfile = (headless: "codex" | "copilot-cli") => ({
+      id: "other",
+      name: "Other",
+      labels: ["other"],
+      description: null,
+      t3: null,
+      cli: { codex: "gpt-5.5-codex", "copilot-cli": "gpt-5.4" },
+      headless,
+    });
+    const codexOutput = [
+      JSON.stringify({ type: "thread.started", thread_id: CODEX_ID }),
+      JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: "Pushed" } }),
+      JSON.stringify({ type: "turn.completed" }),
+    ];
+
+    it("runs codex exec, links the session as soon as Codex names it, and records no cost", async () => {
+      let linkedWhileRunning: string[] = [];
+      const { h, task, jobs, linked, start, patches } = setup({
+        agent: async (job) => {
+          for (const line of codexOutput) job.onStdoutLine?.(line);
+          linkedWhileRunning = [...linked];
+          return codexOutput.join("\n");
+        },
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")], codexCli: "/opt/codex" });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      const out = await start({ options: { runner: "headless" } });
+
+      const job = jobs[0]!;
+      expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex" });
+      expect(job.args.slice(0, 5)).toEqual(["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write"]);
+      expect(job.args.join(" ")).toContain("--model gpt-5.5-codex");
+      expect(linkedWhileRunning).toEqual([CODEX_ID]);
+      expect(out).toMatchObject({ runner: "headless", sessionId: CODEX_ID, result: "Pushed" });
+      expect(out).not.toHaveProperty("costUsd");
+      expect(patches).toContainEqual({ sessionId: CODEX_ID });
+      expect(patches).toContainEqual({ detail: "Model: Other, from label other, on Codex" });
+      const session = h.services.links.listByKind("agent_session")[0];
+      expect(session).toMatchObject({ ref: { harness: "codex", sessionId: CODEX_ID } });
+    });
+
+    it("runs Copilot CLI with a session id given up front", async () => {
+      const { h, task, jobs, start, patches } = setup({
+        agent: async () =>
+          [
+            JSON.stringify({ type: "session.start", data: { sessionId: SESSION } }),
+            JSON.stringify({ type: "assistant.message", data: { content: "Done" } }),
+          ].join("\n"),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("copilot-cli")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await start({ options: { runner: "headless" } });
+      expect(jobs[0]).toMatchObject({ command: "copilot", label: "Copilot CLI" });
+      expect(jobs[0]!.args[jobs[0]!.args.indexOf("--session-id") + 1]).toBe(SESSION);
+      expect(patches[0]).toMatchObject({ runner: "headless", sessionId: SESSION });
+      expect(h.services.links.listByKind("agent_session")[0]).toMatchObject({ ref: { harness: "copilot-cli" } });
+    });
+
+    it("runs on Claude Code, saying why, when the action needs structured output", async () => {
+      const { h, task, jobs, start, patches } = setup({
+        agent: async () => result({ result: "ok", structured_output: { ok: true }, session_id: SESSION }),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await start({ options: { runner: "headless" }, access: "read-only", outputSchema: { type: "object" } });
+      expect(jobs[0]!.args[0]).toBe("-p");
+      expect(jobs[0]!.args).not.toContain("--model");
+      expect(patches).toContainEqual({
+        detail:
+          "Model: Other, from label other\nCodex can't run this action headless (it needs structured output), so Claude Code ran it on its default model.",
+      });
+    });
+
+    it("fails with the harness's own name", async () => {
+      const { h, task, start } = setup({
+        agent: async () => JSON.stringify({ type: "turn.failed", error: { message: "rate limited" } }),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await expect(start({ options: { runner: "headless" } })).rejects.toThrow("Codex stopped: rate limited");
+    });
+  });
+
   it("says when a T3 run's model has no T3 Code model, so T3's default ran", async () => {
     const { h, task, start, patches } = setup({ t3: T3_UP });
     h.services.settings.update({
