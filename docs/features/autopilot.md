@@ -73,7 +73,8 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dailySpendCapUsd`     | none            | What agent runs created today may cost before no more start          |
 | `quietHours`           | off, 22:00–07:00 | No agent runs start in the window (local time; may wrap midnight; equal ends are no window) |
 | `dryRun`               | off             | Record what would run, and do nothing                                |
-| `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR                          |
+| `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks |
+| `prCommentRounds`      | 5               | Fix PRs' attempts per PR on other people's review comments and requests for changes |
 | `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
 | `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 
@@ -370,7 +371,14 @@ as comments only.
   pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
   setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
   posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (Fix PRs) counts its
-  own attempts against the same limit; each fix is followed by at most one new head and so one review.
+  attempts on Autopilot's review and failing checks against the same limit; each fix is followed by at most one new
+  head and so one review. Other people's comments have a budget of their own (`prCommentRounds`, below).
+- **Resolving its own threads.** From round 2 the prompt asks the reviewer to list, in the verdict's optional `fixed`,
+  the comment ids of earlier Autopilot inline comments whose point is fixed at this commit. After posting,
+  `resolveConfirmedThreads` resolves those threads (`resolveReviewThread`), only where the thread's first comment is in
+  one of the earlier rounds' reviews (`rootReviewId`), so a reviewer can't close someone else's point. A failure leaves
+  the thread open and doesn't fail the review; the count goes on the output as `resolvedThreads`. This covers points
+  fixed by hand, which Fix PRs' resolver (below) never sees a reply for.
 - **The agent only reads, and only its worktree.** It runs headless in a worktree on the PR's branch with
   `access: "read-only"` and an output schema. It has no way to write to GitHub. Because it reads text anyone can
   write (the PR's description and comments), the request sets `untrustedInput`, which gives it the least it needs:
@@ -451,8 +459,9 @@ to fix a pull request linked to a task.
     `trusted` author that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
   - review comments: comments on unresolved threads that aren't `own`, are `trusted`, aren't in one of Autopilot's
     reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. Autopilot
-    posts as the user, and the poller doesn't read bodies, so the user's own comments can't be told from its
-    replies and never count;
+    posts as the user, so the user's own comments can't be told from its replies and never count. A thread whose
+    newest comment is Autopilot's reply (the user's account and `prReviewMarker()`) is left out altogether: it was
+    answered, and asking again would let two review bots ping-pong;
   - Autopilot's review: `currentPrReview(...)` with `handoff: "fix"`: `review@<reviewId>`.
 
   Autopilot's own reviews are told apart by the `reviewId`s on Review PRs' runs.
@@ -471,8 +480,9 @@ to fix a pull request linked to a task.
   `prHead` says the PR moved (a force-push). The prompt has a section per trigger with the `gh` commands to read
   it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
   above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
-  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and replies on the threads it addressed,
-  each reply starting with `prReviewMarker()`. The reply goes in a file posted with `gh api … -F body=@file`,
+  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and then replies on
+  each thread it was sent to, the reply's first line exactly `prFixedReply(sha)` ("📋 … Autopilot · fixed in <sha>")
+  for a point it fixed or `prDeclinedReply(reason)` for one it won't. The reply goes in a file posted with `gh api … -F body=@file`,
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
   is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
   via: "nudge" | "t3" | "headless" }`.
@@ -480,12 +490,28 @@ to fix a pull request linked to a task.
   with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
   for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
   (it may start an attempt of its own on the branch while one is at work).
-- **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`) and `prReviewRounds` per PR, counting every
-  attempt that wasn't skipped or conflict-only (below). When a trigger fires past either limit, a gave-up run (`fix:gave_up:<linkId>:<headOid>`
-  per head, `fix:gave_up:<linkId>` once the rounds are used) ends flagged "Autopilot gave up on PR #N: …". That puts
-  it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A new head
-  commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency cap, a
-  daily cap or quiet hours don't hold it back.
+- **Resolving threads it fixed** (switch `resolveThreads`, on by default). With no agent, a candidate keyed
+  `fix:resolve:<linkId>:<headOid>:<hash of the thread ids>` (`resolveDedupeKey`, `startsNoAgent`) picks the
+  snapshot's unresolved threads the account can resolve whose newest comment is Autopilot's reply saying `fixed in
+  <sha>` (`reply: "fixed"`, `parseAutopilotReply`, lenient enough for replies written before the format was fixed). The
+  action reads them again with `reviewThreads` (the threads and the PR's newest 100 commits, fresh) and resolves each
+  that still ends with that reply and whose sha prefixes one of the commits. A thread someone answered since, or whose
+  commit never reached the PR, stays open; declined ones are never touched. It doesn't wait for a fix or review of
+  the PR to finish, isn't an attempt and isn't counted as an agent run (`FIX_RESOLVE_KEY_PREFIX` is left out of the
+  caps like the give-ups). The same threads at the same head are tried once; a new push looks again. The fix prompt
+  tells the agent not to resolve threads itself; with the switch off it says the reviewer does.
+- **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`), counting every attempt that wasn't skipped or
+  conflict-only (below), and per PR as many as each budget allows (`FixBudget`; `attemptBudget` reads an attempt's
+  budget back from its key): `review` (`prReviewRounds`) for attempts with Autopilot's review or failing checks,
+  `comments` (`prCommentRounds`, default 5) for attempts with only other people's comments and requests for changes,
+  and `conflicts` (below). A colleague's review bot thus can't use up the attempts Autopilot's own loop needs, nor
+  the other way round. When a budget is used up, a gave-up run `fix:gave_up:<linkId>:review` or `:comments` gives up
+  on that budget's triggers and the others still go ahead (a conflict that came with them becomes a conflict-only
+  attempt); past the per-head limit, `fix:gave_up:<linkId>:<headOid>`. Each ends flagged "Autopilot gave up on PR #N:
+  …". That puts it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A
+  new head commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency
+  cap, a daily cap or quiet hours don't hold it back. (Before the budgets were split the key was
+  `fix:gave_up:<linkId>`; a PR given up on under it gets a fresh look.)
 
   An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
   counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict
@@ -494,8 +520,8 @@ to fix a pull request linked to a task.
   a merge that keeps failing or a PR that never stops conflicting; failed and successful ones count, skipped ones
   don't. When only a conflict is fresh, only that budget applies, so a PR
   that used up its rounds is still kept merged; past it, a gave-up run `fix:gave_up:<linkId>:conflicts` says "N
-  conflict-only attempts used, still to fix: merge conflicts". A mixed attempt (`checks+conflict`) counts as a normal
-  round. Conflict-only runs are labelled "conflict attempt N of 5" in the summary and the prompt. An integration
+  conflict-only attempts used, still to fix: merge conflicts". A mixed attempt (`checks+conflict`) counts against the
+  budget of its other triggers. Conflict-only runs are labelled "conflict attempt N of 5" in the summary and the prompt. An integration
   epic's PR, fixed for conflicts only, uses only this budget.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for

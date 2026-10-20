@@ -88,16 +88,25 @@ switch, all on by default:
 
 If the task's T3 Code thread is still there, it gets the fix as a message. Otherwise a new session starts on the
 PR's branch, using the runner you chose. Reasons that come up together go into one attempt. The agent pushes to
-the PR's branch and replies on the threads it addressed, starting each reply with Autopilot's mark.
+the PR's branch and replies on each thread, starting with Autopilot's mark and "fixed in <commit>" or "declined:
+<reason>".
+
+- **Resolve threads it fixed** (on by default): Autopilot resolves each thread it replied it fixed once that commit is
+  on the PR, so a repository that requires every conversation resolved can merge. Threads it declined stay open for
+  the reviewer. It also catches up on threads it fixed before. From its second round, **Review PRs** resolves its own
+  earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
-- It makes at most 2 attempts on one head commit and **PR review rounds** (3 by default) per PR. After that the
-  card says "Autopilot gave up" under Needs attention and you get a notification.
+- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **PR
+  review rounds** (3 by default), and fixes for other people's comments and requests for changes get **PR comment
+  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. When
+  one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
+  goes on.
 - It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
+- Its settings: the five switches, **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
   ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
 
 You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See

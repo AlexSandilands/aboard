@@ -20,13 +20,20 @@ import {
   type PrReviewHandoff,
   type PrReviewIssue,
   type PrReviewRunOutput,
+  type PrReviewThreadInfo,
   type SeverityCounts,
 } from "@repo/contracts";
 import { z } from "zod";
 import { StaleReviewError, messageOf, type PostedReview, type ReviewComment } from "../../integrations/github.ts";
 import { isTransientGithubError } from "../../integrations/githubApi.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate } from "../types.ts";
+import {
+  WorktreeHeadError,
+  defineAutomation,
+  type ActionResult,
+  type Candidate,
+  type GithubActions,
+} from "../types.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
 
@@ -152,6 +159,7 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
       "- Focus on regressions in the commits since, and on earlier points that are still not fixed.",
       "- Don't raise again a point that was fixed or that the author declined with a reason (unless the reason is wrong).",
       "- New minor and nit points are FYI (no action needed): mark them `fyi: true`.",
+      `- For each inline comment of those earlier reviews (their comments start with "${prReviewMarker()}") whose point is fixed at this commit, put its comment \`id\` (from the comments API) in \`fixed\`: Autopilot resolves its thread. Leave out a point that is still open or only partly fixed.`,
       "",
     );
   }
@@ -163,7 +171,7 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
     "",
     "## Your answer",
     "",
-    `Answer with the structured result and nothing else: a summary (one paragraph: your verdict and the main risks) and every point you found. A point tied to code has \`file\` and \`line\`, a line of the file at that commit that the PR's diff touches; a point with no location leaves them out. Say what goes wrong and when in \`body\`, and give a \`suggestion\`. A clean change has no points.`,
+    `Answer with the structured result and nothing else: a summary (one paragraph: your verdict and the main risks) and every point you found. A point tied to code has \`file\` and \`line\`, a line of the file at that commit that the PR's diff touches; a point with no location leaves them out. Say what goes wrong and when in \`body\`, and give a \`suggestion\`. A clean change has no points.${earlier.length > 0 ? " List in `fixed` the ids of your earlier comments whose point is now fixed; leave it empty when there are none." : ""}`,
   );
   return lines.join("\n");
 }
@@ -218,6 +226,36 @@ export function renderReview(
     ...(fyi.length > 0 ? ["", "### FYI (no action needed)", "", ...fyi.map(bullet)] : []),
   ].join("\n");
   return { body: clip(body), comments };
+}
+
+/** Resolves its own earlier review threads the round confirmed fixed. Never fails the review: returns how many. */
+export async function resolveConfirmedThreads(
+  github: Pick<GithubActions, "resolveReviewThread">,
+  host: string,
+  threads: readonly PrReviewThreadInfo[],
+  fixed: readonly number[],
+  ownReviewIds: ReadonlySet<number>,
+): Promise<number> {
+  const ids = new Set(fixed);
+  // Only threads Autopilot's own reviews opened: a reviewer can't vouch for someone else's point.
+  const targets = threads.filter(
+    (t) =>
+      t.canResolve &&
+      t.rootCommentId !== null &&
+      ids.has(t.rootCommentId) &&
+      t.rootReviewId !== null &&
+      ownReviewIds.has(t.rootReviewId),
+  );
+  let resolved = 0;
+  for (const thread of targets) {
+    try {
+      await github.resolveReviewThread(host, thread.id);
+      resolved += 1;
+    } catch {
+      // Left open: the next round sees it and can report it again.
+    }
+  }
+  return resolved;
 }
 
 /**
@@ -463,6 +501,16 @@ export const reviewPrs = defineAutomation({
     const { counts, fyi } = countReviewIssues(verdict.issues);
     const actionable = actionableCount(counts, threshold);
     const handoff = reviewHandoff(actionable, data.round, data.maxRounds);
+    const resolvedThreads =
+      data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
+        ? await resolveConfirmedThreads(
+            github,
+            data.host,
+            link.snapshot.reviewThreads ?? [],
+            verdict.fixed ?? [],
+            new Set(data.earlier.flatMap((e) => (e.reviewId === null ? [] : [e.reviewId]))),
+          )
+        : 0;
     const output: PrReviewRunOutput = {
       kind: "pr_review",
       linkId: data.linkId,
@@ -477,6 +525,7 @@ export const reviewPrs = defineAutomation({
       threshold,
       actionable,
       handoff,
+      ...(resolvedThreads > 0 ? { resolvedThreads } : {}),
     };
 
     services.tasks.addNote(
@@ -487,7 +536,11 @@ export const reviewPrs = defineAutomation({
 
     const found = `${describeCounts(counts)}${fyi > 0 ? `, ${fyi} FYI` : ""}`;
     const folded = posted.folded > 0 ? ` (${posted.folded} inline, put in the summary: not on the diff)` : "";
-    const head = `Reviewed PR #${data.number} at ${shortSha(posted.headOid)} (round ${data.round} of ${data.maxRounds}): ${found}${folded}`;
+    const closed =
+      resolvedThreads > 0
+        ? `, resolved ${resolvedThreads} earlier thread${resolvedThreads === 1 ? "" : "s"} it confirmed fixed`
+        : "";
+    const head = `Reviewed PR #${data.number} at ${shortSha(posted.headOid)} (round ${data.round} of ${data.maxRounds}): ${found}${folded}${closed}`;
     switch (handoff) {
       case "clean":
         return { summary: `${head}; nothing at or above ${threshold}`, output };

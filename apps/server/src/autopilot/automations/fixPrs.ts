@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   AUTOPILOT_FIX_PRS,
@@ -7,10 +8,12 @@ import {
   currentPrReview,
   describeCounts,
   isReviewOfLink,
-  prReviewMarker,
   FIX_GAVE_UP_KEY_PREFIX,
+  FIX_RESOLVE_KEY_PREFIX,
   fixGaveUpPrefix,
   fixRunKeyPrefix,
+  prDeclinedReply,
+  prFixedReply,
   prProblems,
   prReviewOutput,
   type AutopilotField,
@@ -25,6 +28,7 @@ import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { latestThread } from "../../integrations/reviewFallbacks.ts";
 import { shQuote } from "../../integrations/terminal.ts";
+import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import { threadSeen } from "../threads.ts";
@@ -33,6 +37,7 @@ import {
   WorktreeHeadError,
   defineAutomation,
   type ActionResult,
+  type GithubActions,
   type Candidate,
   type RunnerResult,
 } from "../types.ts";
@@ -49,6 +54,35 @@ export const ATTEMPTS_PER_HEAD = 2;
  * `prReviewRounds`; this only guards against a merge that keeps failing.
  */
 export const CONFLICT_ATTEMPTS_PER_PR = 5;
+
+/**
+ * The attempt budgets of one PR. `conflicts`: attempts that only merge the base branch in (`CONFLICT_ATTEMPTS_PER_PR`).
+ * `comments`: other people's review comments and requests for changes (`prCommentRounds`), so a colleague's review bot
+ * can't use up the attempts Autopilot's own review loop needs, nor the other way round. `review`: Autopilot's review
+ * and failing checks (`prReviewRounds`).
+ */
+export type FixBudget = "conflicts" | "review" | "comments";
+
+/** The budget a trigger's attempts count against; a conflict alongside other triggers goes with them. */
+const triggerBudget = (kind: FixTriggerKind): FixBudget | null =>
+  kind === "comments" || kind === "changes" ? "comments" : kind === "conflict" ? null : "review";
+
+/** The budget an attempt given these trigger keys counts against: Autopilot's review wins over people's comments. */
+export function attemptBudget(keys: readonly string[]): FixBudget {
+  const kinds = keys.map(kindOf);
+  if (kinds.length > 0 && kinds.every((k) => k === "conflict")) return "conflicts";
+  if (kinds.some((k) => triggerBudget(k) === "review")) return "review";
+  return kinds.some((k) => triggerBudget(k) === "comments") ? "comments" : "review";
+}
+
+/** The dedupe key of resolving these threads at this head: a new push, or another thread, is looked at again. */
+export function resolveDedupeKey(linkId: string, headOid: string, threadIds: readonly string[]): string {
+  const hash = createHash("sha1")
+    .update([...threadIds].sort().join(","))
+    .digest("hex")
+    .slice(0, 12);
+  return `${FIX_RESOLVE_KEY_PREFIX}${linkId}:${headOid}:${hash}`;
+}
 
 const shortSha = (sha: string) => sha.slice(0, 7);
 
@@ -72,12 +106,10 @@ interface FixData {
   title: string;
   headRef: string;
   headOid: string;
-  /**
-   * This PR's fix attempts so far, this one included, and the most there may be. A conflict-only attempt counts
-   * against its own budget (`CONFLICT_ATTEMPTS_PER_PR`), not the PR's rounds.
-   */
+  /** This PR's fix attempts on `budget` so far, this one included, and the most there may be. */
   round: number;
   maxRounds: number;
+  budget: FixBudget;
   conflictOnly: boolean;
   /** Fix attempts on this head commit, this one included. */
   attempt: number;
@@ -90,6 +122,16 @@ interface GaveUpData {
   gaveUp: true;
   number: number;
   reason: string;
+}
+
+/** Threads whose newest comment is Autopilot's "fixed in <sha>" reply, to resolve once that commit is on the PR. */
+interface ResolveData {
+  resolve: true;
+  linkId: string;
+  host: string;
+  repo: string;
+  number: number;
+  threadIds: string[];
 }
 
 /**
@@ -109,13 +151,15 @@ export function parseFixKey(dedupeKey: string, linkId: string): { headOid: strin
 
 const kindOf = (key: string) => key.slice(0, key.indexOf("@")) as FixTriggerKind;
 
-/** Whether an attempt was given nothing but merge conflicts. */
-const isConflictOnly = ({ triggers }: { triggers: readonly string[] }): boolean =>
-  triggers.length > 0 && triggers.every((key) => key.startsWith("conflict@"));
+const BUDGET_NAMES: Record<FixBudget, string> = {
+  conflicts: "conflict attempt",
+  review: "attempt",
+  comments: "review-comment attempt",
+};
 
-/** "attempt 2 of 3", or "conflict attempt 2 of 5" for one that only merges the base branch in. */
-const describeAttempt = ({ round, maxRounds, conflictOnly }: Pick<FixData, "round" | "maxRounds" | "conflictOnly">) =>
-  `${conflictOnly ? "conflict attempt" : "attempt"} ${round} of ${maxRounds}`;
+/** "attempt 2 of 3", "review-comment attempt 2 of 5", or "conflict attempt 2 of 5" for one that only merges. */
+const describeAttempt = ({ round, maxRounds, budget }: Pick<FixData, "round" | "maxRounds" | "budget">) =>
+  `${BUDGET_NAMES[budget]} ${round} of ${maxRounds}`;
 
 /** The highest comment id an earlier attempt was given, so only newer comments count as new. */
 const newestHandledComment = (handled: ReadonlySet<string>): number =>
@@ -209,6 +253,10 @@ export interface FixPromptInput {
   maxRounds?: number;
   /** The attempt only merges conflicts, which have an attempt budget of their own. */
   conflictOnly?: boolean;
+  /** Which budget the attempt counts against, for "attempt 2 of 3"; `review` by default. */
+  budget?: FixBudget;
+  /** Autopilot resolves the threads the agent replied it fixed (Fix PRs' "Resolve threads it fixed"). */
+  resolveThreads?: boolean;
   triggers: readonly FixTrigger[];
   stillOpen: readonly FixTriggerKind[];
   skill: ReviewSkillRef;
@@ -226,6 +274,8 @@ export function fixPrompt({
   round,
   maxRounds,
   conflictOnly = false,
+  budget = conflictOnly ? "conflicts" : "review",
+  resolveThreads = false,
   triggers,
   stillOpen,
   skill,
@@ -237,7 +287,7 @@ export function fixPrompt({
   const lines = [
     manual
       ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`
-      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${conflictOnly ? "conflict-only fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
+      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${budget === "conflicts" ? "conflict-only fix attempt" : budget === "comments" ? "review-comment fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
     "",
     "## What needs fixing",
     "",
@@ -294,7 +344,9 @@ export function fixPrompt({
       ? `- Your worktree starts from the PR's branch \`${pr.headRef}\`. If it doesn't have commit ${pr.headOid}, run \`git fetch origin\` and \`git merge --ff-only ${shQuote(`origin/${pr.headRef}`)}\` first. Push your commits to the PR's branch with \`git push origin ${shQuote(`HEAD:${pr.headRef}`)}\`.`
       : `- Push your commits to the PR's branch \`${pr.headRef}\`.`,
     `- Never force-push, never push to the default branch and never merge the pull request; fix conflicts with a merge, not a rebase.`,
-    `- Reply on each review thread you addressed, or declined with a reason${manual ? "" : `, starting the reply with "${prReviewMarker()}"`}. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`gh api ${api}/comments/<comment id>/replies -F body=@${replyFile}${flag}\`; delete the file afterwards and never commit it. Don't resolve threads: the reviewer does.`,
+    manual
+      ? `- Reply on each review thread you addressed, or declined with a reason. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`gh api ${api}/comments/<comment id>/replies -F body=@${replyFile}${flag}\`; delete the file afterwards and never commit it. Don't resolve threads: the reviewer does.`
+      : `- Once your commits are pushed, reply on each review thread you were sent to. Its first line is exactly \`${prFixedReply("<sha>")}\` (the pushed commit that fixes it) for a point you fixed, or \`${prDeclinedReply("<reason>")}\` for one you won't fix; say what you did below it. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`gh api ${api}/comments/<comment id>/replies -F body=@${replyFile}${flag}\`; delete the file afterwards and never commit it. ${resolveThreads ? `Don't resolve threads yourself: ${BRAND.name} resolves each one you fixed once its commit is on the PR, and declined ones stay open for the reviewer.` : "Don't resolve threads: the reviewer does."}`,
     manual
       ? `- The user is watching this session: if something is unclear or you can't fix it, say so instead of guessing.`
       : `- Nobody is watching this session, so you can't ask anything. If you can't fix something, say why in your reply or a note on task #${task.number}, and stop.`,
@@ -323,6 +375,8 @@ const ConfigSchema = z.object({
   onChangesRequested: z.boolean(),
   onComments: z.boolean(),
   onAutopilotReview: z.boolean(),
+  /** Resolve review threads whose newest comment is Autopilot's "fixed in <sha>" reply, once the commit is on the PR. */
+  resolveThreads: z.boolean(),
   /** The skill the agent follows on top of the fix prompt; the built-in entry is the prompt alone. */
   skill: ReviewSkillRef,
 });
@@ -337,6 +391,7 @@ const DEFAULTS: Config = {
   onChangesRequested: true,
   onComments: true,
   onAutopilotReview: true,
+  resolveThreads: true,
   skill: { source: "builtin" },
 };
 
@@ -367,6 +422,12 @@ const FIELDS: AutopilotField[] = [
     help: "Fix what Review PRs found at or above the fix threshold.",
   },
   {
+    key: "resolveThreads",
+    label: "Resolve threads it fixed",
+    kind: "boolean",
+    help: "Resolve each review thread Autopilot replied it fixed, once that commit is on the PR, so a repository that requires conversations resolved can merge. Threads it declined stay open.",
+  },
+  {
     key: "skill",
     label: "Fix skill",
     kind: "skill",
@@ -393,9 +454,10 @@ const isActive = (run: AutopilotRun) => run.status === "queued" || run.status ==
  * Fixes pull requests linked to tasks (docs/features/autopilot.md#fix-prs): failing checks, merge conflicts, a review
  * requesting changes, new review comments, and Autopilot's own review handing off. The task's live T3 thread is
  * nudged; otherwise a fix session starts on the PR's branch. Triggers that fire together go into one attempt, and each
- * trigger fires once. At most two attempts per head commit and `prReviewRounds` per PR; past either, Autopilot gives
- * up and says so on the card. Attempts that only merge conflicts count against neither: they have their own budget,
- * `CONFLICT_ATTEMPTS_PER_PR`.
+ * trigger fires once. At most two attempts per head commit, and per PR as many as each budget allows (`FixBudget`);
+ * past one, Autopilot gives up on that budget's triggers and says so on the card, and the others go on.
+ *
+ * With no agent, it also resolves the review threads it replied it fixed, once that commit is on the PR.
  */
 export const fixPrs = defineAutomation({
   key: AUTOPILOT_FIX_PRS,
@@ -427,7 +489,7 @@ export const fixPrs = defineAutomation({
         const reviews = all.filter((r) => r.automation === AUTOPILOT_REVIEW_PRS);
         const fixes = all.filter((r) => r.automation === AUTOPILOT_FIX_PRS);
         const ownReviewIds = new Set(reviews.flatMap((r) => prReviewOutput(r)?.reviewId ?? []));
-        return links.flatMap(({ link, ref, snapshot, headRef }): Candidate[] => {
+        const fixCandidates = ({ link, ref, snapshot, headRef }: (typeof links)[number]): Candidate[] => {
           const ofLink = fixes.flatMap((run) => {
             const parsed = parseFixKey(run.dedupeKey, link.id);
             return parsed ? [{ run, ...parsed }] : [];
@@ -450,38 +512,64 @@ export const fixPrs = defineAutomation({
           const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
           if (fresh.length === 0) return [];
 
-          // Attempts that only merged the base branch in have a budget of their own: main moving under the PR isn't
-          // the PR's doing, and shouldn't leave no attempts for review points and failing checks.
-          const conflictUsed = used.filter(isConflictOnly).length;
-          const counted = used.filter((f) => !isConflictOnly(f));
+          // Each budget counts its own attempts: main moving under the PR isn't the PR's doing, and a colleague's review
+          // bot shouldn't leave no attempts for Autopilot's review loop, nor the other way round.
+          const usedOf = (budget: FixBudget) => used.filter((f) => attemptBudget(f.triggers) === budget).length;
+          const maxOf = (budget: FixBudget) =>
+            budget === "conflicts"
+              ? CONFLICT_ATTEMPTS_PER_PR
+              : budget === "comments"
+                ? engine.prCommentRounds
+                : engine.prReviewRounds;
+          const counted = used.filter((f) => attemptBudget(f.triggers) !== "conflicts");
           const atHead = counted.filter((f) => f.headOid === snapshot.headOid).length;
-          const conflictOnly = fresh.every((t) => t.kind === "conflict");
-          const gaveUp = (dedupeKey: string, reason: string): Candidate[] => [
-            {
-              dedupeKey,
-              summary: `give up on PR #${ref.number}: ${reason}`,
-              taskId: task.id,
-              startsNoAgent: true,
-              data: { gaveUp: true, number: ref.number, reason } satisfies GaveUpData,
-            },
-          ];
+          const gaveUp = (dedupeKey: string, reason: string): Candidate => ({
+            dedupeKey,
+            summary: `give up on PR #${ref.number}: ${reason}`,
+            taskId: task.id,
+            startsNoAgent: true,
+            data: { gaveUp: true, number: ref.number, reason } satisfies GaveUpData,
+          });
+          const out: Candidate[] = [];
+          // A used-up budget gives up on its own triggers; the rest still go ahead.
+          const spent = (["review", "comments"] as const).filter((b) => usedOf(b) >= maxOf(b));
+          for (const budget of spent) {
+            const dropped = fresh.filter((t) => triggerBudget(t.kind) === budget);
+            if (dropped.length === 0) continue;
+            const n = usedOf(budget);
+            out.push(
+              gaveUp(
+                `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:${budget}`,
+                `${n} ${budget === "comments" ? "review-comment fix attempt" : "fix attempt"}${n === 1 ? "" : "s"} used, still to fix: ${describeTriggers(dropped.map((t) => t.kind))}`,
+              ),
+            );
+          }
+          const left = fresh.filter((t) => {
+            const budget = triggerBudget(t.kind);
+            return budget === null || !spent.includes(budget as "review" | "comments");
+          });
+          if (left.length === 0) return out;
+          const budget = attemptBudget(left.map((t) => t.key));
+          const conflictOnly = budget === "conflicts";
           if (conflictOnly) {
-            if (conflictUsed >= CONFLICT_ATTEMPTS_PER_PR) {
-              return gaveUp(
-                `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:conflicts`,
-                `${conflictUsed} conflict-only attempt${conflictUsed === 1 ? "" : "s"} used, still to fix: ${describeTriggers(["conflict"])}`,
+            const n = usedOf("conflicts");
+            if (n >= CONFLICT_ATTEMPTS_PER_PR) {
+              out.push(
+                gaveUp(
+                  `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:conflicts`,
+                  `${n} conflict-only attempt${n === 1 ? "" : "s"} used, still to fix: ${describeTriggers(["conflict"])}`,
+                ),
               );
+              return out;
             }
-          } else if (counted.length >= engine.prReviewRounds) {
-            return gaveUp(
-              `${FIX_GAVE_UP_KEY_PREFIX}${link.id}`,
-              `${counted.length} fix attempt${counted.length === 1 ? "" : "s"} used, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
-            );
           } else if (atHead >= ATTEMPTS_PER_HEAD) {
-            return gaveUp(
-              `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:${snapshot.headOid}`,
-              `${atHead} fix attempts at ${shortSha(snapshot.headOid)} didn't change the PR, still to fix: ${describeTriggers(fresh.map((t) => t.kind))}`,
+            out.push(
+              gaveUp(
+                `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:${snapshot.headOid}`,
+                `${atHead} fix attempts at ${shortSha(snapshot.headOid)} didn't change the PR, still to fix: ${describeTriggers(left.map((t) => t.kind))}`,
+              ),
             );
+            return out;
           }
           const data: FixData = {
             linkId: link.id,
@@ -492,29 +580,60 @@ export const fixPrs = defineAutomation({
             title: snapshot.title,
             headRef,
             headOid: snapshot.headOid,
-            round: (conflictOnly ? conflictUsed : counted.length) + 1,
-            maxRounds: conflictOnly ? CONFLICT_ATTEMPTS_PER_PR : engine.prReviewRounds,
+            round: usedOf(budget) + 1,
+            maxRounds: maxOf(budget),
+            budget,
             conflictOnly,
             attempt: atHead + 1,
-            triggers: fresh,
+            triggers: left,
             stillOpen: [...new Set(active.filter((t) => handled.has(t.key)).map((t) => t.kind))],
           };
-          return [
-            {
-              dedupeKey: fixDedupeKey(link.id, snapshot.headOid, fresh),
-              summary: `fix PR #${ref.number} at ${shortSha(snapshot.headOid)}: ${describeTriggers(fresh.map((t) => t.kind))} (${describeAttempt(data)})`,
-              taskId: task.id,
-              data,
-            },
-          ];
+          out.push({
+            dedupeKey: fixDedupeKey(link.id, snapshot.headOid, left),
+            summary: `fix PR #${ref.number} at ${shortSha(snapshot.headOid)}: ${describeTriggers(left.map((t) => t.kind))} (${describeAttempt(data)})`,
+            taskId: task.id,
+            data,
+          });
+          return out;
+        };
+        return links.flatMap(({ link, ref, snapshot, headRef }): Candidate[] => {
+          // Resolving needs no agent and changes no code, so it doesn't wait for a fix or review of the PR.
+          const resolvable = config.resolveThreads
+            ? (snapshot.reviewThreads ?? []).filter((t) => t.reply === "fixed" && t.fixedIn && t.canResolve)
+            : [];
+          const resolve: Candidate[] =
+            resolvable.length > 0
+              ? [
+                  {
+                    dedupeKey: resolveDedupeKey(
+                      link.id,
+                      snapshot.headOid,
+                      resolvable.map((t) => t.id),
+                    ),
+                    summary: `resolve ${resolvable.length} review thread${resolvable.length === 1 ? "" : "s"} Autopilot fixed on PR #${ref.number}`,
+                    taskId: task.id,
+                    startsNoAgent: true,
+                    data: {
+                      resolve: true,
+                      linkId: link.id,
+                      host: ref.host,
+                      repo: ref.repo,
+                      number: ref.number,
+                      threadIds: resolvable.map((t) => t.id),
+                    } satisfies ResolveData,
+                  },
+                ]
+              : [];
+          return [...resolve, ...fixCandidates({ link, ref, snapshot, headRef })];
         });
       }),
     ),
   act: async (candidate, { services, runner, github, config, run }): Promise<ActionResult> => {
-    const given = candidate.data as FixData | GaveUpData;
+    const given = candidate.data as FixData | GaveUpData | ResolveData;
     if ("gaveUp" in given) {
       return { summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`, needsAttention: true };
     }
+    if ("resolve" in given) return resolveFixedThreads(given, github);
     const data = given;
     const task = services.tasks.summary(candidate.taskId!);
     const link = task.links.find((l) => l.id === data.linkId);
@@ -533,6 +652,8 @@ export const fixPrs = defineAutomation({
       round: data.round,
       maxRounds: data.maxRounds,
       conflictOnly: data.conflictOnly,
+      budget: data.budget,
+      resolveThreads: config.resolveThreads,
       triggers: data.triggers,
       stillOpen: data.stillOpen,
       skill: config.skill,
@@ -606,6 +727,42 @@ export const fixPrs = defineAutomation({
     };
   },
 });
+
+/** "1 review thread", "3 review threads". */
+const threads = (n: number) => `${n} review thread${n === 1 ? "" : "s"}`;
+
+/**
+ * Resolves the threads the check found answered "fixed in <sha>", read fresh from GitHub first: each must still be
+ * unresolved, still end with Autopilot's reply, and name a commit among the PR's newest 100. A thread someone answered
+ * since, or whose commit never reached the PR, stays open.
+ */
+async function resolveFixedThreads(
+  data: ResolveData,
+  github: Pick<GithubActions, "reviewThreads" | "resolveReviewThread">,
+): Promise<ActionResult> {
+  const state = await github.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
+  const commits = state.commits.map((c) => c.toLowerCase());
+  const wanted = new Set(data.threadIds);
+  const fixed = state.threads.filter((t) => wanted.has(t.id) && t.reply === "fixed" && t.fixedIn && t.canResolve);
+  const onPr = fixed.filter((t) => commits.some((c) => c.startsWith(t.fixedIn!)));
+  const notOnPr = fixed.length - onPr.length;
+  const missing = notOnPr > 0 ? `; ${threads(notOnPr)} left open: the commit isn't on the PR` : "";
+  if (onPr.length === 0) {
+    return { status: "skipped", summary: `Nothing to resolve on PR #${data.number}${missing}` };
+  }
+  const failed: string[] = [];
+  for (const thread of onPr) {
+    try {
+      await github.resolveReviewThread(data.host, thread.id);
+    } catch (error) {
+      failed.push(messageOf(error));
+    }
+  }
+  const resolved = onPr.length - failed.length;
+  if (resolved === 0) throw new Error(`Couldn't resolve ${threads(onPr.length)} on PR #${data.number}: ${failed[0]}`);
+  const errors = failed.length > 0 ? `; ${failed.length} failed: ${failed[0]}` : "";
+  return { summary: `Resolved ${threads(resolved)} Autopilot fixed on PR #${data.number}${missing}${errors}` };
+}
 
 /**
  * What "Fix in →" starts a session with: Fix PRs' prompt for what is wrong with the PR now, for a user who is watching

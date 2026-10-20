@@ -6,6 +6,8 @@ export interface FakePr extends GraphqlPr {
   /** What the fresh read before a merge reports. */
   mergeStateStatus?: string;
   isMergeQueueEnabled?: boolean;
+  /** The PR's commits, oldest first, for the fresh thread read; its head alone when unset. */
+  history?: string[];
 }
 
 /**
@@ -112,6 +114,23 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       }));
       return { data: { repository: { pullRequest: { reviews: { nodes } } } } };
     }
+    if (operation === "PullRequestThreads") {
+      const { owner, name, number } = variables as { owner: string; name: string; number: number };
+      const pr = prs.get(`${owner}/${name}#${number}`);
+      if (!pr) return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a PullRequest" }] };
+      const oids = pr.history ?? (pr.headRefOid ? [pr.headRefOid] : []);
+      return {
+        data: {
+          repository: {
+            pullRequest: {
+              headRefOid: pr.headRefOid,
+              commits: { nodes: oids.map((oid) => ({ commit: { oid } })) },
+              reviewThreads: pr.reviewThreads ?? { nodes: [] },
+            },
+          },
+        },
+      };
+    }
     if (operation === "PullRequestId") {
       const { owner, name, number } = variables as { owner: string; name: string; number: number };
       return { data: { repository: { pullRequest: { id: `PR_${owner}/${name}#${number}` } } } };
@@ -170,6 +189,14 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       const message = failNextMutation;
       failNextMutation = null;
       return { data: null, errors: [{ type: "UNPROCESSABLE", message }] };
+    }
+    if (operation === "ResolveReviewThread") {
+      const thread = [...prs.values()]
+        .flatMap((p) => p.reviewThreads?.nodes ?? [])
+        .find((t) => t?.id === input.threadId);
+      if (!thread) return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a node" }] };
+      thread.isResolved = true;
+      return { data: { resolveReviewThread: { thread: { id: thread.id, isResolved: true } } } };
     }
     const pr = prById(input.pullRequestId);
     if (operation === "PostPullRequestReview") {

@@ -84,8 +84,12 @@ function setup() {
       return { runner: "headless", result: null, output };
     },
   };
+  const resolved: string[] = [];
   const github: GithubActions = {
     ...NO_GITHUB,
+    resolveReviewThread: async (_host, id) => {
+      resolved.push(id);
+    },
     postReview: async (ref, input) => {
       posts.push({ ...ref, input });
       if (postError) throw new Error(postError);
@@ -163,6 +167,7 @@ function setup() {
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
     runs,
     notes,
+    resolved,
   };
 }
 
@@ -858,6 +863,33 @@ describe("review PRs: verdict, threshold and hand-off", () => {
     expect(prompt).toContain("FYI (no action needed)");
     expect(prompt).toContain("Don't raise again a point that was fixed or that the author declined");
     expect(prompt).not.toContain("this is the last round");
+    expect(prompt).toContain("put its comment `id` (from the comments API) in `fixed`");
+  });
+
+  it("resolves its own earlier threads a later round confirms fixed, and no one else's", async () => {
+    const { setPr, pass, turnOn, setIssues, answerWith, resolved, runs } = setup();
+    setIssues([issue("major")]);
+    turnOn();
+    setPr();
+    await pass();
+    // Review 101 was round 1's; 77 is a colleague's.
+    const thread = (id: string, rootCommentId: number, rootReviewId: number) => ({
+      id,
+      canResolve: true,
+      rootCommentId,
+      rootReviewId,
+      reply: null,
+      fixedIn: null,
+    });
+    setPr({
+      headOid: SHA_B,
+      reviewThreads: [thread("OWN", 11, 101), thread("OTHER", 12, 77), thread("STILL", 13, 101)],
+    });
+    answerWith(() => ({ summary: "Fixed.", issues: [], fixed: [11, 12] }));
+    await pass();
+    expect(resolved).toEqual(["OWN"]);
+    expect(runs()[0]!.summary).toContain("resolved 1 earlier thread it confirmed fixed");
+    expect(runs()[0]!.output).toMatchObject({ resolvedThreads: 1, handoff: "clean" });
   });
 });
 

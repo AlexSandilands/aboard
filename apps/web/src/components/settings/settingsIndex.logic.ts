@@ -340,8 +340,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "autopilot.engine.pr-review-rounds",
     "PR review rounds",
-    "How many review rounds the PR review automation runs on a pull request.",
-    ["review prs", "limit", "github"],
+    "How many review rounds the PR review automation runs on a pull request, and Fix PRs' attempts on its review and failing checks.",
+    ["review prs", "fix prs", "limit", "github"],
+  ),
+  draft(
+    "autopilot.engine.pr-comment-rounds",
+    "PR comment rounds",
+    "How many attempts Fix PRs makes on a pull request for other people's review comments and requests for changes.",
+    ["fix prs", "review bot", "colleague", "limit", "github"],
   ),
   draft(
     "autopilot.engine.pr-fix-threshold",
