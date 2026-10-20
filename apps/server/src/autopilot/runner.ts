@@ -543,7 +543,8 @@ export function createAutopilotRunner(deps: {
 
   /**
    * A run with no task (a digest, a scheduled agent): headless, in an empty folder of its own that is removed
-   * afterwards. With a `repo` it can use git there, so it gets the same push guard as a run in a worktree.
+   * afterwards. With a `repo` it can use git there, so it gets Claude Code's push deny rules: there is no worktree for
+   * the pre-push guard, so an editing run never goes to a harness that lacks them (DriverNeeds.unguarded).
    */
   const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
     const options = readRunnerOptions(request.options);
