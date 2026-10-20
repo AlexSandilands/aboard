@@ -426,7 +426,9 @@ export function createTasksService(
           if (linkKind === "t3_thread" || linkKind === "agent_session") continue;
           deps.links().service.add(task.id, link, actor);
         }
-        linkTitleKeys(task.id, task.title, actor);
+        // An imported task's placeholder title is its own key, already linked under the system it was read with: finding
+        // it again with every system could add a second link under another one.
+        if (!source || input.title !== undefined) linkTitleKeys(task.id, task.title, actor);
         // Images pasted into the new-task box were uploaded before the task existed.
         deps.attachments.claim(task.id, description);
         return task.id;

@@ -367,7 +367,7 @@ describe("importing an epic", () => {
 
   it("reads an epic's bare-key children as its own system's, though another system listed first matches them", async () => {
     // Two systems whose keys look alike: a bare key goes to the first listed, unless the epic's system is known.
-    const first: TicketSystem = { ...JIRA, id: "first", name: "First tracker" };
+    const first: TicketSystem = { ...JIRA, id: "first", name: "First tracker", autoLink: true };
     const second: TicketSystem = {
       ...JIRA,
       id: "second",
@@ -387,7 +387,8 @@ describe("importing an epic", () => {
     expect(epic.kind).toBe("epic");
     expect(epic.children).toHaveLength(1);
     const child = s.tasks.detail(epic.children[0]!.id);
-    expect(child.links[0]).toMatchObject({ kind: "ticket", ref: { system: "second", key: "BB-8" } });
+    // One link, under the epic's system, though the first system listed matches the key too and auto-links it.
+    expect(child.links.map((l) => (l.kind === "ticket" ? l.ref : null))).toEqual([{ system: "second", key: "BB-8" }]);
     expect(child.import?.status).toBe("done");
     expect(jobs.at(-1)).toMatchObject({ source: { key: "BB-8", system: { name: "Second tracker" } } });
   });
