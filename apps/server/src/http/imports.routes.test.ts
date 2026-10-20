@@ -1,11 +1,13 @@
 import type { TaskDetail, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 // gh never answers, so an import a route starts stays pending while the test looks at it.
 function setup() {
   const h = createTestHarness({ integrations: { runGh: () => new Promise(() => {}) } });
   const project = h.services.projects.create({ title: "P", workspaceRoot: "/nonexistent/work" });
+  h.services.settings.update({ ticketSystems: [TEST_JIRA] });
   return { ...h, project };
 }
 
@@ -47,7 +49,7 @@ describe("issue import REST routes", () => {
     const early = await h.request(`/api/tasks/${task.id}/import/retry`, { method: "POST" });
     expect(early.status).toBe(200);
 
-    h.services.imports.fail(task.id, "No Jira tool available");
+    h.services.imports.fail(task.id, "No import tool available");
     const retried = await h.request(`/api/tasks/${task.id}/import/retry`, { method: "POST" });
     expect(retried.status).toBe(200);
     expect(((await retried.json()) as TaskSummary).import).toMatchObject({ status: "pending", error: null });

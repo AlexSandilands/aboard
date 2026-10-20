@@ -11,7 +11,6 @@ import {
   deriveProjectIdentity,
   dueState,
   DueDate,
-  findJiraKeys,
   normalizeWorkspaceKey,
   parseIssueSource,
   parsePlanMarkdown,
@@ -20,9 +19,13 @@ import {
   T3ThreadSnapshot,
   TaskStatus,
   TaskStatusInput,
+  TICKET_SYSTEM_PRESETS,
   type PlanPhase,
   type StepStatus,
 } from "./index.ts";
+
+const jira = { ...TICKET_SYSTEM_PRESETS[0]!.system, linkTemplate: "https://jira.example.com/browse/{key}" };
+const linear = TICKET_SYSTEM_PRESETS[1]!.system;
 
 function phases(...defs: StepStatus[][]): PlanPhase[] {
   return defs.map((steps, pi) => ({
@@ -169,7 +172,7 @@ describe("ProjectIcon image", () => {
 });
 
 describe("classifyLink", () => {
-  it("recognizes PRs, Jira and T3 threads", () => {
+  it("recognizes PRs, tickets and T3 threads", () => {
     expect(classifyLink("https://github.com/acme/app/pull/42")).toMatchObject({
       kind: "pr",
       ref: { host: "github.com", repo: "acme/app", number: 42 },
@@ -178,9 +181,9 @@ describe("classifyLink", () => {
       kind: "pr",
       ref: null,
     });
-    expect(classifyLink("ABC-123", { jiraBaseUrl: "https://jira.example.com/" })).toEqual({
-      kind: "jira",
-      key: "ABC-123",
+    expect(classifyLink("ABC-123", { ticketSystems: [jira] })).toEqual({
+      kind: "ticket",
+      ref: { system: "jira", key: "ABC-123" },
       url: "https://jira.example.com/browse/ABC-123",
     });
     expect(classifyLink("t3code://threads/env-1/thread%3A2")).toMatchObject({
@@ -269,23 +272,31 @@ describe("classifyLink", () => {
 });
 
 describe("parseIssueSource", () => {
-  it("reads a bare Jira key and a /browse/ URL", () => {
-    expect(parseIssueSource("PROJ-123")).toEqual({
-      kind: "jira",
-      key: "PROJ-123",
+  const { linkTemplate: _template, ...unlinked } = jira;
+  const ticketSystems = [unlinked];
+
+  it("reads a configured system's bare key and URL", () => {
+    expect(parseIssueSource("PROJ-123", { ticketSystems })).toEqual({
+      kind: "ticket",
+      ref: { system: "jira", key: "PROJ-123" },
       url: "PROJ-123",
       placeholder: "PROJ-123",
     });
-    expect(parseIssueSource("  PROJ-123 ", { jiraBaseUrl: "https://jira.example.com/" })).toMatchObject({
-      kind: "jira",
+    expect(parseIssueSource("  PROJ-123 ", { ticketSystems: [jira] })).toMatchObject({
+      kind: "ticket",
       url: "https://jira.example.com/browse/PROJ-123",
     });
-    expect(parseIssueSource("https://jira.example.com/browse/ABC-7?focusedId=1")).toEqual({
-      kind: "jira",
-      key: "ABC-7",
+    expect(parseIssueSource("https://jira.example.com/browse/ABC-7?focusedId=1", { ticketSystems })).toEqual({
+      kind: "ticket",
+      ref: { system: "jira", key: "ABC-7" },
       url: "https://jira.example.com/browse/ABC-7?focusedId=1",
       placeholder: "ABC-7",
     });
+  });
+
+  it("knows no tickets without configured systems", () => {
+    expect(parseIssueSource("PROJ-123")).toBeNull();
+    expect(parseIssueSource("https://jira.example.com/browse/ABC-7")).toBeNull();
   });
 
   it("reads a GitHub issue URL on any host", () => {
@@ -302,33 +313,21 @@ describe("parseIssueSource", () => {
   });
 
   it("is null for anything else", () => {
-    expect(parseIssueSource("https://github.com/acme/app/pull/45")).toBeNull();
-    expect(parseIssueSource("https://github.com/acme/app/issues")).toBeNull();
-    expect(parseIssueSource("https://example.com/browse")).toBeNull();
-    expect(parseIssueSource("Fix PROJ-123 login")).toBeNull();
-    expect(parseIssueSource("proj-123")).toBeNull();
-    expect(parseIssueSource("UTF-8")).toBeNull();
-    expect(parseIssueSource("")).toBeNull();
-  });
-});
-
-describe("findJiraKeys", () => {
-  it("finds keys in titles and descriptions, in order, without duplicates", () => {
-    expect(findJiraKeys("CORE-1245 Fix login")).toEqual(["CORE-1245"]);
-    expect(findJiraKeys("Fix login (CORE-1245, OPS_2-7). See CORE-1245 and AB1-9.")).toEqual([
-      "CORE-1245",
-      "OPS_2-7",
-      "AB1-9",
-    ]);
-    expect(findJiraKeys("Details: https://jira.example.com/browse/ABC-12?focus=1")).toEqual(["ABC-12"]);
-    expect(findJiraKeys("ABC-1: done; DEF-2!")).toEqual(["ABC-1", "DEF-2"]);
-    expect(findJiraKeys(null)).toEqual([]);
+    expect(parseIssueSource("https://github.com/acme/app/pull/45", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("https://github.com/acme/app/issues", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("https://example.com/browse", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("Fix PROJ-123 login", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("proj-123", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("", { ticketSystems })).toBeNull();
   });
 
-  it("ignores lowercase, partial matches and common false positives", () => {
-    expect(findJiraKeys("abc-123 and Abc-123")).toEqual([]);
-    expect(findJiraKeys("foo_ABC-1 ABC-1x xABC-1 ABC-1-2 X-1")).toEqual([]);
-    expect(findJiraKeys("UTF-8, SHA-256, ISO-8601, RFC-9110, CVE-2024-1234, X-Request-Id")).toEqual([]);
+  it("gives a key two systems match to the first, and a URL to the system it belongs to", () => {
+    expect(parseIssueSource("ENG-4", { ticketSystems: [linear, jira] })).toMatchObject({
+      ref: { system: "linear", key: "ENG-4" },
+    });
+    expect(
+      parseIssueSource("https://linear.app/acme/issue/ENG-4/fix-it", { ticketSystems: [jira, linear] }),
+    ).toMatchObject({ ref: { system: "linear", key: "ENG-4" } });
   });
 });
 

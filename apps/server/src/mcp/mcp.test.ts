@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -496,13 +497,14 @@ describe("MCP endpoint", () => {
     expect(listed).toContain(`#${unplanned.number} Search titles — done by #${shipped.number}`);
   });
 
-  it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
+  it("lists missing ticket and T3 thread links until they are added, and never on done tasks", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const workspacePath = "C:/Fake/proj";
     const project = h.services.projects.create({ workspaceRoot: workspacePath });
     const task = h.services.tasks.create({
       projectId: project.id,
       title: "CORE-1245 Fix login",
-      description: "Follows CORE-1200. Uses UTF-8.",
+      description: "Follows CORE-1200. Uses utf-8.",
     });
     const ref = `#${task.number}`;
     const getTask = async () => text(await client.callTool({ name: "get_task", arguments: { task: ref } }));
@@ -511,7 +513,7 @@ describe("MCP endpoint", () => {
     expect(detail).toContain("Missing links:");
     expect(detail).toContain(`Jira CORE-1200: link(task: "${ref}", value: "CORE-1200")`);
     expect(detail).not.toContain("Jira CORE-1245:");
-    expect(detail).not.toContain("UTF-8:");
+    expect(detail).not.toContain("utf-8:");
     expect(detail).toContain(`link(task: "${ref}", t3Thread: {environmentId, threadId})`);
 
     await client.callTool({ name: "link", arguments: { task: ref, value: "CORE-1200" } });
@@ -532,6 +534,7 @@ describe("MCP endpoint", () => {
   });
 
   it("add_to_backlog attaches links and the T3 thread", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const created = await client.callTool({
       name: "add_to_backlog",
       arguments: {
@@ -544,7 +547,7 @@ describe("MCP endpoint", () => {
     expect(created.isError).toBeFalsy();
     const number = Number(/#(\d+)/.exec(text(created))?.[1]);
     const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
-    expect(links.sort()).toEqual(["jira", "t3_thread", "url"]);
+    expect(links.sort()).toEqual(["t3_thread", "ticket", "url"]);
   });
 
   it("move_task says when a task with merged PRs went on to Done", async () => {

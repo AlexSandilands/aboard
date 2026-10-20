@@ -61,7 +61,10 @@ A task can link to:
   otherwise; and every 30 minutes once it is merged or closed. The row says when it was last checked, and its
   refresh button reads it now.
 - **GitHub issues**, with their state when imported (see [Importing issues](importing-issues.md)).
-- **Jira issues.** Keys in a task's title are linked automatically.
+- **Tickets** from the trackers you set up in **Settings → Integrations → Ticket systems**: Jira, Linear or your own.
+  Each system has a key pattern (`[A-Z]+-\d+`), a URL pattern and a link template, and **Add** fills them in from
+  a preset. Pasting a key or URL makes a link to it, and with **Link keys in titles** on, a key in a task's title is
+  linked by itself. A key no system matches stays plain text.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
 - **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
   session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
@@ -70,7 +73,7 @@ A task can link to:
 - **Any URL.**
 
 In the task panel, sessions (T3 threads, Claude Code and Copilot CLI sessions, Autopilot's runs) have a
-**Sessions** section of their own, above **Links**, which holds everything else: PRs first, then issues, Jira keys
+**Sessions** section of their own, above **Links**, which holds everything else: PRs first, then issues, tickets
 and other URLs. Like the other sections, each can be collapsed, moved or hidden from **Customize sections**. Past
 three sessions, **Show N more** reveals the rest. When the task has one T3 thread, its Claude Code sessions are in
 the thread's ⌄ menu instead of rows of their own.
@@ -78,7 +81,7 @@ the thread's ⌄ menu instead of rows of their own.
 Failing checks, requested changes, blocked steps and requests from agents ("please review the plans") show up under
 **Needs attention** in the sidebar. An agent's request stays until you press **Dismiss** in the task panel (or the
 agent clears it).
-Agents are told which Jira issue, T3 thread and session a task is still missing, so links tend to fill in on
+Agents are told which ticket, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 
 ## Fixing a PR
@@ -180,7 +183,7 @@ are), or it is archived and **Show archived** is off.
 
 The filter button in the board's top bar narrows the board by status, model tier, Autopilot flag, epic and labels
 (each "any of" what you pick), and by switches for needs attention, has a PR, blocked, priority and archived. The
-search box in the sidebar filters by title, `#number`, Jira key or label. While anything is filtered, a pill beside the
+search box in the sidebar filters by title, `#number`, ticket key or label. While anything is filtered, a pill beside the
 title says so, and its ✕ clears every filter.
 
 Every filter is part of the page's address, so you can bookmark or share a filtered board, and the browser's Back

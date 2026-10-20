@@ -39,7 +39,7 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
   what's moving, what's stuck and what's waiting on you.
 - **Agents do the bookkeeping.** Over MCP they capture ideas, write a plan before they start, tick off
   steps as they go and leave a handover note when they stop. You don't have to update anything.
-- **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, Jira issue and
+- **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, ticket and
   agent thread. Resume it yourself, or hand it to a fresh agent with one click.
 - **Problems come to you.** Failing checks, requested changes and blocked steps collect under
   **Needs attention**, so you don't have to go looking.

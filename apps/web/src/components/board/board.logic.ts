@@ -169,13 +169,13 @@ function hasPr(task: TaskSummary): boolean {
   return task.links.some((link) => link.kind === "pr");
 }
 
-export function jiraKeys(task: TaskSummary): string[] {
+export function ticketKeys(task: TaskSummary): string[] {
   const keys: string[] = [];
-  for (const link of task.links) if (link.kind === "jira") keys.push(link.ref.key);
+  for (const link of task.links) if (link.kind === "ticket") keys.push(link.ref.key);
   return keys;
 }
 
-/** Matches a card against the sidebar search: title, `#number` / bare number, Jira key or label. */
+/** Matches a card against the sidebar search: title, `#number` / bare number, ticket key or label. */
 export function matchesTaskSearch(task: TaskSummary, rawQuery: string): boolean {
   const query = rawQuery.trim().toLowerCase();
   if (!query) return true;
@@ -183,7 +183,7 @@ export function matchesTaskSearch(task: TaskSummary, rawQuery: string): boolean 
   const numberQuery = query.startsWith("#") ? query.slice(1) : query;
   if (/^\d+$/.test(numberQuery) && String(task.number).startsWith(numberQuery)) return true;
   if (task.labels.some((label) => label.includes(query))) return true;
-  return jiraKeys(task).some((key) => key.toLowerCase().includes(query));
+  return ticketKeys(task).some((key) => key.toLowerCase().includes(query));
 }
 
 function byPosition(a: TaskSummary, b: TaskSummary) {

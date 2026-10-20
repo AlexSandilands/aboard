@@ -10,6 +10,7 @@ import type {
   T3ThreadRef,
   T3ThreadSnapshot,
   TaskLink,
+  TicketRef,
 } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
@@ -24,6 +25,8 @@ export interface LinkRow {
   snapshot_json: string | null;
   synced_at: string | null;
   created_at: string;
+  /** 1 on a link the board added by itself (a key in the title) rather than on request. */
+  auto: number;
 }
 
 /** Maps a task_links row to the contract's discriminated TaskLink. */
@@ -44,8 +47,8 @@ export function toLink(r: LinkRow): TaskLink {
         ref: parseJson<PrRef>(r.ref_json),
         snapshot: parseJson<PrSnapshot>(r.snapshot_json),
       };
-    case "jira":
-      return { ...base, kind: "jira", ref: parseJson<{ key: string }>(r.ref_json) ?? { key: r.url } };
+    case "ticket":
+      return { ...base, kind: "ticket", ref: parseJson<TicketRef>(r.ref_json) ?? { system: "", key: r.url } };
     case "t3_thread":
       return {
         ...base,

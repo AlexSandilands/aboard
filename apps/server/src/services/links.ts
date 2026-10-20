@@ -8,6 +8,8 @@ import {
   type PrSnapshot,
   type T3ThreadSnapshot,
   type TaskLink,
+  type TicketRef,
+  type TicketSystem,
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso, parseJson } from "../db/database.ts";
@@ -19,7 +21,7 @@ import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
-export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null): ClassifiedLink {
+export function classifyLinkInput(input: LinkInput, ticketSystems: readonly TicketSystem[]): ClassifiedLink {
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
   }
@@ -29,10 +31,11 @@ export function classifyLinkInput(input: LinkInput, jiraBaseUrl: string | null):
   }
   const value = input.value?.trim();
   if (!value) {
-    throw new AppError("VALIDATION", "Provide a link value (URL or Jira key), a t3Thread or an agentSession");
+    throw new AppError("VALIDATION", "Provide a link value (URL or ticket key), a t3Thread or an agentSession");
   }
-  const looksLikeKey = /^[a-z][a-z0-9_]+-\d+$/i.test(value);
-  const classified = classifyLink(looksLikeKey ? value.toUpperCase() : value, { jiraBaseUrl });
+  // Keys are usually upper case; one an agent typed in lower case ("abc-12") counts when only its upper case matches.
+  const asUpper = classifyLink(value.toUpperCase(), { ticketSystems });
+  const classified = classifyLink(value, { ticketSystems }) ?? (asUpper?.kind === "ticket" ? asUpper : null);
   if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${value}`);
   const canonical: ClassifiedLink =
     classified.kind === "t3_thread" ? { ...classified, url: t3DesktopThreadUrl(classified.ref) } : classified;
@@ -47,8 +50,7 @@ const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
   switch (c.kind) {
     case "pr":
       return c.ref ? JSON.stringify(c.ref) : null;
-    case "jira":
-      return JSON.stringify({ key: c.key });
+    case "ticket":
     case "t3_thread":
     case "issue":
       return JSON.stringify(c.ref);
@@ -92,7 +94,7 @@ export interface LinksModule {
   completeIfPrsDone(taskId: string): void;
 }
 
-/** Task links (PRs, Jira, T3 threads, URLs) and their poller snapshots. */
+/** Task links (PRs, tickets, T3 threads, URLs) and their poller snapshots. */
 export function createLinksService(
   core: Core,
   deps: {
@@ -197,7 +199,7 @@ export function createLinksService(
     add(taskId, input, actor, opts = {}) {
       return core.write((fx) => {
         const task = deps.task(taskId);
-        const classified = classifyLinkInput(input, deps.settings.get().jiraBaseUrl);
+        const classified = classifyLinkInput(input, deps.settings.get().ticketSystems);
         if ((classified.kind === "agent_session" || classified.kind === "t3_thread") && task.manual) {
           throw new AppError(
             "VALIDATION",
@@ -207,11 +209,12 @@ export function createLinksService(
         }
         const existing =
           repos.links.find(task.id, classified.kind, classified.url) ??
-          // A Jira issue is one link however it was written: a bare key, or a URL on any host.
-          (classified.kind === "jira"
-            ? repos.links
-                .forTasks([task.id])
-                .find((l) => l.kind === "jira" && parseJson<{ key: string }>(l.ref_json)?.key === classified.key)
+          // A ticket is one link however it was written: a bare key, or any of its URLs.
+          (classified.kind === "ticket"
+            ? repos.links.forTasks([task.id]).find((l) => {
+                const ref = l.kind === "ticket" ? parseJson<TicketRef>(l.ref_json) : null;
+                return ref?.system === classified.ref.system && ref.key === classified.ref.key;
+              })
             : undefined);
         if (existing) {
           // A session is one link however often it is linked, but an agent may correct the folder it gave (Claude
@@ -248,6 +251,7 @@ export function createLinksService(
           snapshot_json: null,
           synced_at: null,
           created_at: nowIso(),
+          auto: 0,
         };
         repos.links.insert(row);
         fx.log(task.id, actor, "link_added", { linkId: row.id, kind: row.kind, url: row.url });

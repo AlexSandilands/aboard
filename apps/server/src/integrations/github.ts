@@ -1093,7 +1093,7 @@ ${link.ref.repo.toLowerCase()}`;
       }
     },
     async refresh(link) {
-      // Checked before ensureStatus so refreshing a T3 thread or Jira link never spawns gh.
+      // Checked before ensureStatus so refreshing a T3 thread or ticket link never spawns gh.
       if (link.kind !== "pr" || link.ref === null) return false;
       if (!isGithubPr(link, await ensureStatus())) return false;
       await requireGh(link);

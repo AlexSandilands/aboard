@@ -3,12 +3,21 @@ import {
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
+  TICKET_SYSTEM_PRESETS,
   type AppSettings,
+  type TicketSystem,
 } from "@repo/contracts";
+
+/** The Jira preset with a site, linking keys from titles: what most tests that use ticket keys configure. */
+export const TEST_JIRA: TicketSystem = {
+  ...TICKET_SYSTEM_PRESETS.find((p) => p.system.id === "jira")!.system,
+  linkTemplate: "https://jira.example.com/browse/{key}",
+  autoLink: true,
+};
 
 /** Settings as a fresh install returns them, for fakes of SettingsService. */
 export const defaultSettings: AppSettings = {
-  jiraBaseUrl: null,
+  ticketSystems: [],
   githubPolling: true,
   t3LinkTarget: "desktop",
   t3TokenSet: false,
@@ -26,7 +35,6 @@ export const defaultSettings: AppSettings = {
   issueImportEnabled: true,
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
-  issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",

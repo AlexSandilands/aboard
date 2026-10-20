@@ -4,7 +4,7 @@ import {
   TASK_STATUSES,
   autopilotRunEventText,
   describeEpicRollup,
-  findJiraKeys,
+  findTicketKeys,
   formatBytes,
   formatPlanText,
   isGatingSeverity,
@@ -23,6 +23,8 @@ import {
   type TaskRelation,
   type TaskStatus,
   type TaskSummary,
+  ticketLabel,
+  type TicketSystem,
 } from "@repo/contracts";
 import { redact } from "../integrations/claudeTranscript.ts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
@@ -74,7 +76,8 @@ function optionalChecksText(optional: PrSnapshot["optionalChecks"]): string {
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
-export function linkText(link: TaskLink): string {
+/** One link, for agents. `ticketSystems` names a ticket's system ("<System> KEY"); without them it shows its id. */
+export function linkText(link: TaskLink, ticketSystems: readonly TicketSystem[] = []): string {
   const label = link.label ? ` "${link.label}"` : "";
   switch (link.kind) {
     case "pr": {
@@ -87,8 +90,8 @@ export function linkText(link: TaskLink): string {
         : "";
       return `PR ${name}${state}${label} ${link.url}`;
     }
-    case "jira":
-      return `Jira ${link.ref.key}${label}${link.url !== link.ref.key ? ` ${link.url}` : ""}`;
+    case "ticket":
+      return `${ticketLabel(ticketSystems, link.ref)}${label}${link.url !== link.ref.key ? ` ${link.url}` : ""}`;
     case "t3_thread": {
       const s = link.snapshot ? ` (${link.snapshot.title}, ${link.snapshot.status})` : "";
       return `T3 thread${s}${label} ${link.url}`;
@@ -112,7 +115,7 @@ function shortLink(link: TaskLink): string {
   switch (link.kind) {
     case "pr":
       return `PR${link.ref ? ` #${link.ref.number}` : ""}${link.snapshot ? ` ${link.snapshot.state}` : ""}`;
-    case "jira":
+    case "ticket":
       return link.ref.key;
     case "t3_thread":
       return "T3 thread";
@@ -319,18 +322,22 @@ export function eventText(event: TaskEvent): string {
 }
 
 /**
- * Links an open task is missing, each naming the exact call that adds it: Jira keys mentioned in the title or
+ * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the title or
  * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
-export function missingLinkHints(task: TaskDetail, sessionHarness: AgentHarness | null = null): string[] {
+export function missingLinkHints(
+  task: TaskDetail,
+  sessionHarness: AgentHarness | null = null,
+  ticketSystems: readonly TicketSystem[] = [],
+): string[] {
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
-  const linked = new Set(task.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])));
-  const keys = new Set([...findJiraKeys(task.title), ...findJiraKeys(task.description)]);
-  const hints = [...keys]
-    .filter((key) => !linked.has(key))
-    .map((key) => `Jira ${key}: link(task: ${ref}, value: "${key}")`);
+  const linked = new Set(task.links.flatMap((l) => (l.kind === "ticket" ? [`${l.ref.system}:${l.ref.key}`] : [])));
+  const found = [...findTicketKeys(task.title, ticketSystems), ...findTicketKeys(task.description, ticketSystems)];
+  const hints = found
+    .filter((t, i) => !linked.has(`${t.system}:${t.key}`) && found.findIndex((o) => o.key === t.key) === i)
+    .map((t) => `${ticketLabel(ticketSystems, t)}: link(task: ${ref}, value: "${t.key}")`);
   // No agent works on a manual task, so it has no thread, session or PR to link.
   if (task.manual) return hints;
   if (!task.links.some((l) => l.kind === "t3_thread")) {
@@ -637,6 +644,8 @@ export function renderTaskDetail(
     childActivity?: ChildActivity;
     /** Images pasted into the task's text, with where they are on disk. */
     images?: ReadonlyArray<{ path: string; filename: string; size: number }>;
+    /** The configured ticket systems, which name ticket links and find the keys a task hasn't linked. */
+    ticketSystems?: readonly TicketSystem[];
   } = {},
 ): string {
   const lines: string[] = [];
@@ -722,9 +731,9 @@ export function renderTaskDetail(
 
   if (task.links.length) {
     lines.push("", "Links:");
-    for (const link of task.links) lines.push(`- ${linkText(link)}`);
+    for (const link of task.links) lines.push(`- ${linkText(link, opts.ticketSystems)}`);
   }
-  const missing = missingLinkHints(task, opts.sessionHarness ?? null);
+  const missing = missingLinkHints(task, opts.sessionHarness ?? null, opts.ticketSystems);
   if (missing.length) {
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
@@ -763,6 +772,7 @@ export function renderTaskShort(
     autopilotHint?: boolean;
     deliveryHint?: string | null;
     progress?: { now: number; closing?: boolean };
+    ticketSystems?: readonly TicketSystem[];
   } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });

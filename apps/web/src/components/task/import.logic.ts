@@ -1,9 +1,9 @@
-import { parseIssueSource, type TaskImport, type TaskKind } from "@repo/contracts";
+import { parseIssueSource, ticketLabel, type TaskImport, type TaskKind, type TicketSystem } from "@repo/contracts";
 
-/** Where a task's import reads from: "Jira PROJ-1" or "GitHub acme/app#45". */
-export function importSourceLabel(sourceUrl: string): string {
-  const source = parseIssueSource(sourceUrl);
-  if (source?.kind === "jira") return `Jira ${source.key}`;
+/** Where a task's import reads from: "<System> PROJ-1" or "GitHub acme/app#45". */
+export function importSourceLabel(sourceUrl: string, ticketSystems: readonly TicketSystem[] = []): string {
+  const source = parseIssueSource(sourceUrl, { ticketSystems });
+  if (source?.kind === "ticket") return ticketLabel(ticketSystems, source.ref);
   if (source?.kind === "issue") return `GitHub ${source.placeholder}`;
   return sourceUrl;
 }
@@ -14,11 +14,14 @@ export function importPendingLabel(task: { import: TaskImport | null }): string 
 }
 
 /** The panel's callout for a failed import: what failed, and the reason. Null unless it failed. */
-export function importFailure(task: { import: TaskImport | null }): { title: string; reason: string } | null {
+export function importFailure(
+  task: { import: TaskImport | null },
+  ticketSystems: readonly TicketSystem[] = [],
+): { title: string; reason: string } | null {
   const failed = task.import;
   if (failed?.status !== "failed") return null;
   return {
-    title: `Couldn't import ${importSourceLabel(failed.sourceUrl)}`,
+    title: `Couldn't import ${importSourceLabel(failed.sourceUrl, ticketSystems)}`,
     reason: failed.error ?? "The import failed.",
   };
 }

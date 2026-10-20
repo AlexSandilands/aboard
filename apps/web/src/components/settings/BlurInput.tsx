@@ -1,7 +1,7 @@
 import { useState, type ComponentProps } from "react";
 import { Input } from "~/components/ui/input";
 
-/** A text setting saved on blur or Enter, like the Jira base URL. */
+/** A text setting saved on blur or Enter, like a CLI path. */
 export function BlurInput({
   value,
   onSave,
