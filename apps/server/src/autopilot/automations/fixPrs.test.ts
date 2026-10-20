@@ -125,14 +125,16 @@ function setup() {
   /** What GitHub's fresh thread read answers, and the threads resolved so far. */
   let threadState: PrThreadState = { headOid: SHA_A, commits: [SHA_B, SHA_A], threads: [] };
   const resolved: string[] = [];
-  let failResolve: string | null = null;
+  /** GitHub's refusal for every thread, or for some by id. */
+  let failResolve: string | Record<string, string> | null = null;
   const github: GithubActions = {
     ...NO_GITHUB,
     postReview: () => Promise.reject(new Error("not in these tests")),
     prHead: async () => live,
     reviewThreads: async () => threadState,
     resolveReviewThread: async (_host, id) => {
-      if (failResolve) throw new Error(failResolve);
+      const refusal = typeof failResolve === "string" ? failResolve : failResolve?.[id];
+      if (refusal) throw new Error(refusal);
       resolved.push(id);
     },
   };
@@ -226,7 +228,7 @@ function setup() {
     setLive: (sha: string) => (live = sha),
     resolved,
     setThreadState: (patch: Partial<PrThreadState>) => (threadState = { ...threadState, ...patch }),
-    failResolve: (message: string | null) => (failResolve = message),
+    failResolve: (message: string | Record<string, string> | null) => (failResolve = message),
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
   };
 }
@@ -893,6 +895,25 @@ describe("fix PRs: resolving threads it fixed", () => {
     await pass();
     expect(runs()[0]).toMatchObject({ status: "failed" });
     expect(runs()[0]!.error).toContain("Resource not accessible by integration");
+  });
+
+  it("flags a run where GitHub refused some threads, and tries those again on their own", async () => {
+    const { setPr, pass, turnOn, runs, resolved, setThreadState, failResolve } = setup();
+    turnOn();
+    setThreadState({ threads: [thread("T1"), thread("T2")] });
+    setPr({ reviewThreads: [polled(thread("T1")), polled(thread("T2"))] });
+    failResolve({ T2: "Something went wrong" });
+    await pass();
+    expect(resolved).toEqual(["T1"]);
+    expect(runs()[0]).toMatchObject({ status: "succeeded", needsAttention: true });
+    expect(runs()[0]!.summary).toContain("1 failed: Something went wrong");
+    // The next poll no longer has T1: T2 alone is a new set, tried again.
+    failResolve(null);
+    setThreadState({ threads: [thread("T2")] });
+    setPr({ reviewThreads: [polled(thread("T2"))] });
+    await pass();
+    expect(resolved).toEqual(["T1", "T2"]);
+    expect(runs()[0]).toMatchObject({ status: "succeeded", needsAttention: false });
   });
 
   it("resolves alongside a fix attempt, and isn't counted as one", async () => {

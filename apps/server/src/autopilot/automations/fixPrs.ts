@@ -786,7 +786,13 @@ async function resolveFixedThreads(
   const resolved = onPr.length - failed.length;
   if (resolved === 0) throw new Error(`Couldn't resolve ${threads(onPr.length)} on PR #${data.number}: ${failed[0]}`);
   const errors = failed.length > 0 ? `; ${failed.length} failed: ${failed[0]}` : "";
-  return { summary: `Resolved ${threads(resolved)} Autopilot fixed on PR #${data.number}${missing}${errors}`, output };
+  // The resolved threads drop out of the next poll, so the refused ones make a new key and are tried once more on
+  // their own. Flagged all the same: a thread left open can keep the PR blocked, and the user can retry the run.
+  return {
+    summary: `Resolved ${threads(resolved)} Autopilot fixed on PR #${data.number}${missing}${errors}`,
+    output,
+    ...(failed.length > 0 ? { needsAttention: true } : {}),
+  };
 }
 
 /**

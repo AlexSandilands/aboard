@@ -499,7 +499,8 @@ to fix a pull request linked to a task.
   `parseAutopilotReply`, lenient enough for replies written before the format was fixed) with that sha prefixing one
   of the commits. The others (declined, the user's own words, Autopilot's review comment) go on the run's
   `output.settled` as `thread@newestCommentId` and aren't read again until someone comments; one whose commit isn't on
-  the PR is read again after the next push. It doesn't wait for a fix or review of the PR to finish, isn't an attempt
+  the PR is read again after the next push. A thread GitHub refuses to resolve flags the run under Needs attention;
+  the ones that did resolve drop out of the next poll, so the refused ones form a new set and are tried once more. It doesn't wait for a fix or review of the PR to finish, isn't an attempt
   and isn't counted as an agent run (`FIX_RESOLVE_KEY_PREFIX` is left out of the caps like the give-ups). The fix
   prompt tells the agent not to resolve threads itself; with the switch off it says the reviewer does.
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`), counting every attempt that wasn't skipped or
