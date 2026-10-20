@@ -17,7 +17,7 @@ transport, with no session id, and the reply is plain JSON because no tool strea
 The server sends short **instructions** (`INSTRUCTIONS` in `server.ts`) that sum up the workflow: orient,
 `get_task` before resuming, plan before leaving Backlog (with a suggested model tier, and suggest labels if
 the task has none, and whether to flag it for Autopilot), keep
-steps current, group large features into epics, link the Jira issue and the T3 thread, finish with `add_note`.
+steps current, group large features into epics, link the task's ticket and the T3 thread, finish with `add_note`.
 
 ### Tools
 
@@ -26,7 +26,7 @@ steps current, group large features into epics, link the Jira issue and the T3 t
 | `tools/read.ts`    | `board_overview`, `board_activity`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`, `request_attention` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
-| `tools/links.ts`   | `link` (PR URL, Jira key, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent)    |
+| `tools/links.ts`   | `link` (PR URL, ticket key or URL, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent), `unlink` (a link's URL, ticket key or id) |
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
@@ -54,7 +54,7 @@ only when the user asks. `get_task` shows a "Priority: yes" line. An epic can't 
 person that needs no plan (so `create_task` takes no plan with it, and lands it in Planned) and that agents and
 Autopilot leave alone ([task-lifecycle.md](task-lifecycle.md#manual-tasks)). `get_task` shows a "Manual task: yes"
 line and `list_tasks` tags it `[manual]`. Its results drop the hints for an agent working on it (Plan progress,
-the Autopilot flag, the suggested model, and every Missing link but Jira keys), and `get_handoff_prompt`,
+the Autopilot flag, the suggested model, and every Missing link but ticket keys), and `get_handoff_prompt`,
 `start_task_thread`, `start_review` and an `agentSession` or `t3Thread` link are refused on it.
 
 `update_task` takes `dueDate` (`YYYY-MM-DD`, `null` clears it; [board-layout.md](board-layout.md#the-due-date)). Agents set it

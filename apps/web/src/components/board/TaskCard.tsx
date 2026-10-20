@@ -16,7 +16,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
-import { ATTENTION_LABELS, jiraKeys, PRIORITY_ROW_ID, topAttention } from "./board.logic";
+import { ATTENTION_LABELS, PRIORITY_ROW_ID, ticketKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
 import { canPickTask, isPickClick } from "./boardSelection.logic";
 import { blockedLabel } from "./dependencies.logic";
@@ -60,7 +60,7 @@ export const TaskCardContent = memo(function TaskCardContent({
   const attention = topAttention(task.attention);
   const blocked = blockedLabel(task);
   const fetching = importPendingLabel(task);
-  const jiraKey = jiraKeys(task)[0];
+  const ticketKey = ticketKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
   const project = showProject ? projects.find((p) => p.id === task.projectId) : undefined;
   const handoff = showHandoffActions(task);
@@ -77,9 +77,9 @@ export const TaskCardContent = memo(function TaskCardContent({
     <div className="flex flex-col gap-1 px-2.5 py-2">
       <div className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
         <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">#{task.number}</span>
-        {jiraKey ? (
+        {ticketKey ? (
           <Badge variant="outline" size="sm">
-            {jiraKey}
+            {ticketKey}
           </Badge>
         ) : null}
         {project ? (

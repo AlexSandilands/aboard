@@ -1,8 +1,10 @@
 import type { TaskEvent } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { describeEvent, type ActivityContext } from "./activity.logic";
-import { describeLinkInput, jiraHref, threadStatusPresentation } from "./links.logic";
-import { classifyLink } from "@repo/contracts";
+import { describeLinkInput, threadStatusPresentation, ticketLinkHref } from "./links.logic";
+import { classifyLink, TICKET_SYSTEM_PRESETS } from "@repo/contracts";
+
+const JIRA = { ...TICKET_SYSTEM_PRESETS[0]!.system, linkTemplate: "https://jira.example.com/browse/{key}" };
 
 const ctx: ActivityContext = {
   steps: new Map([["s1", { label: "1.2", title: "Write migrations" }]]),
@@ -161,26 +163,26 @@ describe("links logic", () => {
     expect(describeLinkInput(classifyLink("https://github.com/acme/app/pull/12"))?.label).toBe(
       "Pull request acme/app#12",
     );
-    expect(describeLinkInput(classifyLink("ABC-12"))?.label).toBe("Jira issue ABC-12");
+    const ticketSystems = [JIRA];
+    expect(describeLinkInput(classifyLink("ABC-12", { ticketSystems }), ticketSystems)?.label).toBe("Jira ABC-12");
+    expect(describeLinkInput(classifyLink("ABC-12"))).toBeNull();
     expect(describeLinkInput(classifyLink("https://www.example.com/x"))?.label).toBe("Link to example.com");
     expect(describeLinkInput(classifyLink("not a link"))).toBeNull();
   });
 
-  it("builds Jira hrefs from the stored URL or the configured base", () => {
+  it("builds ticket hrefs from the stored URL or the system's link template", () => {
     const base = {
       id: "l",
       taskId: "t",
       label: null,
       syncedAt: null,
       createdAt: "",
-      kind: "jira" as const,
-      ref: { key: "ABC-1" },
+      kind: "ticket" as const,
+      ref: { system: "jira", key: "ABC-1" },
     };
-    expect(jiraHref({ ...base, url: "ABC-1" }, "https://jira.example.com/")).toBe(
-      "https://jira.example.com/browse/ABC-1",
-    );
-    expect(jiraHref({ ...base, url: "ABC-1" }, null)).toBeNull();
-    expect(jiraHref({ ...base, url: "https://j.example.com/browse/ABC-1" }, null)).toBe(
+    expect(ticketLinkHref({ ...base, url: "ABC-1" }, [JIRA])).toBe("https://jira.example.com/browse/ABC-1");
+    expect(ticketLinkHref({ ...base, url: "ABC-1" }, [])).toBeNull();
+    expect(ticketLinkHref({ ...base, url: "https://j.example.com/browse/ABC-1" }, null)).toBe(
       "https://j.example.com/browse/ABC-1",
     );
   });

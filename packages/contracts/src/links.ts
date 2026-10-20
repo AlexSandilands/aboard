@@ -1,22 +1,21 @@
 import type { AgentSessionRef } from "./agentSessions.ts";
 import { LinkKind, type IssueRef, type PrRef, type T3ThreadRef } from "./schemas.ts";
+import { matchTicketKey, matchTicketUrl, type TicketRef, type TicketSystem } from "./ticketSystems.ts";
 
 export type ClassifiedLink =
   | { kind: "pr"; url: string; ref: PrRef | null }
-  | { kind: "jira"; url: string; key: string }
+  | { kind: "ticket"; url: string; ref: TicketRef }
   | { kind: "t3_thread"; url: string; ref: T3ThreadRef }
   | { kind: "issue"; url: string; ref: IssueRef }
   | { kind: "agent_session"; url: string; ref: AgentSessionRef }
   | { kind: "url"; url: string };
 
-const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 // Any host, since GitHub Enterprise lives on its own domains. The server decides which hosts to poll.
 const GITHUB_PR = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/pull\/(\d+)(?:[/?#]|$)/i;
 const GITHUB_ISSUE = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/issues\/(\d+)(?:[/?#]|$)/i;
 const ADO_PR = /^https?:\/\/[^/\s]*(dev\.azure\.com|visualstudio\.com)\/.+\/pullrequest\/(\d+)/i;
 const BITBUCKET_PR = /^https?:\/\/bitbucket\.org\/([^/\s]+\/[^/\s]+)\/pull-requests\/(\d+)/i;
 const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
-const JIRA_BROWSE = /\/browse\/([A-Z][A-Z0-9_]+-\d+)(?:[/?#]|$)/;
 
 /** T3 thread ids are UUIDs, or `thread:…` composites of them. */
 const T3_THREAD_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|thread:[^\s/?#]+)$/i;
@@ -63,21 +62,17 @@ export function parseT3ThreadInput(value: string, t3: T3Target | null | undefine
 
 /**
  * Infers link kind from user/agent input: GitHub-style PR URLs on any host (`/<owner>/<repo>/pull/<n>`),
- * ADO/Bitbucket PR URLs, GitHub issue URLs (`.../issues/<n>`), Jira keys or /browse/ URLs, t3code:// thread deep
- * links, otherwise a plain URL.
+ * ADO/Bitbucket PR URLs, GitHub issue URLs (`.../issues/<n>`), t3code:// thread deep links, then the configured
+ * ticket systems' URLs and keys, otherwise a plain URL.
  * With `t3` (the detected T3 server), bare thread ids and that server's browser URLs are thread links too.
  */
 export function classifyLink(
   value: string,
-  opts: { jiraBaseUrl?: string | null; t3?: T3Target | null } = {},
+  opts: { ticketSystems?: readonly TicketSystem[] | null; t3?: T3Target | null } = {},
 ): ClassifiedLink | null {
   const input = value.trim();
   if (!input) return null;
-
-  if (JIRA_KEY.test(input)) {
-    const base = opts.jiraBaseUrl?.replace(/\/+$/, "");
-    return { kind: "jira", key: input, url: base ? `${base}/browse/${input}` : input };
-  }
+  const systems = opts.ticketSystems ?? [];
 
   const t3 = T3_DEEP_LINK.exec(input);
   if (t3) {
@@ -108,75 +103,39 @@ export function classifyLink(
     };
   }
 
-  const jiraUrl = JIRA_BROWSE.exec(input);
-  if (jiraUrl && /^https?:\/\//i.test(input)) {
-    return { kind: "jira", url: input, key: jiraUrl[1]! };
-  }
+  const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(input);
+  const ticketUrl = isUrl ? matchTicketUrl(input, systems) : null;
+  if (ticketUrl) return { kind: "ticket", url: input, ref: ticketUrl };
+  // A bare key is stored as written, not as its template filled in: the page is worked out from the system when the
+  // link is shown, so fixing a system's template later fixes the links made before.
+  const ticketKey = isUrl ? null : matchTicketKey(input, systems);
+  if (ticketKey) return { kind: "ticket", url: ticketKey.key, ref: ticketKey };
 
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) return { kind: "url", url: input };
+  if (isUrl) return { kind: "url", url: input };
   return null;
-}
-
-// Uppercase only: lowercase "utf-8" or "abc-123" in prose is rarely an issue key. Lookarounds keep
-// "ISO-8601-1" and "foo_ABC-1" from matching part-way, while "/browse/ABC-1" and "(ABC-1)." still do.
-const JIRA_KEY_IN_TEXT = /(?<![A-Za-z0-9_-])[A-Z][A-Z0-9_]+-\d+(?![A-Za-z0-9_]|-\d)/g;
-
-/** Prefixes of standards, encodings and identifiers that look like issue keys. */
-const NOT_JIRA_PROJECTS = new Set([
-  "AES",
-  "CVE",
-  "CWE",
-  "ECMA",
-  "GPT",
-  "HMAC",
-  "HTTP",
-  "IEC",
-  "IEEE",
-  "ISO",
-  "MD",
-  "RFC",
-  "RSA",
-  "SHA",
-  "TLS",
-  "UTF",
-  "WCAG",
-]);
-
-/** Jira keys (PROJ-123) mentioned in free text, de-duplicated in order of appearance. */
-export function findJiraKeys(text: string | null | undefined): string[] {
-  const keys: string[] = [];
-  for (const match of text?.matchAll(JIRA_KEY_IN_TEXT) ?? []) {
-    const key = match[0];
-    const project = key.slice(0, key.lastIndexOf("-"));
-    if (!NOT_JIRA_PROJECTS.has(project) && !keys.includes(key)) keys.push(key);
-  }
-  return keys;
 }
 
 export function isLinkKind(value: string): value is LinkKind {
   return LinkKind.options.includes(value as LinkKind);
 }
 
-/** An issue a task can be created from: what to link, and the title to show until its details are fetched. */
-export type IssueSource =
-  | { kind: "jira"; key: string; url: string; placeholder: string }
+/** What a task can be imported from: what to link, and the title to show until its details are fetched. */
+export type ImportSource =
+  | { kind: "ticket"; ref: TicketRef; url: string; placeholder: string }
   | { kind: "issue"; ref: IssueRef; url: string; placeholder: string };
 
 /**
- * Recognises text that is a Jira issue (a bare key like `PROJ-123` or a `/browse/PROJ-123` URL) or a GitHub issue
- * URL, and nothing else: a PR URL, other links and ordinary titles are null. Standards that look like keys
- * ("UTF-8") are not Jira keys.
+ * Recognises text that is a ticket of one of `systems` (a bare key or one of its URLs) or a GitHub issue URL, and
+ * nothing else: a PR URL, other links and ordinary titles are null.
  */
-export function parseIssueSource(value: string, opts: { jiraBaseUrl?: string | null } = {}): IssueSource | null {
+export function parseImportSource(value: string, systems: readonly TicketSystem[] | null = []): ImportSource | null {
   const input = value.trim();
   if (!input || /\s/.test(input)) return null;
-  const link = classifyLink(input, opts);
+  const link = classifyLink(input, { ticketSystems: systems });
   if (link?.kind === "issue") {
     return { kind: "issue", ref: link.ref, url: link.url, placeholder: `${link.ref.repo}#${link.ref.number}` };
   }
-  if (link?.kind === "jira" && !NOT_JIRA_PROJECTS.has(link.key.slice(0, link.key.lastIndexOf("-")))) {
-    return { kind: "jira", key: link.key, url: link.url, placeholder: link.key };
-  }
+  if (link?.kind === "ticket") return { kind: "ticket", ref: link.ref, url: link.url, placeholder: link.ref.key };
   return null;
 }
 

@@ -20,7 +20,7 @@ filtered board can be bookmarked or shared, and Back undoes a filter. A default 
 | `status`     | Comma-separated statuses, any of them                                                   |
 | `tier`       | Comma-separated suggested model tiers (`light`, `standard`, `deep`, `none` for no tier) |
 | `autopilot`  | Comma-separated per-task Autopilot flags: `on`, `off`, `default`                        |
-| `q`          | Free text: title, `#number`, Jira key or label (the sidebar search box)                 |
+| `q`          | Free text: title, `#number`, ticket key or label (the sidebar search box)                 |
 | `attention`  | `true`: only tasks that need attention                                                  |
 | `pr`         | `true`: only tasks with a pull request                                                  |
 | `blocked`    | `true`: only tasks blocked by an open task                                              |

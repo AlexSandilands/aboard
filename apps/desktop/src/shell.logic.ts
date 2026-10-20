@@ -23,7 +23,7 @@ const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "t3code:"]);
 
 export type NavigationDecision = "allow" | "external" | "block";
 
-/** Board pages stay in the window; links elsewhere (PRs, Jira, T3 Code threads) go to the OS. */
+/** Board pages stay in the window; links elsewhere (PRs, tickets, T3 Code threads) go to the OS. */
 export function decideNavigation(target: string, boardUrl: string): NavigationDecision {
   let url: URL;
   try {

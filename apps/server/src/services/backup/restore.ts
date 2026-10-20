@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { BACKUP_FORMAT_VERSION, BRAND, TASK_BUNDLE_TABLES, type BackupRow, type BoardDump } from "@repo/contracts";
 import { migrate, migrationNames, openDatabase, transaction, type Db } from "../../db/database.ts";
 import { AppError } from "../../errors.ts";
-import { EXPORTED_SETTINGS } from "../settings.ts";
+import { EXPORTED_SETTINGS, RETIRED_EXPORTED_SETTINGS } from "../settings.ts";
 import { dumpBoard } from "./dump.ts";
 import { copyAttachmentFiles } from "./files.ts";
 
@@ -29,7 +29,9 @@ const TABLES = [
 type Table = (typeof TABLES)[number];
 
 const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
-  settings: dump.settings.filter((r) => EXPORTED_SETTINGS.has(String(r.key))),
+  settings: dump.settings.filter(
+    (r) => EXPORTED_SETTINGS.has(String(r.key)) || RETIRED_EXPORTED_SETTINGS.has(String(r.key)),
+  ),
   projects: dump.projects,
   label_colors: dump.label_colors,
   counters: dump.counters,

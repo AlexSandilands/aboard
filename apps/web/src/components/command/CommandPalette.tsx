@@ -39,7 +39,7 @@ import { useTheme } from "~/hooks/useTheme";
 import { ApiError } from "~/lib/api";
 import { useGenerateDigest } from "~/state/digests";
 import { useCreateTask, useImportT3Projects } from "~/state/mutations";
-import { useArchivedTasks, useBoard, useT3ProjectCandidates, useTemplates } from "~/state/queries";
+import { useArchivedTasks, useBoard, useSettings, useT3ProjectCandidates, useTemplates } from "~/state/queries";
 import { type PaletteIntent, useDialogs, usePalette, usePanel } from "~/state/ui";
 import { settingsPaletteEntries } from "~/components/settings/settingsNav.logic";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
@@ -248,6 +248,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const openStats = useOpenStats();
   const newTaskShortcut = useShortcutLabel("idea.new");
   const settingsShortcut = useShortcutLabel("settings.open");
+  const ticketSystems = useSettings().data?.ticketSystems;
   const setDigestOpen = useDialogs((s) => s.setDigestOpen);
   const { mutate: generateDigest } = useGenerateDigest();
   const { resolvedTheme, setTheme } = useTheme();
@@ -413,7 +414,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     // An image still uploading is a placeholder in the description, and the task would be created with it.
     if (!title || createTask.isPending || descriptionInput.uploading) return;
     const { flow, projectId, epicId } = view;
-    const issue = issueImportRow(title, flow);
+    const issue = issueImportRow(title, flow, ticketSystems);
     // An import takes its details from the issue, so the template (and its plan) stays out of it.
     const template = issue ? undefined : availableTemplates.find((t) => t.id === templateId);
     const { fields: templateFields, planFromTemplate } = templateRequest(template, flow);
@@ -849,7 +850,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const hasHighlightedFolder = view.kind === "browse" && highlighted !== null && highlighted.startsWith("browse:");
   const titleProject = view.kind === "title" ? projectById.get(view.projectId) : undefined;
   const titleEpic = view.kind === "title" && view.epicId ? tasks.find((t) => t.id === view.epicId) : undefined;
-  const importRow = view.kind === "title" ? issueImportRow(query, view.flow) : null;
+  const importRow = view.kind === "title" ? issueImportRow(query, view.flow, ticketSystems) : null;
   const availableTemplates =
     view.kind === "title" && view.flow !== "epic" && templates ? templatesFor(templates, view.projectId) : [];
   const templateItems = [

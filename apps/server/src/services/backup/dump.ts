@@ -22,8 +22,8 @@ const TASK_ROWS_SQL: Record<(typeof TASK_BUNDLE_TABLES)[number], string> = {
   plan_phases: "SELECT * FROM plan_phases ORDER BY task_id, position, id",
   plan_steps:
     "SELECT s.* FROM plan_steps s JOIN plan_phases p ON p.id = s.phase_id ORDER BY s.task_id, p.position, p.id, s.position, s.id",
-  task_links: "SELECT * FROM task_links ORDER BY task_id, created_at, id",
-  task_attachments: "SELECT * FROM task_attachments WHERE task_id IS NOT NULL ORDER BY task_id, created_at, id",
+  task_links: "SELECT * FROM task_links ORDER BY task_id, created_at, rowid",
+  task_attachments: "SELECT * FROM task_attachments WHERE task_id IS NOT NULL ORDER BY task_id, created_at, rowid",
   task_labels: "SELECT * FROM task_labels ORDER BY task_id, label",
   task_reviews: "SELECT * FROM task_reviews ORDER BY task_id, round",
   review_findings:

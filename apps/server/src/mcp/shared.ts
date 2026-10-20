@@ -344,6 +344,7 @@ export function taskResult(
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
   const progress = { now: Date.now(), ...(opts.closing ? { closing: true } : {}) };
+  const { ticketSystems } = services.settings.get();
   // Planning one of an epic's tasks is when its shape shows, so set_plan and create_task ask about the epic too.
   const delivery =
     opts.deliveryHint || opts.planningHints
@@ -356,8 +357,9 @@ export function taskResult(
         autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
         deliveryHint: delivery,
         progress,
+        ticketSystems,
       })
-    : renderTaskShort(task, project, { progress, deliveryHint: delivery });
+    : renderTaskShort(task, project, { progress, deliveryHint: delivery, ticketSystems });
   return textResult(`${headline}\n\n${body}`);
 }
 

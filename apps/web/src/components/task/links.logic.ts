@@ -6,17 +6,23 @@ import {
   type T3ThreadSnapshot,
   type T3ThreadStatus,
   type TaskLink,
+  ticketHref,
+  ticketLabel,
+  type TicketSystem,
 } from "@repo/contracts";
 import { isAutopilotSession, type SessionLink } from "~/components/sessions/sessions.logic";
 
 /** What the "Add link" input will create, for the live preview. Null when unrecognised. */
-export function describeLinkInput(link: ClassifiedLink | null): { kind: ClassifiedLink["kind"]; label: string } | null {
+export function describeLinkInput(
+  link: ClassifiedLink | null,
+  ticketSystems: readonly TicketSystem[] = [],
+): { kind: ClassifiedLink["kind"]; label: string } | null {
   if (!link) return null;
   switch (link.kind) {
     case "pr":
       return { kind: "pr", label: link.ref ? `Pull request ${link.ref.repo}#${link.ref.number}` : "Pull request" };
-    case "jira":
-      return { kind: "jira", label: `Jira issue ${link.key}` };
+    case "ticket":
+      return { kind: "ticket", label: ticketLabel(ticketSystems, link.ref) };
     case "t3_thread":
       return { kind: "t3_thread", label: "T3 Code thread" };
     case "issue":
@@ -39,7 +45,7 @@ export function unrecognisedLinkHint(value: string, t3: Pick<T3IntegrationStatus
   if (isT3ThreadId(value) && !t3.detected) {
     return "T3 Code isn't running, so this thread ID can't be placed. Start it, or paste the t3code:// link.";
   }
-  return "Not recognised. Paste a full URL, a Jira key like ABC-123 or a T3 thread ID.";
+  return "Not recognised. Paste a full URL, a ticket key of a system set up in Settings, or a T3 thread ID.";
 }
 
 export function hostnameOf(url: string): string | null {
@@ -52,14 +58,16 @@ export function hostnameOf(url: string): string | null {
 
 export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
-/** Browse URL for a Jira link: the stored URL when it is one, else the configured base. */
-export function jiraHref(
-  link: Extract<TaskLink, { kind: "jira" }>,
-  jiraBaseUrl: string | null | undefined,
+/** The page of a ticket link: the stored URL when it is one, else its system's link template. */
+export function ticketLinkHref(
+  link: Extract<TaskLink, { kind: "ticket" }>,
+  ticketSystems: readonly TicketSystem[] | null | undefined,
 ): string | null {
   if (isWebUrl(link.url)) return link.url;
-  const base = jiraBaseUrl?.trim().replace(/\/+$/, "");
-  return base ? `${base}/browse/${link.ref.key}` : null;
+  return ticketHref(
+    ticketSystems?.find((s) => s.id === link.ref.system),
+    link.ref.key,
+  );
 }
 
 export interface ThreadStatusPresentation {
@@ -165,14 +173,14 @@ export interface LinkGroups {
   sessionRows: Array<ThreadLink | SessionLink>;
   /** Claude Code sessions in each thread's menu, by thread link id, newest first. */
   folded: Map<string, SessionLink[]>;
-  /** The Links section: PRs, then issues, Jira keys and other URLs. */
+  /** The Links section: PRs, then issues, tickets and other URLs. */
   links: PlainLink[];
 }
 
 /** A link that isn't a session: those have their own section. */
 export type PlainLink = Exclude<TaskLink, { kind: "t3_thread" | "agent_session" }>;
 
-const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = { pr: 0, issue: 1, jira: 2, url: 3 };
+const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = { pr: 0, issue: 1, ticket: 2, url: 3 };
 
 const createdMs = (link: TaskLink) => {
   const ms = Date.parse(link.createdAt);

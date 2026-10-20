@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../errors.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 function setup() {
   const h = createTestHarness();
   const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const other = h.services.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+  h.services.settings.update({ ticketSystems: [TEST_JIRA] });
   return { ...h, s: h.services, project, other };
 }
 

@@ -7,6 +7,7 @@ import {
   type T3IntegrationStatus,
   type TaskDetail,
   type TaskLink,
+  type TicketSystem,
 } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,8 +62,8 @@ import {
   ISSUE_STATE,
   isWebUrl,
   groupLinks,
-  jiraHref,
   unrecognisedLinkHint,
+  ticketLinkHref,
   type PlainLink,
 } from "./links.logic";
 import { PANEL_ICON_CLASS, PanelControl, PanelSplitGroup, ROW_HOVER_ACTION_CLASS } from "./PanelControl";
@@ -89,7 +90,7 @@ const PR_STATE: Record<"open" | "draft" | "closed" | "merged", { label: string; 
 
 export const LINK_KIND_ICON: Record<TaskLink["kind"], FC<{ className?: string }>> = {
   pr: GitPullRequestArrowIcon,
-  jira: TicketIcon,
+  ticket: TicketIcon,
   t3_thread: T3Icon,
   issue: CircleDotIcon,
   agent_session: SquareTerminalIcon,
@@ -111,7 +112,7 @@ export function useRemoveTaskLink(taskId: string) {
   };
 }
 
-/** PRs, issues, Jira keys and URLs. The task's threads and agent sessions are in the Sessions section. */
+/** PRs, issues, tickets and URLs. The task's threads and agent sessions are in the Sessions section. */
 export function LinksSection({ task }: { task: TaskDetail }) {
   const board = useBoard().data;
   const settings = useSettings().data;
@@ -138,7 +139,7 @@ export function LinksSection({ task }: { task: TaskDetail }) {
         {links.map((link) => (
           <LinkRow key={link.id} task={task} link={link} settings={settings} onRemove={() => remove(link.id)} />
         ))}
-        <AddLinkPopover taskId={task.id} jiraBaseUrl={settings?.jiraBaseUrl ?? null} t3={t3} />
+        <AddLinkPopover taskId={task.id} ticketSystems={settings?.ticketSystems ?? []} t3={t3} />
       </div>
     </TaskSection>
   );
@@ -160,15 +161,16 @@ function LinkRow({
       return <PullRequestRow task={task} link={link} onRemove={onRemove} />;
     case "issue":
       return <IssueRow link={link} onRemove={onRemove} />;
-    case "jira": {
-      const href = jiraHref(link, settings?.jiraBaseUrl);
+    case "ticket": {
+      const href = ticketLinkHref(link, settings?.ticketSystems);
+      const system = settings?.ticketSystems.find((s) => s.id === link.ref.system)?.name ?? link.ref.system;
       return (
         <RowWithMenu
           href={href}
-          title={href ?? link.ref.key}
+          title={href ? `${system}: ${href}` : `${system} ${link.ref.key}`}
           menu={
             <>
-              <MenuItem onClick={() => copyToClipboard(link.ref.key, "Jira key")}>
+              <MenuItem onClick={() => copyToClipboard(link.ref.key, "Ticket key")}>
                 <CopyIcon />
                 Copy key
               </MenuItem>
@@ -178,6 +180,7 @@ function LinkRow({
         >
           <TicketIcon className={PANEL_ICON_CLASS} />
           <span className="shrink-0 font-mono text-xs">{link.ref.key}</span>
+          {link.label ? null : <PanelLabel className="flex-1 font-normal text-muted-foreground">{system}</PanelLabel>}
           {link.label ? (
             <PanelLabel className="flex-1 font-normal text-muted-foreground">{link.label}</PanelLabel>
           ) : null}
@@ -478,18 +481,18 @@ function Hint({ label, children }: { label: string; children: ReactNode }) {
 
 function AddLinkPopover({
   taskId,
-  jiraBaseUrl,
+  ticketSystems,
   t3,
 }: {
   taskId: string;
-  jiraBaseUrl: string | null;
+  ticketSystems: readonly TicketSystem[];
   t3: T3IntegrationStatus;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const { mutate: addLink, isPending } = useAddLink();
-  const classified = classifyLink(value, { jiraBaseUrl, t3 });
-  const preview = describeLinkInput(classified);
+  const classified = classifyLink(value, { ticketSystems, t3 });
+  const preview = describeLinkInput(classified, ticketSystems);
   const PreviewIcon = preview ? LINK_KIND_ICON[preview.kind] : null;
 
   const submit = () => {
@@ -530,7 +533,7 @@ function AddLinkPopover({
             aria-label="Link"
             size="sm"
             value={value}
-            placeholder="Paste a PR, Jira key, T3 thread or URL"
+            placeholder="Paste a PR, ticket key, T3 thread or URL"
             onChange={(event) => setValue(event.currentTarget.value)}
           />
           <div className="flex min-h-5 items-center gap-1.5 text-xs text-muted-foreground">
@@ -543,7 +546,7 @@ function AddLinkPopover({
             ) : value.trim() ? (
               <span>{unrecognisedLinkHint(value, t3)}</span>
             ) : (
-              <span>Detects GitHub PRs, Jira keys, T3 Code threads and URLs.</span>
+              <span>Detects GitHub PRs, ticket keys, T3 Code threads and URLs.</span>
             )}
           </div>
         </form>

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
+  classifyLink,
   CloseTaskInput,
+  isT3ThreadId,
   TaskResolution,
   templateHasPlan,
   TaskStatusInput,
@@ -52,11 +54,38 @@ const PLAN_REQUIRED_HINT =
 const linksField = z
   .array(z.string().min(1))
   .optional()
-  .describe("Jira keys (ABC-123), PR URLs or URLs to attach. Jira keys in the title are linked automatically.");
+  .describe(
+    "Ticket keys, PR URLs or URLs to attach. Ticket keys in the title may be linked automatically; unlink removes a wrong one.",
+  );
 
-function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined }): LinkInput[] {
-  return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
+/**
+ * The links to create a task with, and the values left out: a bare value no ticket system matches (an agent told to
+ * pass "the ticket key" on a board with no systems, say) would otherwise fail the whole create.
+ */
+function linkInputs(
+  services: Services,
+  args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined },
+): { links: LinkInput[]; skipped: string[] } {
+  const ticketSystems = services.settings.get().ticketSystems;
+  const known = (value: string) =>
+    isT3ThreadId(value) ||
+    classifyLink(value, { ticketSystems }) !== null ||
+    classifyLink(value.toUpperCase(), { ticketSystems })?.kind === "ticket";
+  const values = args.links ?? [];
+  return {
+    links: [
+      ...values.filter(known).map((value) => ({ value })),
+      ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : []),
+    ],
+    skipped: values.filter((value) => !known(value)),
+  };
 }
+
+/** Says which links weren't added, and why. */
+const skippedText = (skipped: readonly string[]): string =>
+  skipped.length
+    ? ` Not linked: ${skipped.join(", ")} (no ticket system set up in Settings matches ${skipped.length === 1 ? "it" : "them"}).`
+    : "";
 
 /**
  * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
@@ -101,13 +130,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Add a task to the backlog",
       description:
-        "Add a task to the Backlog column with one call: an idea, a known to-do, a Jira ticket or GitHub issue " +
+        "Add a task to the Backlog column with one call: an idea, a known to-do, a ticket or GitHub issue " +
         "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. For work that belongs to no code project (a " +
         "document to update, something to review), pass general: true instead: it files the task in the General " +
-        "project. Pass the Jira key in links if there is one, " +
+        "project. Pass the ticket key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
         "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
         "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
@@ -144,7 +173,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         requireWritingProject(args);
         const template = templateFor(services, args);
         const project = writingProject(services, args);
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -163,7 +192,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
         const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
         const from = template ? ` from template ${template.name}${plan}` : "";
-        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.`);
+        return textResult(
+          `Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${skippedText(skipped)}`,
+        );
       }),
   );
 
@@ -174,8 +205,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       description:
         "Create a task you are about to work on, with its plan, in one call. Lands in Planned. A plan is required: " +
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
-        "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
-        "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
+        "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, ticket " +
+        "keys, URLs; link the ticket now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
         "blockedBy when other tasks must be Done first. For work that belongs to no code project, pass general: true " +
@@ -213,7 +244,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const plan = planFromArgs(args);
         const template = templateFor(services, args, { needsPlan: !args.manual, hasPlan: plan !== null });
         const project = writingProject(services, args);
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -231,9 +262,14 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(args.manual ? { manual: true } : {}),
           actor: actor(args.actor),
         });
-        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
-          planningHints: true,
-        });
+        return taskResult(
+          services,
+          task.id,
+          `Created task #${task.number} in ${project.title}.${skippedText(skipped)}`,
+          {
+            planningHints: true,
+          },
+        );
       }),
   );
 
@@ -284,7 +320,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             );
           }
         }
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const epic = services.tasks.createEpic(
           {
             projectId: project.id,
@@ -297,7 +333,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           actor(args.actor),
         );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        const headline = `Created epic #${epic.number} in ${project.title}${added}.`;
+        const headline = `Created epic #${epic.number} in ${project.title}${added}.${skippedText(skipped)}`;
         if (args.delivery) {
           try {
             await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));

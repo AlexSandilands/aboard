@@ -6,6 +6,7 @@ import {
   type PrSnapshot,
   type T3ThreadSnapshot,
   type TaskStatus,
+  type TicketSystem,
 } from "@repo/contracts";
 import { createContext } from "../context.ts";
 import type { Db } from "../db/database.ts";
@@ -360,7 +361,7 @@ const threads: Scenario = (s, opts) => {
   });
 
   addTask(s, project.id, {
-    title: "Jira and plain links",
+    title: "Ticket and plain links",
     status: "planned",
     links: ["SHOP-77", "https://example.com/design-spec"],
   });
@@ -992,6 +993,18 @@ function spreadOverWeeks(db: Db): void {
 export const SCENARIOS = { basic, review, threads, showcase, social, stats } satisfies Record<string, Scenario>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
+/** The made-up tracker the seeded tasks' keys (SHOP-77, PAY-88) belong to. */
+const SEED_TICKET_SYSTEM: TicketSystem = {
+  id: "tracker",
+  name: "Tracker",
+  keyPattern: String.raw`(?:SHOP|PAY)-\d+`,
+  urlPattern: String.raw`^https://tracker\.example\.com/browse/((?:SHOP|PAY)-\d+)`,
+  linkTemplate: "https://tracker.example.com/browse/{key}",
+  autoLink: true,
+  importTools: [],
+  importInstructions: "",
+};
+
 export const isScenarioName = (name: string): name is ScenarioName => Object.hasOwn(SCENARIOS, name);
 
 /**
@@ -1010,6 +1023,8 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
     sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
   });
   try {
+    // Every scenario's tasks link tickets, which need a system to belong to.
+    ctx.services.settings.update({ ticketSystems: [SEED_TICKET_SYSTEM] });
     SCENARIOS[scenario](ctx.services, opts);
     if (scenario === "stats") spreadOverWeeks(ctx.db);
   } finally {

@@ -5,13 +5,16 @@ import {
   type PlanPhase,
   type StepStatus,
   type TaskDetail,
+  type TaskLink,
   type TaskStatus,
   type TaskSummary,
 } from "@repo/contracts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 import {
   STALE_PLAN_MS,
   batchedCompletionHint,
+  linkText,
   progressHints,
   renderTranscript,
   runsOnText,
@@ -198,6 +201,33 @@ describe("renderTranscript", () => {
     const out = renderTranscript(transcript({}, `run ${["TOK", "EN"].join("")}=${value}`));
     expect(out.includes(value)).toBe(false);
     expect(out.includes("[redacted]")).toBe(true);
+  });
+});
+
+describe("linkText for tickets", () => {
+  const ticket = (url: string): TaskLink => ({
+    id: "l",
+    taskId: "t",
+    kind: "ticket",
+    url,
+    label: null,
+    syncedAt: null,
+    createdAt: "",
+    ref: { system: "jira", key: "ABC-1" },
+  });
+
+  it("names the system and links a bare key through its current template", () => {
+    expect(linkText(ticket("ABC-1"), [TEST_JIRA])).toBe("Jira ABC-1 https://jira.example.com/browse/ABC-1");
+    expect(linkText(ticket("ABC-1"), [{ ...TEST_JIRA, linkTemplate: "https://new.example.com/{key}" }])).toBe(
+      "Jira ABC-1 https://new.example.com/ABC-1",
+    );
+  });
+
+  it("keeps a pasted URL, and shows the id of a system that is gone", () => {
+    expect(linkText(ticket("https://old.example.com/browse/ABC-1"), [TEST_JIRA])).toBe(
+      "Jira ABC-1 https://old.example.com/browse/ABC-1",
+    );
+    expect(linkText(ticket("ABC-1"), [])).toBe("jira ABC-1");
   });
 });
 

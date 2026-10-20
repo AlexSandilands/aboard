@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { repositoryRootOf } from "./projects.ts";
-import { defaultSettings } from "../test/fixtures.ts";
+import { defaultSettings, TEST_JIRA } from "../test/fixtures.ts";
 
 const codeOf = (fn: () => unknown): string | undefined => {
   try {
@@ -163,11 +163,18 @@ describe("links", () => {
 
   it("classifies links and is idempotent on (task, kind, url)", () => {
     const { s, task } = setup();
-    s.settings.update({ jiraBaseUrl: "https://acme.atlassian.net/" });
+    s.settings.update({ ticketSystems: [{ ...TEST_JIRA, linkTemplate: "https://acme.atlassian.net/browse/{key}" }] });
     const pr = s.links.add(task.id, { value: "https://github.com/acme/app/pull/12" }, "agent");
     expect(pr).toMatchObject({ kind: "pr", ref: { host: "github.com", repo: "acme/app", number: 12 } });
-    const jira = s.links.add(task.id, { value: "pay-7" }, "agent");
-    expect(jira).toMatchObject({ kind: "jira", url: "https://acme.atlassian.net/browse/PAY-7", ref: { key: "PAY-7" } });
+    const ticket = s.links.add(task.id, { value: "pay-7" }, "agent");
+    expect(ticket).toMatchObject({
+      kind: "ticket",
+      url: "PAY-7",
+      ref: { system: "jira", key: "PAY-7" },
+    });
+    expect(s.links.add(task.id, { value: "https://acme.atlassian.net/browse/PAY-7?focus=1" }, "agent").id).toBe(
+      ticket.id,
+    );
     const thread = s.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "th 1" } }, "agent");
     expect(thread).toMatchObject({ kind: "t3_thread", url: "t3code://threads/env/th%201" });
     expect(s.links.add(task.id, { value: "t3code://threads/env/th%201" }, "agent").id).toBe(thread.id);
