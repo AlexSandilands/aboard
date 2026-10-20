@@ -16,6 +16,7 @@ import {
   createGithubIntegration,
   isGithubHost,
   mapPrSnapshot,
+  mapReviewThreadDetails,
   MergeTargetError,
   pollQuery,
   StaleReviewError,
@@ -159,80 +160,105 @@ describe("mapPrSnapshot", () => {
     ]);
   });
 
-  it("asks for the reviews and the newest 100 threads, with only each thread's last body", () => {
+  it("asks for the reviews and the newest 50 threads, without bodies", () => {
     const { query } = pollQuery([1]);
     expect(query).toContain("reviews(last: 20)");
-    expect(query).toContain("reviewThreads(last: 100)");
-    expect(query).toContain("id isResolved viewerCanResolve");
+    expect(query).toContain("reviewThreads(last: 50) { nodes { id isResolved viewerCanResolve");
     expect(query).toContain("viewerDidAuthor");
-    expect(query).toContain("latest: comments(last: 1) { nodes { body viewerDidAuthor } }");
-    expect(query.match(/body/g)).toHaveLength(1);
+    expect(query).not.toContain("body");
+    // One comments connection per thread: each is a request in GitHub's rate-limit cost, and the poll runs often.
+    expect(query.match(/comments\(/g)).toHaveLength(1);
   });
 
-  it("maps unresolved threads: whether Autopilot answered last, what it said, and whose review opened them", () => {
-    const thread = (id: string, latest: { body: string; viewerDidAuthor: boolean } | null, extra = {}) => ({
+  const comment = (id: number, own = false) => ({
+    databaseId: id,
+    createdAt: `2026-10-01T10:00:0${id % 10}Z`,
+    authorAssociation: "MEMBER",
+    viewerDidAuthor: own,
+    author: { login: own ? "me" : "ana" },
+    pullRequestReview: { databaseId: 900 },
+  });
+  /** A thread opened by a colleague's comment; `reply` is the user's account answering last. */
+  const thread = (id: string, reply: string | null, extra: Record<string, unknown> = {}) => {
+    const n = Number(id.slice(1));
+    return {
       id,
       isResolved: false,
       viewerCanResolve: true,
-      root: { nodes: [{ databaseId: 1, pullRequestReview: { databaseId: 900 } }] },
-      comments: {
+      root: { nodes: [{ databaseId: n * 10, pullRequestReview: { databaseId: 900 } }] },
+      comments: { nodes: [comment(n * 10), ...(reply !== null ? [comment(n * 10 + 1, true)] : [])] },
+      latest: {
         nodes: [
-          {
-            databaseId: Number(id.slice(1)),
-            createdAt: "2026-10-01T10:00:00Z",
-            authorAssociation: "MEMBER",
-            viewerDidAuthor: false,
-            author: { login: "ana" },
-            pullRequestReview: { databaseId: 900 },
-          },
+          reply !== null ? { body: reply, viewerDidAuthor: true } : { body: "Please fix", viewerDidAuthor: false },
         ],
       },
-      latest: { nodes: latest ? [latest] : [] },
       ...extra,
-    });
+    };
+  };
+
+  it("maps unresolved threads with who spoke last, and leaves out comments on ones the user's account answered", () => {
     const reviewThreads = {
       nodes: [
-        thread("T1", {
-          body: `${prFixedReply("ABC1234")}
-
-Moved the check.`,
-          viewerDidAuthor: true,
-        }),
-        thread("T2", { body: `${prReviewMarker()} · declined: out of scope`, viewerDidAuthor: true }),
-        // Written before the format was fixed: the mark, then "Fixed in" on a line of its own.
-        thread("T3", {
-          body: `${prReviewMarker()}
-
-Fixed in 8bbe435: renamed it.`,
-          viewerDidAuthor: true,
-        }),
-        thread("T4", {
-          body: `${prReviewMarker()} · major
-
-**A point**`,
-          viewerDidAuthor: true,
-        }),
-        // The mark in someone else's comment, or the user's own words without it, isn't Autopilot's reply.
-        thread("T5", { body: prFixedReply("abc1234"), viewerDidAuthor: false }),
-        thread("T6", { body: "fixed in abc1234", viewerDidAuthor: true }, { viewerCanResolve: null, root: null }),
-        thread("T7", null, { isResolved: true }),
+        thread("T1", prFixedReply("abc1234")),
+        thread("T2", null),
+        thread("T3", null, { isResolved: true }),
+        thread("T4", null, { viewerCanResolve: null }),
         null,
-        { ...thread("T8", null), id: null },
+        { ...thread("T5", null), id: null },
       ],
     };
     const snapshot = mapPrSnapshot(fakePr({ reviewThreads }), repo);
-    const base = { canResolve: true, rootCommentId: 1, rootReviewId: 900 };
     expect(snapshot.reviewThreads).toEqual([
-      { id: "T1", ...base, reply: "fixed", fixedIn: "abc1234" },
-      { id: "T2", ...base, reply: "declined", fixedIn: null },
-      { id: "T3", ...base, reply: "fixed", fixedIn: "8bbe435" },
-      { id: "T4", ...base, reply: "other", fixedIn: null },
-      { id: "T5", ...base, reply: null, fixedIn: null },
-      { id: "T6", canResolve: false, rootCommentId: null, rootReviewId: null, reply: null, fixedIn: null },
+      { id: "T1", canResolve: true, lastCommentId: 11, ownLast: true },
+      { id: "T2", canResolve: true, lastCommentId: 20, ownLast: false },
+      { id: "T4", canResolve: false, lastCommentId: 40, ownLast: false },
     ]);
-    expect(snapshot.unresolvedThreads).toBe(7);
-    // Comments on threads Autopilot answered last aren't asked about again.
-    expect(snapshot.reviewComments!.map((c) => c.id)).toEqual([5, 6, 8]);
+    expect(snapshot.unresolvedThreads).toBe(4);
+    expect(snapshot.reviewComments!.map((c) => c.id)).toEqual([20, 40, 50]);
+  });
+
+  it("reads what Autopilot's newest reply says, and whose review opened the thread, on the fresh read", () => {
+    const details = mapReviewThreadDetails([
+      thread(
+        "T1",
+        `${prFixedReply("ABC1234")}
+
+Moved the check.`,
+      ),
+      thread("T2", `${prReviewMarker()} · declined: out of scope`),
+      // Written before the format was fixed: the mark, then "Fixed in" on a line of its own.
+      thread(
+        "T3",
+        `${prReviewMarker()}
+
+Fixed in 8bbe435: renamed it.`,
+      ),
+      thread(
+        "T4",
+        `${prReviewMarker()} · major
+
+**A point**`,
+      ),
+      // The user's own words without the mark aren't Autopilot's reply, nor is the mark in someone else's comment.
+      thread("T5", "fixed in abc1234"),
+      { ...thread("T6", null), latest: { nodes: [{ body: prFixedReply("abc1234"), viewerDidAuthor: false }] } },
+    ]);
+    expect(
+      details.map(({ id, reply, fixedIn, rootCommentId, rootReviewId }) => ({
+        id,
+        reply,
+        fixedIn,
+        rootCommentId,
+        rootReviewId,
+      })),
+    ).toEqual([
+      { id: "T1", reply: "fixed", fixedIn: "abc1234", rootCommentId: 10, rootReviewId: 900 },
+      { id: "T2", reply: "declined", fixedIn: null, rootCommentId: 20, rootReviewId: 900 },
+      { id: "T3", reply: "fixed", fixedIn: "8bbe435", rootCommentId: 30, rootReviewId: 900 },
+      { id: "T4", reply: "other", fixedIn: null, rootCommentId: 40, rootReviewId: 900 },
+      { id: "T5", reply: null, fixedIn: null, rootCommentId: 50, rootReviewId: 900 },
+      { id: "T6", reply: null, fixedIn: null, rootCommentId: 60, rootReviewId: 900 },
+    ]);
   });
 
   it("maps the repo's merge settings and the viewer's permission", () => {
@@ -776,7 +802,16 @@ describe("review threads", () => {
       headOid: "head-1",
       commits: ["abc1234ffff", "head-1"],
       threads: [
-        { id: "T1", canResolve: true, rootCommentId: null, rootReviewId: null, reply: "fixed", fixedIn: "abc1234" },
+        {
+          id: "T1",
+          canResolve: true,
+          lastCommentId: null,
+          ownLast: false,
+          rootCommentId: null,
+          rootReviewId: null,
+          reply: "fixed",
+          fixedIn: "abc1234",
+        },
       ],
     });
     await github.resolveReviewThread("github.com", "T1");

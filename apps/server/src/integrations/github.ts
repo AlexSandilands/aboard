@@ -79,7 +79,7 @@ const ReviewCommentNode = z.object({
   pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
 });
 
-/** One review thread as the poll and the fresh thread read get it (`THREAD_FIELDS`). */
+/** One review thread: the poll reads the first fields (`THREAD_FIELDS`), the fresh thread read all (`THREAD_DETAIL_FIELDS`). */
 const ReviewThreadNode = z.object({
   id: z.string().nullish(),
   isResolved: z.boolean(),
@@ -182,6 +182,9 @@ function mapReviews(nodes: ReadonlyArray<z.infer<typeof ReviewNode> | null> | un
   });
 }
 
+/** The thread's newest comment the poll read (GitHub lists them oldest first). */
+const newestComment = (thread: ReviewThreadNode) => thread.comments.nodes.findLast((c) => c !== null) ?? null;
+
 /** What Autopilot's reply as the newest comment of the thread says, or null when someone else spoke last. */
 function threadReply(thread: ReviewThreadNode): ReturnType<typeof parseAutopilotReply> {
   const latest = thread.latest?.nodes.at(-1);
@@ -189,12 +192,15 @@ function threadReply(thread: ReviewThreadNode): ReturnType<typeof parseAutopilot
 }
 
 /**
- * Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with, and so has one that
- * Autopilot answered last: its reply said what it fixed or declined, and asking again would only ping-pong.
+ * Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with, and so has one the
+ * signed-in account answered last: Autopilot posts as the user, and its reply said what it fixed or declined, so
+ * asking again would only let two review bots ping-pong.
  */
 function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]): PrReviewCommentInfo[] {
   return (threads?.nodes ?? [])
-    .flatMap((thread) => (thread && !thread.isResolved && !threadReply(thread) ? thread.comments.nodes : []))
+    .flatMap((thread) =>
+      thread && !thread.isResolved && newestComment(thread)?.viewerDidAuthor !== true ? thread.comments.nodes : [],
+    )
     .flatMap((c): PrReviewCommentInfo[] =>
       c && typeof c.databaseId === "number"
         ? [
@@ -212,22 +218,50 @@ function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]):
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id));
 }
 
-/** The unresolved threads that have a node id, in GitHub's order. */
+/** The unresolved threads that have a node id, in GitHub's order, as the poll keeps them. */
 export function mapReviewThreads(nodes: ReadonlyArray<ReviewThreadNode | null> | undefined): PrReviewThreadInfo[] {
   return (nodes ?? []).flatMap((thread): PrReviewThreadInfo[] => {
     if (!thread || thread.isResolved || !thread.id) return [];
-    const root = thread.root?.nodes[0];
-    const reply = threadReply(thread);
+    const newest = newestComment(thread);
     return [
       {
         id: thread.id,
         canResolve: thread.viewerCanResolve ?? false,
-        rootCommentId: root?.databaseId ?? null,
-        rootReviewId: root?.pullRequestReview?.databaseId ?? null,
-        reply: reply?.kind ?? null,
-        fixedIn: reply?.kind === "fixed" ? reply.sha : null,
+        lastCommentId: newest?.databaseId ?? null,
+        ownLast: newest?.viewerDidAuthor === true,
       },
     ];
+  });
+}
+
+/** An unresolved thread read fresh, with what the poll leaves out. */
+export interface ReviewThreadDetail extends PrReviewThreadInfo {
+  /** The thread's first comment and the review it was posted in, to tell Autopilot's own review threads. */
+  rootCommentId: number | null;
+  rootReviewId: number | null;
+  /**
+   * The newest comment is Autopilot's (the signed-in account, starting with its mark): a reply saying it was fixed
+   * (`fixedIn` is the commit) or declined, or something else of Autopilot's, such as its own review comment. Null when
+   * someone else spoke last.
+   */
+  reply: "fixed" | "declined" | "other" | null;
+  fixedIn: string | null;
+}
+
+/** The unresolved threads of the fresh read, with their first comment and what Autopilot's newest reply says. */
+export function mapReviewThreadDetails(nodes: ReadonlyArray<ReviewThreadNode | null>): ReviewThreadDetail[] {
+  const byId = new Map(nodes.flatMap((t) => (t?.id ? [[t.id, t] as const] : [])));
+  return mapReviewThreads(nodes).map((info) => {
+    const thread = byId.get(info.id)!;
+    const root = thread.root?.nodes[0];
+    const reply = threadReply(thread);
+    return {
+      ...info,
+      rootCommentId: root?.databaseId ?? null,
+      rootReviewId: root?.pullRequestReview?.databaseId ?? null,
+      reply: reply?.kind ?? null,
+      fixedIn: reply?.kind === "fixed" ? reply.sha : null,
+    };
   });
 }
 
@@ -333,12 +367,23 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
-/** The newest 100 threads (GitHub's most per page): a busy review bot can leave more than a few dozen. */
-const THREAD_FIELDS = `reviewThreads(last: 100) { nodes { id isResolved viewerCanResolve
-        root: comments(first: 1) { nodes { databaseId pullRequestReview { databaseId } } }
-        comments(last: 5) { nodes {
+const COMMENT_FIELDS = `comments(last: 5) { nodes {
           databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
-        } }
+        } }`;
+/**
+ * What every poll reads of a PR's threads: the newest 50, with no bodies. Each thread's comments are a connection of
+ * their own in GitHub's rate-limit cost, and the poll reads up to 25 PRs every 20 seconds, so it stays this lean.
+ */
+const THREAD_FIELDS = `reviewThreads(last: 50) { nodes { id isResolved viewerCanResolve
+        ${COMMENT_FIELDS}
+      } }`;
+/**
+ * The fresh read before resolving anything: the newest 100 threads (GitHub's most per page), each with its first
+ * comment and its newest one's body, only to match Autopilot's marked reply. Never put in a prompt.
+ */
+const THREAD_DETAIL_FIELDS = `reviewThreads(last: 100) { nodes { id isResolved viewerCanResolve
+        root: comments(first: 1) { nodes { databaseId pullRequestReview { databaseId } } }
+        ${COMMENT_FIELDS}
         latest: comments(last: 1) { nodes { body viewerDidAuthor } }
       } }`;
 const prFields = (
@@ -390,7 +435,7 @@ const THREAD_STATE_QUERY = `query PullRequestThreads($owner: String!, $name: Str
     pullRequest(number: $number) {
       headRefOid
       commits(last: 100) { nodes { commit { oid } } }
-      ${THREAD_FIELDS}
+      ${THREAD_DETAIL_FIELDS}
     }
   }
 }`;
@@ -413,7 +458,7 @@ export interface PrThreadState {
   /** The PR's newest 100 commits, in full. */
   commits: string[];
   /** Its unresolved threads. */
-  threads: PrReviewThreadInfo[];
+  threads: ReviewThreadDetail[];
 }
 
 const MERGE_MUTATION = `mutation MergePullRequest($input: MergePullRequestInput!) {
@@ -1333,7 +1378,7 @@ ${link.ref.repo.toLowerCase()}`;
         return {
           headOid: pr.headRefOid,
           commits: pr.commits.nodes.flatMap((n) => (n ? [n.commit.oid] : [])),
-          threads: mapReviewThreads(pr.reviewThreads.nodes),
+          threads: mapReviewThreadDetails(pr.reviewThreads.nodes),
         };
       } catch (error) {
         if (error instanceof AppError) throw error;

@@ -13,7 +13,7 @@ import {
   type PrReviewThreadInfo,
   type PrSnapshot,
 } from "@repo/contracts";
-import type { PrThreadState } from "../../integrations/github.ts";
+import type { PrThreadState, ReviewThreadDetail } from "../../integrations/github.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
@@ -26,7 +26,16 @@ import {
   type RunnerRequest,
   type RunnerResult,
 } from "../types.ts";
-import { attemptBudget, fixDedupeKey, fixPrompt, fixPrs, manualFix, parseFixKey, resolveDedupeKey } from "./fixPrs.ts";
+import {
+  attemptBudget,
+  attemptBudgets,
+  fixDedupeKey,
+  fixPrompt,
+  fixPrs,
+  manualFix,
+  parseFixKey,
+  resolveDedupeKey,
+} from "./fixPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -66,14 +75,25 @@ const review = (id: number, over: Partial<PrReviewInfo> = {}): PrReviewInfo => (
   ...over,
 });
 
-const thread = (id: string, over: Partial<PrReviewThreadInfo> = {}): PrReviewThreadInfo => ({
+/** A thread as the fresh read finds it: answered last by Autopilot, "fixed in" a commit on the PR. */
+const thread = (id: string, over: Partial<ReviewThreadDetail> = {}): ReviewThreadDetail => ({
   id,
   canResolve: true,
+  lastCommentId: 10,
+  ownLast: true,
   rootCommentId: 1,
   rootReviewId: 500,
   reply: "fixed",
   fixedIn: SHA_B.slice(0, 7),
   ...over,
+});
+
+/** The same thread as the poll keeps it: no bodies. */
+const polled = ({ id, canResolve, lastCommentId, ownLast }: ReviewThreadDetail): PrReviewThreadInfo => ({
+  id,
+  canResolve,
+  lastCommentId,
+  ownLast,
 });
 
 const engines: AutopilotEngine[] = [];
@@ -718,7 +738,23 @@ describe("fix PRs: budgets", () => {
     expect(attemptBudget(["comments@4"])).toBe("comments");
     expect(attemptBudget(["changes@5", `conflict@${SHA_A}`])).toBe("comments");
     expect(attemptBudget([`checks@${SHA_A}`, "comments@4"])).toBe("review");
-    expect(attemptBudget(["review@900", "comments@4"])).toBe("review");
+    expect(attemptBudgets(["review@900", "comments@4"])).toEqual(["review", "comments"]);
+  });
+
+  it("counts an attempt on Autopilot's review and a colleague's comments against both budgets", async () => {
+    const { requests, setPr, pass, turnOn, runs, reviewed, engineSettings, linkId } = setup();
+    engineSettings({ prCommentRounds: 1 });
+    turnOn();
+    reviewed();
+    setPr({ reviewComments: [comment(1)] });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("This is fix attempt 1 of at most 3 on this PR.");
+    // The comments' one attempt is used, so the next comments are given up on.
+    setPr({ headOid: SHA_B, reviewComments: [comment(1), comment(2)] });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs()[0]!.dedupeKey).toBe(`fix:gave_up:${linkId()}:comments`);
   });
 
   it("gives other people's comments attempts of their own, apart from Autopilot's review and checks", async () => {
@@ -768,13 +804,13 @@ describe("fix PRs: resolving threads it fixed", () => {
     turnOn();
     const threads = [thread("T1"), thread("T2", { fixedIn: SHA_A.slice(0, 7) })];
     setThreadState({ threads });
-    setPr({ reviewThreads: threads, unresolvedThreads: 2 });
+    setPr({ reviewThreads: threads.map(polled), unresolvedThreads: 2 });
     await pass();
     expect(requests).toHaveLength(0);
     expect(resolved).toEqual(["T1", "T2"]);
     expect(runs()[0]).toMatchObject({
       status: "succeeded",
-      dedupeKey: resolveDedupeKey(linkId(), SHA_A, ["T1", "T2"]),
+      dedupeKey: resolveDedupeKey(linkId(), SHA_A, ["T1@10", "T2@10"]),
       summary: "Resolved 2 review threads Autopilot fixed on PR #7",
     });
     // Once is enough: the same threads at the same head aren't tried again.
@@ -783,50 +819,55 @@ describe("fix PRs: resolving threads it fixed", () => {
     expect(runs()).toHaveLength(1);
   });
 
-  it("leaves open a thread whose commit isn't on the PR", async () => {
+  it("leaves open a thread whose commit isn't on the PR, and tries it again after a push", async () => {
     const { setPr, pass, turnOn, runs, resolved, setThreadState } = setup();
     turnOn();
     const threads = [thread("T1", { fixedIn: "deadbee" }), thread("T2")];
     setThreadState({ threads });
-    setPr({ reviewThreads: threads });
+    setPr({ reviewThreads: threads.map(polled) });
     await pass();
     expect(resolved).toEqual(["T2"]);
     expect(runs()[0]!.summary).toBe(
       "Resolved 1 review thread Autopilot fixed on PR #7; 1 review thread left open: the commit isn't on the PR",
     );
-  });
-
-  it("leaves declined threads, other people's last word and threads it can't resolve alone", async () => {
-    const { setPr, pass, turnOn, runs, resolved } = setup();
-    turnOn();
-    setPr({
-      reviewThreads: [
-        thread("T1", { reply: "declined", fixedIn: null }),
-        thread("T2", { reply: null, fixedIn: null }),
-        thread("T3", { reply: "other", fixedIn: null }),
-        thread("T4", { canResolve: false }),
-      ],
-    });
+    setThreadState({ threads: [thread("T1", { fixedIn: "deadbee" })], commits: ["deadbeef00", SHA_B, SHA_A] });
+    setPr({ headOid: SHA_C, reviewThreads: [polled(thread("T1"))] });
     await pass();
-    expect(resolved).toEqual([]);
-    expect(runs()).toHaveLength(0);
+    expect(resolved).toEqual(["T2", "T1"]);
   });
 
-  it("reads the threads fresh, so one answered since stays open", async () => {
+  it("only reads threads the user's account answered last, and resolves none it didn't say it fixed", async () => {
     const { setPr, pass, turnOn, runs, resolved, setThreadState } = setup();
     turnOn();
-    setPr({ reviewThreads: [thread("T1")] });
-    setThreadState({ threads: [thread("T1", { reply: null, fixedIn: null })] });
+    const threads = [
+      thread("T1", { reply: "declined", fixedIn: null }),
+      thread("T2", { reply: null, fixedIn: null }),
+      thread("T3", { reply: "other", fixedIn: null }),
+      thread("T4", { canResolve: false }),
+      thread("T5", { ownLast: false }),
+    ];
+    setThreadState({ threads });
+    setPr({ reviewThreads: threads.map(polled) });
     await pass();
     expect(resolved).toEqual([]);
+    expect(runs()).toHaveLength(1);
     expect(runs()[0]).toMatchObject({ status: "skipped", summary: "Nothing to resolve on PR #7" });
+    expect(runs()[0]!.output).toEqual({ settled: ["T1@10", "T2@10", "T3@10"] });
+    // Read once: a new push doesn't read them again, a new comment on one does.
+    setPr({ headOid: SHA_B, reviewThreads: threads.map(polled) });
+    await pass();
+    expect(runs()).toHaveLength(1);
+    setThreadState({ threads: [thread("T1", { lastCommentId: 11 })] });
+    setPr({ headOid: SHA_B, reviewThreads: [polled(thread("T1", { lastCommentId: 11 })), ...threads.map(polled)] });
+    await pass();
+    expect(resolved).toEqual(["T1"]);
   });
 
   it("does nothing with the switch off", async () => {
     const { setPr, pass, turnOn, runs, resolved, setThreadState } = setup();
     turnOn({ resolveThreads: false });
     setThreadState({ threads: [thread("T1")] });
-    setPr({ reviewThreads: [thread("T1")] });
+    setPr({ reviewThreads: [polled(thread("T1"))] });
     await pass();
     expect(resolved).toEqual([]);
     expect(runs()).toHaveLength(0);
@@ -837,7 +878,7 @@ describe("fix PRs: resolving threads it fixed", () => {
     turnOn();
     failResolve("Resource not accessible by integration");
     setThreadState({ threads: [thread("T1")] });
-    setPr({ reviewThreads: [thread("T1")] });
+    setPr({ reviewThreads: [polled(thread("T1"))] });
     await pass();
     expect(runs()[0]).toMatchObject({ status: "failed" });
     expect(runs()[0]!.error).toContain("Resource not accessible by integration");
@@ -847,7 +888,7 @@ describe("fix PRs: resolving threads it fixed", () => {
     const { requests, setPr, pass, turnOn, runs, resolved, setThreadState } = setup();
     turnOn();
     setThreadState({ threads: [thread("T1")] });
-    setPr({ checks: "failing", reviewThreads: [thread("T1")] });
+    setPr({ checks: "failing", reviewThreads: [polled(thread("T1"))] });
     await pass();
     expect(requests).toHaveLength(1);
     expect(resolved).toEqual(["T1"]);

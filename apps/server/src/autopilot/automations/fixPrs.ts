@@ -67,18 +67,27 @@ export type FixBudget = "conflicts" | "review" | "comments";
 const triggerBudget = (kind: FixTriggerKind): FixBudget | null =>
   kind === "comments" || kind === "changes" ? "comments" : kind === "conflict" ? null : "review";
 
-/** The budget an attempt given these trigger keys counts against: Autopilot's review wins over people's comments. */
-export function attemptBudget(keys: readonly string[]): FixBudget {
+/**
+ * Every budget an attempt given these trigger keys counts against: one that answers both Autopilot's review and a
+ * colleague's comments uses an attempt of each, so neither can use up the other's.
+ */
+export function attemptBudgets(keys: readonly string[]): FixBudget[] {
   const kinds = keys.map(kindOf);
-  if (kinds.length > 0 && kinds.every((k) => k === "conflict")) return "conflicts";
-  if (kinds.some((k) => triggerBudget(k) === "review")) return "review";
-  return kinds.some((k) => triggerBudget(k) === "comments") ? "comments" : "review";
+  if (kinds.length > 0 && kinds.every((k) => k === "conflict")) return ["conflicts"];
+  const budgets = (["review", "comments"] as const).filter((b) => kinds.some((k) => triggerBudget(k) === b));
+  return budgets.length > 0 ? budgets : ["review"];
 }
 
-/** The dedupe key of resolving these threads at this head: a new push, or another thread, is looked at again. */
-export function resolveDedupeKey(linkId: string, headOid: string, threadIds: readonly string[]): string {
+/** The budget an attempt is named after ("attempt 2 of 3"): Autopilot's review and checks before people's comments. */
+export const attemptBudget = (keys: readonly string[]): FixBudget => attemptBudgets(keys)[0]!;
+
+/** A thread at its newest comment: a new comment on it makes it another thread to look at. */
+const threadKey = (t: { id: string; lastCommentId: number | null }) => `${t.id}@${t.lastCommentId ?? ""}`;
+
+/** The dedupe key of resolving these threads (`threadKey`s) at this head: a new push, or another comment, looks again. */
+export function resolveDedupeKey(linkId: string, headOid: string, threads: readonly string[]): string {
   const hash = createHash("sha1")
-    .update([...threadIds].sort().join(","))
+    .update([...threads].sort().join(","))
     .digest("hex")
     .slice(0, 12);
   return `${FIX_RESOLVE_KEY_PREFIX}${linkId}:${headOid}:${hash}`;
@@ -514,7 +523,7 @@ export const fixPrs = defineAutomation({
 
           // Each budget counts its own attempts: main moving under the PR isn't the PR's doing, and a colleague's review
           // bot shouldn't leave no attempts for Autopilot's review loop, nor the other way round.
-          const usedOf = (budget: FixBudget) => used.filter((f) => attemptBudget(f.triggers) === budget).length;
+          const usedOf = (budget: FixBudget) => used.filter((f) => attemptBudgets(f.triggers).includes(budget)).length;
           const maxOf = (budget: FixBudget) =>
             budget === "conflicts"
               ? CONFLICT_ATTEMPTS_PER_PR
@@ -597,20 +606,25 @@ export const fixPrs = defineAutomation({
           return out;
         };
         return links.flatMap(({ link, ref, snapshot, headRef }): Candidate[] => {
-          // Resolving needs no agent and changes no code, so it doesn't wait for a fix or review of the PR.
+          // Resolving needs no agent and changes no code, so it doesn't wait for a fix or review of the PR. The poll
+          // reads no bodies: a thread the user's account answered last is read fresh, once per newest comment that
+          // turned out not to be a "fixed in" reply.
+          const settled = new Set(
+            fixes.flatMap((r) =>
+              r.dedupeKey.startsWith(`${FIX_RESOLVE_KEY_PREFIX}${link.id}:`) && Array.isArray(r.output?.settled)
+                ? (r.output.settled as unknown[]).filter((k): k is string => typeof k === "string")
+                : [],
+            ),
+          );
           const resolvable = config.resolveThreads
-            ? (snapshot.reviewThreads ?? []).filter((t) => t.reply === "fixed" && t.fixedIn && t.canResolve)
+            ? (snapshot.reviewThreads ?? []).filter((t) => t.ownLast && t.canResolve && !settled.has(threadKey(t)))
             : [];
           const resolve: Candidate[] =
             resolvable.length > 0
               ? [
                   {
-                    dedupeKey: resolveDedupeKey(
-                      link.id,
-                      snapshot.headOid,
-                      resolvable.map((t) => t.id),
-                    ),
-                    summary: `resolve ${resolvable.length} review thread${resolvable.length === 1 ? "" : "s"} Autopilot fixed on PR #${ref.number}`,
+                    dedupeKey: resolveDedupeKey(link.id, snapshot.headOid, resolvable.map(threadKey)),
+                    summary: `resolve the review threads Autopilot fixed on PR #${ref.number} (${resolvable.length} to read)`,
                     taskId: task.id,
                     startsNoAgent: true,
                     data: {
@@ -743,12 +757,16 @@ async function resolveFixedThreads(
   const state = await github.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
   const commits = state.commits.map((c) => c.toLowerCase());
   const wanted = new Set(data.threadIds);
-  const fixed = state.threads.filter((t) => wanted.has(t.id) && t.reply === "fixed" && t.fixedIn && t.canResolve);
+  const read = state.threads.filter((t) => wanted.has(t.id));
+  const fixed = read.filter((t) => t.reply === "fixed" && t.fixedIn && t.canResolve);
   const onPr = fixed.filter((t) => commits.some((c) => c.startsWith(t.fixedIn!)));
   const notOnPr = fixed.length - onPr.length;
   const missing = notOnPr > 0 ? `; ${threads(notOnPr)} left open: the commit isn't on the PR` : "";
+  // Threads whose newest comment isn't a "fixed in" reply (declined, the user's own words) aren't read again until
+  // someone comments on them. One whose commit isn't on the PR yet is, after the next push.
+  const output = { settled: read.filter((t) => t.reply !== "fixed").map(threadKey) };
   if (onPr.length === 0) {
-    return { status: "skipped", summary: `Nothing to resolve on PR #${data.number}${missing}` };
+    return { status: "skipped", summary: `Nothing to resolve on PR #${data.number}${missing}`, output };
   }
   const failed: string[] = [];
   for (const thread of onPr) {
@@ -761,7 +779,7 @@ async function resolveFixedThreads(
   const resolved = onPr.length - failed.length;
   if (resolved === 0) throw new Error(`Couldn't resolve ${threads(onPr.length)} on PR #${data.number}: ${failed[0]}`);
   const errors = failed.length > 0 ? `; ${failed.length} failed: ${failed[0]}` : "";
-  return { summary: `Resolved ${threads(resolved)} Autopilot fixed on PR #${data.number}${missing}${errors}` };
+  return { summary: `Resolved ${threads(resolved)} Autopilot fixed on PR #${data.number}${missing}${errors}`, output };
 }
 
 /**

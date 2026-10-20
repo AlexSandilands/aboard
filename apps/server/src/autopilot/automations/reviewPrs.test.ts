@@ -10,7 +10,7 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { StaleReviewError, type PostReviewInput } from "../../integrations/github.ts";
+import { StaleReviewError, type PostReviewInput, type ReviewThreadDetail } from "../../integrations/github.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import {
@@ -85,8 +85,10 @@ function setup() {
     },
   };
   const resolved: string[] = [];
+  let threads: ReviewThreadDetail[] = [];
   const github: GithubActions = {
     ...NO_GITHUB,
+    reviewThreads: async () => ({ headOid: live(), commits: [], threads }),
     resolveReviewThread: async (_host, id) => {
       resolved.push(id);
     },
@@ -168,6 +170,7 @@ function setup() {
     runs,
     notes,
     resolved,
+    setThreads: (next: ReviewThreadDetail[]) => (threads = next),
   };
 }
 
@@ -867,24 +870,24 @@ describe("review PRs: verdict, threshold and hand-off", () => {
   });
 
   it("resolves its own earlier threads a later round confirms fixed, and no one else's", async () => {
-    const { setPr, pass, turnOn, setIssues, answerWith, resolved, runs } = setup();
+    const { setPr, pass, turnOn, setIssues, answerWith, resolved, runs, setThreads } = setup();
     setIssues([issue("major")]);
     turnOn();
     setPr();
     await pass();
     // Review 101 was round 1's; 77 is a colleague's.
-    const thread = (id: string, rootCommentId: number, rootReviewId: number) => ({
+    const thread = (id: string, rootCommentId: number, rootReviewId: number): ReviewThreadDetail => ({
       id,
       canResolve: true,
+      lastCommentId: rootCommentId,
+      ownLast: false,
       rootCommentId,
       rootReviewId,
       reply: null,
       fixedIn: null,
     });
-    setPr({
-      headOid: SHA_B,
-      reviewThreads: [thread("OWN", 11, 101), thread("OTHER", 12, 77), thread("STILL", 13, 101)],
-    });
+    setThreads([thread("OWN", 11, 101), thread("OTHER", 12, 77), thread("STILL", 13, 101)]);
+    setPr({ headOid: SHA_B });
     answerWith(() => ({ summary: "Fixed.", issues: [], fixed: [11, 12] }));
     await pass();
     expect(resolved).toEqual(["OWN"]);

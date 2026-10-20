@@ -215,24 +215,18 @@ export const PrReviewCommentInfo = z.object({
 export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
 
 /**
- * A review thread that isn't resolved. No bodies: only whether its newest comment is Autopilot's marked reply
- * (`parseAutopilotReply`), which is how Fix PRs tells a thread it fixed and may resolve.
+ * A review thread that isn't resolved, as the poll reads it: no bodies. A thread whose newest comment is the signed-in
+ * account's (Autopilot posts as the user) may be one Autopilot answered; Fix PRs reads it fresh to find out.
  */
 export const PrReviewThreadInfo = z.object({
   /** GitHub's node id, which resolveReviewThread takes. */
   id: z.string(),
   /** Whether the signed-in account may resolve it. */
   canResolve: z.boolean(),
-  /** The thread's first comment and the review it was posted in, to tell Autopilot's own review threads. */
-  rootCommentId: z.number().int().nullable(),
-  rootReviewId: z.number().int().nullable(),
-  /**
-   * The newest comment is Autopilot's (the signed-in account, starting with its mark): a reply saying it was fixed
-   * (`fixedIn` is the commit) or declined, or something else of Autopilot's, such as its own review comment. Null when
-   * someone else spoke last.
-   */
-  reply: z.enum(["fixed", "declined", "other"]).nullable(),
-  fixedIn: z.string().nullable(),
+  /** The newest comment's databaseId, so a new comment makes the thread worth another look. */
+  lastCommentId: z.number().int().nullable(),
+  /** The newest comment is the signed-in account's. */
+  ownLast: z.boolean(),
 });
 export type PrReviewThreadInfo = z.infer<typeof PrReviewThreadInfo>;
 
@@ -288,9 +282,9 @@ export const PrSnapshot = z.object({
   isCrossRepository: z.boolean().optional(),
   /** The newest reviews, oldest first. Optional, as below, so older snapshots still parse. */
   reviews: z.array(PrReviewInfo).optional(),
-  /** Comments on the newest unresolved review threads Autopilot didn't answer last, oldest first. */
+  /** Comments on the newest unresolved review threads the signed-in account didn't answer last, oldest first. */
   reviewComments: z.array(PrReviewCommentInfo).optional(),
-  /** The newest unresolved review threads (up to 100). */
+  /** The newest unresolved review threads (of the last 50). */
   reviewThreads: z.array(PrReviewThreadInfo).optional(),
   /** How many of the threads read are unresolved: a repository can require them all resolved before a merge. */
   unresolvedThreads: z.number().int().nonnegative().optional(),

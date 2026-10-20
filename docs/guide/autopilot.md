@@ -99,7 +99,8 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
 - It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **PR
   review rounds** (3 by default), and fixes for other people's comments and requests for changes get **PR comment
-  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. When
+  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
+  thread your account answered last doesn't send it back. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
   goes on.
 - It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch

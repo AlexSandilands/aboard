@@ -20,11 +20,17 @@ import {
   type PrReviewHandoff,
   type PrReviewIssue,
   type PrReviewRunOutput,
-  type PrReviewThreadInfo,
+  type PrRef,
   type SeverityCounts,
 } from "@repo/contracts";
 import { z } from "zod";
-import { StaleReviewError, messageOf, type PostedReview, type ReviewComment } from "../../integrations/github.ts";
+import {
+  StaleReviewError,
+  messageOf,
+  type PostedReview,
+  type ReviewComment,
+  type ReviewThreadDetail,
+} from "../../integrations/github.ts";
 import { isTransientGithubError } from "../../integrations/githubApi.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import {
@@ -228,15 +234,23 @@ export function renderReview(
   return { body: clip(body), comments };
 }
 
-/** Resolves its own earlier review threads the round confirmed fixed. Never fails the review: returns how many. */
+/**
+ * Resolves its own earlier review threads the round confirmed fixed, read fresh from GitHub (the poll doesn't read
+ * whose review opened a thread). Never fails the review: returns how many.
+ */
 export async function resolveConfirmedThreads(
-  github: Pick<GithubActions, "resolveReviewThread">,
-  host: string,
-  threads: readonly PrReviewThreadInfo[],
+  github: Pick<GithubActions, "reviewThreads" | "resolveReviewThread">,
+  ref: PrRef,
   fixed: readonly number[],
   ownReviewIds: ReadonlySet<number>,
 ): Promise<number> {
   const ids = new Set(fixed);
+  let threads: ReviewThreadDetail[];
+  try {
+    threads = (await github.reviewThreads(ref)).threads;
+  } catch {
+    return 0;
+  }
   // Only threads Autopilot's own reviews opened: a reviewer can't vouch for someone else's point.
   const targets = threads.filter(
     (t) =>
@@ -249,7 +263,7 @@ export async function resolveConfirmedThreads(
   let resolved = 0;
   for (const thread of targets) {
     try {
-      await github.resolveReviewThread(host, thread.id);
+      await github.resolveReviewThread(ref.host, thread.id);
       resolved += 1;
     } catch {
       // Left open: the next round sees it and can report it again.
@@ -505,8 +519,7 @@ export const reviewPrs = defineAutomation({
       data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
         ? await resolveConfirmedThreads(
             github,
-            data.host,
-            link.snapshot.reviewThreads ?? [],
+            { host: data.host, repo: data.repo, number: data.number },
             verdict.fixed ?? [],
             new Set(data.earlier.flatMap((e) => (e.reviewId === null ? [] : [e.reviewId]))),
           )
