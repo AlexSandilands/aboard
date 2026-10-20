@@ -95,9 +95,10 @@ export function createLinksRepo(sql: Sql) {
         null
       );
     },
+    /** In the order they were added: rowid breaks a tie in created_at (one call adds several links), a random id can't. */
     forTasks(taskIds: readonly string[]): LinkRow[] {
       return sql.all<LinkRow>(
-        "SELECT * FROM task_links WHERE task_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, id",
+        "SELECT * FROM task_links WHERE task_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, rowid",
         jsonList(taskIds),
       );
     },
@@ -105,7 +106,7 @@ export function createLinksRepo(sql: Sql) {
     byKindActive(kind: LinkKind): LinkRow[] {
       return sql.all<LinkRow>(
         `SELECT l.* FROM task_links l JOIN tasks t ON t.id = l.task_id
-         WHERE l.kind = ? AND t.archived_at IS NULL ORDER BY l.created_at, l.id`,
+         WHERE l.kind = ? AND t.archived_at IS NULL ORDER BY l.created_at, l.rowid`,
         kind,
       );
     },
