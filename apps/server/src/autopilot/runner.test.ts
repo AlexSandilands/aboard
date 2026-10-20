@@ -367,6 +367,15 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(runModel({ tier: "deep", modelChoice: { tier: "light" } }, options(), task, settings).profile?.id).toBe(
       "light",
     );
+    // A Model setting naming a deleted custom model falls back to the action's own choice, with a note.
+    const deleted = runModel(
+      { tier: "deep", modelChoice: { tier: "light" } },
+      options({ modelChoice: { profile: "gone" } }),
+      task,
+      settings,
+    );
+    expect(deleted).toMatchObject({ source: "automation", profile: { id: "light" } });
+    expect(deleted.note).toContain('"gone" no longer exists');
     expect(headlessModel(runModel({ tier: "deep" }, options(), task, settings), "haiku").model).toBe("haiku");
     // Configs saved before the setting existed take the task's model.
     expect(options({ model: "opus" })).toEqual({ ...RUNNER_DEFAULTS, model: "opus", modelChoice: { from: "task" } });

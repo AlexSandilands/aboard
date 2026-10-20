@@ -60,10 +60,13 @@ export function runModel(
   settings: Parameters<typeof resolveRunModel>[1],
 ): RunModel {
   const configured = "from" in options.modelChoice ? null : options.modelChoice;
-  return resolveRunModel(
-    { labels: task?.labels ?? [], tier: request.tier, choice: configured ?? request.modelChoice ?? null },
-    settings,
-  );
+  const input = { labels: task?.labels ?? [], tier: request.tier };
+  const model = resolveRunModel({ ...input, choice: configured ?? request.modelChoice ?? null }, settings);
+  // The Model setting names a custom model since deleted: the action's own choice still comes before the task's.
+  if (model.note && configured && request.modelChoice) {
+    return { ...resolveRunModel({ ...input, choice: request.modelChoice }, settings), note: model.note };
+  }
+  return model;
 }
 
 /**

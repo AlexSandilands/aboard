@@ -27,6 +27,7 @@ describe("custom models editor", () => {
 
   it("reads a comma-separated label list as task labels", () => {
     expect(parseLabelList("Codex61, #fast lane, codex61, ")).toEqual(["codex61", "fast-lane"]);
+    expect(parseLabelList(`ok, ${"x".repeat(40)}`)).toEqual(["ok"]);
   });
 
   it("adds, renames, moves and removes models", () => {
@@ -44,6 +45,12 @@ describe("custom models editor", () => {
     // A blank name keeps the old one.
     list = applyProfileEdit(list, { kind: "change", id: "new-model", change: { field: "name", value: " " } });
     expect(list[1]!.name).toBe("Fast");
+    list = applyProfileEdit(list, {
+      kind: "change",
+      id: "new-model",
+      change: { field: "name", value: "y".repeat(80) },
+    });
+    expect(list[1]!.name).toHaveLength(60);
     list = applyProfileEdit(list, { kind: "move", id: "new-model", delta: -1 });
     expect(list.map((p) => p.id)).toEqual(["new-model", "codex-6-1"]);
     expect(applyProfileEdit(list, { kind: "move", id: "new-model", delta: -1 })).toEqual(list);

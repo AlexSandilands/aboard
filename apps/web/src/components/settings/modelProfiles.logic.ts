@@ -1,6 +1,8 @@
 // Pure helpers for the Custom models list on the Model tiers page: adding, editing, reordering and removing a custom
 // model, and the list one edit sends.
 import {
+  LABEL_MAX_LENGTH,
+  MODEL_PROFILE_NAME_MAX,
   MODEL_PROFILES_MAX,
   MODEL_PROFILE_LABELS_MAX,
   ModelTier,
@@ -37,9 +39,15 @@ export function profileIdFor(name: string, taken: ReadonlySet<string>): string {
   return id;
 }
 
-/** "codex61, #Fast lane" -> ["codex61", "fast-lane"]: commas separate labels, each normalised as a task label is. */
+/**
+ * "codex61, #Fast lane" -> ["codex61", "fast-lane"]: commas separate labels, each normalised as a task label is. One
+ * longer than a label can be is dropped, as no task could carry it and the server would refuse the whole list.
+ */
 export function parseLabelList(text: string): string[] {
-  const labels = text.split(",").map(normalizeLabel).filter(Boolean);
+  const labels = text
+    .split(",")
+    .map(normalizeLabel)
+    .filter((label) => label && label.length <= LABEL_MAX_LENGTH);
   return [...new Set(labels)].slice(0, MODEL_PROFILE_LABELS_MAX);
 }
 
@@ -56,7 +64,9 @@ export function applyProfileEdit(list: readonly ModelProfile[], edit: ProfileEdi
       return list.map((profile) => {
         if (profile.id !== edit.id) return profile;
         const { change } = edit;
-        if (change.field === "name") return { ...profile, name: change.value.trim() || profile.name };
+        if (change.field === "name") {
+          return { ...profile, name: change.value.trim().slice(0, MODEL_PROFILE_NAME_MAX).trim() || profile.name };
+        }
         if (change.field === "labels") return { ...profile, labels: change.value };
         return { ...profile, ...applyTierChange(profile, change) };
       });

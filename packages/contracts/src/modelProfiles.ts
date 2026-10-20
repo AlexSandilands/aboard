@@ -14,6 +14,7 @@ import {
 // docs/features/autopilot.md#models.
 
 export const MODEL_PROFILES_MAX = 20;
+export const MODEL_PROFILE_NAME_MAX = 60;
 /** Most labels one model can be picked by. */
 export const MODEL_PROFILE_LABELS_MAX = 10;
 
@@ -32,7 +33,7 @@ export const ModelProfileId = z
  */
 export const ModelProfile = ModelTierSetting.extend({
   id: ModelProfileId,
-  name: z.string().trim().min(1).max(60),
+  name: z.string().trim().min(1).max(MODEL_PROFILE_NAME_MAX),
   labels: z
     .array(z.string().transform(normalizeLabel).pipe(z.string().min(1).max(LABEL_MAX_LENGTH)))
     .max(MODEL_PROFILE_LABELS_MAX)
