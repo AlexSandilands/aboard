@@ -34,6 +34,12 @@ export const fixRunKeyPrefix = (linkId: string): string => `fix:pr:${linkId}:`;
 /** The start of the dedupe key of every run that records Fix PRs giving up (`fix:gave_up:<link>[:<head>|:conflicts]`). */
 export const FIX_GAVE_UP_KEY_PREFIX = "fix:gave_up:";
 
+/**
+ * The start of the dedupe key of every run in which Fix PRs resolved threads it had fixed, with no agent
+ * (`fix:resolve:<link>:<head>:<threads>`).
+ */
+export const FIX_RESOLVE_KEY_PREFIX = "fix:resolve:";
+
 /** The merge buttons: `armed` is a badge and a menu item of its own, not a slot. */
 export type PrMergeButton = Exclude<PrMergeAction, "armed">;
 

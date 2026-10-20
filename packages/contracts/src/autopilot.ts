@@ -201,8 +201,10 @@ export const AutopilotEngineSettings = z.object({
   quietHours: z.object({ enabled: z.boolean(), start: ClockTime, end: ClockTime }),
   /** Record what would run, as skipped runs, and do nothing. */
   dryRun: z.boolean(),
-  /** Review rounds the PR review automation runs per PR. */
+  /** Review rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks. */
   prReviewRounds: z.number().int().min(1).max(10),
+  /** Fix PRs' attempts per PR on other people's review comments and requests for changes. */
+  prCommentRounds: z.number().int().min(1).max(10),
   /** The lowest finding severity the PR automations ask an agent to fix. */
   prFixThreshold: FindingSeverity,
   /** Days a finished headless run's worktree is kept when its PR hasn't merged; clean ones are then removed. */
@@ -217,6 +219,7 @@ export const DEFAULT_AUTOPILOT_ENGINE: AutopilotEngineSettings = {
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
   dryRun: false,
   prReviewRounds: 3,
+  prCommentRounds: 5,
   prFixThreshold: "major",
   worktreeRetentionDays: 7,
 };

@@ -10,7 +10,7 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { StaleReviewError, type PostReviewInput } from "../../integrations/github.ts";
+import { StaleReviewError, type PostReviewInput, type ReviewThreadDetail } from "../../integrations/github.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import {
@@ -84,8 +84,14 @@ function setup() {
       return { runner: "headless", result: null, output };
     },
   };
+  const resolved: string[] = [];
+  let threads: ReviewThreadDetail[] = [];
   const github: GithubActions = {
     ...NO_GITHUB,
+    reviewThreads: async () => ({ headOid: live(), commits: [], threads }),
+    resolveReviewThread: async (_host, id) => {
+      resolved.push(id);
+    },
     postReview: async (ref, input) => {
       posts.push({ ...ref, input });
       if (postError) throw new Error(postError);
@@ -163,6 +169,8 @@ function setup() {
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
     runs,
     notes,
+    resolved,
+    setThreads: (next: ReviewThreadDetail[]) => (threads = next),
   };
 }
 
@@ -858,6 +866,34 @@ describe("review PRs: verdict, threshold and hand-off", () => {
     expect(prompt).toContain("FYI (no action needed)");
     expect(prompt).toContain("Don't raise again a point that was fixed or that the author declined");
     expect(prompt).not.toContain("this is the last round");
+    expect(prompt).toContain("put its comment `id` (from the comments API) in `fixed`");
+  });
+
+  it("resolves its own earlier threads a later round confirms fixed, and no one else's", async () => {
+    const { setPr, pass, turnOn, setIssues, answerWith, resolved, runs, setThreads } = setup();
+    setIssues([issue("major")]);
+    turnOn();
+    setPr();
+    await pass();
+    // Review 101 was round 1's; 77 is a colleague's.
+    const thread = (id: string, rootCommentId: number, rootReviewId: number): ReviewThreadDetail => ({
+      id,
+      canResolve: true,
+      lastCommentId: rootCommentId,
+      ownLast: false,
+      lastReviewId: rootReviewId,
+      rootCommentId,
+      rootReviewId,
+      reply: null,
+      fixedIn: null,
+    });
+    setThreads([thread("OWN", 11, 101), thread("OTHER", 12, 77), thread("STILL", 13, 101)]);
+    setPr({ headOid: SHA_B });
+    answerWith(() => ({ summary: "Fixed.", issues: [], fixed: [11, 12] }));
+    await pass();
+    expect(resolved).toEqual(["OWN"]);
+    expect(runs()[0]!.summary).toContain("resolved 1 earlier thread it confirmed fixed");
+    expect(runs()[0]!.output).toMatchObject({ resolvedThreads: 1, handoff: "clean" });
   });
 });
 
