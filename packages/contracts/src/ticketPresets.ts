@@ -16,7 +16,7 @@ const PROJECT_KEY = String.raw`[A-Z][A-Z0-9_]+-\d+`;
 
 /**
  * Prefixes of standards, encodings and identifiers that look like keys ("UTF-8", "SHA-256", "CVE-2024-1"), left out
- * of the Jira key pattern so they are never taken for issues.
+ * of the presets' key patterns so they are never taken for issues.
  */
 const NOT_PROJECTS = "AES|CVE|CWE|ECMA|GPT|HMAC|HTTP|IEC|IEEE|ISO|MD|RFC|RSA|SHA|TLS|UTF|WCAG";
 
@@ -47,7 +47,7 @@ export const TICKET_SYSTEM_PRESETS: readonly TicketSystemPreset[] = [
     system: {
       id: "linear",
       name: "Linear",
-      keyPattern: String.raw`[A-Z][A-Z0-9]+-\d+`,
+      keyPattern: String.raw`(?!(?:${NOT_PROJECTS})-)[A-Z][A-Z0-9]+-\d+`,
       urlPattern: String.raw`^https://linear\.app/[^/]+/issue/([A-Z][A-Z0-9]+-\d+)(?:[/?#]|$)`,
       linkTemplate: "https://linear.app/your-workspace/issue/{key}",
       autoLink: false,

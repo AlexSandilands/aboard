@@ -68,8 +68,10 @@ describe("findTicketKeys", () => {
     expect(findTicketKeys(null, [jira])).toEqual([]);
   });
 
-  it("leaves out standards that look like keys, with the Jira preset", () => {
-    expect(findTicketKeys("UTF-8, SHA-256, ISO-8601, RFC-9110, CVE-2024-1234, X-Request-Id", [jira])).toEqual([]);
+  it("leaves out standards that look like keys, with either preset", () => {
+    const standards = "UTF-8, SHA-256, ISO-8601, RFC-9110, CVE-2024-1234, X-Request-Id";
+    expect(findTicketKeys(standards, [jira])).toEqual([]);
+    expect(findTicketKeys(standards, [TICKET_SYSTEM_PRESETS[1]!.system])).toEqual([]);
     expect(findTicketKeys("abc-123 and Abc-123", [jira])).toEqual([]);
   });
 
