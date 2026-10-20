@@ -9,7 +9,9 @@ import {
   AGENT_HARNESSES,
   describeRunModel,
   harnessCliSetting,
+  isClaudeModel,
   profileHeadless,
+  profileHeadlessModel,
   resolveRunModel,
   type AgentHarness,
   type AppSettings,
@@ -99,7 +101,9 @@ export function headlessModel(model: RunModel, typed: string): { model: string |
 
 /**
  * The driver, `--model` and note of a headless run: the harness the chosen model names, unless the run needs something
- * that harness can't do (headlessDriverFor), in which case Claude Code runs it on its default model.
+ * that harness can't do (headlessDriverFor), in which case Claude Code runs it on the model a run on Claude Code would
+ * take: a typed override that is a Claude model, else the chosen model's Claude Code model, else the CLI's default. A
+ * typed model for another harness (say a Codex model) would fail `claude`, so it is passed over.
  */
 export function headlessRun(
   model: RunModel,
@@ -108,9 +112,17 @@ export function headlessRun(
 ): { driver: HeadlessDriver; model: string | null; note: string | null } {
   const { driver, fallback } = headlessDriverFor(profileHeadless(model.profile).harness, needs);
   if (!fallback) return { driver, ...headlessModel(model, typed) };
+  const claudeTyped = isClaudeModel(typed.trim()) ? typed.trim() : null;
+  const cli = claudeTyped ?? profileHeadlessModel(model.profile);
   const described = describeRunModel(model);
-  const note = [model.note, described ? `Model: ${described}` : null, fallback].filter(Boolean).join("\n");
-  return { driver, model: null, note };
+  const note = [
+    model.note,
+    described ? `Model: ${described}` : null,
+    `${fallback} ${cli ? `It ran on ${cli}.` : "It ran on the CLI's default model."}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { driver, model: cli, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */

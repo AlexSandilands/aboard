@@ -133,7 +133,8 @@ Claude Code by default, or **Codex** (`codex exec`) or **Copilot CLI**, with the
 `codex61` label can mean Codex in T3 Code and headless alike. Set the CLI's path in Settings → Integrations if it
 isn't on your PATH, and register the board's MCP server with it ([connecting agents](connect-agents.md)) so the agent
 can move its task. Some things only Claude Code can do: a reviewer's verdict, reading untrusted text locked down, a
-digest with no tools. Those runs stay on Claude Code (its default model), and the run says why. Codex and Copilot
+digest with no tools. Those runs stay on Claude Code, on the model's Claude Code model (or the CLI's default when it has none), and
+the run says why. Codex and Copilot
 have no budget and report no cost, so only the timeout stops them and the spend cap doesn't count them. A model
 with none set for its harness runs on the CLI's default, and the run says so. **Headless model override** still
 takes a model typed as the CLI's `--model` takes it.

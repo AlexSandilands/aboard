@@ -473,8 +473,32 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(jobs[0]!.args).not.toContain("--model");
       expect(patches).toContainEqual({
         detail:
-          "Model: Other, from label other\nCodex can't run this action headless (it needs structured output), so Claude Code ran it on its default model.",
+          "Model: Other, from label other\nCodex can't run this action headless (it needs structured output), so Claude Code ran it. It ran on the CLI's default model.",
       });
+    });
+
+    it("falls back on the model's own Claude Code model, or a typed Claude model, never a Codex one", async () => {
+      const setupWith = async (typed: string) => {
+        const { h, task, jobs, start, patches } = setup({
+          agent: async () => result({ result: "ok", structured_output: { ok: true }, session_id: SESSION }),
+        });
+        const profile = { ...codexProfile("codex"), cli: { codex: "gpt-5.5-codex", "claude-code": "opus" } };
+        h.services.settings.update({ modelProfiles: [profile] });
+        h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+        await start({
+          options: { runner: "headless", model: typed },
+          access: "read-only",
+          outputSchema: { type: "object" },
+        });
+        const args = jobs[0]!.args;
+        return { model: args[args.indexOf("--model") + 1], patches };
+      };
+      const own = await setupWith("");
+      expect(own.model).toBe("opus");
+      expect(own.patches.some((p) => p.detail?.endsWith("It ran on opus."))).toBe(true);
+      expect((await setupWith("sonnet")).model).toBe("sonnet");
+      // A typed model meant for Codex would fail claude: the model's Claude Code model runs instead.
+      expect((await setupWith("gpt-5.5-codex")).model).toBe("opus");
     });
 
     it("fails with the harness's own name", async () => {

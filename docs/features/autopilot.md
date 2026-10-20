@@ -1177,8 +1177,8 @@ for the others): the argv, a parser that turns its output into an outcome, and w
   (`profileHeadless`).
 - **Falling back.** A run that needs something its harness can't do (a reviewer's structured verdict, the untrusted
   lockdown, a no-tools digest, or an editing run with no task, which has no worktree and so no push guard) runs on
-  Claude Code on its default model instead, and the run's detail says why
-  (`headlessDriverFor`). So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
+  Claude Code instead, and the run's detail says why (`headlessDriverFor`) and which model ran: a typed override that
+  is a Claude model, else the model's Claude Code model (`profileHeadlessModel`), else the CLI's default. So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
   agent actions without tool rules) run on Codex or Copilot.
 - **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] -` (read-only runs
   use `--sandbox read-only`), prompt on stdin. Edit runs leave Codex's sandbox off because its `workspace-write`

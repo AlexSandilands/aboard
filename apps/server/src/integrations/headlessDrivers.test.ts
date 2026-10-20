@@ -202,7 +202,7 @@ describe("choosing a driver", () => {
     const fallback = headlessDriverFor("copilot-cli", { access: "edit", outputSchema: {} });
     expect(fallback.driver).toBe(claudeDriver);
     expect(fallback.fallback).toBe(
-      "Copilot CLI can't run this action headless (it needs structured output), so Claude Code ran it on its default model.",
+      "Copilot CLI can't run this action headless (it needs structured output), so Claude Code ran it.",
     );
     expect(headlessDriverFor("claude-code", { access: "none" })).toEqual({ driver: claudeDriver, fallback: null });
   });

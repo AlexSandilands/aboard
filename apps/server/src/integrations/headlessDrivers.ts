@@ -226,7 +226,7 @@ export function missingCapability(driver: HeadlessDriver, needs: DriverNeeds): s
 
 /**
  * The driver for a run on `harness`: its own, or Claude Code's when the run needs something the harness can't do,
- * with a note saying so. A fallback runs on the Claude Code CLI's default model.
+ * with a note saying so. The runner picks the fallback's model (headlessRun).
  */
 export function headlessDriverFor(
   harness: AgentHarness,
@@ -237,6 +237,6 @@ export function headlessDriverFor(
   if (!missing) return { driver, fallback: null };
   return {
     driver: claudeDriver,
-    fallback: `${driver.label} can't run this action headless (it needs ${missing}), so Claude Code ran it on its default model.`,
+    fallback: `${driver.label} can't run this action headless (it needs ${missing}), so Claude Code ran it.`,
   };
 }

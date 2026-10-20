@@ -176,8 +176,11 @@ export function profileHeadlessModel(profile: RunProfile | null): string | null 
   const cli = profileCliModel(profile, "claude-code");
   if (cli) return cli;
   const t3 = profile?.setting.t3?.selection.model;
-  return t3 && /^(claude-|opus|sonnet|haiku)/i.test(t3) ? t3 : null;
+  return t3 && isClaudeModel(t3) ? t3 : null;
 }
+
+/** Whether `claude --model` takes a model: an id (`claude-…`) or one of its aliases. */
+export const isClaudeModel = (model: string): boolean => /^(claude-|opus|sonnet|haiku)/i.test(model);
 
 /** The harness and `--model` a headless Autopilot run takes. */
 export interface HeadlessRunModel {
