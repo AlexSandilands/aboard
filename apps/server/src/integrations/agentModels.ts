@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import {
   AGENT_HARNESSES,
   type AgentHarness,
@@ -126,7 +127,6 @@ export interface AgentModelsService {
 export function createAgentModels(deps: {
   services: () => Pick<Services, "settings">;
   host: () => TerminalHost;
-  userHome: string;
   probes?: Partial<AgentModelProbes>;
   now?: () => number;
 }): AgentModelsService {
@@ -158,7 +158,7 @@ export function createAgentModels(deps: {
     const cliVersion = await probes.version(exe, label).catch(() => null);
     try {
       if (harness === "claude-code") {
-        const found = parseClaudeModels(await probes.claudeInit(exe, deps.userHome));
+        const found = parseClaudeModels(await probes.claudeInit(exe, tmpdir()));
         return {
           harness,
           models: found.models,
@@ -167,7 +167,7 @@ export function createAgentModels(deps: {
           error: null,
         };
       }
-      const models = parseCopilotModels(await probes.copilotHelp(exe, deps.userHome));
+      const models = parseCopilotModels(await probes.copilotHelp(exe, tmpdir()));
       return { harness, models, cliVersion, scannedAt: new Date(now()).toISOString(), error: null };
     } catch (error) {
       return { ...none, cliVersion, error: messageOf(error).slice(0, 200) };

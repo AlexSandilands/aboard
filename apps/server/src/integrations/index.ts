@@ -159,7 +159,6 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const agentModels = createAgentModels({
     services: deps.services,
     host: overrides.terminalHost ?? systemTerminalHost,
-    userHome: deps.config.userHome,
     ...(overrides.agentModelProbes ? { probes: overrides.agentModelProbes } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.

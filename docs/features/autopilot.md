@@ -1176,7 +1176,8 @@ which the T3 launch dialog and the terminal session launcher use too:
 A **headless** run takes, in order: a model typed in the automation's **Headless model override**, the chosen
 model's Claude Code model, its T3 model when that is a Claude model `claude` accepts (`profileHeadlessModel`), else the
 CLI's default. A model set only for T3 Code (a Codex model, say) falls back to the CLI's default, and the run's detail
-says so; otherwise the detail names the model and what picked it. A **T3** launch passes an automation's choice on to
+says so; otherwise the detail names the model and what picked it. The Claude Code model's effort (`cliEffort`, passed as
+`--effort`) goes with it; a typed override or a T3 model standing in for it runs at the CLI's default effort. A **T3** launch passes an automation's choice on to
 `launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
 (`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
 task's model is used. Running a custom model's Codex or Copilot model headless is out of scope: only `claude -p` runs

@@ -137,7 +137,6 @@ function service(probes: Partial<AgentModelProbes>, opts: { now?: () => number }
   const svc = createAgentModels({
     services: () => ({ settings: { get: () => settings } }) as never,
     host,
-    userHome: "/home/u",
     probes: {
       resolve: (command) => `/bin/${command}`,
       version: () => Promise.resolve("2.0.0"),

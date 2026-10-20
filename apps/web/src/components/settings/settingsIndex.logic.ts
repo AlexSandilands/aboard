@@ -97,7 +97,8 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 ];
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
-const MODELS_PER_TIER = "The model each suggested tier starts a new session on is set on the Model tiers page.";
+const MODELS_PER_TIER =
+  "The model and effort each suggested tier starts a new session on are set on the Model tiers page.";
 const BOARD_SKILL =
   "Install the board's skill, which teaches agents the workflow, and keep it updated with the app. A copy you edited is never overwritten without asking.";
 const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow"];
@@ -615,7 +616,7 @@ function generated(): Draft[] {
       "models.tiers.list",
       "Model tiers",
       "What light, standard and deep mean for you: a description, and the model each provider starts a session on.",
-      ["light", "standard", "deep", "suggested model", "claude", "effort"],
+      ["light", "standard", "deep", "suggested model", "claude", "effort", "rescan", "model list", "reasoning effort"],
     ),
     draft(
       "models.tiers.custom",
@@ -631,7 +632,9 @@ function generated(): Draft[] {
         "claude code model",
         "copilot model",
         "--model",
+        "--effort",
         "session model",
+        "effort",
       ]),
     ),
     ...AUTOMATION_ENTRIES.map(({ key, title, description }) => ({

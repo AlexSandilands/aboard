@@ -343,21 +343,22 @@ function CliModelField({
   const levels = modelEffortLevels(harness, findSuggestion(models, model));
   return (
     <>
-      <CliModelPicker
-        className="w-full sm:max-w-sm"
-        label={`${name} ${CLI_LABELS[harness]} model`}
-        placeholder={CLI_PLACEHOLDERS[harness]}
-        value={model}
-        models={models}
-        onSave={(next) =>
-          onChange({
-            field: "cli",
-            harness,
-            value: next,
-            ...(next ? { levels: modelEffortLevels(harness, findSuggestion(models, next)) } : {}),
-          })
-        }
-      />
+      <div className="min-w-0 flex-1 sm:max-w-sm">
+        <CliModelPicker
+          label={`${name} ${CLI_LABELS[harness]} model`}
+          placeholder={CLI_PLACEHOLDERS[harness]}
+          value={model}
+          models={models}
+          onSave={(next) =>
+            onChange({
+              field: "cli",
+              harness,
+              value: next,
+              ...(next ? { levels: modelEffortLevels(harness, findSuggestion(models, next)) } : {}),
+            })
+          }
+        />
+      </div>
       {model.trim() ? (
         <CliEffortPicker
           label={`${name} ${CLI_LABELS[harness]} effort`}
