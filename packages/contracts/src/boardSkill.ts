@@ -515,7 +515,7 @@ the same context (no task), and decides whether an agent runs at all and for wha
 - A missing interpreter fails the run with "python not found on PATH". On Windows only \`.exe\` programs are found on
   the PATH, **not \`.cmd\` or \`.bat\` shims**: \`npm\`, \`pnpm\`, \`npx\` and \`yarn\` are shims, so call a script that reads the
   variable itself instead.
-- **On Windows, never pass a value as an argument to another program** (\`pnpm run notify "$env:${brandEnv("")}TASK_TITLE"\`):
+- **On Windows, never pass text from a task or PR as an argument to another program** (\`pnpm run notify "$env:${brandEnv("")}TASK_TITLE"\`):
   Windows PowerShell doesn't escape quotes in arguments, and a \`.cmd\` program hands them to cmd.exe, where \`&\` runs a
   command. Have the program read the variable itself, or use the value inside the script.
 - A command (\`shell\`) is not interpolated either: it reads \`"$${brandEnv("")}TASK_TITLE"\` in sh and \`$env:${brandEnv("")}TASK_TITLE\`
@@ -664,8 +664,8 @@ and (for a check) look at the lines it prints: every one must be a JSON object w
 Don't run a script that approves, merges, deletes or posts for real just to test it: stub that call, or run it against
 a throwaway target.
 
-In your \`note\`, tell the user to use **Test run** on the import page's editor and to switch the automation on with
-**dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
+In your \`note\`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
+Autopilot → Custom automations; the import page shows scripts read-only) and switch it on with **dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
 (a dry run still runs a check script for real).
 
 ## Hand it over

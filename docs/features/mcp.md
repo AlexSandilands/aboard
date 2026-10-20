@@ -219,8 +219,8 @@ rename a tool, change its arguments or change the workflow, update both, plus `I
 The board ships a second skill, `skills/aboard-automations/SKILL.md`, which teaches an agent how to write a custom
 automation well before it calls `draft_automation`: triggers and actions, placeholders, variables, inputs and tool
 slots, the script contract, structure and per-language limits, check scripts, testing, and handing the draft over.
-Two parts of it are not hand-written, so it can't drift from the editor: the table of values an action is given and
-the per-language snippets come from `AUTOMATION_SDK_SCOPE` and `AUTOMATION_SDK_SNIPPETS`
+Two parts of it are copied from the editor's own text, and a test keeps them from drifting: the table of values an
+action is given and the per-language snippets come from `AUTOMATION_SDK_SCOPE` and `AUTOMATION_SDK_SNIPPETS`
 (`packages/contracts/src/automationSdk.ts`), and `skills.test.ts` fails when the skill stops quoting them. Its worked
 examples are drafts, and the same test runs each through `checkAutomationDraft`, so an example the board would refuse
 fails the build. When `draft_automation`, the automation file's shape or what a script can read changes, update this

@@ -92,7 +92,7 @@ describe("skills", () => {
   // The worked examples are drafts: each must be one the board accepts, with the script above it as its body.
   it("only shows drafts in skills/aboard-automations/SKILL.md that the board accepts", () => {
     const text = shipped("aboard-automations", "SKILL.md");
-    const blocks = [...text.matchAll(/```(\w+)\n([\s\S]*?)\n```/g)].map((m) => ({ lang: m[1]!, code: m[2]! }));
+    const blocks = [...text.matchAll(/^```(\w+)\n([\s\S]*?)\n```$/gm)].map((m) => ({ lang: m[1]!, code: m[2]! }));
     const drafts = blocks.flatMap((block, i) => {
       if (block.lang !== "json" || !block.code.includes('"trigger"')) return [];
       const script = blocks
