@@ -220,7 +220,11 @@ export function createLinksService(
     add(taskId, input, actor, opts = {}) {
       return core.write((fx) => {
         const task = deps.task(taskId);
-        const classified = classifyLinkInput(input, deps.settings.get().ticketSystems);
+        const systems = deps.settings.get().ticketSystems;
+        const classified = classifyLinkInput(
+          input,
+          opts.ticketSystem ? systems.filter((t) => t.id === opts.ticketSystem) : systems,
+        );
         if ((classified.kind === "agent_session" || classified.kind === "t3_thread") && task.manual) {
           throw new AppError(
             "VALIDATION",

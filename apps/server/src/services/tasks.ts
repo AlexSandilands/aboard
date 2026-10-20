@@ -3,7 +3,7 @@ import {
   deriveEpicStatus,
   findTicketKeys,
   normalizeLabel,
-  parseIssueSource,
+  parseImportSource,
   renderTemplateText,
   resolutionNeedsTask,
   startedEpicTasks,
@@ -280,7 +280,7 @@ export function createTasksService(
       return task.id;
     },
 
-    create(input) {
+    create(input, opts = {}) {
       const id = core.write((fx) => {
         const project = deps.projects.get(input.projectId);
         const actor = input.actor ?? "user";
@@ -303,8 +303,12 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
         }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
+        const systems = deps.settings.get().ticketSystems;
         const source = input.sourceUrl
-          ? parseIssueSource(input.sourceUrl, { ticketSystems: deps.settings.get().ticketSystems })
+          ? parseImportSource(
+              input.sourceUrl,
+              opts.ticketSystem ? systems.filter((t) => t.id === opts.ticketSystem) : systems,
+            )
           : null;
         if (input.sourceUrl && !source) {
           throw new AppError(
@@ -419,7 +423,7 @@ export function createTasksService(
         if (plan) deps.plans().replacePlan(task, plan, actor, fx);
         if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
-          deps.links().service.add(task.id, { value: source.url }, actor);
+          deps.links().service.add(task.id, { value: source.url }, actor, { ticketSystem: opts.ticketSystem });
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
         }
         for (const link of input.links ?? []) {
@@ -429,7 +433,9 @@ export function createTasksService(
           if (linkKind === "t3_thread" || linkKind === "agent_session") continue;
           deps.links().service.add(task.id, link, actor);
         }
-        linkTitleKeys(task.id, task.title, actor);
+        // An imported task's placeholder title is its own key, already linked under the system it was read with: finding
+        // it again with every system could add a second link under another one.
+        if (!source || input.title !== undefined) linkTitleKeys(task.id, task.title, actor);
         // Images pasted into the new-task box were uploaded before the task existed.
         deps.attachments.claim(task.id, description);
         return task.id;

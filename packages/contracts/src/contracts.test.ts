@@ -12,7 +12,7 @@ import {
   dueState,
   DueDate,
   normalizeWorkspaceKey,
-  parseIssueSource,
+  parseImportSource,
   parsePlanMarkdown,
   PROJECT_ICON_IMAGE_MAX_LENGTH,
   ProjectIcon,
@@ -271,22 +271,22 @@ describe("classifyLink", () => {
   });
 });
 
-describe("parseIssueSource", () => {
+describe("parseImportSource", () => {
   const { linkTemplate: _template, ...unlinked } = jira;
   const ticketSystems = [unlinked];
 
   it("reads a configured system's bare key and URL", () => {
-    expect(parseIssueSource("PROJ-123", { ticketSystems })).toEqual({
+    expect(parseImportSource("PROJ-123", ticketSystems)).toEqual({
       kind: "ticket",
       ref: { system: "jira", key: "PROJ-123" },
       url: "PROJ-123",
       placeholder: "PROJ-123",
     });
-    expect(parseIssueSource("  PROJ-123 ", { ticketSystems: [jira] })).toMatchObject({
+    expect(parseImportSource("  PROJ-123 ", [jira])).toMatchObject({
       kind: "ticket",
       url: "PROJ-123",
     });
-    expect(parseIssueSource("https://jira.example.com/browse/ABC-7?focusedId=1", { ticketSystems })).toEqual({
+    expect(parseImportSource("https://jira.example.com/browse/ABC-7?focusedId=1", ticketSystems)).toEqual({
       kind: "ticket",
       ref: { system: "jira", key: "ABC-7" },
       url: "https://jira.example.com/browse/ABC-7?focusedId=1",
@@ -295,40 +295,40 @@ describe("parseIssueSource", () => {
   });
 
   it("knows no tickets without configured systems", () => {
-    expect(parseIssueSource("PROJ-123")).toBeNull();
-    expect(parseIssueSource("https://jira.example.com/browse/ABC-7")).toBeNull();
+    expect(parseImportSource("PROJ-123")).toBeNull();
+    expect(parseImportSource("https://jira.example.com/browse/ABC-7")).toBeNull();
   });
 
   it("reads a GitHub issue URL on any host", () => {
-    expect(parseIssueSource("https://github.com/acme/app/issues/45")).toEqual({
+    expect(parseImportSource("https://github.com/acme/app/issues/45")).toEqual({
       kind: "issue",
       ref: { host: "github.com", repo: "acme/app", number: 45 },
       url: "https://github.com/acme/app/issues/45",
       placeholder: "acme/app#45",
     });
-    expect(parseIssueSource("https://ghe.example.com/team/svc/issues/8#issuecomment-1")).toMatchObject({
+    expect(parseImportSource("https://ghe.example.com/team/svc/issues/8#issuecomment-1")).toMatchObject({
       kind: "issue",
       ref: { host: "ghe.example.com", repo: "team/svc", number: 8 },
     });
   });
 
   it("is null for anything else", () => {
-    expect(parseIssueSource("https://github.com/acme/app/pull/45", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("https://github.com/acme/app/issues", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("https://example.com/browse", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("Fix PROJ-123 login", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("proj-123", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("UTF-8", { ticketSystems })).toBeNull();
-    expect(parseIssueSource("", { ticketSystems })).toBeNull();
+    expect(parseImportSource("https://github.com/acme/app/pull/45", ticketSystems)).toBeNull();
+    expect(parseImportSource("https://github.com/acme/app/issues", ticketSystems)).toBeNull();
+    expect(parseImportSource("https://example.com/browse", ticketSystems)).toBeNull();
+    expect(parseImportSource("Fix PROJ-123 login", ticketSystems)).toBeNull();
+    expect(parseImportSource("proj-123", ticketSystems)).toBeNull();
+    expect(parseImportSource("UTF-8", ticketSystems)).toBeNull();
+    expect(parseImportSource("", ticketSystems)).toBeNull();
   });
 
   it("gives a key two systems match to the first, and a URL to the system it belongs to", () => {
-    expect(parseIssueSource("ENG-4", { ticketSystems: [linear, jira] })).toMatchObject({
+    expect(parseImportSource("ENG-4", [linear, jira])).toMatchObject({
       ref: { system: "linear", key: "ENG-4" },
     });
-    expect(
-      parseIssueSource("https://linear.app/acme/issue/ENG-4/fix-it", { ticketSystems: [jira, linear] }),
-    ).toMatchObject({ ref: { system: "linear", key: "ENG-4" } });
+    expect(parseImportSource("https://linear.app/acme/issue/ENG-4/fix-it", [jira, linear])).toMatchObject({
+      ref: { system: "linear", key: "ENG-4" },
+    });
   });
 });
 

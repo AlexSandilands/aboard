@@ -150,7 +150,7 @@ export interface TasksService {
    * With `sourceUrl` (a ticket key or URL, or a GitHub issue URL) the task is titled and linked after the issue and
    * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
    */
-  create(input: CreateTaskInput): TaskDetail;
+  create(input: CreateTaskInput, opts?: CreateTaskOptions): TaskDetail;
   /** Creates an epic and puts the given tasks in it, all or nothing. */
   createEpic(input: Omit<CreateTaskInput, "kind" | "epicId" | "plan">, taskIds: string[], actor: string): TaskDetail;
   /**
@@ -260,8 +260,16 @@ export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | Agent
 export interface AddLinkOptions {
   /** A session the board started in a named Windows Terminal window (see taskWindowName). */
   window?: string;
+  /** Classify a ticket with this system only, for a key the board knows belongs to it (an import's child). */
+  ticketSystem?: string;
   /** The board adds this link by itself (a key in the title), so a rename may take it away again. */
   auto?: boolean;
+}
+
+/** What only the board itself can ask of a task's creation, never an agent over MCP or REST. */
+export interface CreateTaskOptions {
+  /** Read `sourceUrl` as a ticket of this system only, so a key two systems match isn't taken for the other. */
+  ticketSystem?: string;
 }
 
 export interface LinksService {

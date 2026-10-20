@@ -43,7 +43,7 @@ files under each app.
 - [Recurring tasks](guide/recurring-tasks.md): tasks made from a template on a schedule
 - [Custom automations](guide/custom-automations.md): your own triggers and actions, an agent or a command
 - [Digest of what changed](guide/digest.md): a daily summary of the board, plain or written by an agent
-- [Importing issues](guide/importing-issues.md): a task from a Jira or GitHub issue URL
+- [Importing issues](guide/importing-issues.md): a task from a ticket or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
 - [Local review](guide/local-review.md): turning on the review loop
 - [Autopilot](guide/autopilot.md): switching automations on, reviewing PRs, limits, pausing

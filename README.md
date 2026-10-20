@@ -98,7 +98,7 @@ per repo.
 | [Recurring tasks](docs/guide/recurring-tasks.md)       | Tasks made from a template on a schedule                               |
 | [Digest of what changed](docs/guide/digest.md)         | A daily summary of the board, plain or written by an agent             |
 | [Custom automations](docs/guide/custom-automations.md) | Your own Autopilot triggers and actions: an agent or a command         |
-| [Importing issues](docs/guide/importing-issues.md)     | Create a task from a Jira or GitHub issue URL                          |
+| [Importing issues](docs/guide/importing-issues.md)     | Create a task from a ticket or GitHub issue URL                        |
 | [Connecting agents](docs/guide/connect-agents.md)      | MCP setup for Claude Code, Codex, Copilot and VS Code                  |
 | [Local review](docs/guide/local-review.md)             | Have agents' work reviewed on the board before they open a PR          |
 | [Autopilot](docs/guide/autopilot.md)                   | Let the board act on its own: switch automations on, set limits, pause |

@@ -1,6 +1,6 @@
 // Pure helpers for the command palette. Path handling adapted from T3 Code's
 // client-runtime browse helpers (MIT) — see NOTICE.
-import { parseIssueSource, type FsBrowseResult, type TicketSystem } from "@repo/contracts";
+import { parseImportSource, type FsBrowseResult, type TicketSystem } from "@repo/contracts";
 
 // ── Item filtering ───────────────────────────────────────────────────────
 
@@ -180,7 +180,7 @@ export function issueImportRow(
   ticketSystems: readonly TicketSystem[] = [],
 ): IssueImportRow | null {
   if (flow !== "backlog") return null;
-  const source = parseIssueSource(query, { ticketSystems });
+  const source = parseImportSource(query, ticketSystems);
   if (!source) return null;
   return {
     sourceUrl: query.trim(),

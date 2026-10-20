@@ -1,15 +1,9 @@
-import { parseIssueSource, resolveHeadlessModel, type TaskLink } from "@repo/contracts";
+import { parseImportSource, resolveHeadlessModel, type TaskLink } from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
 import { messageOf, type IssueDetails } from "./github.ts";
-import {
-  jiraToolRules,
-  listConnectedMcpServers,
-  runIssueImport,
-  writeToolDenyRules,
-  type RunImport,
-} from "./headlessImport.ts";
+import { listConnectedMcpServers, runIssueImport, writeToolDenyRules, type RunImport } from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 
 /** Runs an import may start before it is given up on; each restart mid-import counts as one. */
@@ -50,8 +44,6 @@ export function createIssueImporter(deps: {
   const log = deps.log ?? console;
   /** `claude mcp list` health-checks every server, which takes seconds; the answer is kept for a while. */
   let listing: { at: number; list: Promise<string[]> } | null = null;
-  /** Why the last listing failed, to say so when no import tool turns up. */
-  let listError: string | null = null;
   const queue: string[] = [];
   const running = new Set<string>();
   let idleWaiters: Array<() => void> = [];
@@ -69,7 +61,7 @@ export function createIssueImporter(deps: {
 
   const importGithub = async (record: ImportRecord): Promise<ImportResult> => {
     const s = deps.services();
-    const source = parseIssueSource(record.sourceUrl, { ticketSystems: s.settings.get().ticketSystems });
+    const source = parseImportSource(record.sourceUrl, s.settings.get().ticketSystems);
     if (source?.kind !== "issue") throw new Error(`${record.sourceUrl} is not a GitHub issue`);
     const issue = await deps.github.fetchIssue(source.ref);
     const link = issueLink(record.taskId);
@@ -109,7 +101,7 @@ export function createIssueImporter(deps: {
           labels: issue.labels,
         },
         boardLabels: s.labels.usage().map((l) => l.name),
-        jiraTools: [],
+        importTools: [],
         denyTools: [],
       });
       return { title: outcome.title, description: outcome.description, labels: outcome.labels, ...epic };
@@ -128,13 +120,8 @@ export function createIssueImporter(deps: {
     const entry = {
       at: Date.now(),
       list: listServers(cli, tmpdir())
-        .then((list) => {
-          listError = null;
-          return list;
-        })
         .catch((error: unknown) => {
-          listError = messageOf(error);
-          log.warn(`[import] couldn't list Claude Code's MCP servers: ${listError}`);
+          log.warn(`[import] couldn't list Claude Code's MCP servers: ${messageOf(error)}`);
           return [];
         })
         .then((list) => {
@@ -154,29 +141,32 @@ export function createIssueImporter(deps: {
     }
     // The system recorded when the task was created, so reordering or editing the others since doesn't move it.
     const recorded = settings.ticketSystems.filter((t) => t.id === record.systemId);
-    const source = parseIssueSource(record.sourceUrl, {
-      ticketSystems: record.systemId ? recorded : settings.ticketSystems,
-    });
-    if (source?.kind !== "ticket") throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
-    const system = settings.ticketSystems.find((t) => t.id === source.ref.system);
-    const servers = await connectedServers(settings.headlessReviewCli);
-    // The run still reads every ticket as a Jira issue, and guesses its tools when none are configured, until #249.
-    const tools = system?.importTools.length ? system.importTools : jiraToolRules(servers);
-    if (tools.length === 0) {
-      throw new Error(
-        `No import tool available${listError ? ` (couldn't list Claude Code's MCP servers: ${listError})` : ""}: connect its MCP server to Claude Code (claude mcp add --scope user), or add import tools to ${system?.name ?? source.ref.system} in Settings`,
-      );
+    const systems = record.systemId ? recorded : settings.ticketSystems;
+    const source = parseImportSource(record.sourceUrl, systems);
+    const system = source?.kind === "ticket" ? systems.find((t) => t.id === source.ref.system) : undefined;
+    if (source?.kind !== "ticket" || !system) {
+      throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
     }
+    // Only the tools the system lists are allowed: the board doesn't guess which tools read tickets.
+    if (system.importTools.length === 0) {
+      throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);
+    }
+    const servers = await connectedServers(settings.headlessReviewCli);
     const outcome = await runImport({
       cli: settings.headlessReviewCli,
       // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
       cwd: tmpdir(),
       model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),
       budgetUsd: settings.issueImportBudgetUsd,
-      source: { kind: "jira", key: source.ref.key, url: source.url },
+      source: {
+        kind: "ticket",
+        key: source.ref.key,
+        url: source.url,
+        system: { name: system.name, importInstructions: system.importInstructions },
+      },
       boardLabels: s.labels.usage().map((l) => l.name),
-      jiraTools: tools,
-      denyTools: writeToolDenyRules(servers, tools),
+      importTools: system.importTools,
+      denyTools: writeToolDenyRules(servers, system.importTools),
     });
     return {
       title: outcome.title,

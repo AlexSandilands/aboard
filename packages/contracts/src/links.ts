@@ -119,22 +119,19 @@ export function isLinkKind(value: string): value is LinkKind {
   return LinkKind.options.includes(value as LinkKind);
 }
 
-/** An issue a task can be created from: what to link, and the title to show until its details are fetched. */
-export type IssueSource =
+/** What a task can be imported from: what to link, and the title to show until its details are fetched. */
+export type ImportSource =
   | { kind: "ticket"; ref: TicketRef; url: string; placeholder: string }
   | { kind: "issue"; ref: IssueRef; url: string; placeholder: string };
 
 /**
- * Recognises text that is a ticket of a configured system (a bare key or one of its URLs) or a GitHub issue URL,
- * and nothing else: a PR URL, other links and ordinary titles are null.
+ * Recognises text that is a ticket of one of `systems` (a bare key or one of its URLs) or a GitHub issue URL, and
+ * nothing else: a PR URL, other links and ordinary titles are null.
  */
-export function parseIssueSource(
-  value: string,
-  opts: { ticketSystems?: readonly TicketSystem[] | null } = {},
-): IssueSource | null {
+export function parseImportSource(value: string, systems: readonly TicketSystem[] | null = []): ImportSource | null {
   const input = value.trim();
   if (!input || /\s/.test(input)) return null;
-  const link = classifyLink(input, opts);
+  const link = classifyLink(input, { ticketSystems: systems });
   if (link?.kind === "issue") {
     return { kind: "issue", ref: link.ref, url: link.url, placeholder: `${link.ref.repo}#${link.ref.number}` };
   }
