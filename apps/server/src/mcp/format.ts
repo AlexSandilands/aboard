@@ -23,6 +23,7 @@ import {
   type TaskRelation,
   type TaskStatus,
   type TaskSummary,
+  ticketHref,
   ticketLabel,
   type TicketSystem,
 } from "@repo/contracts";
@@ -90,8 +91,16 @@ export function linkText(link: TaskLink, ticketSystems: readonly TicketSystem[] 
         : "";
       return `PR ${name}${state}${label} ${link.url}`;
     }
-    case "ticket":
-      return `${ticketLabel(ticketSystems, link.ref)}${label}${link.url !== link.ref.key ? ` ${link.url}` : ""}`;
+    case "ticket": {
+      const href =
+        link.url !== link.ref.key
+          ? link.url
+          : ticketHref(
+              ticketSystems.find((s) => s.id === link.ref.system),
+              link.ref.key,
+            );
+      return `${ticketLabel(ticketSystems, link.ref)}${label}${href ? ` ${href}` : ""}`;
+    }
     case "t3_thread": {
       const s = link.snapshot ? ` (${link.snapshot.title}, ${link.snapshot.status})` : "";
       return `T3 thread${s}${label} ${link.url}`;

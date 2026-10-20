@@ -36,9 +36,9 @@ copies one into the list for the user to adjust. The board treats a system made 
 `classifyLink(value, { ticketSystems })` tries the built-ins first (T3 threads, PRs, GitHub issues), then each
 system's URL pattern on a URL, then each system's key pattern on a bare value, in list order. The first match wins,
 so a key two systems both match (Jira and Linear keys look alike) belongs to the system listed first. A ticket link
-is `{ kind: "ticket", ref: { system, key }, url }`; its URL is the pasted URL, or the template filled in, or the bare
-key when the system has no template. The web app fills a stored bare key's template in when it shows it
-(`ticketLinkHref`), so adding a template later makes old links clickable.
+is `{ kind: "ticket", ref: { system, key }, url }`; its URL is the pasted URL, or the bare key. A bare key's page is
+the system's template filled in when the link is shown (`ticketLinkHref` in the web app, `linkText` for agents), so
+fixing a template later (the presets name a placeholder site) fixes every link made from a key.
 
 `links.add` (the server) also accepts a key typed in lower case when only its upper case matches, and treats a
 ticket as one link however it was written: adding `ABC-1` to a task with `https://…/browse/ABC-1` returns the
@@ -77,6 +77,10 @@ A backup taken before 036 still restores: the restore loads its `jiraBaseUrl` an
   pages that don't exist (#231). Only the user knows which trackers they use and what their keys look like.
 - **Systems are ordered.** Key formats overlap; the list order decides, the same way for pasting and for keys found
   in titles, so a key never goes to one system when typed and another when found.
+- **A key nobody configured doesn't fail a create.** `create_task`, `add_to_backlog` and `create_epic` leave out a
+  bare value no system matches and say so in their result, rather than refusing the task.
+- **The Jira preset leaves standards out.** Its key pattern starts with a negative lookahead for prefixes like `UTF`,
+  `SHA`, `ISO` and `CVE`, so "UTF-8" is never taken for an issue; it is part of the pattern, where the user sees it.
 - **Auto-linking is opt-in.** A converted Jira system starts with `autoLink` off, since the old detector guessed.
 - **The id is stored on links, the name isn't.** Renaming a system relabels every link; removing one leaves its links
   showing the id, still openable through their stored URL.

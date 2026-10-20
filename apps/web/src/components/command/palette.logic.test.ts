@@ -199,6 +199,7 @@ describe("issueImportRow", () => {
     expect(issueImportRow("Fix PROJ-123 login", "backlog", systems)).toBeNull();
     expect(issueImportRow("https://github.com/acme/app/pull/45", "backlog")).toBeNull();
     expect(issueImportRow("PROJ-123", "backlog")).toBeNull();
+    expect(issueImportRow("UTF-8", "backlog", systems)).toBeNull();
     expect(issueImportRow("PROJ-123", "planned", systems)).toBeNull();
   });
 });

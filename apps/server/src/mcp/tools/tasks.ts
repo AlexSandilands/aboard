@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
+  classifyLink,
   CloseTaskInput,
+  isT3ThreadId,
   TaskResolution,
   templateHasPlan,
   TaskStatusInput,
@@ -54,9 +56,34 @@ const linksField = z
   .optional()
   .describe("Jira keys (ABC-123), PR URLs or URLs to attach. Jira keys in the title are linked automatically.");
 
-function linkInputs(args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined }): LinkInput[] {
-  return [...(args.links ?? []).map((value) => ({ value })), ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : [])];
+/**
+ * The links to create a task with, and the values left out: a bare value no ticket system matches (an agent told to
+ * pass "the ticket key" on a board with no systems, say) would otherwise fail the whole create.
+ */
+function linkInputs(
+  services: Services,
+  args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined },
+): { links: LinkInput[]; skipped: string[] } {
+  const ticketSystems = services.settings.get().ticketSystems;
+  const known = (value: string) =>
+    isT3ThreadId(value) ||
+    classifyLink(value, { ticketSystems }) !== null ||
+    classifyLink(value.toUpperCase(), { ticketSystems })?.kind === "ticket";
+  const values = args.links ?? [];
+  return {
+    links: [
+      ...values.filter(known).map((value) => ({ value })),
+      ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : []),
+    ],
+    skipped: values.filter((value) => !known(value)),
+  };
 }
+
+/** Says which links weren't added, and why. */
+const skippedText = (skipped: readonly string[]): string =>
+  skipped.length
+    ? ` Not linked: ${skipped.join(", ")} (no ticket system set up in Settings matches ${skipped.length === 1 ? "it" : "them"}).`
+    : "";
 
 /**
  * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
@@ -144,7 +171,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         requireWritingProject(args);
         const template = templateFor(services, args);
         const project = writingProject(services, args);
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -163,7 +190,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const where = task.parent ? ` in epic #${task.parent.number}` : "";
         const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
         const from = template ? ` from template ${template.name}${plan}` : "";
-        return textResult(`Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.`);
+        return textResult(
+          `Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${skippedText(skipped)}`,
+        );
       }),
   );
 
@@ -213,7 +242,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const plan = planFromArgs(args);
         const template = templateFor(services, args, { needsPlan: !args.manual, hasPlan: plan !== null });
         const project = writingProject(services, args);
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -231,9 +260,14 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           ...(args.manual ? { manual: true } : {}),
           actor: actor(args.actor),
         });
-        return taskResult(services, task.id, `Created task #${task.number} in ${project.title}.`, {
-          planningHints: true,
-        });
+        return taskResult(
+          services,
+          task.id,
+          `Created task #${task.number} in ${project.title}.${skippedText(skipped)}`,
+          {
+            planningHints: true,
+          },
+        );
       }),
   );
 
@@ -284,7 +318,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             );
           }
         }
-        const links = linkInputs(args);
+        const { links, skipped } = linkInputs(services, args);
         const epic = services.tasks.createEpic(
           {
             projectId: project.id,
@@ -297,7 +331,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           actor(args.actor),
         );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        const headline = `Created epic #${epic.number} in ${project.title}${added}.`;
+        const headline = `Created epic #${epic.number} in ${project.title}${added}.${skippedText(skipped)}`;
         if (args.delivery) {
           try {
             await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));

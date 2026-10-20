@@ -138,7 +138,7 @@ describe("tasks", () => {
     const backlog = s.tasks.create({ projectId: project.id, title: "CORE-1245 Fix login", actor: "agent" });
     const planned = s.tasks.create({
       projectId: project.id,
-      title: "Fix PAY-7 (urgent)",
+      title: "Fix PAY-7 (UTF-8)",
       description: "See OPS-9",
       plan: plan("a"),
       links: [{ value: "PAY-7" }],

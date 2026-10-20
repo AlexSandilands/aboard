@@ -1,6 +1,6 @@
 import type { AgentSessionRef } from "./agentSessions.ts";
 import { LinkKind, type IssueRef, type PrRef, type T3ThreadRef } from "./schemas.ts";
-import { matchTicketKey, matchTicketUrl, ticketHref, type TicketRef, type TicketSystem } from "./ticketSystems.ts";
+import { matchTicketKey, matchTicketUrl, type TicketRef, type TicketSystem } from "./ticketSystems.ts";
 
 export type ClassifiedLink =
   | { kind: "pr"; url: string; ref: PrRef | null }
@@ -106,11 +106,10 @@ export function classifyLink(
   const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(input);
   const ticketUrl = isUrl ? matchTicketUrl(input, systems) : null;
   if (ticketUrl) return { kind: "ticket", url: input, ref: ticketUrl };
+  // A bare key is stored as written, not as its template filled in: the page is worked out from the system when the
+  // link is shown, so fixing a system's template later fixes the links made before.
   const ticketKey = isUrl ? null : matchTicketKey(input, systems);
-  if (ticketKey) {
-    const system = systems.find((s) => s.id === ticketKey.system);
-    return { kind: "ticket", url: ticketHref(system, ticketKey.key) ?? ticketKey.key, ref: ticketKey };
-  }
+  if (ticketKey) return { kind: "ticket", url: ticketKey.key, ref: ticketKey };
 
   if (isUrl) return { kind: "url", url: input };
   return null;

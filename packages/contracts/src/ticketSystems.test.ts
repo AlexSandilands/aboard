@@ -68,6 +68,11 @@ describe("findTicketKeys", () => {
     expect(findTicketKeys(null, [jira])).toEqual([]);
   });
 
+  it("leaves out standards that look like keys, with the Jira preset", () => {
+    expect(findTicketKeys("UTF-8, SHA-256, ISO-8601, RFC-9110, CVE-2024-1234, X-Request-Id", [jira])).toEqual([]);
+    expect(findTicketKeys("abc-123 and Abc-123", [jira])).toEqual([]);
+  });
+
   it("finds nothing without a configured system", () => {
     expect(findTicketKeys("M0-1 Project skeleton, ABC-123", [])).toEqual([]);
   });

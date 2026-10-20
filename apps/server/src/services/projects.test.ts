@@ -169,7 +169,7 @@ describe("links", () => {
     const ticket = s.links.add(task.id, { value: "pay-7" }, "agent");
     expect(ticket).toMatchObject({
       kind: "ticket",
-      url: "https://acme.atlassian.net/browse/PAY-7",
+      url: "PAY-7",
       ref: { system: "jira", key: "PAY-7" },
     });
     expect(s.links.add(task.id, { value: "https://acme.atlassian.net/browse/PAY-7?focus=1" }, "agent").id).toBe(

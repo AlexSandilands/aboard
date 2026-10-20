@@ -184,7 +184,7 @@ describe("classifyLink", () => {
     expect(classifyLink("ABC-123", { ticketSystems: [jira] })).toEqual({
       kind: "ticket",
       ref: { system: "jira", key: "ABC-123" },
-      url: "https://jira.example.com/browse/ABC-123",
+      url: "ABC-123",
     });
     expect(classifyLink("t3code://threads/env-1/thread%3A2")).toMatchObject({
       kind: "t3_thread",
@@ -284,7 +284,7 @@ describe("parseIssueSource", () => {
     });
     expect(parseIssueSource("  PROJ-123 ", { ticketSystems: [jira] })).toMatchObject({
       kind: "ticket",
-      url: "https://jira.example.com/browse/PROJ-123",
+      url: "PROJ-123",
     });
     expect(parseIssueSource("https://jira.example.com/browse/ABC-7?focusedId=1", { ticketSystems })).toEqual({
       kind: "ticket",
@@ -318,6 +318,7 @@ describe("parseIssueSource", () => {
     expect(parseIssueSource("https://example.com/browse", { ticketSystems })).toBeNull();
     expect(parseIssueSource("Fix PROJ-123 login", { ticketSystems })).toBeNull();
     expect(parseIssueSource("proj-123", { ticketSystems })).toBeNull();
+    expect(parseIssueSource("UTF-8", { ticketSystems })).toBeNull();
     expect(parseIssueSource("", { ticketSystems })).toBeNull();
   });
 

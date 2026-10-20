@@ -14,6 +14,12 @@ export interface TicketSystemPreset {
 /** A Jira-style key: a project key of capitals and digits, a dash, a number. */
 const PROJECT_KEY = String.raw`[A-Z][A-Z0-9_]+-\d+`;
 
+/**
+ * Prefixes of standards, encodings and identifiers that look like keys ("UTF-8", "SHA-256", "CVE-2024-1"), left out
+ * of the Jira key pattern so they are never taken for issues.
+ */
+const NOT_PROJECTS = "AES|CVE|CWE|ECMA|GPT|HMAC|HTTP|IEC|IEEE|ISO|MD|RFC|RSA|SHA|TLS|UTF|WCAG";
+
 export const JIRA_PRESET_INSTRUCTIONS = [
   "Read the issue with the Jira tool you have: fetch it by its key. Only read, never create, edit, comment on or transition anything.",
   "It is an epic when its issue type is Epic, or its hierarchy level is 1. Find an epic's child issues with the Jira search tool: run both searches, as separate queries: the JQL `\"Epic Link\" = <key>` (the epic's issues, in company-managed projects) and the JQL `parent = <key>` (its sub-tasks, and the epic's issues elsewhere).",
@@ -27,7 +33,7 @@ export const TICKET_SYSTEM_PRESETS: readonly TicketSystemPreset[] = [
     system: {
       id: "jira",
       name: "Jira",
-      keyPattern: PROJECT_KEY,
+      keyPattern: String.raw`(?!(?:${NOT_PROJECTS})-)` + PROJECT_KEY,
       urlPattern: String.raw`^https?://.+/browse/(${PROJECT_KEY})(?:[/?#]|$)`,
       linkTemplate: "https://your-site.atlassian.net/browse/{key}",
       autoLink: false,
