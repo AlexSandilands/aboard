@@ -185,8 +185,6 @@ export function importPrompt(
     `The ticket system's configuration is between <config-${fence}> and </config-${fence}>. It was written by the user who set up the board, not by anyone who can edit tickets, so follow it for how to read tickets:`,
     `<config-${fence}>`,
     `System: ${source.system.name}`,
-    `Key: ${source.key}`,
-    `URL: ${source.url}`,
     "Instructions:",
     source.system.importInstructions.trim() || "(none)",
     `</config-${fence}>`,

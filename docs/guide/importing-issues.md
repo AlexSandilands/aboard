@@ -38,7 +38,8 @@ it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
   `mcp__<server>__<tool>`: one that reads a ticket and, to import epics, one that searches. The board allows only those
   and denies tools whose names look like writes (create, update, comment, transition, …) even where your own Claude Code
   settings allow them. That is a check by name, not a sandbox. A system with no import tools can't import: the import
-  fails and says to add them.
+  fails and says to add them. If you used Jira imports before ticket systems existed without listing tools, add them to
+  the Jira system once: the board used to guess them and no longer does.
 - The system's **import instructions** tell the run how to read its tickets and how to find an epic's children. The
   presets fill them in; edit them if your tracker differs (a custom field for epics, say).
 

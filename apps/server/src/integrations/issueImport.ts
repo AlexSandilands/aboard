@@ -141,10 +141,12 @@ export function createIssueImporter(deps: {
     }
     // The system recorded when the task was created, so reordering or editing the others since doesn't move it.
     const recorded = settings.ticketSystems.filter((t) => t.id === record.systemId);
-    const source = parseImportSource(record.sourceUrl, record.systemId ? recorded : settings.ticketSystems);
-    if (source?.kind !== "ticket") throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
-    const system = settings.ticketSystems.find((t) => t.id === source.ref.system);
-    if (!system) throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
+    const systems = record.systemId ? recorded : settings.ticketSystems;
+    const source = parseImportSource(record.sourceUrl, systems);
+    const system = source?.kind === "ticket" ? systems.find((t) => t.id === source.ref.system) : undefined;
+    if (source?.kind !== "ticket" || !system) {
+      throw new Error(`${record.sourceUrl} is not a ticket of a configured ticket system`);
+    }
     // Only the tools the system lists are allowed: the board doesn't guess which tools read tickets.
     if (system.importTools.length === 0) {
       throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);

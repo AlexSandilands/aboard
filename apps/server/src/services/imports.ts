@@ -119,11 +119,13 @@ export function createImportsService(
       // Ticket children come from the model, which has just read text anyone could write: anything but a ticket
       // (a GitHub URL, say, which would be read with the user's gh) is dropped rather than trusted. A child is always
       // the same kind of issue as its epic, and a ticket's children are tickets of its own system.
-      const childSource = parseImportSource(child, settings.ticketSystems);
-      if (
-        childSource?.kind !== source.sourceKind ||
-        (childSource.kind === "ticket" && childSource.ref.system !== source.systemId)
-      ) {
+      // Only the epic's own system is tried, since key patterns overlap (Jira's and Linear's) and the first system
+      // listed would otherwise win a bare key.
+      const childSource = parseImportSource(
+        child,
+        source.systemId ? settings.ticketSystems.filter((t) => t.id === source.systemId) : settings.ticketSystems,
+      );
+      if (childSource?.kind !== source.sourceKind) {
         unreadable++;
         continue;
       }
@@ -146,7 +148,10 @@ export function createImportsService(
         continue;
       }
       created.push(
-        tasks.create({ projectId: self.projectId, sourceUrl: child, epicId: taskId, actor: IMPORT_ACTOR }).id,
+        tasks.create(
+          { projectId: self.projectId, sourceUrl: child, epicId: taskId, actor: IMPORT_ACTOR },
+          source.systemId ? { ticketSystem: source.systemId } : {},
+        ).id,
       );
     }
     const lines: string[] = [];
@@ -208,7 +213,16 @@ export function createImportsService(
           IMPORT_ACTOR,
         );
         const childImports = result.epic
-          ? fillEpic(taskId, source?.placeholder ?? record.sourceUrl, record, result.epic)
+          ? fillEpic(
+              taskId,
+              source?.placeholder ?? record.sourceUrl,
+              {
+                sourceKind: record.sourceKind,
+                // A record from before systems were recorded: the system its own source parses to.
+                systemId: record.systemId ?? (source?.kind === "ticket" ? source.ref.system : null),
+              },
+              result.epic,
+            )
           : [];
         repos.imports.update({ ...record, status: "done", error: null, updatedAt: nowIso() });
         fx.log(taskId, IMPORT_ACTOR, "imported", { source: record.sourceUrl });

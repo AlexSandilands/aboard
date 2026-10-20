@@ -347,14 +347,49 @@ describe("importing an epic", () => {
     expect(s.tasks.summaries({ projectId: epic.projectId })).toHaveLength(3);
   });
 
-  it("drops a child that belongs to another ticket system, which the model may have listed by mistake", async () => {
-    const shop: TicketSystem = { ...JIRA, id: "shop", name: "Shop tracker", keyPattern: String.raw`SHOP-\d+` };
-    const { s, create, run, jobs } = setup({ runImport: ticketEpic(["PROJ-8", "SHOP-1"]) });
-    s.settings.update({ ticketSystems: [shop, JIRA] });
+  it("drops a child that is a ticket of another system, which the model may have listed by mistake", async () => {
+    const linear: TicketSystem = {
+      ...JIRA,
+      id: "linear",
+      name: "Linear",
+      keyPattern: undefined,
+      urlPattern: String.raw`^https://linear\.app/[^/]+/issue/([A-Z][A-Z0-9]+-\d+)`,
+    };
+    const { s, create, run, jobs } = setup({
+      runImport: ticketEpic(["PROJ-8", "https://linear.app/acme/issue/ENG-4"]),
+    });
+    s.settings.update({ ticketSystems: [JIRA, linear] });
     const epic = await run(create("PROJ-7").id);
     expect(epic.children.map((c) => c.title)).toEqual(["Do PROJ-8"]);
     expect(notes(epic)).toEqual(["Skipped a child issue that wasn't a ticket of its system."]);
     expect(jobs.map((j) => (j.source.kind === "ticket" ? j.source.key : null))).toEqual(["PROJ-7", "PROJ-8"]);
+  });
+
+  it("reads an epic's bare-key children as its own system's, though another system listed first matches them", async () => {
+    // Two systems whose keys look alike: a bare key goes to the first listed, unless the epic's system is known.
+    const first: TicketSystem = { ...JIRA, id: "first", name: "First tracker" };
+    const second: TicketSystem = {
+      ...JIRA,
+      id: "second",
+      name: "Second tracker",
+      urlPattern: String.raw`^https://second\.example\.com/issue/([A-Z][A-Z0-9_]+-\d+)`,
+    };
+    const { s, create, run, jobs } = setup({
+      runImport: (job) =>
+        Promise.resolve(
+          job.source.kind === "ticket" && job.source.key === "BB-7"
+            ? { ...outcome, epic: { children: ["BB-8"], total: 1 } }
+            : outcome,
+        ),
+    });
+    s.settings.update({ ticketSystems: [first, second] });
+    const epic = await run(create("https://second.example.com/issue/BB-7").id);
+    expect(epic.kind).toBe("epic");
+    expect(epic.children).toHaveLength(1);
+    const child = s.tasks.detail(epic.children[0]!.id);
+    expect(child.links[0]).toMatchObject({ kind: "ticket", ref: { system: "second", key: "BB-8" } });
+    expect(child.import?.status).toBe("done");
+    expect(jobs.at(-1)).toMatchObject({ source: { key: "BB-8", system: { name: "Second tracker" } } });
   });
 
   it("turns a GitHub issue with sub-issues into an epic", async () => {

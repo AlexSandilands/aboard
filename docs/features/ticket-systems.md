@@ -67,6 +67,10 @@ that system, but only on an install that used Jira (a base URL, import tools, or
 "Jira", with the preset's patterns and import instructions, `<jiraBaseUrl>/browse/{key}` as its template when a base
 URL was set, the old import tools that are valid rules, and `autoLink` off. The old keys are deleted.
 
+An install that never listed Jira tools used to have the board guess them (`get_jira_issue` and the like, on every
+connected server). That guessing is gone: such a system starts with no import tools, and its imports fail with "Add
+import tools to Jira in Settings" until the user lists them once ([issue import](issue-import.md#which-tools-are-allowed)).
+
 A backup taken before 036 still restores: the restore loads its `jiraBaseUrl` and `issueImportJiraTools`
 (`RETIRED_EXPORTED_SETTINGS`) with the rest, and the migration converts them as the dump is upgraded.
 `ticketSystems` itself is exported with the other settings.

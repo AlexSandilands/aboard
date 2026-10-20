@@ -273,7 +273,7 @@ export function createTasksService(
       return task.id;
     },
 
-    create(input) {
+    create(input, opts = {}) {
       const id = core.write((fx) => {
         const project = deps.projects.get(input.projectId);
         const actor = input.actor ?? "user";
@@ -296,7 +296,13 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
         }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
-        const source = input.sourceUrl ? parseImportSource(input.sourceUrl, deps.settings.get().ticketSystems) : null;
+        const systems = deps.settings.get().ticketSystems;
+        const source = input.sourceUrl
+          ? parseImportSource(
+              input.sourceUrl,
+              opts.ticketSystem ? systems.filter((t) => t.id === opts.ticketSystem) : systems,
+            )
+          : null;
         if (input.sourceUrl && !source) {
           throw new AppError(
             "VALIDATION",
@@ -410,7 +416,7 @@ export function createTasksService(
         if (plan) deps.plans().replacePlan(task, plan, actor, fx);
         if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
-          deps.links().service.add(task.id, { value: source.url }, actor);
+          deps.links().service.add(task.id, { value: source.url }, actor, { ticketSystem: opts.ticketSystem });
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
         }
         for (const link of input.links ?? []) {

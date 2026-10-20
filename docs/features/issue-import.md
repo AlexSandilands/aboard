@@ -85,9 +85,12 @@ An issue that is an epic becomes one on the board, and its children become its t
   `sourceUrl`; only the import converts. A ticket epic with no children listed stays a task with a note too: an empty
   epic looks the same as one whose children couldn't be searched (import tools without a search tool, instructions that
   don't say how to find children, a failed search), and an empty epic nobody notices is worse than a note.
-- **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseImportSource`. A child that isn't
-  the same kind of issue as its epic, or is a ticket of another system than its epic's, is dropped and counted: a
-  ticket epic's list comes from the model, and a GitHub URL in it would be read with the user's `gh`. The rest are
+- **Children.** Each child, at most 50 (`IMPORT_CHILDREN_MAX`), is parsed with `parseImportSource`, for a ticket epic
+  against its own system only (the key patterns of two systems can overlap, and a bare key would go to whichever is
+  listed first); the child is created with `tasks.create(…, { ticketSystem })` so its link and import record name the
+  same system. A child that isn't the same kind of issue as its epic, or that its system doesn't recognise (another
+  system's URL, say), is dropped and counted: a ticket epic's list comes from the model, and a GitHub URL in it would
+  be read with the user's `gh`. The rest are
   matched against the unarchived tasks in the project linked to the same issue (system and key, or GitHub host, repo
   and number):
   - none, or only archived ones: a new task in the epic with the child as its `sourceUrl`, created by `import`;
