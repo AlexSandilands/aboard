@@ -89,6 +89,15 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     }),
   );
 
+  // Asks each CLI which models it lists, for Settings → Model tiers; `?refresh=1` skips the ten minutes' cache.
+  app.get(
+    "/api/agent-models",
+    handle(async (c) => {
+      const { refresh } = parseQuery(c, z.object({ refresh: z.string().optional() }));
+      return c.json(await integrations.agentModels(refresh === "1"));
+    }),
+  );
+
   app.get(
     "/api/settings",
     handle((c) => c.json(services.settings.get())),

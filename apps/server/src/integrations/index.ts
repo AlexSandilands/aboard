@@ -13,6 +13,7 @@ import { boardUrlOf, type Config } from "../config.ts";
 import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentIntegrations, type AgentIntegrationProbes } from "./agentIntegrations.ts";
+import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
@@ -59,6 +60,7 @@ export interface IntegrationOverrides {
   runGit?: RunGit;
   /** What the agent integration checks run: the CLIs and the MCP config files. */
   agentIntegrationProbes?: Partial<AgentIntegrationProbes>;
+  agentModelProbes?: Partial<AgentModelProbes>;
   /** Process checks for agent sessions' status. */
   processProbe?: ProcessProbe;
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
@@ -153,6 +155,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     host: overrides.terminalHost ?? systemTerminalHost,
     userHome: deps.config.userHome,
     ...(overrides.agentIntegrationProbes ? { probes: overrides.agentIntegrationProbes } : {}),
+  });
+  const agentModels = createAgentModels({
+    services: deps.services,
+    host: overrides.terminalHost ?? systemTerminalHost,
+    userHome: deps.config.userHome,
+    ...(overrides.agentModelProbes ? { probes: overrides.agentModelProbes } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.
   const refreshSession = (sessionId: string) => {
@@ -297,6 +305,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     terminalInfo: () => sessions.terminalInfo(),
     agentClis: () => sessionLaunch.clis(),
     agentIntegrations: (refresh) => agentIntegrations.status(refresh),
+    agentModels: (refresh) => agentModels.status(refresh),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
     startPlanningSession: (projectId, input, actor) => sessionLaunch.startPlanning(projectId, input, actor),
