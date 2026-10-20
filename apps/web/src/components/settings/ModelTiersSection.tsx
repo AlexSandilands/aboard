@@ -1,7 +1,8 @@
 import {
   MODEL_PROFILES_MAX,
   MODEL_TIERS,
-  type AgentHarness,
+  AGENT_HARNESSES,
+  AgentHarness,
   type AppSettings,
   type ModelProfile,
   type ModelTier,
@@ -36,10 +37,13 @@ import { SettingsLink, SettingsNote, SettingsRow, SettingsSection } from "./sett
 
 const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
   "claude-code": "e.g. sonnet",
+  codex: "e.g. gpt-5.5-codex",
   "copilot-cli": "e.g. gpt-5.4",
 };
 
-const CLI_LABELS: Record<AgentHarness, string> = { "claude-code": "Claude Code", "copilot-cli": "Copilot CLI" };
+const CLI_LABELS: Record<AgentHarness, string> = Object.fromEntries(
+  AgentHarness.options.map((h) => [h, AGENT_HARNESSES[h].label]),
+) as Record<AgentHarness, string>;
 
 /**
  * What each suggested model tier means, in one place for every provider: a description named in copied prompts, the
@@ -98,7 +102,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                     />
                   </TierField>
                 ) : null}
-                {(["claude-code", "copilot-cli"] as const).map((harness) =>
+                {AgentHarness.options.map((harness) =>
                   shown.has(harness) ? (
                     <TierField key={harness} label={CLI_LABELS[harness]}>
                       <BlurInput
@@ -256,7 +260,7 @@ function CustomModelsSection({
                 />
               </TierField>
             ) : null}
-            {(["claude-code", "copilot-cli"] as const).map((harness) =>
+            {AgentHarness.options.map((harness) =>
               shown.has(harness) ? (
                 <TierField key={harness} label={CLI_LABELS[harness]}>
                   <BlurInput

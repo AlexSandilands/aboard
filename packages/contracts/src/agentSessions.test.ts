@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_HARNESSES,
+  LAUNCHABLE_HARNESSES,
   agentSessionUrl,
   AgentSessionRef,
   canFork,
@@ -35,7 +36,7 @@ describe("AgentSessionRef", () => {
 
   it("rejects relative folders and unknown harnesses", () => {
     expect(AgentSessionRef.safeParse({ harness: "claude-code", sessionId: ID, cwd: "repo" }).success).toBe(false);
-    expect(AgentSessionRef.safeParse({ harness: "codex", sessionId: ID, cwd: "/x" }).success).toBe(false);
+    expect(AgentSessionRef.safeParse({ harness: "gemini", sessionId: ID, cwd: "/x" }).success).toBe(false);
   });
 });
 
@@ -62,6 +63,13 @@ describe("harness table", () => {
       "--fork-session",
     ]);
     expect(resumeArgv({ harness: "copilot-cli", sessionId: ID }, "resume")).toEqual(["copilot", `--resume=${ID}`]);
+    expect(resumeArgv({ harness: "codex", sessionId: ID }, "resume")).toEqual(["codex", "resume", ID]);
+  });
+
+  it("refuses to fork a Codex session, and starts none from the board", () => {
+    expect(canFork("codex")).toBe(false);
+    expect(() => resumeArgv({ harness: "codex", sessionId: ID }, "fork")).toThrow(/can't be forked/);
+    expect(LAUNCHABLE_HARNESSES).toEqual(["claude-code", "copilot-cli"]);
   });
 
   it("refuses to fork a Copilot session", () => {
@@ -73,6 +81,7 @@ describe("harness table", () => {
   it("names each harness's session id variable", () => {
     expect(AGENT_HARNESSES["claude-code"].idEnvVar).toBe("CLAUDE_CODE_SESSION_ID");
     expect(AGENT_HARNESSES["copilot-cli"].idEnvVar).toBe("COPILOT_AGENT_SESSION_ID");
+    expect(AGENT_HARNESSES.codex.idEnvVar).toBe("CODEX_THREAD_ID");
   });
 
   it("gives each session one URL however the id is cased", () => {

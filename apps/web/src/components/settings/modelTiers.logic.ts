@@ -14,6 +14,7 @@ export interface TierProviderState {
 export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: string }> = [
   { provider: "t3", label: "T3 Code" },
   { provider: "claude-code", label: "Claude Code" },
+  { provider: "codex", label: "Codex" },
   { provider: "copilot-cli", label: "Copilot CLI" },
 ];
 

@@ -1,4 +1,4 @@
-import { BRAND } from "@repo/contracts";
+import { BRAND, type AgentHarness } from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
 import { READ_ONLY_TOOLS } from "./headlessReview.ts";
 
@@ -200,11 +200,64 @@ export function parseAgentOutput(stdout: string, wantsOutput: boolean): AgentOut
 
 export interface AgentJob {
   cli: string | null;
+  /** The CLI's name on PATH when `cli` isn't set, and how errors name it. Claude Code's unless given. */
+  command?: string;
+  label?: string;
   cwd: string;
   prompt: string;
   args: string[];
   timeoutMs: number;
+  /** Each line of stdout as it comes. */
+  onStdoutLine?: (line: string) => void;
 }
+
+/** What a harness's headless CLI can be held to, beyond doing work in a folder. */
+export interface DriverCapabilities {
+  /** A JSON schema the final answer must match. */
+  outputSchema: boolean;
+  /** The lockdown for agents that read untrusted text (and a board-only MCP config). */
+  untrusted: boolean;
+  /** A run with no tools at all (`access: "none"`). */
+  noTools: boolean;
+  /** Extra allow and deny rules in Claude Code's syntax (`tools`, `deniedTools`). */
+  toolRules: boolean;
+  /** A spending cap per run. */
+  budget: boolean;
+  /** The board gives the session its id before the run starts; otherwise the CLI reports it (sessionIdOf). */
+  presetSessionId: boolean;
+}
+
+/** One harness's headless CLI: how to call it and how to read what it printed. */
+export interface HeadlessDriver {
+  harness: AgentHarness;
+  /** Its name on PATH. */
+  command: string;
+  /** How runs and errors name it. */
+  label: string;
+  capabilities: DriverCapabilities;
+  /** The argv for a run; the prompt goes over stdin. `sessionId` is ignored without `presetSessionId`. */
+  args(input: AgentArgsInput): string[];
+  parse(stdout: string, wantsOutput: boolean): AgentOutcome;
+  /** The session id a stdout line reports, for a CLI that picks its own. */
+  sessionIdOf?(line: string): string | null;
+}
+
+/** Claude Code (`claude -p`): every capability. */
+export const claudeDriver: HeadlessDriver = {
+  harness: "claude-code",
+  command: "claude",
+  label: "Claude Code",
+  capabilities: {
+    outputSchema: true,
+    untrusted: true,
+    noTools: true,
+    toolRules: true,
+    budget: true,
+    presetSessionId: true,
+  },
+  args: agentArgs,
+  parse: parseAgentOutput,
+};
 
 /** Runs one headless agent to the end and returns its stdout. */
 export type RunAgent = (job: AgentJob) => Promise<string>;
