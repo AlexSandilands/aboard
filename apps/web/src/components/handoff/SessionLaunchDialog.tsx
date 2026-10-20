@@ -25,6 +25,7 @@ import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/stat
 import { useDialogs } from "~/state/ui";
 import { copyFixPrompt } from "./FixPrMenu";
 import { copyHandoffPrompt } from "./HandoffActions";
+import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
   harnessLabel,
@@ -223,6 +224,7 @@ function Composer({
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
   const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
   const start = useStartSession({ silent: true });
+  const images = useLaunchImages();
   const cli = options.clis.find((c) => c.harness === harness);
 
   // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
@@ -240,7 +242,7 @@ function Composer({
         ? fix
           ? "The project's folder isn't a git repository"
           : "Choose a branch"
-        : badModel;
+        : (badModel ?? images.blocker);
 
   const togglePlan = () => {
     const next = !plan;
@@ -258,6 +260,7 @@ function Composer({
         harness,
         mode: fix ? "fix" : epic ? "orchestrate" : plan ? "plan" : "work",
         prompt,
+        ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
         workspace,
       },
@@ -292,10 +295,13 @@ function Composer({
               submit();
             }
           }}
+          {...images.handlers}
           aria-label="First message"
           className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
+        <LaunchImageThumbs state={images} />
         <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+          <AddImageControl state={images} />
           <Input
             size="sm"
             className="w-56"

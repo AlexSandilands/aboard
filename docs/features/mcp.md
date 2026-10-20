@@ -160,7 +160,7 @@ text when both are present.
   (`socialBreakHint`). See [social.md](social.md#what-agents-see).
 - `list_tasks` and `board_overview` print one line per task (`summaryLine`), labels after the title:
   `#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open`. An epic's line shows `[epic]` and its roll-up
-  (`0/3 done · 2 In Progress, 1 Backlog`); a task in one ends with `in epic #N`. `board_overview` counts only
+  (`0/3 done · 2 In Progress, 1 Backlog`, then `integration branch epic/…` when it has one); a task in one ends with `in epic #N`. `board_overview` counts only
   tasks and lists each project's open epics under it.
 - Errors come back as `isError` results reading `CODE: message`. `move_task` adds a hint to
   `PLAN_REQUIRED` (call `set_plan`, or use `close_task`); `set_plan` adds one to `CONFLICT` (use

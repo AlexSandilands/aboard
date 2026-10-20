@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LaunchAttachmentIds } from "./attachments.ts";
 
 // Shapes for starting a T3 Code thread from a task. They are our own normalized subsets of T3's
 // server config (providers, models, settings) and VCS refs, not T3's wire types.
@@ -137,7 +138,14 @@ export type T3LaunchWorkspace = z.infer<typeof T3LaunchWorkspace>;
 export const StartT3ThreadInput = z.object({
   /** T3 de-duplicates launches by it: reusing it after a lost response returns the same thread. */
   commandId: z.uuid().optional(),
+  /**
+   * The new thread's id, generated with `commandId` and kept or reset with it. T3 needs one at launch for uploaded
+   * images; a retry with the same pair returns the same thread.
+   */
+  threadId: z.uuid().optional(),
   prompt: z.string().trim().min(1),
+  /** Images pasted into the dialog: uploaded to T3 Code and sent with the first message. */
+  attachmentIds: LaunchAttachmentIds.optional(),
   modelSelection: T3ModelSelection,
   runtimeMode: T3RuntimeMode,
   workspace: T3LaunchWorkspace,

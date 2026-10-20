@@ -146,6 +146,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   if (resolution) parts.push(resolution);
   if (task.rollup) {
     parts.push(describeEpicRollup(task.rollup));
+    if (task.integrationBranch) parts.push(`integration branch ${task.integrationBranch}`);
   } else if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);

@@ -114,6 +114,11 @@ export type WireRefs = z.infer<typeof WireRefs>;
 /** Subset of T3's `orchestration.launchThread` result. */
 export const WireLaunchResult = z.object({ threadId: z.string().min(1) }).loose();
 
+/** Subset of T3's `attachments.createUploadUrl` result: a pending attachment and where to POST its bytes. */
+export const WireUploadUrl = z
+  .object({ attachmentId: z.string().min(1), relativeUrl: z.string().regex(/^\/(?![/\\])/) })
+  .loose();
+
 // ── Pure mapping ─────────────────────────────────────────────────────────
 
 /** The T3 project for a board project: its stored T3 id, else the T3 project with the same folder. */

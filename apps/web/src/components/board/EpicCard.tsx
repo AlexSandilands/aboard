@@ -1,6 +1,7 @@
 import { describeEpicRollup, type TaskSummary } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, useState } from "react";
+import { EpicBranchBadge } from "~/components/task/EpicDelivery";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
@@ -99,6 +100,7 @@ export const EpicCard = memo(function EpicCard({
             </span>
           </span>
         </button>
+        <EpicBranchBadge epic={epic} />
         <EpicActions epic={epic} />
         {epic.archivedAt ? null : <ArchiveButton task={epic} />}
       </div>

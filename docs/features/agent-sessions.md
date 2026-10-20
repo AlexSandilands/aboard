@@ -156,6 +156,10 @@ model for the task's model, which model that is and what picked it (a label's cu
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
 - a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
+  its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
+  lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
+  session's images stay unclaimed, in the pending folder (see [attachments.md](attachments.md#in-the-launch-dialogs));
 - **New worktree** from a branch, or **This checkout**. (A fix from a PR's **Fix in →** has neither choice: it runs in a
   new worktree on the PR's own branch, below.) The branch starts on the task's integration branch when its
   epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch
