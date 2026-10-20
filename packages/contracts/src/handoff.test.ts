@@ -22,7 +22,7 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("never all at the end of a phase");
     expect(prompt).not.toContain("already linked");
     expect(prompt).toContain("link(t3Thread: {environmentId, threadId})");
-    expect(prompt).toContain("Jira issue");
+    expect(prompt).toContain("its ticket with link");
   });
 
   it("tells a work session not to start a blocked task", () => {
@@ -55,7 +55,7 @@ describe("taskHandoffPrompt", () => {
     for (const mode of ["work", "plan"] as const) {
       const prompt = taskHandoffPrompt({ task: suggested, boardUrl: "http://x", mode, linkedSession: true });
       expect(prompt).toContain("The board started this session and already linked it to the task");
-      expect(prompt).toContain("Jira issue");
+      expect(prompt).toContain("its ticket with link");
       expect(prompt).not.toContain("agentSession");
       expect(prompt).not.toContain("t3Thread");
       expect(prompt).not.toContain("Suggested model");

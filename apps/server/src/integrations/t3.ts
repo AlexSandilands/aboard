@@ -7,10 +7,12 @@ import {
   BRAND,
   type ConnectT3Result,
   isT3ThreadId,
+  type ModelChoice,
   normalizeWorkspaceKey,
   parseT3ThreadInput,
   ProjectIcon,
   type Project,
+  resolveRunModel,
   type StartT3ThreadInput,
   type T3IntegrationStatus,
   type T3LaunchOptions,
@@ -23,6 +25,7 @@ import {
 import { z } from "zod";
 import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
+import type { AttachmentsService } from "../services/attachments.ts";
 import type { LinksService, ProjectsService, SettingsService, TasksService } from "../services/types.ts";
 import { messageOf } from "./github.ts";
 import {
@@ -37,6 +40,7 @@ import {
   WireLaunchResult,
   WireRefs,
   WireServerConfig,
+  WireUploadUrl,
 } from "./t3Launch.ts";
 import { openT3Rpc, T3RpcError, type OpenSocket, type T3RpcSession } from "./t3Rpc.ts";
 import type { Logger } from "./util.ts";
@@ -416,6 +420,7 @@ export interface T3Services {
   settings: Pick<SettingsService, "get" | "t3Token" | "update">;
   projects: Pick<ProjectsService, "list" | "create" | "get">;
   tasks: Pick<TasksService, "summary">;
+  attachments: Pick<AttachmentsService, "forLaunch" | "claimIds">;
 }
 
 export type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
@@ -673,6 +678,7 @@ export function createT3Integration(deps: {
   /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
   const loadLaunchOptions = async (
     target: { taskId: string } | { projectId: string },
+    choice?: ModelChoice,
   ): Promise<{ options: T3LaunchOptions; refsListed: boolean; refsUnreachable: boolean }> => {
     const ctx = await launchContext(target);
     return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
@@ -691,8 +697,13 @@ export function createT3Integration(deps: {
         refs,
         shell: ctx.shell,
         t3Project: ctx.t3Project,
-        suggestedModel: ctx.task?.suggestedModel ?? null,
-        modelTiers: deps.services().settings.get().modelTiers,
+        model: ctx.task
+          ? resolveRunModel(
+              { labels: ctx.task.labels, tier: ctx.task.suggestedModel?.tier, choice },
+              deps.services().settings.get(),
+            )
+          : null,
+        reason: ctx.task?.suggestedModel?.reason ?? null,
       });
       return { options, refsListed: refs !== null, refsUnreachable };
     });
@@ -710,16 +721,71 @@ export function createT3Integration(deps: {
     });
   };
 
-  /** Sends the launch and returns the new thread's id. */
+  /**
+   * Uploads an image to T3 Code as a pending attachment: a signed URL over the RPC, then the bytes to it. Returns the
+   * attachment as `initialMessage` refers to it.
+   */
+  const uploadImage = async (
+    rpc: T3RpcSession,
+    origin: string,
+    image: { filename: string; mime: string; path: string },
+  ) => {
+    const bytes = readFileSync(image.path);
+    const meta = { name: image.filename, mimeType: image.mime, sizeBytes: bytes.length };
+    const url = parseWire(
+      WireUploadUrl,
+      await rpc.request("attachments.createUploadUrl", { type: "image", ...meta }),
+      "upload URL",
+    );
+    // The bytes go to T3 itself only, whatever the answer says.
+    const target = new URL(url.relativeUrl, origin);
+    if (target.origin !== new URL(origin).origin) {
+      throw new AppError("VALIDATION", "Unexpected upload URL from T3 Code (its protocol may have changed)");
+    }
+    let response: Response;
+    try {
+      response = await fetchFn(target.toString(), {
+        method: "POST",
+        headers: { "content-type": image.mime },
+        body: bytes,
+      });
+    } catch (error) {
+      throw t3Unavailable(`Couldn't upload ${image.filename} to T3 Code: ${messageOf(error)}`);
+    }
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).trim().slice(0, 200);
+      throw new AppError(
+        "VALIDATION",
+        `T3 Code refused ${image.filename} (${response.status}${detail ? `: ${detail}` : ""})`,
+      );
+    }
+    return { type: "image" as const, id: url.attachmentId, ...meta };
+  };
+
+  /**
+   * Uploads the launch's images, then sends the launch, and returns the new thread's id. An image of a task's launch
+   * may belong to that task already (a retry after the first attempt claimed it); any other launch takes unclaimed ones.
+   */
   const launch = async (
     ctx: Awaited<ReturnType<typeof launchContext>>,
     input: StartT3ThreadInput,
     title: string,
+    taskId: string | null,
   ): Promise<string> => {
     const { options, ...selection } = input.modelSelection;
+    // Resolved first, so an image that is gone starts nothing.
+    const images = input.attachmentIds?.length
+      ? deps.services().attachments.forLaunch(input.attachmentIds, taskId)
+      : [];
     const result = await withRpc(ctx.origin, ctx.bearer, async (rpc) => {
+      // One after another: they are a few small files, and the first failure stops the launch before it is sent.
+      const attachments = [];
+      for (const image of images) attachments.push(await uploadImage(rpc, ctx.origin, image));
+      // T3 needs the thread's id up front to file uploaded images under it.
+      const threadId = input.threadId ?? (attachments.length > 0 ? randomUUID() : undefined);
       const raw = await rpc.request("orchestration.launchThread", {
         commandId: input.commandId ?? randomUUID(),
+        ...(threadId ? { threadId } : {}),
         projectId: ctx.t3Project.id,
         title,
         modelSelection: options.length > 0 ? { ...selection, options } : selection,
@@ -728,7 +794,7 @@ export function createT3Integration(deps: {
         // have no visible way out. "Plan with me" is carried by the prompt instead.
         interactionMode: "default",
         workspaceStrategy: toWorkspaceStrategy(input.workspace),
-        initialMessage: { text: input.prompt, attachments: [] },
+        initialMessage: { text: input.prompt, attachments },
       });
       // The command was sent, so T3 may have accepted it; tag the failure so a retry keeps the commandId.
       const parsed = WireLaunchResult.safeParse(raw);
@@ -749,8 +815,17 @@ export function createT3Integration(deps: {
     title?: string,
   ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
-    const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`);
+    const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`, taskId);
     const link = deps.services().links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId } }, actor);
+    // The images now belong to the task: backed up and deleted with it, and listed by get_task. After the link, so a
+    // failure here can't leave a started thread unlinked; T3 has its own copy either way.
+    if (input.attachmentIds?.length) {
+      try {
+        deps.services().attachments.claimIds(taskId, input.attachmentIds);
+      } catch (error) {
+        log.warn(`[t3] couldn't give the launch's images to the task: ${messageOf(error)}`);
+      }
+    }
     void pollLive();
     return link;
   };
@@ -761,7 +836,8 @@ export function createT3Integration(deps: {
     title: string,
   ): Promise<T3ThreadRef> => {
     const ctx = await launchContext({ projectId });
-    return { environmentId: ctx.environmentId, threadId: await launch(ctx, input, title) };
+    // Not claimed: there is no one task to give them to. T3 keeps its own copy; the board's is swept after a day.
+    return { environmentId: ctx.environmentId, threadId: await launch(ctx, input, title, null) };
   };
 
   const launchTaskThread = async (
@@ -769,7 +845,7 @@ export function createT3Integration(deps: {
     { prompt, commandId, title, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
-    const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId });
+    const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId }, choice.modelChoice);
     // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
     if (!refsListed) {
       const reason = "T3 Code couldn't list the project's branches, so the thread can't get its own worktree";

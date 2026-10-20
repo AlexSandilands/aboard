@@ -47,11 +47,12 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
 });
 
 /**
- * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to, and one per ticket system. A row may use one of these
- * prefixes without an entry of its own.
+ * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to, one per custom model and one per
+ * ticket system. A row may use one of these prefixes without an entry of its own.
  */
 export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
   "integrations.github.host-",
+  "models.tiers.custom.",
   "integrations.tickets.system-",
 ];
 
@@ -337,8 +338,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "autopilot.engine.pr-review-rounds",
     "PR review rounds",
-    "How many review rounds the PR review automation runs on a pull request.",
-    ["review prs", "limit", "github"],
+    "How many review rounds the PR review automation runs on a pull request, and Fix PRs' attempts on its review and failing checks.",
+    ["review prs", "fix prs", "limit", "github"],
+  ),
+  draft(
+    "autopilot.engine.pr-comment-rounds",
+    "PR comment rounds",
+    "How many attempts Fix PRs makes on a pull request for other people's review comments and requests for changes.",
+    ["fix prs", "review bot", "colleague", "limit", "github"],
   ),
   draft(
     "autopilot.engine.pr-fix-threshold",
@@ -608,6 +615,12 @@ function generated(): Draft[] {
       "What light, standard and deep mean for you: a description, and the model each provider starts a session on.",
       ["light", "standard", "deep", "suggested model", "claude", "effort"],
     ),
+    draft(
+      "models.tiers.custom",
+      "Custom models",
+      "Named models beyond the tiers, each with the task labels that pick it and the models each provider starts on.",
+      ["custom model", "profile", "label", "codex", "override", "model per label", "automation model"],
+    ),
     ...MODEL_TIERS.map(({ value, label, description }) =>
       draft(`models.tiers.${value}`, `${label} model`, description, [
         "model tier",
@@ -668,6 +681,7 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "tasks.new-tasks.templates",
   "tasks.new-tasks.issue-import",
   "models.tiers.list",
+  "models.tiers.custom",
   "project.autopilot.automations",
   "project.recurring.rules",
   "project.recurring.examples",

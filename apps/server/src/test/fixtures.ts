@@ -36,6 +36,7 @@ export const defaultSettings: AppSettings = {
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
   modelTiers: EMPTY_MODEL_TIERS,
+  modelProfiles: [],
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,

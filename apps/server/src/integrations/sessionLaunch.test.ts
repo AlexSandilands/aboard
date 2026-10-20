@@ -78,6 +78,17 @@ function appWith(
 
 const WINDOW = `${BRAND.id}-1`;
 
+/** Starts with a PNG's signature, which is all the upload checks. */
+const png = () => {
+  const bytes = new Uint8Array(32).fill(7);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return bytes;
+};
+
+/** An image pasted into the launch dialog: uploaded without a task. */
+const pastedImage = (app: ReturnType<typeof appWith>, filename = "shot.png") =>
+  app.services.attachments.upload({ taskId: null, filename, mime: "image/png", bytes: png() });
+
 describe("starting a session from the board", () => {
   it("opens Claude Code in the task's Windows Terminal window with the prompt as one argument, and links it", async () => {
     const app = appWith();
@@ -185,6 +196,47 @@ describe("starting a session from the board", () => {
     expect(app.sessionLinks()).toHaveLength(1);
   });
 
+  it("claims pasted images onto the task and points the prompt at them, through Windows quoting", async () => {
+    const app = appWith();
+    const image = pastedImage(app, 'shot "1".png');
+    const { status } = await app.start({ prompt: "Fix the layout.", attachmentIds: [image.id] });
+    expect(status).toBe(201);
+    const [stored] = app.services.attachments.forTask(app.task.id);
+    expect(stored!.id).toBe(image.id);
+    expect(existsSync(stored!.path)).toBe(true);
+    // Line breaks become spaces and double quotes single ones; the path is the one under the task's folder.
+    expect(app.spawned[0]!.args.at(-1)).toBe(
+      `Fix the layout. [Attached image 'shot '1'.png' is saved at: ${stored!.path}]`,
+    );
+  });
+
+  it("keeps the images' paths in the short prompt", async () => {
+    const app = appWith();
+    const image = pastedImage(app);
+    const { body } = await app.start({ prompt: "word ".repeat(2000), attachmentIds: [image.id] });
+    expect(body.shortReason).toMatch(/too long/);
+    const [stored] = app.services.attachments.forTask(app.task.id);
+    expect(body.shortPrompt).toMatch(/^Let's work on #1 from the/);
+    expect(body.shortPrompt).toContain(`[Attached image 'shot.png' is saved at: ${stored!.path}]`);
+  });
+
+  it("starts nothing with an image that is gone or another task's", async () => {
+    const app = appWith();
+    const other = app.services.tasks.create({ projectId: app.task.projectId, title: "Other" });
+    const theirs = app.services.attachments.upload({
+      taskId: other.id,
+      filename: "x.png",
+      mime: "image/png",
+      bytes: png(),
+    });
+    for (const id of [theirs.id, "0b6c1f0e-3a4d-4c1e-9d7a-2f5b8c9e1a11"]) {
+      const { status } = await app.start({ attachmentIds: [id] });
+      expect(status).toBe(400);
+    }
+    expect(app.spawned).toHaveLength(0);
+    expect(app.sessionLinks()).toHaveLength(0);
+  });
+
   it("returns the command to run by hand, and links its session without a window, when the terminal won't start", async () => {
     const app = appWith({ spawnError: new Error("spawn wt.exe ENOENT") });
     const { status, body } = await app.start({});
@@ -270,7 +322,25 @@ describe("starting a session from the board", () => {
       defaultBaseRef: null,
       models: { "claude-code": "opus", "copilot-cli": null },
       tier: "deep",
+      model: { name: "Deep", source: "tier", label: null },
       namedWindow: true,
+    });
+  });
+
+  it("offers the model a task label picks over its tier, and says which label", async () => {
+    const app = appWith();
+    app.services.settings.update({
+      modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus" } } },
+      modelProfiles: [
+        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "copilot-cli": "gpt-5" } },
+      ],
+    });
+    app.services.tasks.update(app.task.id, { suggestedModel: { tier: "deep" }, labels: ["quick"] }, "u");
+    const res = await app.request(`/api/tasks/${app.task.id}/session-launch-options`);
+    expect(await res.json()).toMatchObject({
+      models: { "claude-code": null, "copilot-cli": "gpt-5" },
+      tier: "deep",
+      model: { name: "Fast", source: "label", label: "quick" },
     });
   });
 
@@ -440,5 +510,18 @@ describe("starting a planning session from the board", () => {
     // Windows command lines get single quotes for double ones.
     expect(body.shortPrompt).toContain("get_handoff_prompt(tasks: ['#1'], mode: 'plan')");
     expect(sessionLinksOf(app, app.task.id)).toHaveLength(1);
+  });
+
+  it("points at pasted images where they wait, without giving them to any task", async () => {
+    const app = appWith();
+    const image = pastedImage(app);
+    const pendingPath = app.services.attachments.forLaunch([image.id], null)[0]!.path;
+    const { status } = await plan(app, { taskIds: [app.task.id], attachmentIds: [image.id] });
+    expect(status).toBe(201);
+    expect(app.services.attachments.get(image.id).taskId).toBeNull();
+    expect(app.spawned[0]!.args.at(-1)).toBe(`Plan them [Attached image 'shot.png' is saved at: ${pendingPath}]`);
+
+    const short = await plan(app, { taskIds: [app.task.id], prompt: "word ".repeat(2000), attachmentIds: [image.id] });
+    expect(short.body.shortPrompt).toContain(`[Attached image 'shot.png' is saved at: ${pendingPath}]`);
   });
 });

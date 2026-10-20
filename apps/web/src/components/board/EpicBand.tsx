@@ -2,6 +2,7 @@ import { describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, type CSSProperties } from "react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
+import { EpicBranchBadge } from "~/components/task/EpicDelivery";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardView } from "~/state/ui";
@@ -118,6 +119,7 @@ export const EpicBand = memo(function EpicBand({
             </span>
           </span>
         </button>
+        <EpicBranchBadge epic={epic} className={cn(narrow && "self-start")} />
         <EpicActions epic={epic} className={cn(narrow && "self-start")} />
         <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
       </header>

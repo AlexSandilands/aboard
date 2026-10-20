@@ -2,13 +2,20 @@ import type {
   AutopilotEngineSettings,
   AutopilotField,
   AutopilotRun,
+  ModelChoice,
   ModelTier,
   PrRef,
   Project,
   TaskLink,
 } from "@repo/contracts";
 import type { z } from "zod";
-import type { EpicMergeInput, EpicPrInput, PostedReview, PostReviewInput } from "../integrations/github.ts";
+import type {
+  EpicMergeInput,
+  EpicPrInput,
+  PostedReview,
+  PostReviewInput,
+  PrThreadState,
+} from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { Services } from "../services/types.ts";
 
@@ -65,9 +72,9 @@ export type RunPatch = Partial<
 >;
 
 /**
- * What an action may do on GitHub, as the user's `gh` account: post a review, merge a task's PR into its epic's
- * integration branch (never into the default branch: checkAutopilotMergeTarget), and open and describe the epic's
- * draft PR (never merge it).
+ * What an action may do on GitHub, as the user's `gh` account: post a review, resolve review threads Autopilot
+ * answered, merge a task's PR into its epic's integration branch (never into the default branch:
+ * checkAutopilotMergeTarget), and open and describe the epic's draft PR (never merge it).
  */
 export interface GithubActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
@@ -76,6 +83,9 @@ export interface GithubActions {
   mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
+  /** The PR's unresolved review threads and newest commits, read now. */
+  reviewThreads(ref: PrRef): Promise<PrThreadState>;
+  resolveReviewThread(host: string, threadId: string): Promise<void>;
 }
 
 const noGithub = () => Promise.reject(new Error("GitHub isn't available"));
@@ -87,6 +97,8 @@ export const NO_GITHUB: GithubActions = {
   mergeIntoEpicBranch: noGithub,
   ensureEpicPr: noGithub,
   setPrBody: noGithub,
+  reviewThreads: noGithub,
+  resolveReviewThread: noGithub,
 };
 
 export interface ActionContext<C> {
@@ -172,8 +184,13 @@ export interface RunnerRequest {
    * "Autopilot · " and uses it as the session link's label, the `claude --name` and the T3 thread's title.
    */
   label?: string;
-  /** The task's suggested tier, mapped to a model through the user's tier settings. */
+  /**
+   * The task's suggested tier, mapped to a model through the user's tier settings. A custom model one of the task's
+   * labels picks wins over it, and the automation's own Model setting over both (runner.ts runModel).
+   */
   tier: ModelTier | null;
+  /** The action's own choice of model (a custom automation's), below the automation's Model setting. */
+  modelChoice?: ModelChoice | null;
   /** The automation's config; the runner reads its RunnerOptions fields (runner choice, budget, timeout, access). */
   options: AutomationConfig;
   /** `start` (default) begins a new session; `nudge` posts the prompt into the task's live T3 thread. */

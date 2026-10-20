@@ -37,6 +37,10 @@ either to see the image large. Big images are shrunk in your browser first, and 
 (`get_task`) get the image's file path, so they can open a screenshot of the bug. The images are part of
 the board's backups, and are deleted with the task.
 
+The dialogs that start a T3 Code thread or a Claude Code / Copilot CLI session take images too: paste or drop them
+into the first message, or use the image button. They go with the first message (T3 Code passes them to the agent;
+a CLI session gets each image's file path) and are kept with the task.
+
 ## Closing, archiving and deleting
 
 - **Closing without doing it:** a task that another task already delivered, a duplicate, or one you no

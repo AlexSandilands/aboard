@@ -227,7 +227,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
       description:
         "Lists tasks as compact one-line summaries grouped by status (progress, current step, links, attention). " +
         "Filter by project (workspacePath/projectId), status, labels (any of), free text (matches title, description, " +
-        "#number, Jira keys, labels), epic or attentionOnly. Epics are listed too, marked [epic], and a task in one " +
+        "#number, ticket keys, labels), epic or attentionOnly. Epics are listed too, marked [epic], and a task in one " +
         "says which. Use it to find the task you should resume, then call get_task.",
       inputSchema: {
         ...projectFields,
@@ -294,7 +294,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         "The 'where was I' call. Full task detail: description, plan context, every phase/step with its status " +
         "and id (1.2 [x] ...), the current step, links with live PR/thread state, and recent activity including " +
         "handover notes. ALWAYS call this before resuming work on an existing task, then act on any 'Missing links' " +
-        "it lists (the Jira issue, your T3 thread). Images the user pasted into the text (a screenshot of a bug) " +
+        "it lists (the task's ticket, your T3 thread). Images the user pasted into the text (a screenshot of a bug) " +
         "are listed under 'Images' with their absolute file paths: open them with your file tools.",
       inputSchema: {
         task: taskField,
@@ -318,6 +318,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           progress: { now: Date.now() },
           images: services.attachments.forTask(task.id),
           ticketSystems: services.settings.get().ticketSystems,
+          modelSettings: services.settings.get(),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));
@@ -358,7 +359,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         const hint = epicDeliveryHint(services, epic.id);
         const ask = hint ? `\n\nEpic delivery not chosen:\n- ${hint}` : "";
         return textResult(
-          `${header}\n${delivery}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic))}${ask}`,
+          `${header}\n${delivery}\n${t3}\n\n${renderEpicChildren(epic, childActivity(services, epic), services.settings.get())}${ask}`,
         );
       }),
   );
@@ -418,12 +419,17 @@ ${prompt}
         const mode: HandoffMode = args.mode ?? (subagent ? "work" : defaultHandoffMode(task));
         const problem = handoffModeError(task, mode, subagent);
         if (problem) throw new AppError("VALIDATION", problem);
-        const modelTiers = services.settings.get().modelTiers;
-        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers });
+        const { modelTiers, modelProfiles } = services.settings.get();
+        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers, modelProfiles });
         const head = `${mode[0]!.toUpperCase()}${mode.slice(1)} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
         // A subagent can't switch its own model, so the suggestion goes to the orchestrator that starts it.
         const model = subagent
-          ? suggestedModelLine(task, modelTiers, "Start the subagent on that model if you can choose one.")
+          ? suggestedModelLine(
+              task,
+              modelTiers,
+              "Start the subagent on that model if you can choose one.",
+              modelProfiles,
+            )
           : null;
         const tail = model
           ? `

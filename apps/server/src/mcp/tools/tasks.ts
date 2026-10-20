@@ -54,7 +54,9 @@ const PLAN_REQUIRED_HINT =
 const linksField = z
   .array(z.string().min(1))
   .optional()
-  .describe("Jira keys (ABC-123), PR URLs or URLs to attach. Jira keys in the title are linked automatically.");
+  .describe(
+    "Ticket keys, PR URLs or URLs to attach. Ticket keys in the title may be linked automatically; unlink removes a wrong one.",
+  );
 
 /**
  * The links to create a task with, and the values left out: a bare value no ticket system matches (an agent told to
@@ -128,13 +130,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Add a task to the backlog",
       description:
-        "Add a task to the Backlog column with one call: an idea, a known to-do, a Jira ticket or GitHub issue " +
+        "Add a task to the Backlog column with one call: an idea, a known to-do, a ticket or GitHub issue " +
         "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
         "getting derailed. Pass workspacePath (your cwd); the project is " +
         "created automatically if the board doesn't know it yet. For work that belongs to no code project (a " +
         "document to update, something to review), pass general: true instead: it files the task in the General " +
-        "project. Pass the Jira key in links if there is one, " +
+        "project. Pass the ticket key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
         "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
         "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
@@ -203,8 +205,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       description:
         "Create a task you are about to work on, with its plan, in one call. Lands in Planned. A plan is required: " +
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
-        "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, Jira " +
-        "keys, URLs; link the Jira issue now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
+        "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, ticket " +
+        "keys, URLs; link the ticket now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
         "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
         "blockedBy when other tasks must be Done first. For work that belongs to no code project, pass general: true " +

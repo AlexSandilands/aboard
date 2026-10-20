@@ -32,7 +32,10 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
 - A `template` (id or name) on `POST /api/tasks`, or on either MCP create tool: the template fills in what the
   input leaves out, and the task lands in Backlog unless `status: "planned"` is asked for ([templates](templates.md)).
 - New tasks go to the end of their lane. Links passed at creation are added in the same write, and ticket
-  keys in the title are linked automatically (on later title edits too) for systems with **Link keys in titles** on.
+  keys in the title are linked automatically for systems with **Link keys in titles** on. Those links are marked `auto`.
+  Editing the title links only the keys it adds, so a link someone removed isn't brought back by an edit that leaves
+  its key alone, and removes the `auto` links whose key left the title. Links added on request are never removed
+  automatically; agents take a wrong one off with `unlink`.
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
   path, deepest first. `add_to_backlog` and `create_task` create a project for an unknown path (at the
   nearest folder with a `.git`, else the path itself) and unarchive an archived match. Other write tools
@@ -157,8 +160,8 @@ These drive the card's ring and the sidebar's **Needs attention** list.
 
 ### Missing links
 
-Task results over MCP end with **Missing links** while the task is open: ticket keys (of the configured systems) in its title or
-description that aren't linked yet, a T3 thread when it has none, and a PR when the local review loop has
+Task results over MCP end with **Missing links** while the task is open: ticket keys (of the configured systems) in its
+description that aren't linked yet (and in its title, for a system that doesn't link title keys itself), a T3 thread when it has none, and a PR when the local review loop has
 ended but none is linked. Agents act on tool results more
 reliably than on instructions they read once.
 

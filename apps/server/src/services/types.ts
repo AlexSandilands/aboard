@@ -34,6 +34,7 @@ import type {
   TaskStatus,
   TaskSummary,
   TaskTemplate,
+  TicketRef,
   UpdateProjectInput,
   UpdateSettingsInput,
   UpdateTaskInput,
@@ -261,6 +262,8 @@ export interface AddLinkOptions {
   window?: string;
   /** Classify a ticket with this system only, for a key the board knows belongs to it (an import's child). */
   ticketSystem?: string;
+  /** The board adds this link by itself (a key in the title), so a rename may take it away again. */
+  auto?: boolean;
 }
 
 /** What only the board itself can ask of a task's creation, never an agent over MCP or REST. */
@@ -277,6 +280,16 @@ export interface LinksService {
    */
   add(taskId: string, input: LinkInput, actor: string, opts?: AddLinkOptions): TaskLink;
   remove(linkId: string, actor: string): void;
+  /**
+   * Removes the task's link that `value` names: a link id, a URL, or a ticket key (any URL of the ticket counts too).
+   * Returns the removed link; throws NOT_FOUND when the task has no such link.
+   */
+  unlink(taskId: string, value: string, actor: string): TaskLink;
+  /**
+   * Removes the links the board added by itself for a ticket key in the title (`auto`) whose key is not in `keep`.
+   * Links added on request are never touched.
+   */
+  removeAutoTickets(taskId: string, keep: readonly TicketRef[], actor: string): void;
   get(linkId: string): TaskLink;
   /** Links of a kind on non-archived tasks — for pollers. */
   listByKind(kind: TaskLink["kind"]): TaskLink[];

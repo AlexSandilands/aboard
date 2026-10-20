@@ -4,13 +4,16 @@ import {
   TASK_STATUSES,
   autopilotRunEventText,
   describeEpicRollup,
+  describeRunModel,
   findTicketKeys,
   formatBytes,
   formatPlanText,
   isGatingSeverity,
   type LabelUsage,
+  type ModelSettings,
   reviewBadgeLabel,
   reviewFixedAtLimit,
+  resolveTaskModel,
   reviewIsDone,
   type ReviewFinding,
   type PlanPhase,
@@ -155,6 +158,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   if (resolution) parts.push(resolution);
   if (task.rollup) {
     parts.push(describeEpicRollup(task.rollup));
+    if (task.integrationBranch) parts.push(`integration branch ${task.integrationBranch}`);
   } else if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
@@ -331,8 +335,8 @@ export function eventText(event: TaskEvent): string {
 }
 
 /**
- * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the title or
- * description, the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
+ * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the description
+ * (and in the title, for a system that doesn't link them itself), the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
 export function missingLinkHints(
@@ -343,7 +347,13 @@ export function missingLinkHints(
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
   const linked = new Set(task.links.flatMap((l) => (l.kind === "ticket" ? [`${l.ref.system}:${l.ref.key}`] : [])));
-  const found = [...findTicketKeys(task.title, ticketSystems), ...findTicketKeys(task.description, ticketSystems)];
+  // Only keys the configured systems recognise are hinted, as when linking. The board links title keys of a system
+  // with autoLink itself, so a hint for one would tell an agent to restore a link someone removed.
+  const autoLinked = new Set(ticketSystems.filter((s) => s.autoLink).map((s) => s.id));
+  const found = [
+    ...findTicketKeys(task.title, ticketSystems).filter((t) => !autoLinked.has(t.system)),
+    ...findTicketKeys(task.description, ticketSystems),
+  ];
   const hints = found
     .filter((t, i) => !linked.has(`${t.system}:${t.key}`) && found.findIndex((o) => o.key === t.key) === i)
     .map((t) => `${ticketLabel(ticketSystems, t)}: link(task: ${ref}, value: "${t.key}")`);
@@ -590,7 +600,11 @@ export type ChildActivity = ReadonlyMap<string, TaskEvent>;
  * newest activity: what an orchestrating agent checks to see how each child is getting on, whichever way it was
  * started.
  */
-export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = new Map()): string {
+export function renderEpicChildren(
+  epic: TaskDetail,
+  activity: ChildActivity = new Map(),
+  modelSettings?: ModelSettings,
+): string {
   const lines = [`Tasks (${epic.rollup ? describeEpicRollup(epic.rollup) : "none"}):`];
   if (epic.children.length === 0) {
     lines.push(
@@ -608,6 +622,8 @@ export function renderEpicChildren(epic: TaskDetail, activity: ChildActivity = n
       const threads = child.links.flatMap((l) => (l.kind === "t3_thread" && l.snapshot ? [l.snapshot] : []));
       const live = threads.find((t) => !t.settled && !t.archived);
       if (live) lines.push(`      thread: ${live.title} (${live.status})`);
+      const runsOn = modelSettings ? runsOnText(child, modelSettings) : null;
+      if (runsOn) lines.push(`      runs on: ${runsOn}`);
       if (child.lastNote) {
         const text = child.lastNote.text.replace(/\s+/g, " ").trim();
         lines.push(
@@ -633,6 +649,18 @@ export function deliveryLine(task: Pick<TaskSummary, "kind" | "delivery" | "inte
     : `Delivery: start from ${task.integrationBranch} and open your pull request against it, not the default branch`;
 }
 
+/**
+ * The model a task runs on when one of its labels picks a custom model over its suggested tier (resolveTaskModel), or
+ * null when the tier (or nothing) decides. An automation's own Model setting can still win; this is the task's part.
+ */
+export function runsOnText(
+  task: Pick<TaskSummary, "labels" | "suggestedModel">,
+  settings: ModelSettings,
+): string | null {
+  const model = resolveTaskModel(task, settings);
+  return model.source === "label" ? describeRunModel(model) : null;
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
@@ -655,6 +683,8 @@ export function renderTaskDetail(
     images?: ReadonlyArray<{ path: string; filename: string; size: number }>;
     /** The configured ticket systems, which name ticket links and find the keys a task hasn't linked. */
     ticketSystems?: readonly TicketSystem[];
+    /** The tier and custom model settings, to say when a label picks the task's model ("Runs on"). */
+    modelSettings?: ModelSettings;
   } = {},
 ): string {
   const lines: string[] = [];
@@ -670,6 +700,8 @@ export function renderTaskDetail(
     const { tier, reason } = task.suggestedModel;
     lines.push(`Suggested model: ${tier}${reason ? ` (${reason})` : ""}`);
   }
+  const runsOn = opts.modelSettings ? runsOnText(task, opts.modelSettings) : null;
+  if (runsOn) lines.push(`Runs on: ${runsOn}`);
   if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
   if (task.autoMerge !== null) {
     lines.push(`Auto-merge: ${task.autoMerge ? "on (merge_task_pr may merge its PR)" : "off"}`);
@@ -722,7 +754,7 @@ export function renderTaskDetail(
       "An epic has no plan of its own and its status follows its tasks (the furthest-back open one sets it; Done " +
         "once they all are). Plan, move and review the tasks instead.",
       "",
-      renderEpicChildren(task, opts.childActivity),
+      renderEpicChildren(task, opts.childActivity, opts.modelSettings),
     );
   } else if (task.phases.some((p) => p.steps.length > 0)) {
     lines.push("Plan:", formatPlanText(task.phases, task.currentStep));

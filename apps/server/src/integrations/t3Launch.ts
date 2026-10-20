@@ -1,13 +1,13 @@
 import {
   defaultBaseRef,
+  type ModelChoice,
   runtimeModesFor,
   T3_RUNTIME_MODES,
   normalizeWorkspaceKey,
   T3RuntimeMode,
-  type ModelTiers,
   type Project,
+  type RunModel,
   type StartT3ThreadInput,
-  type SuggestedModel,
   type T3EnvMode,
   type T3LaunchModel,
   type T3LaunchOptions,
@@ -114,6 +114,11 @@ export type WireRefs = z.infer<typeof WireRefs>;
 /** Subset of T3's `orchestration.launchThread` result. */
 export const WireLaunchResult = z.object({ threadId: z.string().min(1) }).loose();
 
+/** Subset of T3's `attachments.createUploadUrl` result: a pending attachment and where to POST its bytes. */
+export const WireUploadUrl = z
+  .object({ attachmentId: z.string().min(1), relativeUrl: z.string().regex(/^\/(?![/\\])/) })
+  .loose();
+
 // ── Pure mapping ─────────────────────────────────────────────────────────
 
 /** The T3 project for a board project: its stored T3 id, else the T3 project with the same folder. */
@@ -205,18 +210,30 @@ export function defaultModelSelection(
 }
 
 /**
- * The task's suggested tier resolved against the tier settings and T3's providers. The tier's model is used
- * only when its provider is ready and still offers it; option values the model no longer supports are dropped.
+ * The task's model (resolveRunModel) resolved against T3's providers. Its T3 model is used only when its provider is
+ * ready and still offers it; option values the model no longer supports are dropped. `reason` is the planner's, shown
+ * when the suggested tier picked the model.
  */
 export function resolveSuggestion(
-  suggested: SuggestedModel | null,
-  modelTiers: ModelTiers,
+  resolved: RunModel,
+  reason: string | null,
   providers: ReadonlyArray<T3LaunchProvider>,
 ): T3LaunchSuggestion | null {
-  if (!suggested) return null;
+  const { profile, source } = resolved;
+  if (!profile || source === "default") return null;
+  const suggested = {
+    tier: profile.tier,
+    name: profile.name,
+    source,
+    label: resolved.label,
+    reason: source === "tier" ? reason : null,
+  };
   const unavailable = (why: string): T3LaunchSuggestion => ({ ...suggested, modelSelection: null, unavailable: why });
-  const binding = modelTiers[suggested.tier].t3;
-  if (!binding) return unavailable(`No T3 Code model is set for the ${suggested.tier} tier in Settings → Model tiers.`);
+  const binding = profile.setting.t3;
+  if (!binding) {
+    const which = profile.tier ? `the ${profile.tier} tier` : profile.name;
+    return unavailable(`No T3 Code model is set for ${which} in Settings → Model tiers.`);
+  }
   const provider = providers.find((p) => p.instanceId === binding.selection.instanceId);
   if (!provider) return unavailable(`${binding.label} isn't offered by T3 Code right now.`);
   if (!provider.ready) return unavailable(`${provider.displayName} isn't ready in T3 Code.`);
@@ -251,8 +268,10 @@ export function buildLaunchOptions(input: {
   refs: WireRefs | null;
   shell: ShellSnapshot;
   t3Project: ShellSnapshot["projects"][number];
-  suggestedModel: SuggestedModel | null;
-  modelTiers: ModelTiers;
+  /** The task's model (resolveRunModel); null for a thread with no task. */
+  model: RunModel | null;
+  /** The planner's reason for the task's suggested tier. */
+  reason: string | null;
 }): T3LaunchOptions {
   const { config, shell, t3Project } = input;
   const settings = config.settings;
@@ -277,7 +296,7 @@ export function buildLaunchOptions(input: {
     isRepo,
     refs,
     previousWorktree: isRepo ? previousWorktree(shell, t3Project) : null,
-    suggestion: resolveSuggestion(input.suggestedModel, input.modelTiers, providers),
+    suggestion: input.model ? resolveSuggestion(input.model, input.reason, providers) : null,
     defaults: {
       modelSelection: defaultModelSelection(config, providers, t3Project),
       runtimeMode: override?.defaultRuntimeMode ?? settings.defaultRuntimeMode ?? "full-access",
@@ -305,8 +324,10 @@ export function toWorkspaceStrategy(workspace: T3LaunchWorkspace): Record<string
 
 /** What a launch without the dialog is told: whether it works the task, and optionally where to branch from. */
 export interface AutoLaunchChoice {
-  /** Work launches take the task's suggested model; planning keeps T3's default, like the dialog. */
+  /** Work launches take the task's model; planning keeps T3's default, like the dialog. */
   work: boolean;
+  /** An automation's choice of model, over the task's labels and tier. */
+  modelChoice?: ModelChoice | undefined;
   /** The ref to branch the new worktree from. Defaults to the default branch, else the current one. */
   baseRef?: string | undefined;
   /**

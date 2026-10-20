@@ -85,7 +85,15 @@ describe("suggested model", () => {
   const sonnet = { instanceId: "claudeAgent", model: "sonnet", options: [{ id: "effort", value: "low" }] };
   const suggested: T3LaunchOptions = {
     ...options,
-    suggestion: { tier: "light", reason: null, modelSelection: sonnet, unavailable: null },
+    suggestion: {
+      tier: "light",
+      name: "Light",
+      source: "tier",
+      label: null,
+      reason: null,
+      modelSelection: sonnet,
+      unavailable: null,
+    },
   };
 
   it("starts work on the suggested model and planning on T3's default", () => {

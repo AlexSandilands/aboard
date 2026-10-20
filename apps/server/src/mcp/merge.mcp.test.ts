@@ -138,6 +138,43 @@ describe("merge_task_pr", () => {
     expect(merges()).toEqual([]);
   });
 
+  it("names unresolved review conversations when GitHub blocks the PR, apart from a missing approval", async () => {
+    const threads = {
+      reviewThreads: {
+        nodes: [
+          { id: "T1", isResolved: false, comments: { nodes: [] } },
+          { id: "T2", isResolved: false, comments: { nodes: [] } },
+          { id: "T3", isResolved: true, comments: { nodes: [] } },
+        ],
+      },
+    };
+    const blocked = (taskId: string, over: Record<string, unknown>) => {
+      const link = linkOf(taskId);
+      if (link.kind !== "pr" || !link.snapshot) throw new Error("no snapshot");
+      h.services.links.setSnapshot(link.id, { ...link.snapshot, mergeState: "blocked", ...over });
+    };
+
+    const approved = await reviewTask({ autoMerge: true, pr: threads });
+    expect(linkOf(approved.id)).toMatchObject({ snapshot: { unresolvedThreads: 2 } });
+    blocked(approved.id, {});
+    expect((await call("merge_task_pr", { task: `#${approved.number}` })).text).toContain(
+      "GitHub says PR #7 is blocked: it has 2 unresolved review conversations, and the repository may require them resolved",
+    );
+
+    const unapproved = await reviewTask({ autoMerge: true, pr: { ...threads, reviewDecision: "REVIEW_REQUIRED" } });
+    blocked(unapproved.id, {});
+    expect((await call("merge_task_pr", { task: `#${unapproved.number}` })).text).toContain(
+      "it still needs an approving review, and it has 2 unresolved review conversations the repository may require resolved",
+    );
+
+    // The poll didn't see it blocked, but GitHub's fresh read before the merge does.
+    const late = await reviewTask({ autoMerge: true, pr: { ...threads, mergeStateStatus: "BLOCKED" } });
+    expect((await call("merge_task_pr", { task: `#${late.number}` })).text).toContain(
+      "(BLOCKED): it has 2 unresolved review conversations",
+    );
+    expect(merges()).toEqual([]);
+  });
+
   it("refuses while the local review is going or left blocking or major findings open", async () => {
     const task = await reviewTask({ autoMerge: true });
     const s = h.services;

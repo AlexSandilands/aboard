@@ -5,6 +5,8 @@ import {
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
+  MODEL_PROFILES_MAX,
+  ModelProfile,
   type ModelTiers,
   type ModelTierSetting,
   type NotificationSettings,
@@ -42,6 +44,7 @@ const DEFAULTS: StoredSettings = {
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
   modelTiers: EMPTY_MODEL_TIERS,
+  modelProfiles: [],
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
@@ -84,6 +87,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "issueImportModel",
     "issueImportBudgetUsd",
     "modelTiers",
+    "modelProfiles",
     "notifications",
     "savedViews",
     "keybindings",
@@ -123,6 +127,27 @@ const mergeModelTiers = (current: ModelTiers, input: Partial<ModelTiers>): Model
     }),
   ),
 });
+
+/** Custom models as stored: blank descriptions as none and CLI models checked, like a tier's. */
+const storedProfiles = (profiles: readonly ModelProfile[]): ModelProfile[] =>
+  profiles.map((profile) => {
+    const { cli: _cli, ...rest } = profile;
+    const cli = cliModels(profile.cli);
+    return { ...rest, description: profile.description?.trim() || null, ...(cli ? { cli } : {}) };
+  });
+
+/**
+ * The stored custom models, each read on its own: one that no longer parses (a hand edit, a limit changed since) is
+ * dropped rather than the whole list, which the next edit would then overwrite. A repeated id keeps its first.
+ */
+export function storedProfileList(stored: unknown): ModelProfile[] {
+  const profiles: ModelProfile[] = [];
+  for (const entry of Array.isArray(stored) ? stored : []) {
+    const parsed = ModelProfile.safeParse(entry);
+    if (parsed.success && !profiles.some((p) => p.id === parsed.data.id)) profiles.push(parsed.data);
+  }
+  return profiles.slice(0, MODEL_PROFILES_MAX);
+}
 
 /** The stored notification settings over the defaults, so a kind added later starts on. */
 const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
@@ -167,6 +192,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     // Saved as a bare model name before tiers were an option.
     headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
+    modelProfiles: storedProfileList(stored.get("modelProfiles")),
     notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
     handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },
@@ -249,6 +275,9 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)
           repos.settings.set("modelTiers", mergeModelTiers(load().modelTiers, input.modelTiers));
+        if (input.modelProfiles !== undefined) {
+          repos.settings.set("modelProfiles", storedProfiles(input.modelProfiles));
+        }
         if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
         if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.socialNetwork !== undefined) repos.settings.set("socialNetwork", input.socialNetwork);

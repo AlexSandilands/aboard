@@ -19,6 +19,34 @@ export const prReviewHeader = (): string => `📋 ${BRAND.name} Autopilot review
 /** The short mark at the start of each inline comment. */
 export const prReviewMarker = (): string => `📋 ${BRAND.name} Autopilot`;
 
+/** The first line of Fix PRs' reply on a thread it fixed: the server resolves the thread once `sha` is on the PR. */
+export const prFixedReply = (sha: string): string => `${prReviewMarker()} · fixed in ${sha}`;
+
+/** The first line of Fix PRs' reply on a thread it won't fix; the thread stays open for the reviewer. */
+export const prDeclinedReply = (reason: string): string => `${prReviewMarker()} · declined: ${reason}`;
+
+/**
+ * What a comment carrying Autopilot's mark says, from its first line after the mark: fixed (with the commit), declined,
+ * or something else (its own review comment, say). Null for a comment without the mark. Lenient about the separator,
+ * so replies written before the format was fixed ("📋 … Autopilot" then "Fixed in abc1234" on the next line) count.
+ */
+export function parseAutopilotReply(
+  body: string,
+): { kind: "fixed"; sha: string } | { kind: "declined" } | { kind: "other" } | null {
+  const text = body.trimStart();
+  const marker = prReviewMarker();
+  if (!text.startsWith(marker)) return null;
+  const first =
+    text
+      .slice(marker.length)
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[\s·:—-]+/, ""))
+      .find((line) => line.trim() !== "") ?? "";
+  if (/^declined\b/i.test(first)) return { kind: "declined" };
+  const fixed = /^fixed in\s+`?([0-9a-f]{7,40})\b/i.exec(first);
+  return fixed ? { kind: "fixed", sha: fixed[1]!.toLowerCase() } : { kind: "other" };
+}
+
 /** The dedupe key of the review of one PR link at one head commit. */
 export const prReviewDedupeKey = (linkId: string, headOid: string): string => `review:pr:${linkId}:${headOid}`;
 
@@ -44,6 +72,8 @@ export const PrReviewVerdict = z.object({
   summary: z.string(),
   /** Every point in the review, the FYI ones too. */
   issues: z.array(PrReviewIssue),
+  /** Ids of earlier Autopilot inline comments whose point is now fixed: the server resolves their threads. */
+  fixed: z.array(z.number().int()).optional(),
 });
 export type PrReviewVerdict = z.infer<typeof PrReviewVerdict>;
 
@@ -72,6 +102,12 @@ export const PR_REVIEW_OUTPUT_SCHEMA = {
         },
         required: ["severity", "title", "fyi"],
       },
+    },
+    fixed: {
+      type: "array",
+      description:
+        "The comment ids of earlier Autopilot review comments whose point is now fixed at this commit. Empty when there are none.",
+      items: { type: "integer" },
     },
   },
   required: ["summary", "issues"],
@@ -111,6 +147,8 @@ export const PrReviewRunOutput = z.object({
   /** Non-FYI issues at or above `threshold`. */
   actionable: z.number().int(),
   handoff: PrReviewHandoff,
+  /** Autopilot's own earlier threads this round confirmed fixed and resolved. */
+  resolvedThreads: z.number().int().optional(),
 });
 export type PrReviewRunOutput = z.infer<typeof PrReviewRunOutput>;
 

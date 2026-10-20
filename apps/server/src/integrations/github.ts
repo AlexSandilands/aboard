@@ -9,10 +9,11 @@ import type {
   PrReviewCommentInfo,
   PrOptionalChecks,
   PrReviewInfo,
+  PrReviewThreadInfo,
   PrSnapshot,
   TaskLink,
 } from "@repo/contracts";
-import { EPIC_BRANCH_PREFIX, PrMergeState, prReviewHeader } from "@repo/contracts";
+import { EPIC_BRANCH_PREFIX, PrMergeState, parseAutopilotReply, prReviewHeader } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../errors.ts";
 import type { LinksService, SettingsService, TasksService } from "../services/types.ts";
@@ -78,6 +79,34 @@ const ReviewCommentNode = z.object({
   pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
 });
 
+/** One review thread: the poll reads the first fields (`THREAD_FIELDS`), the fresh thread read all (`THREAD_DETAIL_FIELDS`). */
+const ReviewThreadNode = z.object({
+  id: z.string().nullish(),
+  isResolved: z.boolean(),
+  viewerCanResolve: z.boolean().nullish(),
+  /** The first comment, which says whose review the thread is. */
+  root: z
+    .object({
+      nodes: z.array(
+        z
+          .object({
+            databaseId: z.number().nullish(),
+            pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
+          })
+          .nullable(),
+      ),
+    })
+    .nullish(),
+  comments: z.object({ nodes: z.array(ReviewCommentNode.nullable()) }),
+  /** The newest comment's body, only to match Autopilot's marked reply: it is never put in a prompt. */
+  latest: z
+    .object({
+      nodes: z.array(z.object({ body: z.string().nullish(), viewerDidAuthor: z.boolean().nullish() }).nullable()),
+    })
+    .nullish(),
+});
+type ReviewThreadNode = z.infer<typeof ReviewThreadNode>;
+
 /** The fields of one pull request the poll reads (`PR_FIELDS`). */
 export const GraphqlPr = z.object({
   number: z.number().optional(),
@@ -94,15 +123,7 @@ export const GraphqlPr = z.object({
   updatedAt: z.string().nullish(),
   autoMergeRequest: z.object({ mergeMethod: MergeMethodJson.nullish() }).nullish(),
   reviews: z.object({ nodes: z.array(ReviewNode.nullable()) }).nullish(),
-  reviewThreads: z
-    .object({
-      nodes: z.array(
-        z
-          .object({ isResolved: z.boolean(), comments: z.object({ nodes: z.array(ReviewCommentNode.nullable()) }) })
-          .nullable(),
-      ),
-    })
-    .nullish(),
+  reviewThreads: z.object({ nodes: z.array(ReviewThreadNode.nullable()) }).nullish(),
   commits: z
     .object({
       nodes: z.array(
@@ -161,10 +182,25 @@ function mapReviews(nodes: ReadonlyArray<z.infer<typeof ReviewNode> | null> | un
   });
 }
 
-/** Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with. */
+/** The thread's newest comment the poll read (GitHub lists them oldest first). */
+const newestComment = (thread: ReviewThreadNode) => thread.comments.nodes.findLast((c) => c !== null) ?? null;
+
+/** What Autopilot's reply as the newest comment of the thread says, or null when someone else spoke last. */
+function threadReply(thread: ReviewThreadNode): ReturnType<typeof parseAutopilotReply> {
+  const latest = thread.latest?.nodes.at(-1);
+  return latest?.viewerDidAuthor === true ? parseAutopilotReply(latest.body ?? "") : null;
+}
+
+/**
+ * Comments on unresolved threads, oldest first. A resolved thread's feedback has been dealt with, and so has one the
+ * signed-in account answered last: Autopilot posts as the user, and its reply said what it fixed or declined, so
+ * asking again would only let two review bots ping-pong.
+ */
 function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]): PrReviewCommentInfo[] {
   return (threads?.nodes ?? [])
-    .flatMap((thread) => (thread && !thread.isResolved ? thread.comments.nodes : []))
+    .flatMap((thread) =>
+      thread && !thread.isResolved && newestComment(thread)?.viewerDidAuthor !== true ? thread.comments.nodes : [],
+    )
     .flatMap((c): PrReviewCommentInfo[] =>
       c && typeof c.databaseId === "number"
         ? [
@@ -180,6 +216,54 @@ function mapReviewComments(threads: z.infer<typeof GraphqlPr>["reviewThreads"]):
         : [],
     )
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id));
+}
+
+/** The unresolved threads that have a node id, in GitHub's order, as the poll keeps them. */
+export function mapReviewThreads(nodes: ReadonlyArray<ReviewThreadNode | null> | undefined): PrReviewThreadInfo[] {
+  return (nodes ?? []).flatMap((thread): PrReviewThreadInfo[] => {
+    if (!thread || thread.isResolved || !thread.id) return [];
+    const newest = newestComment(thread);
+    return [
+      {
+        id: thread.id,
+        canResolve: thread.viewerCanResolve ?? false,
+        lastCommentId: newest?.databaseId ?? null,
+        ownLast: newest?.viewerDidAuthor === true,
+        lastReviewId: newest?.pullRequestReview?.databaseId ?? null,
+      },
+    ];
+  });
+}
+
+/** An unresolved thread read fresh, with what the poll leaves out. */
+export interface ReviewThreadDetail extends PrReviewThreadInfo {
+  /** The thread's first comment and the review it was posted in, to tell Autopilot's own review threads. */
+  rootCommentId: number | null;
+  rootReviewId: number | null;
+  /**
+   * The newest comment is Autopilot's (the signed-in account, starting with its mark): a reply saying it was fixed
+   * (`fixedIn` is the commit) or declined, or something else of Autopilot's, such as its own review comment. Null when
+   * someone else spoke last.
+   */
+  reply: "fixed" | "declined" | "other" | null;
+  fixedIn: string | null;
+}
+
+/** The unresolved threads of the fresh read, with their first comment and what Autopilot's newest reply says. */
+export function mapReviewThreadDetails(nodes: ReadonlyArray<ReviewThreadNode | null>): ReviewThreadDetail[] {
+  const byId = new Map(nodes.flatMap((t) => (t?.id ? [[t.id, t] as const] : [])));
+  return mapReviewThreads(nodes).map((info) => {
+    const thread = byId.get(info.id)!;
+    const root = thread.root?.nodes[0];
+    const reply = threadReply(thread);
+    return {
+      ...info,
+      rootCommentId: root?.databaseId ?? null,
+      rootReviewId: root?.pullRequestReview?.databaseId ?? null,
+      reply: reply?.kind ?? null,
+      fixedIn: reply?.kind === "fixed" ? reply.sha : null,
+    };
+  });
 }
 
 /** One rollup entry's effective state: StatusContext.state, or CheckRun conclusion once completed. */
@@ -256,6 +340,7 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
   if (repo.rebaseMergeAllowed) mergeMethods.push("rebase");
   const optionalChecks = mapOptionalChecks(rollup);
   const mergeState = asMergeState(pr.mergeStateStatus);
+  const threads = mapReviewThreads(pr.reviewThreads?.nodes);
   return {
     state,
     title: pr.title,
@@ -275,20 +360,39 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     isCrossRepository: pr.isCrossRepository ?? false,
     reviews: mapReviews(pr.reviews?.nodes),
     reviewComments: mapReviewComments(pr.reviewThreads),
+    reviewThreads: threads,
+    unresolvedThreads: (pr.reviewThreads?.nodes ?? []).filter((t) => t && !t.isResolved).length,
   };
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────
 
 const REPO_FIELDS = "squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission";
+const COMMENT_FIELDS = `comments(last: 5) { nodes {
+          databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
+        } }`;
+/**
+ * What every poll reads of a PR's threads: the newest 30, with no bodies. Each thread's comments are a connection of
+ * their own in GitHub's rate-limit cost, and the poll reads up to 25 PRs every 20 seconds, so it stays this lean.
+ */
+const THREAD_FIELDS = `reviewThreads(last: 30) { nodes { id isResolved viewerCanResolve
+        ${COMMENT_FIELDS}
+      } }`;
+/**
+ * The fresh read before resolving anything: the newest 100 threads (GitHub's most per page), each with its first
+ * comment and its newest one's body, only to match Autopilot's marked reply. Never put in a prompt.
+ */
+const THREAD_DETAIL_FIELDS = `reviewThreads(last: 100) { nodes { id isResolved viewerCanResolve
+        root: comments(first: 1) { nodes { databaseId pullRequestReview { databaseId } } }
+        ${COMMENT_FIELDS}
+        latest: comments(last: 1) { nodes { body viewerDidAuthor } }
+      } }`;
 const prFields = (
   numberVar: string,
 ) => `number title state isDraft reviewDecision mergeable mergeStateStatus headRefName baseRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
       reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
-      reviewThreads(last: 30) { nodes { isResolved comments(last: 5) { nodes {
-        databaseId createdAt authorAssociation viewerDidAuthor author { login } pullRequestReview { databaseId }
-      } } } }
+      ${THREAD_FIELDS}
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
         ... on CheckRun { status conclusion isRequired(pullRequestNumber: ${numberVar}) }
@@ -325,6 +429,38 @@ const ActionState = z.object({
     }),
   }),
 });
+
+/** A PR's unresolved threads and its newest commits, read fresh before resolving any thread. */
+const THREAD_STATE_QUERY = `query PullRequestThreads($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      headRefOid
+      commits(last: 100) { nodes { commit { oid } } }
+      ${THREAD_DETAIL_FIELDS}
+    }
+  }
+}`;
+const ThreadState = z.object({
+  repository: z.object({
+    pullRequest: z.object({
+      headRefOid: z.string(),
+      commits: z.object({ nodes: z.array(z.object({ commit: z.object({ oid: z.string() }) }).nullable()) }),
+      reviewThreads: z.object({ nodes: z.array(ReviewThreadNode.nullable()) }),
+    }),
+  }),
+});
+const RESOLVE_THREAD_MUTATION = `mutation ResolveReviewThread($threadId: ID!) {
+  resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } }
+}`;
+
+/** A PR's review threads as GitHub has them now. */
+export interface PrThreadState {
+  headOid: string;
+  /** The PR's newest 100 commits, in full. */
+  commits: string[];
+  /** Its unresolved threads. */
+  threads: ReviewThreadDetail[];
+}
 
 const MERGE_MUTATION = `mutation MergePullRequest($input: MergePullRequestInput!) {
   mergePullRequest(input: $input) { clientMutationId }
@@ -680,6 +816,10 @@ export interface GithubIntegration {
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   /** Replaces a PR's description. Throws AppError. */
   setPrBody(ref: PrRef, body: string): Promise<void>;
+  /** The PR's unresolved review threads and newest commits, read now. Throws AppError. */
+  reviewThreads(ref: PrRef): Promise<PrThreadState>;
+  /** Resolves one review thread as the signed-in account. Throws AppError. */
+  resolveReviewThread(host: string, threadId: string): Promise<void>;
   start(): void;
   stop(): void;
 }
@@ -1020,11 +1160,14 @@ ${link.ref.repo.toLowerCase()}`;
       // default branch the board only merges what GitHub would let anyone merge.
       const state = pr.mergeStateStatus?.toUpperCase() ?? "UNKNOWN";
       if (input.into === "default" && !IMMEDIATELY_MERGEABLE.has(state)) {
+        const unresolved = link.kind === "pr" ? (link.snapshot?.unresolvedThreads ?? 0) : 0;
         throw new AppError(
           "VALIDATION",
           state === "UNKNOWN"
             ? "GitHub is still working out whether the PR can be merged: try again in a minute"
-            : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
+            : state === "BLOCKED" && unresolved > 0
+              ? `GitHub says the PR can't be merged yet (${state}): it has ${describeUnresolved(unresolved)}, and the repository may require them resolved, or a branch rule such as a required approval isn't met`
+              : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
         );
       }
       await api.graphql(host, MERGE_MUTATION, {
@@ -1224,6 +1367,33 @@ ${link.ref.repo.toLowerCase()}`;
         throw new AppError("VALIDATION", messageOf(error));
       }
     },
+    async reviewThreads(ref) {
+      await requireSignedIn(ref.host);
+      const [owner, name] = splitRepo(ref.repo);
+      try {
+        const parsed = ThreadState.safeParse(
+          await api.graphql(ref.host, THREAD_STATE_QUERY, { owner, name, number: ref.number }),
+        );
+        if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
+        const pr = parsed.data.repository.pullRequest;
+        return {
+          headOid: pr.headRefOid,
+          commits: pr.commits.nodes.flatMap((n) => (n ? [n.commit.oid] : [])),
+          threads: mapReviewThreadDetails(pr.reviewThreads.nodes),
+        };
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("VALIDATION", messageOf(error));
+      }
+    },
+    async resolveReviewThread(host, threadId) {
+      await requireSignedIn(host);
+      try {
+        await api.graphql(host, RESOLVE_THREAD_MUTATION, { threadId });
+      } catch (error) {
+        throw new AppError("VALIDATION", `GitHub couldn't resolve the review thread: ${messageOf(error)}`);
+      }
+    },
     async postReview(ref, input) {
       await requireSignedIn(ref.host);
       const [owner, name] = splitRepo(ref.repo);
@@ -1327,6 +1497,10 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 function errorFor(errors: readonly GraphqlError[], alias: string): string | null {
   return (errors.find((e) => e.path?.includes(alias)) ?? errors[0])?.message ?? null;
 }
+
+/** "3 unresolved review conversations". */
+export const describeUnresolved = (count: number): string =>
+  `${count} unresolved review conversation${count === 1 ? "" : "s"}`;
 
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
