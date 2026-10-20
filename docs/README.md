@@ -66,7 +66,8 @@ files under each app.
 - [Board and panel layout](features/board-layout.md): collapsible columns and panel sections, links on cards, the settings page
 - [Board filters and saved views](features/saved-views.md): filters as URL params, matching, named views kept on the server
 - [GitHub PRs](features/github-prs.md): live PR state and merging, on github.com and Enterprise hosts
-- [Issue import](features/issue-import.md): a task from a Jira or GitHub issue URL, filled in by Claude Code
+- [Ticket systems](features/ticket-systems.md): configured issue trackers, ticket links, key patterns, presets
+- [Issue import](features/issue-import.md): a task from a ticket or a GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
 - [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR

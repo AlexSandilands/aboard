@@ -34,7 +34,7 @@ export const BoardFilterParams = z.object({
   tier: text,
   /** Autopilot flags, any of them: `on`, `off` or `default`. */
   autopilot: text,
-  /** Free text: title, number, Jira key or label. */
+  /** Free text: title, number, ticket key or label. */
   q: text,
   /** Only tasks that need attention. */
   attention: flag,

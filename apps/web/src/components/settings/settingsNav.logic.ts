@@ -55,7 +55,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     id: "tasks",
     label: "Tasks",
     sections: [
-      section("tasks.new-tasks", "New tasks", ["templates", "issue import", "jira", "github issues"]),
+      section("tasks.new-tasks", "New tasks", ["templates", "issue import", "tickets", "github issues"]),
       section("tasks.planning", "Planning", ["plan tasks", "planning skill", "bulk planning"]),
       section("tasks.review", "Review", ["local review", "rounds", "board reviewer", "skill", "budget"]),
       section("tasks.suggestions", "Suggestions", ["suggested changes", "prompts", "skills", "improve", "accept"]),
@@ -97,7 +97,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session"]),
       section("integrations.codex", "Codex", ["mcp"]),
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
-      section("integrations.jira", "Jira", ["base url"]),
+      section("integrations.tickets", "Ticket systems", ["jira", "linear", "issue keys", "presets"]),
       section("integrations.terminal", "Terminal", ["open in terminal", "windows terminal", "sessions"]),
     ],
   },

@@ -11,6 +11,7 @@ import {
   parseHeadlessModel,
   type SavedViews,
   sanitizeKeybindingOverrides,
+  TicketSystem,
 } from "@repo/contracts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
@@ -22,7 +23,7 @@ import type { SettingsService } from "./types.ts";
 type StoredSettings = Omit<AppSettings, "t3TokenSet"> & { t3Token: string | null };
 
 const DEFAULTS: StoredSettings = {
-  jiraBaseUrl: null,
+  ticketSystems: [],
   githubPolling: true,
   t3LinkTarget: "desktop",
   t3Token: null,
@@ -40,7 +41,6 @@ const DEFAULTS: StoredSettings = {
   issueImportEnabled: true,
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
-  issueImportJiraTools: [],
   modelTiers: EMPTY_MODEL_TIERS,
   terminal: { kind: "auto" },
   terminalOpenIn: "tab",
@@ -66,7 +66,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
   // Goes with the projects, so a restore doesn't make a second General.
   GENERAL_PROJECT_KEY,
   ...([
-    "jiraBaseUrl",
+    "ticketSystems",
     "githubPolling",
     "t3LinkTarget",
     "agentT3Threads",
@@ -83,13 +83,19 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "issueImportEnabled",
     "issueImportModel",
     "issueImportBudgetUsd",
-    "issueImportJiraTools",
     "modelTiers",
     "notifications",
     "savedViews",
     "keybindings",
   ] satisfies Array<keyof StoredSettings>),
 ]);
+
+/**
+ * Settings older versions exported that a migration since converted (036_ticket_systems_settings turns the Jira ones
+ * into a ticket system). A restore loads them with an old backup so that migration sees them; they never reach a
+ * database at the current schema.
+ */
+export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set(["jiraBaseUrl", "issueImportJiraTools"]);
 
 /**
  * A tier's CLI models with blanks dropped. Each goes on a command line as `--model`, so one that isn't a CliModel is
@@ -124,6 +130,30 @@ const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undef
   kinds: { ...DEFAULT_NOTIFICATION_SETTINGS.kinds, ...stored?.kinds },
 });
 
+/**
+ * A ticket system as stored: optional fields left blank are left out (an empty key pattern would match anywhere), and
+ * repeated import tools are dropped.
+ */
+const normalizeTicketSystem = (system: TicketSystem): TicketSystem => {
+  const { keyPattern, urlPattern, linkTemplate, ...rest } = system;
+  return {
+    ...rest,
+    ...(keyPattern ? { keyPattern } : {}),
+    ...(urlPattern ? { urlPattern } : {}),
+    ...(linkTemplate ? { linkTemplate } : {}),
+    importTools: [...new Set(system.importTools)],
+  };
+};
+
+/** The stored systems that are still valid; one that isn't (hand-edited, say) is skipped rather than failing reads. */
+const storedTicketSystems = (stored: unknown): TicketSystem[] =>
+  Array.isArray(stored)
+    ? stored.flatMap((s) => {
+        const parsed = TicketSystem.safeParse(s);
+        return parsed.success ? [normalizeTicketSystem(parsed.data)] : [];
+      })
+    : [];
+
 /** Stored settings over their defaults. Also read by summaries, which derive review state from max rounds. */
 export function loadSettings(repos: Repos): StoredSettings {
   const stored = repos.settings.all();
@@ -133,6 +163,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     ...(Object.fromEntries(
       (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
     ) as unknown as StoredSettings),
+    ticketSystems: storedTicketSystems(stored.get("ticketSystems")),
     // Saved as a bare model name before tiers were an option.
     headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
@@ -172,8 +203,8 @@ export function createSettingsService(core: Core): SettingsService {
     update(input) {
       core.write((fx) => {
         const blankToNull = (v: string | null) => (v ? v : null);
-        if (input.jiraBaseUrl !== undefined) {
-          repos.settings.set("jiraBaseUrl", blankToNull(input.jiraBaseUrl?.replace(/\/+$/, "") ?? null));
+        if (input.ticketSystems !== undefined) {
+          repos.settings.set("ticketSystems", input.ticketSystems.map(normalizeTicketSystem));
         }
         if (input.githubPolling !== undefined) repos.settings.set("githubPolling", input.githubPolling);
         if (input.t3LinkTarget !== undefined) repos.settings.set("t3LinkTarget", input.t3LinkTarget);
@@ -207,9 +238,6 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.issueImportModel !== undefined) repos.settings.set("issueImportModel", input.issueImportModel);
         if (input.issueImportBudgetUsd !== undefined) {
           repos.settings.set("issueImportBudgetUsd", input.issueImportBudgetUsd);
-        }
-        if (input.issueImportJiraTools !== undefined) {
-          repos.settings.set("issueImportJiraTools", [...new Set(input.issueImportJiraTools)]);
         }
         if (input.backupEnabled !== undefined) repos.settings.set("backupEnabled", input.backupEnabled);
         if (input.backupDir !== undefined) repos.settings.set("backupDir", blankToNull(input.backupDir));

@@ -44,7 +44,7 @@ The desktop app starts the server for you and keeps it running in the tray.
   server.
 - The tray menu has **Copy MCP URL** and **Start at login** (starts hidden in the tray).
 - If a server is already running on the port, the app uses it instead of starting a second one.
-- Links to PRs, Jira and T3 Code threads open in your browser or T3 Code, not inside the app.
+- Links to PRs, tickets and T3 Code threads open in your browser or T3 Code, not inside the app.
 - Server logs are in `%APPDATA%\Aboard\logs\server.log`.
 
 The installer isn't code-signed yet, so Windows SmartScreen warns the first time you run it.

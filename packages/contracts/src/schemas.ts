@@ -15,6 +15,7 @@ import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 import { SavedViews } from "./savedViews.ts";
+import { TicketRef, TicketSystem, TicketSystems } from "./ticketSystems.ts";
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export type EpicDelivery = z.infer<typeof EpicDelivery>;
 export const StepStatus = z.enum(["todo", "in_progress", "done", "blocked", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
-export const LinkKind = z.enum(["pr", "jira", "t3_thread", "issue", "agent_session", "url"]);
+export const LinkKind = z.enum(["pr", "ticket", "t3_thread", "issue", "agent_session", "url"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 export const PROJECT_ICON_COLORS = [
@@ -357,7 +358,7 @@ const LinkBase = {
 
 export const TaskLink = z.discriminatedUnion("kind", [
   z.object({ ...LinkBase, kind: z.literal("pr"), ref: PrRef.nullable(), snapshot: PrSnapshot.nullable() }),
-  z.object({ ...LinkBase, kind: z.literal("jira"), ref: z.object({ key: z.string() }) }),
+  z.object({ ...LinkBase, kind: z.literal("ticket"), ref: TicketRef }),
   z.object({
     ...LinkBase,
     kind: z.literal("t3_thread"),
@@ -431,12 +432,12 @@ export type TaskEvent = z.infer<typeof TaskEvent>;
 export const ImportStatus = z.enum(["pending", "failed", "done"]);
 export type ImportStatus = z.infer<typeof ImportStatus>;
 
-/** A task created from a Jira or GitHub issue: the title, description and labels are filled in by a background job. */
+/** A task created from a ticket or a GitHub issue: the title, description and labels are filled in by a background job. */
 export const TaskImport = z.object({
   status: ImportStatus,
   /** Why the last attempt failed; null unless the status is "failed". */
   error: z.string().nullable(),
-  /** The Jira key or issue URL the task was created from. */
+  /** The ticket key or URL, or the issue URL, the task was created from. */
   sourceUrl: z.string(),
 });
 export type TaskImport = z.infer<typeof TaskImport>;
@@ -650,7 +651,7 @@ export const UpdateProjectInput = z.object({
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
 export const LinkInput = z.object({
-  /** URL, Jira key (ABC-123), GitHub PR URL, t3code:// thread link or T3 thread id. Kind is inferred when omitted. */
+  /** URL, ticket key (ABC-123), GitHub PR URL, t3code:// thread link or T3 thread id. Kind is inferred when omitted. */
   value: z.string().trim().min(1).optional(),
   kind: LinkKind.optional(),
   label: z.string().optional(),
@@ -688,7 +689,7 @@ export const CreateTaskInput = z
     /** Tasks that block this one (uuid, "#42" or "42"). */
     blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
-     * A Jira key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
+     * A ticket key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
      * and a background job fills in the title, description and labels. Can't be combined with a plan.
      */
     sourceUrl: z.string().trim().min(1).optional(),
@@ -790,7 +791,8 @@ export const DEFAULT_HANDOFF_MENUS = Object.fromEntries(
 
 export const AppSettings = z
   .object({
-    jiraBaseUrl: z.string().nullable(),
+    /** The issue trackers links and imports know, in the order keys are matched against them. */
+    ticketSystems: z.array(TicketSystem),
     githubPolling: z.boolean(),
     /** Which T3 link the primary "Open in T3 Code" action uses. */
     t3LinkTarget: z.enum(["desktop", "browser"]),
@@ -822,7 +824,7 @@ export const AppSettings = z
     headlessReviewBudgetUsd: z.number().positive().max(100),
     /** The model the board reviewer runs; null keeps the CLI's own default. */
     headlessReviewModel: HeadlessModel.nullable(),
-    /** Fill in tasks created from a Jira or GitHub issue URL in the background. */
+    /** Fill in tasks created from a ticket or a GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
     /**
      * The model `claude -p` runs for an import: a model tier, or a model as `--model` takes it (an alias like "haiku"
@@ -830,11 +832,6 @@ export const AppSettings = z
      */
     issueImportModel: HeadlessModel,
     issueImportBudgetUsd: z.number().positive().max(100),
-    /**
-     * The Jira tools an import may call, as Claude Code names them (`mcp__<server>__<tool>`; a `*` is allowed after
-     * the server). Empty looks for the common read-only Jira tools on every configured MCP server.
-     */
-    issueImportJiraTools: z.array(z.string()),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
     /** Where "Open in terminal" resumes agent sessions. */
@@ -855,7 +852,8 @@ export const AppSettings = z
 export type AppSettings = z.infer<typeof AppSettings>;
 
 export const UpdateSettingsInput = z.object({
-  jiraBaseUrl: z.string().trim().nullable().optional(),
+  /** Replaces the whole list. */
+  ticketSystems: TicketSystems.optional(),
   githubPolling: z.boolean().optional(),
   t3LinkTarget: z.enum(["desktop", "browser"]).optional(),
   agentT3Threads: z.boolean().optional(),
@@ -874,7 +872,6 @@ export const UpdateSettingsInput = z.object({
   headlessReviewModel: HeadlessModel.nullable().optional(),
   issueImportModel: HeadlessModel.optional(),
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
-  issueImportJiraTools: z.array(z.string().trim().min(1)).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),
   terminal: TerminalSetting.optional(),

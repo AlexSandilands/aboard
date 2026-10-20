@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 import type { IssueDetails } from "./github.ts";
 import type { ImportJob, ImportOutcome } from "./headlessImport.ts";
@@ -34,6 +35,7 @@ function setup(
   const h = createTestHarness();
   const s = h.services;
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+  s.settings.update({ ticketSystems: [TEST_JIRA] });
   const jobs: ImportJob[] = [];
   const listed: string[] = [];
   const warnings: string[] = [];
@@ -182,7 +184,7 @@ describe("issue import", () => {
     const { create, run, warnings } = setup({ listServers: () => Promise.reject(new Error("claude not found")) });
     const failed = await run(create("PROJ-7").id);
     expect(failed.import?.error).toContain(
-      "No Jira tool available (couldn't list Claude Code's MCP servers: claude not found)",
+      "No import tool available (couldn't list Claude Code's MCP servers: claude not found)",
     );
     expect(warnings.join()).toContain("claude not found");
   });
@@ -194,9 +196,9 @@ describe("issue import", () => {
     expect(listed).toHaveLength(2);
   });
 
-  it("uses the tools listed in Settings instead of looking for them", async () => {
+  it("uses the ticket system's import tools instead of looking for them", async () => {
     const { s, create, run, jobs } = setup({ servers: ["other"] });
-    s.settings.update({ issueImportJiraTools: ["mcp__corp__read_ticket"] });
+    s.settings.update({ ticketSystems: [{ ...TEST_JIRA, importTools: ["mcp__corp__read_ticket"] }] });
     await run(create("PROJ-7").id);
     expect(jobs[0]!.jiraTools).toEqual(["mcp__corp__read_ticket"]);
     // The server the rule names is covered by the deny rules too, though the CLI didn't list it.
@@ -207,7 +209,7 @@ describe("issue import", () => {
     const none = setup({ servers: [] });
     const noTool = await none.run(none.create("PROJ-7").id);
     expect(noTool.import).toMatchObject({ status: "failed" });
-    expect(noTool.import?.error).toContain("No Jira tool available");
+    expect(noTool.import?.error).toContain("No import tool available");
     expect(none.jobs).toEqual([]);
 
     const off = setup();
@@ -298,13 +300,13 @@ describe("importing an epic", () => {
     });
     const epic = await run(create("PROJ-7").id);
     expect(epic).toMatchObject({ kind: "epic", title: "One-page checkout", status: "backlog" });
-    expect(epic.links[0]).toMatchObject({ kind: "jira", ref: { key: "PROJ-7" } });
+    expect(epic.links[0]).toMatchObject({ kind: "ticket", ref: { system: "jira", key: "PROJ-7" } });
     expect(epic.events.map((e) => e.type)).toContain("became_epic");
     expect(sorted(epic.children.map((c) => c.title))).toEqual(["Do PROJ-8", "Do PROJ-9"]);
     expect(epic.children.every((c) => c.import?.status === "done" && c.parent?.id === epic.id)).toBe(true);
     expect(jobs.map((j) => (j.source.kind === "jira" ? j.source.key : null))).toEqual(["PROJ-7", "PROJ-8", "PROJ-9"]);
     // A GitHub URL in a Jira epic's list came from the model, not Jira, so it is dropped like a bad key.
-    expect(notes(epic)).toEqual(["Skipped 2 child issues that weren't a Jira issue."]);
+    expect(notes(epic)).toEqual(["Skipped 2 child issues that weren't a ticket."]);
     expect(s.tasks.summaries({ projectId: epic.projectId })).toHaveLength(3);
   });
 
@@ -375,7 +377,7 @@ describe("importing an epic", () => {
     const done = await run(create("PROJ-7").id);
     expect(done).toMatchObject({ kind: "task", title: "One-page checkout", import: { status: "done" } });
     expect(notes(done)[0]).toContain("none of its child issues could be listed");
-    expect(notes(done)[0]).toContain("Jira tools");
+    expect(notes(done)[0]).toContain("import tools");
     expect(jobs).toHaveLength(1);
   });
 

@@ -47,10 +47,13 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
 });
 
 /**
- * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to. A row may use one of these
+ * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to, and one per ticket system. A row may use one of these
  * prefixes without an entry of its own.
  */
-export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = ["integrations.github.host-"];
+export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
+  "integrations.github.host-",
+  "integrations.tickets.system-",
+];
 
 /** Orchestrate's own area on the Autopilot page: its switch, config, per-project checks and run history. */
 const ORCHESTRATE_AREA_ID = "autopilot.engine.orchestrate";
@@ -229,14 +232,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.new-tasks.issue-import",
     "Issue import",
-    "Paste a Jira key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills it in.",
-    ["jira", "github issue", "import", "claude"],
+    "Paste a ticket key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills it in.",
+    ["ticket", "github issue", "import", "claude"],
   ),
   draft(
     "tasks.new-tasks.import-enabled",
     "Fill in imported tasks",
-    "Paste a Jira key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills in its description.",
-    ["issue import", "jira", "github issue", "claude", "autofill"],
+    "Paste a ticket key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills in its description.",
+    ["issue import", "ticket", "github issue", "claude", "autofill"],
   ),
   draft(
     "tasks.new-tasks.import-model",
@@ -249,12 +252,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Budget per import",
     "The most one import may spend, in US dollars (claude --max-budget-usd).",
     ["issue import", "cost", "spend", "dollars", "limit"],
-  ),
-  draft(
-    "tasks.new-tasks.import-jira-tools",
-    "Jira tools",
-    "The Jira MCP tools Claude Code may use to read an issue, comma-separated.",
-    ["issue import", "mcp", "atlassian", "allowed tools"],
   ),
   // Tasks › Planning
   draft(
@@ -478,7 +475,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Copy the board's instructions for your AGENTS.md, for agents that don't read skills. Says when it changed since you copied it.",
     ["agents.md", "instructions", "copy", "other agents", "workflow"],
   ),
-  // Integrations › GitHub, Jira
+  // Integrations › GitHub, Ticket systems
   draft(
     "integrations.github.cli",
     "GitHub CLI",
@@ -491,12 +488,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Refresh state, checks and reviews of GitHub PR links every 2 minutes.",
     ["pull requests", "refresh", "checks", "enterprise", "polling"],
   ),
-  draft("integrations.jira.base-url", "Jira base URL", "Used to link keys like ABC-123.", [
-    "atlassian",
-    "link",
-    "issue key",
-    "server",
-  ]),
+  draft(
+    "integrations.tickets.status",
+    "Ticket systems",
+    "The issue trackers whose keys and URLs become links, and whose tickets can be imported as tasks.",
+    ["jira", "linear", "issue key", "ticket", "link template", "key pattern", "import tools", "preset"],
+  ),
   // Integrations › Terminal
   draft(
     "integrations.terminal.terminal",

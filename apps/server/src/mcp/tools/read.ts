@@ -317,6 +317,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           sessionHarness: harnessOfClient(client()),
           progress: { now: Date.now() },
           images: services.attachments.forTask(task.id),
+          ticketSystems: services.settings.get().ticketSystems,
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));

@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -496,7 +497,8 @@ describe("MCP endpoint", () => {
     expect(listed).toContain(`#${unplanned.number} Search titles — done by #${shipped.number}`);
   });
 
-  it("lists missing Jira and T3 thread links until they are added, and never on done tasks", async () => {
+  it("lists missing ticket and T3 thread links until they are added, and never on done tasks", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const workspacePath = "C:/Fake/proj";
     const project = h.services.projects.create({ workspaceRoot: workspacePath });
     const task = h.services.tasks.create({
@@ -532,6 +534,7 @@ describe("MCP endpoint", () => {
   });
 
   it("add_to_backlog attaches links and the T3 thread", async () => {
+    h.services.settings.update({ ticketSystems: [TEST_JIRA] });
     const created = await client.callTool({
       name: "add_to_backlog",
       arguments: {
@@ -544,7 +547,24 @@ describe("MCP endpoint", () => {
     expect(created.isError).toBeFalsy();
     const number = Number(/#(\d+)/.exec(text(created))?.[1]);
     const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
-    expect(links.sort()).toEqual(["jira", "t3_thread", "url"]);
+    expect(links.sort()).toEqual(["t3_thread", "ticket", "url"]);
+  });
+
+  it("creates a task without a key no ticket system matches, and says so", async () => {
+    const created = await client.callTool({
+      name: "create_task",
+      arguments: {
+        title: "Add login",
+        workspacePath: "C:/Fake/proj",
+        markdown: "## Build\n- [ ] Write it",
+        links: ["PAY-12", "https://example.com/spec"],
+      },
+    });
+    expect(created.isError).toBeFalsy();
+    expect(text(created)).toContain("Not linked: PAY-12 (no ticket system set up in Settings matches it).");
+    const number = Number(/#(\d+)/.exec(text(created))?.[1]);
+    const links = h.services.tasks.detail(h.services.tasks.resolveId(`#${number}`)).links.map((l) => l.kind);
+    expect(links).toEqual(["url"]);
   });
 
   it("move_task says when a task with merged PRs went on to Done", async () => {

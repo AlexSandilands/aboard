@@ -1,6 +1,7 @@
 import type { PlanInput } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
+import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 const plan = (...titles: string[]): PlanInput => ({
@@ -117,8 +118,9 @@ describe("tasks", () => {
     expectCode(() => s.tasks.move(c, { beforeId: "nope" }, "user"), "VALIDATION");
   });
 
-  it("matches queries on title, description, #number and Jira keys", () => {
+  it("matches queries on title, description, #number and ticket keys", () => {
     const { s, project } = setup();
+    s.settings.update({ ticketSystems: [TEST_JIRA] });
     const one = s.tasks.create({ projectId: project.id, title: "Fix login", description: "OAuth callback" });
     const two = s.tasks.create({ projectId: project.id, title: "Other", links: [{ value: "PAY-77" }] });
     const titles = (query: string) => s.tasks.summaries({ query }).map((t) => t.title);
@@ -129,9 +131,10 @@ describe("tasks", () => {
     expect(one.id).toBeTruthy();
   });
 
-  it("links Jira keys in the title on create and rename, but not keys only in the description", () => {
+  it("links ticket keys in the title on create and rename, but not keys only in the description", () => {
     const { s, project } = setup();
-    const jiraKeys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : []));
+    s.settings.update({ ticketSystems: [TEST_JIRA] });
+    const jiraKeys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : []));
     const backlog = s.tasks.create({ projectId: project.id, title: "CORE-1245 Fix login", actor: "agent" });
     const planned = s.tasks.create({
       projectId: project.id,
@@ -148,6 +151,15 @@ describe("tasks", () => {
     s.tasks.update(backlog.id, { title: "CORE-1245 and CORE-1246: fix login" }, "agent");
     expect(jiraKeys(backlog.id)).toEqual(["CORE-1245", "CORE-1246"]);
     expect(s.tasks.detail(backlog.id).events.filter((e) => e.type === "link_added")).toHaveLength(2);
+  });
+
+  it("links title keys only for systems that ask for it, and none without a system", () => {
+    const { s, project } = setup();
+    const keys = (id: string) => s.tasks.detail(id).links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : []));
+    expect(keys(s.tasks.create({ projectId: project.id, title: "M0-1 Project skeleton" }).id)).toEqual([]);
+    s.settings.update({ ticketSystems: [{ ...TEST_JIRA, autoLink: false }] });
+    expect(keys(s.tasks.create({ projectId: project.id, title: "CORE-1 Fix login" }).id)).toEqual([]);
+    expect(() => s.tasks.create({ projectId: project.id, title: "T", links: [{ value: "OPS-1" }] })).not.toThrow();
   });
 
   it("archives via update and records lastNote", () => {

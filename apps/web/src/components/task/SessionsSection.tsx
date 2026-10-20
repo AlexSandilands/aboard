@@ -50,7 +50,7 @@ import { PanelLabel } from "./PanelLabel";
 import { SessionsSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 
-/** The task's T3 threads and agent sessions, in a section of their own so Links stays PRs, issues, Jira keys and URLs. */
+/** The task's T3 threads and agent sessions, in a section of their own so Links stays PRs, issues, tickets and URLs. */
 export function SessionsSection({ task }: { task: TaskDetail }) {
   const board = useBoard().data;
   const settings = useSettings().data;

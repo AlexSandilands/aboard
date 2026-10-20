@@ -77,7 +77,9 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         if (link.kind === "agent_session") void ctx.integrations.refreshLink(link.id).catch(() => {});
         if (link.kind === "pr") ctx.integrations.prLinked(link.id);
         const summary = services.tasks.summary(id);
-        return textResult(`Linked to #${summary.number}: ${linkText(link)}${warning ? `\nWarning: ${warning}` : ""}`);
+        return textResult(
+          `Linked to #${summary.number}: ${linkText(link, services.settings.get().ticketSystems)}${warning ? `\nWarning: ${warning}` : ""}`,
+        );
       }),
   );
 };

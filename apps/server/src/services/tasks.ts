@@ -1,7 +1,7 @@
 import {
   deriveEpicRollup,
   deriveEpicStatus,
-  findJiraKeys,
+  findTicketKeys,
   normalizeLabel,
   parseIssueSource,
   renderTemplateText,
@@ -44,7 +44,7 @@ const EPIC_MANUAL_MESSAGE = "An epic can't be a manual task; mark its tasks inst
 const MANUAL_AUTOPILOT_MESSAGE = "A manual task is for people, so Autopilot never starts it; make it a code task first";
 const MANUAL_AUTO_MERGE_MESSAGE = "A manual task has no pull request to merge; make it a code task first";
 
-/** Case-insensitive text match over title, description, "#number", Jira keys and labels. */
+/** Case-insensitive text match over title, description, "#number", ticket keys and labels. */
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -54,7 +54,7 @@ export function matchesQuery({ record, summary }: AssembledTask, query: string):
     record.title,
     record.description ?? "",
     `#${record.number}`,
-    ...summary.links.flatMap((l) => (l.kind === "jira" ? [l.ref.key] : [])),
+    ...summary.links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : [])),
     ...summary.labels,
   ];
   return haystack.some((text) => text.toLowerCase().includes(q));
@@ -133,10 +133,16 @@ export function createTasksService(
       {},
     );
 
-  // A key in the title is a strong signal, so it is linked outright. Keys in a description are only
-  // hinted at (mcp/format.ts), since prose there gives too many false positives. links.add is idempotent.
+  // A key in the title is a strong signal, so it is linked outright, for the systems that ask for it. Keys in a
+  // description are only hinted at (mcp/format.ts), since prose there gives too many false positives. Keys are found
+  // with every system, so a key goes to the same system it would when pasted. links.add is idempotent.
   const linkTitleKeys = (taskId: string, title: string, actor: string): void => {
-    for (const key of findJiraKeys(title)) deps.links().service.add(taskId, { value: key }, actor);
+    const systems = deps.settings.get().ticketSystems;
+    for (const ref of findTicketKeys(title, systems)) {
+      if (systems.find((s) => s.id === ref.system)?.autoLink) {
+        deps.links().service.add(taskId, { value: ref.key }, actor);
+      }
+    }
   };
 
   /** Validates the resolution/by-task pairing for `close` and returns the by-task, if any. */
@@ -290,9 +296,14 @@ export function createTasksService(
           throw new AppError("VALIDATION", "An epic can't be made from a template; its tasks can");
         }
         const epic = input.epicId ? epicFor(input.epicId, project.id) : null;
-        const source = input.sourceUrl ? parseIssueSource(input.sourceUrl, deps.settings.get()) : null;
+        const source = input.sourceUrl
+          ? parseIssueSource(input.sourceUrl, { ticketSystems: deps.settings.get().ticketSystems })
+          : null;
         if (input.sourceUrl && !source) {
-          throw new AppError("VALIDATION", `Not a Jira issue key or URL, or a GitHub issue URL: ${input.sourceUrl}`);
+          throw new AppError(
+            "VALIDATION",
+            `Not a ticket key or URL of a configured ticket system, or a GitHub issue URL: ${input.sourceUrl}`,
+          );
         }
         if (source && input.plan)
           throw new AppError("VALIDATION", "A task imported from an issue can't start with a plan");
@@ -407,7 +418,7 @@ export function createTasksService(
         for (const link of input.links ?? []) {
           // No agent works on a manual task, so the session or thread creating it isn't linked (links.add refuses
           // one). Agents in T3 Code pass their thread on every create, a manual to-do for the user included.
-          const linkKind = manual ? classifyLinkInput(link, deps.settings.get().jiraBaseUrl).kind : null;
+          const linkKind = manual ? classifyLinkInput(link, deps.settings.get().ticketSystems).kind : null;
           if (linkKind === "t3_thread" || linkKind === "agent_session") continue;
           deps.links().service.add(task.id, link, actor);
         }

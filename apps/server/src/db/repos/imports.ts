@@ -1,13 +1,15 @@
 import type { ImportStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
-export type ImportSourceKind = "jira" | "issue";
+export type ImportSourceKind = "ticket" | "issue";
 
 /** A task_imports row in domain shape. */
 export interface ImportRecord {
   taskId: string;
   sourceUrl: string;
   sourceKind: ImportSourceKind;
+  /** The ticket system a ticket import reads from; null for a GitHub issue. */
+  systemId: string | null;
   status: ImportStatus;
   error: string | null;
   attempts: number;
@@ -19,6 +21,7 @@ interface ImportRow {
   task_id: string;
   source_url: string;
   source_kind: ImportSourceKind;
+  system_id: string | null;
   status: ImportStatus;
   error: string | null;
   attempts: number;
@@ -30,6 +33,7 @@ const toImport = (r: ImportRow): ImportRecord => ({
   taskId: r.task_id,
   sourceUrl: r.source_url,
   sourceKind: r.source_kind,
+  systemId: r.system_id,
   status: r.status,
   error: r.error,
   attempts: r.attempts,
@@ -66,6 +70,7 @@ export function createImportsRepo(sql: Sql) {
         task_id: r.taskId,
         source_url: r.sourceUrl,
         source_kind: r.sourceKind,
+        system_id: r.systemId,
         status: r.status,
         error: r.error,
         attempts: r.attempts,

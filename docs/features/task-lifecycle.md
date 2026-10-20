@@ -24,15 +24,15 @@ follows its tasks, it can't be closed, and it can't be archived while any of its
 - `add_to_backlog` (MCP) or **New task** (UI): no plan, lands in Backlog.
 - `create_task` (MCP): requires a plan and lands in Planned. Like `POST /api/tasks`, it lands in Backlog
   instead when no phase of the plan has a step.
-- A Jira key or URL, or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
+- A ticket key or URL of a configured [ticket system](ticket-systems.md), or a GitHub issue URL, as `sourceUrl` on `POST /api/tasks` (the palette's Import row): lands in
   Backlog titled after the issue, and its details are filled in in the background
   ([issue import](issue-import.md)).
 - `add_to_backlog`, `create_task` and `POST /api/tasks` can set the task's Autopilot flag at creation; it
   defaults to unset ([autopilot.md](autopilot.md#the-per-task-flag)).
 - A `template` (id or name) on `POST /api/tasks`, or on either MCP create tool: the template fills in what the
   input leaves out, and the task lands in Backlog unless `status: "planned"` is asked for ([templates](templates.md)).
-- New tasks go to the end of their lane. Links passed at creation are added in the same write, and Jira
-  keys in the title are linked automatically (on later title edits too).
+- New tasks go to the end of their lane. Links passed at creation are added in the same write, and ticket
+  keys in the title are linked automatically (on later title edits too) for systems with **Link keys in titles** on.
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
   path, deepest first. `add_to_backlog` and `create_task` create a project for an unknown path (at the
   nearest folder with a `.git`, else the path itself) and unarchive an archived match. Other write tools
@@ -157,7 +157,7 @@ These drive the card's ring and the sidebar's **Needs attention** list.
 
 ### Missing links
 
-Task results over MCP end with **Missing links** while the task is open: Jira keys in its title or
+Task results over MCP end with **Missing links** while the task is open: ticket keys (of the configured systems) in its title or
 description that aren't linked yet, a T3 thread when it has none, and a PR when the local review loop has
 ended but none is linked. Agents act on tool results more
 reliably than on instructions they read once.

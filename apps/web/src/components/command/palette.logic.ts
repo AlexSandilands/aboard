@@ -1,6 +1,6 @@
 // Pure helpers for the command palette. Path handling adapted from T3 Code's
 // client-runtime browse helpers (MIT) — see NOTICE.
-import { parseIssueSource, type FsBrowseResult } from "@repo/contracts";
+import { parseIssueSource, type FsBrowseResult, type TicketSystem } from "@repo/contracts";
 
 // ── Item filtering ───────────────────────────────────────────────────────
 
@@ -165,22 +165,30 @@ export function normalizeDescription(raw: string): string | undefined {
 export interface IssueImportRow {
   /** Sent as `sourceUrl`; the server fills in the title, description and labels. */
   sourceUrl: string;
-  /** The row's title: "Import PROJ-123 from Jira". */
+  /** The row's title: "Import PROJ-123 from <System>". */
   title: string;
   description: string;
 }
 
 /**
- * Recognises a pasted Jira key or URL, or GitHub issue URL, in the title box. Only for tasks that land in Backlog:
+ * Recognises a pasted ticket key or URL of a configured system, or a GitHub issue URL, in the title box. Only for tasks that land in Backlog:
  * a task that opens the plan editor is titled by the user.
  */
-export function issueImportRow(query: string, flow: "backlog" | "planned" | "epic"): IssueImportRow | null {
+export function issueImportRow(
+  query: string,
+  flow: "backlog" | "planned" | "epic",
+  ticketSystems: readonly TicketSystem[] = [],
+): IssueImportRow | null {
   if (flow !== "backlog") return null;
-  const source = parseIssueSource(query);
+  const source = parseIssueSource(query, { ticketSystems });
   if (!source) return null;
   return {
     sourceUrl: query.trim(),
-    title: `Import ${source.placeholder} from ${source.kind === "jira" ? "Jira" : "GitHub"}`,
+    title: `Import ${source.placeholder} from ${
+      source.kind === "ticket"
+        ? (ticketSystems.find((s) => s.id === source.ref.system)?.name ?? source.ref.system)
+        : "GitHub"
+    }`,
     description: "Fills in the title, description and labels from the issue in the background",
   };
 }

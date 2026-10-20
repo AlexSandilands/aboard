@@ -129,7 +129,7 @@ export interface TaskQuery {
   projectId?: string;
   status?: TaskStatus;
   includeArchived?: boolean;
-  /** Matches title, description, "#number", Jira keys and labels, case-insensitively. */
+  /** Matches title, description, "#number", ticket keys and labels, case-insensitively. */
   query?: string;
   /** Tasks carrying any of these labels (normalised before matching). */
   labels?: string[];
@@ -146,7 +146,7 @@ export interface TasksService {
   resolveId(ref: string): string;
   /**
    * Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column.
-   * With `sourceUrl` (a Jira key or URL, or a GitHub issue URL) the task is titled and linked after the issue and
+   * With `sourceUrl` (a ticket key or URL, or a GitHub issue URL) the task is titled and linked after the issue and
    * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
    */
   create(input: CreateTaskInput): TaskDetail;
@@ -360,8 +360,8 @@ export interface ImportResult {
   /** Raw label suggestions; normalised, deduped and capped when applied. */
   labels: string[];
   /**
-   * Set when the issue is an epic (a Jira epic, a GitHub issue with sub-issues): the task becomes an epic and its
-   * children become tasks in it. `children` are their Jira keys or issue URLs, at most IMPORT_CHILDREN_MAX of them;
+   * Set when the issue is an epic (a ticket that is an epic, a GitHub issue with sub-issues): the task becomes an epic and its
+   * children become tasks in it. `children` are their ticket keys or issue URLs, at most IMPORT_CHILDREN_MAX of them;
    * `total` is how many the issue has.
    */
   epic?: { children: string[]; total: number };
@@ -373,7 +373,7 @@ export interface ImportCompletion {
   childImports: string[];
 }
 
-/** The background fill-in of tasks created from a Jira or GitHub issue (see CreateTaskInput.sourceUrl). */
+/** The background fill-in of tasks created from a ticket or a GitHub issue (see CreateTaskInput.sourceUrl). */
 export interface ImportsService {
   get(taskId: string): ImportRecord | null;
   /** Pending imports on non-archived tasks, oldest first. */

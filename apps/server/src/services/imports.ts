@@ -3,7 +3,9 @@ import {
   LABELS_PER_TASK_MAX,
   normalizeLabel,
   parseIssueSource,
+  type IssueRef,
   type IssueSource,
+  type TicketRef,
 } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import type { ImportRecord } from "../db/repos/imports.ts";
@@ -39,14 +41,14 @@ export function importLabels(raw: readonly string[], existing: readonly string[]
   return labels.slice(0, LABELS_PER_TASK_MAX);
 }
 
-/** One name per issue, however it was written: a Jira key, or a GitHub issue's host, repo and number. */
-function issueIdentity(source: IssueSource): string {
-  return source.kind === "jira"
-    ? `jira:${source.key.toUpperCase()}`
+/** One name per issue, however it was written: a ticket's system and key, or a GitHub issue's host, repo and number. */
+function issueIdentity(source: { kind: "ticket"; ref: TicketRef } | { kind: "issue"; ref: IssueRef }): string {
+  return source.kind === "ticket"
+    ? `ticket:${source.ref.system}:${source.ref.key.toUpperCase()}`
     : `issue:${source.ref.host}/${source.ref.repo}#${source.ref.number}`.toLowerCase();
 }
 
-/** Tasks created from a Jira or GitHub issue: the state of filling in their details in the background. */
+/** Tasks created from a ticket or a GitHub issue: the state of filling in their details in the background. */
 export function createImportsService(
   core: Core,
   deps: { tasks: () => TasksService; settings: SettingsService },
@@ -56,7 +58,7 @@ export function createImportsService(
   /** Unarchived tasks in the project linked to each issue, by issueIdentity. */
   const linkedTasks = (projectId: string): Map<string, string[]> => {
     const byIssue = new Map<string, string[]>();
-    const links = [...repos.links.byKindActive("jira"), ...repos.links.byKindActive("issue")].map(toLink);
+    const links = [...repos.links.byKindActive("ticket"), ...repos.links.byKindActive("issue")].map(toLink);
     const inProject = new Set(
       repos.tasks
         .getMany([...new Set(links.map((l) => l.taskId))])
@@ -65,12 +67,7 @@ export function createImportsService(
     );
     for (const link of links) {
       if (!inProject.has(link.taskId)) continue;
-      const id =
-        link.kind === "jira"
-          ? `jira:${link.ref.key.toUpperCase()}`
-          : link.kind === "issue"
-            ? `issue:${link.ref.host}/${link.ref.repo}#${link.ref.number}`.toLowerCase()
-            : null;
+      const id = link.kind === "ticket" || link.kind === "issue" ? issueIdentity(link) : null;
       if (!id) continue;
       const ids = byIssue.get(id) ?? [];
       if (!ids.includes(link.taskId)) byIssue.set(id, [...ids, link.taskId]);
@@ -90,12 +87,12 @@ export function createImportsService(
     epic: NonNullable<ImportResult["epic"]>,
   ): string[] => {
     const tasks = deps.tasks();
-    // An empty epic and one whose children couldn't be listed (no Jira search tool allowed, or a search that failed)
+    // An empty epic and one whose children couldn't be listed (no search tool allowed, or a search that failed)
     // look the same, so it stays a task rather than becoming an empty epic nobody would notice.
     if (epic.children.length === 0 && repos.tasks.get(taskId)?.parentId === null) {
       tasks.addNote(
         taskId,
-        `${sourceLabel} is an epic, but none of its child issues could be listed, so it was imported as a task. If it has some, check that a Jira search tool is allowed in Settings → Tasks → New tasks → Jira tools, then paste it again.`,
+        `${sourceLabel} is an epic, but none of its child issues could be listed, so it was imported as a task. If it has some, check that its ticket system's import tools include a search tool in Settings → Integrations → Ticket systems, then paste it again.`,
         IMPORT_ACTOR,
       );
       return [];
@@ -119,10 +116,10 @@ export function createImportsService(
     let unreadable = 0;
     for (const child of epic.children) {
       if (seen.size >= IMPORT_CHILDREN_MAX) break;
-      // Jira children come from the model, which has just read text anyone could write: anything but a Jira issue
+      // Ticket children come from the model, which has just read text anyone could write: anything but a ticket
       // (a GitHub URL, say, which would be read with the user's gh) is dropped rather than trusted. A child is always
       // the same kind of issue as its epic.
-      const source = parseIssueSource(child, settings);
+      const source = parseIssueSource(child, { ticketSystems: settings.ticketSystems });
       if (source?.kind !== sourceKind) {
         unreadable++;
         continue;
@@ -161,7 +158,7 @@ export function createImportsService(
     }
     if (unreadable) {
       lines.push(
-        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${sourceKind === "jira" ? "a Jira issue" : "a GitHub issue"}.`,
+        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${sourceKind === "ticket" ? "a ticket" : "a GitHub issue"}.`,
       );
     }
     if (lines.length) tasks.addNote(taskId, lines.join("\n\n"), IMPORT_ACTOR);
@@ -194,7 +191,7 @@ export function createImportsService(
       return core.write((fx) => {
         const record = recordOf(taskId);
         const task = deps.tasks().detail(taskId);
-        const source = parseIssueSource(record.sourceUrl);
+        const source = parseIssueSource(record.sourceUrl, { ticketSystems: deps.settings.get().ticketSystems });
         // The user may have renamed or described the placeholder while the fetch ran; their words stand.
         const title = result.title.trim().slice(0, TITLE_MAX);
         const description = result.description?.trim().slice(0, DESCRIPTION_MAX);
@@ -244,6 +241,7 @@ export function createImportsService(
         taskId,
         sourceUrl,
         sourceKind: source.kind,
+        systemId: source.kind === "ticket" ? source.ref.system : null,
         status: "pending",
         error: null,
         attempts: 0,
