@@ -472,6 +472,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "new session",
   ]),
   draft("integrations.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
+  draft(
+    "integrations.codex.cli-path",
+    "Codex CLI path",
+    "What headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
+    ["openai", "executable", "binary", "headless", "autopilot"],
+  ),
   draft("integrations.codex.skill", "Codex board skill", `${BOARD_SKILL} In ~/.codex/skills.`, [
     "openai",
     ...BOARD_SKILL_KEYWORDS,

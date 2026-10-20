@@ -514,14 +514,60 @@ export function CopilotSection({ settings }: { settings: AppSettings }) {
   );
 }
 
-export function CodexSection() {
+/** Codex: the MCP server, and the CLI headless Autopilot runs start when a model runs on Codex. */
+export function CodexSection({ settings }: { settings: AppSettings }) {
+  const updateSettings = useUpdateSettings();
+  const queryClient = useQueryClient();
+  const recheck = useRecheckAgentIntegrations();
+  const integrations = useAgentIntegrations();
+  const codex = integrations.data?.harnesses.find((h) => h.harness === "codex");
+  // Many use Codex only through T3 Code, with no CLI of their own: no warning for a CLI that isn't there.
+  const status = codex?.cli.found ? agentDot("Codex", codex, integrations.isError) : SNIPPET_DOT;
   return (
-    <SettingsSection id="integrations.codex.status" title="Codex" status={<Dot dot={SNIPPET_DOT} />}>
-      <SettingsRow id="integrations.codex.mcp" title="MCP server" description="Register the MCP server.">
+    <SettingsSection id="integrations.codex.status" title="Codex" status={<Dot dot={status} />}>
+      <SettingsRow
+        id="integrations.codex.mcp"
+        title="MCP server"
+        description="Register the MCP server."
+        info="Adds it to ~/.codex/config.toml."
+        status={codex?.cli.found ? <McpStatus mcp={codex.mcp} /> : undefined}
+      >
         <div className="mt-2">
           <CommandSnippet command={`codex mcp add ${BRAND.id} --url ${mcpUrl()}`} />
         </div>
       </SettingsRow>
+      <SettingsRow
+        id="integrations.codex.cli-path"
+        title="Codex CLI path"
+        description="Empty uses codex from your PATH."
+        info="What headless Autopilot runs start for a model that runs on Codex, and what Open in terminal resumes a Codex session with."
+        status={<CliStatus cli={codex?.cli} />}
+        control={
+          <>
+            <BlurInput
+              aria-label="Codex CLI path"
+              size="sm"
+              className="sm:w-56"
+              placeholder="codex"
+              value={settings.codexCli ?? ""}
+              onSave={(next) =>
+                updateSettings.mutate(
+                  { codexCli: next.trim() || null },
+                  {
+                    onSuccess: () => {
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis });
+                      void queryClient.invalidateQueries({ queryKey: queryKeys.agentIntegrations });
+                    },
+                  },
+                )
+              }
+            />
+            <Button size="sm" variant="outline" disabled={recheck.isPending} onClick={() => recheck.mutate()}>
+              Re-check
+            </Button>
+          </>
+        }
+      />
       <BoardSkillRow id="integrations.codex.skill" harness="codex" title="Codex" />
       <AgentsSnippetRow id="integrations.codex.snippet" />
     </SettingsSection>

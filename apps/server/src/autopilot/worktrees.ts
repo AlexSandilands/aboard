@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { RunGit } from "../integrations/backup.ts";
+import { installPushGuard } from "./pushGuard.ts";
 
 // Git worktrees for Autopilot's headless runs. Each run gets its own, under the board's data dir, so an agent never
 // works in the user's checkout and runs side by side never share one.
@@ -25,6 +26,8 @@ export interface WorktreeRequest {
   branchPrefix?: string | undefined;
   /** Start from origin's copy of `baseRef` when there is one: a branch others merge into, such as an epic's. */
   baseFromOrigin?: boolean | undefined;
+  /** Give the worktree a pre-push hook that refuses force, delete and default-branch pushes (installPushGuard). */
+  pushGuard?: boolean | undefined;
 }
 
 export interface Worktree {
@@ -34,6 +37,8 @@ export interface Worktree {
   /** The branch on origin the work goes to: `branch` itself, or the existing branch asked for. */
   pushTo: string;
   defaultBranch: string | null;
+  /** The push guard's hooks folder, with `pushGuard`: the agent's git is pointed at it (pushGuardEnv). */
+  hooksPath: string | null;
 }
 
 /** Whether `child` is `parent` or inside it. */
@@ -140,7 +145,18 @@ export async function createWorktree(runGit: RunGit, req: WorktreeRequest): Prom
   mkdirSync(dirname(path), { recursive: true });
   const added = await runGit(["worktree", "add", "--no-track", "-b", branch, path, start], checkout);
   if (added.code !== 0) throw gitError(`Couldn't add a worktree from ${start}`, added);
-  return { path, branch, pushTo: pushTo ?? branch, defaultBranch };
+  let hooksPath: string | null = null;
+  if (req.pushGuard) {
+    try {
+      hooksPath = await installPushGuard(runGit, path, defaultBranch);
+    } catch (error) {
+      // An agent must not work where its pushes aren't guarded; nothing has happened in the worktree yet.
+      await runGit(["worktree", "remove", "--force", path], checkout).catch(() => null);
+      await runGit(["branch", "-D", branch], checkout).catch(() => null);
+      throw error;
+    }
+  }
+  return { path, branch, pushTo: pushTo ?? branch, defaultBranch, hooksPath };
 }
 
 export type RemoveOutcome = "removed" | "dirty" | "missing";

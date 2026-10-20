@@ -29,6 +29,7 @@ export const defaultSettings: AppSettings = {
   agentT3Threads: false,
   headlessReviewCli: null,
   copilotCli: null,
+  codexCli: null,
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
   headlessReviewModel: null,

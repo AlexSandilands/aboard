@@ -1,4 +1,5 @@
 import {
+  AGENT_HARNESSES,
   defaultBaseRef,
   type AgentCliStatus,
   type AgentHarness,
@@ -64,14 +65,19 @@ export function canStartProjectT3Thread(
 
 type HandoffSettings = Pick<AppSettings, "t3TokenSet"> & Partial<Pick<AppSettings, "handoffMenus">>;
 
-/** The CLIs the menus offer a new session in: the ones that run here, less those the user hid in settings. */
+/**
+ * The CLIs the menus offer a new session in: the ones that run here and the board can start (not Codex), less those
+ * the user hid in settings.
+ */
 export const handoffClis = (
   clis: readonly AgentCliStatus[] | undefined,
   settings: Partial<Pick<AppSettings, "handoffMenus">> | undefined,
-): AgentHarness[] =>
-  (clis ?? [])
-    .filter((cli) => cli.available && settings?.handoffMenus?.[cli.harness] !== false)
+): AgentHarness[] => {
+  const menus: Partial<Record<AgentHarness, boolean>> | undefined = settings?.handoffMenus;
+  return (clis ?? [])
+    .filter((cli) => cli.available && AGENT_HARNESSES[cli.harness].presetSessionId && menus?.[cli.harness] !== false)
     .map((cli) => cli.harness);
+};
 
 /**
  * Whether a failed launch may be retried with the same commandId. Keep it whenever T3 may already have

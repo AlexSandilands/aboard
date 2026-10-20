@@ -176,7 +176,29 @@ export function profileHeadlessModel(profile: RunProfile | null): string | null 
   const cli = profileCliModel(profile, "claude-code");
   if (cli) return cli;
   const t3 = profile?.setting.t3?.selection.model;
-  return t3 && /^(claude-|opus|sonnet|haiku)/i.test(t3) ? t3 : null;
+  return t3 && isClaudeModel(t3) ? t3 : null;
+}
+
+/** Whether `claude --model` takes a model: an id (`claude-…`) or one of its aliases. */
+export const isClaudeModel = (model: string): boolean => /^(claude-|opus|sonnet|haiku)/i.test(model);
+
+/** The harness and `--model` a headless Autopilot run takes. */
+export interface HeadlessRunModel {
+  harness: AgentHarness;
+  /** Null runs the CLI's default. */
+  model: string | null;
+}
+
+/**
+ * What a headless run on a profile runs: the harness the profile names (Claude Code when it names none, or there is no
+ * profile) and that harness's model. Claude Code also takes the profile's T3 model when it is a Claude model.
+ */
+export function profileHeadless(profile: RunProfile | null): HeadlessRunModel {
+  const harness = profile?.setting.headless ?? "claude-code";
+  return {
+    harness,
+    model: harness === "claude-code" ? profileHeadlessModel(profile) : profileCliModel(profile, harness),
+  };
 }
 
 /** How a person is told where a model came from: "Codex 6.1 (from label codex61)". */

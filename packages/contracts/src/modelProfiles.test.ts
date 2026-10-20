@@ -7,6 +7,7 @@ import {
   ModelProfile,
   ModelProfiles,
   parseModelChoiceKey,
+  profileHeadless,
   profileHeadlessModel,
   resolveRunModel,
   type ModelSettings,
@@ -87,6 +88,30 @@ describe("model profiles", () => {
     expect(profileHeadlessModel(t3Only.profile)).toBeNull();
     const tier = resolveRunModel({ labels: [], tier: "deep" }, settings);
     expect(describeRunModel(tier)).toBe("Deep tier (Opus)");
+  });
+
+  it("runs headless on the harness a model names, with that harness's model, else on Claude Code", () => {
+    const headless = ModelProfile.parse({ ...codex, cli: { codex: "gpt-5.5-codex" }, headless: "codex" });
+    expect(profileHeadless({ id: "x", name: "x", tier: null, setting: headless })).toEqual({
+      harness: "codex",
+      model: "gpt-5.5-codex",
+    });
+    const noModel = { id: "x", name: "x", tier: null, setting: { ...headless, cli: {} } };
+    expect(profileHeadless(noModel)).toEqual({ harness: "codex", model: null });
+    // Unset: Claude Code with its own model; a tier works the same way.
+    const label = resolveRunModel({ labels: ["fast-lane"], tier: null }, { ...settings, modelProfiles: [sonnet] });
+    expect(profileHeadless(label.profile)).toEqual({ harness: "claude-code", model: "sonnet" });
+    const tier = resolveRunModel({ labels: [], tier: "deep" }, settings);
+    expect(profileHeadless(tier.profile)).toEqual({ harness: "claude-code", model: "opus" });
+    const copilotTier = {
+      ...settings,
+      modelTiers: { ...settings.modelTiers, light: { description: null, t3: null, headless: "copilot-cli" as const } },
+    };
+    expect(profileHeadless(resolveRunModel({ labels: [], tier: "light" }, copilotTier).profile)).toEqual({
+      harness: "copilot-cli",
+      model: null,
+    });
+    expect(profileHeadless(null)).toEqual({ harness: "claude-code", model: null });
   });
 
   it("round-trips a choice through its select key", () => {
