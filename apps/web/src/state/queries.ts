@@ -344,30 +344,62 @@ export function useT3ProjectCandidates(enabled: boolean) {
   });
 }
 
-/** Models, refs and defaults for starting a T3 Code thread. Fetched fresh each time the dialog opens. */
+/**
+ * How long the launch options of a closed dialog (or a prefetch nobody opened) stay in the cache. Reopening inside it
+ * shows them at once while a refresh runs, and the dialog's own state is never reseeded by it.
+ */
+const LAUNCH_OPTIONS_GC_MS = 30_000;
+/** Opening the hand-off menu again within this long doesn't prefetch the launch options again. */
+const LAUNCH_OPTIONS_PREFETCH_STALE_MS = 15_000;
+
+const t3LaunchOptionsQuery = (taskId: string) => ({
+  queryKey: queryKeys.t3LaunchOptions(taskId),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/t3-launch-options`, { signal }),
+  gcTime: LAUNCH_OPTIONS_GC_MS,
+  retry: false,
+});
+
+const projectT3LaunchOptionsQuery = (projectId: string) => ({
+  queryKey: queryKeys.projectT3LaunchOptions(projectId),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api<T3LaunchOptions>(`/api/projects/${encodeURIComponent(projectId)}/t3-launch-options`, { signal }),
+  gcTime: LAUNCH_OPTIONS_GC_MS,
+  retry: false,
+});
+
+/**
+ * Models, refs and defaults for starting a T3 Code thread. Cached briefly (see prefetchT3LaunchOptions) but always
+ * refreshed when the dialog opens, since T3 can change between two opens.
+ */
 export function useT3LaunchOptions(taskId: string | null) {
   return useQuery({
-    queryKey: queryKeys.t3LaunchOptions(taskId ?? ""),
-    queryFn: ({ signal }) =>
-      api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/t3-launch-options`, { signal }),
+    ...t3LaunchOptionsQuery(taskId ?? ""),
     enabled: !!taskId,
     staleTime: 0,
-    gcTime: 0,
-    retry: false,
   });
 }
 
 /** The same for a thread about a whole project (Suggest epics). */
 export function useProjectT3LaunchOptions(projectId: string | null) {
   return useQuery({
-    queryKey: queryKeys.projectT3LaunchOptions(projectId ?? ""),
-    queryFn: ({ signal }) =>
-      api<T3LaunchOptions>(`/api/projects/${encodeURIComponent(projectId!)}/t3-launch-options`, { signal }),
+    ...projectT3LaunchOptionsQuery(projectId ?? ""),
     enabled: !!projectId,
     staleTime: 0,
-    gcTime: 0,
-    retry: false,
   });
+}
+
+/**
+ * Starts loading the launch options of a dialog the user is about to open (the hand-off menu just opened), so they
+ * are there, or nearly, when it does.
+ */
+export function usePrefetchT3LaunchOptions() {
+  const queryClient = useQueryClient();
+  return (target: { taskId: string } | { projectId: string }) => {
+    const staleTime = LAUNCH_OPTIONS_PREFETCH_STALE_MS;
+    if ("taskId" in target) void queryClient.prefetchQuery({ ...t3LaunchOptionsQuery(target.taskId), staleTime });
+    else void queryClient.prefetchQuery({ ...projectT3LaunchOptionsQuery(target.projectId), staleTime });
+  };
 }
 
 /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */

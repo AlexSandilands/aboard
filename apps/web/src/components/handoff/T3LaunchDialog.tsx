@@ -11,6 +11,7 @@ import {
   type T3LaunchOptions,
   type T3LaunchSuggestion,
   type T3ModelSelection,
+  type T3RuntimeMode,
   type T3ThreadRef,
   type TaskSummary,
 } from "@repo/contracts";
@@ -270,11 +271,11 @@ function LaunchContent({
         <DialogDescription>{subject.label}</DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
-        {options.isPending ? (
-          <Skeleton shape="card" className="h-40 w-full" />
-        ) : options.isError ? (
+        {/* Not once there are options: a failed background refresh must not throw away what the user has typed. */}
+        {!options.data && options.isError && !options.isFetching ? (
           <LaunchUnavailable subject={subject} message={options.error.message} onRetry={() => void options.refetch()} />
         ) : (
+          // The same element while the options load and after, so what is typed while waiting is kept.
           <Composer subject={subject} options={options.data} starter={starter} onDone={onDone} />
         )}
       </div>
@@ -316,34 +317,32 @@ function Composer({
   onDone,
 }: {
   subject: LaunchSubject;
-  options: T3LaunchOptions;
+  /** Undefined while they load: the prompt can be edited meanwhile, the rest waits for them. */
+  options: T3LaunchOptions | undefined;
   starter: Starter;
   onDone: () => void;
 }) {
   const { promptFor } = subject;
   const [planWithMe, setPlanWithMe] = useState(subject.initialPlan);
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
-  const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
-  const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
-  const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
-  const [choice, setChoice] = useState<WorkspaceChoice>(() => {
-    if (subject.checkout) return { mode: "current", ref: null };
-    const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
-    // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
-    return subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
-      ? { mode: "new_worktree", ref: null }
-      : initial;
-  });
+  // The choices start from the options, and only once: a refresh of them (the dialog opened on cached options) must
+  // never move what the user has picked.
+  const [picks, setPicks] = useState<Picks | null>(() => (options ? initialPicks(options, subject, planWithMe) : null));
+  if (!picks && options) setPicks(initialPicks(options, subject, planWithMe));
+  const ready = options && picks ? { options, ...picks } : null;
   // Kept or reset together: a retry with the same pair returns the same thread, images and all.
   const [launchIds, setLaunchIds] = useState(newLaunchIds);
   const images = useLaunchImages();
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
 
-  const workspace = toLaunchWorkspace(options, choice);
-  const model = findModel(options, selection);
-  const blocker =
-    !selection || !model?.provider.ready
+  const selection = ready?.selection ?? null;
+  const provider = options?.providers.find((p) => p.instanceId === selection?.instanceId);
+  const workspace = ready ? toLaunchWorkspace(ready.options, ready.choice) : null;
+  const model = options ? findModel(options, selection) : undefined;
+  const blocker = !ready
+    ? "Loading the launch options"
+    : !selection || !model?.provider.ready
       ? "Choose an available model"
       : !workspace
         ? "Choose a branch"
@@ -352,29 +351,38 @@ function Composer({
             "Fix the PR in a new worktree, not in your checkout"
           : images.blocker;
 
-  const changeSelection = (next: T3ModelSelection | null) => {
-    setSelection(next);
-    const nextProvider = options.providers.find((p) => p.instanceId === next?.instanceId);
-    setRuntimeMode((mode) => clampRuntimeMode(mode, nextProvider));
-  };
+  const pick = (patch: Partial<Picks>) => setPicks((current) => current && { ...current, ...patch });
+  const changeSelection = (next: T3ModelSelection | null) =>
+    setPicks(
+      (current) =>
+        current && {
+          ...current,
+          selection: next,
+          runtimeMode: clampRuntimeMode(
+            current.runtimeMode,
+            options?.providers.find((p) => p.instanceId === next?.instanceId),
+          ),
+        },
+    );
 
   const togglePlan = () => {
     const next = !planWithMe;
     // Swap the generated prompt and the mode's model, but never discard the user's own choices.
     if (prompt === promptFor(planWithMe)) setPrompt(promptFor(next));
-    changeSelection(selectionAfterPlanToggle(options, selection, next));
+    // Still loading: the model is chosen from the options when they arrive, for the mode the dialog is then in.
+    if (ready) changeSelection(selectionAfterPlanToggle(ready.options, ready.selection, next));
     setPlanWithMe(next);
   };
 
   const submit = () => {
-    if (blocker || !selection || !workspace || !prompt.trim()) return;
+    if (blocker || !ready || !selection || !workspace || !prompt.trim()) return;
     starter.start(
       {
         ...launchIds,
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         modelSelection: selection,
-        runtimeMode,
+        runtimeMode: ready.runtimeMode,
         workspace,
       },
       {
@@ -421,9 +429,25 @@ function Composer({
         <LaunchImageThumbs state={images} />
         <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
           <AddImageControl state={images} />
-          <ModelPicker options={options} selection={selection} onChange={changeSelection} />
-          {selection ? <TraitsPicker options={options} selection={selection} onChange={setSelection} /> : null}
-          <AccessPicker provider={provider} value={runtimeMode} onChange={setRuntimeMode} />
+          {ready ? (
+            <>
+              <ModelPicker options={ready.options} selection={ready.selection} onChange={changeSelection} />
+              {ready.selection ? (
+                <TraitsPicker
+                  options={ready.options}
+                  selection={ready.selection}
+                  onChange={(next) => pick({ selection: next })}
+                />
+              ) : null}
+              <AccessPicker
+                provider={provider}
+                value={ready.runtimeMode}
+                onChange={(runtimeMode) => pick({ runtimeMode })}
+              />
+            </>
+          ) : (
+            <ToolbarSkeleton />
+          )}
           {subject.planToggle ? (
             <ComposerControl
               aria-pressed={planWithMe}
@@ -448,8 +472,17 @@ function Composer({
         </div>
       </div>
       <ComposerStrip className="justify-between">
-        <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
-        <RefPicker options={options} choice={choice} onChange={setChoice} />
+        {ready ? (
+          <>
+            <WorkspaceMenu options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
+            <RefPicker options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
+          </>
+        ) : (
+          <>
+            <Skeleton className="my-1 h-4 w-28" />
+            <Skeleton className="my-1 h-4 w-36" />
+          </>
+        )}
       </ComposerStrip>
       {subject.fixBranch ? (
         <FixBranchNote
@@ -457,8 +490,42 @@ function Composer({
           startsFrom={workspace?.mode === "new_worktree" ? workspace.baseRef : null}
         />
       ) : null}
-      {options.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
+      {options?.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
+  );
+}
+
+/** What the dialog's pickers hold: the model, the access and where the thread starts. */
+interface Picks {
+  selection: T3ModelSelection | null;
+  runtimeMode: T3RuntimeMode;
+  choice: WorkspaceChoice;
+}
+
+function initialPicks(options: T3LaunchOptions, subject: LaunchSubject, planWithMe: boolean): Picks {
+  const selection = launchModelSelection(options, planWithMe);
+  const runtimeMode = clampRuntimeMode(
+    options.defaults.runtimeMode,
+    options.providers.find((p) => p.instanceId === selection?.instanceId),
+  );
+  if (subject.checkout) return { selection, runtimeMode, choice: { mode: "current", ref: null } };
+  const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
+  // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
+  const choice: WorkspaceChoice =
+    subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
+      ? { mode: "new_worktree", ref: null }
+      : initial;
+  return { selection, runtimeMode, choice };
+}
+
+/** Stands in for the model, effort and access pickers while the options load. */
+function ToolbarSkeleton() {
+  return (
+    <>
+      <Skeleton shape="pill" className="mx-2.5 h-4 w-32" />
+      <Skeleton shape="pill" className="mx-2.5 h-4 w-16" />
+      <Skeleton shape="pill" className="mx-2.5 h-4 w-24" />
+    </>
   );
 }
 

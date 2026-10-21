@@ -304,7 +304,8 @@ function Composer({
           <AddImageControl state={images} />
           <Input
             size="sm"
-            className="w-56"
+            // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
+            className="w-56 min-w-0 shrink"
             aria-label="Model"
             aria-invalid={badModel ? true : undefined}
             placeholder="Model (the CLI's default)"

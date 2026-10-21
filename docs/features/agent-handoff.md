@@ -219,6 +219,18 @@ worktree default and "start new worktrees from origin" come from the same settin
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
 
+**Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and
+**Plan with me** work straight away; the model, effort, access, workspace and branch controls show skeletons until the
+options arrive, and Send stays disabled. What you typed is kept. The choices are made from the options once, when they
+first arrive, and a later refresh only updates the lists: it never moves a model, access or workspace you picked.
+Opening the hand-off menu (and Suggest epics, and Fix in →) starts loading the options, and they stay cached for 30
+seconds after the dialog closes, so opening it again shows them at once while they refresh in the background. If a
+background refresh fails the dialog stays as it is; the error panel only replaces a dialog that never had options.
+
+The toolbar stays on one row: the model picker is the one control that shrinks, truncating its name (the full name is
+its tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog does the same with
+its model field.
+
 Launches carry a `commandId`, which T3 uses to de-duplicate them, and a `threadId` the dialog makes with it
 (T3 files uploaded images under the thread, so it needs the id up front). After a timeout or lost connection the
 dialog keeps both, so pressing Send again returns the thread T3 may already have started instead of a second
@@ -250,6 +262,9 @@ own web client uses:
 
 The browser only talks to the board's REST API (`GET /api/tasks/:id/t3-launch-options`,
 `POST /api/tasks/:id/t3-thread`, and `GET /api/integrations/t3/models` for settings). Each request opens one WebSocket session and closes it when done.
+Loading the launch options does not wait for the shell snapshot: the ticket, the WebSocket and `server.getConfig` start
+while the snapshot loads (the session is dropped if that fails or T3 turns out to have moved), and `vcs.listRefs` goes
+out as soon as the T3 project is known. A load that takes 1.5 seconds or more is logged with the time each stage took.
 
 **This protocol is not a public API.** It was worked out from T3 Code's source, so a T3 update can break it.
 Failures to load the dialog's options are shown in the dialog, with an offer to copy the prompt instead.
