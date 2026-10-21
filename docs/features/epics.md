@@ -189,7 +189,7 @@ reads it from the task.
   with `markedMerged`; a PR merge logs `mergedPr` instead). It is refused while the epic has open tasks or none, and for
   any epic that doesn't deliver through a branch; other status moves of an epic are refused as before. Changing the
   delivery clears the mark, and so does a task of the epic being open again (reopened, or added): the mark covered the
-  branch as it stood, so the epic waits for a merge again once its tasks finish. A merge seen through the epic's PR stays on record (that PR did merge); work added after it needs a new PR from the branch, which the epic's Merge into epic branch run opens, or a manual mark. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
+  branch as it stood, so the epic waits for a merge again once its tasks finish. A merge seen through the epic's PR stays on record (that PR did merge); Merge into epic branch doesn't open another PR once the epic's has merged, so that new work is delivered by hand. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
   task's column, and a later merge or finish brings it back.
 - **Going back** to main is refused once one of its tasks has started (`startedEpicTasks`: In Progress, Review, or
   Done without being closed), since their branches and PRs already target the epic's branch.
