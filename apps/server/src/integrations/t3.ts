@@ -732,10 +732,10 @@ export function createT3Integration(deps: {
         throw error;
       }
       const earlySession = early ? await early : null;
-      // When T3 moved while the shell loaded (the context looked again), the early session is to the wrong one.
+      // When T3 moved or the token changed while the shell loaded, the early session is to the wrong one.
       let ready: Extract<EarlySession, { rpc: T3RpcSession }> | null = null;
       if (earlySession) {
-        if (earlyOrigin !== ctx.origin) {
+        if (earlyOrigin !== ctx.origin || bearer !== ctx.bearer) {
           if ("rpc" in earlySession) earlySession.rpc.close();
         } else if ("rpc" in earlySession) ready = earlySession;
         else if (!(earlySession.error instanceof T3RpcError && earlySession.error.kind === "unreachable")) {

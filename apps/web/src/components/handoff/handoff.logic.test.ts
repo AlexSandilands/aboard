@@ -6,7 +6,9 @@ import {
   FAVORITES,
   handoffClis,
   initialPickerTab,
+  emptyPickState,
   initialPicks,
+  pickBy,
   initialWorkspaceChoice,
   keepsCommandId,
   launchModelSelection,
@@ -21,6 +23,7 @@ import {
   selectModel,
   setOption,
   showHandoffActions,
+  syncPicks,
   toLaunchWorkspace,
   workspaceLabel,
 } from "./handoff.logic";
@@ -262,6 +265,38 @@ describe("initial picks", () => {
       mode: "new_worktree",
       ref: "epic/1",
     });
+  });
+});
+
+describe("syncPicks", () => {
+  const sonnet = { instanceId: "claudeAgent", model: "sonnet", options: [] };
+  const refreshed: T3LaunchOptions = { ...options, defaults: { ...options.defaults, modelSelection: sonnet } };
+
+  it("has nothing to pick from while the options load", () => {
+    expect(syncPicks(emptyPickState, undefined, {}, false)).toBe(emptyPickState);
+  });
+
+  it("seeds when the options arrive, and is left alone when nothing changed", () => {
+    const seeded = syncPicks(emptyPickState, options, {}, false);
+    expect(seeded.picks?.selection).toEqual(options.defaults.modelSelection);
+    expect(syncPicks(seeded, options, {}, false)).toBe(seeded);
+  });
+
+  it("follows a refresh until something is picked", () => {
+    const seeded = syncPicks(emptyPickState, options, {}, false);
+    expect(syncPicks(seeded, refreshed, {}, false).picks?.selection).toEqual(sonnet);
+  });
+
+  it("never moves a choice after the user has picked", () => {
+    const seeded = syncPicks(emptyPickState, options, {}, false);
+    const picked = pickBy(seeded, (p) => ({ ...p, runtimeMode: "approval-required" }));
+    expect(picked.touched).toBe(true);
+    expect(syncPicks(picked, refreshed, {}, false)).toBe(picked);
+    expect(picked.picks?.runtimeMode).toBe("approval-required");
+  });
+
+  it("ignores a pick before there are pickers", () => {
+    expect(pickBy(emptyPickState, (p) => p)).toBe(emptyPickState);
   });
 });
 

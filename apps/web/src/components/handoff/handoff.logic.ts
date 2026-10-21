@@ -331,6 +331,36 @@ export function initialPicks(
   return { selection, runtimeMode, choice };
 }
 
+/** The dialog's pickers with what they were last made from, and whether the user has picked anything since. */
+export interface PickState {
+  picks: Picks | null;
+  seededFrom: T3LaunchOptions | undefined;
+  touched: boolean;
+}
+
+export const emptyPickState: PickState = { picks: null, seededFrom: undefined, touched: false };
+
+/**
+ * Makes the pickers from the options once they are there, and again when a refresh brings different ones, but only
+ * until the user has picked something: after that a refresh never moves a choice. The same state back when there is
+ * nothing to do, so the caller can tell.
+ */
+export function syncPicks(
+  state: PickState,
+  options: T3LaunchOptions | undefined,
+  subject: Parameters<typeof initialPicks>[1],
+  planWithMe: boolean,
+): PickState {
+  if (!options) return state;
+  if (state.picks && (options === state.seededFrom || state.touched)) return state;
+  return { ...state, picks: initialPicks(options, subject, planWithMe), seededFrom: options };
+}
+
+/** A pick by the user: the pickers change, and a refresh of the options stops moving them. */
+export function pickBy(state: PickState, change: (picks: Picks) => Picks): PickState {
+  return state.picks ? { ...state, picks: change(state.picks), touched: true } : state;
+}
+
 export function selectedRef(options: Pick<T3LaunchOptions, "refs">, choice: WorkspaceChoice): T3Ref | undefined {
   if (choice.ref) return options.refs.find((r) => r.name === choice.ref);
   return choice.mode === "new_worktree" ? defaultBaseRef(options.refs) : options.refs.find((r) => r.current);

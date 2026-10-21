@@ -794,6 +794,35 @@ describe("T3 thread launch", () => {
     expect(socket.closed).toBe(true);
   });
 
+  it("drops the early session when the token changed after it was opened", async () => {
+    const inner = t3Fetch();
+    const bearers: string[] = [];
+    const fake = fakeServices({ token: "old", projects: [acme], images: [] });
+    const rotating: FetchFn = (url, init) => {
+      if (url.endsWith("/api/auth/websocket-ticket")) {
+        bearers.push(String(new Headers(init?.headers).get("authorization")));
+        // Rotated after the early session read its token and before the context reads its own.
+        if (bearers.length === 1) fake.services.settings.update({ t3Token: "new" });
+      }
+      return inner(url, init);
+    };
+    const socket = fakeSocket((frame) =>
+      frame.tag === "server.getConfig"
+        ? success(frame.id, SERVER_CONFIG)
+        : success(frame.id, { isRepo: true, refs: [] }),
+    );
+    const t3 = createT3Integration({
+      t3Home: makeT3Home(),
+      bus: new EventBus(),
+      services: () => fake.services,
+      fetch: rotating,
+      openSocket: socket.open,
+    });
+    expect((await t3.launchOptions("task-1")).t3ProjectId).toBe("t3-p1");
+    expect(bearers).toEqual(["Bearer old", "Bearer new"]);
+    expect(socket.closed).toBe(true);
+  });
+
   it("returns a context error at once, without waiting for a session that hangs", async () => {
     // T3 refuses the shell while its RPC never answers: the refusal must not wait for the early config request.
     const { t3 } = setup(() => undefined, "tok", t3Fetch({ shellStatus: 401 }));

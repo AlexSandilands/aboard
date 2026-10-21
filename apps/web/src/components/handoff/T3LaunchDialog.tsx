@@ -31,8 +31,10 @@ import { useDialogs } from "~/state/ui";
 import {
   keepsCommandId,
   findModel,
-  initialPicks,
+  emptyPickState,
+  pickBy,
   selectionAfterPlanToggle,
+  syncPicks,
   toLaunchWorkspace,
   type Picks,
 } from "./handoff.logic";
@@ -326,13 +328,10 @@ function Composer({
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
   // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
   // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
-  const [picks, setPicks] = useState<Picks | null>(() => (options ? initialPicks(options, subject, planWithMe) : null));
-  const [seededFrom, setSeededFrom] = useState(options);
-  const [touched, setTouched] = useState(false);
-  if (options && (!picks || (options !== seededFrom && !touched))) {
-    setSeededFrom(options);
-    setPicks(initialPicks(options, subject, planWithMe));
-  }
+  const [pickState, setPickState] = useState(() => syncPicks(emptyPickState, options, subject, planWithMe));
+  const synced = syncPicks(pickState, options, subject, planWithMe);
+  if (synced !== pickState) setPickState(synced);
+  const picks = synced.picks;
   const ready = options && picks ? { options, ...picks } : null;
   // Kept or reset together: a retry with the same pair returns the same thread, images and all.
   const [launchIds, setLaunchIds] = useState(newLaunchIds);
@@ -357,33 +356,28 @@ function Composer({
             "Fix the PR in a new worktree, not in your checkout"
           : images.blocker;
 
-  const pick = (patch: Partial<Picks>) => {
-    setTouched(true);
-    setPicks((current) => current && { ...current, ...patch });
-  };
-  const pickModel = (next: T3ModelSelection | null) => {
-    setTouched(true);
-    changeSelection(next);
-  };
-  const changeSelection = (next: T3ModelSelection | null) =>
-    setPicks(
-      (current) =>
-        current && {
-          ...current,
-          selection: next,
-          runtimeMode: clampRuntimeMode(
-            current.runtimeMode,
-            options?.providers.find((p) => p.instanceId === next?.instanceId),
-          ),
-        },
-    );
+  const withModel = (current: Picks, next: T3ModelSelection | null): Picks => ({
+    ...current,
+    selection: next,
+    runtimeMode: clampRuntimeMode(
+      current.runtimeMode,
+      options?.providers.find((p) => p.instanceId === next?.instanceId),
+    ),
+  });
+  const pick = (patch: Partial<Picks>) =>
+    setPickState((state) => pickBy(state, (current) => ({ ...current, ...patch })));
+  const pickModel = (next: T3ModelSelection | null) =>
+    setPickState((state) => pickBy(state, (c) => withModel(c, next)));
 
   const togglePlan = () => {
     const next = !planWithMe;
     // Swap the generated prompt and the mode's model, but never discard the user's own choices.
     if (prompt === promptFor(planWithMe)) setPrompt(promptFor(next));
     // Still loading: the model is chosen from the options when they arrive, for the mode the dialog is then in.
-    if (ready) changeSelection(selectionAfterPlanToggle(ready.options, ready.selection, next));
+    if (ready) {
+      const nextModel = selectionAfterPlanToggle(ready.options, ready.selection, next);
+      setPickState((state) => (state.picks ? { ...state, picks: withModel(state.picks, nextModel) } : state));
+    }
     setPlanWithMe(next);
   };
 
