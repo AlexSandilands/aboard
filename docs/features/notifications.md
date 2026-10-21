@@ -82,8 +82,9 @@ where a pop-up belongs:
   `BrowserWindow.setOverlayIcon` applies it. Windows has no numeric badge API, hence the drawing. The shell
   accepts only a small PNG data URL (`parseDesktopBadge`).
 - **macOS and Linux:** `app.setBadgeCount`.
-- **Tray:** a second set of tray icons with a red dot (`tray-unread*.png`, rasterised by `scripts/build.ts`)
-  replaces the tray image while anything is unread, and the tooltip carries the description.
+- **Tray:** a second set of tray icons with a red dot (`tray[-white|-black]-unread*.png`, one per tray icon
+  style, rasterised by `scripts/build.ts`) replaces the tray image while anything is unread, and the tooltip
+  carries the description. The dot is ringed in the opposite colour to the glyph so it reads on any panel.
 - **Browser:** the same circle drawn on the tab's favicon; the original returns at zero. Not used in the
   desktop app.
 
