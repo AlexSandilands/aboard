@@ -1,105 +1,247 @@
-import type { AgentModel } from "@repo/contracts";
-import { useState } from "react";
+import type { AgentHarness, AgentModel, CliEffort } from "@repo/contracts";
+import { BrainIcon, CheckIcon, ChevronDownIcon, CornerDownLeftIcon, SearchIcon } from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
+import { DEFAULT_EFFORT, effortItems, effortOfValue } from "~/components/handoff/cliEffort.logic";
+import { ComposerControl } from "~/components/handoff/T3LaunchPickers";
+import { HarnessIcon } from "~/components/sessions/SessionParts";
 import {
-  Autocomplete,
-  AutocompleteEmpty,
-  AutocompleteInput,
-  AutocompleteItem,
-  AutocompleteList,
-  AutocompletePopup,
-} from "~/components/ui/autocomplete";
-import { commitModel, modelMatches, suggestedModels } from "./cliModelPicker.logic";
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "~/components/ui/menu";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import {
+  arrowTarget,
+  enterPick,
+  filterModels,
+  findSuggestion,
+  suggestedModels,
+  typedModel,
+} from "./cliModelPicker.logic";
+
+const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opacity-60" />;
 
 /**
- * A CLI's model on the Model tiers page: a text field that suggests the models the CLI lists (their name and what it
- * says about them). Anything else can be typed, e.g. `claude-opus-5-5` or `sonnet[1m]`; clearing it means the CLI's
- * default. Saved on picking a suggestion or leaving the field, as the other fields on the page are.
+ * A CLI's model on the Model tiers page, looking like T3 Code's model picker: a button with the CLI's mark and the
+ * model's name, opening a searchable list of the models the CLI lists. Anything else can be typed and used, e.g.
+ * `claude-opus-5-5` or `sonnet[1m]`. Saved as soon as a model is picked.
  */
 export function CliModelPicker({
+  harness,
+  cliName,
   value,
   models,
-  placeholder,
+  loading = false,
   label,
   onSave,
-  className,
 }: {
+  harness: AgentHarness;
+  cliName: string;
   /** The saved model, "" for none. */
   value: string;
-  /** What the scan found; empty while it runs or when it failed. */
+  /** What the scan found; empty while it runs, when it failed, or for a CLI that isn't scanned. */
   models: readonly AgentModel[];
-  placeholder: string;
+  /** The scan is still running, so an empty list doesn't mean the CLI lists nothing. */
+  loading?: boolean;
   label: string;
-  onSave: (next: string | null) => void;
-  className?: string;
+  onSave: (next: string) => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  const [seen, setSeen] = useState(value);
-  const [error, setError] = useState<string | null>(null);
-  // A save from elsewhere (another tab, the cleared model) replaces what is in the field.
-  if (seen !== value) {
-    setSeen(value);
-    setDraft(value);
-    setError(null);
-  }
-  const items = suggestedModels(models, value);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const listed = suggestedModels(models, value);
+  const shown = filterModels(listed, query);
+  const typed = typedModel(query, listed);
+  const current = findSuggestion(listed, value);
+  const onEnter = enterPick(query, listed);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const commit = (text: string) => {
-    const result = commitModel(text, value);
-    if (result.kind === "invalid") setError(result.error);
-    else {
-      setError(null);
-      if (result.kind === "save") onSave(result.value);
-    }
+  // Arrow keys move between the search and the rows, as the Autocomplete this replaced did.
+  const onArrow = (event: KeyboardEvent) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const rows = [...(listRef.current?.querySelectorAll<HTMLButtonElement>("button[data-option]") ?? [])];
+    const from = rows.findIndex((row) => row === document.activeElement);
+    const to = arrowTarget(from, rows.length, event.key);
+    event.preventDefault();
+    (to < 0 ? searchRef.current : rows[to])?.focus();
+  };
+
+  const pick = (next: string) => {
+    if (next !== value.trim()) onSave(next);
+    setOpen(false);
   };
 
   return (
-    <Autocomplete
-      items={items}
-      value={draft}
-      itemToStringValue={(model: AgentModel) => model.value}
-      filter={(model: AgentModel, query: string) => modelMatches(model, query, value)}
-      openOnInputClick
-      onValueChange={(text, details) => {
-        setDraft(text);
-        setError(null);
-        // A pick or the clear button is a finished edit; typing is saved when the field is left.
-        if (details.reason === "item-press" || details.reason === "clear-press") commit(text);
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setQuery("");
       }}
     >
-      <AutocompleteInput
-        size="sm"
-        showClear={draft !== ""}
-        className={className}
-        aria-label={label}
-        aria-invalid={error ? true : undefined}
-        title={error ?? undefined}
-        placeholder={placeholder}
-        onBlur={() => commit(draft)}
-        onKeyDown={(event) => {
-          // With a suggestion highlighted, Enter picks it; otherwise it finishes what was typed.
-          if (event.key === "Enter" && !event.defaultPrevented) commit(draft);
-        }}
-      />
-      {items.length > 0 ? (
-        <AutocompletePopup>
-          <AutocompleteEmpty>No listed model matches: it is used as typed.</AutocompleteEmpty>
-          <AutocompleteList>
-            {(model: AgentModel) => (
-              <AutocompleteItem key={model.value} value={model} className="flex-col items-start gap-0">
-                <span className="flex w-full min-w-0 items-baseline gap-2">
-                  <span className="truncate">{model.label ?? model.value}</span>
-                  {model.label ? (
-                    <span className="truncate font-mono text-xs text-muted-foreground">{model.value}</span>
-                  ) : null}
+      <PopoverTrigger render={<ComposerControl className="max-w-64" aria-label={label} />}>
+        <HarnessIcon harness={harness} className="size-4" />
+        <span className={current ? "min-w-0 truncate" : "min-w-0 truncate text-muted-foreground"}>
+          {current ? (current.label ?? current.value) : "Choose a model"}
+        </span>
+        <Chevron />
+      </PopoverTrigger>
+      <PopoverPopup align="start" padding="none" className="before:hidden">
+        <div className="flex max-h-86.5 w-screen max-w-90 flex-col overflow-hidden bg-muted/40">
+          <label className="mx-2 mt-2 flex items-center gap-2 border-b border-border px-1 pb-2 text-sm focus-within:border-primary">
+            <SearchIcon aria-hidden className="size-4 text-muted-foreground" />
+            <input
+              autoFocus
+              ref={searchRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return onArrow(event);
+                event.preventDefault();
+                if (onEnter) pick(onEnter);
+              }}
+              placeholder={`Search ${cliName} models or type one...`}
+              aria-invalid={typed?.kind === "invalid" ? true : undefined}
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
+            {shown.map((model) => (
+              <ModelRow
+                key={model.value}
+                harness={harness}
+                cliName={cliName}
+                model={model}
+                selected={model.value === value.trim()}
+                onEnter={model.value === onEnter}
+                onKeyDown={onArrow}
+                onPick={() => pick(model.value)}
+              />
+            ))}
+            {typed?.kind === "use" ? (
+              <button
+                type="button"
+                data-option
+                onKeyDown={onArrow}
+                onClick={() => pick(typed.value)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-accent focus-visible:bg-accent"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium leading-snug">
+                    Use <span className="font-mono">{typed.value}</span>
+                  </span>
+                  <span className="mt-1 block text-xs leading-snug text-muted-foreground/70">
+                    Passed to {cliName} as typed
+                  </span>
                 </span>
-                {model.description ? (
-                  <span className="w-full truncate text-xs text-muted-foreground">{model.description}</span>
-                ) : null}
-              </AutocompleteItem>
-            )}
-          </AutocompleteList>
-        </AutocompletePopup>
-      ) : null}
-    </Autocomplete>
+                {onEnter === typed.value ? <EnterHint /> : null}
+              </button>
+            ) : null}
+            {typed?.kind === "invalid" ? (
+              <p className="px-2 py-3 text-center text-xs text-destructive-foreground">{typed.error}</p>
+            ) : null}
+            {shown.length === 0 && !typed ? (
+              <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                {loading && listed.length === 0
+                  ? "Loading models..."
+                  : listed.length === 0
+                    ? "No models listed. Type one to use it."
+                    : "No models found"}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
+/** Marks the row Enter in the search picks. */
+const EnterHint = () => <CornerDownLeftIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
+
+function ModelRow({
+  harness,
+  cliName,
+  model,
+  selected,
+  onEnter,
+  onKeyDown,
+  onPick,
+}: {
+  harness: AgentHarness;
+  cliName: string;
+  model: AgentModel;
+  selected: boolean;
+  /** Enter in the search picks this row. */
+  onEnter: boolean;
+  onKeyDown: (event: KeyboardEvent) => void;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-option
+      onKeyDown={onKeyDown}
+      onClick={onPick}
+      aria-current={selected || undefined}
+      title={model.description ?? undefined}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-accent focus-visible:bg-accent aria-current:bg-accent/60"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-1.5 text-xs font-medium leading-snug">
+          <span className="truncate">{model.label ?? model.value}</span>
+          {model.label ? (
+            <span className="truncate font-mono text-[10px] font-normal text-muted-foreground/70">{model.value}</span>
+          ) : null}
+        </span>
+        <span className="mt-1 flex min-w-0 items-center gap-1 text-xs leading-snug text-muted-foreground/70">
+          <HarnessIcon harness={harness} className="size-3" />
+          <span className="truncate">{model.description ?? cliName}</span>
+        </span>
+      </span>
+      {onEnter ? <EnterHint /> : null}
+      {selected ? <CheckIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" /> : null}
+    </button>
+  );
+}
+
+/** The effort beside a CLI's model, as T3 Code's effort menu: the model's levels, or the CLI's own default. */
+export function CliEffortMenu({
+  value,
+  levels,
+  label,
+  onChange,
+}: {
+  value: CliEffort | null;
+  levels: readonly CliEffort[];
+  label: string;
+  onChange: (effort: CliEffort | null) => void;
+}) {
+  const items = effortItems(levels, value);
+  const selected = value ?? DEFAULT_EFFORT;
+  return (
+    <Menu>
+      <MenuTrigger render={<ComposerControl aria-label={label} />}>
+        <BrainIcon />
+        <span>{items.find((item) => item.value === selected)?.label}</span>
+        <Chevron />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuGroup>
+          <MenuGroupLabel>Effort</MenuGroupLabel>
+          <MenuRadioGroup value={selected} onValueChange={(next: string) => onChange(effortOfValue(next))}>
+            {items.map((item) => (
+              <MenuRadioItem key={item.value} value={item.value}>
+                {item.label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
   );
 }

@@ -311,11 +311,12 @@ Copilot CLI support is unit-tested only.
 ## Choosing a CLI's model
 
 **Settings → Model tiers** picks each tier's (and each custom model's) Claude Code and Copilot CLI model from a list
-the CLI itself gives, so a model isn't typed from memory. The field is a text field with suggestions
-(`CliModelPicker`, on `ui/autocomplete`): a suggestion shows its name, its value and what the CLI says about it, and
-anything else can be typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the scan doesn't
-list still shows, and clearing the field means the CLI's default. It is saved on picking a suggestion, on the clear
-button, and on leaving the field.
+the CLI itself gives, so a model isn't typed from memory. The row looks like the T3 Code one above it, on the same
+`ComposerControl`: a button with the CLI's mark and the model's name (`CliModelPicker`) opens a searchable list of
+the models, each with its name, its value and what the CLI says about it. Search text the list doesn't have can be
+used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the scan doesn't list still
+shows. Beside it are the effort menu (`CliEffortMenu`) and a button that clears the model, which means the CLI's
+default. A model is saved as soon as it is picked.
 
 `GET /api/agent-models` (`integrations/agentModels.ts`, kept apart from `/api/agent-integrations` so that check stays
 fast) asks each CLI, and only the Model tiers page does, once a CLI's field is shown (`useAgentModels`):
@@ -354,7 +355,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
 | `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
 | `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
-| `apps/web/src/components/settings/CliModelPicker.tsx` | The model field with suggestions (`cliModelPicker.logic.ts` is tested); the effort select is `handoff/CliEffortPicker.tsx` |
+| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page (`cliModelPicker.logic.ts` is tested); the launch dialogs' effort select is `handoff/CliEffortPicker.tsx` |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
