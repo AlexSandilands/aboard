@@ -600,6 +600,60 @@ const showcase: Scenario = (s, opts) => {
     true,
   );
 
+  // An epic for the README demo (scripts/demo): its blocker is In Progress with its last two steps open, so they
+  // can tick off live; finishing it frees the Autopilot-flagged task it blocks, which leads a chain for Shift.
+  const checkout = s.tasks.create({
+    projectId: shop.id,
+    title: "One-page checkout",
+    kind: "epic",
+    description: "Replace the three-step checkout with a single page.",
+    actor: AGENT,
+  }).id;
+  const autocomplete = addTask(s, shop.id, {
+    title: "Address autocomplete",
+    status: "done",
+    labels: ["ui"],
+    epicId: checkout,
+  });
+  addTask(s, shop.id, {
+    title: "Merge shipping and billing steps",
+    status: "review",
+    labels: ["ui"],
+    epicId: checkout,
+    plan: steps("Merge", ["One form for both addresses", "Same as shipping toggle"], true),
+  });
+  const paymentForm = addTask(s, shop.id, {
+    title: "Inline payment form",
+    status: "in_progress",
+    labels: ["ui"],
+    epicId: checkout,
+    plan: {
+      phases: [
+        {
+          title: "Form",
+          steps: [
+            { title: "Card fields in an iframe", status: "done" },
+            { title: "Inline validation", status: "done" },
+            { title: "3-D Secure challenge", status: "in_progress" },
+            { title: "Error states", status: "todo" },
+          ],
+        },
+      ],
+    },
+  });
+  const savedCards = addTask(s, shop.id, {
+    title: "Save cards for next time",
+    status: "planned",
+    labels: ["backend"],
+    epicId: checkout,
+    plan: steps("Saved cards", ["Vault the card token", "Pick a saved card at checkout", "Remove a card"]),
+  });
+  s.tasks.update(savedCards, { autopilot: true }, "user");
+  const reorder = addTask(s, shop.id, { title: "One-click reorder", status: "backlog", epicId: checkout });
+  s.tasks.update(paymentForm, { addBlockedBy: [autocomplete] }, AGENT);
+  s.tasks.update(savedCards, { addBlockedBy: [paymentForm] }, AGENT);
+  s.tasks.update(reorder, { addBlockedBy: [savedCards] }, AGENT);
+
   const sitemap = done("Add a sitemap", ["seo"]);
   done("Lazy-load product reviews", ["perf"]);
   const dup = addTask(s, shop.id, { title: "Sitemap for SEO", status: "backlog" });

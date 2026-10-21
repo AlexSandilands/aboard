@@ -168,6 +168,22 @@ describe("seed scenarios", () => {
     expect(details.some((t) => t.reviews.some((r) => r.findings.some((f) => f.severity === "blocking")))).toBe(true);
   });
 
+  it("showcase has the demo's epic: a blocker in progress freeing an Autopilot-flagged planned task", () => {
+    const { tasks } = seeded("showcase");
+    const epic = tasks.find((t) => t.kind === "epic" && t.title === "One-page checkout")!;
+    const children = tasks.filter((t) => t.parent?.id === epic.id);
+    expect(new Set(children.map((t) => t.status))).toEqual(
+      new Set(["backlog", "planned", "in_progress", "review", "done"]),
+    );
+    const blocker = children.find((t) => t.status === "in_progress")!;
+    expect(blocker.stepStatuses.filter((s) => s !== "done")).toHaveLength(2);
+    const freed = children.find((t) => t.status === "planned")!;
+    expect(freed).toMatchObject({ autopilot: true, blocked: true });
+    expect(freed.blockedBy.map((b) => b.id)).toEqual([blocker.id]);
+    expect(freed.blocks).toHaveLength(1);
+    expect(blocker.blockedBy).toHaveLength(1);
+  });
+
   it("showcase has suggested changes waiting for the user, and one already rejected", () => {
     const { suggestions } = seeded("showcase");
     expect(suggestions.open).toBe(2);
