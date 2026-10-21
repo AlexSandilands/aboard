@@ -5,6 +5,7 @@ import { BRAND, brandEnv, readDesktopSandbox, type DesktopBadge } from "@repo/co
 import {
   BrowserWindow,
   Menu,
+  type MenuItem,
   Notification,
   Tray,
   app,
@@ -15,7 +16,8 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { appIcon, trayIcon } from "./icon.ts";
+import { TRAY_ICON_STYLES, readPrefs, writePrefs, type TrayIconStyle } from "./desktopPrefs.ts";
+import { appIcon, menuIcon, trayIcon } from "./icon.ts";
 import {
   NOTIFICATION_CLICK_CHANNEL,
   NOTIFY_CHANNEL,
@@ -24,7 +26,7 @@ import {
   SET_THEME_CHANNEL,
 } from "./ipc.ts";
 import { loginItem } from "./loginItem.ts";
-import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
+import { ServerStartError, connectServer, type BoardServer, type ServerOptions } from "./server.ts";
 import {
   allowSubFrameNavigation,
   decideNavigation,
@@ -70,6 +72,12 @@ let server: BoardServer | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+/** Whether this shell runs the server itself (not attached to `pnpm dev`'s), so it may restart it. */
+let ownsServer = false;
+/** The server restart in progress, if any; `server` is null meanwhile. */
+let restart: Promise<void> | null = null;
+/** What the shell remembers about itself, read once the profile path is final. */
+let prefs = readPrefs(app.getPath("userData"));
 /** The unread count the page last reported, kept to restyle a window created later. */
 let badge: DesktopBadge = { count: 0, description: "", overlay: null };
 /** Shown notifications, held until they close: Electron drops the click handler of one that is garbage collected. */
@@ -168,12 +176,13 @@ function applyBadge(next: DesktopBadge): void {
   badge = next;
   if (window) applyWindowBadge(window);
   if (process.platform !== "win32") app.setBadgeCount(next.count);
-  tray?.setImage(trayIcon(next.count > 0));
+  tray?.setImage(trayIcon(prefs.trayIcon, next.count > 0));
   tray?.setToolTip(next.count > 0 ? `${productName}: ${next.description}` : productName);
 }
 
 function showWindow(): void {
-  if (!server) {
+  // Before the first start there is nothing to show yet; during a restart the window exists and shows the board.
+  if (!server && !window) {
     showRequested = true;
     return;
   }
@@ -186,38 +195,95 @@ function showWindow(): void {
 /** Starts hidden, so a start at login stays in the tray. */
 const startAtLogin = loginItem([HIDDEN_ARG]);
 
+const TRAY_ICON_LABELS: Record<TrayIconStyle, string> = { colour: "Colour", white: "White", black: "Black" };
+
+/** Whether the tray menu is dark; Windows has a separate setting for its shell, the board's theme choice must not sway it. */
+function menuIsDark(): boolean {
+  return process.platform === "win32"
+    ? nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
+    : nativeTheme.shouldUseDarkColors;
+}
+
 function buildTrayMenu(): Menu {
+  const dark = menuIsDark();
   return Menu.buildFromTemplate([
-    { label: `Open ${productName}`, click: showWindow },
+    { label: `Open ${productName}`, icon: menuIcon("app-window", dark), click: showWindow },
     {
       label: "Copy MCP URL",
+      icon: menuIcon("copy", dark),
       enabled: server !== null,
       // The API server's URL even in dev, where the window shows the Vite server instead.
       click: () => server && clipboard.writeText(withToken(`${server.url}/mcp`, "query")),
     },
     { type: "separator" },
     {
+      label: "Tray icon",
+      icon: menuIcon("palette", dark),
+      submenu: TRAY_ICON_STYLES.map((style) => ({
+        label: TRAY_ICON_LABELS[style],
+        type: "radio" as const,
+        checked: prefs.trayIcon === style,
+        click: () => setTrayIconStyle(style),
+      })),
+    },
+    {
       label: "Start at login",
-      type: "checkbox",
+      // Qt menus (KDE) put a checkbox in a column of its own, left of the icons, so on Linux the state is an icon.
+      ...(process.platform === "linux"
+        ? {
+            icon: menuIcon(startAtLogin.get() ? "square-check" : "square", dark),
+            click: () => {
+              startAtLogin.set(!startAtLogin.get());
+              refreshTrayMenu();
+            },
+          }
+        : {
+            type: "checkbox" as const,
+            checked: startAtLogin.get(),
+            click: (item: MenuItem) => startAtLogin.set(item.checked),
+          }),
       // A dev build would register the bare electron binary.
       enabled: app.isPackaged,
-      checked: startAtLogin.get(),
-      click: (item) => startAtLogin.set(item.checked),
     },
     { type: "separator" },
-    { label: "Quit", click: () => app.quit() },
+    {
+      label: restart ? "Restarting server…" : "Restart server",
+      icon: menuIcon("rotate-cw", dark),
+      // An attached server (`pnpm dev`) isn't ours to stop.
+      enabled: ownsServer && !restart,
+      click: restartServer,
+    },
+    { type: "separator" },
+    { label: "Quit", icon: menuIcon("power", dark), click: () => app.quit() },
   ]);
 }
 
+function refreshTrayMenu(): void {
+  tray?.setContextMenu(buildTrayMenu());
+}
+
+function setTrayIconStyle(style: TrayIconStyle): void {
+  prefs = { ...prefs, trayIcon: style };
+  try {
+    writePrefs(app.getPath("userData"), prefs);
+  } catch (error) {
+    // The choice still applies until the shell quits.
+    console.error(`[${BRAND.id}] could not save the tray icon choice:`, error);
+  }
+  tray?.setImage(trayIcon(style, badge.count > 0));
+  refreshTrayMenu();
+}
+
 function createTray(): Tray {
-  const t = new Tray(trayIcon());
+  const t = new Tray(trayIcon(prefs.trayIcon, badge.count > 0));
   t.setToolTip(productName);
   t.setContextMenu(buildTrayMenu());
   t.on("click", showWindow);
   return t;
 }
 
-async function reportStartFailure(error: unknown): Promise<void> {
+/** Resolves to the index of the button pressed: 0 is Quit. */
+async function reportStartFailure(error: unknown): Promise<number> {
   const logs = error instanceof ServerStartError ? error.logs : String(error);
   const { response } = await dialog.showMessageBox({
     type: "error",
@@ -228,28 +294,63 @@ async function reportStartFailure(error: unknown): Promise<void> {
     defaultId: 0,
   });
   if (response === 1) await shell.openPath(app.getPath("logs"));
+  return response;
+}
+
+const serverOptions: ServerOptions = {
+  port,
+  bundle,
+  webDist,
+  attachOnly: devUrl !== null,
+  onUnexpectedExit(details) {
+    dialog.showErrorBox(`${productName} server stopped`, details);
+    app.exit(1);
+  },
+};
+
+/** Stops the server we run and starts it again, then reloads the window onto the new one. */
+function restartServer(): void {
+  if (!ownsServer || restart) return;
+  const old = server;
+  // The window keeps showing the board, which reconnects by itself; until then nothing is served.
+  server = null;
+  restart = (async () => {
+    try {
+      await old?.stop();
+      const next = await connectServer(serverOptions);
+      // Attaching means something still answers on the port (the old server not gone yet); there is nothing of ours to run.
+      if (!next.owned && !quitting) {
+        throw new ServerStartError(`The old server is still answering on port ${port}; it did not restart.`, "");
+      }
+      if (quitting) {
+        await next.stop();
+        return;
+      }
+      server = next;
+      void window?.loadURL(withToken(boardUrl(), "hash"));
+    } catch (error) {
+      // Quitting mid-restart isn't a failure to report. Otherwise the tray stays, so Restart server can try again.
+      if (!quitting && (await reportStartFailure(error)) === 0) app.quit();
+    } finally {
+      restart = null;
+      refreshTrayMenu();
+    }
+  })();
+  refreshTrayMenu();
 }
 
 async function start(): Promise<void> {
   tray = createTray();
   try {
-    server = await connectServer({
-      port,
-      bundle,
-      webDist,
-      attachOnly: devUrl !== null,
-      onUnexpectedExit(details) {
-        dialog.showErrorBox(`${productName} server stopped`, details);
-        app.exit(1);
-      },
-    });
+    server = await connectServer(serverOptions);
+    ownsServer = server.owned;
   } catch (error) {
     // Quitting from the tray mid-startup kills the server; that isn't a failure to report.
     if (!quitting) await reportStartFailure(error);
     app.exit(quitting ? 0 : 1);
     return;
   }
-  tray.setContextMenu(buildTrayMenu());
+  refreshTrayMenu();
   window = createWindow(showRequested || !process.argv.includes(HIDDEN_ARG));
 }
 
@@ -298,9 +399,18 @@ if (app.requestSingleInstanceLock()) {
   nativeTheme.on("updated", () => {
     // Hidden windows catch up on "show" (see createWindow).
     if (window?.isVisible()) syncTitleBar(window, nativeTheme.shouldUseDarkColors, pageBackground);
+    // The menu's icons are drawn for a light or a dark menu.
+    refreshTrayMenu();
   });
   app.on("before-quit", (event) => {
     quitting = true;
+    // A restart in flight stops the server it started once it sees we're quitting; wait for that.
+    if (restart) {
+      event.preventDefault();
+      window?.hide();
+      void restart.finally(() => app.quit());
+      return;
+    }
     if (!server?.owned) return;
     const owned = server;
     server = null;

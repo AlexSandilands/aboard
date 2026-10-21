@@ -38,10 +38,29 @@ An unexpected exit after startup shows an error and quits the app.
 
 - Closing the window hides it to the tray, so agents keep their MCP endpoint. **Quit** in the tray stops
   an owned server first.
-- The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Start at login** (packaged only;
-  starts hidden), Quit. Electron's login items only exist on Windows and macOS, so on Linux the item writes
+- The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Tray icon**, **Start at login**
+  (packaged only; starts hidden), **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
+  plain item whose icon is a ticked or empty square, because Qt menus put a real checkbox in a column left of the
+  icons; elsewhere it is a checkbox.
+  Electron's login items only exist on Windows and macOS, so on Linux the item writes
   (or removes) a desktop entry in the XDG autostart folder, `~/.config/autostart/<id>.desktop`
   (`apps/desktop/src/loginItem.ts`). It runs the AppImage file itself when started from one.
+- **Menu icons** are Lucide outlines, inlined in `scripts/build.ts` and rendered to `dist/icons/menu/` in a
+  light set (dark ink) and a dark set. `buildTrayMenu` picks the set from `nativeTheme.shouldUseDarkColors`
+  (on Windows, `shouldUseDarkColorsForSystemIntegratedUI`) and rebuilds the menu on `nativeTheme` "updated".
+  On Linux they travel over dbusmenu: KDE shows them, but a GNOME AppIndicator extension may not, and the
+  items work without them. On Linux the set follows the board's light/dark choice too, since that sets
+  `themeSource`, so it can differ from the panel's.
+- **Tray icon** is a radio submenu: Colour (the default, the app icon), White and Black (the "A" and card bar
+  as one solid glyph, `apps/desktop/assets/a-card-mono.svg`, recoloured at build time), so the icon can match
+  a panel that draws monochrome icons, like KDE's. There is no "Auto": a shell can't tell what the panel
+  looks like. The choice applies at once and is kept in `prefs.json` in the shell's `userData` folder
+  (`desktopPrefs.ts`), not in the board's settings. A missing or corrupt file means Colour.
+- **Restart server** stops the server the shell runs, starts it again and reloads the window. It is disabled
+  when the shell only attached to one it didn't start (`pnpm dev`, or a sandbox shell). While it runs the
+  item reads "Restarting server…" and is disabled. If the new server doesn't start, the same dialog as at
+  startup shows (Quit quits, Open log folder leaves the tray running) and the item can be tried again.
+  Quitting mid-restart waits for it, then stops what it started.
 - A single-instance lock brings the existing window forward. The dev app is named `<Name> Dev`, so its
   data folders and lock never clash with an installed copy.
 - Navigation: same-origin URLs load in the window; `http`, `https`, `mailto` and `t3code` links open in
@@ -53,7 +72,7 @@ The page asks the shell, through `window.desktopBridge`, to show an OS notificat
 unread count (`setBadge`); clicks come back through `onNotificationClick`. The main process checks the
 sender's origin and validates both payloads (`parseDesktopNotification`, `parseDesktopBadge`) before acting.
 On Windows the taskbar count is an overlay image the page draws; elsewhere it is `app.setBadgeCount`. The tray
-icon swaps to a red-dot variant while anything is unread. What produces notifications and when they pop up is
+icon swaps to a red-dot variant of the chosen style while anything is unread. What produces notifications and when they pop up is
 in [notifications](notifications.md).
 
 ### Title bar
@@ -74,7 +93,7 @@ The window is frameless with Windows' native controls painted over the page (`ti
 ### Building and packaging
 
 - `scripts/build.ts`: esbuild bundles `src/main.ts` (ESM) and `src/preload.ts` (CJS, since the preload is
-  sandboxed), and rasterises the favicon into window and tray icons.
+  sandboxed), and rasterises the favicon into window and tray icons, the mono logo into the white and black ones, and the menu icons.
 - `scripts/launch.ts`: builds, then runs Electron. `--dev` points the window at Vite (5317).
 - `scripts/package.ts`: electron-builder, into `apps/desktop/release/`, for the OS it runs on: the NSIS
   installer on Windows; AppImage, .deb, .rpm (needs rpmbuild) and a tarball on Linux. Name targets to build
@@ -123,6 +142,8 @@ home; `--desktop` waits a few seconds and reports the log if the shell exits at 
 | File                                  | What it does                                                     |
 | ------------------------------------- | ---------------------------------------------------------------- |
 | `apps/desktop/src/main.ts`            | Window, tray, single instance, quit, theme IPC                   |
+| `apps/desktop/src/desktopPrefs.ts`    | `prefs.json`: the tray icon style, read and written              |
+| `apps/desktop/src/icon.ts`            | Window, tray and menu icon images                                |
 | `apps/desktop/src/server.ts`          | `connectServer`: probe, attach, spawn, stop                      |
 | `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail        |
 | `apps/desktop/src/titleBar.ts`        | Title bar overlay options and sync                               |
