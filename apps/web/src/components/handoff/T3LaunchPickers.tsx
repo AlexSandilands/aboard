@@ -136,7 +136,10 @@ export function ModelPicker({
         }
       }}
     >
-      <PopoverTrigger render={<ComposerControl className="max-w-56" aria-label="Model" />}>
+      {/* The one toolbar control that may shrink, so the submit arrow is never pushed past the composer's edge. */}
+      <PopoverTrigger
+        render={<ComposerControl className="max-w-80 shrink" aria-label="Model" title={current?.model.name} />}
+      >
         {current ? <ProviderIcon driver={current.provider.driver} /> : null}
         <span className="min-w-0 truncate">{current?.model.name ?? "Choose a model"}</span>
         <Chevron />

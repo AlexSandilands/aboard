@@ -297,27 +297,16 @@ export function useAgentIntegrations() {
  * The models each CLI lists, for the pickers on the Model tiers page. The server asks the CLIs (a few seconds) and
  * keeps the answer for ten minutes, so this runs only where it is `enabled`; Rescan asks again.
  */
-export function useAgentModels(enabled: boolean) {
-  return useQuery({
-    queryKey: queryKeys.agentModels,
-    queryFn: ({ signal }) => api<AgentModels>("/api/agent-models", { signal }),
-    // A scan that failed comes back as a reply with an error; the server doesn't keep it, so neither does this.
-    staleTime: (query) => (query.state.data?.harnesses.some((h) => h.error) ? 0 : 10 * 60_000),
-    enabled,
-  });
-}
+const agentModelsQuery = {
+  queryKey: queryKeys.agentModels,
+  queryFn: ({ signal }: { signal: AbortSignal }) => api<AgentModels>("/api/agent-models", { signal }),
+  // A scan that failed comes back as a reply with an error; the server doesn't keep it, so neither does this.
+  staleTime: (query: { state: { data?: AgentModels } }) =>
+    query.state.data?.harnesses.some((h) => h.error) ? 0 : 10 * 60_000,
+};
 
-/** CLIs, branches and the tier's models for the new-session dialog. Fetched fresh each time it opens. */
-export function useSessionLaunchOptions(taskId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.sessionLaunchOptions(taskId ?? ""),
-    queryFn: ({ signal }) =>
-      api<SessionLaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/session-launch-options`, { signal }),
-    enabled: !!taskId,
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-  });
+export function useAgentModels(enabled: boolean) {
+  return useQuery({ ...agentModelsQuery, enabled });
 }
 
 /** What "Fix in →" starts a session with: the PR's branch and Fix PRs' prompt for its problems now. Read each time. */
@@ -360,30 +349,93 @@ export function useT3ProjectCandidates(enabled: boolean) {
   });
 }
 
-/** Models, refs and defaults for starting a T3 Code thread. Fetched fresh each time the dialog opens. */
+/**
+ * How long the launch options of a closed dialog (or a prefetch nobody opened) stay in the cache. Reopening inside it
+ * shows them at once while a refresh runs; choices the user has made in the dialog are never moved by it.
+ */
+const LAUNCH_OPTIONS_GC_MS = 30_000;
+/** Opening the hand-off menu again within this long doesn't prefetch the launch options again. */
+const LAUNCH_OPTIONS_PREFETCH_STALE_MS = 15_000;
+
+const t3LaunchOptionsQuery = (taskId: string) => ({
+  queryKey: queryKeys.t3LaunchOptions(taskId),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/t3-launch-options`, { signal }),
+  gcTime: LAUNCH_OPTIONS_GC_MS,
+  retry: false,
+});
+
+const projectT3LaunchOptionsQuery = (projectId: string) => ({
+  queryKey: queryKeys.projectT3LaunchOptions(projectId),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api<T3LaunchOptions>(`/api/projects/${encodeURIComponent(projectId)}/t3-launch-options`, { signal }),
+  gcTime: LAUNCH_OPTIONS_GC_MS,
+  retry: false,
+});
+
+/**
+ * Models, refs and defaults for starting a T3 Code thread. Cached briefly (see prefetchT3LaunchOptions) but always
+ * refreshed when the dialog opens, since T3 can change between two opens.
+ */
 export function useT3LaunchOptions(taskId: string | null) {
   return useQuery({
-    queryKey: queryKeys.t3LaunchOptions(taskId ?? ""),
-    queryFn: ({ signal }) =>
-      api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId!)}/t3-launch-options`, { signal }),
+    ...t3LaunchOptionsQuery(taskId ?? ""),
     enabled: !!taskId,
     staleTime: 0,
-    gcTime: 0,
-    retry: false,
   });
 }
 
 /** The same for a thread about a whole project (Suggest epics). */
 export function useProjectT3LaunchOptions(projectId: string | null) {
   return useQuery({
-    queryKey: queryKeys.projectT3LaunchOptions(projectId ?? ""),
-    queryFn: ({ signal }) =>
-      api<T3LaunchOptions>(`/api/projects/${encodeURIComponent(projectId!)}/t3-launch-options`, { signal }),
+    ...projectT3LaunchOptionsQuery(projectId ?? ""),
     enabled: !!projectId,
     staleTime: 0,
-    gcTime: 0,
-    retry: false,
   });
+}
+
+const sessionLaunchOptionsQuery = (taskId: string) => ({
+  queryKey: queryKeys.sessionLaunchOptions(taskId),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api<SessionLaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/session-launch-options`, { signal }),
+  gcTime: LAUNCH_OPTIONS_GC_MS,
+  retry: false,
+});
+
+/**
+ * CLIs, branches and the tier's models for the new-session dialog. Cached briefly like T3's (see
+ * usePrefetchSessionLaunchOptions) but always refreshed when the dialog opens.
+ */
+export function useSessionLaunchOptions(taskId: string | null) {
+  return useQuery({ ...sessionLaunchOptionsQuery(taskId ?? ""), enabled: !!taskId, staleTime: 0 });
+}
+
+/**
+ * Starts loading the launch options of a dialog the user is about to open (the hand-off menu just opened), so they
+ * are there, or nearly, when it does.
+ */
+export function usePrefetchT3LaunchOptions() {
+  const queryClient = useQueryClient();
+  return (target: { taskId: string } | { projectId: string }) => {
+    const staleTime = LAUNCH_OPTIONS_PREFETCH_STALE_MS;
+    if ("taskId" in target) void queryClient.prefetchQuery({ ...t3LaunchOptionsQuery(target.taskId), staleTime });
+    else void queryClient.prefetchQuery({ ...projectT3LaunchOptionsQuery(target.projectId), staleTime });
+  };
+}
+
+/**
+ * The same for the Claude Code / Copilot session dialog: its options, and the CLIs' model list its picker offers (a
+ * first scan starts the CLIs, which takes seconds).
+ */
+export function usePrefetchSessionLaunchOptions() {
+  const queryClient = useQueryClient();
+  return (taskId: string) => {
+    void queryClient.prefetchQuery({
+      ...sessionLaunchOptionsQuery(taskId),
+      staleTime: LAUNCH_OPTIONS_PREFETCH_STALE_MS,
+    });
+    void queryClient.prefetchQuery(agentModelsQuery);
+  };
 }
 
 /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */

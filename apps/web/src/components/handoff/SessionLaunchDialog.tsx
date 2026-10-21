@@ -1,5 +1,5 @@
 import {
-  CLI_EFFORTS,
+  modelEffortLevels,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
@@ -9,35 +9,36 @@ import {
   type StartSessionResult,
   type TaskSummary,
 } from "@repo/contracts";
-import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
+import { ArrowUpIcon, LightbulbIcon } from "lucide-react";
 import { useState } from "react";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { CliEffortMenu, CliModelPicker } from "~/components/settings/CliModelPicker";
+import { findSuggestion } from "~/components/settings/cliModelPicker.logic";
 import { copyToClipboard } from "~/components/task/InlineInput";
-import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
-import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
-import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/state/queries";
+import { useAgentModels, useBoard, usePrFix, useSessionLaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
-import { CliEffortPicker } from "./CliEffortPicker";
-import { initialEffort } from "./cliEffort.logic";
+import { effortAfterModelChange } from "./cliEffort.logic";
 import { copyFixPrompt } from "./FixPrMenu";
-import { copyHandoffPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
+import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
+  emptySessionPickState,
   harnessLabel,
-  initialModel,
-  initialWhere,
   modelError,
+  pickSessionBy,
+  picksAfterPlanToggle,
   startedDescription,
+  syncSessionPicks,
   toSessionWorkspace,
-  type SessionWhere,
+  type SessionPicks,
 } from "./sessionLaunch.logic";
 
 const WHERE_ITEMS = [
@@ -56,7 +57,7 @@ export function SessionLaunchDialog() {
   const task = useBoard().data?.tasks.find((t) => t.id === target?.taskId);
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-220">
         {task && target ? (
           <SessionLaunch
             key={`${task.id}:${target.harness}:${target.fixLinkId ?? ""}`}
@@ -84,9 +85,6 @@ function SessionLaunch({
 }) {
   const options = useSessionLaunchOptions(task.id);
   const fix = usePrFix(fixLinkId);
-  const modelSettings = useSettings().data;
-  const pending = options.isPending || (!!fixLinkId && fix.isPending);
-  const error = options.error ?? (fixLinkId ? fix.error : null);
   return (
     <>
       <DialogHeader>
@@ -99,44 +97,28 @@ function SessionLaunch({
         </DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
-        {pending ? (
+        {/* A fix's prompt is the PR's problems, so its composer waits for them; a task's prompt is there at once. */}
+        {fixLinkId && fix.isPending ? (
           <Skeleton shape="card" className="h-40 w-full" />
-        ) : error || !options.data ? (
-          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
-            <p className="flex items-start gap-2">
-              <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-              <span>{error?.message ?? "Couldn't read the launch options"}</span>
-            </p>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  void options.refetch();
-                  if (fixLinkId) void fix.refetch();
-                }}
-              >
-                Retry
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  // A fix copies the fix prompt (read again, and its error shown), never the task's work prompt.
-                  fixLinkId
-                    ? void copyFixPrompt(fixLinkId)
-                    : copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings)
-                }
-              >
-                Copy prompt instead
-              </Button>
-            </div>
-          </div>
+        ) : fixLinkId && !fix.data ? (
+          <LaunchUnavailable
+            message={fix.error?.message ?? "Couldn't read the PR's problems"}
+            onRetry={() => void fix.refetch()}
+            // Read again, with its error shown; never the task's work prompt.
+            onCopy={() => void copyFixPrompt(fixLinkId)}
+          />
         ) : (
+          // One element while the options load, fail and arrive, so what is typed meanwhile is kept.
           <Composer
             task={task}
             harness={harness}
             options={options.data}
+            // Not once there are options: a failed background refresh must not make the dialog look broken.
+            failure={
+              !options.data && options.isError && !options.isFetching
+                ? { message: options.error.message, onRetry: () => void options.refetch() }
+                : null
+            }
             fix={fixLinkId ? (fix.data ?? null) : null}
             onDone={onDone}
           />
@@ -201,12 +183,16 @@ function Composer({
   task,
   harness,
   options,
+  failure,
   fix,
   onDone,
 }: {
   task: TaskSummary;
   harness: AgentHarness;
-  options: SessionLaunchOptions;
+  /** Undefined while they load: the prompt can be edited meanwhile, the rest waits for them. */
+  options: SessionLaunchOptions | undefined;
+  /** Set when loading them failed: shown under the composer, which stays so the prompt isn't lost. */
+  failure: { message: string; onRetry: () => void } | null;
   /** Set to fix a PR: its prompt and branch, which the session works on. */
   fix: PrFixInfo | null;
   onDone: () => void;
@@ -224,44 +210,71 @@ function Composer({
         });
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
-  const [model, setModel] = useState(() => initialModel(options, harness, plan));
-  const [effort, setEffort] = useState(() => initialEffort(options, harness, plan));
-  const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
+  // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
+  // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
+  const integrationBranch = task.integrationBranch;
+  const [pickState, setPickState] = useState(() =>
+    syncSessionPicks(emptySessionPickState, options, harness, plan, integrationBranch),
+  );
+  const synced = syncSessionPicks(pickState, options, harness, plan, integrationBranch);
+  if (synced !== pickState) setPickState(synced);
+  const ready = options && synced.picks ? { options, ...synced.picks } : null;
+  // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
+  const scanned = useAgentModels(true);
+  const models = scanned.data?.harnesses.find((h) => h.harness === harness)?.models ?? [];
   const start = useStartSession({ silent: true });
   const images = useLaunchImages();
-  const cli = options.clis.find((c) => c.harness === harness);
+  const cli = options?.clis.find((c) => c.harness === harness);
 
   // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
-  const workspace = fix
-    ? options.isRepo
-      ? { mode: "pr_branch" as const, branch: fix.branch }
-      : null
-    : toSessionWorkspace(where);
+  const workspace = !ready
+    ? null
+    : fix
+      ? ready.options.isRepo
+        ? { mode: "pr_branch" as const, branch: fix.branch }
+        : null
+      : toSessionWorkspace(ready.where);
+  const model = ready?.model ?? "";
+  const levels = modelEffortLevels(harness, findSuggestion(models, model));
   const badModel = modelError(model);
-  const blocker = !cli?.available
-    ? `${harnessLabel(harness)} isn't installed`
-    : !options.workspaceRoot
-      ? "The project has no folder"
-      : !workspace
-        ? fix
-          ? "The project's folder isn't a git repository"
-          : "Choose a branch"
-        : (badModel ?? images.blocker);
+  const blocker = !ready
+    ? failure
+      ? "The launch options didn't load"
+      : "Loading the launch options"
+    : !cli?.available
+      ? `${harnessLabel(harness)} isn't installed`
+      : !ready.options.workspaceRoot
+        ? "The project has no folder"
+        : !workspace
+          ? fix
+            ? "The project's folder isn't a git repository"
+            : "Choose a branch"
+          : (badModel ?? images.blocker);
+
+  const pick = (change: (picks: SessionPicks) => SessionPicks) => setPickState((state) => pickSessionBy(state, change));
+  const pickModel = (next: string) =>
+    pick((picks) => ({
+      ...picks,
+      model: next,
+      // The effort goes with the model: kept while the new one takes it.
+      effort: effortAfterModelChange(picks.effort, modelEffortLevels(harness, findSuggestion(models, next))),
+    }));
 
   const togglePlan = () => {
     const next = !plan;
-    // Swap what the dialog generated, but never discard what the user typed.
+    // Swap what the dialog generated, but never discard what the user typed or picked.
     if (prompt === promptFor(plan)) setPrompt(promptFor(next));
-    if (model === initialModel(options, harness, plan)) {
-      setModel(initialModel(options, harness, next));
-      // The effort goes with the model, so it follows it.
-      if (effort === initialEffort(options, harness, plan)) setEffort(initialEffort(options, harness, next));
+    // Still loading: the choices are made from the options when they arrive, for the mode the dialog is then in.
+    if (ready) {
+      setPickState((state) =>
+        state.picks ? { ...state, picks: picksAfterPlanToggle(state.picks, ready.options, harness, plan) } : state,
+      );
     }
     setPlan(next);
   };
 
   const submit = () => {
-    if (blocker || !workspace || !prompt.trim() || start.isPending) return;
+    if (blocker || !ready || !workspace || !prompt.trim() || start.isPending) return;
     start.mutate(
       {
         taskId: task.id,
@@ -269,8 +282,9 @@ function Composer({
         mode: fix ? "fix" : epic ? "orchestrate" : plan ? "plan" : "work",
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
-        model: model.trim() || null,
-        effort,
+        model: ready.model.trim() || null,
+        // A model that takes no effort gets none, whatever was picked for the one before it.
+        effort: levels.length > 0 ? ready.effort : null,
         workspace,
       },
       {
@@ -306,27 +320,36 @@ function Composer({
           }}
           {...images.handlers}
           aria-label="First message"
-          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="field-sizing-content mx-2 mt-2 block max-h-72 min-h-26 w-[calc(100%-1rem)] resize-none bg-transparent px-3 pt-2 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <LaunchImageThumbs state={images} />
-        <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
-          <AddImageControl state={images} />
-          <Input
-            size="sm"
-            className="w-56"
-            aria-label="Model"
-            aria-invalid={badModel ? true : undefined}
-            placeholder="Model (the CLI's default)"
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-          />
-          <CliEffortPicker
-            value={effort}
-            levels={CLI_EFFORTS[harness]}
-            onChange={setEffort}
-            variant="ghost"
-            className="w-auto"
-          />
+        <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
+          {ready ? (
+            <>
+              <CliModelPicker
+                harness={harness}
+                cliName={harnessLabel(harness)}
+                label="Model"
+                defaultLabel="Default model"
+                value={ready.model}
+                models={models}
+                loading={scanned.isFetching}
+                // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
+                className="max-w-80 shrink"
+                onSave={pickModel}
+              />
+              {levels.length > 0 ? (
+                <CliEffortMenu
+                  label="Effort"
+                  value={ready.effort}
+                  levels={levels}
+                  onChange={(effort) => pick((picks) => ({ ...picks, effort }))}
+                />
+              ) : null}
+            </>
+          ) : failure ? null : (
+            <ToolbarSkeleton />
+          )}
           {fix || epic ? null : (
             <ComposerControl
               aria-pressed={plan}
@@ -337,89 +360,130 @@ function Composer({
               <span>Plan with me</span>
             </ComposerControl>
           )}
-          <button
-            type="submit"
-            aria-label="Start session"
-            title={blocker ?? "Start session (Ctrl+Enter)"}
-            disabled={!!blocker || start.isPending || !prompt.trim()}
-            className={cn(
-              "ms-auto flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-            )}
-          >
-            {start.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
-          </button>
+          <div className="ms-auto flex shrink-0 items-center gap-1.5">
+            <AddImageControl state={images} />
+            <button
+              type="submit"
+              aria-label="Start session"
+              title={blocker ?? "Start session (Ctrl+Enter)"}
+              disabled={!!blocker || start.isPending || !prompt.trim()}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+              )}
+            >
+              {start.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
+            </button>
+          </div>
         </div>
       </div>
       <ComposerStrip className="justify-between gap-2">
-        {fix ? (
-          <span className="truncate px-2 py-1 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
+        {!ready ? (
+          failure ? null : (
+            <>
+              <Skeleton className="my-1 h-4 w-28" />
+              <Skeleton className="my-1 h-4 w-36" />
+            </>
+          )
+        ) : fix ? (
+          <span
+            className="truncate px-2 py-1 text-xs text-muted-foreground"
+            title={ready.options.workspaceRoot ?? undefined}
+          >
             New worktree on the PR's branch <span className="font-mono text-foreground/80">{fix.branch}</span>
           </span>
         ) : (
-          <>
-            <Select
-              items={WHERE_ITEMS}
-              value={where.mode}
-              disabled={!options.isRepo}
-              onValueChange={(value) =>
-                setWhere(
-                  value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
-                )
-              }
-            >
-              <SelectTrigger size="sm" variant="ghost" aria-label="Where to run" className="w-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectPopup>
-                {WHERE_ITEMS.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-            {where.mode === "new_worktree" ? (
-              <Select
-                items={options.branches.map((b) => ({ value: b, label: b }))}
-                value={where.baseRef}
-                onValueChange={(value) => setWhere({ mode: "new_worktree", baseRef: value })}
-              >
-                <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
-                  <SelectValue placeholder="Choose a branch" />
-                </SelectTrigger>
-                <SelectPopup>
-                  {options.branches.map((branch) => (
-                    <SelectItem key={branch} value={branch}>
-                      {branch}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-            ) : (
-              <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
-                {options.workspaceRoot ?? "No project folder"}
-              </span>
-            )}
-          </>
+          <WhereStrip
+            options={ready.options}
+            where={ready.where}
+            onChange={(where) => pick((picks) => ({ ...picks, where }))}
+          />
         )}
       </ComposerStrip>
-      <p className="mt-2 px-1 text-xs text-muted-foreground">
-        {options.model && !plan ? (
-          <span className="block">
-            <span className="font-medium text-foreground">
-              {options.model.source === "label"
-                ? `Model: ${options.model.name}, from label ${options.model.label}`
-                : `Suggested model: ${options.model.name}`}
+      {failure && !options ? (
+        <LaunchUnavailable
+          message={failure.message}
+          onRetry={failure.onRetry}
+          onCopy={() => copyToClipboard(prompt, fix ? "fix prompt" : "prompt")}
+        />
+      ) : null}
+      {options ? (
+        <p className="mt-2 px-1 text-xs text-muted-foreground">
+          {options.model && !plan ? (
+            <span className="block">
+              <span className="font-medium text-foreground">
+                {options.model.source === "label"
+                  ? `Model: ${options.model.name}, from label ${options.model.label}`
+                  : `Suggested model: ${options.model.name}`}
+              </span>
+              {options.models[harness]
+                ? null
+                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
             </span>
-            {options.models[harness]
-              ? null
-              : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
-          </span>
-        ) : null}
-        {options.namedWindow
-          ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}, which the session's link brings back while it runs.`
-          : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
-      </p>
+          ) : null}
+          {options.namedWindow
+            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}, which the session's link brings back while it runs.`
+            : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
+        </p>
+      ) : null}
     </form>
+  );
+}
+
+/** Where a task's session runs: a new worktree from a branch, or the project's checkout. */
+function WhereStrip({
+  options,
+  where,
+  onChange,
+}: {
+  options: SessionLaunchOptions;
+  where: SessionPicks["where"];
+  onChange: (where: SessionPicks["where"]) => void;
+}) {
+  return (
+    <>
+      <Select
+        items={WHERE_ITEMS}
+        value={where.mode}
+        disabled={!options.isRepo}
+        onValueChange={(value) =>
+          onChange(
+            value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
+          )
+        }
+      >
+        <SelectTrigger size="sm" variant="ghost" aria-label="Where to run" className="w-auto">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {WHERE_ITEMS.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+      {where.mode === "new_worktree" ? (
+        <Select
+          items={options.branches.map((b) => ({ value: b, label: b }))}
+          value={where.baseRef}
+          onValueChange={(value) => onChange({ mode: "new_worktree", baseRef: value })}
+        >
+          <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
+            <SelectValue placeholder="Choose a branch" />
+          </SelectTrigger>
+          <SelectPopup>
+            {options.branches.map((branch) => (
+              <SelectItem key={branch} value={branch}>
+                {branch}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      ) : (
+        <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
+          {options.workspaceRoot ?? "No project folder"}
+        </span>
+      )}
+    </>
   );
 }

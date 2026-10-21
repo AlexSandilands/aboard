@@ -195,16 +195,27 @@ export function createSessionLaunch(deps: {
     return { task, root: projectRoot(task.projectId) };
   };
 
-  /** Local branches, then origin's (without origin/HEAD). Empty when the folder isn't a repository. */
-  const branchesOf = async (root: string): Promise<{ isRepo: boolean; branches: string[] }> => {
-    const top = await deps.runGit(["rev-parse", "--show-toplevel"], root).catch(() => null);
-    if (top?.code !== 0) return { isRepo: false, branches: [] };
-    const refs = await deps.runGit(
-      ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin"],
-      root,
-    );
-    const names = refs.code === 0 ? refs.stdout.split("\n").map((l) => l.trim()) : [];
-    return { isRepo: true, branches: names.filter((n) => n && n !== "origin" && n !== "origin/HEAD") };
+  /**
+   * Local branches, then origin's (without origin/HEAD), and the default branch. Empty when the folder isn't a
+   * repository. The three git calls run side by side: one after another they made the dialog wait most of a second.
+   */
+  const branchesOf = async (
+    root: string,
+  ): Promise<{ isRepo: boolean; branches: string[]; defaultBranch: string | null }> => {
+    const [top, refs, defaultBranch] = await Promise.all([
+      deps.runGit(["rev-parse", "--show-toplevel"], root).catch(() => null),
+      deps
+        .runGit(["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin"], root)
+        .catch(() => null),
+      defaultBranchOf(deps.runGit, root).catch(() => null),
+    ]);
+    if (top?.code !== 0) return { isRepo: false, branches: [], defaultBranch: null };
+    const names = refs?.code === 0 ? refs.stdout.split("\n").map((l) => l.trim()) : [];
+    return {
+      isRepo: true,
+      branches: names.filter((n) => n && n !== "origin" && n !== "origin/HEAD"),
+      defaultBranch,
+    };
   };
 
   /** The harness's CLI and a terminal to open it in, or why a session can't start. */
@@ -337,8 +348,9 @@ export function createSessionLaunch(deps: {
       const { task, root } = subject(taskId);
       const settings = deps.services().settings.get();
       const h = deps.host();
-      const { isRepo, branches } = root ? await branchesOf(root) : { isRepo: false, branches: [] };
-      const defaultBranch = isRepo && root ? await defaultBranchOf(deps.runGit, root).catch(() => null) : null;
+      const { isRepo, branches, defaultBranch } = root
+        ? await branchesOf(root)
+        : { isRepo: false, branches: [], defaultBranch: null };
       const defaultBaseRef =
         // Origin's copy first, as Autopilot's worktrees start from it: a local default branch can be behind.
         (defaultBranch &&

@@ -17,6 +17,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
+import { PrefetchSessionLaunchOptions, PrefetchT3LaunchOptions } from "./LaunchPrefetch";
 import { cn } from "~/lib/utils";
 import { useBoard, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
@@ -78,6 +79,7 @@ export function SuggestEpicsMenu({ project, canStartT3 }: { project: Project; ca
         <TooltipPopup>Suggest epics</TooltipPopup>
       </Tooltip>
       <MenuPopup align="start">
+        {canStartT3 ? <PrefetchT3LaunchOptions projectId={project.id} /> : null}
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openProjectT3Launch(project.id)}>
             <T3Icon className="size-4.5 sm:size-4" />
@@ -191,6 +193,8 @@ export function HandoffMenu({
         <TooltipPopup>Hand off to an agent</TooltipPopup>
       </Tooltip>
       <MenuPopup align={variant === "card" ? "start" : "end"} {...cardHandlers}>
+        {canStartT3 ? <PrefetchT3LaunchOptions taskId={task.id} /> : null}
+        {sessionClis.length ? <PrefetchSessionLaunchOptions taskId={task.id} /> : null}
         {canStartT3 ? (
           <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id)}>
             <T3Icon className="size-4.5 sm:size-4" />

@@ -1,5 +1,6 @@
 import {
   AGENT_HARNESSES,
+  clampRuntimeMode,
   defaultBaseRef,
   type AgentCliStatus,
   type AgentHarness,
@@ -13,6 +14,7 @@ import {
   type T3LaunchWorkspace,
   type T3ModelSelection,
   type T3Ref,
+  type T3RuntimeMode,
   type TaskSummary,
 } from "@repo/contracts";
 
@@ -296,6 +298,67 @@ export function initialWorkspaceChoice(
     if (ref) return { mode: "new_worktree", ref: ref.name };
   }
   return { mode: options.isRepo && options.defaults.envMode === "worktree" ? "new_worktree" : "current", ref: null };
+}
+
+/** What the launch dialog's pickers hold: the model, the access and where the thread starts. */
+export interface Picks {
+  selection: T3ModelSelection | null;
+  runtimeMode: T3RuntimeMode;
+  choice: WorkspaceChoice;
+}
+
+/**
+ * The pickers' first values, made from the options once they are known: the mode's model, T3's access default for
+ * that provider, and the workspace the subject starts in.
+ */
+export function initialPicks(
+  options: T3LaunchOptions,
+  subject: { checkout?: boolean; integrationBranch?: string | null; fixBranch?: string | null },
+  planWithMe: boolean,
+): Picks {
+  const selection = launchModelSelection(options, planWithMe);
+  const runtimeMode = clampRuntimeMode(
+    options.defaults.runtimeMode,
+    options.providers.find((p) => p.instanceId === selection?.instanceId),
+  );
+  if (subject.checkout) return { selection, runtimeMode, choice: { mode: "current", ref: null } };
+  const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
+  // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
+  const choice: WorkspaceChoice =
+    subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
+      ? { mode: "new_worktree", ref: null }
+      : initial;
+  return { selection, runtimeMode, choice };
+}
+
+/** The dialog's pickers with what they were last made from, and whether the user has picked anything since. */
+export interface PickState {
+  picks: Picks | null;
+  seededFrom: T3LaunchOptions | undefined;
+  touched: boolean;
+}
+
+export const emptyPickState: PickState = { picks: null, seededFrom: undefined, touched: false };
+
+/**
+ * Makes the pickers from the options once they are there, and again when a refresh brings different ones, but only
+ * until the user has picked something: after that a refresh never moves a choice. The same state back when there is
+ * nothing to do, so the caller can tell.
+ */
+export function syncPicks(
+  state: PickState,
+  options: T3LaunchOptions | undefined,
+  subject: Parameters<typeof initialPicks>[1],
+  planWithMe: boolean,
+): PickState {
+  if (!options) return state;
+  if (state.picks && (options === state.seededFrom || state.touched)) return state;
+  return { ...state, picks: initialPicks(options, subject, planWithMe), seededFrom: options };
+}
+
+/** A pick by the user: the pickers change, and a refresh of the options stops moving them. */
+export function pickBy(state: PickState, change: (picks: Picks) => Picks): PickState {
+  return state.picks ? { ...state, picks: change(state.picks), touched: true } : state;
 }
 
 export function selectedRef(options: Pick<T3LaunchOptions, "refs">, choice: WorkspaceChoice): T3Ref | undefined {

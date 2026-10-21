@@ -31,14 +31,16 @@ import { useDialogs } from "~/state/ui";
 import {
   keepsCommandId,
   findModel,
-  initialWorkspaceChoice,
-  launchModelSelection,
+  emptyPickState,
+  pickBy,
   selectionAfterPlanToggle,
+  syncPicks,
   toLaunchWorkspace,
-  type WorkspaceChoice,
+  type Picks,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
+import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { usePlanPrompt } from "./PlanTasksDialog";
 import {
   AccessPicker,
@@ -100,7 +102,7 @@ export function T3LaunchDialog() {
       : undefined;
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-220">
         {task && target?.kind === "task" ? (
           <TaskLaunch
             key={`${task.id}:${target.fixLinkId ?? ""}`}
@@ -270,80 +272,64 @@ function LaunchContent({
         <DialogDescription>{subject.label}</DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
-        {options.isPending ? (
-          <Skeleton shape="card" className="h-40 w-full" />
-        ) : options.isError ? (
-          <LaunchUnavailable subject={subject} message={options.error.message} onRetry={() => void options.refetch()} />
-        ) : (
-          <Composer subject={subject} options={options.data} starter={starter} onDone={onDone} />
-        )}
+        {/* One element while the options load, fail and arrive, so what is typed meanwhile is kept. */}
+        <Composer
+          subject={subject}
+          options={options.data}
+          // Not once there are options: a failed background refresh must not make the dialog look broken.
+          failure={
+            !options.data && options.isError && !options.isFetching
+              ? { message: options.error.message, onRetry: () => void options.refetch() }
+              : null
+          }
+          starter={starter}
+          onDone={onDone}
+        />
       </div>
     </>
-  );
-}
-
-function LaunchUnavailable({
-  subject,
-  message,
-  onRetry,
-}: {
-  subject: LaunchSubject;
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
-      <p className="flex items-start gap-2">
-        <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-        <span>{message}</span>
-      </p>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onRetry}>
-          Retry
-        </Button>
-        <Button size="sm" variant="ghost" onClick={subject.copyPrompt}>
-          Copy prompt instead
-        </Button>
-      </div>
-    </div>
   );
 }
 
 function Composer({
   subject,
   options,
+  failure,
   starter,
   onDone,
 }: {
   subject: LaunchSubject;
-  options: T3LaunchOptions;
+  /** Undefined while they load: the prompt can be edited meanwhile, the rest waits for them. */
+  options: T3LaunchOptions | undefined;
+  /** Set when loading them failed: shown under the composer, which stays so the prompt isn't lost. */
+  failure: { message: string; onRetry: () => void } | null;
   starter: Starter;
   onDone: () => void;
 }) {
   const { promptFor } = subject;
   const [planWithMe, setPlanWithMe] = useState(subject.initialPlan);
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
-  const [selection, setSelection] = useState<T3ModelSelection | null>(() => launchModelSelection(options, planWithMe));
-  const provider = options.providers.find((p) => p.instanceId === selection?.instanceId);
-  const [runtimeMode, setRuntimeMode] = useState(() => clampRuntimeMode(options.defaults.runtimeMode, provider));
-  const [choice, setChoice] = useState<WorkspaceChoice>(() => {
-    if (subject.checkout) return { mode: "current", ref: null };
-    const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
-    // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
-    return subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
-      ? { mode: "new_worktree", ref: null }
-      : initial;
-  });
+  // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
+  // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
+  const [pickState, setPickState] = useState(() => syncPicks(emptyPickState, options, subject, planWithMe));
+  const synced = syncPicks(pickState, options, subject, planWithMe);
+  if (synced !== pickState) setPickState(synced);
+  const picks = synced.picks;
+  const ready = options && picks ? { options, ...picks } : null;
   // Kept or reset together: a retry with the same pair returns the same thread, images and all.
   const [launchIds, setLaunchIds] = useState(newLaunchIds);
   const images = useLaunchImages();
   const t3 = useBoard().data?.integrations.t3;
   const settings = useSettings().data;
 
-  const workspace = toLaunchWorkspace(options, choice);
-  const model = findModel(options, selection);
-  const blocker =
-    !selection || !model?.provider.ready
+  const selection = ready?.selection ?? null;
+  const provider = options?.providers.find((p) => p.instanceId === selection?.instanceId);
+  const workspace = ready ? toLaunchWorkspace(ready.options, ready.choice) : null;
+  const model = options ? findModel(options, selection) : undefined;
+  const blocker = !ready
+    ? failure
+      ? "The launch options didn't load"
+      : "Loading the launch options"
+    : !selection || !model?.provider.ready
       ? "Choose an available model"
       : !workspace
         ? "Choose a branch"
@@ -352,29 +338,40 @@ function Composer({
             "Fix the PR in a new worktree, not in your checkout"
           : images.blocker;
 
-  const changeSelection = (next: T3ModelSelection | null) => {
-    setSelection(next);
-    const nextProvider = options.providers.find((p) => p.instanceId === next?.instanceId);
-    setRuntimeMode((mode) => clampRuntimeMode(mode, nextProvider));
-  };
+  const withModel = (current: Picks, next: T3ModelSelection | null): Picks => ({
+    ...current,
+    selection: next,
+    runtimeMode: clampRuntimeMode(
+      current.runtimeMode,
+      options?.providers.find((p) => p.instanceId === next?.instanceId),
+    ),
+  });
+  const pick = (patch: Partial<Picks>) =>
+    setPickState((state) => pickBy(state, (current) => ({ ...current, ...patch })));
+  const pickModel = (next: T3ModelSelection | null) =>
+    setPickState((state) => pickBy(state, (c) => withModel(c, next)));
 
   const togglePlan = () => {
     const next = !planWithMe;
     // Swap the generated prompt and the mode's model, but never discard the user's own choices.
     if (prompt === promptFor(planWithMe)) setPrompt(promptFor(next));
-    changeSelection(selectionAfterPlanToggle(options, selection, next));
+    // Still loading: the model is chosen from the options when they arrive, for the mode the dialog is then in.
+    if (ready) {
+      const nextModel = selectionAfterPlanToggle(ready.options, ready.selection, next);
+      setPickState((state) => (state.picks ? { ...state, picks: withModel(state.picks, nextModel) } : state));
+    }
     setPlanWithMe(next);
   };
 
   const submit = () => {
-    if (blocker || !selection || !workspace || !prompt.trim()) return;
+    if (blocker || !ready || !selection || !workspace || !prompt.trim()) return;
     starter.start(
       {
         ...launchIds,
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         modelSelection: selection,
-        runtimeMode,
+        runtimeMode: ready.runtimeMode,
         workspace,
       },
       {
@@ -416,14 +413,29 @@ function Composer({
           }}
           {...images.handlers}
           aria-label="First message"
-          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="field-sizing-content mx-2 mt-2 block max-h-72 min-h-26 w-[calc(100%-1rem)] resize-none bg-transparent px-3 pt-2 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <LaunchImageThumbs state={images} />
-        <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
-          <AddImageControl state={images} />
-          <ModelPicker options={options} selection={selection} onChange={changeSelection} />
-          {selection ? <TraitsPicker options={options} selection={selection} onChange={setSelection} /> : null}
-          <AccessPicker provider={provider} value={runtimeMode} onChange={setRuntimeMode} />
+        <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
+          {ready ? (
+            <>
+              <ModelPicker options={ready.options} selection={ready.selection} onChange={pickModel} />
+              {ready.selection ? (
+                <TraitsPicker
+                  options={ready.options}
+                  selection={ready.selection}
+                  onChange={(next) => pick({ selection: next })}
+                />
+              ) : null}
+              <AccessPicker
+                provider={provider}
+                value={ready.runtimeMode}
+                onChange={(runtimeMode) => pick({ runtimeMode })}
+              />
+            </>
+          ) : failure ? null : (
+            <ToolbarSkeleton />
+          )}
           {subject.planToggle ? (
             <ComposerControl
               aria-pressed={planWithMe}
@@ -434,30 +446,50 @@ function Composer({
               <span>Plan with me</span>
             </ComposerControl>
           ) : null}
-          <button
-            type="submit"
-            aria-label="Start thread"
-            title={blocker ?? "Start thread (Ctrl+Enter)"}
-            disabled={!!blocker || starter.isPending || !prompt.trim()}
-            className={cn(
-              "ms-auto flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-            )}
-          >
-            {starter.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
-          </button>
+          <div className="ms-auto flex shrink-0 items-center gap-1.5">
+            <AddImageControl state={images} />
+            <button
+              type="submit"
+              aria-label="Start thread"
+              title={blocker ?? "Start thread (Ctrl+Enter)"}
+              disabled={!!blocker || starter.isPending || !prompt.trim()}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+              )}
+            >
+              {starter.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
+            </button>
+          </div>
         </div>
       </div>
       <ComposerStrip className="justify-between">
-        <WorkspaceMenu options={options} choice={choice} onChange={setChoice} />
-        <RefPicker options={options} choice={choice} onChange={setChoice} />
+        {ready ? (
+          <>
+            <WorkspaceMenu options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
+            <RefPicker options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
+          </>
+        ) : failure ? null : (
+          <>
+            <Skeleton className="my-1 h-4 w-28" />
+            <Skeleton className="my-1 h-4 w-36" />
+          </>
+        )}
       </ComposerStrip>
+      {failure && !options ? (
+        // Copies what is in the box, edits included.
+        <LaunchUnavailable
+          message={failure.message}
+          onRetry={failure.onRetry}
+          onCopy={() => copyToClipboard(prompt, "prompt")}
+        />
+      ) : null}
       {subject.fixBranch ? (
         <FixBranchNote
           branch={subject.fixBranch}
           startsFrom={workspace?.mode === "new_worktree" ? workspace.baseRef : null}
         />
       ) : null}
-      {options.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
+      {options?.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
   );
 }

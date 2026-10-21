@@ -3,10 +3,12 @@ import {
   CliModel,
   taskNumberList,
   type AgentHarness,
+  type CliEffort,
   type SessionLaunchOptions,
   type SessionWorkspace,
   type StartSessionResult,
 } from "@repo/contracts";
+import { initialEffort } from "./cliEffort.logic";
 
 /** Where the dialog will start the session: a new worktree from a branch, or the project's checkout. */
 export type SessionWhere = { mode: "new_worktree"; baseRef: string | null } | { mode: "current" };
@@ -43,6 +45,76 @@ export function initialModel(
   plan: boolean,
 ): string {
   return plan ? "" : (options.models[harness] ?? "");
+}
+
+/** The dialog's choices: the model ("" for the CLI's default), its effort, and where the session runs. */
+export interface SessionPicks {
+  model: string;
+  effort: CliEffort | null;
+  where: SessionWhere;
+}
+
+export function initialSessionPicks(
+  options: SessionLaunchOptions,
+  harness: AgentHarness,
+  plan: boolean,
+  integrationBranch: string | null,
+): SessionPicks {
+  return {
+    model: initialModel(options, harness, plan),
+    effort: initialEffort(options, harness, plan),
+    where: initialWhere(options, integrationBranch),
+  };
+}
+
+/** The choices with the options they were last made from, and whether the user has picked anything since. */
+export interface SessionPickState {
+  picks: SessionPicks | null;
+  seededFrom: SessionLaunchOptions | undefined;
+  touched: boolean;
+}
+
+export const emptySessionPickState: SessionPickState = { picks: null, seededFrom: undefined, touched: false };
+
+/**
+ * Makes the choices from the options once they are there, and again when a refresh brings different ones, but only
+ * until the user has picked something: after that a refresh never moves a choice (as the T3 dialog's syncPicks).
+ * The same state back when there is nothing to do, so the caller can tell.
+ */
+export function syncSessionPicks(
+  state: SessionPickState,
+  options: SessionLaunchOptions | undefined,
+  harness: AgentHarness,
+  plan: boolean,
+  integrationBranch: string | null,
+): SessionPickState {
+  if (!options) return state;
+  if (state.picks && (options === state.seededFrom || state.touched)) return state;
+  return { ...state, picks: initialSessionPicks(options, harness, plan, integrationBranch), seededFrom: options };
+}
+
+/** A pick by the user: the choices change, and a refresh of the options stops moving them. */
+export function pickSessionBy(
+  state: SessionPickState,
+  change: (picks: SessionPicks) => SessionPicks,
+): SessionPickState {
+  return state.picks ? { ...state, picks: change(state.picks), touched: true } : state;
+}
+
+/**
+ * Plan with me switched: the model and effort follow the mode while they are still the ones the dialog chose (the
+ * tier's model when working, the CLI's default when planning). Doesn't count as a pick.
+ */
+export function picksAfterPlanToggle(
+  picks: SessionPicks,
+  options: SessionLaunchOptions,
+  harness: AgentHarness,
+  plan: boolean,
+): SessionPicks {
+  if (picks.model !== initialModel(options, harness, plan)) return picks;
+  const effort =
+    picks.effort === initialEffort(options, harness, plan) ? initialEffort(options, harness, !plan) : picks.effort;
+  return { ...picks, model: initialModel(options, harness, !plan), effort };
 }
 
 /** Why the model field can't be sent as typed, or null. Blank means the CLI's default. */

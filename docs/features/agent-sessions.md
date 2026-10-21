@@ -163,11 +163,15 @@ model for the task's model, which model that is and what picked it (a label's cu
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; blank, and
-  planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
-- an effort next to it (`--effort` for Claude Code, `--reasoning-effort` for Copilot CLI), filled in from the same
-  model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It offers the CLI's
-  own levels (`CLI_EFFORTS`) or "Default effort", which passes no flag. The planning dialog has the same two fields;
+- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
+  model**, and planning, use the CLI's default. It is the Model tiers page's picker (`CliModelPicker`, with
+  `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`); a name it doesn't list can be
+  typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- an effort next to it (`--effort` for Claude Code, `--reasoning-effort` for Copilot CLI; `CliEffortMenu`), filled in
+  from the same model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It
+  offers the levels the scan lists for the model, else the CLI's own (`CLI_EFFORTS`), or "Default effort", which passes
+  no flag; a model that takes no effort hides it, and picking a model that doesn't take the chosen level resets it to
+  the default. The planning dialog has the same two pickers, starting on the CLI's default;
 - images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
   its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
   lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
@@ -176,6 +180,12 @@ model for the task's model, which model that is and what picked it (a label's cu
   new worktree on the PR's own branch, below.) The branch starts on the task's integration branch when its
   epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch
   (the local one when origin has none), as Autopilot's worktrees start from it.
+
+It loads like the T3 dialog (see [agent-handoff.md](agent-handoff.md#the-launch-dialog)): the prompt can be edited at
+once while the model, effort and workspace controls show skeletons; the choices follow a refresh of the options until
+the user picks one; opening the hand-off menu or **Fix in →** prefetches the options and the model scan, and the
+options stay cached for 30 seconds. A fix waits for its prompt (the PR's problems) before the composer shows. The
+server runs the options' three git calls (`rev-parse`, `for-each-ref`, the default branch) side by side.
 
 `POST /api/tasks/:id/sessions` then:
 
@@ -355,7 +365,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
 | `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
 | `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
-| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page (`cliModelPicker.logic.ts` is tested); the launch dialogs' effort select is `handoff/CliEffortPicker.tsx` |
+| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session and planning dialogs (`cliModelPicker.logic.ts` is tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |

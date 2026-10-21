@@ -656,57 +656,133 @@ export function createT3Integration(deps: {
     return { task, shell, t3Project, origin, environmentId, bearer };
   };
 
+  const openRpc = (origin: string, bearer: string) =>
+    openT3Rpc({
+      origin,
+      token: bearer,
+      fetch: fetchFn,
+      ...(deps.openSocket ? { openSocket: deps.openSocket } : {}),
+    });
+
+  const readConfig = async (rpc: T3RpcSession) =>
+    parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
+
+  const rpcFailure = (error: unknown): unknown =>
+    error instanceof T3RpcError ? new AppError("VALIDATION", error.message, { t3: error.kind }) : error;
+
   /** Runs requests on one RPC session, closing it afterwards and turning RPC failures into AppErrors. */
   const withRpc = async <T>(origin: string, bearer: string, run: (rpc: T3RpcSession) => Promise<T>): Promise<T> => {
     let rpc: T3RpcSession | null = null;
     try {
-      rpc = await openT3Rpc({
-        origin,
-        token: bearer,
-        fetch: fetchFn,
-        ...(deps.openSocket ? { openSocket: deps.openSocket } : {}),
-      });
+      rpc = await openRpc(origin, bearer);
       return await run(rpc);
     } catch (error) {
-      if (error instanceof T3RpcError) throw new AppError("VALIDATION", error.message, { t3: error.kind });
-      throw error;
+      throw rpcFailure(error);
     } finally {
       rpc?.close();
     }
   };
+
+  type EarlySession = { rpc: T3RpcSession; config: Awaited<ReturnType<typeof readConfig>> } | { error: unknown };
+
+  /** Slower than this and a launch-options load is logged with the time each stage took. */
+  const SLOW_LAUNCH_OPTIONS_MS = 1500;
 
   /** Launch options, and whether T3 answered the ref listing (a failed one looks like a folder without git). */
   const loadLaunchOptions = async (
     target: { taskId: string } | { projectId: string },
     choice?: ModelChoice,
   ): Promise<{ options: T3LaunchOptions; refsListed: boolean; refsUnreachable: boolean }> => {
-    const ctx = await launchContext(target);
-    return withRpc(ctx.origin, ctx.bearer, async (rpc) => {
-      const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
-      // Refs are optional: a folder that isn't a git repo (or a failed listing) just offers the current checkout.
-      let refsUnreachable = false;
-      const refs = await rpc
-        .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
-        .then((value) => WireRefs.safeParse(value).data ?? null)
-        .catch((error: unknown) => {
-          refsUnreachable = error instanceof T3RpcError && error.kind === "unreachable";
-          return null;
+    const started = performance.now();
+    const stages: string[] = [];
+    const timed = async <T>(name: string, run: () => Promise<T>): Promise<T> => {
+      const at = performance.now();
+      try {
+        return await run();
+      } finally {
+        stages.push(`${name} ${Math.round(performance.now() - at)}ms`);
+      }
+    };
+    try {
+      // The ticket, the WebSocket and server.getConfig don't depend on the shell, so they start now and run while the
+      // shell loads. A failure waits in the promise until the context is known, so its errors keep their priority.
+      await timed("discovery", ensureDetected);
+      if (!discovery.detected) throw t3Unavailable("T3 Code is not running");
+      const bearer = token();
+      const earlyOrigin = bearer ? discovery.origin : null;
+      const early =
+        earlyOrigin && bearer
+          ? timed("rpc+config", async (): Promise<EarlySession> => {
+              let rpc: T3RpcSession | null = null;
+              try {
+                rpc = await openRpc(earlyOrigin, bearer);
+                return { rpc, config: await readConfig(rpc) };
+              } catch (error) {
+                rpc?.close();
+                return { error };
+              }
+            })
+          : null;
+      let ctx: Awaited<ReturnType<typeof launchContext>>;
+      try {
+        ctx = await timed("shell", () => launchContext(target));
+      } catch (error) {
+        // Not waited for: the context's error is returned at once, and a session the early start opens is closed.
+        void early?.then((lost) => ("rpc" in lost ? lost.rpc.close() : undefined));
+        throw error;
+      }
+      const earlySession = early ? await early : null;
+      // When T3 moved or the token changed while the shell loaded, the early session is to the wrong one.
+      let ready: Extract<EarlySession, { rpc: T3RpcSession }> | null = null;
+      if (earlySession) {
+        if (earlyOrigin !== ctx.origin || bearer !== ctx.bearer) {
+          if ("rpc" in earlySession) earlySession.rpc.close();
+        } else if ("rpc" in earlySession) ready = earlySession;
+        else if (!(earlySession.error instanceof T3RpcError && earlySession.error.kind === "unreachable")) {
+          throw rpcFailure(earlySession.error);
+        }
+        // An unreachable T3 that the shell then reached (it restarted meanwhile): opened again below.
+      }
+      let rpc: T3RpcSession | null = ready?.rpc ?? null;
+      try {
+        rpc ??= await timed("rpc", () => openRpc(ctx.origin, ctx.bearer));
+        const session = rpc;
+        // Refs are optional: a folder that isn't a git repo (or a failed listing) just offers the current checkout.
+        let refsUnreachable = false;
+        const refsLoad = timed("refs", () =>
+          session
+            .request("vcs.listRefs", { cwd: ctx.t3Project.workspaceRoot, limit: 100 })
+            .then((value) => WireRefs.safeParse(value).data ?? null)
+            .catch((error: unknown) => {
+              refsUnreachable = error instanceof T3RpcError && error.kind === "unreachable";
+              return null;
+            }),
+        );
+        const config = ready ? ready.config : await timed("config", () => readConfig(session));
+        const refs = await refsLoad;
+        const options = buildLaunchOptions({
+          config,
+          refs,
+          shell: ctx.shell,
+          t3Project: ctx.t3Project,
+          model: ctx.task
+            ? resolveRunModel(
+                { labels: ctx.task.labels, tier: ctx.task.suggestedModel?.tier, choice },
+                deps.services().settings.get(),
+              )
+            : null,
+          reason: ctx.task?.suggestedModel?.reason ?? null,
         });
-      const options = buildLaunchOptions({
-        config,
-        refs,
-        shell: ctx.shell,
-        t3Project: ctx.t3Project,
-        model: ctx.task
-          ? resolveRunModel(
-              { labels: ctx.task.labels, tier: ctx.task.suggestedModel?.tier, choice },
-              deps.services().settings.get(),
-            )
-          : null,
-        reason: ctx.task?.suggestedModel?.reason ?? null,
-      });
-      return { options, refsListed: refs !== null, refsUnreachable };
-    });
+        return { options, refsListed: refs !== null, refsUnreachable };
+      } catch (error) {
+        throw rpcFailure(error);
+      } finally {
+        rpc?.close();
+      }
+    } finally {
+      const total = Math.round(performance.now() - started);
+      if (total >= SLOW_LAUNCH_OPTIONS_MS) log.warn(`[t3] slow launch options (${total}ms): ${stages.join(", ")}`);
+    }
   };
 
   const modelCatalog = async (): Promise<T3ModelCatalog> => {
@@ -716,7 +792,7 @@ export function createT3Integration(deps: {
     const bearer = token();
     if (!bearer) throw new AppError("VALIDATION", "No T3 Code token configured");
     return withRpc(origin, bearer, async (rpc) => {
-      const config = parseWire(WireServerConfig, await rpc.request("server.getConfig", {}), "server config");
+      const config = await readConfig(rpc);
       return { providers: mapProviders(config), favorites: mapFavorites(config) };
     });
   };
