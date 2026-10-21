@@ -7,9 +7,12 @@ import {
   autopilotSessionName,
   BRAND,
   AGENT_HARNESSES,
+  type CliEffort,
   describeRunModel,
   harnessCliSetting,
   isClaudeModel,
+  profileCliEffort,
+  profileCliModel,
   profileHeadless,
   profileHeadlessModel,
   resolveRunModel,
@@ -83,8 +86,11 @@ export function runModel(
  * then the chosen model's model for its headless harness; a chosen model with none runs on the CLI's default, and
  * says so.
  */
-export function headlessModel(model: RunModel, typed: string): { model: string | null; note: string | null } {
-  if (typed.trim()) return { model: typed.trim(), note: null };
+export function headlessModel(
+  model: RunModel,
+  typed: string,
+): { model: string | null; effort: CliEffort | null; note: string | null } {
+  if (typed.trim()) return { model: typed.trim(), effort: null, note: null };
   const { harness, model: cli } = profileHeadless(model.profile);
   const label = AGENT_HARNESSES[harness].label;
   const on = harness === "claude-code" ? "" : `, on ${label}`;
@@ -96,7 +102,8 @@ export function headlessModel(model: RunModel, typed: string): { model: string |
     lines.push(`Model: ${described} has no ${label} model in Settings → Model tiers, so the CLI's default ran${on}`);
   }
   const note = lines.filter(Boolean).join("\n") || null;
-  return { model: cli, note };
+  // The effort goes with the harness's own model: a T3 model that stood in for the Claude Code one carries none.
+  return { model: cli, effort: profileCliEffort(model.profile, harness), note };
 }
 
 /**
@@ -109,11 +116,16 @@ export function headlessRun(
   model: RunModel,
   typed: string,
   needs: DriverNeeds,
-): { driver: HeadlessDriver; model: string | null; note: string | null } {
+): { driver: HeadlessDriver; model: string | null; effort: CliEffort | null; note: string | null } {
   const { driver, fallback } = headlessDriverFor(profileHeadless(model.profile).harness, needs);
   if (!fallback) return { driver, ...headlessModel(model, typed) };
   const claudeTyped = isClaudeModel(typed.trim()) ? typed.trim() : null;
   const cli = claudeTyped ?? profileHeadlessModel(model.profile);
+  // Claude Code's effort goes only with the model it was set for: not a typed one, nor a T3 model standing in.
+  const effort =
+    !claudeTyped && cli && cli === profileCliModel(model.profile, "claude-code")
+      ? profileCliEffort(model.profile, "claude-code")
+      : null;
   const described = describeRunModel(model);
   const note = [
     model.note,
@@ -122,7 +134,7 @@ export function headlessRun(
   ]
     .filter(Boolean)
     .join("\n");
-  return { driver, model: cli, note };
+  return { driver, model: cli, effort, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -461,6 +473,7 @@ export function createAutopilotRunner(deps: {
         // Ignored by a driver that can't preset one.
         sessionId: preset ?? "",
         model: plan.model,
+        effort: plan.effort,
         name: autopilotSessionName(request.label),
         defaultBranch: where.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),

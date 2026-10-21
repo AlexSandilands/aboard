@@ -122,7 +122,8 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   is logged as `suggested_model_changed`.
 - **Settings → Model tiers** says what each tier means for you, one row per tier: a free-text description (e.g.
   "Sonnet 5.5, medium effort") for any harness; when T3 Code is connected, a T3 model with its effort and fast
-  mode; and a `--model` for each CLI found (Claude Code, Copilot CLI; `modelTiers[tier].cli`). A provider that
+  mode; and a `--model` and `--effort` for each CLI found (Claude Code, Copilot CLI; `modelTiers[tier].cli` and
+  `cliEffort`), picked from the models the CLI lists, see [agent-sessions.md](agent-sessions.md#choosing-a-clis-model). A provider that
   isn't set up has no field, unless a value is already saved for it. The T3 model's label is saved with it, so
   prompts can name it without asking T3. An edit sends only its own tier, so quick edits to two tiers can't
   overwrite each other; the server replaces a whole tier, so a second edit within a tier builds on the one still

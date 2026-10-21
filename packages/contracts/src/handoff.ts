@@ -227,7 +227,7 @@ function orchestrateDeliveryLines(task: HandoffPromptInput["task"]): string[] {
   const branch = task.integrationBranch;
   if (branch) {
     return [
-      `   This epic is delivered through the integration branch \`${branch}\`: each task starts from it and opens its pull request against it, and Autopilot merges the pull request there once its review is finished and its checks pass. start_task_thread starts from it by itself; give subagents worktrees from \`origin/${branch}\`. A task blocked by another starts once that one is Done, which is when its pull request merged into the branch. I merge the epic's own pull request into the default branch.`,
+      `   This epic is delivered through the integration branch \`${branch}\`: each task starts from it and opens its pull request against it, and Autopilot merges the pull request there once its review is finished and its checks pass. start_task_thread starts from it by itself; give subagents worktrees from \`origin/${branch}\`. A task blocked by another starts once that one is Done, which is when its pull request merged into the branch. I merge the epic's own pull request into the default branch, and the epic stays in Review until then even when all its tasks are Done (epic_overview says what it waits for). Don't mark it merged yourself; if I tell you it merged some other way, move_task(epic, done) records that.`,
     ];
   }
   if (task.delivery) return [];

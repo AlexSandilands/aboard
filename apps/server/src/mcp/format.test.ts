@@ -14,6 +14,7 @@ import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 import {
   STALE_PLAN_MS,
   batchedCompletionHint,
+  deliveryLine,
   linkText,
   progressHints,
   renderTranscript,
@@ -260,5 +261,55 @@ describe("summaryLine", () => {
 
   it("says nothing for an epic delivering to main", () => {
     expect(summaryLine(epic({ integrationBranch: null }))).not.toContain("integration");
+  });
+});
+
+describe("an integration epic waiting for its branch to merge", () => {
+  const done = { total: 2, done: 2, byStatus: { backlog: 0, planned: 0, in_progress: 0, review: 0, done: 2 } };
+  const epic = (over: Partial<TaskSummary>) =>
+    ({
+      kind: "epic",
+      delivery: "integration",
+      integrationBranch: "epic/5-checkout",
+      integrationMerge: { merged: false, by: null, pr: null },
+      rollup: done,
+      progress: { done: 0, total: 0 },
+      status: "review",
+      attention: [],
+      review: null,
+      resolution: null,
+      title: "Checkout",
+      number: 5,
+      labels: [],
+      links: [],
+      blockedBy: [],
+      parent: null,
+      ...over,
+    }) as unknown as TaskSummary;
+  const pr = { host: "github.com", repo: "acme/app", number: 9 };
+
+  it("says on its summary line that only the merge is left", () => {
+    expect(summaryLine(epic({}))).toContain("waiting for its branch to merge into the default branch");
+    const open = { ...done, done: 1, byStatus: { ...done.byStatus, in_progress: 1, done: 1 } };
+    expect(summaryLine(epic({ rollup: open }))).not.toContain("waiting for its branch");
+    expect(summaryLine(epic({ integrationMerge: { merged: true, by: "pr", pr } }))).not.toContain("waiting for");
+  });
+
+  it("tells the agent what finishes it", () => {
+    expect(deliveryLine(epic({}))).toContain("Link its pull request on the epic");
+    expect(deliveryLine(epic({ integrationMerge: { merged: false, by: null, pr } }))).toContain(
+      "waiting for PR acme/app#9 to merge",
+    );
+    expect(deliveryLine(epic({ integrationMerge: { merged: true, by: "pr", pr } }))).toContain(
+      "Merged into the default branch (acme/app#9)",
+    );
+    expect(deliveryLine(epic({ integrationMerge: { merged: true, by: "manual", pr: null } }))).toContain(
+      "Marked merged",
+    );
+  });
+
+  it("only explains the rule while tasks are open", () => {
+    const open = { ...done, done: 1, byStatus: { ...done.byStatus, in_progress: 1, done: 1 } };
+    expect(deliveryLine(epic({ rollup: open }))).toContain("only once its tasks are done and its branch has merged");
   });
 });

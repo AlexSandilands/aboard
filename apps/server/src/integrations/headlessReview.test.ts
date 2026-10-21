@@ -23,6 +23,13 @@ describe("headless review", () => {
     expect(headlessArgs(1.5)).not.toContain("--model");
   });
 
+  it("passes the chosen effort, and none otherwise", () => {
+    const args = headlessArgs(1.5, "sonnet", "high");
+    expect(args[args.indexOf("--effort") + 1]).toBe("high");
+    expect(headlessArgs(1.5, "sonnet")).not.toContain("--effort");
+    expect(headlessArgs(1.5, null, null)).not.toContain("--effort");
+  });
+
   it("puts the task inline and diffs against the base branch", () => {
     const prompt = headlessPrompt({
       taskNumber: 7,

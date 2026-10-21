@@ -192,11 +192,13 @@ export function describeEpicRollup(rollup: EpicRollup): string {
 
 /**
  * An epic sits where its furthest-back open child is, so the column shows how far the whole feature has got.
- * Done once every child is done or closed; Backlog while it has no children.
+ * Done once every child is done or closed; Backlog while it has no children. `awaitingMerge` is an integration epic
+ * whose branch hasn't merged into the default branch: its work is finished but not delivered, so it stays in Review.
  */
-export function deriveEpicStatus(rollup: EpicRollup): TaskStatus {
+export function deriveEpicStatus(rollup: EpicRollup, awaitingMerge = false): TaskStatus {
   if (rollup.total === 0) return "backlog";
-  return TaskStatus.options.find((s) => rollup.byStatus[s] > 0) ?? "backlog";
+  const status = TaskStatus.options.find((s) => rollup.byStatus[s] > 0) ?? "backlog";
+  return status === "done" && awaitingMerge ? "review" : status;
 }
 
 export type DueState = "overdue" | "today" | "later";

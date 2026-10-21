@@ -39,7 +39,7 @@ import { createSocialService } from "./social.ts";
 import { createStatsService } from "./stats.ts";
 import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
-import { createTasksService } from "./tasks.ts";
+import { createTasksService, syncEpicStatus } from "./tasks.ts";
 import type { ReviewsService, Services } from "./types.ts";
 
 export interface ServiceDeps {
@@ -106,6 +106,7 @@ export function createServices(deps: ServiceDeps): Services {
   links = createLinksService(core, {
     task: tasks.record,
     tasks: tasks.service,
+    syncEpic: (epicId, actor, fx) => syncEpicStatus(core.repos, epicId, actor, fx),
     settings,
     notifications,
     polls: deps.prHostHoldsTasks ?? ((host) => host === "github.com"),

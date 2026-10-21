@@ -1,4 +1,4 @@
-import type { PlanInput } from "@repo/contracts";
+import { epicBranchName, type PlanInput } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -429,5 +429,141 @@ describe("epics", () => {
     events.length = 0;
     s.plans.addSteps(s.tasks.detail(a.id).phases[0]!.id, [{ title: "more" }], "agent");
     expect(events).toContainEqual({ type: "task.detail_changed", taskId: epic.id });
+  });
+});
+
+describe("integration epics", () => {
+  const snapshot = (state: "open" | "draft" | "merged", headRef: string | null) => ({
+    state,
+    title: "Epic",
+    checks: "passing" as const,
+    reviewDecision: null,
+    mergeable: "mergeable" as const,
+    headRef,
+    updatedAt: null,
+  });
+
+  /** An epic delivered through its branch, with its tasks done. */
+  function finished() {
+    const ctx = setup();
+    const branch = epicBranchName(ctx.s.tasks.summary(ctx.epic.id));
+    ctx.s.tasks.setDelivery(ctx.epic.id, "integration", branch, "user");
+    const [a, b] = [ctx.child("A"), ctx.child("B")];
+    ctx.s.tasks.move(a.id, { status: "done" }, "agent");
+    ctx.s.tasks.move(b.id, { status: "done" }, "agent");
+    const pr = ctx.s.links.add(ctx.epic.id, { value: "https://github.com/acme/app/pull/9" }, "autopilot");
+    return { ...ctx, branch, a, b, pr };
+  }
+
+  it("stays in Review when its tasks are done, until its branch merges", () => {
+    const { s, epic, branch, pr } = finished();
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "review", integrationMerge: { merged: false } });
+    s.links.setSnapshot(pr.id, snapshot("draft", branch));
+    expect(s.tasks.summary(epic.id)).toMatchObject({
+      status: "review",
+      integrationMerge: { merged: false, pr: { number: 9 } },
+    });
+  });
+
+  it("is Done once its PR from the branch merges, and logs which", () => {
+    const { s, epic, branch, pr } = finished();
+    s.links.setSnapshot(pr.id, snapshot("merged", branch));
+    expect(s.tasks.summary(epic.id)).toMatchObject({
+      status: "done",
+      integrationMerge: { merged: true, by: "pr" },
+    });
+    const change = s.tasks.detail(epic.id).events.find((e) => e.type === "status_changed" && e.payload.to === "done");
+    expect(change?.payload).toMatchObject({ fromChildren: true, mergedPr: "acme/app#9" });
+  });
+
+  it("ignores a merged PR that isn't from the branch", () => {
+    const { s, epic, pr } = finished();
+    s.links.setSnapshot(pr.id, snapshot("merged", "feature/other"));
+    expect(s.tasks.summary(epic.id).status).toBe("review");
+  });
+
+  it("goes back to Review when its merged PR is unlinked, and Done again when a task finishes after the merge", () => {
+    const { s, epic, branch, pr, a } = finished();
+    s.links.setSnapshot(pr.id, snapshot("merged", branch));
+    s.links.remove(pr.id, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("review");
+    const again = s.links.add(epic.id, { value: "https://github.com/acme/app/pull/9" }, "user");
+    s.links.setSnapshot(again.id, snapshot("merged", branch));
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    // A reopened task pulls the epic back; the merge stays on record, so finishing it again finishes the epic.
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("in_progress");
+    s.tasks.move(a.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+  });
+
+  it("is Done when marked merged by moving it to Done", () => {
+    const { s, epic } = finished();
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    const done = s.tasks.summary(epic.id);
+    expect(done).toMatchObject({ status: "done", integrationMerge: { merged: true, by: "manual" } });
+    const detail = s.tasks.detail(epic.id);
+    expect(detail.events.map((e) => e.type)).toContain("integration_marked_merged");
+    expect(detail.events.find((e) => e.type === "status_changed" && e.payload.to === "done")?.payload).toMatchObject({
+      markedMerged: true,
+    });
+  });
+
+  it("refuses to mark it merged while tasks are open, with no tasks, or when it doesn't deliver through a branch", () => {
+    expect.hasAssertions();
+    const { s, epic, a, project } = finished();
+    s.tasks.move(a.id, { status: "review" }, "agent");
+    expectCode(() => s.tasks.move(epic.id, { status: "done" }, "user"), "VALIDATION", /still open: #\d+/);
+    const empty = s.tasks.create({ projectId: project.id, title: "Empty", kind: "epic" });
+    s.tasks.setDelivery(empty.id, "integration", "epic/9-empty", "user");
+    expectCode(() => s.tasks.move(empty.id, { status: "done" }, "user"), "VALIDATION", /none yet/);
+    const plain = s.tasks.create({ projectId: project.id, title: "Plain", kind: "epic" });
+    expectCode(() => s.tasks.move(plain.id, { status: "done" }, "user"), "VALIDATION", /follows its child/);
+    s.tasks.setDelivery(plain.id, "main", null, "user");
+    expectCode(() => s.tasks.move(plain.id, { status: "done" }, "user"), "VALIDATION", /follows its child/);
+  });
+
+  it("finishes on its tasks alone when it delivers to main, or no delivery was chosen", () => {
+    const { s, project } = setup();
+    const epic = s.tasks.create({ projectId: project.id, title: "Main", kind: "epic" });
+    const task = s.tasks.create({ projectId: project.id, title: "T", epicId: epic.id, plan: plan("a") });
+    s.tasks.setDelivery(epic.id, "main", null, "user");
+    s.tasks.move(task.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", integrationMerge: null });
+  });
+
+  it("forgets a merge marked by hand once a task is open again, so later work waits for a merge too", () => {
+    const { s, epic, a, project } = finished();
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("in_progress");
+    s.tasks.move(a.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "review", integrationMerge: { merged: false } });
+    // A task added after the mark counts the same.
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    const late = s.tasks.create({ projectId: project.id, title: "Late", epicId: epic.id, plan: plan("a") });
+    expect(s.tasks.summary(epic.id).status).toBe("planned");
+    s.tasks.move(late.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("review");
+  });
+
+  it("clears a merge marked by hand when the delivery changes, and re-derives the epic", () => {
+    const { s, epic, branch } = finished();
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    // Same branch again is a no-op, so the mark stays.
+    s.tasks.setDelivery(epic.id, "integration", branch, "user");
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    s.tasks.setDelivery(epic.id, "integration", "epic/99-elsewhere", "user");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "review", integrationMerge: { merged: false } });
+  });
+
+  it("makes an epic that already had everything done wait once it switches to integration", () => {
+    const { s, project } = setup();
+    const epic = s.tasks.create({ projectId: project.id, title: "Late", kind: "epic" });
+    const task = s.tasks.create({ projectId: project.id, title: "T", epicId: epic.id, plan: plan("a") });
+    s.tasks.move(task.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("done");
+    s.tasks.setDelivery(epic.id, "integration", "epic/5-late", "user");
+    expect(s.tasks.summary(epic.id).status).toBe("review");
   });
 });

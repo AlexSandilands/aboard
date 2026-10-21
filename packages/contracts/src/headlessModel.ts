@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ModelTier, type ModelTiers } from "./modelTiers.ts";
-import { CliModel, tierCliModel } from "./sessionLaunch.ts";
+import { type CliEffort, ModelTier, type ModelTiers } from "./modelTiers.ts";
+import { CliModel, tierCliEffort, tierCliModel } from "./sessionLaunch.ts";
 
 /**
  * The model a headless job (`claude -p`) runs on: one of the Model tiers settings, so it is set once, or a model typed
@@ -31,6 +31,10 @@ export const resolveHeadlessModel = (tiers: ModelTiers, choice: HeadlessModel | 
   if (!choice) return null;
   return "tier" in choice ? tierCliModel(tiers, choice.tier, "claude-code") : choice.model;
 };
+
+/** The `--effort` to pass `claude` with `resolveHeadlessModel`'s model: a tier's, and none for a typed model. */
+export const resolveHeadlessEffort = (tiers: ModelTiers, choice: HeadlessModel | null): CliEffort | null =>
+  choice && "tier" in choice ? tierCliEffort(tiers, choice.tier, "claude-code") : null;
 
 export const sameHeadlessModel = (a: HeadlessModel | null, b: HeadlessModel | null): boolean =>
   a === b ||

@@ -1,6 +1,7 @@
 import type {
   AddLinkResult,
   AgentIntegrations,
+  AgentModels,
   AppSettings,
   AskSettingsInput,
   AskSettingsResult,
@@ -139,6 +140,12 @@ export const useSetEpicDelivery = (epicId: string, opts?: MutationOpts) =>
       api<TaskDetail>(`/api/tasks/${enc(epicId)}/delivery`, { method: "PUT", body: { delivery } }),
     opts,
   );
+/**
+ * Marks an integration epic merged into the default branch, for when no PR the board watches shows it. A move to Done is
+ * how the server takes it, and only once all the epic's tasks are Done; the board updates from its event.
+ */
+export const useMarkEpicMerged = (epicId: string, opts?: MutationOpts) =>
+  useApiMutation(() => api<TaskSummary>(`/api/tasks/${enc(epicId)}/move`, { body: { status: "done" } }), opts);
 // ── Templates ───────────────────────────────────────────────────────────
 
 /** Templates aren't part of the board snapshot or its events (only the UI edits them), so each change refetches the list. */
@@ -314,6 +321,21 @@ export const useResolveFinding = (opts?: MutationOpts) =>
       api<ReviewFinding>(`/api/tasks/${enc(taskId)}/findings/${enc(finding)}`, { method: "PATCH", body: input }),
     opts,
   );
+
+/** Asks the CLIs for their models again, past the server's cache, and shows the answer. */
+export function useRescanAgentModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<AgentModels>("/api/agent-models?refresh=1"),
+    onSuccess: (result) => queryClient.setQueryData(queryKeys.agentModels, result),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't scan for models",
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
 
 /** Runs the CLIs and the MCP checks again, past the server's cache, and shows the answer. */
 export function useRecheckAgentIntegrations() {

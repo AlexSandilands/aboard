@@ -1,4 +1,5 @@
 import {
+  CLI_EFFORTS,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
@@ -23,6 +24,8 @@ import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
 import { useBoard, usePrFix, useSettings, useSessionLaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
+import { CliEffortPicker } from "./CliEffortPicker";
+import { initialEffort } from "./cliEffort.logic";
 import { copyFixPrompt } from "./FixPrMenu";
 import { copyHandoffPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
@@ -222,6 +225,7 @@ function Composer({
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   const [model, setModel] = useState(() => initialModel(options, harness, plan));
+  const [effort, setEffort] = useState(() => initialEffort(options, harness, plan));
   const [where, setWhere] = useState<SessionWhere>(() => initialWhere(options, task.integrationBranch));
   const start = useStartSession({ silent: true });
   const images = useLaunchImages();
@@ -248,7 +252,11 @@ function Composer({
     const next = !plan;
     // Swap what the dialog generated, but never discard what the user typed.
     if (prompt === promptFor(plan)) setPrompt(promptFor(next));
-    if (model === initialModel(options, harness, plan)) setModel(initialModel(options, harness, next));
+    if (model === initialModel(options, harness, plan)) {
+      setModel(initialModel(options, harness, next));
+      // The effort goes with the model, so it follows it.
+      if (effort === initialEffort(options, harness, plan)) setEffort(initialEffort(options, harness, next));
+    }
     setPlan(next);
   };
 
@@ -262,6 +270,7 @@ function Composer({
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
+        effort,
         workspace,
       },
       {
@@ -310,6 +319,13 @@ function Composer({
             placeholder="Model (the CLI's default)"
             value={model}
             onChange={(event) => setModel(event.target.value)}
+          />
+          <CliEffortPicker
+            value={effort}
+            levels={CLI_EFFORTS[harness]}
+            onChange={setEffort}
+            variant="ghost"
+            className="w-auto"
           />
           {fix || epic ? null : (
             <ComposerControl

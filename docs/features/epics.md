@@ -17,8 +17,8 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Rule                                 | Enforced in                                                    |
 | ------------------------------------ | -------------------------------------------------------------- |
 | No plan: `set_plan`, adding a phase and creating one with a plan are refused | `noPlanOnEpic` in `services/plans.ts`, `create` in `services/tasks.ts` |
-| No status of its own: `move` refuses a status change (reordering within the column is fine) | `move` in `services/tasks.ts` |
-| Can't be closed, reviewed, or moved to Done by its PRs merging | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone` |
+| No status of its own: `move` refuses a status change (reordering within the column is fine), except marking an integration epic merged ([Delivery](#delivery)) | `move` in `services/tasks.ts` |
+| Can't be closed or reviewed, and its PRs merging doesn't move it as it would a task (for an integration epic the merge of its own PR from the branch is an input to its derived status, [Delivery](#delivery)) | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone`, `links.setSnapshot` |
 | Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
 | A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
 | Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
@@ -33,10 +33,15 @@ Errors are `VALIDATION` with a message that says what to do instead (plan the ta
 An epic's status is derived from its tasks that aren't archived (`deriveEpicStatus` in
 `packages/contracts/src/derive.ts`): the furthest-back status any of them is in, Done once every one is done or
 closed, Backlog while it has none. It is stored on the row, so lists, filters and column counts read it like
-any other status.
+any other status. The exception is an epic delivered through an integration branch, which is Done only once that
+branch has also merged into the default branch: until then it stays in **Review** even with every task done
+([Delivery](#delivery)). Integration epics already Done when this rule arrived are counted as merged by migration 038
+(`integration_merged_at` set to when they finished), so they stay Done.
 
 `syncEpic` in `services/tasks.ts` recomputes it in the same write whenever a task joins or leaves the epic,
-changes status, is closed or reopened, archived or unarchived, moved to another project, or deleted. A change
+changes status, is closed or reopened, archived or unarchived, moved to another project, or deleted, and when what
+an integration epic waits for changes: a PR on it is linked, unlinked or changes state, its delivery changes, or it is
+marked merged. A change
 logs `status_changed` on the epic with `fromChildren: true` ("follows its tasks" in the activity log) and
 moves the epic to the end of its new column.
 
@@ -170,6 +175,22 @@ reads it from the task.
   A branch already on origin (switching back and forth) is used as it is. A git failure refuses the switch with
   git's message; `create_epic` still creates the epic and says why its delivery wasn't set. Then
   `tasks.setDelivery` stores it, logs `delivery_changed` and republishes the epic's tasks.
+- **Finishing.** An integration epic is Done only once all its tasks are Done **and** its branch has merged into the
+  default branch; until then `deriveEpicStatus` gets `awaitingMerge` and holds it in Review. The board knows the branch
+  merged when a PR linked on the epic whose head is the branch (`snapshot.headRef`) shows `merged` in the poller's
+  snapshot (`epicBranchMerge` in `packages/contracts/src/delivery.ts`): Autopilot's draft PR, or one the user links by
+  hand. No git is run for it. `TaskSummary.integrationMerge` carries `{ merged, by: "pr" | "manual" | null, pr }` for
+  such an epic (null for any other). While all its tasks are Done and it hasn't merged, the band's integration badge
+  reads **waiting for merge into main** (warning colour), and the delivery popover names the PR (a link) or says to link
+  one.
+- **Marking merged.** For a merge with no PR to watch (Merge into epic branch is off, GitHub polling is off, or the
+  branch merged some other way), **Mark merged into main** in that popover, or `move_task(epic, done)`, stores
+  `integration_merged_at` on the epic (`integration_marked_merged` event) and `syncEpic` makes it Done (`status_changed`
+  with `markedMerged`; a PR merge logs `mergedPr` instead). It is refused while the epic has open tasks or none, and for
+  any epic that doesn't deliver through a branch; other status moves of an epic are refused as before. Changing the
+  delivery clears the mark, and so does a task of the epic being open again (reopened, or added): the mark covered the
+  branch as it stood, so the epic waits for a merge again once its tasks finish. A merge seen through the epic's PR stays on record (that PR did merge); Merge into epic branch doesn't open another PR once the epic's has merged, so that new work is delivered by hand. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
+  task's column, and a later merge or finish brings it back.
 - **Going back** to main is refused once one of its tasks has started (`startedEpicTasks`: In Progress, Review, or
   Done without being closed), since their branches and PRs already target the epic's branch.
 - **Starting tasks.** Start planned passes the branch as `workspace.prBase`; `taskHandoffPrompt` adds
@@ -302,6 +323,11 @@ launch has no suggested model and returns the thread instead of a link.
 
 ## Decisions
 
+- **An integration epic isn't delivered until its branch is.** Without this, an epic whose tasks all merged into its
+  branch read Done while nothing had reached the default branch, and Auto-archive could take it away with its PR still
+  open. Review is the nearest honest column (the work is finished and waits on the user's merge), so no new status
+  exists. The merge is read from the epic's PR rather than from git, so a board that can't run git still works, and
+  the manual mark covers the cases where no PR is watched.
 - **Derived and stored status.** Deriving keeps an epic honest without anyone moving it, and storing it
   means every list, filter and count works unchanged. The cost is that every change to a task's status,
   epic, project or archive state must call `syncEpic`.
@@ -357,6 +383,6 @@ launch has no suggested model and returns the thread instead of a link.
 | `apps/server/src/mcp/tools/threads.ts`                  | `start_task_thread`, `message_task_thread`                            |
 | `apps/server/src/integrations/t3Launch.ts`              | `autoLaunchSettings`: a launch without the dialog                      |
 | `apps/server/src/mcp/format.ts`                        | `renderEpicChildren`, epic lines and events, `deliveryLine`, `deliveryHint` |
-| `packages/contracts/src/delivery.ts`                   | `epicBranchName`, `startedEpicTasks`, `deliveryHintApplies`           |
+| `packages/contracts/src/delivery.ts`                   | `epicBranchName`, `startedEpicTasks`, `deliveryHintApplies`, `epicBranchMerge`, `awaitingBranchMerge` |
 | `apps/server/src/autopilot/epicBranch.ts`              | Making the integration branch on origin                               |
 | `apps/web/src/components/task/EpicDelivery.tsx`        | The Delivery control and the panel's branch button                    |

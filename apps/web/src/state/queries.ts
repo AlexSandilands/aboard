@@ -1,6 +1,7 @@
 import type {
   AgentClis,
   AgentIntegrations,
+  AgentModels,
   AppSettings,
   AutopilotOverview,
   AutopilotActiveRun,
@@ -73,6 +74,7 @@ export const queryKeys = {
   terminal: ["terminal"] as const,
   agentClis: ["agentClis"] as const,
   agentIntegrations: ["agentIntegrations"] as const,
+  agentModels: ["agentModels"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
   prFix: (linkId: string) => ["prFix", linkId] as const,
   templates: ["templates"] as const,
@@ -288,6 +290,20 @@ export function useAgentIntegrations() {
     queryKey: queryKeys.agentIntegrations,
     queryFn: ({ signal }) => api<AgentIntegrations>("/api/agent-integrations", { signal }),
     staleTime: 60_000,
+  });
+}
+
+/**
+ * The models each CLI lists, for the pickers on the Model tiers page. The server asks the CLIs (a few seconds) and
+ * keeps the answer for ten minutes, so this runs only where it is `enabled`; Rescan asks again.
+ */
+export function useAgentModels(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.agentModels,
+    queryFn: ({ signal }) => api<AgentModels>("/api/agent-models", { signal }),
+    // A scan that failed comes back as a reply with an error; the server doesn't keep it, so neither does this.
+    staleTime: (query) => (query.state.data?.harnesses.some((h) => h.error) ? 0 : 10 * 60_000),
+    enabled,
   });
 }
 

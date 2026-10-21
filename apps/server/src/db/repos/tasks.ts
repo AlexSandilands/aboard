@@ -50,6 +50,8 @@ export interface TaskRecord {
   delivery: EpicDelivery | null;
   /** An epic's integration branch while it uses integration delivery. */
   integrationBranch: string | null;
+  /** When an integration epic was marked merged into the default branch by hand; null when not. */
+  integrationMergedAt: string | null;
 }
 
 interface TaskRow {
@@ -84,6 +86,7 @@ interface TaskRow {
   template_id: string | null;
   delivery: EpicDelivery | null;
   integration_branch: string | null;
+  integration_merged_at: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -118,6 +121,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   templateId: r.template_id,
   delivery: r.delivery,
   integrationBranch: r.integration_branch,
+  integrationMergedAt: r.integration_merged_at,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -152,6 +156,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   template_id: t.templateId,
   delivery: t.delivery,
   integration_branch: t.integrationBranch,
+  integration_merged_at: t.integrationMergedAt,
 });
 
 export interface TaskFilter {

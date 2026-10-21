@@ -339,7 +339,12 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
           t3: { selection: { instanceId: "c", model: "claude-opus-5-5", options: [] }, label: "Opus" },
         },
         light: { description: null, t3: { selection: { instanceId: "x", model: "gpt-5", options: [] }, label: "GPT" } },
-        standard: { description: null, t3: null, cli: { "claude-code": "sonnet" } },
+        standard: {
+          description: null,
+          t3: null,
+          cli: { "claude-code": "sonnet" },
+          cliEffort: { "claude-code": "medium" as const },
+        },
       },
       modelProfiles: [
         { id: "codex61", name: "Codex 6.1", labels: ["codex61"], description: null, t3: null },
@@ -350,10 +355,36 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     // The tier's T3 model when it is a Claude model, the tier's Claude Code model, else the CLI's default.
     expect(headlessModel(runModel({ tier: "deep" }, options(), null, settings), "").model).toBe("claude-opus-5-5");
     expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "").model).toBe("sonnet");
+    // The effort goes with the Claude Code model; a T3 model standing in for it, and a typed model, carry none.
+    expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "").effort).toBe("medium");
+    expect(headlessModel(runModel({ tier: "deep" }, options(), null, settings), "").effort).toBeNull();
+    // A model that runs headless on Copilot CLI takes its Copilot effort.
+    const copilot = {
+      ...settings,
+      modelTiers: {
+        ...settings.modelTiers,
+        standard: {
+          description: null,
+          t3: null,
+          headless: "copilot-cli" as const,
+          cli: { "copilot-cli": "gpt-5.4" },
+          cliEffort: { "claude-code": "medium" as const, "copilot-cli": "none" as const },
+        },
+      },
+    };
+    expect(headlessModel(runModel({ tier: "standard" }, options(), null, copilot), "")).toMatchObject({
+      model: "gpt-5.4",
+      effort: "none",
+    });
+    expect(headlessModel(runModel({ tier: "standard" }, options(), null, settings), "opus").effort).toBeNull();
     const light = headlessModel(runModel({ tier: "light" }, options(), null, settings), "");
     expect(light.model).toBeNull();
     expect(light.note).toContain("no Claude Code model");
-    expect(headlessModel(runModel({ tier: null }, options(), null, settings), "")).toEqual({ model: null, note: null });
+    expect(headlessModel(runModel({ tier: null }, options(), null, settings), "")).toEqual({
+      model: null,
+      effort: null,
+      note: null,
+    });
     // A label beats the tier; the automation's Model setting beats both, and a typed override beats everything.
     expect(runModel({ tier: "deep" }, options(), task, settings)).toMatchObject({
       source: "label",
@@ -385,12 +416,21 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     const { h, task, jobs, start, patches } = setup();
     h.services.settings.update({
       modelProfiles: [
-        { id: "fast", name: "Fast", labels: ["quick"], description: null, t3: null, cli: { "claude-code": "haiku" } },
+        {
+          id: "fast",
+          name: "Fast",
+          labels: ["quick"],
+          description: null,
+          t3: null,
+          cli: { "claude-code": "haiku" },
+          cliEffort: { "claude-code": "low" },
+        },
       ],
     });
     h.services.tasks.update(task.id, { labels: ["quick"] }, "test");
     await start({ options: { runner: "headless" } });
     expect(jobs[0]!.args.join(" ")).toContain("--model haiku");
+    expect(jobs[0]!.args.join(" ")).toContain("--effort low");
     expect(patches).toContainEqual({ detail: "Model: Fast, from label quick" });
   });
 

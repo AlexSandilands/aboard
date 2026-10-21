@@ -1,14 +1,25 @@
-import { epicBranchName, startedEpicTasks, type EpicDelivery, type TaskSummary } from "@repo/contracts";
+import {
+  awaitingBranchMerge,
+  epicBranchName,
+  startedEpicTasks,
+  type EpicDelivery,
+  type TaskSummary,
+} from "@repo/contracts";
 import { GitBranchIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import { useSetEpicDelivery } from "~/state/mutations";
+import { useMarkEpicMerged, useSetEpicDelivery } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
 
-type EpicLike = Pick<TaskSummary, "id" | "number" | "title" | "kind" | "delivery" | "integrationBranch" | "archivedAt">;
+type EpicLike = Pick<
+  TaskSummary,
+  "id" | "number" | "title" | "kind" | "delivery" | "integrationBranch" | "archivedAt"
+> &
+  Partial<Pick<TaskSummary, "integrationMerge" | "rollup" | "links">>;
 
 const OPTIONS: ReadonlyArray<{ value: EpicDelivery; label: string }> = [
   { value: "main", label: "Pull requests to main" },
@@ -62,6 +73,70 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
           it.
         </p>
       ) : null}
+      <EpicMergeStatus epic={epic} />
+    </div>
+  );
+}
+
+/** The epic is waiting for its branch to merge into main: all its tasks are done and the merge isn't seen yet. */
+const isWaitingForMerge = (epic: EpicLike): boolean =>
+  awaitingBranchMerge({ integrationMerge: epic.integrationMerge ?? null, rollup: epic.rollup ?? null });
+
+/**
+ * Where an integration epic stands on merging into main: it is Done once its tasks are and its branch has merged,
+ * which the board sees from the epic's PR from the branch. When there is no such PR to watch, it can be marked merged.
+ */
+function EpicMergeStatus({ epic }: { epic: EpicLike }) {
+  const mark = useMarkEpicMerged(epic.id);
+  const merge = epic.integrationMerge;
+  if (!epic.integrationBranch || !merge) return null;
+  const pr = merge.pr;
+  const url = pr
+    ? epic.links?.find((l) => l.kind === "pr" && l.ref?.number === pr.number && l.ref.repo === pr.repo)?.url
+    : null;
+  const prLabel = pr ? `PR #${pr.number}` : null;
+  const prNode = prLabel ? (
+    url ? (
+      <a href={url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+        {prLabel}
+      </a>
+    ) : (
+      prLabel
+    )
+  ) : null;
+  if (merge.merged) {
+    return (
+      <p className="text-2xs text-muted-foreground">
+        {merge.by === "pr" ? <>Merged into main ({prNode}).</> : "Marked merged into main."}
+      </p>
+    );
+  }
+  if (!isWaitingForMerge(epic)) {
+    return (
+      <p className="text-2xs text-muted-foreground">
+        Done once its tasks are done and {epic.integrationBranch} has merged into main.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-2xs text-muted-foreground">
+        All tasks are done.{" "}
+        {prNode ? (
+          <>Waiting for {prNode} to merge into main.</>
+        ) : (
+          "Waiting for the branch to merge into main; link its pull request on the epic so the board sees it."
+        )}
+      </p>
+      <Button
+        size="xs"
+        variant="outline"
+        className="self-start"
+        disabled={mark.isPending}
+        onClick={() => mark.mutate(undefined)}
+      >
+        Mark merged into main
+      </Button>
     </div>
   );
 }
@@ -72,7 +147,10 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
  */
 export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className?: string }) {
   if (epic.kind !== "epic" || epic.archivedAt !== null || !epic.integrationBranch) return null;
-  const label = `Delivery: integration branch ${epic.integrationBranch}`;
+  const waiting = isWaitingForMerge(epic);
+  const label = waiting
+    ? `Waiting for ${epic.integrationBranch} to merge into main`
+    : `Delivery: integration branch ${epic.integrationBranch}`;
   return (
     <Popover>
       <Tooltip>
@@ -81,7 +159,7 @@ export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className
             <PopoverTrigger
               render={
                 <Badge
-                  variant="info"
+                  variant={waiting ? "warning" : "info"}
                   size="sm"
                   render={<button type="button" aria-label={label} />}
                   className={className}
@@ -91,9 +169,9 @@ export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className
           }
         >
           <GitBranchIcon aria-hidden />
-          integration
+          {waiting ? "waiting for merge into main" : "integration"}
         </TooltipTrigger>
-        <TooltipPopup>{epic.integrationBranch}</TooltipPopup>
+        <TooltipPopup>{waiting ? label : epic.integrationBranch}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
         <EpicDeliveryControl epic={epic} />

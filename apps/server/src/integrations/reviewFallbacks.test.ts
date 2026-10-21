@@ -153,18 +153,21 @@ describe("review fallbacks", () => {
       const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
       s.settings.update({
         ...headlessReviewModel,
-        modelTiers: { light: { description: null, t3: null, cli: { "claude-code": "haiku" } } },
+        modelTiers: {
+          light: { description: null, t3: null, cli: { "claude-code": "haiku" }, cliEffort: { "claude-code": "low" } },
+        },
       });
       s.tasks.move(task.id, { status: "review" }, "user");
       await fallbacks.tick();
       advance(PAST_GRACE);
       await fallbacks.tick();
       await fallbacks.idle();
-      return jobs[0]?.model;
+      return [jobs[0]?.model, jobs[0]?.effort];
     };
-    expect(await run({ headlessReviewModel: { model: "sonnet" } })).toBe("sonnet");
-    expect(await run({ headlessReviewModel: { tier: "light" } })).toBe("haiku");
-    expect(await run({ headlessReviewModel: { tier: "deep" } })).toBeNull();
+    // A typed model carries no effort; a tier's Claude Code model carries the tier's.
+    expect(await run({ headlessReviewModel: { model: "sonnet" } })).toEqual(["sonnet", null]);
+    expect(await run({ headlessReviewModel: { tier: "light" } })).toEqual(["haiku", "low"]);
+    expect(await run({ headlessReviewModel: { tier: "deep" } })).toEqual([null, null]);
   });
 
   it("keeps ticking after a pass with nothing to do", async () => {

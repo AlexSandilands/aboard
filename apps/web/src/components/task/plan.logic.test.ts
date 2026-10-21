@@ -70,6 +70,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     dueDate: null,
     delivery: null,
     integrationBranch: null,
+    integrationMerge: null,
     review: null,
     suggestedModel: null,
     import: null,

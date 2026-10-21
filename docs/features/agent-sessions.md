@@ -165,6 +165,9 @@ model for the task's model, which model that is and what picked it (a label's cu
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
 - a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; blank, and
   planning, use the CLI's default. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- an effort next to it (`--effort` for Claude Code, `--reasoning-effort` for Copilot CLI), filled in from the same
+  model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It offers the CLI's
+  own levels (`CLI_EFFORTS`) or "Default effort", which passes no flag. The planning dialog has the same two fields;
 - images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
   its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
   lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
@@ -178,9 +181,10 @@ model for the task's model, which model that is and what picked it (a label's cu
 
 1. for a new worktree, runs `createWorktree` under `<worktreesDir>/sessions` on a new `<brand>/<task#>-<id8>` branch.
    Autopilot's cleanup never removes these: they are the user's;
-2. builds `claude [--model m] --session-id <uuid> --name "Implementing #N" -- <prompt>` (`--` so a prompt starting
-   with `-` isn't read as an option), or Copilot's
-   `copilot [--model m] --session-id <uuid> --name … -i <prompt>`, with a session id the board picks;
+2. builds `claude [--model m] [--effort e] --session-id <uuid> --name "Implementing #N" -- <prompt>` (`--` so a
+   prompt starting with `-` isn't read as an option), or Copilot's
+   `copilot [--model m] [--reasoning-effort e] --session-id <uuid> --name … -i <prompt>`, with a session id the board
+   picks;
 3. opens it in the terminal setting's terminal. With Windows Terminal it goes to the window named for the task
    (`taskWindowName`, `<brand>-<task#>`): `wt -w <brand>-115 new-tab …` opens the window, or a tab of it when it is
    already open, whatever **Open in** says;
@@ -304,6 +308,41 @@ Copilot CLI support is unit-tested only.
 | Focusing a window that already shows any session | No reliable way across terminals; only a Windows Terminal window the board named can be found again |
 | Writing the prompt to a file for the session to read | Neither CLI takes a first prompt from a file, and a pointer prompt reads worse than the prompt itself |
 
+## Choosing a CLI's model
+
+**Settings → Model tiers** picks each tier's (and each custom model's) Claude Code and Copilot CLI model from a list
+the CLI itself gives, so a model isn't typed from memory. The row looks like the T3 Code one above it, on the same
+`ComposerControl`: a button with the CLI's mark and the model's name (`CliModelPicker`) opens a searchable list of
+the models, each with its name, its value and what the CLI says about it. Search text the list doesn't have can be
+used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the scan doesn't list still
+shows. Beside it are the effort menu (`CliEffortMenu`) and a button that clears the model, which means the CLI's
+default. A model is saved as soon as it is picked.
+
+`GET /api/agent-models` (`integrations/agentModels.ts`, kept apart from `/api/agent-integrations` so that check stays
+fast) asks each CLI, and only the Model tiers page does, once a CLI's field is shown (`useAgentModels`):
+
+- **Claude Code:** `claude -p --input-format stream-json --output-format stream-json --verbose` is given one
+  `initialize` control request on stdin, then stdin closes. The CLI answers with `models[]` (`value`, `displayName`,
+  `description`, `supportedEffortLevels`) and exits. No prompt is sent, so it costs no tokens; its SessionStart hooks do
+  run, which is most of the few seconds a scan takes. The `default` entry is left out, as an empty field already means it.
+- **Copilot CLI:** the `model` list in `copilot help config`. It names no models and no per-model efforts, so every
+  model offers the CLI's `--reasoning-effort` levels.
+
+Each harness's answer is kept for ten minutes, by the CLI path it came from (a changed path rescans); a scan that failed
+isn't kept. `?refresh=1`, the **Rescan models** button, rescans, and joins a scan already running. A CLI that is
+missing, fails, times out or prints something unexpected gives an empty list and an `error`, shown under the tiers; the
+fields still take typed models.
+
+An **effort** (`cliEffort[harness]`, optional and additive on a tier and on a custom model, so older settings parse as
+they were) goes with the model: its select shows only once a model is set, and offers that model's scanned levels, else
+the CLI's own. Clearing the model clears its effort, and so does choosing a model that doesn't take it; the server also
+drops an effort for a harness with no model. The effort goes everywhere the model does:
+
+- a new session (`newSessionArgv`; the dialog prefills it);
+- headless `claude -p` runs that resolve to a tier or custom model: Autopilot's headless agent (`headlessModel` in the
+  runner returns it with the model; a typed **Headless model override**, or a T3 model standing in for the Claude Code
+  one, carries none), the board reviewer and the issue import (`resolveHeadlessEffort`; a typed model carries none).
+
 ## Code map
 
 | File | What it does |
@@ -312,10 +351,13 @@ Copilot CLI support is unit-tested only.
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
 | `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
+| `packages/contracts/src/agentModels.ts`, `modelTiers.ts` | The scan's shape (`AgentModels`); `CliEffort`, `CLI_EFFORTS` and `cliEffort` on a tier |
+| `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
 | `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
 | `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
+| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page (`cliModelPicker.logic.ts` is tested); the launch dialogs' effort select is `handoff/CliEffortPicker.tsx` |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
-| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations` |
+| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |

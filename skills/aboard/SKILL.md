@@ -117,7 +117,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    ..."), `draft_automation(automation, note)` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
    fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
-   A refused draft lists every problem with where it is; fix them all and call again.
+   A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
+   `aboard-automations` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
+   contract, and how to test a script and hand the draft over.
 
 5. **Keep steps current.** `update_step` to `in_progress` when you start a step and `done` as soon as
    it's finished: one call per step, the moment it changes, never saved up for the end of a phase. The
@@ -176,7 +178,7 @@ band across the columns its tasks are in, with a roll-up of how many are done.
 - Put new tasks in it with `epic: "#N"` on `create_task` / `add_to_backlog`. Move a task in, across or out
   with `update_task(task, epic: "#N")` or `epic: null`. Moving a task to another project takes it out of its
   epic. Epics don't nest.
-- An epic has **no plan and no column of its own**: `set_plan`, `move_task` and `close_task` refuse it. Its
+- An epic has **no plan and no column of its own**: `set_plan`, `move_task` and `close_task` refuse it (`move_task` takes one move, below). Its
   status follows its tasks (the furthest-back open one sets it; Done once they all are), so plan, move and
   review the tasks.
 - `epic_overview` (or `get_task` on the epic) lists each task with its status, progress, current step,
@@ -191,7 +193,10 @@ band across the columns its tasks are in, with a roll-up of how many are done.
 - **Delivery**: an epic's tasks are delivered through **pull requests to main** (the default: each task's PR
   goes to the default branch and the user merges it) or an **integration branch** (`epic/<number>-<slug>`:
   the tasks start from it and open their PRs against it, Autopilot merges each one there once it is reviewed
-  and green, and the user merges the epic's single PR into the default branch). When a result says **Epic
+  and green, and the user merges the epic's single PR into the default branch). An integration epic stays in
+  **Review** after its tasks are all Done, until its branch has merged into the default branch: the board sees
+  that from the epic's PR linked on it, and `epic_overview` says what it waits for. Only when the user says it
+  merged some other way, `move_task(epic, done)` marks it merged. When a result says **Epic
   delivery not chosen**, ask the user which they want, then `update_task(epic, delivery: "integration" | "main")`;
   never choose unasked. Going back to main is refused once a task has started.
 - **Working a task of an integration epic**: `get_task` shows a `Delivery:` line. Branch from
@@ -309,5 +314,6 @@ copilot mcp add --transport http aboard http://127.0.0.1:4317/mcp
 code --add-mcp '{"name":"aboard","type":"http","url":"http://127.0.0.1:4317/mcp"}'
 ```
 
-Install this skill from the board's Settings (Board skill, under Claude Code, Copilot or Codex), which keeps it
-in step with the app, or copy the folder to `~/.claude/skills/aboard/`.
+Install this skill from the board's Settings (Board skills, under Claude Code, Copilot or Codex), which keeps it
+(and `aboard-automations`, for writing custom automations) in step with the app, or copy the folder to
+`~/.claude/skills/aboard/`.
