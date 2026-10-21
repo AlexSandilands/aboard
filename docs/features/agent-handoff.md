@@ -228,8 +228,9 @@ Opening the hand-off menu (and Suggest epics, and Fix in →) starts loading the
 seconds after the dialog closes, so opening it again shows them at once while they refresh in the background. If a
 background refresh fails the dialog stays as it is; the error panel only replaces a dialog that never had options.
 
-The toolbar stays on one row: the model picker is the one control that shrinks, truncating its name (the full name is
-its tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog does the same with
+Both launch dialogs are `max-w-220` wide, enough for the toolbar with a long model name. The toolbar stays on one row:
+on a narrower window the model picker is the one control that shrinks, truncating its name (the full name is its
+tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog does the same with
 its model field.
 
 Launches carry a `commandId`, which T3 uses to de-duplicate them, and a `threadId` the dialog makes with it

@@ -101,7 +101,7 @@ export function T3LaunchDialog() {
       : undefined;
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-220">
         {task && target?.kind === "task" ? (
           <TaskLaunch
             key={`${task.id}:${target.fixLinkId ?? ""}`}
@@ -431,11 +431,10 @@ function Composer({
           }}
           {...images.handlers}
           aria-label="First message"
-          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-5 pt-4 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <LaunchImageThumbs state={images} />
-        <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
-          <AddImageControl state={images} />
+        <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
           {ready ? (
             <>
               <ModelPicker options={ready.options} selection={ready.selection} onChange={pickModel} />
@@ -465,17 +464,20 @@ function Composer({
               <span>Plan with me</span>
             </ComposerControl>
           ) : null}
-          <button
-            type="submit"
-            aria-label="Start thread"
-            title={blocker ?? "Start thread (Ctrl+Enter)"}
-            disabled={!!blocker || starter.isPending || !prompt.trim()}
-            className={cn(
-              "ms-auto flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-            )}
-          >
-            {starter.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
-          </button>
+          <div className="ms-auto flex shrink-0 items-center gap-1.5">
+            <AddImageControl state={images} />
+            <button
+              type="submit"
+              aria-label="Start thread"
+              title={blocker ?? "Start thread (Ctrl+Enter)"}
+              disabled={!!blocker || starter.isPending || !prompt.trim()}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+              )}
+            >
+              {starter.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
+            </button>
+          </div>
         </div>
       </div>
       <ComposerStrip className="justify-between">
