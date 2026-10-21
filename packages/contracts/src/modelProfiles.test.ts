@@ -7,6 +7,7 @@ import {
   ModelProfile,
   ModelProfiles,
   parseModelChoiceKey,
+  profileCliEffort,
   profileHeadless,
   profileHeadlessModel,
   resolveRunModel,
@@ -88,6 +89,24 @@ describe("model profiles", () => {
     expect(profileHeadlessModel(t3Only.profile)).toBeNull();
     const tier = resolveRunModel({ labels: [], tier: "deep" }, settings);
     expect(describeRunModel(tier)).toBe("Deep tier (Opus)");
+  });
+
+  it("carries a model's effort only while its CLI model is set", () => {
+    const high = ModelProfile.parse({
+      id: "hi",
+      name: "Hi",
+      description: null,
+      t3: null,
+      cli: { "claude-code": "opus" },
+      cliEffort: { "claude-code": "high", "copilot-cli": "low" },
+    });
+    const run = resolveRunModel(
+      { labels: [], tier: null, choice: { profile: "hi" } },
+      { ...settings, modelProfiles: [high] },
+    );
+    expect(profileCliEffort(run.profile, "claude-code")).toBe("high");
+    expect(profileCliEffort(run.profile, "copilot-cli")).toBeNull();
+    expect(profileCliEffort(null, "claude-code")).toBeNull();
   });
 
   it("runs headless on the harness a model names, with that harness's model, else on Claude Code", () => {

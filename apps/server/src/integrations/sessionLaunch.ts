@@ -16,10 +16,13 @@ import {
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
+  profileCliEffort,
   profileCliModel,
   resolveTaskModel,
   type AgentCliStatus,
   type AppSettings,
+  type CliEffort,
+  cliEffortFor,
   type SessionLaunchOptions,
   type StartPlanningSessionInput,
   type StartSessionInput,
@@ -140,6 +143,14 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/** The effort a launch asked for, when the harness's CLI takes it. Refused otherwise: it would only fail in the terminal. */
+function launchEffort(harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null {
+  if (!effort) return null;
+  const level = cliEffortFor(harness, effort);
+  if (!level) throw new AppError("VALIDATION", `${AGENT_HARNESSES[harness].label} has no effort ${effort}`);
+  return level;
+}
+
 export function createSessionLaunch(deps: {
   services: () => SessionServices;
   host: () => TerminalHost;
@@ -232,6 +243,7 @@ export function createSessionLaunch(deps: {
     session: {
       sessionId: string;
       model: string | null;
+      effort: CliEffort | null;
       prompt: string;
       cwd: string;
       branch: string | null;
@@ -246,7 +258,14 @@ export function createSessionLaunch(deps: {
   ): Promise<StartSessionResult> => {
     const { sessionId, cwd, label } = session;
     const argvFor = (prompt: string) => {
-      const argv = newSessionArgv({ harness, sessionId, model: session.model, name: label, prompt });
+      const argv = newSessionArgv({
+        harness,
+        sessionId,
+        model: session.model,
+        effort: session.effort,
+        name: label,
+        prompt,
+      });
       return [exe, ...argv.slice(1)];
     };
     const window = resolved.focus ? taskWindowName(session.windowTask) : undefined;
@@ -341,6 +360,11 @@ export function createSessionLaunch(deps: {
           codex: profileCliModel(model.profile, "codex"),
           "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
         },
+        efforts: {
+          "claude-code": profileCliEffort(model.profile, "claude-code"),
+          codex: profileCliEffort(model.profile, "codex"),
+          "copilot-cli": profileCliEffort(model.profile, "copilot-cli"),
+        },
         tier,
         model: picked ? { name: picked.name, source: model.source as "label" | "tier", label: model.label } : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
@@ -355,6 +379,7 @@ export function createSessionLaunch(deps: {
       if (modeError) throw new AppError("VALIDATION", modeError);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const ready = prepare(input.harness);
+      const effort = launchEffort(input.harness, input.effort);
       const imageIds = input.attachmentIds ?? [];
       // Checked before a worktree is made, so an image that is gone leaves nothing behind.
       deps.services().attachments.forLaunch(imageIds, task.id);
@@ -397,6 +422,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId,
         model: input.model,
+        effort,
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
@@ -422,6 +448,7 @@ export function createSessionLaunch(deps: {
       const root = projectRoot(projectId);
       if (!root) throw new AppError("VALIDATION", "The project has no folder to start a session in");
       const ready = prepare(input.harness);
+      const effort = launchEffort(input.harness, input.effort);
       // Not claimed: there is no one task to give them to, so they wait in the pending folder and are swept after a
       // day, by when the session has read them.
       const images = deps.services().attachments.forLaunch(input.attachmentIds ?? [], null);
@@ -429,6 +456,7 @@ export function createSessionLaunch(deps: {
       return launch(ready, {
         sessionId: randomUUID(),
         model: input.model,
+        effort,
         prompt: withAttachedImages(input.prompt, images),
         cwd: root,
         branch: null,

@@ -44,7 +44,7 @@ files under each app.
 - [Custom automations](guide/custom-automations.md): your own triggers and actions, an agent or a command
 - [Digest of what changed](guide/digest.md): a daily summary of the board, plain or written by an agent
 - [Importing issues](guide/importing-issues.md): a task from a ticket or GitHub issue URL
-- [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skill
+- [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skills
 - [Local review](guide/local-review.md): turning on the review loop
 - [Autopilot](guide/autopilot.md): switching automations on, reviewing PRs, limits, pausing
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads

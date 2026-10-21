@@ -1322,7 +1322,9 @@ A **headless** run runs on the chosen model's **Headless runs** harness (Claude 
 override**, the chosen model's model for that harness (for Claude Code also its T3 model when that is a Claude model
 `claude` accepts, `profileHeadlessModel`), else the CLI's default. A model with none for its harness falls back to the
 CLI's default, and the run's detail says so; otherwise the detail names the model, what picked it and, off Claude
-Code, the harness. A **T3** launch passes an automation's choice on to
+Code, the harness. The model's effort for that harness (`cliEffort`, `--effort` or `--reasoning-effort`; Codex has
+none) goes with its model: a typed override, or a T3 model standing in for the Claude Code one, runs at the CLI's
+default effort. A **T3** launch passes an automation's choice on to
 `launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
 (`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
 task's model is used.

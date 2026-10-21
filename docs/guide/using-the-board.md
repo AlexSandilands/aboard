@@ -126,7 +126,10 @@ start a blocked task.
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
-each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it.
+each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it. For
+Claude Code and Copilot CLI you choose the model from the list the CLI gives (or type one the list doesn't have) and
+how hard it thinks (its effort); new sessions and Autopilot's headless runs on that tier use both. **Rescan models**
+asks the CLIs again after you update them.
 
 The task panel's Details section shows the tier, the model you mapped to it and the planner's reason. Change
 or clear the tier from the dropdown there; picking one drops the planner's reason.

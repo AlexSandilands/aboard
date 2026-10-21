@@ -13,6 +13,60 @@ describe("custom models", () => {
   });
 });
 
+describe("CLI efforts", () => {
+  const saved = (h: ReturnType<typeof createTestHarness>) => h.services.settings.get();
+
+  it("saves a tier's and a custom model's effort with its model, and reads it back", () => {
+    const h = createTestHarness();
+    h.services.settings.update({
+      modelTiers: {
+        deep: { description: null, t3: null, cli: { "claude-code": "opus" }, cliEffort: { "claude-code": "max" } },
+      },
+      modelProfiles: [
+        {
+          id: "fast",
+          name: "Fast",
+          labels: [],
+          description: null,
+          t3: null,
+          cli: { "copilot-cli": "gpt-5.4" },
+          cliEffort: { "copilot-cli": "none" },
+        },
+      ],
+    });
+    expect(saved(h).modelTiers.deep.cliEffort).toEqual({ "claude-code": "max" });
+    expect(saved(h).modelProfiles[0]?.cliEffort).toEqual({ "copilot-cli": "none" });
+  });
+
+  it("drops an effort once its model is cleared", () => {
+    const h = createTestHarness();
+    const deep = { description: null, t3: null };
+    h.services.settings.update({
+      modelTiers: { deep: { ...deep, cli: { "claude-code": "opus" }, cliEffort: { "claude-code": "max" } } },
+    });
+    h.services.settings.update({
+      modelTiers: { deep: { ...deep, cli: { "claude-code": null }, cliEffort: { "claude-code": "max" } } },
+    });
+    expect(saved(h).modelTiers.deep).not.toHaveProperty("cliEffort");
+  });
+
+  it("refuses an effort the harness's CLI doesn't take", () => {
+    const h = createTestHarness();
+    const update = () =>
+      h.services.settings.update({
+        modelTiers: {
+          light: {
+            description: null,
+            t3: null,
+            cli: { "claude-code": "haiku" },
+            cliEffort: { "claude-code": "minimal" },
+          },
+        },
+      });
+    expect(update).toThrow(/Claude Code has no effort minimal/);
+  });
+});
+
 describe("headless job models", () => {
   it("defaults to haiku for imports and the CLI's own model for the board reviewer", () => {
     const { services } = createTestHarness();

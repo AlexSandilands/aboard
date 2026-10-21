@@ -18,6 +18,16 @@ describe("headless agent", () => {
     expect(after(args, "--max-budget-usd")).toBe("3");
     expect(after(args, "--session-id")).toBe(SESSION);
     expect(after(args, "--model")).toBe("sonnet");
+    expect(args).not.toContain("--effort");
+    const effortful = agentArgs({
+      access: "edit",
+      budgetUsd: 3,
+      sessionId: SESSION,
+      model: "sonnet",
+      effort: "high",
+      defaultBranch: "main",
+    });
+    expect(after(effortful, "--effort")).toBe("high");
     expect(args).not.toContain("--name");
     expect(args).not.toContain("--no-session-persistence");
     expect(args).not.toContain("--strict-mcp-config");

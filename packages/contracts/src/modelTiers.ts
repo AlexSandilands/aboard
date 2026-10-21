@@ -43,6 +43,29 @@ export const SuggestedModelInput = z.object({
 });
 export type SuggestedModelInput = z.infer<typeof SuggestedModelInput>;
 
+/** An effort level as `--effort` (Claude Code) or `--reasoning-effort` (Copilot CLI) takes it: the union of both. */
+export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export type CliEffort = z.infer<typeof CliEffort>;
+
+/**
+ * The levels each CLI accepts, which a model's own scanned levels narrow. Copilot CLI lists no levels per model, so
+ * these apply to all of them.
+ */
+export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
+  "claude-code": ["low", "medium", "high", "xhigh", "max"],
+  // Codex has no effort of its own here: `codex exec` takes none on its command line.
+  codex: [],
+  "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+};
+
+/** The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's, and `claude --effort` refuses them. */
+export const cliEffortFor = (harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null =>
+  effort && CLI_EFFORTS[harness].includes(effort) ? effort : null;
+
+/** Each harness's effort for a tier or custom model; a harness with none runs the CLI's default effort. */
+export const CliEfforts = z.partialRecord(AgentHarness, CliEffort);
+export type CliEfforts = z.infer<typeof CliEfforts>;
+
 /**
  * What one tier means for this user: free text for any harness, plus optional models for T3 Code and for the CLIs
  * the board starts sessions in.
@@ -57,6 +80,11 @@ export const ModelTierSetting = z.object({
    * it existed have none. Checked as a CliModel when saved (sessionLaunch.ts imports this file).
    */
   cli: z.partialRecord(AgentHarness, z.string().nullable()).optional(),
+  /**
+   * The effort a CLI session or headless run on that model starts with. Optional like `cli`; only meaningful while the
+   * harness has a model set here.
+   */
+  cliEffort: CliEfforts.optional(),
   /**
    * The harness a headless Autopilot run on this model uses, with its `cli` model. Unset (and settings saved before it
    * existed) is Claude Code.

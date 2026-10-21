@@ -122,6 +122,17 @@ describe("the Copilot CLI driver", () => {
     ]);
   });
 
+  it("passes the model's reasoning effort after its model", () => {
+    const args = copilotArgs(input({ model: "gpt-5.4", effort: "none" }));
+    expect(args.slice(args.indexOf("--model"), args.indexOf("--model") + 4)).toEqual([
+      "--model",
+      "gpt-5.4",
+      "--reasoning-effort",
+      "none",
+    ]);
+    expect(copilotArgs(input({ model: "gpt-5.4" }))).not.toContain("--reasoning-effort");
+  });
+
   it("gives a read-only run git commands that only read, and no writes", () => {
     const args = copilotArgs(input({ access: "read-only" }));
     const allowed = args.flatMap((arg, i) => (args[i - 1] === "--allow-tool" ? [arg] : []));

@@ -180,7 +180,8 @@ import tools ([upgrading](ticket-systems.md#upgrading-from-the-jira-settings)).
 `issueImportModel` is a `HeadlessModel` (`packages/contracts/src/headlessModel.ts`): `{ tier }` or `{ model }`.
 A bare string, which is how it was saved before tiers were an option, parses as `{ model }`, and the settings
 service normalizes a stored string on read (a value that is neither falls back to `haiku`). A tier runs the
-`claude-code` model of that tier in Settings → Model tiers (`resolveHeadlessModel`); a tier with none leaves
+`claude-code` model of that tier in Settings → Model tiers (`resolveHeadlessModel`), at that tier's effort
+(`resolveHeadlessEffort`, as `--effort`; a typed model has none); a tier with none leaves
 `--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be and
 links to the tier. The board reviewer's model (`headlessReviewModel`, see
 [local review](local-review.md#the-board-reviewer)) is the same type.
