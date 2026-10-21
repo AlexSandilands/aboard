@@ -16,7 +16,7 @@ import { nowIso, parseJson } from "../db/database.ts";
 import { toLink, type LinkRow } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound } from "../errors.ts";
-import type { Core } from "./core.ts";
+import type { Core, Effects } from "./core.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
@@ -121,6 +121,8 @@ export function createLinksService(
   deps: {
     task: (id: string) => TaskRecord;
     tasks: Pick<TasksService, "move">;
+    /** Re-derives an epic's status, which depends on whether its PR from the integration branch has merged. */
+    syncEpic: (epicId: string, actor: string, fx: Effects) => void;
     settings: SettingsService;
     notifications: NotificationsService;
     polls: (host: string) => boolean;
@@ -131,7 +133,7 @@ export function createLinksService(
   /** `creditLinkId` names the PR recorded as the merge, when it is one of the merged ones. */
   const completeIfPrsDone = (taskId: string, creditLinkId?: string): void => {
     const task = deps.task(taskId);
-    // An epic's status follows its children, so its own PRs don't move it.
+    // An epic is not moved by its PRs merging as a task is; setSnapshot re-syncs it instead (syncEpicStatus).
     if (task.status !== "review" || task.archivedAt !== null || task.kind === "epic") return;
     const links = repos.links.forTasks([task.id]).map(toLink);
     if (!prsCompleteTask(links, deps.polls)) return;
@@ -285,6 +287,7 @@ export function createLinksService(
         };
         repos.links.insert(row);
         fx.log(task.id, actor, "link_added", { linkId: row.id, kind: row.kind, url: row.url });
+        if (row.kind === "pr") deps.syncEpic(task.id, actor, fx);
         return toLink(row);
       });
     },
@@ -294,6 +297,7 @@ export function createLinksService(
         const row = rowOrThrow(linkId);
         repos.links.delete(linkId);
         fx.log(row.task_id, actor, "link_removed", { kind: row.kind, url: row.url });
+        if (row.kind === "pr") deps.syncEpic(row.task_id, actor, fx);
       });
     },
 
@@ -310,6 +314,7 @@ export function createLinksService(
         repos.links.delete(row.id);
         fx.log(task.id, actor, "link_removed", { kind: row.kind, url: row.url });
         fx.task(task.id);
+        if (row.kind === "pr") deps.syncEpic(task.id, actor, fx);
         return link;
       });
     },
@@ -366,7 +371,12 @@ export function createLinksService(
         }
         fx.task(row.task_id);
         notifyOnChange(row, row.snapshot_json, json);
-        if (row.kind === "pr") completeOnMerge({ ...row, snapshot_json: json }, row.snapshot_json);
+        if (row.kind === "pr") {
+          // An epic's status follows its tasks and, for an integration epic, whether its PR from the branch merged.
+          // Derived from the links as they are, so unlike a task it needs no "just became merged" guard.
+          if (deps.task(row.task_id).kind === "epic") deps.syncEpic(row.task_id, GITHUB_ACTOR, fx);
+          else completeOnMerge({ ...row, snapshot_json: json }, row.snapshot_json);
+        }
       });
     },
   };

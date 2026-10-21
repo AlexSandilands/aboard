@@ -6,6 +6,10 @@ import {
   startedEpicTasks,
   deriveAttention,
   describeEpicRollup,
+  deriveEpicStatus,
+  epicBranchMerge,
+  type PrSnapshot,
+  type TaskLink,
   deriveCurrentStep,
   deriveProgress,
   deriveProjectIdentity,
@@ -400,6 +404,82 @@ describe("describeEpicRollup", () => {
     expect(
       describeEpicRollup({ total: 0, done: 0, byStatus: { ...byStatus, backlog: 0, in_progress: 0, done: 0 } }),
     ).toBe("No tasks yet");
+  });
+});
+
+describe("deriveEpicStatus", () => {
+  const rollup = (byStatus: Partial<Record<TaskStatus, number>>) => {
+    const counts = { backlog: 0, planned: 0, in_progress: 0, review: 0, done: 0, ...byStatus };
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return { total, done: counts.done, byStatus: counts };
+  };
+
+  it("follows the furthest-back task, and is Backlog with none", () => {
+    expect(deriveEpicStatus(rollup({}))).toBe("backlog");
+    expect(deriveEpicStatus(rollup({ in_progress: 1, done: 2 }))).toBe("in_progress");
+    expect(deriveEpicStatus(rollup({ review: 1, done: 2 }))).toBe("review");
+    expect(deriveEpicStatus(rollup({ done: 3 }))).toBe("done");
+  });
+
+  it("holds a finished epic in Review while its branch is unmerged", () => {
+    expect(deriveEpicStatus(rollup({ done: 3 }), true)).toBe("review");
+    // Only the finished case changes: an epic with open tasks sits where they are, and an empty one in Backlog.
+    expect(deriveEpicStatus(rollup({ in_progress: 1, done: 2 }), true)).toBe("in_progress");
+    expect(deriveEpicStatus(rollup({}), true)).toBe("backlog");
+  });
+});
+
+describe("epicBranchMerge", () => {
+  const branch = "epic/7-checkout";
+  const pr = (state: PrSnapshot["state"], headRef: string | null, number = 1): TaskLink => ({
+    id: `pr-${number}`,
+    taskId: "epic",
+    kind: "pr",
+    url: `https://github.com/o/r/pull/${number}`,
+    label: null,
+    syncedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ref: { host: "github.com", repo: "o/r", number },
+    snapshot: { state, headRef } as PrSnapshot,
+  });
+  const epic = {
+    kind: "epic" as const,
+    delivery: "integration" as const,
+    integrationBranch: branch,
+    integrationMergedAt: null,
+  };
+
+  it("is null unless the epic uses integration delivery", () => {
+    expect(epicBranchMerge({ ...epic, delivery: "main", integrationBranch: null }, [])).toBeNull();
+    expect(epicBranchMerge({ ...epic, delivery: null, integrationBranch: null }, [])).toBeNull();
+    expect(epicBranchMerge({ ...epic, kind: "task" }, [])).toBeNull();
+  });
+
+  it("waits until a PR from the branch has merged", () => {
+    expect(epicBranchMerge(epic, [])).toEqual({ merged: false, by: null, pr: null });
+    const open = epicBranchMerge(epic, [pr("draft", branch, 4)]);
+    expect(open).toEqual({ merged: false, by: null, pr: { host: "github.com", repo: "o/r", number: 4 } });
+    expect(epicBranchMerge(epic, [pr("merged", branch, 4)])).toEqual({ merged: true, by: "pr", pr: open!.pr });
+  });
+
+  it("ignores PRs from other branches, and a closed one that never merged", () => {
+    expect(epicBranchMerge(epic, [pr("merged", "task/9", 2)])?.merged).toBe(false);
+    expect(epicBranchMerge(epic, [pr("closed", branch, 3)])?.merged).toBe(false);
+    expect(epicBranchMerge(epic, [pr("closed", branch, 3), pr("merged", branch, 5)])).toMatchObject({
+      merged: true,
+      pr: { number: 5 },
+    });
+  });
+
+  it("counts a manual mark, keeping the PR it was waiting for", () => {
+    expect(epicBranchMerge({ ...epic, integrationMergedAt: "2026-01-02T00:00:00.000Z" }, [])).toEqual({
+      merged: true,
+      by: "manual",
+      pr: null,
+    });
+    expect(
+      epicBranchMerge({ ...epic, integrationMergedAt: "2026-01-02T00:00:00.000Z" }, [pr("open", branch, 4)]),
+    ).toMatchObject({ merged: true, by: "manual", pr: { number: 4 } });
   });
 });
 

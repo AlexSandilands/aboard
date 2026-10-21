@@ -174,6 +174,18 @@ export type PlanPhase = z.infer<typeof PlanPhase>;
 export const PrRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
 export type PrRef = z.infer<typeof PrRef>;
 
+/**
+ * Whether an integration epic's branch has merged into the default branch. `by` says how the board knows: `pr` (its
+ * PR from the branch shows merged) or `manual` (the user marked it). `pr` is the epic's PR from the branch, when one
+ * is linked, merged or not. An epic is Done only once its tasks are and this is merged.
+ */
+export const IntegrationMerge = z.object({
+  merged: z.boolean(),
+  by: z.enum(["pr", "manual"]).nullable(),
+  pr: PrRef.nullable(),
+});
+export type IntegrationMerge = z.infer<typeof IntegrationMerge>;
+
 /** A GitHub issue. Shaped like a PR ref, since both live at `<host>/<owner>/<repo>/<kind>/<n>`. */
 export const IssueRef = z.object({ host: z.string(), repo: z.string(), number: z.number().int() });
 export type IssueRef = z.infer<typeof IssueRef>;
@@ -554,6 +566,8 @@ export const TaskSummary = z.object({
    * branch, which the task starts from and opens its pull request against. Null otherwise.
    */
   integrationBranch: z.string().nullable(),
+  /** An integration epic's merge into the default branch; null for anything else. */
+  integrationMerge: IntegrationMerge.nullable(),
   /** Local review badge; null when the task has never been reviewed. */
   review: TaskReviewSummary.nullable(),
   /** The model tier its planner suggests for implementing it; null when none is set. */

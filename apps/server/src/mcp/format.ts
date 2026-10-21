@@ -3,6 +3,7 @@ import {
   type AgentHarness,
   TASK_STATUSES,
   autopilotRunEventText,
+  awaitingBranchMerge,
   describeEpicRollup,
   describeRunModel,
   findTicketKeys,
@@ -159,6 +160,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   if (task.rollup) {
     parts.push(describeEpicRollup(task.rollup));
     if (task.integrationBranch) parts.push(`integration branch ${task.integrationBranch}`);
+    if (awaitingBranchMerge(task)) parts.push("waiting for its branch to merge into the default branch");
   } else if (task.progress.total > 0) {
     const at = task.currentStep ? `, at ${task.currentStep.index} ${task.currentStep.title}` : "";
     parts.push(`${task.progress.done}/${task.progress.total}${at}`);
@@ -220,6 +222,8 @@ export function eventText(event: TaskEvent): string {
     case "status_changed":
       what = `status ${str("from") ?? "?"} -> ${str("to") ?? "?"}${p.fromChildren ? " (follows its tasks)" : ""}`;
       if (str("clearedResolution")) what += ` (reopened, was ${str("clearedResolution")})`;
+      if (str("mergedPr")) what += ` (${str("mergedPr")} merged)`;
+      if (p.markedMerged === true) what += " (branch marked merged into the default branch)";
       break;
     case "closed": {
       const by = typeof p.byTask === "number" ? ` #${p.byTask}` : "";
@@ -265,6 +269,9 @@ export function eventText(event: TaskEvent): string {
         str("delivery") === "integration"
           ? `delivery set to the integration branch ${str("branch") ?? ""}`.trimEnd()
           : "delivery set to pull requests to main";
+      break;
+    case "integration_marked_merged":
+      what = `marked ${str("branch") ?? "the integration branch"} as merged into the default branch`;
       break;
     case "suggested_model_changed":
       what = str("tier")
@@ -642,11 +649,39 @@ export function renderEpicChildren(
  * Where an integration epic's work goes: for the epic its branch, for its tasks the branch they start from and open
  * their pull requests against. Null for everything delivered to main.
  */
-export function deliveryLine(task: Pick<TaskSummary, "kind" | "delivery" | "integrationBranch">): string | null {
+export function deliveryLine(
+  task: Pick<TaskSummary, "kind" | "delivery" | "integrationBranch"> &
+    Partial<Pick<TaskSummary, "integrationMerge" | "rollup">>,
+): string | null {
   if (!task.integrationBranch) return null;
-  return task.kind === "epic"
-    ? `Delivery: integration branch ${task.integrationBranch} (Autopilot merges its tasks' pull requests into it; the user merges it into the default branch)`
-    : `Delivery: start from ${task.integrationBranch} and open your pull request against it, not the default branch`;
+  if (task.kind !== "epic") {
+    return `Delivery: start from ${task.integrationBranch} and open your pull request against it, not the default branch`;
+  }
+  const line = `Delivery: integration branch ${task.integrationBranch} (Autopilot merges its tasks' pull requests into it; the user merges it into the default branch)`;
+  const state = mergeStateText(task);
+  return state ? `${line}. ${state}` : line;
+}
+
+const prText = (pr: { repo: string; number: number }): string => `${pr.repo}#${pr.number}`;
+
+/** What an integration epic still waits for, or how its branch merged; null when there is nothing to say yet. */
+function mergeStateText(task: Partial<Pick<TaskSummary, "integrationMerge" | "rollup">>): string | null {
+  const merge = task.integrationMerge;
+  if (!merge) return null;
+  if (merge.merged) {
+    return merge.by === "pr" && merge.pr
+      ? `Merged into the default branch (${prText(merge.pr)})`
+      : "Marked merged into the default branch";
+  }
+  if (!task.rollup || !awaitingBranchMerge({ integrationMerge: merge, rollup: task.rollup })) {
+    return "The epic is Done only once its tasks are done and its branch has merged into the default branch";
+  }
+  return merge.pr
+    ? `All tasks are done; waiting for PR ${prText(merge.pr)} to merge into the default branch, which finishes the epic. ` +
+        "If it merged some other way and the user says so, move_task(epic, done) marks it merged"
+    : "All tasks are done; waiting for the branch to merge into the default branch. Link its pull request on the epic " +
+        "(link) so the board sees the merge, or, if it merged some other way and the user says so, move_task(epic, done) " +
+        "marks it merged";
 }
 
 /**
@@ -752,7 +787,9 @@ export function renderTaskDetail(
   if (epic) {
     lines.push(
       "An epic has no plan of its own and its status follows its tasks (the furthest-back open one sets it; Done " +
-        "once they all are). Plan, move and review the tasks instead.",
+        "once they all are" +
+        (task.integrationBranch ? " and its integration branch has merged into the default branch" : "") +
+        "). Plan, move and review the tasks instead.",
       "",
       renderEpicChildren(task, opts.childActivity, opts.modelSettings),
     );

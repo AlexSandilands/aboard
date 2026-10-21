@@ -1,4 +1,4 @@
-import type { TaskSummary } from "./schemas.ts";
+import type { IntegrationMerge, TaskLink, TaskSummary } from "./schemas.ts";
 
 /** Where every integration branch lives, so it reads as the epic's and never as a task's or Autopilot's own. */
 export const EPIC_BRANCH_PREFIX = "epic/";
@@ -47,3 +47,37 @@ export function deliveryHintApplies(
 
 /** Autopilot's "Merge into epic branch": merges task PRs into an integration epic's branch and keeps its PR. */
 export const AUTOPILOT_MERGE_EPIC_PRS = "merge_epic_prs";
+
+/**
+ * Whether an integration epic's branch has merged into the default branch, and how the board knows: its PR from the
+ * branch (any linked PR whose head is the branch) shows merged, or the user marked it merged by hand. `pr` is that PR
+ * even while it is open, so the panel can link to what the epic is waiting for. Null for an epic that delivers to
+ * main (or has no delivery chosen), and for anything that isn't an epic.
+ */
+export function epicBranchMerge(
+  epic: Pick<TaskSummary, "kind" | "delivery" | "integrationBranch"> & { integrationMergedAt: string | null },
+  links: readonly TaskLink[],
+): IntegrationMerge | null {
+  if (epic.kind !== "epic" || epic.delivery !== "integration" || !epic.integrationBranch) return null;
+  const branch = epic.integrationBranch;
+  const prs = links.flatMap((l) => (l.kind === "pr" && l.ref && l.snapshot?.headRef === branch ? [l] : []));
+  const merged = prs.find((l) => l.snapshot?.state === "merged");
+  const shown = merged ?? prs[0];
+  const pr = shown?.ref ?? null;
+  if (merged) return { merged: true, by: "pr", pr };
+  if (epic.integrationMergedAt) return { merged: true, by: "manual", pr };
+  return { merged: false, by: null, pr };
+}
+
+/**
+ * Whether an integration epic's tasks are all done and only the merge of its branch into the default branch is left:
+ * the state in which it sits in Review with a "waiting for merge" badge, and can be marked merged.
+ */
+export function awaitingBranchMerge(task: Pick<TaskSummary, "integrationMerge" | "rollup">): boolean {
+  return (
+    task.integrationMerge?.merged === false &&
+    task.rollup !== null &&
+    task.rollup.total > 0 &&
+    task.rollup.done === task.rollup.total
+  );
+}

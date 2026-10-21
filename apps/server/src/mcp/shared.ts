@@ -140,7 +140,8 @@ export const deliveryField = z
     "How the epic's tasks are delivered. main: each task opens a pull request to the default branch and the user " +
       "merges it. integration: the board makes the branch epic/<number>-<slug> on origin; the tasks start from it " +
       "and open their pull requests against it, Autopilot merges each one there once it is reviewed and green, and " +
-      "the user merges the epic's own pull request into the default branch. Set it only after the user has chosen; " +
+      "the user merges the epic's own pull request into the default branch; the epic stays in Review after its " +
+      "tasks are done until that branch has merged. Set it only after the user has chosen; " +
       "ask first, never on your own. Back to main only while none of the epic's tasks has started.",
   );
 

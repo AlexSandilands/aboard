@@ -78,6 +78,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const to = `moved to ${STATUS_LABEL.get(str(p.to) ?? "") ?? str(p.to) ?? "?"}`;
       const merged = str(p.mergedPr);
       if (merged) return line("status", `${to} when ${merged} merged`);
+      if (p.markedMerged === true) return line("status", `${to} once its branch was marked merged into main`);
       return line("status", str(p.clearedResolution) ? `reopened this and ${to}` : to);
     }
     case "closed": {
@@ -117,6 +118,8 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
           ? `set delivery to the integration branch${str(p.branch) ? ` ${str(p.branch)}` : ""}`
           : "set delivery to pull requests to main",
       );
+    case "integration_marked_merged":
+      return line("edit", `marked ${str(p.branch) ?? "its integration branch"} as merged into the default branch`);
     case "suggested_model_changed": {
       const tier = str(p.tier);
       return line("edit", tier ? `suggested the ${tier} model tier` : "cleared the suggested model", str(p.reason));
