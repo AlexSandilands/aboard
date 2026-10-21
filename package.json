@@ -3,6 +3,14 @@
   "displayName": "Aboard",
   "version": "0.1.0",
   "private": true,
+  "description": "Mission control for your coding agents: a local kanban board that agents update over MCP.",
+  "homepage": "https://github.com/AlexSandilands/aboard",
+  "license": "MIT",
+  "author": "Alex Sandilands <profile.alex@proton.me>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexSandilands/aboard.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,magenta \"pnpm --filter @repo/server dev\" \"pnpm --filter @repo/web dev\"",

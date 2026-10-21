@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20browser-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Platform: Windows or browser" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20browser-0078D4?style=flat-square" alt="Platform: Windows, Linux or browser" />
   <img src="https://img.shields.io/badge/MCP-server-8B5CF6?style=flat-square" alt="MCP server" />
   <img src="https://img.shields.io/badge/node-24%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node 24+" />
   <img src="https://img.shields.io/badge/electron-44-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 44" />
@@ -47,6 +47,21 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
   carries on with what it was doing.
 
 Everything runs on your machine: a local server and a SQLite file, with no account and no cloud.
+
+## Install
+
+Download the desktop app from the [latest release](https://github.com/AlexSandilands/aboard/releases/latest):
+
+| System               | Get                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| Windows              | `Aboard-Setup-<version>.exe`. It installs for your user only, no admin rights needed |
+| Arch Linux           | `paru -S aboard-bin` (or any AUR helper)                                             |
+| Debian, Ubuntu, Mint | `aboard_<version>_amd64.deb`: `sudo apt install ./aboard_<version>_amd64.deb`        |
+| Fedora, openSUSE     | `aboard-<version>.x86_64.rpm`: `sudo dnf install ./aboard-<version>.x86_64.rpm`      |
+| Any other Linux      | `Aboard-<version>-x86_64.AppImage`: `chmod +x` it and run it                         |
+
+The Windows installer isn't code-signed yet, so SmartScreen warns the first time you run it: **More info → Run
+anyway**.
 
 ## Run from source
 

@@ -1,6 +1,6 @@
 # Desktop app
 
-An Electron shell for Windows. It runs the server in the background and keeps it in the tray, so the
+An Electron shell for Windows and Linux. It runs the server in the background and keeps it in the tray, so the
 board and the MCP endpoint are up without a terminal. The main process only manages the window, the tray
 and the server's lifecycle; the board itself is the same web app and server as in the browser.
 
@@ -39,7 +39,9 @@ An unexpected exit after startup shows an error and quits the app.
 - Closing the window hides it to the tray, so agents keep their MCP endpoint. **Quit** in the tray stops
   an owned server first.
 - The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Start at login** (packaged only;
-  starts hidden), Quit.
+  starts hidden), Quit. Electron's login items only exist on Windows and macOS, so on Linux the item writes
+  (or removes) a desktop entry in the XDG autostart folder, `~/.config/autostart/<id>.desktop`
+  (`apps/desktop/src/loginItem.ts`). It runs the AppImage file itself when started from one.
 - A single-instance lock brings the existing window forward. The dev app is named `<Name> Dev`, so its
   data folders and lock never clash with an installed copy.
 - Navigation: same-origin URLs load in the window; `http`, `https`, `mailto` and `t3code` links open in
@@ -74,9 +76,13 @@ The window is frameless with Windows' native controls painted over the page (`ti
 - `scripts/build.ts`: esbuild bundles `src/main.ts` (ESM) and `src/preload.ts` (CJS, since the preload is
   sandboxed), and rasterises the favicon into window and tray icons.
 - `scripts/launch.ts`: builds, then runs Electron. `--dev` points the window at Vite (5317).
-- `scripts/package.ts`: electron-builder, NSIS installer in `apps/desktop/release/`. App id, product
-  name, executable and installer name all come from `BRAND`. The server bundle and the web dist ship as
-  extra resources. Electron fuses turn off run-as-node, `NODE_OPTIONS` and inspect flags.
+- `scripts/package.ts`: electron-builder, into `apps/desktop/release/`, for the OS it runs on: the NSIS
+  installer on Windows; AppImage, .deb, .rpm (needs rpmbuild) and a tarball on Linux. Name targets to build
+  only those: `pnpm desktop:package tar.gz`. App id, product name, executable and file names all come from
+  `BRAND`. The server bundle and the web dist ship as extra resources, and the license and `NOTICE` sit beside
+  the executable. On Linux the window's app id is `<id>.desktop`, so docks match it to the menu entry. Electron
+  fuses turn off run-as-node, `NODE_OPTIONS` and inspect flags. Releases run it in CI
+  ([releases.md](releases.md)).
 
 `pnpm desktop` runs the dev server, Vite and the shell together; the shell waits for both to answer, then
 attaches.
@@ -120,6 +126,7 @@ home; `--desktop` waits a few seconds and reports the log if the shell exits at 
 | `apps/desktop/src/server.ts`          | `connectServer`: probe, attach, spawn, stop                      |
 | `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail        |
 | `apps/desktop/src/titleBar.ts`        | Title bar overlay options and sync                               |
+| `apps/desktop/src/loginItem.ts`       | Start at login: Electron's login item, or an XDG autostart entry on Linux |
 | `packages/contracts/src/desktop.ts`   | `desktopSandboxEnv`, `readDesktopSandbox` (sandbox shell wiring and guard) |
 | `apps/desktop/src/preload.ts`, `ipc.ts` | `window.desktopBridge`                                         |
 | `apps/desktop/scripts/*.ts`           | Build, launch, package                                           |

@@ -59,6 +59,12 @@ The git hooks (lefthook) format, lint and check the commit message on commit. CI
 Ubuntu and Windows for every PR. Commits and PR titles follow Conventional Commits:
 `feat(web): add favicon options`.
 
+## Releasing
+
+Publish a release on GitHub with a date tag (`v2026.10.21`) and generated notes; CI builds the installers,
+attaches them and updates the AUR package. Details and one-time setup:
+[docs/features/releases.md](docs/features/releases.md).
+
 ## Layout
 
 | Path                 | What                                                       |

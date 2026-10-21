@@ -23,6 +23,7 @@ import {
   SET_BADGE_CHANNEL,
   SET_THEME_CHANNEL,
 } from "./ipc.ts";
+import { loginItem } from "./loginItem.ts";
 import { ServerStartError, connectServer, type BoardServer } from "./server.ts";
 import {
   allowSubFrameNavigation,
@@ -182,9 +183,8 @@ function showWindow(): void {
   window.focus();
 }
 
-function loginItemArgs() {
-  return { args: [HIDDEN_ARG] };
-}
+/** Starts hidden, so a start at login stays in the tray. */
+const startAtLogin = loginItem([HIDDEN_ARG]);
 
 function buildTrayMenu(): Menu {
   return Menu.buildFromTemplate([
@@ -201,8 +201,8 @@ function buildTrayMenu(): Menu {
       type: "checkbox",
       // A dev build would register the bare electron binary.
       enabled: app.isPackaged,
-      checked: app.getLoginItemSettings(loginItemArgs()).openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, ...loginItemArgs() }),
+      checked: startAtLogin.get(),
+      click: (item) => startAtLogin.set(item.checked),
     },
     { type: "separator" },
     { label: "Quit", click: () => app.quit() },

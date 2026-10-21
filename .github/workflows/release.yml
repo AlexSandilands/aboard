@@ -1,0 +1,116 @@
+name: Release
+
+# Publishing a release on GitHub starts this: give it a new tag named for the date (v2026.10.21) and let GitHub
+# generate the notes. It builds the Windows installer and the Linux packages, attaches them to the release, then
+# updates the AUR package. To rebuild a release's files, run it by hand with the release's tag.
+# How it fits together: docs/features/releases.md.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the published release to build, e.g. v2026.10.21
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            files: "*-Setup-*.exe"
+          - os: ubuntu-latest
+            name: linux
+            files: "*.AppImage *.deb *.rpm *.tar.gz"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install rpmbuild
+        if: matrix.name == 'linux'
+        run: sudo apt-get install -y --no-install-recommends rpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp the version
+        run: node scripts/release-version.ts "$TAG"
+      - run: pnpm desktop:package
+      - name: Attach to the release
+        working-directory: apps/desktop/release
+        run: |
+          sha256sum ${{ matrix.files }} > SHA256SUMS-${{ matrix.name }}.txt
+          cat SHA256SUMS-${{ matrix.name }}.txt
+          gh release upload "$TAG" ${{ matrix.files }} SHA256SUMS-${{ matrix.name }}.txt --clobber
+
+  aur:
+    needs: package
+    runs-on: ubuntu-latest
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Check for the AUR key
+        id: key
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::No AUR_SSH_PRIVATE_KEY secret, so the AUR package wasn't updated."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.key.outputs.skip != 'true'
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v7
+        if: steps.key.outputs.skip != 'true'
+        with:
+          node-version: 24
+      - name: Update the AUR package
+        if: steps.key.outputs.skip != 'true'
+        run: |
+          version=$(node scripts/release-version.ts "$TAG")
+          pkgname=$(node -p 'require("./package.json").name')-bin
+          author=$(node -p 'require("./package.json").author')
+
+          gh release download "$TAG" --pattern '*-linux-x64.tar.gz' --dir "$RUNNER_TEMP"
+          sha256=$(sha256sum "$RUNNER_TEMP"/*-linux-x64.tar.gz | cut -d' ' -f1)
+
+          # The AUR's host key, pinned: it matches the fingerprint published on https://aur.archlinux.org.
+          mkdir -p ~/.ssh
+          echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" >> ~/.ssh/known_hosts
+          install -m 600 /dev/null ~/.ssh/aur
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes"
+
+          # Cloning a package that doesn't exist yet gives an empty repo; the first push creates it.
+          git clone "ssh://aur@aur.archlinux.org/$pkgname.git" "$RUNNER_TEMP/aur"
+          node scripts/aur-package.ts "$version" "$sha256" "$RUNNER_TEMP/aur"
+          cd "$RUNNER_TEMP/aur"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "The AUR already has $pkgname $version."
+            exit 0
+          fi
+          git -c user.name="${author% <*}" -c user.email="$(sed -E 's/.*<(.*)>/\1/' <<< "$author")" \
+            commit -m "Update to $version"
+          git push origin HEAD:master

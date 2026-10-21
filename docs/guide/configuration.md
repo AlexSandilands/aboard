@@ -36,15 +36,20 @@ pnpm backup restore-task <folder|file> 42   # put task #42 back, with its plan a
 A backup taken by an older version restores into a newer one. See
 [docs/features/backup.md](../features/backup.md).
 
-## Desktop app (Windows)
+## Desktop app
 
-The desktop app starts the server for you and keeps it running in the tray.
+The desktop app, for Windows and Linux, starts the server for you and keeps it running in the tray. Get it
+from the [releases](https://github.com/AlexSandilands/aboard/releases) or, on Arch, the AUR (see the
+[README](../../README.md#install)).
 
 - Closing the window hides it to the tray; agents can still reach MCP. **Quit** from the tray stops the
   server.
 - The tray menu has **Copy MCP URL** and **Start at login** (starts hidden in the tray).
 - If a server is already running on the port, the app uses it instead of starting a second one.
 - Links to PRs, tickets and T3 Code threads open in your browser or T3 Code, not inside the app.
-- Server logs are in `%APPDATA%\Aboard\logs\server.log`.
+- Server logs are in `%APPDATA%\Aboard\logs\server.log` on Windows and `~/.config/Aboard/logs/server.log` on
+  Linux.
+- On Linux the tray icon needs a desktop with a system tray: KDE Plasma has one, GNOME needs the
+  AppIndicator extension. **Start at login** adds the app to `~/.config/autostart`.
 
 The installer isn't code-signed yet, so Windows SmartScreen warns the first time you run it.
