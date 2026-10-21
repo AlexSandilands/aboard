@@ -1191,7 +1191,8 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
 }
 
 /* Panel animations: the task panel grows in from the right edge when it opens and shrinks back into it
-   when it closes. Keyframes rather than a transition, so dragging the panel's edge stays immediate. */
+   when it closes. Keyframes rather than a transition, so dragging the panel's edge stays immediate. The
+   panel's contents keep their full width inside it (see TaskPanel) and are clipped, not squeezed. */
 [data-panel-animations="true"] .panel-enter {
   animation: panel-enter var(--panel-animation-duration) ease-out;
 }
@@ -1201,9 +1202,14 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   overflow: hidden;
 }
 
+/* Clip only while it plays: at rest the aside leaves overflow visible, so the resize handle's outer half isn't cut. */
 @keyframes panel-enter {
   from {
     width: 0;
+    overflow: hidden;
+  }
+  to {
+    overflow: hidden;
   }
 }
 
