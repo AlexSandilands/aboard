@@ -1,6 +1,6 @@
 /**
  * Packages the desktop app with electron-builder into `release/`, for the platform it runs on: the NSIS installer on
- * Windows; AppImage, .deb, .rpm and a tarball on Linux (the AUR package repackages the tarball). Config lives here
+ * Windows; AppImage, .deb, .rpm and a tarball on Linux (the Arch packages repackage the tarball). Config lives here
  * rather than in a static file so the product name and id come from BRAND. Expects the web build, server bundle and
  * main bundle to exist: run via `pnpm desktop:package`.
  */

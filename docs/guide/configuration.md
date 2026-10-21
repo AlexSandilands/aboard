@@ -39,7 +39,7 @@ A backup taken by an older version restores into a newer one. See
 ## Desktop app
 
 The desktop app, for Windows and Linux, starts the server for you and keeps it running in the tray. Get it
-from the [releases](https://github.com/AlexSandilands/aboard/releases) or, on Arch, the AUR (see the
+from the [releases](https://github.com/AlexSandilands/aboard/releases) or, on Arch, the board's pacman repo (see the
 [README](../../README.md#install)).
 
 - Closing the window hides it to the tray; agents can still reach MCP. **Quit** from the tray stops the

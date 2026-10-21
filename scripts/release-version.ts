@@ -1,6 +1,6 @@
 /**
  * Checks a release tag and stamps its version into the root package.json, which BRAND (and so the app, the installer
- * names and the AUR package) reads. Releases are dated: `v2026.10.21`, with no leading zeros, because electron-builder
+ * names and the Arch packages) reads. Releases are dated: `v2026.10.21`, with no leading zeros, because electron-builder
  * needs valid semver. Run by the release workflow before building: `node scripts/release-version.ts v2026.10.21`.
  * Prints the version without the `v`.
  */

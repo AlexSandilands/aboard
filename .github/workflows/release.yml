@@ -2,7 +2,8 @@ name: Release
 
 # Publishing a release on GitHub starts this: give it a new tag named for the date (v2026.10.21) and let GitHub
 # generate the notes. It builds the Windows installer and the Linux packages, attaches them to the release, then
-# updates the AUR package. To rebuild a release's files, run it by hand with the release's tag.
+# updates the pacman repo (the `pacman` release) and the AUR package. To rebuild a release's files, run it by hand
+# with the release's tag.
 # How it fits together: docs/features/releases.md.
 
 on:
@@ -27,6 +28,8 @@ env:
 
 jobs:
   package:
+    # The pacman repo is a release too; publishing it isn't a release of the app.
+    if: github.event.release.tag_name != 'pacman'
     strategy:
       fail-fast: false
       matrix:
@@ -63,6 +66,68 @@ jobs:
           sha256sum ${{ matrix.files }} > SHA256SUMS-${{ matrix.name }}.txt
           cat SHA256SUMS-${{ matrix.name }}.txt
           gh release upload "$TAG" ${{ matrix.files }} SHA256SUMS-${{ matrix.name }}.txt --clobber
+
+  pacman:
+    needs: package
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    # One update of the repo at a time: each replaces the database.
+    concurrency:
+      group: pacman-repo
+      cancel-in-progress: false
+    env:
+      PACMAN_GPG_PRIVATE_KEY: ${{ secrets.PACMAN_GPG_PRIVATE_KEY }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check for the signing key
+        id: key
+        run: |
+          if [ -z "$PACMAN_GPG_PRIVATE_KEY" ]; then
+            echo "::notice::No PACMAN_GPG_PRIVATE_KEY secret, so the pacman repo wasn't updated."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install tools
+        if: steps.key.outputs.skip != 'true'
+        run: pacman -Syu --noconfirm --needed git github-cli nodejs
+      - uses: actions/checkout@v7
+        if: steps.key.outputs.skip != 'true'
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build and sign the package
+        if: steps.key.outputs.skip != 'true'
+        id: build
+        run: |
+          version=$(node scripts/release-version.ts "$TAG")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          gh release download "$TAG" --pattern '*-linux-x64.tar.gz' --dir "$RUNNER_TEMP"
+          .github/scripts/pacman-repo.sh "$version" "$RUNNER_TEMP"/*-linux-x64.tar.gz "$RUNNER_TEMP/pacman"
+      - name: Publish to the pacman release
+        if: steps.key.outputs.skip != 'true'
+        run: |
+          version=${{ steps.build.outputs.version }}
+          repo=$(node -p 'require("./package.json").name')
+          cd "$RUNNER_TEMP/pacman"
+
+          if ! gh release view pacman > /dev/null 2>&1; then
+            gh release create pacman --prerelease --latest=false --title "pacman repository" \
+              --notes "The pacman repository for Arch Linux. How to add it: ${{ github.server_url }}/${{ github.repository }}#install"
+          elif gh release download pacman --pattern "$repo.db" --dir current 2> /dev/null; then
+            # A rebuild of an older release must not take the repo back to it.
+            current=$(tar -xOf "current/$repo.db" --wildcards '*/desc' | awk '/^%VERSION%$/ { getline; print; exit }')
+            rm -rf current
+            if [ "$(vercmp "$version-1" "$current")" -lt 0 ]; then
+              echo "::notice::The pacman repo has $current, newer than $version, so it was left alone."
+              exit 0
+            fi
+          fi
+
+          # The package before the database that lists it, so pacman never sees a database for a missing file.
+          gh release upload pacman ./*.pkg.tar.zst ./*.pkg.tar.zst.sig --clobber
+          gh release upload pacman "$repo.db" "$repo.db.sig" "$repo.files" "$repo.files.sig" --clobber
+          # Older packages: the new database no longer lists them.
+          gh release view pacman --json assets --jq '.assets[].name' | while read -r asset; do
+            [ -e "$asset" ] || gh release delete-asset pacman "$asset" --yes
+          done
 
   aur:
     needs: package
@@ -104,7 +169,7 @@ jobs:
 
           # Cloning a package that doesn't exist yet gives an empty repo; the first push creates it.
           git clone "ssh://aur@aur.archlinux.org/$pkgname.git" "$RUNNER_TEMP/aur"
-          node scripts/aur-package.ts "$version" "$sha256" "$RUNNER_TEMP/aur"
+          node scripts/arch-package.ts "$pkgname" "$version" "$sha256" "$RUNNER_TEMP/aur"
           cd "$RUNNER_TEMP/aur"
           git add PKGBUILD .SRCINFO
           if git diff --cached --quiet; then
