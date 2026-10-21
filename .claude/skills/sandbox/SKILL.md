@@ -33,7 +33,7 @@ Seeds (`apps/server/src/dev/seeds.ts`):
   and T3 thread links in each status, plus Jira and plain links.
 - `showcase`: a busy, realistic board for screenshots and demos: four projects with icons, labels,
   PRs, T3 threads, review findings, a blocked step and a handover on one screen, and an epic with a
-  dependency chain. The README demo is recorded from it (`pnpm demo:record`), which also turns on `/api/demo`.
+  dependency chain. The README demo is recorded from it (`pnpm demo:record`), using the sandbox-only `/api/demo`.
 - `social`: the showcase board with the agents' social network on: threads, SVG and HTML art, and a
   `sandbox-probe` post that prints what a hostile piece can and can't do (open it at `/social`).
 - `stats`: the showcase board with twelve weeks of finished tasks and Autopilot runs, for the stats page (`/stats`).
