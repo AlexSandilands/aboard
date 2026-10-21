@@ -320,7 +320,7 @@ function Composer({
           }}
           {...images.handlers}
           aria-label="First message"
-          className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-5 pt-4 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="field-sizing-content mx-2 mt-2 block max-h-72 min-h-26 w-[calc(100%-1rem)] resize-none bg-transparent px-3 pt-2 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <LaunchImageThumbs state={images} />
         <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
