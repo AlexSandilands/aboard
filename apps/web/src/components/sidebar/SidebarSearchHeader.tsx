@@ -11,7 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { ProjectFavicon, ProjectFaviconStack } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import {
   Combobox,
@@ -34,6 +34,7 @@ import {
   useSetProjectScope,
 } from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
+import { ALL_PROJECTS_VALUE, nextProjectScope } from "./projectScope.logic";
 
 /** Search field plus the segmented project-filter / add-project / new-task buttons. */
 export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Project> }) {
@@ -144,7 +145,7 @@ interface ScopeItem {
   label: string;
 }
 
-const ALL_PROJECTS: ScopeItem = { value: "all", label: "All projects" };
+const ALL_PROJECTS: ScopeItem = { value: ALL_PROJECTS_VALUE, label: "All projects" };
 
 /**
  * A multi-select over the projects, scoping the board through `?project=`. Nothing ticked is the whole board, which
@@ -188,21 +189,20 @@ function ProjectScopeCombobox({
       open={open}
       onOpenChange={setOpen}
       value={value}
-      onValueChange={(next: ScopeItem[]) => {
-        const pickedAll = next.some((item) => item.value === ALL_PROJECTS.value);
-        const wasAll = value.some((item) => item.value === ALL_PROJECTS.value);
+      onValueChange={(next: ScopeItem[]) =>
         void setProjectScope(
-          pickedAll && !wasAll ? [] : next.filter((i) => i.value !== ALL_PROJECTS.value).map((i) => i.value),
-        );
-      }}
+          nextProjectScope(
+            value.map((item) => item.value),
+            next.map((item) => item.value),
+          ),
+        )
+      }
     >
       <ComboboxTrigger render={<SidebarHeaderIconButton label={label} />}>
         {selectedProjects.length > 0 ? (
           // Wrapped so the button's direct-child svg colour rule cannot override the project's own colour.
-          <span className="flex shrink-0 -space-x-1.5">
-            {selectedProjects.slice(0, 3).map((project) => (
-              <ProjectFavicon key={project.id} title={project.title} icon={project.icon} className="size-4" />
-            ))}
+          <span className="flex shrink-0">
+            <ProjectFaviconStack projects={selectedProjects} />
           </span>
         ) : (
           <ListFilterIcon className="size-4" />
@@ -234,7 +234,7 @@ function ProjectScopeCombobox({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "me-2 flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input",
+                    "flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input",
                     ticked && "border-primary bg-primary text-primary-foreground",
                   )}
                 >
@@ -245,7 +245,7 @@ function ProjectScopeCombobox({
                 ) : (
                   <FolderIcon className="size-4 shrink-0" />
                 )}
-                <span className="ms-2 min-w-0 flex-1 truncate text-sm">{item.label}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
                 {project ? (
                   <Button
                     size="icon-xs"

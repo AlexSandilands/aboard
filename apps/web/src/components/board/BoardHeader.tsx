@@ -8,7 +8,7 @@ import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { BookmarkIcon, GroupIcon, InboxIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { NotificationsBell } from "~/components/notifications/NotificationsBell";
-import { ProjectFavicon } from "~/components/project/ProjectFavicon";
+import { ProjectFavicon, ProjectFaviconStack } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
 import {
@@ -391,11 +391,7 @@ function ScopeLabel({ projects }: { projects: ReadonlyArray<Project> }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<div className="flex min-w-0 items-center gap-2" />}>
-        <span className="flex shrink-0 -space-x-1.5">
-          {projects.slice(0, 3).map((project) => (
-            <ProjectFavicon key={project.id} title={project.title} icon={project.icon} className="size-4" />
-          ))}
-        </span>
+        <ProjectFaviconStack projects={projects} />
         <h1 className="truncate text-sm font-medium">{projects.length} projects</h1>
       </TooltipTrigger>
       <TooltipPopup>{projects.map((project) => project.title).join(", ")}</TooltipPopup>
