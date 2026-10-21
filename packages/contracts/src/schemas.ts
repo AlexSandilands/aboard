@@ -125,6 +125,14 @@ export const ProjectIcon = z.discriminatedUnion("kind", [
 ]);
 export type ProjectIcon = z.infer<typeof ProjectIcon>;
 
+/** An image file found in a project's folder that the icon picker offers. `path` is relative to the folder, with "/". */
+export const IconCandidate = z.object({
+  path: z.string(),
+  name: z.string(),
+  bytes: z.number().int().nonnegative(),
+});
+export type IconCandidate = z.infer<typeof IconCandidate>;
+
 const IsoDate = z.string();
 
 // ── Entities ─────────────────────────────────────────────────────────────

@@ -25,6 +25,8 @@ import {
 import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { iconCandidateSrc } from "~/lib/api";
+import { useIconCandidates } from "~/state/queries";
 
 const DEFAULT_ICON: IconName = "folder-code";
 
@@ -40,12 +42,15 @@ function iconLabel(name: string): string {
 }
 
 export function ProjectIconPickerDialog({
+  projectId = null,
   title,
   value: current,
   open,
   onOpenChange,
   onSave,
 }: {
+  /** The project whose folder is searched for images to offer; without one the Image tab has no suggestions. */
+  readonly projectId?: string | null;
   readonly title: string;
   readonly value: ProjectIcon | null;
   readonly open: boolean;
@@ -86,6 +91,7 @@ export function ProjectIconPickerDialog({
     previousOpenRef.current = open;
   }, [current, open, automatic.color, automatic.monogram]);
 
+  const candidates = useIconCandidates(projectId, open && mode === "image");
   const icons = useMemo(() => filterProjectIconNames(query), [query]);
   const selectedColorClassName = projectIconColorClassName(color);
   const monogram = letters.normalize("NFKC").trim().toUpperCase();
@@ -105,7 +111,7 @@ export function ProjectIconPickerDialog({
     onOpenChange(false);
   };
 
-  const takeImageFile = async (file: File | undefined) => {
+  const takeImageFile = async (file: Blob | undefined) => {
     const request = ++imageRequestRef.current;
     if (!file) {
       setImageError("Choose an image file.");
@@ -119,6 +125,17 @@ export function ProjectIconPickerDialog({
       if (request !== imageRequestRef.current) return;
       setImageError(error instanceof IconImageError ? error.message : "That image couldn't be used.");
     }
+  };
+  const takeCandidate = async (path: string) => {
+    if (!projectId) return;
+    // Fetched like a dropped file would be read, so the same resize and size checks apply.
+    const response = await fetch(iconCandidateSrc(projectId, path)).catch(() => null);
+    if (!response?.ok) {
+      imageRequestRef.current += 1;
+      setImageError("That image couldn't be read. It may have been moved or deleted.");
+      return;
+    }
+    await takeImageFile(await response.blob());
   };
   const imageFrom = (items: DataTransferItemList) =>
     [...items]
@@ -241,36 +258,64 @@ export function ProjectIconPickerDialog({
               </div>
             </div>
           ) : mode === "image" ? (
-            <div className="flex items-center gap-4 rounded-lg border border-dashed border-border p-4">
-              {image ? (
-                <img src={image} alt="Selected icon" className="size-12 shrink-0 rounded-[25%] object-contain" />
-              ) : (
-                <div className="size-12 shrink-0 rounded-[25%] bg-muted" />
-              )}
-              <div className="flex-1 space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    if (file) void takeImageFile(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                  {image ? "Choose another image" : "Choose image"}
-                </Button>
-                {imageError ? (
-                  <p className="text-xs text-destructive-foreground">{imageError}</p>
+            <>
+              {projectId && candidates.data && candidates.data.length > 0 ? (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Found in project</div>
+                  <ScrollArea scrollFade className="max-h-40">
+                    <div className="grid grid-cols-8 gap-1 p-0.5 sm:grid-cols-10">
+                      {candidates.data.map((candidate) => (
+                        <button
+                          key={candidate.path}
+                          type="button"
+                          title={candidate.path}
+                          aria-label={candidate.path}
+                          className="flex aspect-square items-center justify-center rounded-md border border-transparent p-1 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                          onClick={() => void takeCandidate(candidate.path)}
+                        >
+                          <img
+                            src={iconCandidateSrc(projectId, candidate.path)}
+                            alt=""
+                            loading="lazy"
+                            className="size-full object-contain"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-4 rounded-lg border border-dashed border-border p-4">
+                {image ? (
+                  <img src={image} alt="Selected icon" className="size-12 shrink-0 rounded-[25%] object-contain" />
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Or drop or paste one here. It's resized to a small square.
-                  </p>
+                  <div className="size-12 shrink-0 rounded-[25%] bg-muted" />
                 )}
+                <div className="flex-1 space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      if (file) void takeImageFile(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                    {image ? "Choose another image" : "Choose image"}
+                  </Button>
+                  {imageError ? (
+                    <p className="text-xs text-destructive-foreground">{imageError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Or drop or paste one here. It's resized to a small square.
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             <>
               <ScrollArea scrollFade className="max-h-64">

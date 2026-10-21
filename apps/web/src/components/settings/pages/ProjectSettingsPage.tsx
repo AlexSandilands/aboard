@@ -306,6 +306,7 @@ function ProjectSections({ project }: { project: Project }) {
       {iconPickerOpen ? (
         <Suspense fallback={null}>
           <ProjectIconPickerDialog
+            projectId={project.id}
             title={project.title}
             value={project.icon}
             open={iconPickerOpen}

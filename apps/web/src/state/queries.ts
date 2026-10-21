@@ -13,6 +13,7 @@ import type {
   BoardEvent,
   BoardSnapshot,
   FsBrowseResult,
+  IconCandidate,
   IntegrationsStatus,
   PrFixInfo,
   SettingsAskStatus,
@@ -54,6 +55,7 @@ export const queryKeys = {
   socialFeed: ["socialFeed"] as const,
   stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
   t3Projects: ["t3Projects"] as const,
+  iconCandidates: (projectId: string) => ["iconCandidates", projectId] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
   t3LaunchOptions: (taskId: string) => ["t3LaunchOptions", taskId] as const,
   projectT3LaunchOptions: (projectId: string) => ["projectT3LaunchOptions", projectId] as const,
@@ -337,6 +339,18 @@ export function useBackupStatus() {
     queryKey: queryKeys.backupStatus,
     queryFn: ({ signal }) => api<BackupStatus>("/api/backup/status", { signal }),
     refetchInterval: (query) => (query.state.data?.running ? 1000 : 15_000),
+  });
+}
+
+/** Images in the project's folder, for the icon picker's Image tab; only asked for while that tab is showing. */
+export function useIconCandidates(projectId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.iconCandidates(projectId ?? ""),
+    queryFn: ({ signal }) =>
+      api<IconCandidate[]>(`/api/projects/${encodeURIComponent(projectId ?? "")}/icon-candidates`, { signal }),
+    enabled: enabled && !!projectId,
+    // The folder changes under the board, so a reopened picker looks again.
+    staleTime: 0,
   });
 }
 

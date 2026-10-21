@@ -6,8 +6,11 @@ import {
   UpdateProjectInput,
 } from "@repo/contracts";
 import type { Hono } from "hono";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
+import { AppError } from "../../errors.ts";
+import { findIconCandidatesCached, resolveIconFile } from "../../projectIcons.ts";
 import { actorOf, handle, noContent, parseBody, parseQuery, queryFlag, idParam } from "../respond.ts";
 
 /** /api/projects */
@@ -45,6 +48,31 @@ export function registerProjectRoutes(app: Hono, { services, integrations }: App
     handle((c) => {
       services.projects.delete(idParam(c));
       return noContent(c);
+    }),
+  );
+  // Images in the project's folder for the icon picker; none for a project with no folder or one that is gone.
+  app.get(
+    "/api/projects/:id/icon-candidates",
+    handle(async (c) => {
+      const { workspaceRoot } = services.projects.get(idParam(c));
+      return c.json(workspaceRoot ? await findIconCandidatesCached(workspaceRoot) : []);
+    }),
+  );
+  app.get(
+    "/api/projects/:id/icon-candidates/file",
+    handle(async (c) => {
+      const { workspaceRoot } = services.projects.get(idParam(c));
+      const { path } = parseQuery(c, z.object({ path: z.string().min(1).max(1000) }));
+      const file = workspaceRoot ? await resolveIconFile(workspaceRoot, path) : null;
+      if (!file) throw new AppError("NOT_FOUND", "That image isn't in the project folder");
+      const bytes = new Uint8Array(await readFile(file.absolutePath));
+      return c.body(bytes, 200, {
+        "content-type": file.contentType,
+        // An SVG here is only ever shown as an <img>; these stop it running if it is opened on its own.
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox",
+        "cache-control": "private, no-cache",
+      });
     }),
   );
   app.get(

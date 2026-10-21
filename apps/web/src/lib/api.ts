@@ -42,6 +42,14 @@ export function attachmentSrc(id: string): string {
   return token ? `${attachmentUrl(id)}?token=${encodeURIComponent(token)}` : attachmentUrl(id);
 }
 
+/** Where an image found in a project's folder loads from, for an `<img>` or a fetch; the token rides in the query. */
+export function iconCandidateSrc(projectId: string, path: string): string {
+  const query = new URLSearchParams({ path });
+  const token = authToken();
+  if (token) query.set("token", token);
+  return `/api/projects/${encodeURIComponent(projectId)}/icon-candidates/file?${query}`;
+}
+
 /** Uploads an image (the body is the file itself). `taskId` is null in the new-task box, whose task isn't created yet. */
 export async function uploadAttachment(file: Blob, filename: string, taskId: string | null): Promise<TaskAttachment> {
   const token = authToken();
