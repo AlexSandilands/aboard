@@ -519,6 +519,7 @@ describe("restore", () => {
           template_id: _m,
           delivery: _d,
           integration_branch: _b,
+          integration_merged_at: _im,
           attention_message: _atm,
           attention_actor: _aa,
           attention_requested_at: _at,

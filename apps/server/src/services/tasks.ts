@@ -1,6 +1,7 @@
 import {
   deriveEpicRollup,
   deriveEpicStatus,
+  epicBranchMerge,
   findTicketKeys,
   normalizeLabel,
   parseImportSource,
@@ -15,6 +16,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
+import { toLink } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
@@ -72,8 +74,9 @@ function statusChangeTime(repos: Repos, taskId: string, now: string): string {
 
 /**
  * Re-derives an epic's status from its children (see deriveEpicStatus) and marks its card changed, since the
- * roll-up may have moved. Call inside the write after any change to a child's status, epic, project or archive
- * state. A no-op for an id that isn't an epic.
+ * roll-up may have moved. An integration epic whose branch hasn't merged into the default branch stays in Review
+ * once its tasks are done. Call inside the write after any change to a child's status, epic, project or archive
+ * state, and to the epic's delivery, its PR links or their merge. A no-op for an id that isn't an epic.
  */
 export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: Effects): void {
   const epic = repos.tasks.get(epicId);
@@ -84,7 +87,8 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   // have changed.
   if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
-  const status = deriveEpicStatus(deriveEpicRollup(children));
+  const merge = epicBranchMerge(epic, repos.links.forTasks([epicId]).map(toLink));
+  const status = deriveEpicStatus(deriveEpicRollup(children), merge !== null && !merge.merged);
   if (status === epic.status) return;
   const now = nowIso();
   const lane = repos.tasks.lane(epic.projectId, status).filter((t) => t.id !== epic.id);
@@ -97,7 +101,14 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
     // A finished epic no longer asks, the same as a finished task (move and close clear it).
     ...(status === "done" ? { attentionRequest: null } : {}),
   });
-  fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true });
+  // Done through the branch merging, not just the tasks finishing: the log says how the board knew.
+  const mergedBy =
+    status === "done" && merge?.merged
+      ? merge.by === "pr" && merge.pr
+        ? { mergedPr: `${merge.pr.repo}#${merge.pr.number}` }
+        : { markedMerged: true }
+      : {};
+  fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true, ...mergedBy });
   if (status === "done" && epic.attentionRequest) fx.log(epicId, actor, "attention_cleared", { finished: true });
 }
 
@@ -405,6 +416,7 @@ export function createTasksService(
           templateId: template?.id ?? null,
           delivery: null,
           integrationBranch: null,
+          integrationMergedAt: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
@@ -681,9 +693,17 @@ export function createTasksService(
             );
           }
         }
-        repos.tasks.update({ ...current, delivery, integrationBranch: nextBranch, updatedAt: nowIso() });
+        // A merge marked by hand was for the branch it was marked on.
+        repos.tasks.update({
+          ...current,
+          delivery,
+          integrationBranch: nextBranch,
+          integrationMergedAt: null,
+          updatedAt: nowIso(),
+        });
         fx.log(id, actor, "delivery_changed", { delivery, branch: nextBranch });
-        fx.task(id);
+        // Integration holds a finished epic in Review until its branch merges; main lets it finish on its tasks.
+        syncEpic(id, actor, fx);
         // Its tasks' summaries carry the branch they start from.
         for (const child of repos.tasks.childrenOf([id])) fx.task(child.id);
       });
@@ -696,9 +716,31 @@ export function createTasksService(
         const status = input.status ?? current.status;
         const statusChanged = status !== current.status;
         if (statusChanged && current.kind === "epic") {
+          // The one move an epic takes: an integration epic whose tasks are all done is marked merged into the default
+          // branch, for when there is no PR to watch for it. Its status then follows from that (syncEpic).
+          if (status === "done" && current.delivery === "integration") {
+            const open = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null && c.status !== "done");
+            const total = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null).length;
+            if (open.length > 0 || total === 0) {
+              throw new AppError(
+                "VALIDATION",
+                `#${current.number} can be marked merged into the default branch once all its tasks are done` +
+                  (open.length > 0
+                    ? `; still open: ${open.map((c) => `#${c.number}`).join(", ")}`
+                    : "; it has none yet"),
+              );
+            }
+            repos.tasks.update({ ...current, integrationMergedAt: nowIso(), updatedAt: nowIso() });
+            fx.log(id, actor, "integration_marked_merged", { branch: current.integrationBranch });
+            syncEpic(id, actor, fx);
+            return;
+          }
           throw new AppError(
             "VALIDATION",
-            `#${current.number} is an epic; its status follows its child tasks, so move those instead`,
+            `#${current.number} is an epic; its status follows its child tasks, so move those instead` +
+              (current.delivery === "integration"
+                ? ". Once they are all done, move it to Done to mark its branch merged into the default branch"
+                : ""),
           );
         }
         if (statusChanged && status !== "backlog" && !current.manual && repos.plans.countSteps(id) === 0) {

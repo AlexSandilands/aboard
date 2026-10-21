@@ -139,6 +139,12 @@ export const useSetEpicDelivery = (epicId: string, opts?: MutationOpts) =>
       api<TaskDetail>(`/api/tasks/${enc(epicId)}/delivery`, { method: "PUT", body: { delivery } }),
     opts,
   );
+/**
+ * Marks an integration epic merged into the default branch, for when no PR the board watches shows it. A move to Done is
+ * how the server takes it, and only once all the epic's tasks are Done; the board updates from its event.
+ */
+export const useMarkEpicMerged = (epicId: string, opts?: MutationOpts) =>
+  useApiMutation(() => api<TaskSummary>(`/api/tasks/${enc(epicId)}/move`, { body: { status: "done" } }), opts);
 // ── Templates ───────────────────────────────────────────────────────────
 
 /** Templates aren't part of the board snapshot or its events (only the UI edits them), so each change refetches the list. */

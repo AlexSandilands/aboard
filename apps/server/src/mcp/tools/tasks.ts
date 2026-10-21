@@ -357,7 +357,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan, except for a manual task; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it before opening the PR (a PR opened earlier is reviewed on GitHub too), then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
-        "beforeTask/afterTask optionally position it within the column.",
+        "beforeTask/afterTask optionally position it within the column. An epic's status follows its tasks, so it " +
+        "isn't moved, with one exception: an integration epic stays in Review once its tasks are done, until its PR " +
+        "from its branch merges into the default branch; when it merged some other way, move_task(epic, done) marks " +
+        "it merged. Do that only when the user says the branch merged, never on your own.",
       inputSchema: {
         task: taskField,
         status: TaskStatusInput,

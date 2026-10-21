@@ -568,7 +568,8 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
 - **The epic's PR.** Once a task PR has merged into the branch and the epic has no PR from it, it opens a draft PR
   from the branch into the default branch (`ensureEpicPr`: an open one already there is used instead) and links it
   on the epic (`epic-pr:<epicId>:<branch>:<task PRs merged>`, so a failed attempt is tried again after the next
-  merge). Then it keeps the PR's description, `epicPrBody` (each task with
+  merge). That PR merging is what finishes the epic: the board sees it through the link and the epic goes from Review to
+  Done once its tasks are Done too ([epics](epics.md#delivery)). Then it keeps the PR's description, `epicPrBody` (each task with
   its state, its PRs into the branch, its latest Autopilot review counts and its local review), current: the key
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.

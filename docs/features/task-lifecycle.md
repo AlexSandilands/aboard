@@ -17,7 +17,8 @@ The first column was called Ideas (`idea`) until migration 006 renamed it. Statu
 instructions keep working; outputs only ever say `backlog`.
 
 An epic is a task of kind `epic` that groups others. It skips most of this: it has no plan, its status
-follows its tasks, it can't be closed, and it can't be archived while any of its tasks is open. See [epics.md](epics.md).
+follows its tasks (an epic delivered through an integration branch stays in Review until the branch has merged into the
+default branch), it can't be closed, and it can't be archived while any of its tasks is open. See [epics.md](epics.md).
 
 ### Creating
 

@@ -185,6 +185,10 @@ start means the epic stops every time a task is done. An epic can instead delive
   Autopilot popover: **Delivery: Pull requests to main** (the default) or **Integration branch**. The board makes
   the branch `epic/<number>-<title>` on origin from your default branch. Agents ask you about this when they plan
   an epic whose tasks depend on each other; they never choose for you.
+- The epic isn't Done until that branch has merged into main. With every task done it waits in **Review**, with a
+  **waiting for merge into main** badge, and finishes by itself once you merge its pull request (the draft one Autopilot
+  keeps, or one you link on the epic). If the branch merged some other way, or there's no pull request to watch, open the
+  badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
 - **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit, once all of

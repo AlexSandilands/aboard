@@ -73,6 +73,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     dueDate: null,
     delivery: null,
     integrationBranch: null,
+    integrationMerge: null,
     review: null,
     suggestedModel: null,
     import: null,
