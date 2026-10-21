@@ -14,7 +14,7 @@ filtered board can be bookmarked or shared, and Back undoes a filter. A default 
 
 | Param        | Filter                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------- |
-| `project`    | Scopes the board to one project (the sidebar, the palette)                              |
+| `project`    | Scopes the board to some projects: ids, comma-separated ([The project scope](#the-project-scope)) |
 | `epic`       | Shows only that epic's band ([epics.md](epics.md#on-the-board))                         |
 | `labels`     | Comma-separated labels, any of them ([labels.md](labels.md))                            |
 | `status`     | Comma-separated statuses, any of them                                                   |
@@ -54,6 +54,22 @@ submenus for status, model tier, Autopilot flag and epic, the label list, and th
 **Reset filters**). While any filter is on, a pill beside the title says how many ("2 filters active") with a reset
 button, and the filter button is highlighted. When the filters are exactly a saved view's, the pill shows its name
 instead. The project scope doesn't count: it has its own chip with its own close button, and a reset leaves it.
+
+### The project scope
+
+`?project=` is a list of project ids, like `?labels=`. One id is a list of one, so older URLs, bookmarks and saved
+views keep working. The sidebar's project menu (`ProjectScopeCombobox`) ticks and unticks projects and stays open
+while you click; **All projects** clears the list, and so does unticking the last project or ticking every one, because
+nothing ticked and everything ticked are the same board. Ids of projects that don't exist are ignored (`parseProjectScope`
+with the board's projects), and the board writes the ids in lane order (`formatProjectScope`) so a subset always makes the
+same URL. A saved view keeps whatever order it was saved in, and `sameFilters` compares the ids as a set, so a view
+still matches the board when the order differs.
+
+The header chip shows the project's title for one project, and up to three stacked favicons and "N projects" (the titles
+in a tooltip) for several. Its ✕ shows every project again. The sidebar's Projects list shows only the ticked projects
+(see [board-layout.md](board-layout.md#the-sidebars-projects-list)). The new-task default and the palette's "Current
+filter" hint need one project, so they apply only when exactly one is ticked; with several, the palette lists the ticked
+projects first. The palette's go-to-project still means "show only this project".
 
 ### Saved views
 

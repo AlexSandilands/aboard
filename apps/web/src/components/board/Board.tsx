@@ -146,13 +146,19 @@ export function Board() {
   }, [hasPick]);
   // In-progress-only looks across every project, so a project scope waits (it comes back when the filter is off).
   const inProgressOnly = useBoardFilters().inProgress;
-  const scopedProject = inProgressOnly ? null : (boardQuery.data?.projects.find((p) => p.id === projectFilter) ?? null);
+  const boardProjects = boardQuery.data?.projects;
+  const scopedProjects = useMemo(
+    () => (inProgressOnly ? [] : (boardProjects ?? []).filter((p) => projectFilter.includes(p.id))),
+    [inProgressOnly, boardProjects, projectFilter],
+  );
+
+  const scopedIds = useMemo(() => scopedProjects.map((p) => p.id), [scopedProjects]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <BoardHeader scopedProject={scopedProject} />
+      <BoardHeader scopedProjects={scopedProjects} />
       {boardQuery.data ? (
-        <BoardContent board={boardQuery.data} projectFilter={scopedProject?.id ?? null} />
+        <BoardContent board={boardQuery.data} projectFilter={scopedIds} />
       ) : boardQuery.isError ? (
         <Empty>
           <EmptyHeader>
@@ -237,7 +243,7 @@ function describeOver(
   return sortable ? `Over ${column}, position ${sortable.index + 1} of ${sortable.items.length}.` : `Over ${column}.`;
 }
 
-function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: string | null }) {
+function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: ReadonlyArray<string> }) {
   const queryClient = useQueryClient();
   const filters = useBoardFilters();
   const priorityLane = useBoardView((s) => s.showPriorityLane);
@@ -260,7 +266,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       buildLanes(
         board,
         {
-          projectId: projectFilter,
+          projectIds: projectFilter,
           search: filters.text,
           attentionOnly: filters.attention,
           hasPrOnly: filters.hasPr,

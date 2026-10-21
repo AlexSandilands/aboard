@@ -43,7 +43,7 @@ import {
   useSetBoardFilters,
   useSetEpicFilter,
   useSetLabelFilter,
-  useSetProjectFilter,
+  useSetProjectScope,
 } from "./boardNavigation";
 import {
   activeFilterCount,
@@ -57,7 +57,7 @@ import {
 import { cn } from "~/lib/utils";
 
 /** The board's top bar (52px; 40px under the desktop title bar): title or scoped project, filters, and the palette hint. */
-export function BoardHeader({ scopedProject }: { scopedProject: Project | null }) {
+export function BoardHeader({ scopedProjects }: { scopedProjects: ReadonlyArray<Project> }) {
   const { isMobile, open } = useSidebar();
   const filters = useBoardFilters();
   const setFilters = useSetBoardFilters();
@@ -65,7 +65,8 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
   const selectedLabels = useLabelFilter();
   const setLabelFilter = useSetLabelFilter();
   const filtered = activeFilterCount(filters) > 0;
-  const setProjectFilter = useSetProjectFilter();
+  const setProjectScope = useSetProjectScope();
+  const scopedProjectIds = useMemo(() => scopedProjects.map((p) => p.id), [scopedProjects]);
   const newGeneralTask = useNewGeneralTask();
   // With the task panel closed this header reaches the window's right edge and the native controls.
   const atRightEdge = useSelectedTaskId() === null;
@@ -78,10 +79,9 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
       )}
     >
       {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
-      {scopedProject ? (
+      {scopedProjects.length > 0 ? (
         <div className="flex min-w-0 items-center gap-2">
-          <ProjectFavicon title={scopedProject.title} icon={scopedProject.icon} className="size-4" />
-          <h1 className="truncate text-sm font-medium">{scopedProject.title}</h1>
+          <ScopeLabel projects={scopedProjects} />
           <Tooltip>
             <TooltipTrigger
               render={
@@ -89,7 +89,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
                   variant="ghost-muted"
                   size="icon-micro"
                   aria-label="Show all projects"
-                  onClick={() => void setProjectFilter(null)}
+                  onClick={() => void setProjectScope([])}
                 />
               }
             >
@@ -179,7 +179,7 @@ export function BoardHeader({ scopedProject }: { scopedProject: Project | null }
             <AutopilotFilterMenu />
             <EpicFilterMenu />
             <LabelFilterGroup
-              scopedProjectId={scopedProject?.id ?? null}
+              scopedProjectIds={scopedProjectIds}
               selected={selectedLabels}
               onChange={(labels) => void setLabelFilter(labels)}
             />
@@ -377,24 +377,52 @@ function FiltersActive() {
   );
 }
 
+/** The header's name for the project scope: the project, or up to three favicons and how many projects. */
+function ScopeLabel({ projects }: { projects: ReadonlyArray<Project> }) {
+  const [only] = projects;
+  if (projects.length === 1 && only) {
+    return (
+      <>
+        <ProjectFavicon title={only.title} icon={only.icon} className="size-4" />
+        <h1 className="truncate text-sm font-medium">{only.title}</h1>
+      </>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<div className="flex min-w-0 items-center gap-2" />}>
+        <span className="flex shrink-0 -space-x-1.5">
+          {projects.slice(0, 3).map((project) => (
+            <ProjectFavicon key={project.id} title={project.title} icon={project.icon} className="size-4" />
+          ))}
+        </span>
+        <h1 className="truncate text-sm font-medium">{projects.length} projects</h1>
+      </TooltipTrigger>
+      <TooltipPopup>{projects.map((project) => project.title).join(", ")}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 /** The filter menu's label checkboxes, with how many cards in scope carry each. Selected labels stay listed. */
 function LabelFilterGroup({
-  scopedProjectId,
+  scopedProjectIds,
   selected,
   onChange,
 }: {
-  scopedProjectId: string | null;
+  scopedProjectIds: ReadonlyArray<string>;
   selected: ReadonlyArray<string>;
   onChange: (labels: string[]) => void;
 }) {
   const tasks = useBoard().data?.tasks;
   const colors = useLabelColors();
   const counts = useMemo(() => {
-    const inScope = (tasks ?? []).filter((task) => !scopedProjectId || task.projectId === scopedProjectId);
+    const inScope = (tasks ?? []).filter(
+      (task) => scopedProjectIds.length === 0 || scopedProjectIds.includes(task.projectId),
+    );
     const list = labelCounts(inScope);
     for (const label of selected) if (!list.some((l) => l.name === label)) list.push({ name: label, count: 0 });
     return list;
-  }, [tasks, scopedProjectId, selected]);
+  }, [tasks, scopedProjectIds, selected]);
   if (counts.length === 0) return null;
   return (
     <>

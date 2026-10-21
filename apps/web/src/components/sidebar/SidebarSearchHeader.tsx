@@ -1,6 +1,7 @@
 // Layout adapted from T3 Code (SidebarThreadHeader.tsx and the project scope combobox in Sidebar.tsx), MIT — see NOTICE.
 import type { Project } from "@repo/contracts";
 import {
+  CheckIcon,
   FolderIcon,
   FolderPlusIcon,
   ListFilterIcon,
@@ -22,6 +23,7 @@ import {
   ComboboxTrigger,
 } from "~/components/ui/combobox";
 import { SidebarInput } from "~/components/ui/sidebar";
+import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
@@ -29,7 +31,7 @@ import {
   useBoardFilters,
   useProjectFilter,
   useSetBoardFilters,
-  useSetProjectFilter,
+  useSetProjectScope,
 } from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
 
@@ -83,7 +85,7 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
       <div className="flex shrink-0 items-center">
         {projects.length > 0 ? (
           <>
-            <ProjectScopeCombobox projects={projects} selectedId={projectFilter} anchorRef={searchFieldRef} />
+            <ProjectScopeCombobox projects={projects} selectedIds={projectFilter} anchorRef={searchFieldRef} />
             <SidebarHeaderIconButton
               label="Add project"
               onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}
@@ -95,7 +97,11 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
         <SidebarHeaderIconButton
           label="New task"
           tooltip={newTaskShortcut ? `New task (${newTaskShortcut})` : "New task"}
-          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId: projectFilter ?? undefined })}
+          onClick={() =>
+            usePalette
+              .getState()
+              .openPalette({ kind: "new-task", projectId: projectFilter.length === 1 ? projectFilter[0] : undefined })
+          }
         >
           <SquarePenIcon />
         </SidebarHeaderIconButton>
@@ -140,52 +146,63 @@ interface ScopeItem {
 
 const ALL_PROJECTS: ScopeItem = { value: "all", label: "All projects" };
 
-/** T3's "Filter threads by project" combobox: scopes the board through `?project=`. */
+/**
+ * A multi-select over the projects, scoping the board through `?project=`. Nothing ticked is the whole board, which
+ * the "All projects" row stands for.
+ */
 function ProjectScopeCombobox({
   projects,
-  selectedId,
+  selectedIds,
   anchorRef,
 }: {
   projects: ReadonlyArray<Project>;
-  selectedId: string | null;
+  selectedIds: ReadonlyArray<string>;
   anchorRef: RefObject<HTMLDivElement | null>;
 }) {
   const [open, setOpen] = useState(false);
-  const setProjectFilter = useSetProjectFilter();
+  const setProjectScope = useSetProjectScope();
   const openSettings = useOpenSettings();
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const items = useMemo<ScopeItem[]>(
     () => [ALL_PROJECTS, ...projects.map((p) => ({ value: p.id, label: p.title }))],
     [projects],
   );
-  const selectedProject = selectedId ? (projectById.get(selectedId) ?? null) : null;
-  const selectedItem = items.find((item) => item.value === selectedProject?.id) ?? ALL_PROJECTS;
+  const selectedProjects = useMemo(() => projects.filter((p) => selectedIds.includes(p.id)), [projects, selectedIds]);
+  // "All projects" counts as the selected row while no project is.
+  const value = useMemo(
+    () => (selectedProjects.length ? items.filter((item) => selectedIds.includes(item.value)) : [ALL_PROJECTS]),
+    [items, selectedIds, selectedProjects.length],
+  );
+  const label =
+    selectedProjects.length === 0
+      ? "Filter board by project"
+      : `Filter board by projects: ${selectedProjects.map((p) => p.title).join(", ")}`;
 
   return (
     <Combobox
+      multiple
       items={items}
       autoHighlight
       itemToStringLabel={(item: ScopeItem) => item.label}
       isItemEqualToValue={(a: ScopeItem, b: ScopeItem) => a.value === b.value}
       open={open}
       onOpenChange={setOpen}
-      value={selectedItem}
-      onValueChange={(item: ScopeItem | null) => {
-        if (!item) return;
-        void setProjectFilter(item.value === ALL_PROJECTS.value ? null : item.value);
+      value={value}
+      onValueChange={(next: ScopeItem[]) => {
+        const pickedAll = next.some((item) => item.value === ALL_PROJECTS.value);
+        const wasAll = value.some((item) => item.value === ALL_PROJECTS.value);
+        void setProjectScope(
+          pickedAll && !wasAll ? [] : next.filter((i) => i.value !== ALL_PROJECTS.value).map((i) => i.value),
+        );
       }}
     >
-      <ComboboxTrigger
-        render={
-          <SidebarHeaderIconButton
-            label={selectedProject ? `Filter board by project: ${selectedProject.title}` : "Filter board by project"}
-          />
-        }
-      >
-        {selectedProject ? (
+      <ComboboxTrigger render={<SidebarHeaderIconButton label={label} />}>
+        {selectedProjects.length > 0 ? (
           // Wrapped so the button's direct-child svg colour rule cannot override the project's own colour.
-          <span className="flex shrink-0">
-            <ProjectFavicon title={selectedProject.title} icon={selectedProject.icon} className="size-4" />
+          <span className="flex shrink-0 -space-x-1.5">
+            {selectedProjects.slice(0, 3).map((project) => (
+              <ProjectFavicon key={project.id} title={project.title} icon={project.icon} className="size-4" />
+            ))}
           </span>
         ) : (
           <ListFilterIcon className="size-4" />
@@ -201,6 +218,7 @@ function ProjectScopeCombobox({
         <ComboboxList>
           {(item: ScopeItem) => {
             const project = projectById.get(item.value) ?? null;
+            const ticked = value.some((v) => v.value === item.value);
             return (
               <ComboboxItem
                 key={item.value}
@@ -213,12 +231,21 @@ function ProjectScopeCombobox({
                   openSettings("project", { project: project.id });
                 }}
               >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "me-2 flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input",
+                    ticked && "border-primary bg-primary text-primary-foreground",
+                  )}
+                >
+                  {ticked ? <CheckIcon className="size-3" /> : null}
+                </span>
                 {project ? (
                   <ProjectFavicon title={project.title} icon={project.icon} className="size-4 shrink-0" />
                 ) : (
                   <FolderIcon className="size-4 shrink-0" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
+                <span className="ms-2 min-w-0 flex-1 truncate text-sm">{item.label}</span>
                 {project ? (
                   <Button
                     size="icon-xs"

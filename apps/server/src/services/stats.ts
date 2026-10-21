@@ -26,9 +26,10 @@ import type { Core } from "./core.ts";
 export interface StatsService {
   /**
    * The last `weeks` calendar weeks, ending with the current one, and the same number before them, for comparison.
-   * One week is shown by day instead: the last 7 days ending today, against the 7 before.
+   * One week is shown by day instead: the last 7 days ending today, against the 7 before. `projectIds` limits it to
+   * those projects (a 404 for an unknown one); none is the whole board.
    */
-  weekly(weeks: StatsPeriod, projectId?: string): Promise<StatsResponse>;
+  weekly(weeks: StatsPeriod, projectIds?: ReadonlyArray<string>): Promise<StatsResponse>;
 }
 
 /** How long a project's commit times are reused: reading them is a git process per project. */
@@ -152,9 +153,13 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
   };
 
   return {
-    async weekly(weeks, projectId) {
-      const project = projectId ? repos.projects.get(projectId) : null;
-      if (projectId && !project) throw notFound("Project", projectId);
+    async weekly(weeks, projectIds = []) {
+      const chosen = projectIds.map((id) => {
+        const project = repos.projects.get(id);
+        if (!project) throw notFound("Project", id);
+        return project;
+      });
+      const chosenIds = new Set(chosen.map((p) => p.id));
 
       // 2 * `perPeriod` buckets: the second half is the period shown, the first the one it is compared with. A single
       // week is shown by day, so its period is 7 buckets.
@@ -192,7 +197,8 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         series(`time_in_status.${status}.median`, "ms", "median");
       }
 
-      const inScope = (taskProject: string | null | undefined): boolean => !projectId || taskProject === projectId;
+      const inScope = (taskProject: string | null | undefined): boolean =>
+        chosenIds.size === 0 || (taskProject != null && chosenIds.has(taskProject));
       const projectOf = new Map<string, string | null>();
       const projectOfTask = (taskId: string): string | null => {
         if (!projectOf.has(taskId)) projectOf.set(taskId, repos.tasks.get(taskId)?.projectId ?? null);
@@ -246,9 +252,11 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
       const nowMs = core.now().getTime();
       const snapshotTimes = stamps.slice(1).map((s) => Math.min(s, nowMs));
       const openAt = Object.fromEntries(OPEN_STATUSES.map((status) => [status, snapshotTimes.map(() => 0)] as const));
-      const flowTasks = repos.tasks
-        .list({ ...(projectId ? { projectId } : {}), includeArchived: true })
-        .filter((t) => t.kind !== "epic");
+      const flowTasks = (
+        chosen.length === 1
+          ? repos.tasks.list({ projectId: chosen[0]!.id, includeArchived: true })
+          : repos.tasks.list({ includeArchived: true }).filter((t) => inScope(t.projectId))
+      ).filter((t) => t.kind !== "epic");
       const movesByTask = new Map<string, TaskEvent[]>();
       for (const m of repos.events.ofTypes(
         flowTasks.map((t) => t.id),
@@ -435,13 +443,14 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         ),
       };
       // Commits that reached each project's default branch, by when they landed. A project without a folder has no
-      // history to read (said so only when it is the one asked for; on the whole board it is just not counted).
+      // history to read (said so for the ones asked for; on the whole board it is just not counted).
       const notes: string[] = [];
-      const inFolders = (project ? [project] : repos.projects.list(true)).filter(
+      const inFolders = (chosen.length ? chosen : repos.projects.list(true)).filter(
         (p): p is Project & { workspaceRoot: string } => p.workspaceRoot !== null,
       );
-      if (project && inFolders.length === 0)
-        notes.push(`${project.title} has no folder, so its commits aren't counted`);
+      for (const p of chosen) {
+        if (p.workspaceRoot === null) notes.push(`${p.title} has no folder, so its commits aren't counted`);
+      }
       // Projects on one repository (another folder in it, or a second clone) share its commits: each counts once.
       const seenCommits = new Set<string>();
       for (const commits of await Promise.all(inFolders.map((p) => commitsOf(p, bounds[0]!)))) {
@@ -483,7 +492,7 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         from: shown[0]!,
         to: shown.at(-1)!,
         previousFrom: start,
-        project: project ? { id: project.id, title: project.title } : null,
+        projects: chosen.map((p) => ({ id: p.id, title: p.title })),
         buckets: shown.slice(0, -1).map((from, i) => ({ start: from, end: shown[i + 1]! })),
         series: out,
         breakdowns,

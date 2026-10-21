@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   classifyLink,
   deliveryHintApplies,
+  formatProjectScope,
+  parseProjectScope,
   epicBranchName,
   startedEpicTasks,
   deriveAttention,
@@ -526,5 +528,32 @@ describe("epic delivery helpers", () => {
       child("5", "review", { archivedAt: "2026-01-01T00:00:00Z" }),
     ]);
     expect(started.map((c) => c.id)).toEqual(["2", "3"]);
+  });
+});
+
+describe("project scope", () => {
+  const order = ["a", "b", "c"];
+
+  it("reads a legacy single id as a list of one", () => {
+    expect(parseProjectScope("b")).toEqual(["b"]);
+    expect(parseProjectScope("b", order)).toEqual(["b"]);
+  });
+
+  it("drops blanks and repeats, and with the project list unknown ids and the order of the ids", () => {
+    expect(parseProjectScope(" c, ,a,c")).toEqual(["c", "a"]);
+    expect(parseProjectScope("c,gone,a", order)).toEqual(["a", "c"]);
+    expect(parseProjectScope(undefined, order)).toEqual([]);
+  });
+
+  it("writes the ids in lane order and round-trips", () => {
+    const value = formatProjectScope(["c", "a"], order);
+    expect(value).toBe("a,c");
+    expect(parseProjectScope(value, order)).toEqual(["a", "c"]);
+  });
+
+  it("is the whole board when nothing, or every project, is ticked", () => {
+    expect(formatProjectScope([], order)).toBeUndefined();
+    expect(formatProjectScope(["c", "b", "a"], order)).toBeUndefined();
+    expect(formatProjectScope(["gone"], order)).toBeUndefined();
   });
 });

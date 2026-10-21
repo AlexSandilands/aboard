@@ -5,6 +5,7 @@ import {
   type ModelTier,
   type TaskStatus,
   type TaskSummary,
+  parseProjectScope,
 } from "@repo/contracts";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 
@@ -115,7 +116,7 @@ export function readFilters(params: BoardFilterParams): FilterState {
  */
 export function filterParams(filters: FilterState, project?: string | null): BoardFilterParams {
   return {
-    project: project || undefined,
+    project: normalizeProjectScope(project),
     epic: filters.epicId ?? undefined,
     labels: formatLabelFilter(filters.labels),
     status: formatChoices(filters.statuses),
@@ -131,6 +132,11 @@ export function filterParams(filters: FilterState, project?: string | null): Boa
   };
 }
 
+/** A `?project=` value with repeats and blanks dropped, in the order given. */
+function normalizeProjectScope(project: string | null | undefined): string | undefined {
+  return parseProjectScope(project ?? undefined).join(",") || undefined;
+}
+
 /** The filter params of a search (the board's, or a saved view's), without `task` or anything else, normalised. */
 export function normalizeParams(search: BoardFilterParams): BoardFilterParams {
   return filterParams(readFilters(search), search.project);
@@ -140,7 +146,10 @@ export function normalizeParams(search: BoardFilterParams): BoardFilterParams {
 export function sameFilters(a: BoardFilterParams, b: BoardFilterParams): boolean {
   const left = normalizeParams(a);
   const right = normalizeParams(b);
-  return FILTER_PARAM_KEYS.every((key) => left[key] === right[key]);
+  // The board writes the projects in lane order, which a saved view doesn't know, so they compare as a set.
+  const sameProjects =
+    [...parseProjectScope(left.project)].sort().join(",") === [...parseProjectScope(right.project)].sort().join(",");
+  return sameProjects && FILTER_PARAM_KEYS.every((key) => key === "project" || left[key] === right[key]);
 }
 
 /** How many kinds of filter are set. The project scope has its own place in the header and doesn't count. */

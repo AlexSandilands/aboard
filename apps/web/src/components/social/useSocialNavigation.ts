@@ -27,6 +27,6 @@ export function useLeaveSocial() {
       router.history.back();
       return;
     }
-    void navigate({ to: "/", search: { project: project ?? undefined } });
+    void navigate({ to: "/", search: { project: project.join(",") || undefined } });
   }, [router, navigate, project]);
 }

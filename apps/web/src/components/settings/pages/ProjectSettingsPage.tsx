@@ -1,4 +1,4 @@
-import type { Project } from "@repo/contracts";
+import { parseProjectScope, type Project } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
 import { ProjectAutopilotSection } from "~/components/autopilot/AutopilotSettingsSection";
@@ -43,7 +43,10 @@ const ProjectIconPickerDialog = lazy(() =>
 export function ProjectSettingsPage() {
   const board = useBoard();
   const requested = useSearch({ strict: false, select: (search) => search.project });
-  const fromBoard = useSettingsNav((s) => s.boardReturn.project);
+  const boardScope = useSettingsNav((s) => s.boardReturn.project);
+  // A scope of several projects names no single one to show.
+  const scoped = parseProjectScope(boardScope);
+  const fromBoard = scoped.length === 1 ? scoped[0] : null;
   // In sidebar order, so the picker reads like the project list.
   const projects = [...(board.data?.projects ?? [])].sort((a, b) =>
     a.position < b.position ? -1 : a.position > b.position ? 1 : 0,

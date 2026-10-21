@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseProjectScope } from "./savedViews.ts";
 
 // Weekly trends over the board's history, or daily for a single week (docs/features/stats.md).
 
@@ -6,17 +7,26 @@ import { z } from "zod";
 export const STATS_PERIODS = [1, 4, 12, 52] as const;
 export type StatsPeriod = (typeof STATS_PERIODS)[number];
 
-/** `GET /api/stats` query: the period in weeks and, optionally, one project. */
-export const StatsQuery = z.object({
-  weeks: z.coerce
-    .number()
-    .int()
-    .refine((n): n is StatsPeriod => (STATS_PERIODS as readonly number[]).includes(n), {
-      message: `weeks must be one of ${STATS_PERIODS.join(", ")}`,
-    })
-    .default(12),
-  projectId: z.string().min(1).optional(),
-});
+/**
+ * `GET /api/stats` query: the period in weeks and, optionally, some projects: `projectIds` is a comma list, and
+ * `projectId` one project (the older form, kept as an alias). Parsed to the list of ids; empty is the whole board.
+ */
+export const StatsQuery = z
+  .object({
+    weeks: z.coerce
+      .number()
+      .int()
+      .refine((n): n is StatsPeriod => (STATS_PERIODS as readonly number[]).includes(n), {
+        message: `weeks must be one of ${STATS_PERIODS.join(", ")}`,
+      })
+      .default(12),
+    projectId: z.string().min(1).optional(),
+    projectIds: z.string().optional(),
+  })
+  .transform(({ weeks, projectId, projectIds }) => ({
+    weeks,
+    projectIds: parseProjectScope([projectIds, projectId].filter(Boolean).join(",")),
+  }));
 export type StatsQuery = z.infer<typeof StatsQuery>;
 
 /** How a series' values read: a count of things, a duration in milliseconds, dollars, or an average of counts. */
@@ -85,8 +95,8 @@ export const StatsResponse = z.object({
   to: z.string(),
   /** Where the previous period begins; it ends at `from`. */
   previousFrom: z.string(),
-  /** Null for the whole board. */
-  project: z.object({ id: z.string(), title: z.string() }).nullable(),
+  /** The projects the numbers cover, in the order asked for; empty for the whole board. */
+  projects: z.array(z.object({ id: z.string(), title: z.string() })),
   buckets: z.array(StatsBucket),
   series: z.record(z.string(), StatsSeries),
   breakdowns: z.record(z.string(), StatsBreakdown),

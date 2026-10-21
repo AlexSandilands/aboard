@@ -8,10 +8,12 @@ it already keeps, and from git for commits; nothing is recorded for the purpose.
 
 ## How it works
 
-`GET /api/stats?weeks=&projectId=` (`apps/server/src/http/routes/system.ts`) calls `services.stats.weekly`
+`GET /api/stats?weeks=&projectIds=` (`apps/server/src/http/routes/system.ts`) calls `services.stats.weekly`
 (`apps/server/src/services/stats.ts`). `weeks` is 1, 4, 12 (the default) or 52, and anything else is a 400. One week is the exception to "by week": it is
 charted **by day** ([One week, by day](#one-week-by-day)).
-`projectId` limits every series to one project (404 when it doesn't exist); without it the whole board counts.
+`projectIds` (comma-separated) limits every series to those projects (404 when any of them doesn't exist); `projectId` is
+the same for one project. Without either the whole board counts. The stats page's project picker is a multi-select, and
+opening or leaving the page carries the board's project scope both ways.
 
 The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 
@@ -24,7 +26,7 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
   (`previousFrom` to `from`), for "up or down on last time".
 - `breakdowns`: a **map by name** to `{ unit, items }`, the period split by a category rather than by week
   ([Breakdowns](#breakdowns)).
-- `from`, `to`, `previousFrom`, `project`, `weeks`.
+- `from`, `to`, `previousFrom`, `projects` (`{ id, title }` for each project asked for, in the order asked; empty for the whole board), `weeks`.
 - `notes`: sentences about the numbers, e.g. a project whose commits weren't counted because its folder isn't a git
   repository. Empty when there is nothing to say.
 
@@ -80,7 +82,7 @@ doesn't change the shape.
 A breakdown splits the whole period by a category, not by week. Each is `{ unit, items }`, with an item per category
 `{ key, total, previousTotal }` (the period and the one before it), largest `total` first. A `null` key is the "none"
 category: a task without a label or a tier suggestion. All three are always present, with no items when nothing
-falls in them. They share the scope of the series: `projectId` limits them to one project.
+falls in them. They share the scope of the series: `projectIds` limits them to those projects.
 
 | Breakdown | What it counts | Source |
 | --------- | -------------- | ------ |
@@ -103,7 +105,7 @@ counted (the commits it brought are). Commit times are bucketed like every other
 
 - Projects that point at one repository (a folder inside it, or a second clone) share its commits: the board-wide sum
   counts each commit hash once.
-- A project without a folder is skipped. When it is the one asked for, a note says so.
+- A project without a folder is skipped. When it is one of those asked for, a note says so.
 - Git failing (no folder on disk, not a repository, no default branch, a timeout) gives that project no commits and a
   note in `notes`, never an error, so the other series still load.
 - Times are cached per project, folder and period start for 10 minutes, in memory (a restart clears them); a failed
@@ -122,18 +124,18 @@ are the levels at the end of each day.
 
 `/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like
 `/social`. It is reached from the Stats icon in the sidebar footer and the command palette's "Open stats"
-(`useOpenStats`, which carries over the project the board is on). While it is open the footer's three icons give way
-to a single **Back** button, as in Settings, and so does Esc: both go to the board on the project the stats page
-showed (`useLeaveStats`). `?project=` (a project id; none is the whole board)
+(`useOpenStats`, which carries over the projects the board is on). While it is open the footer's three icons give way
+to a single **Back** button, as in Settings, and so does Esc: both go to the board on the projects the stats page
+showed (`useLeaveStats`). `?project=` (project ids, comma-separated; none is the whole board)
 and `?weeks=` (1, 4, 12 or 52; anything else reads as 12) hold the view, so links and reloads keep it.
 
 The sections are 40 px (`space-y-10`) apart; the gaps inside a section are small. With `bucket: "day"` the axis
 labels read "Mon 13", the tooltips "Mon, Oct 13", and the titles and blurbs say "per day" / "each day"; the page
 passes the bucket kind to the charts through `BucketKindContext`, and the tiles compare with "previous week".
 
-`useStats(weeks, projectId)` reads `GET /api/stats`. Nothing is pushed over SSE for stats, so it is stale at once
-and refetches when the window regains focus and when the period or project changes (a new query key). While a new key
-loads, the previous charts stay up, dimmed. A project that no longer exists (404) offers "Show all projects".
+`useStats(weeks, projectIds)` reads `GET /api/stats`. Nothing is pushed over SSE for stats, so it is stale at once
+and refetches when the window regains focus and when the period or projects change (a new query key). While a new key
+loads, the previous charts stay up, dimmed. A selection that names a project that no longer exists (404) offers "Show all projects".
 
 The sections (Throughput, Cycle time, Flow, PRs, commits and reviews, PR flow, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
 above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by

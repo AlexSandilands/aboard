@@ -27,7 +27,8 @@ function setup() {
   const clock = (when: Date) => vi.setSystemTime(when);
   const task = (projectId: string, title: string) => s.tasks.create({ projectId, title, plan });
   const finish = (id: string) => s.tasks.move(id, { status: "done" }, "agent");
-  const stats = (weeks: 1 | 4 | 12 | 52 = 4, projectId?: string) => s.stats.weekly(weeks, projectId);
+  const stats = (weeks: 1 | 4 | 12 | 52 = 4, projectId?: string) =>
+    s.stats.weekly(weeks, projectId ? [projectId] : undefined);
   const values = async (name: string, weeks: 1 | 4 | 12 | 52 = 4, projectId?: string) =>
     (await stats(weeks, projectId)).series[name]!;
   return { ...h, s, alpha, beta, clock, task, finish, stats, values };
@@ -100,7 +101,7 @@ describe("stats.weekly", () => {
     expect(res.from).toBe(res.buckets[0]!.start);
     expect(res.to).toBe(res.buckets.at(-1)!.end);
     expect(res.previousFrom).toBe(new Date(2026, 7, 24).toISOString());
-    expect(res.project).toBeNull();
+    expect(res.projects).toEqual([]);
     expect(res.series.tasks_created).toEqual({ unit: "count", values: [0, 0, 0, 0], total: 0, previousTotal: 0 });
     expect(res.series["cycle_time.created_to_done"]).toEqual({
       unit: "ms",
@@ -685,8 +686,30 @@ describe("stats.weekly", () => {
     expect((await values("tasks_created")).total).toBe(2);
     expect((await values("tasks_created", 4, alpha.id)).total).toBe(1);
     expect((await values("tasks_completed", 4, beta.id)).total).toBe(0);
-    expect((await stats(4, alpha.id)).project).toEqual({ id: alpha.id, title: "Alpha" });
-    await expect(s.stats.weekly(4, "nope")).rejects.toThrow(/not found/i);
+    expect((await stats(4, alpha.id)).projects).toEqual([{ id: alpha.id, title: "Alpha" }]);
+    await expect(s.stats.weekly(4, ["nope"])).rejects.toThrow(/not found/i);
+  });
+
+  it("covers a subset of the projects, in the order asked for, and a 404 for any unknown one", async () => {
+    const { s, alpha, beta, clock, task, finish } = setup();
+    const gamma = s.projects.create({ title: "Gamma", workspaceRoot: "/work/gamma" });
+    clock(at(12, 9));
+    const a = task(alpha.id, "In alpha");
+    const b = task(beta.id, "In beta");
+    task(gamma.id, "In gamma");
+    finish(a.id);
+    finish(b.id);
+
+    const both = await s.stats.weekly(4, [beta.id, alpha.id]);
+    expect(both.projects).toEqual([
+      { id: beta.id, title: "Beta" },
+      { id: alpha.id, title: "Alpha" },
+    ]);
+    expect(both.series.tasks_created!.total).toBe(2);
+    expect(both.series.tasks_completed!.total).toBe(2);
+    expect(both.series["open_tasks.backlog"]!.total).toBe(0);
+    expect((await s.stats.weekly(4)).series.tasks_created!.total).toBe(3);
+    await expect(s.stats.weekly(4, [alpha.id, "nope"])).rejects.toThrow(/not found/i);
   });
 });
 
@@ -777,8 +800,8 @@ describe("stats.weekly commits", () => {
     const all = await s.stats.weekly(4);
     expect(all.series.commits!.total).toBe(3);
     expect(all.notes).toEqual([]);
-    expect((await s.stats.weekly(4, alpha.id)).series.commits!.total).toBe(1);
-    const none = await s.stats.weekly(4, gamma.id);
+    expect((await s.stats.weekly(4, [alpha.id])).series.commits!.total).toBe(1);
+    const none = await s.stats.weekly(4, [gamma.id]);
     expect(none.series.commits!.total).toBe(0);
     expect(none.notes).toEqual(["Gamma has no folder, so its commits aren't counted"]);
   });
@@ -830,8 +853,8 @@ describe("stats.weekly commits", () => {
     const first = s.projects.create({ title: "Ahead", workspaceRoot: ahead });
     const second = s.projects.create({ title: "Dangling", workspaceRoot: dangling });
 
-    expect((await s.stats.weekly(4, first.id)).series.commits).toMatchObject({ values: [0, 0, 1, 0], total: 1 });
-    const res = await s.stats.weekly(4, second.id);
+    expect((await s.stats.weekly(4, [first.id])).series.commits).toMatchObject({ values: [0, 0, 1, 0], total: 1 });
+    const res = await s.stats.weekly(4, [second.id]);
     expect(res.series.commits!.total).toBe(2);
     expect(res.notes).toEqual([]);
   });
@@ -840,13 +863,13 @@ describe("stats.weekly commits", () => {
     const dir = tempDir();
     const { s } = setupCommits();
     const project = s.projects.create({ title: "Late", workspaceRoot: dir });
-    expect((await s.stats.weekly(4, project.id)).notes).toHaveLength(1);
+    expect((await s.stats.weekly(4, [project.id])).notes).toHaveLength(1);
 
     git(dir, "init", "--quiet", "-b", "main");
     commit(dir, "a.txt", at(13, 10));
-    expect((await s.stats.weekly(4, project.id)).notes).toHaveLength(1);
+    expect((await s.stats.weekly(4, [project.id])).notes).toHaveLength(1);
     vi.setSystemTime(new Date(at(14, 12).getTime() + 31_000));
-    const res = await s.stats.weekly(4, project.id);
+    const res = await s.stats.weekly(4, [project.id]);
     expect(res.notes).toEqual([]);
     expect(res.series.commits!.total).toBe(1);
   });
