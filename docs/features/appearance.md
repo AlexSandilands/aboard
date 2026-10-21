@@ -143,6 +143,10 @@ colours read them (`@theme inline`), so every `text-foreground`, `text-muted-for
 **Panel animations**: the ported sidebar primitive already transitions when an ancestor has
 `data-panel-animations="true"`. The task panel grows in from its edge with the `.panel-enter` keyframe and
 shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
+Only the `<aside>`'s width animates. Its contents sit in an inner wrapper fixed at `var(--resizable-width)` (at least
+380px, the `@container` the panel's `@[460px]` queries measure), anchored left and clipped by the `<aside>`, so they
+slide in and out at full size instead of being re-laid out and wrapped on every frame. The keyframes set
+`overflow: hidden` only while they play, so the resize handle, which hangs over the panel's edge, isn't clipped at rest.
 
 **Fonts** are typed by name and applied on Enter or blur, only if the browser can draw the family (and, for
 the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/fonts.ts`.

@@ -80,11 +80,18 @@ export function TaskPanel({
       onAnimationEnd={(event) => {
         if (closing && event.target === event.currentTarget) onClosed?.();
       }}
-      className={`${closing ? "panel-exit" : "panel-enter"} @container relative flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background`}
+      className={`${closing ? "panel-exit" : "panel-enter"} relative flex h-full min-h-0 max-w-[70vw] shrink-0`}
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />
-      <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />
+      {/* The aside animates its width; this keeps the contents at the panel's full width (anchored left, clipped
+          by the aside) so they slide in and out instead of reflowing, and is the container the @ queries see. */}
+      <div
+        className="@container flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+        style={{ width: `var(${RESIZABLE_WIDTH_PROPERTY})`, minWidth: MIN_WIDTH }}
+      >
+        <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />
+      </div>
     </aside>
   );
 }
