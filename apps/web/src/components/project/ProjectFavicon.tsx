@@ -70,18 +70,3 @@ export function ProjectFavicon(input: { title: string; icon: ProjectIcon | null;
   }
   return <FolderCodeIcon className={cn("size-3.5 shrink-0 text-icon-muted", input.className)} />;
 }
-
-/** The first three of several projects' favicons, overlapping: the sign of a project scope of more than one. */
-export function ProjectFaviconStack({
-  projects,
-}: {
-  projects: ReadonlyArray<{ id: string; title: string; icon: ProjectIcon | null }>;
-}) {
-  return (
-    <span className="flex shrink-0 -space-x-1.5">
-      {projects.slice(0, 3).map((project) => (
-        <ProjectFavicon key={project.id} title={project.title} icon={project.icon} className="size-4" />
-      ))}
-    </span>
-  );
-}

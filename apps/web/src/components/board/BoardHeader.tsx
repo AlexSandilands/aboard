@@ -8,7 +8,6 @@ import { LabelChip, useLabelColors } from "~/components/labels/LabelChip";
 import { labelCounts, toggleLabel } from "~/components/labels/labels.logic";
 import { BookmarkIcon, GroupIcon, InboxIcon, ListFilterIcon, SearchIcon, XIcon } from "lucide-react";
 import { NotificationsBell } from "~/components/notifications/NotificationsBell";
-import { ProjectFavicon, ProjectFaviconStack } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
 import {
@@ -43,7 +42,6 @@ import {
   useSetBoardFilters,
   useSetEpicFilter,
   useSetLabelFilter,
-  useSetProjectScope,
 } from "./boardNavigation";
 import {
   activeFilterCount,
@@ -56,7 +54,7 @@ import {
 } from "./boardFilters.logic";
 import { cn } from "~/lib/utils";
 
-/** The board's top bar (52px; 40px under the desktop title bar): title or scoped project, filters, and the palette hint. */
+/** The board's top bar (52px; 40px under the desktop title bar): title, filters, and the palette hint. */
 export function BoardHeader({ scopedProjects }: { scopedProjects: ReadonlyArray<Project> }) {
   const { isMobile, open } = useSidebar();
   const filters = useBoardFilters();
@@ -65,7 +63,6 @@ export function BoardHeader({ scopedProjects }: { scopedProjects: ReadonlyArray<
   const selectedLabels = useLabelFilter();
   const setLabelFilter = useSetLabelFilter();
   const filtered = activeFilterCount(filters) > 0;
-  const setProjectScope = useSetProjectScope();
   const scopedProjectIds = useMemo(() => scopedProjects.map((p) => p.id), [scopedProjects]);
   const newGeneralTask = useNewGeneralTask();
   // With the task panel closed this header reaches the window's right edge and the native controls.
@@ -79,28 +76,7 @@ export function BoardHeader({ scopedProjects }: { scopedProjects: ReadonlyArray<
       )}
     >
       {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
-      {scopedProjects.length > 0 ? (
-        <div className="flex min-w-0 items-center gap-2">
-          <ScopeLabel projects={scopedProjects} />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost-muted"
-                  size="icon-micro"
-                  aria-label="Show all projects"
-                  onClick={() => void setProjectScope([])}
-                />
-              }
-            >
-              <XIcon />
-            </TooltipTrigger>
-            <TooltipPopup>Show all projects</TooltipPopup>
-          </Tooltip>
-        </div>
-      ) : (
-        <h1 className="text-sm font-medium">Board</h1>
-      )}
+      <h1 className="text-sm font-medium">Board</h1>
       <FiltersActive />
       <ActiveEpicFilter />
       <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
@@ -374,28 +350,6 @@ function FiltersActive() {
         <XIcon />
       </Button>
     </span>
-  );
-}
-
-/** The header's name for the project scope: the project, or up to three favicons and how many projects. */
-function ScopeLabel({ projects }: { projects: ReadonlyArray<Project> }) {
-  const [only] = projects;
-  if (projects.length === 1 && only) {
-    return (
-      <>
-        <ProjectFavicon title={only.title} icon={only.icon} className="size-4" />
-        <h1 className="truncate text-sm font-medium">{only.title}</h1>
-      </>
-    );
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<div className="flex min-w-0 items-center gap-2" />}>
-        <ProjectFaviconStack projects={projects} />
-        <h1 className="truncate text-sm font-medium">{projects.length} projects</h1>
-      </TooltipTrigger>
-      <TooltipPopup>{projects.map((project) => project.title).join(", ")}</TooltipPopup>
-    </Tooltip>
   );
 }
 

@@ -53,7 +53,7 @@ The header's filter menu holds the switches (in progress, needs attention, has P
 submenus for status, model tier, Autopilot flag and epic, the label list, and the views (switch, **Save view…**,
 **Reset filters**). While any filter is on, a pill beside the title says how many ("2 filters active") with a reset
 button, and the filter button is highlighted. When the filters are exactly a saved view's, the pill shows its name
-instead. The project scope doesn't count: it has its own chip with its own close button, and a reset leaves it.
+instead. The project scope doesn't count: it is set only from the sidebar's project menu, and a reset leaves it.
 
 ### The project scope
 
@@ -65,8 +65,8 @@ with the board's projects), and the board writes the ids in lane order (`formatP
 same URL. A saved view keeps whatever order it was saved in, and `sameFilters` compares the ids as a set, so a view
 still matches the board when the order differs.
 
-The header chip shows the project's title for one project, and up to three stacked favicons and "N projects" (the titles
-in a tooltip) for several. Its ✕ shows every project again. The sidebar's Projects list shows only the ticked projects
+The project menu is the one place the scope is shown and changed: the board header keeps its "Board" title and the
+menu's button keeps its filter icon. The sidebar's Projects list shows only the ticked projects
 (see [board-layout.md](board-layout.md#the-sidebars-projects-list)). The new-task default and the palette's "Current
 filter" hint need one project, so they apply only when exactly one is ticked; with several, the palette lists the ticked
 projects first. The palette's go-to-project still means "show only this project".
