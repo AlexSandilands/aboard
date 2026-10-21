@@ -129,7 +129,6 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
                   key={project.id}
                   project={project}
                   openCount={counts.get(project.id) ?? 0}
-                  active={scope.includes(project.id)}
                   onSelect={handleSelect}
                 />
               ))}
@@ -144,12 +143,10 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
 const SortableProjectRow = memo(function SortableProjectRow({
   project,
   openCount,
-  active,
   onSelect,
 }: {
   project: Project;
   openCount: number;
-  active: boolean;
   onSelect: (projectId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
@@ -172,7 +169,6 @@ const SortableProjectRow = memo(function SortableProjectRow({
       <SidebarMenuButton
         {...attributes}
         {...listeners}
-        isActive={active}
         onClick={() => onSelect(project.id)}
         onContextMenu={(event) => {
           event.preventDefault();

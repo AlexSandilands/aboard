@@ -11,7 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ProjectFavicon, ProjectFaviconStack } from "~/components/project/ProjectFavicon";
+import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import {
   Combobox,
@@ -23,7 +23,6 @@ import {
   ComboboxTrigger,
 } from "~/components/ui/combobox";
 import { SidebarInput } from "~/components/ui/sidebar";
-import { cn } from "~/lib/utils";
 import { usePalette } from "~/state/ui";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
@@ -199,14 +198,7 @@ function ProjectScopeCombobox({
       }
     >
       <ComboboxTrigger render={<SidebarHeaderIconButton label={label} />}>
-        {selectedProjects.length > 0 ? (
-          // Wrapped so the button's direct-child svg colour rule cannot override the project's own colour.
-          <span className="flex shrink-0">
-            <ProjectFaviconStack projects={selectedProjects} />
-          </span>
-        ) : (
-          <ListFilterIcon className="size-4" />
-        )}
+        <ListFilterIcon className="size-4" />
       </ComboboxTrigger>
       <ComboboxPopup
         align="start"
@@ -231,14 +223,12 @@ function ProjectScopeCombobox({
                   openSettings("project", { project: project.id });
                 }}
               >
+                {/* A plain tick in a fixed slot, so the icons and names line up whether or not a row is ticked. */}
                 <span
                   aria-hidden="true"
-                  className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input",
-                    ticked && "border-primary bg-primary text-primary-foreground",
-                  )}
+                  className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
                 >
-                  {ticked ? <CheckIcon className="size-3" /> : null}
+                  {ticked ? <CheckIcon className="size-4" /> : null}
                 </span>
                 {project ? (
                   <ProjectFavicon title={project.title} icon={project.icon} className="size-4 shrink-0" />
