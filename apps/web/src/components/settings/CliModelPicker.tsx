@@ -4,6 +4,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { DEFAULT_EFFORT, effortItems, effortOfValue } from "~/components/handoff/cliEffort.logic";
 import { ComposerControl } from "~/components/handoff/T3LaunchPickers";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { cn } from "~/lib/utils";
 import {
   Menu,
   MenuGroup,
@@ -26,9 +27,10 @@ import {
 const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opacity-60" />;
 
 /**
- * A CLI's model on the Model tiers page, looking like T3 Code's model picker: a button with the CLI's mark and the
- * model's name, opening a searchable list of the models the CLI lists. Anything else can be typed and used, e.g.
- * `claude-opus-5-5` or `sonnet[1m]`. Saved as soon as a model is picked.
+ * A CLI's model, looking like T3 Code's model picker: a button with the CLI's mark and the model's name, opening a
+ * searchable list of the models the CLI lists. Anything else can be typed and used, e.g. `claude-opus-5-5` or
+ * `sonnet[1m]`. On the Model tiers page it is saved as soon as a model is picked; the session launch dialog also
+ * offers the CLI's own default (`defaultLabel`).
  */
 export function CliModelPicker({
   harness,
@@ -37,6 +39,8 @@ export function CliModelPicker({
   models,
   loading = false,
   label,
+  defaultLabel,
+  className,
   onSave,
 }: {
   harness: AgentHarness;
@@ -48,6 +52,9 @@ export function CliModelPicker({
   /** The scan is still running, so an empty list doesn't mean the CLI lists nothing. */
   loading?: boolean;
   label: string;
+  /** Offers "" (no `--model`, the CLI's default) under this name, first in the list and on the button. */
+  defaultLabel?: string;
+  className?: string;
   onSave: (next: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -83,10 +90,10 @@ export function CliModelPicker({
         if (next) setQuery("");
       }}
     >
-      <PopoverTrigger render={<ComposerControl className="max-w-64" aria-label={label} />}>
+      <PopoverTrigger render={<ComposerControl className={cn("max-w-64", className)} aria-label={label} />}>
         <HarnessIcon harness={harness} className="size-4" />
-        <span className={current ? "min-w-0 truncate" : "min-w-0 truncate text-muted-foreground"}>
-          {current ? (current.label ?? current.value) : "Choose a model"}
+        <span className={current || defaultLabel ? "min-w-0 truncate" : "min-w-0 truncate text-muted-foreground"}>
+          {current ? (current.label ?? current.value) : (defaultLabel ?? "Choose a model")}
         </span>
         <Chevron />
       </PopoverTrigger>
@@ -110,6 +117,24 @@ export function CliModelPicker({
             />
           </label>
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
+            {defaultLabel && !query.trim() ? (
+              <button
+                type="button"
+                data-option
+                onKeyDown={onArrow}
+                onClick={() => pick("")}
+                aria-current={!value.trim() || undefined}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-accent focus-visible:bg-accent aria-current:bg-accent/60"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium leading-snug">{defaultLabel}</span>
+                  <span className="mt-1 block text-xs leading-snug text-muted-foreground/70">
+                    Whatever {cliName} is set to use
+                  </span>
+                </span>
+                {!value.trim() ? <CheckIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" /> : null}
+              </button>
+            ) : null}
             {shown.map((model) => (
               <ModelRow
                 key={model.value}

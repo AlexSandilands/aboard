@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { usePrefetchT3LaunchOptions } from "~/state/queries";
+import { usePrefetchSessionLaunchOptions, usePrefetchT3LaunchOptions } from "~/state/queries";
 
 /**
  * Put inside a menu's popup, which only mounts while the menu is open: opening the menu starts loading the launch
@@ -14,5 +14,15 @@ export function PrefetchT3LaunchOptions(target: { taskId: string } | { projectId
     // `prefetch` is a new function each render; the menu opening (this mounting) is what triggers it.
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- see above
   }, [kind, id]);
+  return null;
+}
+
+/** The same for the "New Claude Code / Copilot CLI session…" items: their dialog's options and the CLIs' models. */
+export function PrefetchSessionLaunchOptions({ taskId }: { taskId: string }) {
+  const prefetch = usePrefetchSessionLaunchOptions();
+  useEffect(() => {
+    prefetch(taskId);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- as above: the menu opening is the trigger
+  }, [taskId]);
   return null;
 }

@@ -19,7 +19,7 @@ import { useAutopilotEpicScope, useAutopilotRuns, useAutopilotScope, useBoard, u
 import { useDialogs } from "~/state/ui";
 import { canStartT3Thread } from "./handoff.logic";
 import { prAutopilotState } from "./fixPr.logic";
-import { PrefetchT3LaunchOptions } from "./LaunchPrefetch";
+import { PrefetchSessionLaunchOptions, PrefetchT3LaunchOptions } from "./LaunchPrefetch";
 
 type PrLink = Extract<TaskLink, { kind: "pr" }>;
 type SlotTask = Pick<
@@ -91,6 +91,7 @@ export function FixInMenuItems({ task, link }: { task: SlotTask; link: PrLink })
   return (
     <>
       {t3 ? <PrefetchT3LaunchOptions taskId={task.id} /> : null}
+      {clis.length ? <PrefetchSessionLaunchOptions taskId={task.id} /> : null}
       {t3 ? (
         <MenuItem onClick={() => useDialogs.getState().openT3Launch(task.id, link.id)}>
           <T3Icon />

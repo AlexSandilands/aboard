@@ -40,6 +40,7 @@ import {
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
+import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { usePlanPrompt } from "./PlanTasksDialog";
 import {
   AccessPicker,
@@ -289,25 +290,6 @@ function LaunchContent({
   );
 }
 
-function LaunchUnavailable({ message, onRetry, onCopy }: { message: string; onRetry: () => void; onCopy: () => void }) {
-  return (
-    <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
-      <p className="flex items-start gap-2">
-        <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-        <span>{message}</span>
-      </p>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onRetry}>
-          Retry
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCopy}>
-          Copy prompt instead
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function Composer({
   subject,
   options,
@@ -509,17 +491,6 @@ function Composer({
       ) : null}
       {options?.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
-  );
-}
-
-/** Stands in for the model, effort and access pickers while the options load. */
-function ToolbarSkeleton() {
-  return (
-    <>
-      <Skeleton shape="pill" className="mx-2.5 h-4 w-32" />
-      <Skeleton shape="pill" className="mx-2.5 h-4 w-16" />
-      <Skeleton shape="pill" className="mx-2.5 h-4 w-24" />
-    </>
   );
 }
 

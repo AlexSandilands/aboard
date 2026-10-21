@@ -231,8 +231,8 @@ background refresh fails the dialog stays as it is; the error panel only replace
 
 Both launch dialogs are `max-w-220` wide, enough for the toolbar with a long model name. The toolbar stays on one row:
 on a narrower window the model picker is the one control that shrinks, truncating its name (the full name is its
-tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog does the same with
-its model field.
+tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog has the same composer,
+model and effort pickers and loading (see [agent-sessions.md](agent-sessions.md)).
 
 Launches carry a `commandId`, which T3 uses to de-duplicate them, and a `threadId` the dialog makes with it
 (T3 files uploaded images under the thread, so it needs the id up front). After a timeout or lost connection the
