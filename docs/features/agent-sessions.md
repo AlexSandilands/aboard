@@ -171,7 +171,7 @@ model for the task's model, which model that is and what picked it (a label's cu
   from the same model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It
   offers the levels the scan lists for the model, else the CLI's own (`CLI_EFFORTS`), or "Default effort", which passes
   no flag; a model that takes no effort hides it, and picking a model that doesn't take the chosen level resets it to
-  the default. The planning dialog has the same two fields, as a text field and a select;
+  the default. The planning dialog has the same two pickers, starting on the CLI's default;
 - images, pasted or dropped into the prompt or picked with the image button (up to 10). A CLI can't take an image on
   its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
   lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
@@ -365,7 +365,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
 | `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
 | `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
-| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session dialog (`cliModelPicker.logic.ts` is tested); the planning dialog's effort select is `handoff/CliEffortPicker.tsx` |
+| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session and planning dialogs (`cliModelPicker.logic.ts` is tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |

@@ -1,7 +1,7 @@
 import {
   AGENT_HARNESSES,
-  CLI_EFFORTS,
   MAX_PLAN_TASKS,
+  modelEffortLevels,
   planningSessionLabel,
   planTasksPrompt,
   type AgentHarness,
@@ -13,6 +13,8 @@ import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 import { pickedAmong, plannableTasks } from "~/components/board/boardSelection.logic";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { CliEffortMenu, CliModelPicker } from "~/components/settings/CliModelPicker";
+import { findSuggestion } from "~/components/settings/cliModelPicker.logic";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Button } from "~/components/ui/button";
 import {
@@ -23,16 +25,15 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useStartPlanningSession } from "~/state/mutations";
-import { useAgentClis, useBoard, useSettings } from "~/state/queries";
+import { useAgentClis, useAgentModels, useBoard, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { planSkillOf } from "./handoff.logic";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
-import { CliEffortPicker } from "./CliEffortPicker";
+import { effortAfterModelChange } from "./cliEffort.logic";
 import { announceSession } from "./SessionLaunchDialog";
 import { ComposerStrip } from "./T3LaunchPickers";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
@@ -171,7 +172,7 @@ export function PlanSessionDialog() {
   const project = board?.projects.find((p) => p.id === target?.projectId);
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && close()}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-220">
         {project && target ? (
           <PlanSession
             key={`${project.id}:${target.harness}`}
@@ -204,6 +205,10 @@ function PlanSession({
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState<CliEffort | null>(null);
   const cli = useAgentClis().data?.find((c) => c.harness === harness);
+  // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
+  const scanned = useAgentModels(true);
+  const models = scanned.data?.harnesses.find((h) => h.harness === harness)?.models ?? [];
+  const levels = modelEffortLevels(harness, findSuggestion(models, model));
   const start = useStartPlanningSession({ silent: true });
   const images = useLaunchImages();
   const badModel = modelError(model);
@@ -222,7 +227,8 @@ function PlanSession({
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
-        effort,
+        // A model that takes no effort gets none, whatever was picked for the one before it.
+        effort: levels.length > 0 ? effort : null,
         taskIds: tasks.map((t) => t.id),
       },
       {
@@ -266,38 +272,45 @@ function PlanSession({
             }}
             {...images.handlers}
             aria-label="First message"
-            className="field-sizing-content block max-h-72 min-h-28 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+            className="field-sizing-content mx-2 mt-2 block max-h-72 min-h-26 w-[calc(100%-1rem)] resize-none bg-transparent px-3 pt-2 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
           />
           <LaunchImageThumbs state={images} />
-          <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
-            <AddImageControl state={images} />
-            <Input
-              size="sm"
-              className="w-56"
-              aria-label="Model"
-              aria-invalid={badModel ? true : undefined}
-              placeholder="Model (the CLI's default)"
+          <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
+            <CliModelPicker
+              harness={harness}
+              cliName={harnessLabel(harness)}
+              label="Model"
+              defaultLabel="Default model"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              models={models}
+              loading={scanned.isFetching}
+              // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
+              className="max-w-80 shrink"
+              onSave={(next) => {
+                setModel(next);
+                // The effort goes with the model: kept while the new one takes it.
+                setEffort((current) =>
+                  effortAfterModelChange(current, modelEffortLevels(harness, findSuggestion(models, next))),
+                );
+              }}
             />
-            <CliEffortPicker
-              value={effort}
-              levels={CLI_EFFORTS[harness]}
-              onChange={setEffort}
-              variant="ghost"
-              className="w-auto"
-            />
-            <button
-              type="submit"
-              aria-label="Start session"
-              title={blocker ?? "Start session (Ctrl+Enter)"}
-              disabled={!!blocker || start.isPending || !prompt.trim()}
-              className={cn(
-                "ms-auto flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-              )}
-            >
-              {start.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
-            </button>
+            {levels.length > 0 ? (
+              <CliEffortMenu label="Effort" value={effort} levels={levels} onChange={setEffort} />
+            ) : null}
+            <div className="ms-auto flex shrink-0 items-center gap-1.5">
+              <AddImageControl state={images} />
+              <button
+                type="submit"
+                aria-label="Start session"
+                title={blocker ?? "Start session (Ctrl+Enter)"}
+                disabled={!!blocker || start.isPending || !prompt.trim()}
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+                )}
+              >
+                {start.isPending ? <Spinner className="size-4" /> : <ArrowUpIcon className="size-4" />}
+              </button>
+            </div>
           </div>
         </div>
         <ComposerStrip className="gap-2">
