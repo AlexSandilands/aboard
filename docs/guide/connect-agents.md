@@ -29,21 +29,23 @@ runs and an entry with the board's address is registered, under any name.
 
 The server explains the basics when an agent connects. For the full workflow:
 
-- **Claude Code, Copilot, Codex:** in **Settings → Integrations**, turn on **Board skill** in the agent's
-  section. The board installs [`skills/aboard`](../../skills/aboard) into its global skills folder
-  (`~/.claude/skills/aboard`, `~/.copilot/skills/aboard` or `~/.codex/skills/aboard`, or under the folder
-  `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` names when you set one) and rewrites it when an
-  update changes it, so agents never follow an old workflow. It's off until you turn it on.
+- **Claude Code, Copilot, Codex:** in **Settings → Integrations**, turn on **Board skills** in the agent's
+  section. The board installs two skills into its global skills folder (`~/.claude/skills`, `~/.copilot/skills` or
+  `~/.codex/skills`, or under the folder `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` names when you set
+  one): [`skills/aboard`](../../skills/aboard), the workflow, and
+  [`skills/aboard-automations`](../../skills/aboard-automations), which teaches the agent how to write a good
+  [custom automation](custom-automations.md#asking-an-agent-for-one) when you ask for one. It rewrites them when an
+  update changes them, so agents never follow an old workflow. It's off until you turn it on.
 - **Other agents:** paste [`skills/aboard/AGENTS-snippet.md`](../../skills/aboard/AGENTS-snippet.md) into
   your `AGENTS.md` or `CLAUDE.md`. **Copy snippet** in the Codex section copies it and, later, says when it
   changed since you copied it: paste it again then, since tools get renamed and an old copy sends agents to
   tools that no longer exist.
 
-The row shows the installed copy's state: **Up to date**, **Out of date** (rewritten when the board next
+The row shows the installed copies' combined state: **Up to date**, **Out of date** (rewritten when the board next
 starts), **Edited by you**, or **Not the app's copy** (one you copied in yourself, often an older version). The
 board only rewrites a copy that is still exactly what it wrote; any other stays yours until you choose
-**Overwrite**, or **Keep mine** to stop syncing it. Turning the switch off
-asks whether to delete the installed copy, and it never touches your other skills.
+**Overwrite**, or **Keep mine** to stop syncing it. A skill you edited doesn't stop the other from being updated.
+Turning the switch off asks whether to delete the installed copies, and it never touches your other skills.
 
 ## Projects
 

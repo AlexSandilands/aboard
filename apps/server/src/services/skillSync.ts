@@ -1,10 +1,11 @@
 import {
   BOARD_AGENTS_SNIPPET,
-  boardSkillFile,
-  BRAND,
   brandEnv,
+  SHIPPED_SKILLS,
   SkillSyncHarness,
+  type ShippedSkill,
   type SkillSyncHarnessStatus,
+  type SkillSyncSkillStatus,
   type SkillSyncState,
   type SkillSyncStatus,
 } from "@repo/contracts";
@@ -20,10 +21,15 @@ import { promptHash } from "./suggestions.ts";
  */
 export const SKILL_SYNC_KEY = "skillSync";
 
+type SkillKey = ShippedSkill["key"];
+
 interface HarnessRecord {
   enabled: boolean;
-  /** Hash of the text the board last wrote (or adopted); a file that still matches it is the board's to rewrite. */
-  installedHash: string | null;
+  /**
+   * Per skill, the hash of the text the board last wrote (or adopted); a file that still matches it is the board's to
+   * rewrite. A skill missing here was never installed by the board.
+   */
+  installedHashes: Partial<Record<SkillKey, string>>;
 }
 
 interface StoredSkillSync {
@@ -32,7 +38,19 @@ interface StoredSkillSync {
   snippetCopiedHash: string | null;
 }
 
-const OFF: HarnessRecord = { enabled: false, installedHash: null };
+/** What is saved: records from when the board shipped one skill kept its hash in `installedHash`. */
+interface SavedHarnessRecord {
+  enabled?: boolean;
+  installedHash?: string | null;
+  installedHashes?: Partial<Record<SkillKey, string>>;
+}
+
+const OFF: HarnessRecord = { enabled: false, installedHashes: {} };
+
+const readRecord = (saved: SavedHarnessRecord): HarnessRecord => ({
+  enabled: saved.enabled ?? false,
+  installedHashes: { ...(saved.installedHash ? { board: saved.installedHash } : {}), ...saved.installedHashes },
+});
 
 /** Each harness's own folder, which holds its global `skills/`. */
 export type HarnessHomes = Record<SkillSyncHarness, string>;
@@ -63,21 +81,22 @@ const hashOf = (text: string) => promptHash(text.replace(/\r\n/g, "\n"));
 
 export interface SkillSyncService {
   status(): SkillSyncStatus;
-  /** Turns sync on and installs the skill, unless an edited copy is there: that waits for overwrite. */
+  /** Turns sync on and installs the skills, unless an edited copy is there: that one waits for overwrite. */
   enable(harness: SkillSyncHarness): SkillSyncStatus;
   /** Replaces whatever is installed, the user's edits included, and turns sync on. */
   overwrite(harness: SkillSyncHarness): SkillSyncStatus;
-  /** Turns sync off; with `remove`, deletes the installed copy, refusing an edited one unless `force`. */
+  /** Turns sync off; with `remove`, deletes the installed copies, refusing an edited one unless `force`. */
   disable(harness: SkillSyncHarness, opts: { remove: boolean; force?: boolean }): SkillSyncStatus;
-  /** Brings every enabled harness's copy up to date. Run on start; never throws. */
+  /** Brings every enabled harness's copies up to date. Run on start; never throws. */
   syncAll(): void;
   snippetCopied(): SkillSyncStatus;
 }
 
 /**
- * Installs the board skill into harnesses' global skill folders (`<home>/<root>/<BRAND.id>/SKILL.md`) and keeps it in
- * step with the app. Only a file that still matches what the board last wrote is ever rewritten, so a copy the user
- * edited stays theirs until they choose to overwrite it. Nothing outside the board's own folder is touched.
+ * Installs the board's skills (SHIPPED_SKILLS) into harnesses' global skill folders (`<home>/skills/<id>/SKILL.md`) and
+ * keeps them in step with the app. Only a file that still matches what the board last wrote is ever rewritten, so a
+ * copy the user edited stays theirs until they choose to overwrite it, while a harness's other skills carry on. Nothing
+ * outside the board's own folders is touched.
  */
 export function createSkillSyncService(
   core: Core,
@@ -86,8 +105,15 @@ export function createSkillSyncService(
   const { repos } = core;
 
   const load = (): StoredSkillSync => {
-    const stored = repos.settings.all().get(SKILL_SYNC_KEY) as Partial<StoredSkillSync> | undefined;
-    return { harnesses: stored?.harnesses ?? {}, snippetCopiedHash: stored?.snippetCopiedHash ?? null };
+    const stored = repos.settings.all().get(SKILL_SYNC_KEY) as
+      | { harnesses?: Partial<Record<SkillSyncHarness, SavedHarnessRecord>>; snippetCopiedHash?: string | null }
+      | undefined;
+    const harnesses: StoredSkillSync["harnesses"] = {};
+    for (const harness of SkillSyncHarness.options) {
+      const saved = stored?.harnesses?.[harness];
+      if (saved) harnesses[harness] = readRecord(saved);
+    }
+    return { harnesses, snippetCopiedHash: stored?.snippetCopiedHash ?? null };
   };
   const save = (next: StoredSkillSync) => core.write(() => repos.settings.set(SKILL_SYNC_KEY, next));
   const record = (harness: SkillSyncHarness) => load().harnesses[harness] ?? OFF;
@@ -97,50 +123,64 @@ export function createSkillSyncService(
   };
 
   const homes = { ...defaultHarnessHomes(opts.userHome), ...opts.harnessHomes };
-  const pathOf = (harness: SkillSyncHarness) => join(homes[harness], "skills", BRAND.id, "SKILL.md");
-  const readDisk = (harness: SkillSyncHarness): string | null => {
+  const skillsDir = (harness: SkillSyncHarness) => join(homes[harness], "skills");
+  const pathOf = (harness: SkillSyncHarness, skill: ShippedSkill) => join(skillsDir(harness), skill.id, "SKILL.md");
+  const readDisk = (harness: SkillSyncHarness, skill: ShippedSkill): string | null => {
     try {
-      return readFileSync(pathOf(harness), "utf8");
+      return readFileSync(pathOf(harness, skill), "utf8");
     } catch {
       return null;
     }
   };
 
-  const stateOf = (harness: SkillSyncHarness, rec: HarnessRecord): SkillSyncState => {
-    const disk = readDisk(harness);
+  const stateOf = (harness: SkillSyncHarness, skill: ShippedSkill, rec: HarnessRecord): SkillSyncState => {
+    const disk = readDisk(harness, skill);
     if (disk === null) return "not_installed";
     const diskHash = hashOf(disk);
-    if (diskHash === hashOf(boardSkillFile())) return "up_to_date";
-    return diskHash === rec.installedHash ? "out_of_date" : "edited";
+    if (diskHash === hashOf(skill.file())) return "up_to_date";
+    return diskHash === rec.installedHashes[skill.key] ? "out_of_date" : "edited";
   };
 
-  const write = (harness: SkillSyncHarness): string => {
-    const text = boardSkillFile();
-    mkdirSync(dirname(pathOf(harness)), { recursive: true });
-    writeFileSync(pathOf(harness), text);
+  const write = (harness: SkillSyncHarness, skill: ShippedSkill): string => {
+    const text = skill.file();
+    mkdirSync(dirname(pathOf(harness, skill)), { recursive: true });
+    writeFileSync(pathOf(harness, skill), text);
     return hashOf(text);
   };
 
-  /** Installs or updates one harness's copy unless the user edited it; the record says what the board now owns. */
+  /** Installs or updates each of a harness's skills unless the user edited it; the record says what the board owns. */
   const sync = (harness: SkillSyncHarness, rec: HarnessRecord): HarnessRecord => {
-    const state = stateOf(harness, rec);
-    // An identical copy (one the user put there, say) is adopted, so it is kept up to date from now on.
-    if (state === "up_to_date") return { ...rec, installedHash: hashOf(boardSkillFile()) };
-    if (state === "edited") return rec;
-    return { ...rec, installedHash: write(harness) };
+    const installedHashes = { ...rec.installedHashes };
+    for (const skill of SHIPPED_SKILLS) {
+      const state = stateOf(harness, skill, rec);
+      // An identical copy (one the user put there, say) is adopted, so it is kept up to date from now on.
+      if (state === "up_to_date") installedHashes[skill.key] = hashOf(skill.file());
+      else if (state !== "edited") installedHashes[skill.key] = write(harness, skill);
+    }
+    return { ...rec, installedHashes };
+  };
+
+  /** The skills as one: the state that needs the user (or the next sync) most. */
+  const combine = (skills: SkillSyncSkillStatus[]): Pick<SkillSyncHarnessStatus, "state" | "installedByBoard"> => {
+    const edited = skills.filter((s) => s.state === "edited");
+    if (edited.length > 0) return { state: "edited", installedByBoard: edited.every((s) => s.installedByBoard) };
+    const installedByBoard = skills.some((s) => s.installedByBoard);
+    if (skills.every((s) => s.state === "not_installed")) return { state: "not_installed", installedByBoard };
+    // A skill the app gained since the others were installed is missing: the next sync adds it.
+    return { state: skills.every((s) => s.state === "up_to_date") ? "up_to_date" : "out_of_date", installedByBoard };
   };
 
   const status = (): SkillSyncStatus => {
     const stored = load();
     const harnesses = SkillSyncHarness.options.map((harness): SkillSyncHarnessStatus => {
       const rec = stored.harnesses[harness] ?? OFF;
-      return {
-        harness,
-        enabled: rec.enabled,
-        state: stateOf(harness, rec),
-        installedByBoard: rec.installedHash !== null,
-        path: pathOf(harness),
-      };
+      const skills = SHIPPED_SKILLS.map((skill): SkillSyncSkillStatus => ({
+        id: skill.id,
+        state: stateOf(harness, skill, rec),
+        installedByBoard: rec.installedHashes[skill.key] !== undefined,
+        path: pathOf(harness, skill),
+      }));
+      return { harness, enabled: rec.enabled, ...combine(skills), path: skillsDir(harness), skills };
     });
     return {
       harnesses,
@@ -159,7 +199,9 @@ export function createSkillSyncService(
       return status();
     },
     overwrite(harness) {
-      setRecord(harness, { enabled: true, installedHash: write(harness) });
+      const installedHashes: HarnessRecord["installedHashes"] = {};
+      for (const skill of SHIPPED_SKILLS) installedHashes[skill.key] = write(harness, skill);
+      setRecord(harness, { enabled: true, installedHashes });
       return status();
     },
     disable(harness, { remove, force }) {
@@ -168,17 +210,18 @@ export function createSkillSyncService(
         setRecord(harness, { ...rec, enabled: false });
         return status();
       }
-      const state = stateOf(harness, rec);
-      if (state === "edited" && !force) {
-        throw new AppError("CONFLICT", "The installed skill was edited; pass force to delete it anyway");
+      if (!force && SHIPPED_SKILLS.some((skill) => stateOf(harness, skill, rec) === "edited")) {
+        throw new AppError("CONFLICT", "An installed skill was edited; pass force to delete it anyway");
       }
-      const path = pathOf(harness);
-      rmSync(path, { force: true });
-      // The folder goes too when it held only the skill; anything else the user put there stays.
-      try {
-        rmdirSync(dirname(path));
-      } catch {
-        // Not empty, or already gone.
+      for (const skill of SHIPPED_SKILLS) {
+        const path = pathOf(harness, skill);
+        rmSync(path, { force: true });
+        // The folder goes too when it held only the skill; anything else the user put there stays.
+        try {
+          rmdirSync(dirname(path));
+        } catch {
+          // Not empty, or already gone.
+        }
       }
       setRecord(harness, OFF);
       return status();
@@ -190,7 +233,7 @@ export function createSkillSyncService(
         try {
           setRecord(harness, sync(harness, rec));
         } catch (error) {
-          console.warn(`[skill-sync] couldn't update the ${harness} skill: ${(error as Error).message}`);
+          console.warn(`[skill-sync] couldn't update the ${harness} skills: ${(error as Error).message}`);
         }
       }
     },

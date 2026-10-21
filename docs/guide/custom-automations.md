@@ -372,6 +372,11 @@ and you get a notification and a link to the import page, where the draft opens 
 saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
 import it; it comes in off, like any import.
 
+With **Settings → Integrations → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
+how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
+treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
+less guidance.
+
 Drafts waiting for you are listed at the top of **Custom automations**, with **Review** and **Dismiss**. Importing a
 draft removes it; one you leave is dropped after 14 days. Drafts aren't backed up.
 
@@ -379,9 +384,10 @@ draft removes it; one you leave is dropped after 14 days. Drafts aren't backed u
 
 A command or script runs as you, in sh (Windows PowerShell on Windows) or its language's interpreter, whenever its
 trigger fires in a project it's on in. The board's own environment variables, such as its API token, are left out of its
-environment. There is no MCP tool for custom automations, and the API only takes a command, a script or a check from
-the board's settings page (a request without the page's Origin is refused). That keeps agents from setting one up by
-accident; it isn't a lock, since anything that can run commands on your machine already can.
+environment. An agent can only draft one over MCP, which you import (see [Asking an agent for one](#asking-an-agent-for-one)),
+and the API only takes a command, a script or a check from the board's settings page (a request without the page's
+Origin is refused). That keeps agents from setting one up by accident; it isn't a lock, since anything that can run
+commands on your machine already can.
 
 A script can do anything you can. Three things to think about before you switch one on:
 
@@ -400,4 +406,5 @@ A script can do anything you can. Three things to think about before you switch 
 
 A script you imported is someone else's code: read it on the import page before you switch it on.
 
-Custom automations are part of the board's [backup](../features/backup.md). Agents can't see or change them.
+Custom automations are part of the board's [backup](../features/backup.md). Agents can't see or change the ones you
+have; they can only draft new ones.

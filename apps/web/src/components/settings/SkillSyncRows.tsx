@@ -45,8 +45,8 @@ function useSkillSyncAction() {
 }
 
 /**
- * The Board skill row of a harness's section: a switch that installs the skill into the harness's global skills and
- * keeps it current, its state, and the choice to make when the user edited their copy.
+ * The Board skills row of a harness's section: a switch that installs the board's skills into the harness's global
+ * skills and keeps them current, their state, and the choice to make when the user edited a copy.
  */
 export function BoardSkillRow({ id, harness, title }: { id: string; harness: SkillSyncHarness; title: string }) {
   const skillSync = useSkillSync();
@@ -62,13 +62,13 @@ export function BoardSkillRow({ id, harness, title }: { id: string; harness: Ski
   return (
     <SettingsRow
       id={id}
-      title="Board skill"
-      description={status ? skillSyncDescription(status) : "Checking the installed skill..."}
-      info={`Teaches ${title} when to add to the backlog, write plans and update steps. A copy you edit is never overwritten without asking.`}
+      title="Board skills"
+      description={status ? skillSyncDescription(status) : "Checking the installed skills..."}
+      info={`Teaches ${title} when to add to the backlog, write plans and update steps, and how to write custom automations for you to import. A copy you edit is never overwritten without asking.`}
       status={badge ? <StatusLine badge={<Badge variant={badge.variant}>{badge.label}</Badge>} /> : null}
       control={
         <Switch
-          aria-label={`Keep the board skill installed for ${title}`}
+          aria-label={`Keep the board skills installed for ${title}`}
           checked={status?.enabled ?? false}
           disabled={!status || act.isPending}
           onCheckedChange={(checked) => {
@@ -97,7 +97,7 @@ export function BoardSkillRow({ id, harness, title }: { id: string; harness: Ski
       <Dialog open={confirmOff} onOpenChange={setConfirmOff}>
         <DialogPopup showCloseButton={false} className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Stop syncing the skill?</DialogTitle>
+            <DialogTitle>Stop syncing the skills?</DialogTitle>
             <DialogDescription>{prompt?.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>

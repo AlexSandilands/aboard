@@ -2,7 +2,7 @@ import type { SkillSyncHarnessStatus, SkillSyncStatus } from "@repo/contracts";
 
 type BadgeVariant = "success" | "warning" | "info" | "secondary";
 
-/** The status badge of a harness's Board skill row; none while sync is off and nothing is installed. */
+/** The status badge of a harness's Board skills row; none while sync is off and nothing is installed. */
 export function skillSyncBadge(status: SkillSyncHarnessStatus): { label: string; variant: BadgeVariant } | null {
   switch (status.state) {
     case "up_to_date":
@@ -17,19 +17,15 @@ export function skillSyncBadge(status: SkillSyncHarnessStatus): { label: string;
   }
 }
 
-/** The folder the server installs the skill in: the one the harness reads, which its env vars may move. */
-export const skillSyncFolder = (status: Pick<SkillSyncHarnessStatus, "path">): string =>
-  status.path.replace(/[\\/][^\\/]*$/, "");
-
 /** The row's description: what the switch does, or what the user has to decide. */
 export function skillSyncDescription(status: SkillSyncHarnessStatus): string {
   if (status.enabled && status.state === "edited") {
     return status.installedByBoard
-      ? "Your copy differs from the app's, so it isn't updated. Overwrite it, or keep yours and stop syncing."
-      : "A copy the board didn't install is there, perhaps an older one. Overwrite it with the app's, or keep it and stop syncing.";
+      ? "A skill you edited differs from the app's, so it isn't updated. Overwrite it, or keep yours and stop syncing."
+      : "A skill the board didn't install is there, perhaps an older copy. Overwrite it with the app's, or keep it and stop syncing.";
   }
-  if (status.enabled) return `Installed in ${skillSyncFolder(status)} and updated with the app.`;
-  return `Install it in ${skillSyncFolder(status)} and keep it updated with the app.`;
+  if (status.enabled) return `Installed in ${status.path} and updated with the app.`;
+  return `Install them in ${status.path} and keep them updated with the app.`;
 }
 
 /** What turning sync off asks, when there is a copy to delete. Null: just turn it off. */
@@ -41,10 +37,10 @@ export function skillSyncDisablePrompt(
   return {
     edited,
     description: !edited
-      ? `Delete the skill from ${skillSyncFolder(status)}, or keep it there, no longer updated.`
+      ? `Delete the skills from ${status.path}, or keep them there, no longer updated.`
       : status.installedByBoard
-        ? `The skill in ${skillSyncFolder(status)} has your edits. Deleting it loses them; keeping it leaves it as it is, no longer updated.`
-        : `The skill in ${skillSyncFolder(status)} isn't the app's copy. Deleting it loses any changes made to it; keeping it leaves it as it is.`,
+        ? `A skill in ${status.path} has your edits. Deleting it loses them; keeping it leaves it as it is, no longer updated.`
+        : `A skill in ${status.path} isn't the app's copy. Deleting it loses any changes made to it; keeping it leaves it as it is.`,
   };
 }
 

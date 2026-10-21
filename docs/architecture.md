@@ -21,7 +21,7 @@ same services, so an agent's change reaches open browsers within a second.
 | `apps/server`        | Hono on Node 24: REST, SSE, MCP, services, `node:sqlite`, and the GitHub, T3 Code and review integrations                         |
 | `apps/web`           | React 19 + Vite. Server state in the TanStack Query cache, kept fresh by SSE; UI-only state in zustand                            |
 | `apps/desktop`       | Electron shell that runs or attaches to the server and shows the web app. See [features/desktop.md](features/desktop.md)          |
-| `skills/`            | The skills and `AGENTS.md` snippet shipped to agents that use the board. Not loaded by the app, except that a test keeps `skills/aboard-review/SKILL.md` identical to the built-in review skill. |
+| `skills/`            | The skills and `AGENTS.md` snippet shipped to agents that use the board. Not loaded by the app, except that a test keeps `skills/aboard-review/SKILL.md` identical to the built-in review skill and `skills/aboard/` and `skills/aboard-automations/` identical to the texts embedded in contracts. |
 
 The product name, id and version come only from the root `package.json`, through `BRAND` in
 `packages/contracts/src/brand.ts`. Env vars (`brandEnv`), browser storage keys (`storageKey`), the
@@ -55,11 +55,11 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
-| `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder, and then the board skill ignores `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` and `CODEX_HOME` |
+| `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder, and then the board skills ignore `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` and `CODEX_HOME` |
 | `T3CODE_HOME`             | `~/.t3`                     | Where to find T3 Code's runtime file                               |
 | `CLAUDE_CONFIG_DIR`       | `~/.claude`                 | Where Claude Code keeps running sessions, for session status        |
 | `COPILOT_HOME`            | `~/.copilot`                | The same for Copilot CLI                                            |
-| `CODEX_HOME`              | `~/.codex`                  | Codex's folder. The board skill goes in its `skills/`, as it does under `CLAUDE_CONFIG_DIR` and `COPILOT_HOME` |
+| `CODEX_HOME`              | `~/.codex`                  | Codex's folder. The board skills go in its `skills/`, as it does under `CLAUDE_CONFIG_DIR` and `COPILOT_HOME` |
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
