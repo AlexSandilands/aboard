@@ -106,7 +106,7 @@ diff <(makepkg --printsrcinfo) .SRCINFO && makepkg -f   # no diff, then a packag
 
 The tarball, with its own Electron, goes in `/opt/aboard`, plus `/usr/bin/aboard`, a desktop entry, the SVG
 icon in the hicolor theme and the license. The dependencies are the libraries the bundled Electron links
-against, the same set as the .deb.
+against: the same set as the .deb, plus `alsa-lib`, which a minimal Arch install lacks.
 
 ## Decisions
 

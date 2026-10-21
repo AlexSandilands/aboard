@@ -21,8 +21,13 @@ export interface ArchRelease {
 /** The pacman repo's package takes the app's own name; the AUR's takes `-bin`, as AUR packages of builds do. */
 export const PKGNAMES = [BRAND.id, `${BRAND.id}-bin`];
 
-/** The runtime libraries the bundled Electron links against: the same set electron-builder's .deb depends on. */
+/**
+ * The runtime libraries the bundled Electron links against: the set electron-builder's .deb depends on, plus
+ * alsa-lib, which Debian desktops always have and a minimal Arch install doesn't. To recheck, install the package in
+ * a bare `archlinux` container and run `ldd` over `/opt/<id>/<id>` and `/opt/<id>/*.so*`: nothing should be "not found".
+ */
 const DEPENDS = [
+  "alsa-lib",
   "gtk3",
   "libnotify",
   "nss",
