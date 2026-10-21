@@ -1,6 +1,6 @@
 // View-stack command palette, modelled on T3 Code's CommandPalette (MIT) — see NOTICE.
 import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@repo/contracts";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BookmarkIcon,
@@ -49,6 +49,7 @@ import {
   boardSearchFrom,
   useApplyFilterParams,
   useBoardFilterParams,
+  useProjectFilter,
   useOpenTask,
   useResetFilters,
 } from "~/components/board/boardNavigation";
@@ -240,7 +241,6 @@ function projectIcon(project: Pick<Project, "title" | "icon">) {
 function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const navigate = useNavigate();
   const openTaskAndReveal = useOpenTask();
-  const search = useSearch({ strict: false });
   const closePalette = usePalette((s) => s.closePalette);
   const lastProjectId = usePalette((s) => s.lastProjectId);
   const setLastProjectId = usePalette((s) => s.setLastProjectId);
@@ -254,6 +254,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
   const { resolvedTheme, setTheme } = useTheme();
   const savedViews = useSavedViews();
   const filterParams = useBoardFilterParams();
+  const scopeIds = useProjectFilter();
   const applyFilterParams = useApplyFilterParams();
   const resetFilters = useResetFilters();
 
@@ -785,21 +786,24 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
         return [{ value: "candidates", label: "T3 Code projects", items }];
       }
       case "pick-project": {
+        // With one project ticked it is the default; with several, they all come first.
+        const ticked = projects.filter((p) => scopeIds.includes(p.id));
         const preferredId =
-          (search.project && projectById.has(search.project) ? search.project : null) ??
-          (lastProjectId && projectById.has(lastProjectId) ? lastProjectId : null);
-        const ordered = preferredId
-          ? [...projects.filter((p) => p.id === preferredId), ...projects.filter((p) => p.id !== preferredId)]
-          : projects;
+          ticked.length > 0 ? null : lastProjectId && projectById.has(lastProjectId) ? lastProjectId : null;
+        const ordered =
+          ticked.length > 0
+            ? [...ticked, ...projects.filter((p) => !scopeIds.includes(p.id))]
+            : preferredId
+              ? [...projects.filter((p) => p.id === preferredId), ...projects.filter((p) => p.id !== preferredId)]
+              : projects;
         const flow = view.flow;
         const items = ordered.map((project): PaletteItem => ({
           value: `pick:${project.id}`,
           title: project.title,
-          description:
-            project.id === preferredId
-              ? search.project === project.id
-                ? "Current filter"
-                : "Last used"
+          description: scopeIds.includes(project.id)
+            ? "Current filter"
+            : project.id === preferredId
+              ? "Last used"
               : (project.workspaceRoot ?? undefined),
           searchTerms: [project.workspaceRoot ?? ""],
           icon: projectIcon(project),
@@ -823,7 +827,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       }
       case "go-to-project": {
         const items: PaletteItem[] = [];
-        if (search.project) {
+        if (scopeIds.length > 0) {
           items.push({
             value: "project:all",
             title: "All projects",

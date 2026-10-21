@@ -22,7 +22,7 @@ const flag = z
  * an empty search. Values that don't parse are dropped on read (`readBoardFilters` in the web app).
  */
 export const BoardFilterParams = z.object({
-  /** Scopes the board to one project. */
+  /** Scopes the board to some projects: their ids, comma-separated. One id is a list of one. */
   project: text,
   /** Shows only that epic's band. */
   epic: text,
@@ -50,6 +50,34 @@ export const BoardFilterParams = z.object({
   archived: flag,
 });
 export type BoardFilterParams = z.infer<typeof BoardFilterParams>;
+
+/**
+ * A `?project=` value as a list of project ids: blanks and repeats dropped. With the board's projects in lane order
+ * (`order`), unknown ids are dropped too and the rest come in that order, so a subset always reads the same.
+ */
+export function parseProjectScope(value: string | undefined, order?: ReadonlyArray<string>): string[] {
+  if (!value) return [];
+  const named = [
+    ...new Set(
+      value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (!order) return named;
+  const known = new Set(named);
+  return order.filter((id) => known.has(id));
+}
+
+/**
+ * A project list as the `?project=` value, or undefined for the whole board: no ids, or every project ticked
+ * (`order` is the board's projects in lane order, which the ids are written in).
+ */
+export function formatProjectScope(ids: ReadonlyArray<string>, order: ReadonlyArray<string>): string | undefined {
+  const chosen = parseProjectScope(ids.join(","), order);
+  return chosen.length === 0 || chosen.length === order.length ? undefined : chosen.join(",");
+}
 
 export const SavedView = z.object({
   id: z.string().min(1),

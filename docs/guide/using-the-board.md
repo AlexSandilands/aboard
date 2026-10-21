@@ -193,6 +193,10 @@ The filter button in the board's top bar narrows the board by status, model tier
 search box in the sidebar filters by title, `#number`, ticket key or label. While anything is filtered, a pill beside the
 title says so, and its ✕ clears every filter.
 
+To show only some of your projects, open the project menu beside the sidebar's search box and tick the ones you want;
+the menu stays open while you tick, and **All projects** shows every project again. The sidebar's Projects list shows just the ticked ones. The
+stats page has the same choice and starts from the projects you have ticked.
+
 Every filter is part of the page's address, so you can bookmark or share a filtered board, and the browser's Back
 button undoes a filter.
 

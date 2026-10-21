@@ -29,7 +29,7 @@ export function AppFrame() {
       sidebarLabel={inSettings ? "Settings" : "Projects"}
       onBack={inSettings ? settingsBack : inStats ? leaveStats : inSocial ? leaveSocial : taskId ? closeTask : null}
       // On the project settings page `?project=` is the project being configured, not the board's scope.
-      newTaskProjectId={inSettings ? null : projectFilter}
+      newTaskProjectId={inSettings || projectFilter.length !== 1 ? null : projectFilter[0]}
     >
       <CloseSheetOnSwitch inSettings={inSettings} />
       <Outlet />

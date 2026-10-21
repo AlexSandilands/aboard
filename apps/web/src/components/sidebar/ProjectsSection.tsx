@@ -12,7 +12,6 @@ import {
 } from "@dnd-kit/core";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -33,20 +32,25 @@ import { queryKeys } from "~/state/queries";
 import { usePalette } from "~/state/ui";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { openTaskCounts } from "~/components/board/board.logic";
-import { scrollToLane, useProjectFilter, useSetProjectFilter } from "~/components/board/boardNavigation";
+import { scrollToLane, useBoardFilters, useProjectFilter } from "~/components/board/boardNavigation";
+import { moveAmongVisible } from "./projectsOrder.logic";
+
+const NO_PROJECTS: ReadonlyArray<string> = [];
 
 const collisionDetection: CollisionDetection = (args) => {
   const hits = pointerWithin(args);
   return hits.length > 0 ? hits : closestCorners(args);
 };
 
-/** "Projects": drag to reorder lanes, click to jump to (or, while filtered, switch to) a lane. */
+/** "Projects": drag to reorder lanes, click to jump to a lane. With some projects ticked, only those are listed. */
 export function ProjectsSection({ board }: { board: BoardSnapshot }) {
   const [expanded, setExpanded] = useState(true);
   const queryClient = useQueryClient();
   const reorderProjects = useReorderProjects();
+  // In-progress-only looks across every project, so the project scope waits and every project is listed.
+  const inProgressOnly = useBoardFilters().inProgress;
   const projectFilter = useProjectFilter();
-  const setProjectFilter = useSetProjectFilter();
+  const scope = inProgressOnly ? NO_PROJECTS : projectFilter;
   const { isMobile, setOpenMobile } = useSidebar();
   const counts = useMemo(() => openTaskCounts(board.tasks), [board.tasks]);
   const suppressClickRef = useRef(false);
@@ -54,7 +58,11 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const projects = board.projects;
+  const allIds = useMemo(() => board.projects.map((p) => p.id), [board.projects]);
+  const projects = useMemo(
+    () => (scope.length ? board.projects.filter((p) => scope.includes(p.id)) : board.projects),
+    [board.projects, scope],
+  );
   const ids = useMemo(() => projects.map((p) => p.id), [projects]);
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -63,14 +71,14 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
     }, 0);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const from = ids.indexOf(String(active.id));
-    const to = ids.indexOf(String(over.id));
-    if (from < 0 || to < 0) return;
-    const nextIds = arrayMove(ids, from, to);
+    const nextIds = moveAmongVisible(allIds, ids, String(active.id), String(over.id));
+    if (!nextIds) return;
     // Optimistic order; the server's project.upserted events carry the new positions.
-    queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) =>
-      current ? { ...current, projects: arrayMove(current.projects, from, to) } : current,
-    );
+    queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (current) => {
+      if (!current) return current;
+      const byId = new Map(current.projects.map((p) => [p.id, p]));
+      return { ...current, projects: nextIds.flatMap((id) => byId.get(id) ?? []) };
+    });
     reorderProjects.mutate(nextIds, {
       onError: () => void queryClient.invalidateQueries({ queryKey: queryKeys.board }),
     });
@@ -78,8 +86,7 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
 
   const handleSelect = (projectId: string) => {
     if (suppressClickRef.current) return;
-    if (projectFilter) void setProjectFilter(projectId);
-    else scrollToLane(projectId);
+    scrollToLane(projectId);
     if (isMobile) setOpenMobile(false);
   };
 
@@ -122,7 +129,6 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
                   key={project.id}
                   project={project}
                   openCount={counts.get(project.id) ?? 0}
-                  active={project.id === projectFilter}
                   onSelect={handleSelect}
                 />
               ))}
@@ -137,12 +143,10 @@ export function ProjectsSection({ board }: { board: BoardSnapshot }) {
 const SortableProjectRow = memo(function SortableProjectRow({
   project,
   openCount,
-  active,
   onSelect,
 }: {
   project: Project;
   openCount: number;
-  active: boolean;
   onSelect: (projectId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
@@ -165,7 +169,6 @@ const SortableProjectRow = memo(function SortableProjectRow({
       <SidebarMenuButton
         {...attributes}
         {...listeners}
-        isActive={active}
         onClick={() => onSelect(project.id)}
         onContextMenu={(event) => {
           event.preventDefault();

@@ -148,8 +148,8 @@ export function isInPriorityLane(task: TaskSummary): boolean {
 }
 
 export interface BoardFilters {
-  /** `?project=` id; unknown ids are ignored. */
-  projectId: string | null;
+  /** `?project=` ids: only these projects' lanes. Unknown ids are ignored, and none (or none known) shows every project. */
+  projectIds: ReadonlyArray<string>;
   search: string;
   attentionOnly: boolean;
   /** Only cards with at least one PR link. */
@@ -221,7 +221,8 @@ export function buildLanes(
   filters: BoardFilters,
   archived: ReadonlyArray<TaskSummary> = [],
 ): Lane[] {
-  const scoped = filters.projectId && board.projects.some((p) => p.id === filters.projectId) ? filters.projectId : null;
+  const known = filters.projectIds.filter((id) => board.projects.some((p) => p.id === id));
+  const scoped = known.length > 0 ? new Set(known) : null;
   const active = new Set(board.tasks.map((task) => task.id));
   const tasks = archived.length ? [...board.tasks, ...archived.filter((task) => !active.has(task.id))] : board.tasks;
   const epicFilter =
@@ -252,7 +253,7 @@ export function buildLanes(
 
   const epics = new Map<string, TaskSummary>();
   for (const task of tasks) {
-    if (task.kind !== "epic" || (scoped && task.projectId !== scoped)) continue;
+    if (task.kind !== "epic" || (scoped && !scoped.has(task.projectId))) continue;
     if (epicFilter && task.id !== epicFilter) continue;
     epics.set(task.id, task);
   }
@@ -273,7 +274,7 @@ export function buildLanes(
       priorityCount++;
       continue;
     }
-    if (scoped && task.projectId !== scoped) continue;
+    if (scoped && !scoped.has(task.projectId)) continue;
     const epic = task.parent ? epics.get(task.parent.id) : undefined;
     if (epicFilter && !epic) continue;
     if (!matches(task) && !(epic && matches(epic))) continue;
@@ -319,7 +320,7 @@ export function buildLanes(
     lanes.push({ priority: true, project: PRIORITY_PROJECT, bands: [], cells: priorityCells, epicChildren: {} });
   }
   for (const project of board.projects) {
-    if (scoped && project.id !== scoped) continue;
+    if (scoped && !scoped.has(project.id)) continue;
     const cells = looseCells.get(project.id);
     const bands = bandsByProject.get(project.id) ?? [];
     if (!cells && bands.length === 0 && filtering) continue;

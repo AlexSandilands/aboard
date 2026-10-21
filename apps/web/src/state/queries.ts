@@ -53,7 +53,7 @@ export const queryKeys = {
   skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
-  stats: (weeks: StatsPeriod, projectId: string | null) => ["stats", weeks, projectId] as const,
+  stats: (weeks: StatsPeriod, projectIds: ReadonlyArray<string>) => ["stats", weeks, projectIds.join(",")] as const,
   t3Projects: ["t3Projects"] as const,
   iconCandidates: (projectId: string) => ["iconCandidates", projectId] as const,
   fsBrowse: (path: string) => ["fsBrowse", path] as const,
@@ -176,6 +176,11 @@ const boardQuery = {
   queryKey: queryKeys.board,
   queryFn: ({ signal }: { signal: AbortSignal }) => api<BoardSnapshot>("/api/board", { signal }),
 };
+
+/** The board's project ids in lane order; re-renders only when they change. */
+export function useProjectIds(): ReadonlyArray<string> | undefined {
+  return useQuery({ ...boardQuery, select: (board) => board.projects.map((p) => p.id) }).data;
+}
 
 /** Pause and the runs in flight, from the board snapshot; re-renders only when they change. */
 export function useAutopilotStatus(): AutopilotStatus | undefined {
@@ -596,14 +601,14 @@ export function useSocialFeed() {
 
 /**
  * Weekly stats for the stats page. No event covers them, so they are read when the page opens, when the period or
- * project changes (a new key) and when the window regains focus, instead of being pushed.
+ * projects change (a new key) and when the window regains focus, instead of being pushed.
  */
-export function useStats(weeks: StatsPeriod, projectId: string | null) {
+export function useStats(weeks: StatsPeriod, projectIds: ReadonlyArray<string>) {
   return useQuery({
-    queryKey: queryKeys.stats(weeks, projectId),
+    queryKey: queryKeys.stats(weeks, projectIds),
     queryFn: ({ signal }) => {
       const query = new URLSearchParams({ weeks: String(weeks) });
-      if (projectId) query.set("projectId", projectId);
+      if (projectIds.length) query.set("projectIds", projectIds.join(","));
       return api<StatsResponse>(`/api/stats?${query}`, { signal });
     },
     staleTime: 0,

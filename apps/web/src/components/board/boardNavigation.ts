@@ -1,8 +1,9 @@
-import type { BoardFilterParams } from "@repo/contracts";
+import { formatProjectScope, parseProjectScope, type BoardFilterParams } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
+import { useProjectIds } from "~/state/queries";
 import { useReveal, useSettingsNav } from "~/state/ui";
 import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type FilterState } from "./boardFilters.logic";
 
@@ -19,9 +20,14 @@ export function useSelectedTaskId(): string | null {
   return useSearch({ strict: false, select: (search) => search.task ?? null });
 }
 
-/** `?project=` — the project the board is scoped to. */
-export function useProjectFilter(): string | null {
-  return useSearch({ strict: false, select: (search) => search.project ?? null });
+/**
+ * `?project=` — the projects the board is scoped to, in lane order; empty is every project. Ids of projects that
+ * don't exist (any more) are dropped once the board has loaded.
+ */
+export function useProjectFilter(): ReadonlyArray<string> {
+  const raw = useSearch({ strict: false, select: (search) => search.project });
+  const order = useProjectIds();
+  return useMemo(() => parseProjectScope(raw, order), [raw, order]);
 }
 
 /** `?labels=`: the labels the board is filtered to (any of them). */
@@ -147,20 +153,20 @@ export function useApplyFilterParams() {
   );
 }
 
-export function useSetProjectFilter() {
+/** Scopes the board to these projects. None, or every project, is the whole board. */
+export function useSetProjectScope() {
   const navigate = useNavigate();
+  const order = useProjectIds();
   return useCallback(
-    (projectId: string | null) =>
-      navigate({
+    (projectIds: ReadonlyArray<string>) => {
+      const project = order ? formatProjectScope(projectIds, order) : projectIds.join(",") || undefined;
+      return navigate({
         to: "/",
-        // The in-progress filter looks across every project, so choosing one ends it.
-        search: (prev) => ({
-          ...boardSearchFrom(prev),
-          project: projectId ?? undefined,
-          ...(projectId ? { inprogress: undefined } : {}),
-        }),
-      }),
-    [navigate],
+        // The in-progress filter looks across every project, so choosing some ends it.
+        search: (prev) => ({ ...boardSearchFrom(prev), project, ...(project ? { inprogress: undefined } : {}) }),
+      });
+    },
+    [navigate, order],
   );
 }
 

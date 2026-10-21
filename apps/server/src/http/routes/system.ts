@@ -21,12 +21,12 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     handle((c) => c.json(services.board.snapshot())),
   );
 
-  // Weekly trends: `weeks` is 1 (by day), 4, 12 (default) or 52; `projectId` limits them to one project.
+  // Weekly trends: `weeks` is 1 (by day), 4, 12 (default) or 52; `projectIds` (comma-separated; `projectId` for one) limits them to those projects.
   app.get(
     "/api/stats",
     handle(async (c) => {
-      const { weeks, projectId } = parseQuery(c, StatsQuery);
-      return c.json(await services.stats.weekly(weeks, projectId));
+      const { weeks, projectIds } = parseQuery(c, StatsQuery);
+      return c.json(await services.stats.weekly(weeks, projectIds));
     }),
   );
 

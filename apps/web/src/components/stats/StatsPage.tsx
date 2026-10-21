@@ -1,14 +1,18 @@
 import {
   AGENT_HARNESSES,
+  formatProjectScope,
+  parseProjectScope,
   STATS_PERIODS,
   type StatsPeriod,
   type StatsResponse,
   type StatsSeries,
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ApiError } from "~/lib/api";
@@ -33,8 +37,6 @@ import { SortedBars } from "./SortedBars";
 import { TrendLine } from "./TrendLine";
 import { WeeklyBars } from "./WeeklyBars";
 
-const ALL_PROJECTS = "all";
-
 const EMPTY: StatsSeries = {
   unit: "count",
   values: [],
@@ -48,56 +50,72 @@ export function StatsPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/_app/stats" });
   const weeks = parseStatsPeriod(search.weeks);
-  const projectId = search.project ?? null;
-  const stats = useStats(weeks, projectId);
+  // As written in the URL: an id of a project that is gone stays, so the API answers 404 and the page says so.
+  const projectIds = useMemo(() => parseProjectScope(search.project), [search.project]);
+  const stats = useStats(weeks, projectIds);
   const projects = useBoard().data?.projects ?? [];
+  const chosen = projects.filter((project) => projectIds.includes(project.id));
   // A project that was deleted or archived since the link was made: the API says 404, so say so and offer the whole board.
-  const unknownProject = stats.error instanceof ApiError && stats.error.status === 404 && projectId !== null;
+  const unknownProject = stats.error instanceof ApiError && stats.error.status === 404 && projectIds.length > 0;
 
   const setSearch = (patch: { project?: string | undefined; weeks?: StatsPeriod }) =>
     void navigate({
       to: "/stats",
       search: {
         weeks: patch.weeks ?? weeks,
-        project: "project" in patch ? patch.project : (projectId ?? undefined),
+        project: "project" in patch ? patch.project : (search.project ?? undefined),
       },
       replace: true,
     });
 
-  const projectItems = [
-    { value: ALL_PROJECTS, label: "All projects" },
-    ...projects.map((project) => ({ value: project.id, label: project.title })),
-  ];
+  const allIds = projects.map((project) => project.id);
+  const toggleProject = (id: string) => {
+    const next = projectIds.includes(id) ? projectIds.filter((p) => p !== id) : [...projectIds, id];
+    setSearch({ project: formatProjectScope(next, allIds) });
+  };
+  const scopeLabel =
+    chosen.length === 0 ? "All projects" : chosen.length === 1 ? chosen[0]!.title : `${chosen.length} projects`;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end) wco:pe-(--workspace-native-controls-inset)">
         {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
-        <h1 className="truncate text-sm font-medium">Stats</h1>
+        <h1 className="truncate text-sm font-medium">
+          Stats
+          {chosen.length > 0 ? (
+            <span className="font-normal text-muted-foreground" title={chosen.map((p) => p.title).join(", ")}>
+              {" "}
+              · {scopeLabel}
+            </span>
+          ) : null}
+        </h1>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-2 pb-24 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Select
-              items={projectItems}
-              value={projectId ?? ALL_PROJECTS}
-              onValueChange={(next) =>
-                setSearch({
-                  project: next === null || next === ALL_PROJECTS ? undefined : next,
-                })
-              }
-            >
-              <SelectTrigger size="sm" className="sm:w-52" aria-label="Project">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectPopup>
-                {projectItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
+            <Menu>
+              <MenuTrigger
+                render={
+                  <Button variant="outline" size="sm" className="sm:w-52 justify-between" aria-label="Projects" />
+                }
+              >
+                <span className="truncate">{scopeLabel}</span>
+                <ChevronDownIcon />
+              </MenuTrigger>
+              <MenuPopup align="start">
+                <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
+                <MenuSeparator />
+                {projects.map((project) => (
+                  <MenuCheckboxItem
+                    key={project.id}
+                    checked={projectIds.includes(project.id)}
+                    onCheckedChange={() => toggleProject(project.id)}
+                  >
+                    {project.title}
+                  </MenuCheckboxItem>
                 ))}
-              </SelectPopup>
-            </Select>
+              </MenuPopup>
+            </Menu>
             <ToggleGroup
               aria-label="Period"
               value={[String(weeks)]}
@@ -116,7 +134,7 @@ export function StatsPage() {
           </div>
           {unknownProject ? (
             <p className="text-sm text-muted-foreground">
-              That project isn't on the board any more.{" "}
+              A project in this selection isn't on the board any more.{" "}
               <button
                 type="button"
                 className="rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -246,8 +264,8 @@ function StatsSections({ data }: { data: StatsResponse }) {
   if (isQuiet(data.series)) {
     return (
       <p className="text-sm text-muted-foreground">
-        Nothing happened {data.project ? `in ${data.project.title} ` : ""}in {periodLabel(data)}, or the {per}s before.
-        Charts appear as tasks are finished and agents run.
+        Nothing happened {data.projects.length ? `in ${data.projects.map((p) => p.title).join(", ")} ` : ""}in{" "}
+        {periodLabel(data)}, or the {per}s before. Charts appear as tasks are finished and agents run.
       </p>
     );
   }

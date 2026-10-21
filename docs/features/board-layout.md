@@ -72,6 +72,14 @@ across every project: it ignores a project scope while it is on (the scope retur
 sidebar turns it off). Epic
 bands keep only their In Progress tasks, and the priority lane holds its In Progress ones.
 
+### The sidebar's Projects list
+
+The sidebar lists the projects in lane order: drag to reorder, click to scroll the board to a lane. While a project scope
+is on ([saved-views.md](saved-views.md#the-project-scope)) it lists only the ticked projects, so a click always has a
+lane to scroll to; In progress, all projects suspends the scope, and every project is listed again. Dragging in a short
+list still saves the order of the whole board: the listed projects trade the places they already hold and the hidden ones
+stay where they were (`moveAmongVisible`).
+
 ### Collapsing columns
 
 Every column header has a collapse toggle. A collapsed column shows the first five cards of each lane

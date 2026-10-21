@@ -80,7 +80,7 @@ export const settingsGroupRoute = createRoute({
 // The agents' social network's feed, reached only from the hidden section in Settings (docs/features/social.md).
 const socialRoute = createRoute({ getParentRoute: () => appRoute, path: "/social", component: SocialFeedPage });
 
-/** `?project=` (a project id; none is the whole board) and `?weeks=` (4, 12 or 52) on the stats page. */
+/** `?project=` (project ids, comma-separated; none is the whole board) and `?weeks=` (4, 12 or 52) on the stats page. */
 const StatsSearch = z.object({
   project: z.string().min(1).optional().catch(undefined),
   weeks: z.unknown().optional().transform(parseStatsPeriod),

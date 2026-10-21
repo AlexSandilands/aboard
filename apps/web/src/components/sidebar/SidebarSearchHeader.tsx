@@ -1,6 +1,7 @@
 // Layout adapted from T3 Code (SidebarThreadHeader.tsx and the project scope combobox in Sidebar.tsx), MIT — see NOTICE.
 import type { Project } from "@repo/contracts";
 import {
+  CheckIcon,
   FolderIcon,
   FolderPlusIcon,
   ListFilterIcon,
@@ -29,9 +30,10 @@ import {
   useBoardFilters,
   useProjectFilter,
   useSetBoardFilters,
-  useSetProjectFilter,
+  useSetProjectScope,
 } from "~/components/board/boardNavigation";
 import { SidebarHeaderIconButton } from "./SidebarHeaderIconButton";
+import { ALL_PROJECTS_VALUE, nextProjectScope } from "./projectScope.logic";
 
 /** Search field plus the segmented project-filter / add-project / new-task buttons. */
 export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Project> }) {
@@ -83,7 +85,7 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
       <div className="flex shrink-0 items-center">
         {projects.length > 0 ? (
           <>
-            <ProjectScopeCombobox projects={projects} selectedId={projectFilter} anchorRef={searchFieldRef} />
+            <ProjectScopeCombobox projects={projects} selectedIds={projectFilter} anchorRef={searchFieldRef} />
             <SidebarHeaderIconButton
               label="Add project"
               onClick={() => usePalette.getState().openPalette({ kind: "add-project" })}
@@ -95,7 +97,11 @@ export function SidebarSearchHeader({ projects }: { projects: ReadonlyArray<Proj
         <SidebarHeaderIconButton
           label="New task"
           tooltip={newTaskShortcut ? `New task (${newTaskShortcut})` : "New task"}
-          onClick={() => usePalette.getState().openPalette({ kind: "new-task", projectId: projectFilter ?? undefined })}
+          onClick={() =>
+            usePalette
+              .getState()
+              .openPalette({ kind: "new-task", projectId: projectFilter.length === 1 ? projectFilter[0] : undefined })
+          }
         >
           <SquarePenIcon />
         </SidebarHeaderIconButton>
@@ -138,58 +144,61 @@ interface ScopeItem {
   label: string;
 }
 
-const ALL_PROJECTS: ScopeItem = { value: "all", label: "All projects" };
+const ALL_PROJECTS: ScopeItem = { value: ALL_PROJECTS_VALUE, label: "All projects" };
 
-/** T3's "Filter threads by project" combobox: scopes the board through `?project=`. */
+/**
+ * A multi-select over the projects, scoping the board through `?project=`. Nothing ticked is the whole board, which
+ * the "All projects" row stands for.
+ */
 function ProjectScopeCombobox({
   projects,
-  selectedId,
+  selectedIds,
   anchorRef,
 }: {
   projects: ReadonlyArray<Project>;
-  selectedId: string | null;
+  selectedIds: ReadonlyArray<string>;
   anchorRef: RefObject<HTMLDivElement | null>;
 }) {
   const [open, setOpen] = useState(false);
-  const setProjectFilter = useSetProjectFilter();
+  const setProjectScope = useSetProjectScope();
   const openSettings = useOpenSettings();
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const items = useMemo<ScopeItem[]>(
     () => [ALL_PROJECTS, ...projects.map((p) => ({ value: p.id, label: p.title }))],
     [projects],
   );
-  const selectedProject = selectedId ? (projectById.get(selectedId) ?? null) : null;
-  const selectedItem = items.find((item) => item.value === selectedProject?.id) ?? ALL_PROJECTS;
+  const selectedProjects = useMemo(() => projects.filter((p) => selectedIds.includes(p.id)), [projects, selectedIds]);
+  // "All projects" counts as the selected row while no project is.
+  const value = useMemo(
+    () => (selectedProjects.length ? items.filter((item) => selectedIds.includes(item.value)) : [ALL_PROJECTS]),
+    [items, selectedIds, selectedProjects.length],
+  );
+  const label =
+    selectedProjects.length === 0
+      ? "Filter board by project"
+      : `Filter board by projects: ${selectedProjects.map((p) => p.title).join(", ")}`;
 
   return (
     <Combobox
+      multiple
       items={items}
       autoHighlight
       itemToStringLabel={(item: ScopeItem) => item.label}
       isItemEqualToValue={(a: ScopeItem, b: ScopeItem) => a.value === b.value}
       open={open}
       onOpenChange={setOpen}
-      value={selectedItem}
-      onValueChange={(item: ScopeItem | null) => {
-        if (!item) return;
-        void setProjectFilter(item.value === ALL_PROJECTS.value ? null : item.value);
-      }}
+      value={value}
+      onValueChange={(next: ScopeItem[]) =>
+        void setProjectScope(
+          nextProjectScope(
+            value.map((item) => item.value),
+            next.map((item) => item.value),
+          ),
+        )
+      }
     >
-      <ComboboxTrigger
-        render={
-          <SidebarHeaderIconButton
-            label={selectedProject ? `Filter board by project: ${selectedProject.title}` : "Filter board by project"}
-          />
-        }
-      >
-        {selectedProject ? (
-          // Wrapped so the button's direct-child svg colour rule cannot override the project's own colour.
-          <span className="flex shrink-0">
-            <ProjectFavicon title={selectedProject.title} icon={selectedProject.icon} className="size-4" />
-          </span>
-        ) : (
-          <ListFilterIcon className="size-4" />
-        )}
+      <ComboboxTrigger render={<SidebarHeaderIconButton label={label} />}>
+        <ListFilterIcon className="size-4" />
       </ComboboxTrigger>
       <ComboboxPopup
         align="start"
@@ -201,6 +210,7 @@ function ProjectScopeCombobox({
         <ComboboxList>
           {(item: ScopeItem) => {
             const project = projectById.get(item.value) ?? null;
+            const ticked = value.some((v) => v.value === item.value);
             return (
               <ComboboxItem
                 key={item.value}
@@ -213,6 +223,13 @@ function ProjectScopeCombobox({
                   openSettings("project", { project: project.id });
                 }}
               >
+                {/* A plain tick in a fixed slot, so the icons and names line up whether or not a row is ticked. */}
+                <span
+                  aria-hidden="true"
+                  className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+                >
+                  {ticked ? <CheckIcon className="size-4" /> : null}
+                </span>
                 {project ? (
                   <ProjectFavicon title={project.title} icon={project.icon} className="size-4 shrink-0" />
                 ) : (

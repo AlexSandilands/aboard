@@ -8,7 +8,7 @@ describe("GET /api/stats", () => {
     const res = await h.request("/api/stats");
     expect(res.status).toBe(200);
     const body = StatsResponse.parse(await res.json());
-    expect(body).toMatchObject({ weeks: 12, project: null });
+    expect(body).toMatchObject({ weeks: 12, projects: [] });
     expect(body.buckets).toHaveLength(12);
   });
 
@@ -21,7 +21,12 @@ describe("GET /api/stats", () => {
       expect(body.bucket).toBe(weeks === 1 ? "day" : "week");
     }
     const scoped = StatsResponse.parse(await (await h.request(`/api/stats?projectId=${project.id}`)).json());
-    expect(scoped.project).toEqual({ id: project.id, title: "Alpha" });
+    expect(scoped.projects).toEqual([{ id: project.id, title: "Alpha" }]);
+    const other = h.services.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const subset = StatsResponse.parse(
+      await (await h.request(`/api/stats?projectIds=${other.id},${project.id}&projectId=${project.id}`)).json(),
+    );
+    expect(subset.projects.map((p) => p.title)).toEqual(["Beta", "Alpha"]);
   });
 
   it("rejects other periods, and a project that isn't there", async () => {
@@ -30,5 +35,6 @@ describe("GET /api/stats", () => {
       expect((await h.request(`/api/stats?${query}`)).status).toBe(400);
     }
     expect((await h.request("/api/stats?projectId=nope")).status).toBe(404);
+    expect((await h.request("/api/stats?projectIds=nope,other")).status).toBe(404);
   });
 });

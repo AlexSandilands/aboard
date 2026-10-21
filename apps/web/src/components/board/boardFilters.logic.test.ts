@@ -92,6 +92,12 @@ describe("sameFilters / normalizeParams", () => {
     expect(sameFilters({ attention: true }, { attention: true, q: " " })).toBe(true);
   });
 
+  it("compares the project ids as a set, written in any order", () => {
+    expect(sameFilters({ project: "b,a" }, { project: "a,b" })).toBe(true);
+    expect(sameFilters({ project: "a,a, b" }, { project: "a,b" })).toBe(true);
+    expect(sameFilters({ project: "a,b" }, { project: "a" })).toBe(false);
+  });
+
   it("normalises a stored view to the canonical params", () => {
     expect(normalizeParams({ status: "done,backlog,zzz", q: " x " })).toMatchObject({ status: "backlog,done", q: "x" });
   });
