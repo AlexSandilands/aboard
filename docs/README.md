@@ -72,6 +72,7 @@ files under each app.
 - [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
+- [Releases](features/releases.md): cutting a release, the installers and the pacman repo CI builds for it
 - [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges
 - [Rich Markdown editor](features/rich-editor.md): editing descriptions and notes as rich text, stored as exact Markdown
 - [Pasted images](features/attachments.md): images in a task's text, shrunk in the browser, stored on disk, listed for agents

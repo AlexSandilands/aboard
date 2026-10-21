@@ -96,3 +96,27 @@ export function parseDesktopBadge(value: unknown): DesktopBadge | null {
   }
   return { count, description: described, overlay };
 }
+
+/**
+ * One argument of a desktop entry's `Exec` line. The spec reserves spaces, quotes and shell characters: such an
+ * argument goes in double quotes, with `"`, `` ` ``, `$` and `\` escaped inside them. The key is also a string value,
+ * whose own escaping doubles every backslash after that, and a lone `%` would start a field code.
+ */
+function desktopExecArg(arg: string): string {
+  const literal = arg.replaceAll("%", "%%");
+  const quoted = /[\s"'\\><~|&;$*?#()`]/.test(literal) ? `"${literal.replace(/["`$\\]/g, "\\$&")}"` : literal;
+  return quoted.replaceAll("\\", "\\\\");
+}
+
+/** The XDG autostart entry that starts the app at login on Linux, where Electron has no login items. */
+export function linuxAutostartEntry(name: string, exe: string, args: readonly string[]): string {
+  return [
+    "[Desktop Entry]",
+    "Type=Application",
+    `Name=${name}`,
+    `Exec=${[exe, ...args].map(desktopExecArg).join(" ")}`,
+    "Terminal=false",
+    "X-GNOME-Autostart-enabled=true",
+    "",
+  ].join("\n");
+}

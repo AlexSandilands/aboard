@@ -6,6 +6,7 @@ import {
   decideNavigation,
   isDesktopTheme,
   isOwnHealth,
+  linuxAutostartEntry,
   parseBackgroundColor,
   parseDesktopBadge,
   parseDesktopNotification,
@@ -130,5 +131,21 @@ describe("parseDesktopBadge", () => {
       parseDesktopBadge({ count: 1, description: "", overlay: `data:image/png;base64,${"A".repeat(60_000)}` }),
     ).toBeNull();
     expect(parseDesktopBadge({ count: 1, overlay: null })).toBeNull();
+  });
+});
+
+describe("linuxAutostartEntry", () => {
+  it("writes a desktop entry that runs the app with its arguments", () => {
+    expect(linuxAutostartEntry("Aboard", "/opt/aboard/aboard", ["--hidden"])).toBe(
+      "[Desktop Entry]\nType=Application\nName=Aboard\nExec=/opt/aboard/aboard --hidden\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
+    );
+  });
+
+  it("quotes paths with spaces and escapes what the Exec key reserves", () => {
+    const entry = linuxAutostartEntry("Aboard", "/home/me/My Apps/Aboard.AppImage", ["--hidden"]);
+    expect(entry).toContain('Exec="/home/me/My Apps/Aboard.AppImage" --hidden\n');
+    // Quoting escapes these with a backslash, and the string value doubles every backslash again.
+    expect(linuxAutostartEntry("Aboard", '/a/$b"c`d\\e', [])).toContain('Exec="/a/\\\\$b\\\\"c\\\\`d\\\\\\\\e"\n');
+    expect(linuxAutostartEntry("Aboard", "/a/100%", [])).toContain("Exec=/a/100%%\n");
   });
 });
