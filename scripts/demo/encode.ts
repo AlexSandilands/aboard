@@ -3,7 +3,7 @@
  * of the 2x frames, so they stay sharp), trims, scales, then encodes with gifski, or ffmpeg's palettegen when gifski
  * isn't installed. Run on its own to re-encode a take without recording again:
  *
- *   node scripts/demo/encode.ts <take dir> [--out file.gif] [--width 1280] [--fps 20] [--quality 80]
+ *   node scripts/demo/encode.ts <take dir> [--out file.gif] [--width 1280] [--fps 20] [--quality 90]
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -55,8 +55,8 @@ export interface EncodeOptions {
 export const DEFAULT_ENCODE: Omit<EncodeOptions, "out"> = {
   width: 1280,
   fps: 20,
-  quality: 80,
-  budget: 6 * 1024 * 1024,
+  quality: 90,
+  budget: 20 * 1024 * 1024,
 };
 
 /** The view as zoompan takes it: the visible width and centre, in source pixels. */
@@ -187,7 +187,19 @@ export function encode(takeDir: string, options: EncodeOptions): void {
   if (has("gifski")) {
     execFileSync(
       "gifski",
-      ["--quiet", "--fps", String(options.fps), "--quality", String(options.quality), "-o", out, ...pngs],
+      // Without --width gifski shrinks anything over about 800x600, halving the frames scale= made.
+      [
+        "--quiet",
+        "--width",
+        String(options.width),
+        "--fps",
+        String(options.fps),
+        "--quality",
+        String(options.quality),
+        "-o",
+        out,
+        ...pngs,
+      ],
       { stdio: "inherit" },
     );
   } else {
