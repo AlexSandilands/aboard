@@ -16,7 +16,7 @@ export function trayIcon(style: TrayIconStyle, unread = false): NativeImage {
   return nativeImage.createFromPath(`${ICONS_DIR}${prefix}${unread ? "-unread" : ""}.png`);
 }
 
-export type MenuIconName = "app-window" | "copy" | "palette" | "rotate-cw" | "power";
+export type MenuIconName = "app-window" | "copy" | "palette" | "rotate-cw" | "power" | "square" | "square-check";
 
 /** A menu item's icon, drawn for a light or a dark menu; the `@2x` file next to it serves high-DPI displays. */
 export function menuIcon(name: MenuIconName, dark: boolean): NativeImage {

@@ -5,6 +5,7 @@ import { BRAND, brandEnv, readDesktopSandbox, type DesktopBadge } from "@repo/co
 import {
   BrowserWindow,
   Menu,
+  type MenuItem,
   Notification,
   Tray,
   app,
@@ -227,11 +228,22 @@ function buildTrayMenu(): Menu {
     },
     {
       label: "Start at login",
-      type: "checkbox",
+      // Qt menus (KDE) put a checkbox in a column of its own, left of the icons, so on Linux the state is an icon.
+      ...(process.platform === "linux"
+        ? {
+            icon: menuIcon(startAtLogin.get() ? "square-check" : "square", dark),
+            click: () => {
+              startAtLogin.set(!startAtLogin.get());
+              refreshTrayMenu();
+            },
+          }
+        : {
+            type: "checkbox" as const,
+            checked: startAtLogin.get(),
+            click: (item: MenuItem) => startAtLogin.set(item.checked),
+          }),
       // A dev build would register the bare electron binary.
       enabled: app.isPackaged,
-      checked: startAtLogin.get(),
-      click: (item) => startAtLogin.set(item.checked),
     },
     { type: "separator" },
     {

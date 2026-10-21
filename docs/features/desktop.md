@@ -39,7 +39,9 @@ An unexpected exit after startup shows an error and quits the app.
 - Closing the window hides it to the tray, so agents keep their MCP endpoint. **Quit** in the tray stops
   an owned server first.
 - The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Tray icon**, **Start at login**
-  (packaged only; starts hidden), **Restart server**, Quit. Every item but Start at login has an icon.
+  (packaged only; starts hidden), **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
+  plain item whose icon is a ticked or empty square, because Qt menus put a real checkbox in a column left of the
+  icons; elsewhere it is a checkbox.
   Electron's login items only exist on Windows and macOS, so on Linux the item writes
   (or removes) a desktop entry in the XDG autostart folder, `~/.config/autostart/<id>.desktop`
   (`apps/desktop/src/loginItem.ts`). It runs the AppImage file itself when started from one.
