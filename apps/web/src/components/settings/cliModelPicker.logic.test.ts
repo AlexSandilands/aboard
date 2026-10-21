@@ -1,6 +1,13 @@
 import type { AgentModel } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { filterModels, findSuggestion, suggestedModels, typedModel } from "./cliModelPicker.logic";
+import {
+  arrowTarget,
+  enterPick,
+  filterModels,
+  findSuggestion,
+  suggestedModels,
+  typedModel,
+} from "./cliModelPicker.logic";
 
 const model = (value: string, label: string | null = null, description: string | null = null): AgentModel => ({
   value,
@@ -51,6 +58,47 @@ describe("typedModel", () => {
   it("refuses text that couldn't go on a command line", () => {
     expect(typedModel("opus; calc", scanned)).toMatchObject({ kind: "invalid" });
     expect(typedModel("a b", scanned)).toMatchObject({ kind: "invalid" });
+  });
+});
+
+describe("enterPick", () => {
+  const withLong = [...scanned, model("sonnet", "Sonnet")];
+
+  it("picks a typed model the list doesn't have", () => {
+    expect(enterPick(" claude-opus-5-5 ", scanned)).toBe("claude-opus-5-5");
+  });
+
+  it("picks the listed model named exactly, even when others match too", () => {
+    expect(enterPick("sonnet", withLong)).toBe("sonnet");
+    expect(enterPick(" haiku ", withLong)).toBe("haiku");
+  });
+
+  it("picks the only model the search leaves", () => {
+    expect(enterPick("everyday", scanned)).toBe("opus");
+  });
+
+  it("picks nothing for an invalid name, a blank search or several matches", () => {
+    expect(enterPick("opus; calc", scanned)).toBeNull();
+    expect(enterPick("", [scanned[0]!])).toBeNull();
+    expect(enterPick("son", withLong)).toBeNull();
+  });
+});
+
+describe("arrowTarget", () => {
+  it("moves from the search into the rows and between them", () => {
+    expect(arrowTarget(-1, 3, "ArrowDown")).toBe(0);
+    expect(arrowTarget(0, 3, "ArrowDown")).toBe(1);
+    expect(arrowTarget(2, 3, "ArrowDown")).toBe(2);
+  });
+
+  it("moves up a row, and from the first row back to the search", () => {
+    expect(arrowTarget(2, 3, "ArrowUp")).toBe(1);
+    expect(arrowTarget(0, 3, "ArrowUp")).toBe(-1);
+    expect(arrowTarget(-1, 3, "ArrowUp")).toBe(-1);
+  });
+
+  it("stays in the search when there are no rows", () => {
+    expect(arrowTarget(-1, 0, "ArrowDown")).toBe(-1);
   });
 });
 

@@ -133,6 +133,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                         name={`${label} tier`}
                         setting={setting}
                         models={modelsOf(scanned.data, harness)}
+                        scanning={scanned.isFetching}
                         onChange={(change) => save(tier, change)}
                       />
                     </TierField>
@@ -170,6 +171,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
         catalog={catalog.data}
         catalogError={catalog.error?.message ?? null}
         scanned={scanned.data}
+        scanning={scanned.isFetching}
       />
     </>
   );
@@ -186,6 +188,7 @@ function CustomModelsSection({
   catalog,
   catalogError,
   scanned,
+  scanning,
 }: {
   profiles: readonly ModelProfile[];
   shown: ReadonlySet<TierProvider>;
@@ -193,6 +196,7 @@ function CustomModelsSection({
   catalog: T3ModelCatalog | undefined;
   catalogError: string | null;
   scanned: AgentModels | undefined;
+  scanning: boolean;
 }) {
   const updateSettings = useUpdateSettings();
   const edits = useRef(createProfileEdits()).current;
@@ -306,6 +310,7 @@ function CustomModelsSection({
                     name={profile.name}
                     setting={profile}
                     models={modelsOf(scanned, harness)}
+                    scanning={scanning}
                     onChange={(next) => change(profile.id, next)}
                   />
                 </TierField>
@@ -341,12 +346,14 @@ function CliModelField({
   name,
   setting,
   models,
+  scanning,
   onChange,
 }: {
   harness: AgentHarness;
   name: string;
   setting: ModelTierSetting;
   models: readonly AgentModel[];
+  scanning: boolean;
   onChange: (change: TierChange) => void;
 }) {
   const model = setting.cli?.[harness] ?? "";
@@ -359,6 +366,7 @@ function CliModelField({
         label={`${name} ${CLI_LABELS[harness]} model`}
         value={model}
         models={models}
+        loading={scanning}
         onSave={(next) =>
           onChange({
             field: "cli",

@@ -34,6 +34,32 @@ export function typedModel(query: string, models: readonly AgentModel[]): TypedM
     : { kind: "invalid", error: "A model name has only letters, digits and . : @ / [ ] -" };
 }
 
+/**
+ * The model Enter picks in the search: the listed model it names exactly (`sonnet` while `sonnet[1m]` matches too),
+ * else the only listed model it matches, else what was typed when nothing is listed for it. Null for a blank search,
+ * an invalid name, or several matches.
+ */
+export function enterPick(query: string, listed: readonly AgentModel[]): string | null {
+  const text = query.trim();
+  if (!text) return null;
+  const exact = listed.find((m) => m.value === text);
+  if (exact) return exact.value;
+  const shown = filterModels(listed, text);
+  if (shown.length === 1) return shown[0]!.value;
+  if (shown.length > 1) return null;
+  const typed = typedModel(text, listed);
+  return typed?.kind === "use" ? typed.value : null;
+}
+
+/**
+ * Where an arrow key moves focus in the picker: from the search (-1) down into the rows, between rows, and from the
+ * first row back up to the search. Stays put at the last row.
+ */
+export function arrowTarget(from: number, count: number, key: "ArrowDown" | "ArrowUp"): number {
+  if (key === "ArrowDown") return Math.min(from + 1, count - 1);
+  return Math.max(from - 1, -1);
+}
+
 /** The suggestion for a model value, if the scan listed it. */
 export const findSuggestion = (models: readonly AgentModel[], value: string): AgentModel | undefined =>
   models.find((m) => m.value === value.trim());
