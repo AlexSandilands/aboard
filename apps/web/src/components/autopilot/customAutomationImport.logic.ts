@@ -84,7 +84,7 @@ export function importProblem(bundle: AutomationBundle, draft: ImportDraft): str
   return checkCustomDefinition(parsed.data);
 }
 
-/** The file name a download of an automation gets: `dispatch.automation.json`. */
+/** The file name a download of an automation gets: `triage.automation.json`. */
 export function bundleFilename(name: string): string {
   const slug = name
     .toLowerCase()

@@ -319,7 +319,7 @@ describe("custom automations: triggers", () => {
       const { define, pass, agentRuns, project } = setup();
       const tools = ["mcp__issue-tracker__search_jira", "mcp__issue-tracker__get_jira_issue"];
       define({
-        name: "Dispatch",
+        name: "Triage",
         trigger: minutes(5),
         filters: { projectIds: [project.id] },
         action: { ...agent, allowedTools: tools },

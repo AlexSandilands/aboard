@@ -24,7 +24,7 @@ import {
 const withCheck = (agent: CustomAction, check: unknown): CustomAction => Object.assign({}, agent, { check });
 
 const definition = (): CustomDefinition => ({
-  name: "Dispatch",
+  name: "Triage",
   trigger: CustomTrigger.parse({ kind: "status_change", to: "review" }),
   filters: { projectIds: ["p1"], labels: ["bug"], epicId: "e1" },
   action: CustomAction.parse({

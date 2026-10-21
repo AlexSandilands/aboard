@@ -258,13 +258,13 @@ button is disabled. If you empty a slot of one that is already on, it stops star
 
 ## Sharing one
 
-On a custom automation's row, **Export** downloads a file (`dispatch.automation.json`). It holds the trigger,
+On a custom automation's row, **Export** downloads a file (`triage.automation.json`). It holds the trigger,
 prompt, skill name and allowed tools, any script or check script (in full), the declared inputs with their current values as defaults, and the declared
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
 To use someone's file: **Custom automations → Import**, then choose the file (or one of the examples the app ships:
-**Dispatch**, **Improve prompts and skills** or **Review repo PRs**). Before anything is saved you see everything it
+**Improve prompts and skills** or **Review repo PRs**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
@@ -276,22 +276,12 @@ It comes in **off**; switch it on in the Autopilot list when you have read it an
   exists is never overwritten: a name you use is kept apart (`triage-2`) and the automation names the new one.
 - Export tells you when a skill went into the file. Only its `SKILL.md` travels, not scripts or other files beside
   it, so check the skill for anything private first.
-- An automation name you already use gets a number: `Dispatch (2)`.
+- An automation name you already use gets a number: `Triage (2)`.
 - A file made by a newer version of the app is refused, saying so.
-
-### Dispatch
-
-Dispatch is the first example that ships. Every hour it searches Jira (with your **Jira tools** slot) for recent defects
-that match its JQL, skips keys already on the board (a task linking the key) or in its handover, adds the ones that
-look fixable by an agent to the board with a plan, and then either asks you to approve each plan or, if you turned
-**Require a human to approve plans first** off, flags the task so Autopilot starts it. It never merges: you review the
-pull requests. Fill the Jira slot with tools such as `mcp__issue-tracker__search_jira` and
-`mcp__issue-tracker__get_jira_issue`, check the JQL and the limits, pick the projects, switch **Start planned tasks** on
-if it should start work, and switch Dispatch on.
 
 ### Improve prompts and skills
 
-The second example audits how agents did and suggests changes to the text they run with. Every Monday at 07:00 it
+The first example audits how agents did and suggests changes to the text they run with. Every Monday at 07:00 it
 reads what happened in the project over the past week (`board_activity`: review rounds and findings, failed or
 retried Autopilot runs, blocked steps, stalls, agents' notes), looks closer at the few tasks that went worst (their
 session transcripts only when the notes don't say why), and suggests at most a few rewrites of your review and
@@ -321,7 +311,7 @@ the earlier (it stays in the history).
 
 ### Review repo PRs
 
-The third example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
+The second example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
 project it's on in. It also covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't
 see. It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
 

@@ -65,7 +65,7 @@ function setup(aheadMs = 2 * 3_600_000) {
 type Setup = ReturnType<typeof setup>;
 
 const jira = { name: "jira", label: "Jira tools", description: "search issues by JQL" };
-const dispatchAction = (extra: Record<string, unknown> = {}): Action =>
+const triageAction = (extra: Record<string, unknown> = {}): Action =>
   CustomAction.parse({
     kind: "agent",
     prompt: "Run {{inputs.jql}} and triage the defects.",
@@ -74,8 +74,8 @@ const dispatchAction = (extra: Record<string, unknown> = {}): Action =>
     slots: [jira],
     ...extra,
   });
-const dispatch = (action: Action = dispatchAction()): CreateCustomAutomationInput => ({
-  name: "Dispatch",
+const triage = (action: Action = triageAction()): CreateCustomAutomationInput => ({
+  name: "Triage",
   trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
   filters: { projectIds: [] },
   action,
@@ -90,13 +90,13 @@ describe("exporting a custom automation", () => {
     s.installSkill("triage");
     const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
     const custom = s.services.customAutomations.create({
-      ...dispatch(dispatchAction({ slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira"] }] })),
+      ...triage(triageAction({ slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira"] }] })),
       filters: { projectIds: [project.id] },
     });
     const bundle = await exportOf(s, custom);
     expect(bundle).toMatchObject({
       version: PLAIN_BUNDLE_VERSION,
-      name: "Dispatch",
+      name: "Triage",
       inputs: [{ name: "jql", default: "type = Bug" }],
       slots: [jira],
       skill: { name: "triage", body: SKILL },
@@ -108,7 +108,7 @@ describe("exporting a custom automation", () => {
 
   it("carries no skill when the named one isn't installed", async () => {
     const s = setup();
-    const custom = s.services.customAutomations.create(dispatch());
+    const custom = s.services.customAutomations.create(triage());
     expect((await exportOf(s, custom)).skill).toBeUndefined();
   });
 
@@ -127,7 +127,7 @@ describe("importing a custom automation", () => {
   const fileOf = async () => {
     const other = setup();
     other.installSkill("triage");
-    return exportOf(other, other.services.customAutomations.create(dispatch()));
+    return exportOf(other, other.services.customAutomations.create(triage()));
   };
 
   it("round-trips into an automation that is off, with the importer's inputs, tools and projects", async () => {
@@ -150,7 +150,7 @@ describe("importing a custom automation", () => {
     expect(skill).toMatchObject({ name: "triage", renamed: false });
     expect(readFileSync(join(s.skillDir("triage"), "SKILL.md"), "utf8")).toBe(SKILL);
     expect(automation).toMatchObject({
-      name: "Dispatch",
+      name: "Triage",
       filters: { projectIds: [project.id], epicId: null },
       action: {
         kind: "agent",
@@ -189,10 +189,10 @@ describe("importing a custom automation", () => {
   it("gives a name that is taken a number", async () => {
     const bundle = await fileOf();
     const s = setup();
-    s.services.customAutomations.create(dispatch());
+    s.services.customAutomations.create(triage());
     const first = await s.json<Imported>(await post(s, { bundle }));
     const second = await s.json<Imported>(await post(s, { bundle }));
-    expect([first.automation.name, second.automation.name]).toEqual(["Dispatch (2)", "Dispatch (3)"]);
+    expect([first.automation.name, second.automation.name]).toEqual(["Triage (2)", "Triage (3)"]);
   });
 
   it("refuses what isn't an automation file, a newer version and a definition that can't run, writing nothing", async () => {
@@ -281,7 +281,7 @@ describe("sharing a script", () => {
     const s = setup();
     const bundle = await exportOf(s, s.services.customAutomations.create(scriptAutomation()));
     expect(bundle).toMatchObject({ version: SCRIPT_BUNDLE_VERSION, action: script });
-    expect((await exportOf(s, s.services.customAutomations.create(dispatch()))).version).toBe(PLAIN_BUNDLE_VERSION);
+    expect((await exportOf(s, s.services.customAutomations.create(triage()))).version).toBe(PLAIN_BUNDLE_VERSION);
   });
 
   it("imports only once the importer confirms, from the board's page, writing nothing otherwise", async () => {
@@ -317,21 +317,21 @@ describe("sharing a script", () => {
 
   it("needs no confirmation for a file without a script", async () => {
     const s = setup();
-    const bundle = await exportOf(s, s.services.customAutomations.create(dispatch()));
+    const bundle = await exportOf(s, s.services.customAutomations.create(triage()));
     expect((await post(s, { bundle })).status).toBe(201);
   });
 });
 
 describe("a required tool slot", () => {
   const key = (custom: CustomAutomation) => encodeURIComponent(customAutomationKey(custom.id));
-  const filled = dispatchAction({
+  const filled = triageAction({
     allowedTools: ["WebFetch"],
     slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira"] }],
   });
 
   it("can't be switched on while empty, and says what is missing", async () => {
     const s = setup();
-    const custom = s.services.customAutomations.create(dispatch());
+    const custom = s.services.customAutomations.create(triage());
     const refused = await s.request(`/api/autopilot/board/${key(custom)}`, { method: "PUT", json: { mode: "on" } });
     expect(refused.status).toBe(400);
     expect(JSON.stringify(await refused.json())).toContain("Won't work until you fill in: Jira tools");
@@ -348,7 +348,7 @@ describe("a required tool slot", () => {
   it("gives the run its tools and tells the prompt which they are, and starts nothing once emptied", async () => {
     const s = setup();
     const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-    const custom = s.services.customAutomations.create(dispatch(filled));
+    const custom = s.services.customAutomations.create(triage(filled));
     s.services.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on" });
     await s.engine.pass();
     await s.engine.idle();
@@ -360,45 +360,11 @@ describe("a required tool slot", () => {
     expect(s.services.autopilot.runsForProject(project.id)).toHaveLength(1);
 
     // Emptying the slot of an automation that is already on stops it rather than starting an agent without its tools.
-    s.services.customAutomations.update(custom.id, { action: dispatchAction() });
+    s.services.customAutomations.update(custom.id, { action: triageAction() });
     s.services.customAutomations.rearm(custom.id, [project.id]);
     await s.engine.pass();
     await s.engine.idle();
     expect(s.agentRuns).toHaveLength(1);
-  });
-});
-
-describe("the Dispatch example", () => {
-  it("imports, takes a fake Jira server's tools into its slot and runs with them and the filled inputs", async () => {
-    const s = setup();
-    const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-    const bundle = AUTOMATION_EXAMPLES.find((e) => e.id === "dispatch")!.bundle;
-    const imported = await s.json<{ automation: CustomAutomation }>(
-      await s.request("/api/autopilot/custom/import", {
-        method: "POST",
-        json: {
-          bundle,
-          inputs: { jql: "project = ALPHA AND issuetype = Bug", require_approval: "false" },
-          slots: { jira: ["mcp__fake-jira__search_issues", "mcp__fake-jira__get_issue"] },
-          projectIds: [project.id],
-        },
-      }),
-    );
-    const key = customAutomationKey(imported.automation.id);
-    s.services.autopilot.setScope("board", null, key, { mode: "on" });
-    await s.engine.pass();
-    await s.engine.idle();
-    expect(s.agentRuns).toHaveLength(1);
-    const request = s.agentRuns[0]!;
-    expect(request.tools).toEqual(["mcp__fake-jira__search_issues", "mcp__fake-jira__get_issue"]);
-    expect(request.prompt).toContain("(project = ALPHA AND issuetype = Bug) AND created >= -14d");
-    expect(request.prompt).toContain("up to 50 issues");
-    expect(request.prompt).toContain("set to: false");
-    expect(request.prompt).toContain(
-      "- Jira tools (search issues by JQL and read an issue): mcp__fake-jira__search_issues",
-    );
-    expect(request.prompt).toContain(`Project: Alpha`);
-    expect(request.outputSchema).toBeTruthy();
   });
 });
 

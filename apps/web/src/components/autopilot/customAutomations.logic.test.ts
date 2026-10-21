@@ -198,16 +198,22 @@ describe("custom automation form", () => {
   it("reads the allowed tools one per line, and gives them back one per line", () => {
     const result = customFormToInput({
       ...emptyCustomForm(),
-      name: "Dispatch",
+      name: "Triage",
       prompt: "Go",
-      allowedTools: [" mcp__issue-tracker ", "", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)", ""].join(
-        NL,
-      ),
+      allowedTools: [
+        " mcp__issue-tracker ",
+        "",
+        "mcp__issue-tracker__search_jira",
+        "WebFetch(domain:a.com,b.com)",
+        "",
+      ].join(NL),
     });
     expect(result).toMatchObject({
       ok: true,
       input: {
-        action: { allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)"] },
+        action: {
+          allowedTools: ["mcp__issue-tracker", "mcp__issue-tracker__search_jira", "WebFetch(domain:a.com,b.com)"],
+        },
       },
     });
     const saved = custom({

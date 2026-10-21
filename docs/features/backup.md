@@ -134,8 +134,8 @@ The status (last run, last commit, last push, last error) is held in memory and 
   code. The migrations already know how to move data forward, including the data fixes some of them make.
 - **Allow-list for settings.** "Everything except secrets" leaks the next secret someone adds.
 - **Use the system git.** No credentials to store, and it works with whatever git sign-in you already use.
-- **Point it at a private repo.** Anything an agent pastes into a
-  note stays in git history for good. The settings row says so.
+- **Point it at a private repo.** Anything an agent pastes into a note stays in git history for good. The
+  settings row says so.
 
 ## Alternatives considered
 

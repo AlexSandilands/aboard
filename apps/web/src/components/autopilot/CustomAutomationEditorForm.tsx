@@ -451,8 +451,8 @@ export function CustomAutomationEditorForm({
                   label="Allowed tools"
                   hint={
                     <>
-                      Optional, one per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>) or
-                      one of its tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The
+                      Optional, one per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>)
+                      or one of its tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The
                       board&apos;s own tools are always allowed.
                     </>
                   }

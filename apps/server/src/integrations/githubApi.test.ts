@@ -96,7 +96,9 @@ describe("parseGhAuthStatus", () => {
           { state: "success", active: false, host: "github.com", login: "old" },
           { state: "success", active: true, host: "github.com", login: "me" },
         ],
-        "GHE.Example.com": [{ state: "error", active: true, host: "ghe.example.com", login: "work", error: "bad token" }],
+        "GHE.Example.com": [
+          { state: "error", active: true, host: "ghe.example.com", login: "work", error: "bad token" },
+        ],
       },
     });
     expect(parseGhAuthStatus(stdout)).toEqual([
@@ -116,7 +118,9 @@ describe("createGithubApi", () => {
   it("posts the query with the host's token and returns data", async () => {
     const net = fakeFetch(() => Response.json({ data: { viewer: { login: "me" } } }));
     const api = createGithubApi({ tokens: createGhTokens({ runGh: fakeGh([fakeToken(7)]).runGh }), fetch: net.fetch });
-    expect(await api.graphql("ghe.example.com", "query Q($a: Int!) { x }", { a: 1 })).toEqual({ viewer: { login: "me" } });
+    expect(await api.graphql("ghe.example.com", "query Q($a: Int!) { x }", { a: 1 })).toEqual({
+      viewer: { login: "me" },
+    });
     expect(net.calls).toEqual([
       {
         url: "https://ghe.example.com/api/graphql",

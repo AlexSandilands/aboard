@@ -48,18 +48,12 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
 
 Everything runs on your machine: a local server and a SQLite file, with no account and no cloud.
 
-## Install
-
-> [!NOTE]
-> A Windows installer on [GitHub Releases](https://github.com/example/aboard/releases) is on the
-> way. Until then, run it from source as below.
-
 ## Run from source
 
 You need [Node 24+](https://nodejs.org) and [pnpm](https://pnpm.io).
 
 ```sh
-git clone https://github.com/example/aboard.git
+git clone <repository-url> aboard
 cd aboard
 pnpm install
 ```
