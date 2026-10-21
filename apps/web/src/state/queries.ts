@@ -346,7 +346,7 @@ export function useT3ProjectCandidates(enabled: boolean) {
 
 /**
  * How long the launch options of a closed dialog (or a prefetch nobody opened) stay in the cache. Reopening inside it
- * shows them at once while a refresh runs, and the dialog's own state is never reseeded by it.
+ * shows them at once while a refresh runs; choices the user has made in the dialog are never moved by it.
  */
 const LAUNCH_OPTIONS_GC_MS = 30_000;
 /** Opening the hand-off menu again within this long doesn't prefetch the launch options again. */
