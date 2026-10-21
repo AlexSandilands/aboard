@@ -22,7 +22,7 @@
 <br>
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="Agents update the board live: a new idea appears, a step is ticked off, a blocked step shows up under Needs attention, then a task opens with its plan and agent thread" width="900" />
+  <img src=".github/assets/demo.gif" alt="The board updating live: steps tick off on an epic's task, dependency lines show what it blocks, finishing it lets Autopilot start the next task, Autopilot fixes a PR's failing checks, then a new task gets a Claude Code session from the hand-off menu" width="900" />
 </p>
 
 <br>
@@ -41,6 +41,10 @@ Aboard moves it onto a board, and the agents keep the board up to date themselve
   steps as they go and leave a handover note when they stop. You don't have to update anything.
 - **Pick up anything in seconds.** Every task shows its plan, the step it's on, its PRs, ticket and
   agent thread. Resume it yourself, or hand it to a fresh agent with one click.
+- **Big work stays in order.** Group tasks into epics and say what blocks what: blocked cards show a lock,
+  and hovering a card draws the chain.
+- **Autopilot keeps it moving.** Flag a task and Autopilot starts it once it's ready, fixes failing checks
+  on its PR and reviews it, within limits you set.
 - **Problems come to you.** Failing checks, requested changes and blocked steps collect under
   **Needs attention**, so you don't have to go looking.
 - **Ideas don't get lost.** Anything worth doing later goes into the Backlog in one call, and the agent
