@@ -41,6 +41,12 @@ and a click tries again.
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Ticket systems, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
+- **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in
+  project**: PNG, JPEG, WebP, GIF, SVG and ICO files under 2 MB, up to 60, with names like `favicon` and `logo` first,
+  then the shallower paths. In a git folder the list comes from git, so ignored files (`node_modules`, build output)
+  are left out; any other folder is searched four levels deep. Click one to preview it, then **Save icon**: it is
+  resized to a small square like an uploaded image, so the file itself isn't kept or linked. The list is empty for
+  General and for a project with no folder.
 - Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
   when it isn't set up or the board can't tell (Codex's stays grey until its CLI is found, since many use it only through T3 Code).
 - Claude Code, GitHub Copilot and Codex (once its CLI is found) are green only when their CLI runs (`--version`) and the board's MCP server is
