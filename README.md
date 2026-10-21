@@ -22,7 +22,7 @@
 <br>
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="The board updating live: steps tick off on an epic's task, dependency lines show what it blocks, finishing it lets Autopilot start the next task, Autopilot fixes a PR's failing checks, then a new task gets a Claude Code session from the hand-off menu" width="900" />
+  <img src=".github/assets/demo.gif" alt="The board updating live: a task's panel slides in and its plan ticks off, dependency lines fan out to the three tasks it blocks, finishing it lets Autopilot start all three, Autopilot fixes a PR's failing checks, then a new task gets a Claude Code session from the hand-off menu" width="900" />
 </p>
 
 <br>

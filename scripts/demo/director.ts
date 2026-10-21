@@ -123,17 +123,19 @@ async function lookUp(call: Api) {
     return found;
   };
   const blocker = task("Inline payment form");
-  const freed = task("Save cards for next time");
+  const freed = ["Save cards for next time", "Express checkout buttons", "Fraud checks on card payments"].map(task);
   const merging = task("Merge shipping and billing steps");
   const webhooks = task("Retry failed payment webhooks with backoff");
-  const blockerDetail = await call<{ phases: { steps: { id: string; status: string }[] }[] }>(
+  const blockerDetail = await call<{ phases: { title: string; steps: { id: string; status: string }[] }[] }>(
     "GET",
     `/api/tasks/${blocker.id}`,
   );
   const openSteps = blockerDetail.phases.flatMap((p) => p.steps).filter((s) => s.status !== "done");
-  const webhooksDetail = await call<{ links: { id: string; kind: string }[] }>("GET", `/api/tasks/${webhooks.id}`);
-  const prLink = webhooksDetail.links.find((l) => l.kind === "pr")!;
-  return { blocker, freed, merging, webhooks, openSteps, prLinkId: prLink.id };
+  // The finished phase the panel shows folded, which the cursor opens.
+  const donePhase = blockerDetail.phases.find((p) => p.steps.every((s) => s.status === "done"))!.title;
+  const mergingDetail = await call<{ links: { id: string; kind: string }[] }>("GET", `/api/tasks/${merging.id}`);
+  const prLink = mergingDetail.links.find((l) => l.kind === "pr")!;
+  return { blocker, freed, merging, webhooks, openSteps, donePhase, prLinkId: prLink.id };
 }
 
 const card = (page: Page, task: TaskInfo) => page.locator(`[data-task-card="${task.id}"]`).first();
@@ -166,6 +168,20 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
     await sleep(8);
   }
   await page.mouse.up();
+}
+
+/** Wheels the element under the pointer until `target` sits `top` pixels from the top, in small eased steps. */
+async function scrollTo(page: Page, target: Locator, top: number) {
+  const box = await target.boundingBox();
+  if (!box) return;
+  const distance = box.y - top;
+  const steps = 14;
+  for (let i = 0; i < steps; i++) {
+    const p = (i + 0.5) / steps;
+    // Bell-shaped step sizes, so the scroll eases in and out.
+    await page.mouse.wheel(0, (distance * Math.PI * Math.sin(Math.PI * p)) / (2 * steps));
+    await sleep(22);
+  }
 }
 
 /** Types like a quick typist: steady, with a little jitter, so it doesn't look pasted. */
@@ -219,25 +235,42 @@ async function record(sandbox: Sandbox): Promise<Timeline> {
     if (shots) await page.screenshot({ path: join(takeDir, `shot-${++shot}-${name}.png`) });
   };
 
-  // Beat 1: the epic. Push in on its cards while the blocker's last two steps tick off live.
+  // Beat 1: the task panel. Click the epic's In Progress task; the panel slides in, scrolls to the plan, opens the
+  // finished phase, and the current phase's last two steps tick off live.
   const band = page.locator("header[data-task-card]").first().locator("..");
-  await sleep(500);
-  zoomTo(await rectOf(card(page, ids.freed), card(page, ids.blocker), card(page, ids.merging)));
-  void glide(page, await pointOf(card(page, ids.blocker), 0.5, 1.4), 900);
-  await sleep(1100);
+  await sleep(400);
+  zoomTo(await rectOf(band), 800);
+  await click(page, card(page, ids.blocker), 700, 0.45, 0.35);
+  const panelTitle = page.getByRole("heading", { name: ids.blocker.title });
+  await panelTitle.waitFor();
+  zoomTo(null, 600);
+  await sleep(700);
+  const planHeader = page.getByRole("button", { name: /^Plan/ }).last();
+  const phase = page.getByRole("button", { name: new RegExp(`^\\d+\\s*${ids.donePhase}`) }).last();
+  await glide(page, await pointOf(panelTitle, 0.5, 6), 400);
+  await scrollTo(page, planHeader, 120);
+  await sleep(200);
+  const panelBox = (await panelTitle.boundingBox())!;
+  const planTop = (await planHeader.boundingBox())!.y;
+  zoomTo({ x: panelBox.x - 16, y: planTop - 16, width: 1600 - panelBox.x + 16, height: 300 }, 700);
+  await click(page, phase, 450, 0.3, 0.5);
+  await sleep(700);
   const [third, fourth] = ids.openSteps;
   await call("PATCH", `/api/steps/${third!.id}`, { status: "done" });
   await sleep(250);
   await call("PATCH", `/api/steps/${fourth!.id}`, { status: "in_progress" });
-  await sleep(900);
+  await sleep(800);
   await call("PATCH", `/api/steps/${fourth!.id}`, { status: "done" });
   await sleep(900);
-  await snap("steps");
+  await snap("panel");
+  await showKeys(page, "Esc");
+  await page.keyboard.press("Escape");
+  await sleep(300);
 
-  // Beat 2: dependencies. Out to the whole epic, then onto the blocker: green to what it frees, red to what it
-  // waits on; Shift draws the whole chain.
+  // Beat 2: dependencies. Back out to the epic and onto the task: green lines fan out to the three tasks it frees,
+  // red to the one it waited on; Shift draws the chain beyond them.
   zoomTo(await rectOf(band), 800);
-  await glide(page, await pointOf(card(page, ids.blocker), 0.45, 0.4), 420);
+  await glide(page, await pointOf(card(page, ids.blocker), 0.45, 0.4), 500);
   await sleep(1300);
   await snap("lines");
   await showKeys(page, "Shift");
@@ -247,37 +280,48 @@ async function record(sandbox: Sandbox): Promise<Timeline> {
   await page.keyboard.up("Shift");
   await sleep(200);
 
-  // Beat 3: the chain moves. The blocker is dragged to Done, the lock drops off the task it held, and Autopilot
-  // starts that task, which slides into In Progress.
+  // Beat 3: the chain moves. The task is dragged to Done, the locks drop off all three, and Autopilot starts each,
+  // sliding them into In Progress.
   const doneColumn = await pointOf(page.locator("header[data-task-card]").first(), 0.92, 4);
   await drag(page, await pointOf(card(page, ids.blocker), 0.45, 0.4), doneColumn, 800);
-  await sleep(900);
+  await sleep(800);
   await snap("dragged");
-  const run = await call<{ id: string }>("POST", "/api/demo/autopilot/runs", {
-    automation: "start_planned",
-    taskId: ids.freed.id,
-    summary: `start ${ids.freed.title}`,
-  });
-  await glide(page, await pointOf(card(page, ids.freed), 0.5, 0.75), 380);
-  await sleep(1300);
-  await call("POST", `/api/tasks/${ids.freed.id}/move`, { status: "in_progress" });
-  await sleep(1300);
+  await glide(page, await pointOf(card(page, ids.freed[1]!), 1.05, 0.5), 450);
+  const runs: { id: string }[] = [];
+  for (const task of ids.freed) {
+    runs.push(
+      await call<{ id: string }>("POST", "/api/demo/autopilot/runs", {
+        automation: "start_planned",
+        taskId: task.id,
+        summary: `start ${task.title}`,
+      }),
+    );
+    await sleep(180);
+  }
+  await sleep(700);
+  for (const task of ids.freed) {
+    await call("POST", `/api/tasks/${task.id}/move`, { status: "in_progress" });
+    await sleep(300);
+  }
+  await sleep(700);
   await snap("autopilot");
-  await call("POST", `/api/demo/autopilot/runs/${run.id}/finish`, { summary: "Started a Claude Code session" });
+  for (const run of runs) {
+    await call("POST", `/api/demo/autopilot/runs/${run.id}/finish`, { summary: "Started a Claude Code session" });
+  }
 
   // Beat 4: a failing PR. Push in on the card; Autopilot's fix run takes the checks from red to amber to green.
-  const prCard = card(page, ids.webhooks);
+  const prCard = card(page, ids.merging);
   zoomTo(await rectOf(prCard), 900);
-  await glide(page, await pointOf(prCard.getByText("#87"), 0.5, 0.5), 700);
-  await sleep(900);
+  await glide(page, await pointOf(prCard.getByText("#91"), 0.5, 0.5), 600);
+  await sleep(600);
   const fix = await call<{ id: string }>("POST", "/api/demo/autopilot/runs", {
     automation: "fix_prs",
-    taskId: ids.webhooks.id,
-    summary: "fix the failing checks on PR #87",
+    taskId: ids.merging.id,
+    summary: "fix the failing checks on PR #91",
   });
-  await sleep(1200);
+  await sleep(1000);
   await call("POST", `/api/demo/links/${ids.prLinkId}/pr`, { checks: "pending" });
-  await sleep(1300);
+  await sleep(1100);
   await call("POST", `/api/demo/links/${ids.prLinkId}/pr`, { checks: "passing" });
   await call("POST", `/api/demo/autopilot/runs/${fix.id}/finish`, { summary: "Pushed a fix; checks pass" });
   await sleep(1000);
@@ -345,7 +389,8 @@ async function record(sandbox: Sandbox): Promise<Timeline> {
   return { viewport: VIEWPORT, start: 0, end: duration, zooms };
 }
 
-rmSync(takeDir, { recursive: true, force: true });
+// Only what a take writes is cleared, so a mistaken --take never wipes a folder of other files.
+for (const entry of ["frames", "cfr", "png"]) rmSync(join(takeDir, entry), { recursive: true, force: true });
 mkdirSync(takeDir, { recursive: true });
 const sandbox = await startSandbox();
 console.log(`[demo] sandbox at ${sandbox.url}; recording into ${takeDir}`);

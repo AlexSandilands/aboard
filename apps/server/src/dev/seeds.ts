@@ -601,7 +601,7 @@ const showcase: Scenario = (s, opts) => {
   );
 
   // An epic for the README demo (scripts/demo): its blocker is In Progress with its last two steps open, so they
-  // can tick off live; finishing it frees the Autopilot-flagged task it blocks, which leads a chain for Shift.
+  // can tick off live; finishing it frees three Autopilot-flagged tasks, two of which hold up a fourth.
   const checkout = s.tasks.create({
     projectId: shop.id,
     title: "One-page checkout",
@@ -615,13 +615,14 @@ const showcase: Scenario = (s, opts) => {
     labels: ["ui"],
     epicId: checkout,
   });
-  addTask(s, shop.id, {
+  const merging = addTask(s, shop.id, {
     title: "Merge shipping and billing steps",
     status: "review",
     labels: ["ui"],
     epicId: checkout,
     plan: steps("Merge", ["One form for both addresses", "Same as shipping toggle"], true),
   });
+  pr(merging, 91, { state: "open", checks: "failing", reviewDecision: null, mergeable: "mergeable" });
   const paymentForm = addTask(s, shop.id, {
     title: "Inline payment form",
     status: "in_progress",
@@ -634,6 +635,11 @@ const showcase: Scenario = (s, opts) => {
           steps: [
             { title: "Card fields in an iframe", status: "done" },
             { title: "Inline validation", status: "done" },
+          ],
+        },
+        {
+          title: "Payments",
+          steps: [
             { title: "3-D Secure challenge", status: "in_progress" },
             { title: "Error states", status: "todo" },
           ],
@@ -641,18 +647,31 @@ const showcase: Scenario = (s, opts) => {
       ],
     },
   });
-  const savedCards = addTask(s, shop.id, {
-    title: "Save cards for next time",
-    status: "planned",
-    labels: ["backend"],
-    epicId: checkout,
-    plan: steps("Saved cards", ["Vault the card token", "Pick a saved card at checkout", "Remove a card"]),
+  // The three tasks the blocker frees, all flagged for Autopilot, so finishing it starts all three at once.
+  const freed = [
+    ["Save cards for next time", "backend", ["Vault the card token", "Pick a saved card at checkout", "Remove a card"]],
+    [
+      "Express checkout buttons",
+      "ui",
+      ["Apple Pay and Google Pay buttons", "Prefill the address", "Fall back to the form"],
+    ],
+    ["Fraud checks on card payments", "backend", ["Score each payment", "Hold risky orders", "Alert on holds"]],
+  ] as const;
+  const freedIds = freed.map(([title, label, stepTitles]) => {
+    const id = addTask(s, shop.id, {
+      title,
+      status: "planned",
+      labels: [label],
+      epicId: checkout,
+      plan: steps(title, [...stepTitles]),
+    });
+    s.tasks.update(id, { autopilot: true, addBlockedBy: [paymentForm] }, "user");
+    return id;
   });
-  s.tasks.update(savedCards, { autopilot: true }, "user");
+  // A second level for Shift: reorder waits on saved cards and express checkout.
   const reorder = addTask(s, shop.id, { title: "One-click reorder", status: "backlog", epicId: checkout });
   s.tasks.update(paymentForm, { addBlockedBy: [autocomplete] }, AGENT);
-  s.tasks.update(savedCards, { addBlockedBy: [paymentForm] }, AGENT);
-  s.tasks.update(reorder, { addBlockedBy: [savedCards] }, AGENT);
+  s.tasks.update(reorder, { addBlockedBy: [freedIds[0]!, freedIds[1]!] }, AGENT);
 
   const sitemap = done("Add a sitemap", ["seo"]);
   done("Lazy-load product reviews", ["perf"]);

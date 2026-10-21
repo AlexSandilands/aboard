@@ -54,7 +54,7 @@ pnpm exec playwright install chromium   # once
 pnpm demo:record                        # restarts this checkout's sandbox, records, writes both files
 ```
 
-It needs ffmpeg, and [gifski](https://gif.ski) for a clean GIF (without it the script falls back to
+It runs on macOS and Linux (the CLI stub is a shell script). It needs ffmpeg, and [gifski](https://gif.ski) for a clean GIF (without it the script falls back to
 ffmpeg's palette, which bands more). `scripts/demo/director.ts` plays the beats with a drawn cursor in
 headless Chromium at twice the pixels; `encode.ts` adds the zooms afterwards, trims and encodes, and
 warns over 6 MB. The take stays in a temp folder (`/tmp/demo-take`), so `node scripts/demo/encode.ts

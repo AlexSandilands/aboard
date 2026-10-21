@@ -6,7 +6,16 @@
  *   node scripts/demo/encode.ts <take dir> [--out file.gif] [--width 1280] [--fps 20] [--quality 80]
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -123,7 +132,14 @@ function replayAt(takeDir: string, fps: number): string {
   let next = 0;
   for (let i = 0; i < Math.floor(duration * fps); i++) {
     while (next + 1 < frames.length && frames[next + 1]!.at <= i / fps) next++;
-    symlinkSync(join(framesDir, frames[next]!.file), join(dir, `${String(i).padStart(5, "0")}.jpg`));
+    const from = join(framesDir, frames[next]!.file);
+    const to = join(dir, `${String(i).padStart(5, "0")}.jpg`);
+    // Windows refuses symlinks without Developer Mode; a copy works everywhere.
+    try {
+      symlinkSync(from, to);
+    } catch {
+      copyFileSync(from, to);
+    }
   }
   return dir;
 }
