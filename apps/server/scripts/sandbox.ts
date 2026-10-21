@@ -418,6 +418,8 @@ async function start(argv: string[]): Promise<void> {
     }
     env[brandEnv("HOME")] = dataDir;
     env[brandEnv("POLLERS")] = "0";
+    // With the pollers off, /api/demo stands in for them so the README demo can show PR checks and Autopilot runs.
+    env[brandEnv("DEMO")] = "1";
     // A folder that doesn't exist: no T3 Code install is detected, so nothing reaches the user's T3 threads.
     env.T3CODE_HOME = join(home, "no-t3");
     // A home of its own: installing or syncing skills writes `<home>/.claude/skills`, never the user's.

@@ -45,8 +45,26 @@ from its own port and the Vite port.
 
 ### Screenshots
 
-The README GIF and the screenshots in `.github/assets/` are taken from `pnpm sandbox --seed showcase`, a
-busy example board, so they never show real work. Retake them from that seed when the UI changes.
+The README GIF (`demo.gif`) and the task panel screenshot (`task-panel.png`) in `.github/assets/` are
+recorded from `pnpm sandbox --seed showcase`, a busy example board, so they never show real work. Retake
+both when the UI changes:
+
+```sh
+pnpm exec playwright install chromium   # once
+pnpm demo:record                        # restarts this checkout's sandbox, records, writes both files
+```
+
+It runs on macOS and Linux (the CLI stub is a shell script). It needs ffmpeg, and [gifski](https://gif.ski) for a clean GIF (without it the script falls back to
+ffmpeg's palette, which bands more). `scripts/demo/director.ts` plays the beats with a drawn cursor in
+headless Chromium at twice the pixels; `encode.ts` adds the zooms afterwards, trims and encodes, and
+warns over 6 MB. The take stays in a temp folder (`/tmp/demo-take`), so `node scripts/demo/encode.ts
+/tmp/demo-take` re-encodes it without recording again.
+
+The sandbox's pollers are off, so what the GitHub poller and Autopilot would do goes through
+`/api/demo`, which only the sandbox registers: it changes a PR link's checks and starts and finishes
+pretend Autopilot runs, through the same service calls the poller and the engine make. Starting a
+session is stubbed too: the director points the terminal at `true {command}` and the Claude Code CLI path
+at a script that only answers `--version`, so nothing real is launched.
 
 ## Checks
 
