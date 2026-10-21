@@ -385,9 +385,11 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           );
           // Entering Review with every PR already merged completes the task straight away.
           const moved =
-            summary.status === args.status
-              ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
-              : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
+            summary.kind === "epic"
+              ? `Marked #${summary.number}'s branch merged into the default branch; the epic is ${statusLabel(summary.status)}.`
+              : summary.status === args.status
+                ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
+                : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
           const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
           // The PR was opened before the loop (the old order): it can be reviewed on GitHub while the loop runs.
           const early =
@@ -395,7 +397,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
               ? "A pull request is already linked. Finish the local review loop below first, and push every fix to that PR; don't open another. Until the loop ends, Autopilot holds off its own review of the PR."
               : null;
           return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved, {
-            closing: summary.status === "done" && !wasDone,
+            closing: summary.kind !== "epic" && summary.status === "done" && !wasDone,
           });
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },

@@ -79,7 +79,7 @@ function statusChangeTime(repos: Repos, taskId: string, now: string): string {
  * state, and to the epic's delivery, its PR links or their merge. A no-op for an id that isn't an epic.
  */
 export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: Effects): void {
-  const epic = repos.tasks.get(epicId);
+  let epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
   fx.task(epicId);
   // An archived epic keeps the status it left with (Done), so a task of it archived later can't move it (reopening or
@@ -87,8 +87,15 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   // have changed.
   if (epic.archivedAt !== null) return;
   const children = repos.tasks.childrenOf([epicId]).filter((c) => c.archivedAt === null);
+  const rollup = deriveEpicRollup(children);
+  // A merge marked by hand was for the branch as it stood: once a task is open again (reopened, or a new one added), the
+  // mark no longer covers the epic's work, so the epic waits for a merge again when its tasks finish.
+  if (epic.integrationMergedAt !== null && deriveEpicStatus(rollup) !== "done") {
+    epic = { ...epic, integrationMergedAt: null };
+    repos.tasks.update(epic);
+  }
   const merge = epicBranchMerge(epic, repos.links.forTasks([epicId]).map(toLink));
-  const status = deriveEpicStatus(deriveEpicRollup(children), merge !== null && !merge.merged);
+  const status = deriveEpicStatus(rollup, merge !== null && !merge.merged);
   if (status === epic.status) return;
   const now = nowIso();
   const lane = repos.tasks.lane(epic.projectId, status).filter((t) => t.id !== epic.id);
@@ -719,9 +726,9 @@ export function createTasksService(
           // The one move an epic takes: an integration epic whose tasks are all done is marked merged into the default
           // branch, for when there is no PR to watch for it. Its status then follows from that (syncEpic).
           if (status === "done" && current.delivery === "integration") {
-            const open = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null && c.status !== "done");
-            const total = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null).length;
-            if (open.length > 0 || total === 0) {
+            const children = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null);
+            const open = children.filter((c) => c.status !== "done");
+            if (open.length > 0 || children.length === 0) {
               throw new AppError(
                 "VALIDATION",
                 `#${current.number} can be marked merged into the default branch once all its tasks are done` +

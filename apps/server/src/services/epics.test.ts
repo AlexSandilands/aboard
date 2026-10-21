@@ -532,6 +532,21 @@ describe("integration epics", () => {
     expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", integrationMerge: null });
   });
 
+  it("forgets a merge marked by hand once a task is open again, so later work waits for a merge too", () => {
+    const { s, epic, a, project } = finished();
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    s.tasks.move(a.id, { status: "in_progress" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("in_progress");
+    s.tasks.move(a.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id)).toMatchObject({ status: "review", integrationMerge: { merged: false } });
+    // A task added after the mark counts the same.
+    s.tasks.move(epic.id, { status: "done" }, "user");
+    const late = s.tasks.create({ projectId: project.id, title: "Late", epicId: epic.id, plan: plan("a") });
+    expect(s.tasks.summary(epic.id).status).toBe("planned");
+    s.tasks.move(late.id, { status: "done" }, "agent");
+    expect(s.tasks.summary(epic.id).status).toBe("review");
+  });
+
   it("clears a merge marked by hand when the delivery changes, and re-derives the epic", () => {
     const { s, epic, branch } = finished();
     s.tasks.move(epic.id, { status: "done" }, "user");

@@ -35,8 +35,8 @@ An epic's status is derived from its tasks that aren't archived (`deriveEpicStat
 closed, Backlog while it has none. It is stored on the row, so lists, filters and column counts read it like
 any other status. The exception is an epic delivered through an integration branch, which is Done only once that
 branch has also merged into the default branch: until then it stays in **Review** even with every task done
-([Delivery](#delivery)). Epics already Done when this rule arrived were left as they were (no migration, no startup pass)
-and are only re-derived the next time something changes.
+([Delivery](#delivery)). Integration epics already Done when this rule arrived are counted as merged by migration 038
+(`integration_merged_at` set to when they finished), so they stay Done.
 
 `syncEpic` in `services/tasks.ts` recomputes it in the same write whenever a task joins or leaves the epic,
 changes status, is closed or reopened, archived or unarchived, moved to another project, or deleted, and when what
@@ -188,7 +188,8 @@ reads it from the task.
   `integration_merged_at` on the epic (`integration_marked_merged` event) and `syncEpic` makes it Done (`status_changed`
   with `markedMerged`; a PR merge logs `mergedPr` instead). It is refused while the epic has open tasks or none, and for
   any epic that doesn't deliver through a branch; other status moves of an epic are refused as before. Changing the
-  delivery clears the mark. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
+  delivery clears the mark, and so does a task of the epic being open again (reopened, or added): the mark covered the
+  branch as it stood, so the epic waits for a merge again once its tasks finish. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
   task's column, and a later merge or finish brings it back.
 - **Going back** to main is refused once one of its tasks has started (`startedEpicTasks`: In Progress, Review, or
   Done without being closed), since their branches and PRs already target the epic's branch.
