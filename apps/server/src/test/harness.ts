@@ -29,6 +29,8 @@ export function createTestHarness(
     userHome?: string;
     harnessHomes?: Config["harnessHomes"];
     worktreesDir?: string;
+    /** Registers the sandbox's /api/demo routes. */
+    demo?: boolean;
     integrations?: IntegrationOverrides;
   } = {},
 ) {

@@ -11,7 +11,7 @@ import type { AppContext } from "./app.ts";
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
   config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
-    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes">>,
+    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo">>,
   overrides: IntegrationOverrides = {},
 ): AppContext & { db: Db } {
   const db = openDatabase(config.dbPath);

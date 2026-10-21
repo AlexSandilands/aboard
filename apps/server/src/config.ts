@@ -20,6 +20,11 @@ export interface Config {
   t3Home: string;
   /** Disable background pollers (tests). */
   pollers: boolean;
+  /**
+   * Registers /api/demo, which sets PR checks and pretend Autopilot runs so the README demo can be recorded with
+   * the pollers off. Only the isolated sandbox sets it.
+   */
+  demo?: boolean;
   /** The user's home folder, where harnesses install skills (`~/.claude/skills`). */
   userHome: string;
   /** Each harness's folder (CLAUDE_CONFIG_DIR, COPILOT_HOME, CODEX_HOME or the default), where the board skill goes. */
@@ -58,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
+    demo: env[brandEnv("DEMO")] === "1",
     userHome,
     harnessHomes: harnessHomesFrom(env, userHome),
     worktreesDir: join(homeDir, "worktrees"),
