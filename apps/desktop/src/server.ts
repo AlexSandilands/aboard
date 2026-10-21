@@ -116,7 +116,11 @@ Full log: ${logPath}`;
       // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Electron UtilityProcess, not window.postMessage
       child.postMessage("shutdown");
       const timedOut = await Promise.race([exited.then(() => false), sleep(STOP_TIMEOUT_MS).then(() => true)]);
-      if (timedOut) child.kill();
+      if (timedOut) {
+        child.kill();
+        // Resolve only once the process is gone, so the port is free for whoever starts the next server.
+        await exited;
+      }
     },
   };
 

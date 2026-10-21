@@ -306,6 +306,10 @@ function restartServer(): void {
     try {
       await old?.stop();
       const next = await connectServer(serverOptions);
+      // Attaching means something still answers on the port (the old server not gone yet); there is nothing of ours to run.
+      if (!next.owned && !quitting) {
+        throw new ServerStartError(`The old server is still answering on port ${port}; it did not restart.`, "");
+      }
       if (quitting) {
         await next.stop();
         return;
