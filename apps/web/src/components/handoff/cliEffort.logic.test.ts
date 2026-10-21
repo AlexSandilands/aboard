@@ -1,19 +1,33 @@
 import { CLI_EFFORTS } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_EFFORT, effortAfterModelChange, effortItems, effortOfValue, initialEffort } from "./cliEffort.logic";
+import {
+  DEFAULT_EFFORT,
+  effortAfterModelChange,
+  effortItems,
+  effortLabel,
+  effortOfValue,
+  initialEffort,
+} from "./cliEffort.logic";
 
 describe("effortItems", () => {
   it("lists the default first, then the levels", () => {
     expect(effortItems(["low", "high"], null)).toEqual([
       { value: DEFAULT_EFFORT, label: "Default effort" },
-      { value: "low", label: "low" },
-      { value: "high", label: "high" },
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
     ]);
   });
 
   it("keeps a chosen level the list doesn't have, so it can be seen and cleared", () => {
     expect(effortItems(["low"], "max").map((item) => item.value)).toEqual([DEFAULT_EFFORT, "max", "low"]);
     expect(effortItems(["low", "max"], "max").map((item) => item.value)).toEqual([DEFAULT_EFFORT, "low", "max"]);
+  });
+});
+
+describe("effortLabel", () => {
+  it("names every level", () => {
+    expect(effortLabel("xhigh")).toBe("Extra high");
+    expect(effortLabel("none")).toBe("None");
   });
 });
 
