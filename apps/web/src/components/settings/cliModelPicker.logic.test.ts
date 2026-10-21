@@ -1,6 +1,6 @@
 import type { AgentModel } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { commitModel, findSuggestion, modelMatches, suggestedModels } from "./cliModelPicker.logic";
+import { filterModels, findSuggestion, suggestedModels, typedModel } from "./cliModelPicker.logic";
 
 const model = (value: string, label: string | null = null, description: string | null = null): AgentModel => ({
   value,
@@ -23,38 +23,34 @@ describe("suggestedModels", () => {
   });
 });
 
-describe("modelMatches", () => {
+describe("filterModels", () => {
   it("matches the value, name or description, ignoring case", () => {
-    expect(modelMatches(scanned[0]!, "OPU", "")).toBe(true);
-    expect(modelMatches(scanned[0]!, "everyday", "")).toBe(true);
-    expect(modelMatches(scanned[1]!, "sonn", "")).toBe(true);
-    expect(modelMatches(scanned[2]!, "sonn", "")).toBe(false);
+    expect(filterModels(scanned, "OPU")).toEqual([scanned[0]]);
+    expect(filterModels(scanned, "everyday")).toEqual([scanned[0]]);
+    expect(filterModels(scanned, "sonn")).toEqual([scanned[1]]);
+    expect(filterModels(scanned, "gpt")).toEqual([]);
   });
 
-  it("matches everything for a blank query, and for the saved model as the field shows it", () => {
-    expect(scanned.every((m) => modelMatches(m, "", "opus"))).toBe(true);
-    expect(scanned.every((m) => modelMatches(m, "  ", "opus"))).toBe(true);
-    expect(scanned.every((m) => modelMatches(m, "opus", "opus"))).toBe(true);
-    expect(modelMatches(scanned[2]!, "opus", "")).toBe(false);
+  it("lists everything for a blank search", () => {
+    expect(filterModels(scanned, "")).toEqual(scanned);
+    expect(filterModels(scanned, "  ")).toEqual(scanned);
   });
 });
 
-describe("commitModel", () => {
-  it("does nothing when the text is the saved model, ignoring spaces", () => {
-    expect(commitModel("opus", "opus")).toEqual({ kind: "none" });
-    expect(commitModel(" opus ", "opus")).toEqual({ kind: "none" });
-    expect(commitModel("", "")).toEqual({ kind: "none" });
+describe("typedModel", () => {
+  it("offers a typed model the list doesn't have, trimmed", () => {
+    expect(typedModel(" sonnet[1m]x ", scanned)).toEqual({ kind: "use", value: "sonnet[1m]x" });
+    expect(typedModel("claude-opus-5-5", [])).toEqual({ kind: "use", value: "claude-opus-5-5" });
   });
 
-  it("saves a typed model trimmed, and clears on blank", () => {
-    expect(commitModel(" sonnet[1m] ", "opus")).toEqual({ kind: "save", value: "sonnet[1m]" });
-    expect(commitModel("claude-opus-5-5", "")).toEqual({ kind: "save", value: "claude-opus-5-5" });
-    expect(commitModel("  ", "opus")).toEqual({ kind: "save", value: null });
+  it("offers nothing for a blank search or a listed model", () => {
+    expect(typedModel("  ", scanned)).toBeNull();
+    expect(typedModel(" haiku ", scanned)).toBeNull();
   });
 
   it("refuses text that couldn't go on a command line", () => {
-    expect(commitModel("opus; calc", "")).toMatchObject({ kind: "invalid" });
-    expect(commitModel("a b", "opus")).toMatchObject({ kind: "invalid" });
+    expect(typedModel("opus; calc", scanned)).toMatchObject({ kind: "invalid" });
+    expect(typedModel("a b", scanned)).toMatchObject({ kind: "invalid" });
   });
 });
 

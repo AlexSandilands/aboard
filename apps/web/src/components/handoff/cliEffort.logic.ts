@@ -5,6 +5,19 @@ import { CLI_EFFORTS, type AgentHarness, type CliEffort } from "@repo/contracts"
 /** The select's value for "the CLI's own default effort", which a Select can't hold as null. */
 export const DEFAULT_EFFORT = "default";
 
+const EFFORT_LABELS: Record<CliEffort, string> = {
+  none: "None",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
+/** A level as the pickers show it. */
+export const effortLabel = (level: CliEffort): string => EFFORT_LABELS[level];
+
 export interface EffortItem {
   value: string;
   label: string;
@@ -18,7 +31,7 @@ export function effortItems(levels: readonly CliEffort[], current: CliEffort | n
   const shown = current && !levels.includes(current) ? [current, ...levels] : levels;
   return [
     { value: DEFAULT_EFFORT, label: "Default effort" },
-    ...shown.map((level) => ({ value: level, label: level })),
+    ...shown.map((level) => ({ value: level, label: effortLabel(level) })),
   ];
 }
 

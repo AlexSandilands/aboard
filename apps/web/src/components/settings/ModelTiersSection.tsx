@@ -16,7 +16,6 @@ import {
 } from "@repo/contracts";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useRef, type ReactNode } from "react";
-import { CliEffortPicker } from "~/components/handoff/CliEffortPicker";
 import { ModelPicker, TraitsPicker } from "~/components/handoff/T3LaunchPickers";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { Button } from "~/components/ui/button";
@@ -26,7 +25,7 @@ import { useRescanAgentModels, useUpdateSettings } from "~/state/mutations";
 import { useAgentIntegrations, useAgentModels, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { findSuggestion } from "./cliModelPicker.logic";
-import { CliModelPicker } from "./CliModelPicker";
+import { CliEffortMenu, CliModelPicker } from "./CliModelPicker";
 import {
   createProfileEdits,
   labelConflicts,
@@ -43,12 +42,6 @@ import {
   type TierProvider,
 } from "./modelTiers.logic";
 import { SettingsLink, SettingsNote, SettingsRow, SettingsSection } from "./settingsLayout";
-
-const CLI_PLACEHOLDERS: Record<AgentHarness, string> = {
-  "claude-code": "Choose or type, e.g. sonnet",
-  codex: "e.g. gpt-5.5-codex",
-  "copilot-cli": "Choose or type, e.g. gpt-5.4",
-};
 
 const CLI_LABELS: Record<AgentHarness, string> = Object.fromEntries(
   AgentHarness.options.map((h) => [h, AGENT_HARNESSES[h].label]),
@@ -341,6 +334,7 @@ const modelsOf = (scanned: AgentModels | undefined, harness: AgentHarness): read
 /**
  * A CLI's `--model` for a tier or custom model, with its `--effort` beside it once a model is set. The effort offers
  * what the model's scan lists, else the CLI's own levels; a new model that doesn't take the saved effort clears it.
+ * Laid out like the T3 Code row above it: model, effort, then a button that clears the model (the CLI's default).
  */
 function CliModelField({
   harness,
@@ -359,31 +353,38 @@ function CliModelField({
   const levels = modelEffortLevels(harness, findSuggestion(models, model));
   return (
     <>
-      <div className="min-w-0 flex-1 sm:max-w-sm">
-        <CliModelPicker
-          label={`${name} ${CLI_LABELS[harness]} model`}
-          placeholder={CLI_PLACEHOLDERS[harness]}
-          value={model}
-          models={models}
-          onSave={(next) =>
-            onChange({
-              field: "cli",
-              harness,
-              value: next,
-              ...(next ? { levels: modelEffortLevels(harness, findSuggestion(models, next)) } : {}),
-            })
-          }
-        />
-      </div>
+      <CliModelPicker
+        harness={harness}
+        cliName={CLI_LABELS[harness]}
+        label={`${name} ${CLI_LABELS[harness]} model`}
+        value={model}
+        models={models}
+        onSave={(next) =>
+          onChange({
+            field: "cli",
+            harness,
+            value: next,
+            levels: modelEffortLevels(harness, findSuggestion(models, next)),
+          })
+        }
+      />
       {model.trim() && levels.length > 0 ? (
-        <CliEffortPicker
+        <CliEffortMenu
           label={`${name} ${CLI_LABELS[harness]} effort`}
           value={setting.cliEffort?.[harness] ?? null}
           levels={levels}
-          variant="ghost"
-          className="w-auto"
           onChange={(value) => onChange({ field: "cliEffort", harness, value })}
         />
+      ) : null}
+      {model.trim() ? (
+        <Button
+          size="icon-xs"
+          variant="ghost-muted"
+          aria-label={`Clear ${CLI_LABELS[harness]} model`}
+          onClick={() => onChange({ field: "cli", harness, value: null })}
+        >
+          <XIcon />
+        </Button>
       ) : null}
     </>
   );

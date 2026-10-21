@@ -1,39 +1,36 @@
 import { CliModel, type AgentModel } from "@repo/contracts";
 
-// The model field of a CLI on the Model tiers page: a text field that suggests the models the CLI lists.
+// The model picker of a CLI on the Model tiers page: the models the CLI lists, searchable, plus whatever is typed.
 
-/** The models to suggest: the scanned ones, then the saved one when the scan doesn't have it, so it is still shown. */
+/** The models to list: the scanned ones, then the saved one when the scan doesn't have it, so it is still shown. */
 export function suggestedModels(models: readonly AgentModel[], saved: string): AgentModel[] {
   const value = saved.trim();
   if (!value || models.some((m) => m.value === value)) return [...models];
   return [...models, { value, label: null, description: null, effortLevels: null }];
 }
 
-/**
- * Whether a suggestion matches what was typed: any part of its value, name or description, ignoring case. Typing
- * exactly the saved model (which is what the field shows when it opens) lists everything, so another can be picked.
- */
-export function modelMatches(model: AgentModel, query: string, saved: string): boolean {
+/** The models matching the search: any part of their value, name or description, ignoring case. Blank lists all. */
+export function filterModels(models: readonly AgentModel[], query: string): AgentModel[] {
   const needle = query.trim().toLowerCase();
-  if (!needle || query === saved) return true;
-  return [model.value, model.label, model.description].some((text) => text?.toLowerCase().includes(needle));
+  if (!needle) return [...models];
+  return models.filter((m) => [m.value, m.label, m.description].some((text) => text?.toLowerCase().includes(needle)));
 }
 
-export type ModelCommit =
-  /** Nothing to save: the text is what is saved already. */
-  | { kind: "none" }
-  /** Save this model, or null to clear it (the CLI's default). */
-  | { kind: "save"; value: string | null }
-  /** The text can't go on a command line; it is left in the field with the reason. */
+export type TypedModel =
+  /** The search text can be used as a model of its own. */
+  | { kind: "use"; value: string }
+  /** The text can't go on a command line. */
   | { kind: "invalid"; error: string };
 
-/** What leaving the field with `draft` does, given the saved model. */
-export function commitModel(draft: string, saved: string): ModelCommit {
-  const text = draft.trim();
-  if (text === saved.trim()) return { kind: "none" };
-  if (!text) return { kind: "save", value: null };
+/**
+ * The search text offered as a model the list doesn't have (e.g. `claude-opus-5-5` or `sonnet[1m]`). Null when it is
+ * blank or is exactly a listed model, which is picked from the list instead.
+ */
+export function typedModel(query: string, models: readonly AgentModel[]): TypedModel | null {
+  const text = query.trim();
+  if (!text || models.some((m) => m.value === text)) return null;
   return CliModel.safeParse(text).success
-    ? { kind: "save", value: text }
+    ? { kind: "use", value: text }
     : { kind: "invalid", error: "A model name has only letters, digits and . : @ / [ ] -" };
 }
 
