@@ -136,6 +136,21 @@ describe("starting a session from the board", () => {
     );
   });
 
+  it("passes the chosen effort after the model, and refuses a level no CLI takes", async () => {
+    const app = appWith();
+    const { status } = await app.start({ model: "opus", effort: "high" });
+    expect(status).toBe(201);
+    const args = app.spawned[0]!.args;
+    const at = args.indexOf("--model");
+    expect(args.slice(at, at + 4)).toEqual(["--model", "opus", "--effort", "high"]);
+    await app.start({ harness: "copilot-cli", model: "gpt-5.4", effort: "none" });
+    expect(app.spawned[1]!.args).toContain("--reasoning-effort");
+    expect((await app.start({ effort: "huge" })).status).toBe(400);
+    // A level only Copilot takes is refused for Claude Code before any terminal opens.
+    expect((await app.start({ effort: "none" })).status).toBe(400);
+    expect(app.spawned).toHaveLength(2);
+  });
+
   it("starts Copilot CLI with -i, labels a planning session and lets the task's other sessions share its window", async () => {
     const app = appWith();
     await app.start({});
@@ -319,7 +334,14 @@ describe("starting a session from the board", () => {
   it("offers the tier's CLI model and the checkout when the folder isn't a repository", async () => {
     const app = appWith();
     app.services.settings.update({
-      modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus", "copilot-cli": " " } } },
+      modelTiers: {
+        deep: {
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus", "copilot-cli": " " },
+          cliEffort: { "claude-code": "high" },
+        },
+      },
     });
     app.services.tasks.update(app.task.id, { suggestedModel: { tier: "deep" } }, "u");
     const res = await app.request(`/api/tasks/${app.task.id}/session-launch-options`);
@@ -329,6 +351,7 @@ describe("starting a session from the board", () => {
       branches: [],
       defaultBaseRef: null,
       models: { "claude-code": "opus", "copilot-cli": null },
+      efforts: { "claude-code": "high", "copilot-cli": null },
       tier: "deep",
       model: { name: "Deep", source: "tier", label: null },
       namedWindow: true,
@@ -350,6 +373,52 @@ describe("starting a session from the board", () => {
       tier: "deep",
       model: { name: "Fast", source: "label", label: "quick" },
     });
+  });
+
+  it("saves a tier's and a custom model's CLI efforts, dropping one whose model isn't set", () => {
+    const app = appWith();
+    const saved = app.services.settings.update({
+      modelTiers: {
+        deep: {
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus", "copilot-cli": " " },
+          cliEffort: { "claude-code": "high", "copilot-cli": "low" },
+        },
+      },
+      modelProfiles: [
+        {
+          id: "fast",
+          name: "Fast",
+          labels: [],
+          description: null,
+          t3: null,
+          cliEffort: { "claude-code": "low" },
+        },
+        {
+          id: "slow",
+          name: "Slow",
+          labels: [],
+          description: null,
+          t3: null,
+          cli: { "claude-code": "opus" },
+          cliEffort: { "claude-code": "max" },
+        },
+      ],
+    });
+    expect(saved.modelTiers.deep.cliEffort).toEqual({ "claude-code": "high" });
+    expect(saved.modelProfiles.map((p) => p.cliEffort)).toEqual([undefined, { "claude-code": "max" }]);
+  });
+
+  it("won't save an effort the harness's CLI doesn't take", () => {
+    const app = appWith();
+    expect(() =>
+      app.services.settings.update({
+        modelTiers: {
+          light: { description: null, t3: null, cli: { "claude-code": "haiku" }, cliEffort: { "claude-code": "none" } },
+        },
+      }),
+    ).toThrow(/Claude Code has no effort none/);
   });
 
   it("won't save a tier's CLI model that isn't a model name", () => {

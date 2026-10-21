@@ -1,9 +1,11 @@
 import {
   AGENT_HARNESSES,
+  CLI_EFFORTS,
   MAX_PLAN_TASKS,
   planningSessionLabel,
   planTasksPrompt,
   type AgentHarness,
+  type CliEffort,
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
@@ -30,6 +32,7 @@ import { useAgentClis, useBoard, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { planSkillOf } from "./handoff.logic";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
+import { CliEffortPicker } from "./CliEffortPicker";
 import { announceSession } from "./SessionLaunchDialog";
 import { ComposerStrip } from "./T3LaunchPickers";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
@@ -199,6 +202,7 @@ function PlanSession({
   const [prompt, setPrompt] = useState(() => promptFor(true));
   // Planning keeps the CLI's default model: a task's suggested tier is about implementing it.
   const [model, setModel] = useState("");
+  const [effort, setEffort] = useState<CliEffort | null>(null);
   const cli = useAgentClis().data?.find((c) => c.harness === harness);
   const start = useStartPlanningSession({ silent: true });
   const images = useLaunchImages();
@@ -218,6 +222,7 @@ function PlanSession({
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: model.trim() || null,
+        effort,
         taskIds: tasks.map((t) => t.id),
       },
       {
@@ -274,6 +279,13 @@ function PlanSession({
               placeholder="Model (the CLI's default)"
               value={model}
               onChange={(event) => setModel(event.target.value)}
+            />
+            <CliEffortPicker
+              value={effort}
+              levels={CLI_EFFORTS[harness]}
+              onChange={setEffort}
+              variant="ghost"
+              className="w-auto"
             />
             <button
               type="submit"

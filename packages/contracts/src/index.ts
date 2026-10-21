@@ -18,6 +18,7 @@ export * from "./planMarkdown.ts";
 export * from "./desktop.ts";
 export * from "./handoff.ts";
 export * from "./t3Launch.ts";
+export * from "./agentModels.ts";
 export * from "./modelTiers.ts";
 export * from "./modelProfiles.ts";
 export * from "./headlessModel.ts";

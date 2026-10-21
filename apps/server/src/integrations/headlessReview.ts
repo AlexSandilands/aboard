@@ -1,5 +1,6 @@
 import {
   BUILTIN_REVIEW_SKILL_BODY,
+  type CliEffort,
   FindingSeverity,
   type ReviewFindingInput,
   type ReviewSkillRef,
@@ -49,12 +50,17 @@ export const READ_ONLY_TOOLS = [
   "Bash(git rev-parse *)",
 ];
 
-export function headlessArgs(budgetUsd: number, model: string | null = null): string[] {
+export function headlessArgs(
+  budgetUsd: number,
+  model: string | null = null,
+  effort: CliEffort | null = null,
+): string[] {
   return [
     "-p",
     "--output-format",
     "json",
     ...(model ? ["--model", model] : []),
+    ...(effort ? ["--effort", effort] : []),
     "--json-schema",
     JSON.stringify(REVIEW_OUTPUT_SCHEMA),
     "--permission-mode",
@@ -136,12 +142,14 @@ export interface HeadlessJob {
   budgetUsd: number;
   /** As `--model` takes it; null keeps the CLI's default. */
   model: string | null;
+  /** As `--effort` takes it; absent or null keeps the CLI's default. */
+  effort?: CliEffort | null;
 }
 
 export type RunHeadless = (job: HeadlessJob) => Promise<HeadlessReview>;
 
 /** Runs one headless review. */
-export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model }) =>
+export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model, effort }) =>
   parseHeadlessOutput(
-    await runClaude({ cli, cwd, prompt, args: headlessArgs(budgetUsd, model), timeoutMs: RUN_TIMEOUT_MS }),
+    await runClaude({ cli, cwd, prompt, args: headlessArgs(budgetUsd, model, effort), timeoutMs: RUN_TIMEOUT_MS }),
   );

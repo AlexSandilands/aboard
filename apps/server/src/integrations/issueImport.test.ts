@@ -95,16 +95,21 @@ describe("issue import", () => {
     s.settings.update({
       issueImportModel: { tier: "light" },
       modelTiers: {
-        light: tier({ "claude-code": "sonnet", "copilot-cli": "gpt-5-mini" }),
+        light: {
+          ...tier({ "claude-code": "sonnet", "copilot-cli": "gpt-5-mini" }),
+          cliEffort: { "claude-code": "medium" },
+        },
         standard: tier({ "copilot-cli": "x" }),
       },
     });
     await run(create(GH_URL).id);
     expect(jobs.at(-1)?.model).toBe("sonnet");
+    expect(jobs.at(-1)?.effort).toBe("medium");
 
     s.settings.update({ issueImportModel: { tier: "standard" } });
     await run(create("https://github.com/acme/app/issues/46").id);
     expect(jobs.at(-1)?.model).toBeNull();
+    expect(jobs.at(-1)?.effort).toBeNull();
   });
 
   it("falls back to the issue as written when the model can't run", async () => {

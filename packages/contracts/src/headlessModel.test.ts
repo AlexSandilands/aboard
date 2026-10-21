@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { HeadlessModel, parseHeadlessModel, resolveHeadlessModel, sameHeadlessModel } from "./headlessModel.ts";
-import { EMPTY_MODEL_TIERS } from "./modelTiers.ts";
+import {
+  HeadlessModel,
+  parseHeadlessModel,
+  resolveHeadlessEffort,
+  resolveHeadlessModel,
+  sameHeadlessModel,
+} from "./headlessModel.ts";
+import { EMPTY_MODEL_TIERS, ModelTiers } from "./modelTiers.ts";
 
-const tiers = {
+const tiers = ModelTiers.parse({
   ...EMPTY_MODEL_TIERS,
-  light: { description: null, t3: null, cli: { "claude-code": "haiku", "copilot-cli": "gpt-5-mini" } },
+  light: {
+    description: null,
+    t3: null,
+    cli: { "claude-code": "haiku", "copilot-cli": "gpt-5-mini" },
+    cliEffort: { "claude-code": "low", "copilot-cli": "none" },
+  },
   standard: { description: null, t3: null, cli: { "copilot-cli": "gpt-5" } },
-};
+});
 
 describe("headless model", () => {
   it("parses a bare string as the typed model it was saved as before tiers", () => {
@@ -37,6 +48,13 @@ describe("headless model", () => {
 
   it("passes a typed model through as it is", () => {
     expect(resolveHeadlessModel(tiers, { model: "opus" })).toBe("opus");
+  });
+
+  it("resolves a tier's Claude Code effort, and none for a typed model", () => {
+    expect(resolveHeadlessEffort(tiers, { tier: "light" })).toBe("low");
+    expect(resolveHeadlessEffort(tiers, { tier: "standard" })).toBeNull();
+    expect(resolveHeadlessEffort(tiers, { model: "haiku" })).toBeNull();
+    expect(resolveHeadlessEffort(tiers, null)).toBeNull();
   });
 
   it("compares choices", () => {

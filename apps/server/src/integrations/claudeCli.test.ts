@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   claudeFailure,
+  claudeOutput,
   cmdShimArgs,
   parseClaudeOutput,
   readClaudeResult,
@@ -103,5 +104,18 @@ describe("claude CLI", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("names the CLI it ran in a timeout or failure, Claude Code unless told otherwise", async () => {
+    const hang = ["-e", "setTimeout(() => {}, 20000)"];
+    await expect(claudeOutput(process.execPath, hang, { timeoutMs: 200, label: "Copilot CLI" })).rejects.toThrow(
+      /^Copilot CLI didn't finish/,
+    );
+    await expect(claudeOutput(process.execPath, hang, { timeoutMs: 200 })).rejects.toThrow(
+      /^Claude Code didn't finish/,
+    );
+    await expect(
+      claudeOutput(process.execPath, ["-e", "process.exit(3)"], { timeoutMs: 5000, label: "Copilot CLI" }),
+    ).rejects.toThrow(/^Copilot CLI -e exited with code 3/);
   });
 });

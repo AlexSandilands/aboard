@@ -140,6 +140,7 @@ export function copilotArgs(input: AgentArgsInput): string[] {
     ...allow.flatMap((rule) => ["--allow-tool", rule]),
     ...deny.flatMap((rule) => ["--deny-tool", rule]),
     ...(input.model ? ["--model", input.model] : []),
+    ...(input.effort ? ["--reasoning-effort", input.effort] : []),
     ...(input.name ? ["--name", input.name] : []),
   ];
 }

@@ -34,6 +34,9 @@ describe("import arguments", () => {
   it("runs a GitHub issue with no tools and no MCP servers", () => {
     const args = importArgs({ model: "haiku", budgetUsd: 0.5, source: github, settingsPath: "/tmp/ignored.json" });
     expect(args[args.indexOf("--model") + 1]).toBe("haiku");
+    expect(args).not.toContain("--effort");
+    const effortful = importArgs({ model: "haiku", effort: "low", budgetUsd: 0.5, source: github, settingsPath: null });
+    expect(effortful[effortful.indexOf("--effort") + 1]).toBe("low");
     expect(args[args.indexOf("--tools") + 1]).toBe("");
     expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
     expect(args[args.indexOf("--max-budget-usd") + 1]).toBe("0.5");
