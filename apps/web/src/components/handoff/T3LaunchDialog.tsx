@@ -324,10 +324,15 @@ function Composer({
   const { promptFor } = subject;
   const [planWithMe, setPlanWithMe] = useState(subject.initialPlan);
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
-  // The choices start from the options, and only once: a refresh of them (the dialog opened on cached options) must
-  // never move what the user has picked.
+  // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
+  // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
   const [picks, setPicks] = useState<Picks | null>(() => (options ? initialPicks(options, subject, planWithMe) : null));
-  if (!picks && options) setPicks(initialPicks(options, subject, planWithMe));
+  const [seededFrom, setSeededFrom] = useState(options);
+  const [touched, setTouched] = useState(false);
+  if (options && (!picks || (options !== seededFrom && !touched))) {
+    setSeededFrom(options);
+    setPicks(initialPicks(options, subject, planWithMe));
+  }
   const ready = options && picks ? { options, ...picks } : null;
   // Kept or reset together: a retry with the same pair returns the same thread, images and all.
   const [launchIds, setLaunchIds] = useState(newLaunchIds);
@@ -340,7 +345,9 @@ function Composer({
   const workspace = ready ? toLaunchWorkspace(ready.options, ready.choice) : null;
   const model = options ? findModel(options, selection) : undefined;
   const blocker = !ready
-    ? "Loading the launch options"
+    ? failure
+      ? "The launch options didn't load"
+      : "Loading the launch options"
     : !selection || !model?.provider.ready
       ? "Choose an available model"
       : !workspace
@@ -350,7 +357,14 @@ function Composer({
             "Fix the PR in a new worktree, not in your checkout"
           : images.blocker;
 
-  const pick = (patch: Partial<Picks>) => setPicks((current) => current && { ...current, ...patch });
+  const pick = (patch: Partial<Picks>) => {
+    setTouched(true);
+    setPicks((current) => current && { ...current, ...patch });
+  };
+  const pickModel = (next: T3ModelSelection | null) => {
+    setTouched(true);
+    changeSelection(next);
+  };
   const changeSelection = (next: T3ModelSelection | null) =>
     setPicks(
       (current) =>
@@ -430,7 +444,7 @@ function Composer({
           <AddImageControl state={images} />
           {ready ? (
             <>
-              <ModelPicker options={ready.options} selection={ready.selection} onChange={changeSelection} />
+              <ModelPicker options={ready.options} selection={ready.selection} onChange={pickModel} />
               {ready.selection ? (
                 <TraitsPicker
                   options={ready.options}

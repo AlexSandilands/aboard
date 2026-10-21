@@ -221,8 +221,9 @@ The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it
 
 **Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and
 **Plan with me** work straight away; the model, effort, access, workspace and branch controls show skeletons until the
-options arrive, and Send stays disabled. What you typed is kept. The choices are made from the options once, when they
-first arrive, and a later refresh only updates the lists: it never moves a model, access or workspace you picked.
+options arrive, and Send stays disabled. What you typed is kept. The choices are made from the options when they
+arrive, and follow a refresh of them (the task's model may have changed since the cached copy) until you pick something;
+after that a refresh only updates the lists and never moves a model, access or workspace you picked.
 Opening the hand-off menu (and Suggest epics, and Fix in →) starts loading the options, and they stay cached for 30
 seconds after the dialog closes, so opening it again shows them at once while they refresh in the background. If a
 background refresh fails the dialog stays as it is; the error panel only replaces a dialog that never had options.
