@@ -29,6 +29,7 @@
     "format:check": "oxfmt --check",
     "knip": "knip",
     "docs:check": "node scripts/check-doc-links.ts",
+    "demo:record": "node scripts/demo/director.ts",
     "skill:embed": "node scripts/embed-board-skill.ts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm docs:check && pnpm test",
     "prepare": "lefthook install"
@@ -43,6 +44,7 @@
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2004",
+    "playwright": "^1.64.1",
     "typescript": "~6.0.3",
     "vitest": "^5.0.4"
   },
