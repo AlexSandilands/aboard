@@ -6,6 +6,7 @@ import {
   FAVORITES,
   handoffClis,
   initialPickerTab,
+  initialPicks,
   initialWorkspaceChoice,
   keepsCommandId,
   launchModelSelection,
@@ -229,6 +230,38 @@ describe("access", () => {
     expect(runtimeModesFor(codex).map((m) => m.label)).toEqual(["Supervised", "Auto"]);
     expect(clampRuntimeMode("full-access", codex)).toBe("auto");
     expect(clampRuntimeMode("approval-required", codex)).toBe("approval-required");
+  });
+});
+
+describe("initial picks", () => {
+  const worktree = { ...options, defaults: { ...options.defaults, envMode: "worktree" as const } };
+
+  it("takes the mode's model, T3's access default and its workspace default", () => {
+    expect(initialPicks(worktree, {}, false)).toEqual({
+      selection: options.defaults.modelSelection,
+      runtimeMode: clampRuntimeMode(options.defaults.runtimeMode, claude),
+      choice: { mode: "new_worktree", ref: null },
+    });
+  });
+
+  it("starts planning in the checkout whatever T3's default", () => {
+    expect(initialPicks(worktree, { checkout: true }, true).choice).toEqual({ mode: "current", ref: null });
+  });
+
+  it("never starts a fix in the checkout, even when T3 has no ref for the branch", () => {
+    expect(initialPicks(options, { fixBranch: "feat/x" }, false).choice).toEqual({ mode: "new_worktree", ref: null });
+    expect(initialPicks({ ...options, isRepo: false }, { fixBranch: "feat/x" }, false).choice.mode).toBe("current");
+  });
+
+  it("starts a task's worktree from its integration branch when T3 lists it", () => {
+    const withBranch = {
+      ...options,
+      refs: [...options.refs, { ...options.refs[1]!, name: "epic/1", isDefault: false }],
+    };
+    expect(initialPicks(withBranch, { integrationBranch: "epic/1" }, false).choice).toEqual({
+      mode: "new_worktree",
+      ref: "epic/1",
+    });
   });
 });
 

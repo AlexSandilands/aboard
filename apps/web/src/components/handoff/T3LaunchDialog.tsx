@@ -11,7 +11,6 @@ import {
   type T3LaunchOptions,
   type T3LaunchSuggestion,
   type T3ModelSelection,
-  type T3RuntimeMode,
   type T3ThreadRef,
   type TaskSummary,
 } from "@repo/contracts";
@@ -32,11 +31,10 @@ import { useDialogs } from "~/state/ui";
 import {
   keepsCommandId,
   findModel,
-  initialWorkspaceChoice,
-  launchModelSelection,
+  initialPicks,
   selectionAfterPlanToggle,
   toLaunchWorkspace,
-  type WorkspaceChoice,
+  type Picks,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
@@ -271,29 +269,27 @@ function LaunchContent({
         <DialogDescription>{subject.label}</DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
-        {/* Not once there are options: a failed background refresh must not throw away what the user has typed. */}
-        {!options.data && options.isError && !options.isFetching ? (
-          <LaunchUnavailable subject={subject} message={options.error.message} onRetry={() => void options.refetch()} />
-        ) : (
-          // The same element while the options load and after, so what is typed while waiting is kept.
-          <Composer subject={subject} options={options.data} starter={starter} onDone={onDone} />
-        )}
+        {/* One element while the options load, fail and arrive, so what is typed meanwhile is kept. */}
+        <Composer
+          subject={subject}
+          options={options.data}
+          // Not once there are options: a failed background refresh must not make the dialog look broken.
+          failure={
+            !options.data && options.isError && !options.isFetching
+              ? { message: options.error.message, onRetry: () => void options.refetch() }
+              : null
+          }
+          starter={starter}
+          onDone={onDone}
+        />
       </div>
     </>
   );
 }
 
-function LaunchUnavailable({
-  subject,
-  message,
-  onRetry,
-}: {
-  subject: LaunchSubject;
-  message: string;
-  onRetry: () => void;
-}) {
+function LaunchUnavailable({ message, onRetry, onCopy }: { message: string; onRetry: () => void; onCopy: () => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
+    <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 text-sm">
       <p className="flex items-start gap-2">
         <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
         <span>{message}</span>
@@ -302,7 +298,7 @@ function LaunchUnavailable({
         <Button size="sm" variant="outline" onClick={onRetry}>
           Retry
         </Button>
-        <Button size="sm" variant="ghost" onClick={subject.copyPrompt}>
+        <Button size="sm" variant="ghost" onClick={onCopy}>
           Copy prompt instead
         </Button>
       </div>
@@ -313,12 +309,15 @@ function LaunchUnavailable({
 function Composer({
   subject,
   options,
+  failure,
   starter,
   onDone,
 }: {
   subject: LaunchSubject;
   /** Undefined while they load: the prompt can be edited meanwhile, the rest waits for them. */
   options: T3LaunchOptions | undefined;
+  /** Set when loading them failed: shown under the composer, which stays so the prompt isn't lost. */
+  failure: { message: string; onRetry: () => void } | null;
   starter: Starter;
   onDone: () => void;
 }) {
@@ -445,7 +444,7 @@ function Composer({
                 onChange={(runtimeMode) => pick({ runtimeMode })}
               />
             </>
-          ) : (
+          ) : failure ? null : (
             <ToolbarSkeleton />
           )}
           {subject.planToggle ? (
@@ -477,13 +476,21 @@ function Composer({
             <WorkspaceMenu options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
             <RefPicker options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
           </>
-        ) : (
+        ) : failure ? null : (
           <>
             <Skeleton className="my-1 h-4 w-28" />
             <Skeleton className="my-1 h-4 w-36" />
           </>
         )}
       </ComposerStrip>
+      {failure && !options ? (
+        // Copies what is in the box, edits included.
+        <LaunchUnavailable
+          message={failure.message}
+          onRetry={failure.onRetry}
+          onCopy={() => copyToClipboard(prompt, "prompt")}
+        />
+      ) : null}
       {subject.fixBranch ? (
         <FixBranchNote
           branch={subject.fixBranch}
@@ -493,29 +500,6 @@ function Composer({
       {options?.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
     </form>
   );
-}
-
-/** What the dialog's pickers hold: the model, the access and where the thread starts. */
-interface Picks {
-  selection: T3ModelSelection | null;
-  runtimeMode: T3RuntimeMode;
-  choice: WorkspaceChoice;
-}
-
-function initialPicks(options: T3LaunchOptions, subject: LaunchSubject, planWithMe: boolean): Picks {
-  const selection = launchModelSelection(options, planWithMe);
-  const runtimeMode = clampRuntimeMode(
-    options.defaults.runtimeMode,
-    options.providers.find((p) => p.instanceId === selection?.instanceId),
-  );
-  if (subject.checkout) return { selection, runtimeMode, choice: { mode: "current", ref: null } };
-  const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
-  // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
-  const choice: WorkspaceChoice =
-    subject.fixBranch && options.isRepo && initial.mode !== "new_worktree"
-      ? { mode: "new_worktree", ref: null }
-      : initial;
-  return { selection, runtimeMode, choice };
 }
 
 /** Stands in for the model, effort and access pickers while the options load. */

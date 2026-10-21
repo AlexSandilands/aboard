@@ -733,6 +733,75 @@ describe("T3 thread launch", () => {
     expect(socket.closed).toBe(true);
   });
 
+  it("opens the session again when the early one was cut off but the shell then answered", async () => {
+    const inner = t3Fetch();
+    let ticketRefused = false;
+    const ticketOnceRefused: FetchFn = (url, init) => {
+      if (url.endsWith("/api/auth/websocket-ticket") && !ticketRefused) {
+        ticketRefused = true;
+        return Promise.reject(new Error("connect ECONNREFUSED"));
+      }
+      return inner(url, init);
+    };
+    const { t3, socket } = setup(
+      (frame) =>
+        frame.tag === "server.getConfig"
+          ? success(frame.id, SERVER_CONFIG)
+          : success(frame.id, { isRepo: true, refs: [] }),
+      "tok",
+      ticketOnceRefused,
+    );
+    expect((await t3.launchOptions("task-1")).t3ProjectId).toBe("t3-p1");
+    expect(socket.sent.map((f) => f.tag).sort()).toEqual(["server.getConfig", "vcs.listRefs"]);
+    expect(socket.closed).toBe(true);
+  });
+
+  it("drops the early session and opens one to the new origin when T3 moved while the shell loaded", async () => {
+    const home = makeT3Home();
+    const inner = t3Fetch();
+    const moved = "http://127.0.0.1:3774";
+    let shellTries = 0;
+    const movingT3: FetchFn = (url, init) => {
+      if (url.endsWith("/api/orchestration/shell") && shellTries++ === 0) {
+        // T3 restarts on another port: the first shell fetch fails and the next discovery finds the new one.
+        writeFileSync(
+          join(home, "userdata", "server-runtime.json"),
+          JSON.stringify({ version: 1, pid: 2, host: "127.0.0.1", port: 3774, origin: moved, startedAt: "2026-10-12" }),
+        );
+        return Promise.reject(new Error("connect ECONNREFUSED"));
+      }
+      return inner(url.replace(moved, ORIGIN), init);
+    };
+    const fake = fakeServices({ token: "tok", projects: [acme], images: [] });
+    const socket = fakeSocket((frame) =>
+      frame.tag === "server.getConfig"
+        ? success(frame.id, SERVER_CONFIG)
+        : success(frame.id, { isRepo: true, refs: [] }),
+    );
+    const opened: string[] = [];
+    const t3 = createT3Integration({
+      t3Home: home,
+      bus: new EventBus(),
+      services: () => fake.services,
+      fetch: movingT3,
+      openSocket: (url) => {
+        opened.push(new URL(url).host);
+        return socket.open(url);
+      },
+    });
+    expect((await t3.launchOptions("task-1")).t3ProjectId).toBe("t3-p1");
+    expect(opened).toEqual(["127.0.0.1:3773", "127.0.0.1:3774"]);
+    expect(socket.closed).toBe(true);
+  });
+
+  it("returns a context error at once, without waiting for a session that hangs", async () => {
+    // T3 refuses the shell while its RPC never answers: the refusal must not wait for the early config request.
+    const { t3 } = setup(() => undefined, "tok", t3Fetch({ shellStatus: 401 }));
+    const error = await t3.launchOptions("task-1").catch((e) => e);
+    expect(isT3Unavailable(error)).toBe(false);
+    expect(error).toBeInstanceOf(Error);
+  });
+
   it("still offers the options when listing the refs fails", async () => {
     const { t3, socket } = setup((frame) =>
       frame.tag === "server.getConfig" ? success(frame.id, SERVER_CONFIG) : success(frame.id, { unexpected: true }),

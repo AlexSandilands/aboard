@@ -727,8 +727,8 @@ export function createT3Integration(deps: {
       try {
         ctx = await timed("shell", () => launchContext(target));
       } catch (error) {
-        const lost = await early;
-        if (lost && "rpc" in lost) lost.rpc.close();
+        // Not waited for: the context's error is returned at once, and a session the early start opens is closed.
+        void early?.then((lost) => ("rpc" in lost ? lost.rpc.close() : undefined));
         throw error;
       }
       const earlySession = early ? await early : null;
@@ -738,7 +738,10 @@ export function createT3Integration(deps: {
         if (earlyOrigin !== ctx.origin) {
           if ("rpc" in earlySession) earlySession.rpc.close();
         } else if ("rpc" in earlySession) ready = earlySession;
-        else throw rpcFailure(earlySession.error);
+        else if (!(earlySession.error instanceof T3RpcError && earlySession.error.kind === "unreachable")) {
+          throw rpcFailure(earlySession.error);
+        }
+        // An unreachable T3 that the shell then reached (it restarted meanwhile): opened again below.
       }
       let rpc: T3RpcSession | null = ready?.rpc ?? null;
       try {
