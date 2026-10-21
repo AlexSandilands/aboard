@@ -32,6 +32,9 @@ await build({
   targets: host.platform.createTarget(requested.length > 0 ? requested : host.targets, Arch.x64),
   publish: "never",
   config: {
+    // CI uploads the files itself. Left unset, a GH_TOKEN in the environment makes electron-builder set up GitHub
+    // publishing and auto-update files, and fail when it can't work out the repo.
+    publish: null,
     appId: `com.${BRAND.id}.desktop`,
     productName: BRAND.name,
     executableName: BRAND.id,
