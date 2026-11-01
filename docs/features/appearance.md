@@ -151,10 +151,11 @@ where it now sits with one transform, in step with the sidebar. A toggle mid-sli
 the share of the duration left (as the sidebar's own CSS transition does on reversal). The whole main area moves, the
 docked task panel and the header's right-hand controls included, so what sits at the window's right edge starts one
 sidebar width in from it and slides out (opening) or in (closing); a drag finishes the glide first, since a transformed
-ancestor would offset the drag overlay. Nothing
-resizes during the slide, so the board's `ResizeObserver`s measure once. The root has `overflow-x: clip` because
-a closing sidebar's main area starts beyond the window's right edge. Both are off with Panel animations at 0 and under
-reduced motion. The task panel grows in from its edge with the `.panel-enter` keyframe and
+ancestor would offset the drag overlay. Nothing resizes during the slide, so the board's `ResizeObserver`s measure once. The `SidebarProvider` wrapper has
+`overflow-x: clip` because a closing sidebar's main area starts beyond the window's right edge. The slide and the glide
+are both off with Panel animations at 0 and under reduced motion.
+
+The task panel grows in from its edge with the `.panel-enter` keyframe and
 shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
 Only the `<aside>`'s width animates. Its contents sit in an inner wrapper fixed at `var(--resizable-width)` (at least
 380px, the `@container` the panel's `@[460px]` queries measure), anchored left and clipped by the `<aside>`, so they

@@ -129,11 +129,15 @@ function useInsetGlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "l
 }
 
 /**
- * Ends a sidebar glide at once. Mid-glide the main area is transformed, which offsets what is positioned or measured
- * against the viewport (a drag overlay, say), so a drag finishes it first.
+ * Ends a sidebar slide at once, the sidebar's own transition included so the two stay together. Mid-glide the main area
+ * is transformed, which offsets what is positioned or measured against the viewport (a drag overlay, say), so a drag
+ * finishes it first.
  */
 function finishSidebarGlide() {
-  for (const animation of document.getAnimations()) if (animation.id === INSET_GLIDE_ID) animation.finish();
+  for (const animation of document.getAnimations()) {
+    const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+    if (animation.id === INSET_GLIDE_ID || target?.matches("[data-slot='sidebar-container']")) animation.finish();
+  }
 }
 
 function SidebarProvider({
