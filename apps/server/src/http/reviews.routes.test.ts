@@ -40,6 +40,19 @@ describe("review REST routes", () => {
     expect(rounds.map((r) => r.round)).toEqual([1, 2]);
   });
 
+  it("names the reviewer's model in the prompt once one is set at any level", async () => {
+    const h = setup();
+    h.services.reviews.openRound(h.task.id, { trigger: "manual", actor: "agent" });
+    const promptOf = async () =>
+      ((await (await h.request(`/api/tasks/${h.task.id}/review-prompt`)).json()) as { prompt: string }).prompt;
+    expect(await promptOf()).not.toContain("Run the reviewer on");
+
+    h.services.settings.update({ reviewModel: { model: "claude-opus-5-5" } });
+    expect(await promptOf()).toContain('Run the reviewer on `claude-opus-5-5`: in Claude Code pass `model: "opus"`');
+    h.services.tasks.update(h.task.id, { reviewModel: { model: "sonnet" } }, "user");
+    expect(await promptOf()).toContain('Run the reviewer on `sonnet`: in Claude Code pass `model: "sonnet"`');
+  });
+
   it("asks to fix open blocking findings before another round", async () => {
     const h = setup();
     h.services.reviews.submit(h.task.id, { findings: [{ severity: "blocking", title: "x" }] }, "reviewer");

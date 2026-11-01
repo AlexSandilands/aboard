@@ -82,6 +82,7 @@ export function createReviewFallbacks(deps: {
       cycleRound: task.review?.round ?? 1,
       maxRounds: s.settings.get().reviewMaxRounds,
       skill: s.reviews.skillFor(task.id),
+      modelLine: s.reviews.modelLineFor(task.id),
     });
     try {
       // Stable per round, so a retry after a lost reply doesn't post twice.
@@ -104,12 +105,13 @@ export function createReviewFallbacks(deps: {
       const cwd = workspace?.worktreePath ?? project.workspaceRoot;
       if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
       const settings = s.settings.get();
+      const reviewModel = s.reviews.modelFor(task.id);
       const result = await runHeadless({
         cli: settings.headlessReviewCli,
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
-        model: resolveHeadlessModel(settings.modelTiers, settings.reviewModel),
-        effort: resolveHeadlessEffort(settings.modelTiers, settings.reviewModel),
+        model: resolveHeadlessModel(settings.modelTiers, reviewModel),
+        effort: resolveHeadlessEffort(settings.modelTiers, reviewModel),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,

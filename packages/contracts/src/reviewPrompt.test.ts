@@ -25,6 +25,18 @@ describe("review prompts", () => {
     expect(text).toContain("Reviewer brief:");
   });
 
+  it("names the reviewer's model in step 1 only when one is set", () => {
+    const base = { task, round: 1, cycleRound: 1, maxRounds: 3, skill: { source: "builtin" } } as const;
+    const modelLine = "Run the reviewer on the deep tier: pick that model if your harness lets you, else use your own.";
+    const step1 = (text: string) => text.split("\n").find((l) => l.startsWith("1. "));
+    expect(step1(reviewLoopInstructions({ ...base, modelLine }))).toContain(
+      `give it the brief below. ${modelLine} Wait for it to finish`,
+    );
+    for (const none of [{}, { modelLine: null }]) {
+      expect(step1(reviewLoopInstructions({ ...base, ...none }))).toContain("brief below. Wait for it to finish");
+    }
+  });
+
   it("ends the fix prompt with opening the PR, also after the last round", () => {
     for (const cycleRound of [1, 3]) {
       const text = reviewFixInstructions({ task, round: cycleRound, cycleRound, maxRounds: 3 });

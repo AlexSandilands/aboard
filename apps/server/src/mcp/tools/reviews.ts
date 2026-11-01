@@ -26,6 +26,7 @@ export function openRoundInstructions(services: Services, taskId: string): strin
     cycleRound: task.review?.round ?? 1,
     maxRounds: task.review?.maxRounds ?? services.settings.get().reviewMaxRounds,
     skill: services.reviews.skillFor(taskId),
+    modelLine: services.reviews.modelLineFor(taskId),
   });
 }
 

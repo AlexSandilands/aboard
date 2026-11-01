@@ -3,6 +3,7 @@ import {
   deriveReviewSummary,
   FindingSeverity,
   type HeadlessModel,
+  reviewerModelLine,
   reviewSkillName,
   reviewWantsAnotherRound,
   type ReviewFinding,
@@ -160,6 +161,8 @@ export function createReviewsService(
     skillFor,
 
     modelFor,
+
+    modelLineFor: (taskId) => reviewerModelLine(loadSettings(repos).modelTiers, modelFor(taskId)),
 
     openRound(taskId, opts) {
       const id = core.write((fx) => openRoundIn(taskId, opts, fx).id);

@@ -66,6 +66,8 @@ export interface ReviewPromptInput {
   cycleRound: number;
   maxRounds: number;
   skill: ReviewSkillRef;
+  /** Which model the reviewer subagent runs on (`reviewerModelLine`); null or left out says nothing, so it inherits. */
+  modelLine?: string | null;
 }
 
 const skillLines = (skill: ReviewSkillRef): string[] =>
@@ -120,7 +122,7 @@ export function reviewLoopInstructions(input: ReviewPromptInput): string {
   const which = round === cycleRound ? `round ${round}` : `round ${round} (${cycleRound} of this review)`;
   return [
     `Local review is on for this task: ${which} is open, up to ${maxRounds} rounds. Run the review loop before you open a pull request:`,
-    "1. Start a reviewer subagent with fresh context (Claude Code: the Agent tool; Copilot: a subagent) and give it the brief below. Wait for it to finish; it records its findings on the board.",
+    `1. Start a reviewer subagent with fresh context (Claude Code: the Agent tool; Copilot: a subagent) and give it the brief below.${input.modelLine ? ` ${input.modelLine}` : ""} Wait for it to finish; it records its findings on the board.`,
     `2. Call get_task(${ref}). Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).`,
     `3. If the round raised blocking or major findings, the board opens the next round itself (when auto-review is on) once you have resolved the last of them: call start_review(${ref}) for its brief and repeat from step 1 with a new reviewer. Stop when a round comes back clean or after ${maxRounds} rounds.`,
     `4. ${REVIEW_PR_STEP}`,
