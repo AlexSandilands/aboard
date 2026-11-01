@@ -6,6 +6,9 @@ describe("automationUpdate", () => {
     expect(automationUpdate({ setting: "autopilot", choice: "on" })).toEqual({ autopilot: true });
     expect(automationUpdate({ setting: "autoMerge", choice: "off" })).toEqual({ autoMerge: false });
     expect(automationUpdate({ setting: "autoReview", choice: "on" })).toEqual({ autoReview: true });
+    expect(automationUpdate({ setting: "reviewModel", model: { tier: "deep" } })).toEqual({
+      reviewModel: { tier: "deep" },
+    });
     expect(automationUpdate({ setting: "priority", on: true })).toEqual({ priority: true });
     expect(automationUpdate({ setting: "manual", on: true })).toEqual({ manual: true });
   });
@@ -14,5 +17,6 @@ describe("automationUpdate", () => {
     expect(automationUpdate({ setting: "autopilot", choice: "default" })).toEqual({ autopilot: null });
     expect(automationUpdate({ setting: "autoMerge", choice: "default" })).toEqual({ autoMerge: null });
     expect(automationUpdate({ setting: "autoReview", choice: "inherit" })).toEqual({ autoReview: null });
+    expect(automationUpdate({ setting: "reviewModel", model: null })).toEqual({ reviewModel: null });
   });
 });

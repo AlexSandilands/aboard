@@ -583,6 +583,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["local review", "override", "reviewer"],
   ),
   draft(
+    "project.review-skill.model",
+    "Project reviewer model",
+    "The model that reviews this project's tasks, instead of the board's.",
+    ["local review", "override", "reviewer", "tier", "opus", "subagent"],
+  ),
+  draft(
     "project.autopilot.automations",
     "Autopilot overrides",
     "Switch automations on or off for this project, over the board's setting.",
