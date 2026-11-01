@@ -2,10 +2,11 @@ import { reviewSkillName, type Project } from "@repo/contracts";
 import { skillOptions } from "~/components/review/review.logic";
 import { useUpdateProject } from "~/state/mutations";
 import { useSettings, useSkills } from "~/state/queries";
+import { HeadlessModelRow } from "./HeadlessModelRow";
 import { ReviewSkillSelect } from "./ReviewSettingsSection";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
-/** The project's review skill: the global one, or a skill of its own (from its folder or the user's). */
+/** The project's review skill and reviewer model: the board's, or ones of its own (a skill from its folder or the user's). */
 export function ProjectReviewSection({ project }: { project: Project }) {
   const updateProject = useUpdateProject();
   const settings = useSettings().data;
@@ -31,6 +32,19 @@ export function ProjectReviewSection({ project }: { project: Project }) {
           />
         }
       />
+      {settings ? (
+        <HeadlessModelRow
+          id="project.review-skill.model"
+          title="Reviewer model"
+          description="The model that reviews this project's tasks. A task can pick its own."
+          label="Reviewer model for this project"
+          tiers={settings.modelTiers}
+          value={project.reviewModel}
+          allowDefault
+          defaultLabel="Use board setting"
+          onChange={(reviewModel) => updateProject.mutate({ id: project.id, reviewModel })}
+        />
+      ) : null}
     </SettingsSection>
   );
 }

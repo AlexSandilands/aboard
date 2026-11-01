@@ -282,16 +282,16 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["rounds", "local review", "limit", "findings", "max rounds"],
   ),
   draft(
+    "tasks.review.model",
+    "Reviewer model",
+    "The model that reviews, for the reviewer subagent and the board reviewer.",
+    ["reviewer", "board reviewer", "subagent", "opus", "claude model", "tier", "light", "standard", "deep", "--model"],
+  ),
+  draft(
     "tasks.review.board-reviewer",
     "Board reviewer",
     "When no agent reviews a round, the board runs Claude Code headless to review it.",
     ["local review", "headless", "claude", "fallback", "automatic"],
-  ),
-  draft(
-    "tasks.review.model",
-    "Board reviewer model",
-    "A model tier, a model passed to claude --model, or the CLI's default.",
-    ["board reviewer", "headless", "claude model", "tier", "light", "standard", "deep", "--model"],
   ),
   draft(
     "tasks.review.budget",
@@ -581,6 +581,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Project review skill",
     "A review skill for this project, instead of the board's.",
     ["local review", "override", "reviewer"],
+  ),
+  draft(
+    "project.review-skill.model",
+    "Project reviewer model",
+    "The model that reviews this project's tasks, instead of the board's.",
+    ["local review", "override", "reviewer", "tier", "opus", "subagent"],
   ),
   draft(
     "project.autopilot.automations",

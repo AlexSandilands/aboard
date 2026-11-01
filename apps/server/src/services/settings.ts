@@ -44,7 +44,7 @@ const DEFAULTS: StoredSettings = {
   codexCli: null,
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
-  headlessReviewModel: null,
+  reviewModel: null,
   issueImportEnabled: true,
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,
@@ -89,7 +89,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "codexCli",
     "handoffMenus",
     "headlessReviewBudgetUsd",
-    "headlessReviewModel",
+    "reviewModel",
     "issueImportEnabled",
     "issueImportModel",
     "issueImportBudgetUsd",
@@ -104,10 +104,14 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
 
 /**
  * Settings older versions exported that a migration since converted (036_ticket_systems_settings turns the Jira ones
- * into a ticket system). A restore loads them with an old backup so that migration sees them; they never reach a
+ * into a ticket system, 039_review_model renames headlessReviewModel). A restore loads them with an old backup so that migration sees them; they never reach a
  * database at the current schema.
  */
-export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set(["jiraBaseUrl", "issueImportJiraTools"]);
+export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set([
+  "jiraBaseUrl",
+  "issueImportJiraTools",
+  "headlessReviewModel",
+]);
 
 /**
  * A tier's CLI models with blanks dropped. Each goes on a command line as `--model`, so one that isn't a CliModel is
@@ -237,7 +241,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     ) as unknown as StoredSettings),
     ticketSystems: storedTicketSystems(stored.get("ticketSystems")),
     // Saved as a bare model name before tiers were an option.
-    headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
+    reviewModel: parseHeadlessModel(stored.get("reviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
     modelProfiles: storedProfileList(stored.get("modelProfiles")),
     notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
@@ -305,8 +309,8 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }
-        if (input.headlessReviewModel !== undefined) {
-          repos.settings.set("headlessReviewModel", input.headlessReviewModel);
+        if (input.reviewModel !== undefined) {
+          repos.settings.set("reviewModel", input.reviewModel);
         }
         if (input.issueImportEnabled !== undefined) repos.settings.set("issueImportEnabled", input.issueImportEnabled);
         if (input.issueImportModel !== undefined) repos.settings.set("issueImportModel", input.issueImportModel);

@@ -4,6 +4,7 @@ import { Switch } from "~/components/ui/switch";
 import { skillKey, skillOptions, type SkillOption } from "~/components/review/review.logic";
 import { useUpdateSettings } from "~/state/mutations";
 import { useSkills } from "~/state/queries";
+import { HeadlessModelRow } from "./HeadlessModelRow";
 import { HeadlessReviewerRows } from "./HeadlessReviewerRows";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
@@ -112,6 +113,18 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
             </SelectPopup>
           </Select>
         }
+      />
+      <HeadlessModelRow
+        id="tasks.review.model"
+        title="Reviewer model"
+        description="The model that reviews, for the reviewer subagent and the board reviewer."
+        info="A model tier, or a model passed to claude --model. Without one, the reviewer subagent runs on the implementing agent's model and the board reviewer on the CLI's default. A project or a task can pick its own."
+        label="Reviewer model"
+        tiers={settings.modelTiers}
+        value={settings.reviewModel}
+        allowDefault
+        defaultLabel="Implementer's model"
+        onChange={(next) => updateSettings.mutate({ reviewModel: next })}
       />
       <HeadlessReviewerRows settings={settings} />
     </SettingsSection>

@@ -1,9 +1,16 @@
-import type { TaskDetail } from "@repo/contracts";
-import { useId, type ReactNode } from "react";
+import type { HeadlessModel, TaskDetail } from "@repo/contracts";
+import { useId, useState, type ReactNode } from "react";
 
 import { autoReviewChoice, autoReviewOptions } from "~/components/review/review.logic";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { BlurInput } from "~/components/settings/BlurInput";
 import { Switch } from "~/components/ui/switch";
+import {
+  headlessModelForOption,
+  headlessModelItems,
+  headlessModelOption,
+  typedHeadlessModel,
+} from "~/components/settings/headlessModel.logic";
 import { useUpdateTask } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
 import { AUTO_MERGE_OPTIONS, AUTOPILOT_OPTIONS, autopilotChoice } from "./autopilot.logic";
@@ -17,7 +24,8 @@ import { TaskSection } from "./TaskSection";
  */
 export function AutomationSection({ task }: { task: TaskDetail }) {
   const { mutate: updateTask } = useUpdateTask();
-  const globalReview = useSettings().data?.autoReview ?? false;
+  const settings = useSettings().data;
+  const globalReview = settings?.autoReview ?? false;
   const change = (next: AutomationChange) => updateTask({ id: task.id, ...automationUpdate(next) });
   return (
     <TaskSection title="Automation">
@@ -48,6 +56,17 @@ export function AutomationSection({ task }: { task: TaskDetail }) {
                 onChange={(choice) => change({ setting: "autoReview", choice })}
               />
             </Row>
+            {(task.autoReview ?? globalReview) ? (
+              <Row
+                label="Reviewer"
+                hint="The model that reviews this task: a tier or a model id. Inherit follows the project, then the board"
+              >
+                <ReviewModelPicker
+                  value={task.reviewModel}
+                  onChange={(model) => change({ setting: "reviewModel", model })}
+                />
+              </Row>
+            ) : null}
             <Row label="Auto-merge" hint="Whether an agent may merge this task's pull request with merge_task_pr">
               <ChoiceSelect
                 ariaLabel="Auto-merge for this task"
@@ -123,5 +142,55 @@ function ChoiceSelect<T extends string>({
         ))}
       </SelectPopup>
     </Select>
+  );
+}
+
+/** The task's reviewer model: inherit, a tier, or a typed model, which shows a field to name it. */
+function ReviewModelPicker({
+  value,
+  onChange,
+}: {
+  value: HeadlessModel | null;
+  onChange: (next: HeadlessModel | null) => void;
+}) {
+  // Custom was picked but nothing is typed yet, so there is nothing to save.
+  const [typing, setTyping] = useState(false);
+  // Bumped when typed text is refused, to remount the field with the saved value.
+  const [rejected, setRejected] = useState(0);
+  const option = headlessModelOption(value, typing);
+  const items = headlessModelItems(true, "Inherit");
+  return (
+    <>
+      <ChoiceSelect
+        ariaLabel="Reviewer model for this task"
+        items={items}
+        value={option}
+        onChange={(next) => {
+          if (next === option) return;
+          const saved = headlessModelForOption(next, value);
+          setTyping(saved === undefined);
+          if (saved !== undefined) onChange(saved);
+        }}
+      />
+      {option === "custom" ? (
+        <BlurInput
+          key={`${value && "model" in value ? value.model : "typing"}-${rejected}`}
+          size="sm"
+          className="w-28"
+          aria-label="Reviewer model id"
+          placeholder="claude-opus-5-5"
+          value={value && "model" in value ? value.model : ""}
+          onSave={(next) => {
+            const typed = typedHeadlessModel(next);
+            if (!typed) {
+              setRejected((n) => n + 1);
+              return;
+            }
+            setTyping(false);
+            onChange(typed);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -24,6 +24,7 @@ export function HeadlessModelRow({
   tiers,
   value,
   allowDefault,
+  defaultLabel,
   onChange,
 }: {
   id: string;
@@ -36,6 +37,8 @@ export function HeadlessModelRow({
   value: HeadlessModel | null;
   /** Offer "CLI default" (no choice), for jobs that run on the CLI's own model until one is picked. */
   allowDefault: boolean;
+  /** What the "no choice" entry is called, when it isn't the CLI default. */
+  defaultLabel?: string;
   onChange: (next: HeadlessModel | null) => void;
 }) {
   // Custom was picked but no name typed yet: nothing to save, so the field shows empty until there is one.
@@ -43,7 +46,7 @@ export function HeadlessModelRow({
   // Bumped when typed text is refused, to remount the field with the saved value.
   const [rejected, setRejected] = useState(0);
   const option = headlessModelOption(value, typing);
-  const items = headlessModelItems(allowDefault);
+  const items = headlessModelItems(allowDefault, defaultLabel);
   const run = headlessModelRun(tiers, value);
   return (
     <SettingsRow

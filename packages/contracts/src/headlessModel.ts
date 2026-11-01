@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type CliEffort, ModelTier, type ModelTiers } from "./modelTiers.ts";
+import { type CliEffort, modelTierDescription, modelTierLabel, ModelTier, type ModelTiers } from "./modelTiers.ts";
 import { CliModel, tierCliEffort, tierCliModel } from "./sessionLaunch.ts";
 
 /**
@@ -39,3 +39,31 @@ export const resolveHeadlessEffort = (tiers: ModelTiers, choice: HeadlessModel |
 export const sameHeadlessModel = (a: HeadlessModel | null, b: HeadlessModel | null): boolean =>
   a === b ||
   (a !== null && b !== null && ("tier" in a ? "tier" in b && a.tier === b.tier : "model" in b && a.model === b.model));
+
+const CLAUDE_AGENT_ALIASES = ["opus", "sonnet", "haiku", "fable"] as const;
+
+/**
+ * The short name Claude Code's Agent tool takes for a model (`opus`, `sonnet`, `haiku`, `fable`), read from the
+ * model id the user saved ("claude-opus-5-5", "opus[1m]"); null when the id names none of them.
+ */
+export const claudeAgentAlias = (modelId: string): string | null =>
+  CLAUDE_AGENT_ALIASES.find((alias) => modelId.toLowerCase().includes(alias)) ?? null;
+
+/**
+ * The line of the review brief that says which model the reviewer subagent runs on, or null while no model is set
+ * (the reviewer then runs on the implementer's own). It names the Claude Code way to pick it and leaves other
+ * harnesses to do their best.
+ */
+export const reviewerModelLine = (tiers: ModelTiers, choice: HeadlessModel | null): string | null => {
+  if (!choice) return null;
+  const claudeModel = resolveHeadlessModel(tiers, choice);
+  const subject = (() => {
+    if (!("tier" in choice)) return `\`${choice.model}\``;
+    const description = modelTierDescription(tiers, choice.tier);
+    return `the ${modelTierLabel(choice.tier).toLowerCase()} tier${description ? ` (${description})` : ""}`;
+  })();
+  const inClaudeCode = claudeModel
+    ? `in Claude Code pass \`model: "${claudeAgentAlias(claudeModel) ?? claudeModel}"\` to the Agent tool; elsewhere `
+    : "";
+  return `Run the reviewer on ${subject}: ${inClaudeCode}pick that model if your harness lets you, else use your own.`;
+};

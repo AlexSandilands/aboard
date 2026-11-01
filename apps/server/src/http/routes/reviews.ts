@@ -59,6 +59,7 @@ export function registerReviewRoutes(app: Hono, { services, config }: AppContext
           cycleRound: open ? cycleRounds : cycleRounds + 1,
           maxRounds,
           skill: services.reviews.skillFor(id),
+          modelLine: services.reviews.modelLineFor(id),
         }),
       });
     }),

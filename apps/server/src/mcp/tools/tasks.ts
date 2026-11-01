@@ -18,6 +18,8 @@ import {
   autoMergeField,
   autopilotField,
   autopilotValue,
+  reviewModelField,
+  reviewModelValue,
   manualField,
   priorityField,
   dueDateField,
@@ -440,7 +442,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     {
       title: "Update task fields",
       description:
-        "Edit a task's title, description, plan context, labels, suggested model, Autopilot or auto-merge flag, due date, manual flag, or archive/unarchive it. " +
+        "Edit a task's title, description, plan context, labels, suggested model, reviewer model, Autopilot or auto-merge flag, due date, manual flag, or archive/unarchive it. " +
         "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr merge its PR " +
         "into the default branch, so set either only after the user has said so, and dueDate (YYYY-MM-DD, null clears it) only when the user gives a date. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
@@ -475,6 +477,13 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           .nullable()
           .optional()
           .describe("Turn local review on or off for this task; null follows the board's setting."),
+        reviewModel: reviewModelField
+          .nullable()
+          .optional()
+          .describe(
+            "Which model reviews this task when local review runs: a tier (light, standard, deep) or a model id; " +
+              "null follows the project's, then the board's setting. Ask the user first; never set it on your own.",
+          ),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
         autopilot: autopilotField.optional(),
@@ -508,6 +517,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             ...(projectId ? { projectId } : {}),
             ...(args.archived !== undefined ? { archived: args.archived } : {}),
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
+            ...(args.reviewModel !== undefined ? { reviewModel: reviewModelValue(args.reviewModel) } : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),

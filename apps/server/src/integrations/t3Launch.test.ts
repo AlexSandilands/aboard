@@ -289,6 +289,7 @@ describe("resolveT3Project", () => {
     icon: null,
     t3ProjectId: null,
     reviewSkill: null,
+    reviewModel: null,
     planSkill: null,
     variables: [],
     position: "a0",

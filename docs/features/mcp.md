@@ -60,6 +60,11 @@ the Autopilot flag, the suggested model, and every Missing link but ticket keys)
 `update_task` takes `dueDate` (`YYYY-MM-DD`, `null` clears it; [board-layout.md](board-layout.md#the-due-date)). Agents set it
 only when the user gives a date. `get_task` shows a "Due:" line and `list_tasks` lines "due YYYY-MM-DD", only when set.
 
+`update_task` takes `reviewModel`: a tier name (`light`, `standard`, `deep`) or a model id for the model that reviews the
+task, `null` to follow the project's and then the board's ([local-review.md](local-review.md#the-reviewer-model)).
+Agents set it only when the user asks. When one is in effect, the review loop text that `move_task` and `start_review`
+return says which model to start the reviewer on.
+
 `add_to_backlog`, `create_task` and `update_task` take `autoMerge: "default" | "on" | "off"` (stored as null, 1 or 0),
 which lets `merge_task_pr` merge the task's PR into the default branch. Agents set it only when the user says so; the server can't enforce that
 ([why](../decisions/0008-autopilot-engine.md)).

@@ -39,7 +39,7 @@ and a click tries again.
 | **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI), picked from the models each lists, with an effort for the CLIs. **Custom models** add named models picked by a task label |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Ticket systems, Terminal |
-| **Project**      | General (name, icon, folder), Planning skill, Review skill, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
+| **Project**      | General (name, icon, folder), Planning skill, Review skill and reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in
   project**: PNG, JPEG, WebP, GIF, SVG and ICO files under 2 MB, up to 60, with names like `favicon` and `logo` first,

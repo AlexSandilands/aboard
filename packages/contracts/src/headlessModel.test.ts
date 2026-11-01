@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  claudeAgentAlias,
   HeadlessModel,
   parseHeadlessModel,
   resolveHeadlessEffort,
   resolveHeadlessModel,
+  reviewerModelLine,
   sameHeadlessModel,
 } from "./headlessModel.ts";
 import { EMPTY_MODEL_TIERS, ModelTiers } from "./modelTiers.ts";
@@ -63,5 +65,31 @@ describe("headless model", () => {
     expect(sameHeadlessModel({ model: "a" }, { model: "a" })).toBe(true);
     expect(sameHeadlessModel({ model: "a" }, null)).toBe(false);
     expect(sameHeadlessModel(null, null)).toBe(true);
+  });
+
+  it("finds the Agent tool's alias in a Claude Code model id", () => {
+    expect(claudeAgentAlias("claude-opus-5-5")).toBe("opus");
+    expect(claudeAgentAlias("Sonnet[1m]")).toBe("sonnet");
+    expect(claudeAgentAlias("haiku")).toBe("haiku");
+    expect(claudeAgentAlias("claude-fable-5-1")).toBe("fable");
+    expect(claudeAgentAlias("gpt-5")).toBeNull();
+  });
+
+  it("words the reviewer's model for each kind of choice", () => {
+    const named = ModelTiers.parse({
+      ...tiers,
+      deep: { description: "Opus 5.5", t3: null, cli: { "claude-code": "claude-opus-5-5" } },
+    });
+    expect(reviewerModelLine(named, null)).toBeNull();
+    expect(reviewerModelLine(named, { tier: "deep" })).toBe(
+      'Run the reviewer on the deep tier (Opus 5.5): in Claude Code pass `model: "opus"` to the Agent tool; elsewhere pick that model if your harness lets you, else use your own.',
+    );
+    // A tier without a Claude Code model can't be named to the Agent tool.
+    expect(reviewerModelLine(named, { tier: "standard" })).toBe(
+      "Run the reviewer on the standard tier: pick that model if your harness lets you, else use your own.",
+    );
+    expect(reviewerModelLine(named, { model: "sonnet" })).toContain('`sonnet`: in Claude Code pass `model: "sonnet"`');
+    // No alias matches: the id goes through as typed.
+    expect(reviewerModelLine(named, { model: "my-model" })).toContain('pass `model: "my-model"`');
   });
 });

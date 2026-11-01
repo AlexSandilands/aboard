@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   CreateTaskInput,
   EpicDelivery,
+  HeadlessModel,
   CreateTemplateInput,
   IssueSnapshot,
   LinkInput,
@@ -332,6 +333,10 @@ export interface ReviewsService {
   effectiveAutoReview(taskId: string): boolean;
   /** The project's override, else the global setting. */
   skillFor(taskId: string): ReviewSkillRef;
+  /** The task's override, else the project's, else the global setting; null leaves the reviewer on its own default. */
+  modelFor(taskId: string): HeadlessModel | null;
+  /** What the review brief says about `modelFor`'s model, or null while none is set. */
+  modelLineFor(taskId: string): string | null;
   /**
    * Opens the next round as pending. An unfinished latest round is reused: a pending one is returned as is
    * (a move onto a manual round starts a new cycle), a stalled or failed one goes back to pending. A move

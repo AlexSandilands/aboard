@@ -1,3 +1,4 @@
+import type { HeadlessModel } from "@repo/contracts";
 import { autoReviewValue, type AutoReviewChoice } from "~/components/review/review.logic";
 import { autopilotValue, type AutopilotChoice } from "./autopilot.logic";
 
@@ -6,6 +7,7 @@ export type AutomationChange =
   | { setting: "autopilot"; choice: AutopilotChoice }
   | { setting: "autoMerge"; choice: AutopilotChoice }
   | { setting: "autoReview"; choice: AutoReviewChoice }
+  | { setting: "reviewModel"; model: HeadlessModel | null }
   | { setting: "priority"; on: boolean }
   | { setting: "manual"; on: boolean };
 
@@ -15,6 +17,7 @@ export function automationUpdate(
   | { autopilot: boolean | null }
   | { autoMerge: boolean | null }
   | { autoReview: boolean | null }
+  | { reviewModel: HeadlessModel | null }
   | { priority: boolean }
   | { manual: boolean } {
   switch (change.setting) {
@@ -24,6 +27,8 @@ export function automationUpdate(
       return { autoMerge: autopilotValue(change.choice) };
     case "autoReview":
       return { autoReview: autoReviewValue(change.choice) };
+    case "reviewModel":
+      return { reviewModel: change.model };
     case "priority":
       return { priority: change.on };
     case "manual":

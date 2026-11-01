@@ -1,4 +1,4 @@
-import { BOARD_REVIEWER, type T3ThreadSnapshot } from "@repo/contracts";
+import { BOARD_REVIEWER, type HeadlessModel, type T3ThreadSnapshot } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { HeadlessJob, HeadlessReview } from "./headlessReview.ts";
@@ -149,10 +149,14 @@ describe("review fallbacks", () => {
   });
 
   it("runs the board's review on the chosen model: a typed one, or a tier's Claude Code model", async () => {
-    const run = async (headlessReviewModel: Parameters<ReturnType<typeof setup>["s"]["settings"]["update"]>[0]) => {
+    const run = async (
+      reviewModel: Parameters<ReturnType<typeof setup>["s"]["settings"]["update"]>[0],
+      taskModel?: HeadlessModel,
+    ) => {
       const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
+      if (taskModel) s.tasks.update(task.id, { reviewModel: taskModel }, "user");
       s.settings.update({
-        ...headlessReviewModel,
+        ...reviewModel,
         modelTiers: {
           light: { description: null, t3: null, cli: { "claude-code": "haiku" }, cliEffort: { "claude-code": "low" } },
         },
@@ -165,9 +169,11 @@ describe("review fallbacks", () => {
       return [jobs[0]?.model, jobs[0]?.effort];
     };
     // A typed model carries no effort; a tier's Claude Code model carries the tier's.
-    expect(await run({ headlessReviewModel: { model: "sonnet" } })).toEqual(["sonnet", null]);
-    expect(await run({ headlessReviewModel: { tier: "light" } })).toEqual(["haiku", "low"]);
-    expect(await run({ headlessReviewModel: { tier: "deep" } })).toEqual([null, null]);
+    expect(await run({ reviewModel: { model: "sonnet" } })).toEqual(["sonnet", null]);
+    expect(await run({ reviewModel: { tier: "light" } })).toEqual(["haiku", "low"]);
+    expect(await run({ reviewModel: { tier: "deep" } })).toEqual([null, null]);
+    // The task's own choice wins over the board's.
+    expect(await run({ reviewModel: { model: "sonnet" } }, { tier: "light" })).toEqual(["haiku", "low"]);
   });
 
   it("keeps ticking after a pass with nothing to do", async () => {

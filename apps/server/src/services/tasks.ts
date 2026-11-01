@@ -6,6 +6,7 @@ import {
   normalizeLabel,
   parseImportSource,
   renderTemplateText,
+  sameHeadlessModel,
   resolutionNeedsTask,
   startedEpicTasks,
   templateHasPlan,
@@ -412,6 +413,7 @@ export function createTasksService(
           resolution: null,
           resolvedByTaskId: null,
           autoReview: null,
+          reviewModel: null,
           // A manual task's explicit Off is the same as Default, and it can't be flagged On (refused above).
           autopilot: manual ? null : (input.autopilot ?? null),
           autoMerge: manual ? null : (input.autoMerge ?? null),
@@ -532,6 +534,10 @@ export function createTasksService(
         if (input.autoReview !== undefined && input.autoReview !== current.autoReview) {
           next.autoReview = input.autoReview;
           changed.push("autoReview");
+        }
+        if (input.reviewModel !== undefined && !sameHeadlessModel(input.reviewModel, current.reviewModel)) {
+          next.reviewModel = input.reviewModel;
+          changed.push("reviewModel");
         }
         if (current.kind === "epic" && input.manual) throw new AppError("VALIDATION", EPIC_MANUAL_MESSAGE);
         const manual = input.manual ?? current.manual;
