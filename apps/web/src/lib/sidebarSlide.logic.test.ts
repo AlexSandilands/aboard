@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { glideStartOffset, slideDurationMs } from "./sidebarSlide.logic";
+import { glideDurationMs, glideStartOffset, slideDurationMs } from "./sidebarSlide.logic";
 
 describe("slideDurationMs", () => {
   it("scales the panel animation setting, so the default is 450 ms", () => {
@@ -31,5 +31,20 @@ describe("glideStartOffset", () => {
   it("continues from a glide still running", () => {
     expect(glideStartOffset({ current: 100, width: 256, opening: false, side: "left" })).toBe(356);
     expect(glideStartOffset({ current: 100, width: 256, opening: true, side: "left" })).toBe(-156);
+  });
+});
+
+describe("glideDurationMs", () => {
+  it("runs the full duration from a standing start", () => {
+    expect(glideDurationMs(450, 256, 256)).toBe(450);
+    expect(glideDurationMs(450, -256, 256)).toBe(450);
+  });
+
+  it("shortens a reversal in proportion to the distance left", () => {
+    expect(glideDurationMs(450, -64, 256)).toBe(112.5);
+  });
+
+  it("never runs longer than the full duration", () => {
+    expect(glideDurationMs(450, 300, 256)).toBe(450);
   });
 });

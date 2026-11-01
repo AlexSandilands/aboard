@@ -142,12 +142,16 @@ colours read them (`@theme inline`), so every `text-foreground`, `text-muted-for
 
 **Panel animations**: board cards sliding between columns use 1.75× the duration (`useBoardFlip`, see
 [board-layout.md](board-layout.md#card-motion)). The sidebar slides for 3× the duration (`--sidebar-slide-duration`,
-set by `appearancePaint` from `slideDurationMs` in `components/ui/sidebarSlide.logic.ts`: 150 ms gives 450 ms) on
+set by `appearancePaint` from `slideDurationMs` in `lib/sidebarSlide.logic.ts`: 150 ms gives 450 ms) on
 `--ease-sidebar-slide`, `cubic-bezier(0.2, 0.9, 0.25, 1)`, fitted frame by frame from a recording of Antigravity's panel
 opening: fast start, long soft tail. Its container moves with `translateX`, not `left`, and keeps its width, so its
 contents never re-wrap. The gap beside it changes at once, so the main area lays out once at its final width (its
 text wraps once, not on every frame); `useInsetGlide` in `ui/sidebar.tsx` then glides `SidebarInset` from where it was to
-where it now sits with one transform, in step with the sidebar (a glide still running is continued, not restarted). Nothing
+where it now sits with one transform, in step with the sidebar. A toggle mid-slide continues from where the glide is, over
+the share of the duration left (as the sidebar's own CSS transition does on reversal). The whole main area moves, the
+docked task panel and the header's right-hand controls included, so what sits at the window's right edge starts one
+sidebar width in from it and slides out (opening) or in (closing); a drag finishes the glide first, since a transformed
+ancestor would offset the drag overlay. Nothing
 resizes during the slide, so the board's `ResizeObserver`s measure once. The root has `overflow-x: clip` because
 a closing sidebar's main area starts beyond the window's right edge. Both are off with Panel animations at 0 and under
 reduced motion. The task panel grows in from its edge with the `.panel-enter` keyframe and

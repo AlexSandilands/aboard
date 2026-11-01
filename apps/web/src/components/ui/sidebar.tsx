@@ -12,8 +12,8 @@ import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "~/
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
+import { glideDurationMs, glideStartOffset } from "~/lib/sidebarSlide.logic";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
-import { glideStartOffset } from "./sidebarSlide.logic";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
 const SIDEBAR_WIDTH = "16rem";
@@ -117,14 +117,23 @@ function useInsetGlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "l
     const running = inset.getAnimations().filter((animation) => animation.id === INSET_GLIDE_ID);
     const current = running.length > 0 ? new DOMMatrix(getComputedStyle(inset).transform).m41 : 0;
     for (const animation of running) animation.cancel();
-    const from = glideStartOffset({ current, width: container.offsetWidth, opening: open, side });
+    const width = container.offsetWidth;
+    const from = glideStartOffset({ current, width, opening: open, side });
     const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-sidebar-slide").trim();
     inset.animate([{ transform: `translateX(${from}px)` }, { transform: "none" }], {
-      duration,
+      duration: glideDurationMs(duration, from, width),
       easing: easing || "ease-out",
       id: INSET_GLIDE_ID,
     });
   }, [open, side, sidebarRef]);
+}
+
+/**
+ * Ends a sidebar glide at once. Mid-glide the main area is transformed, which offsets what is positioned or measured
+ * against the viewport (a drag overlay, say), so a drag finishes it first.
+ */
+function finishSidebarGlide() {
+  for (const animation of document.getAnimations()) if (animation.id === INSET_GLIDE_ID) animation.finish();
 }
 
 function SidebarProvider({
@@ -806,6 +815,7 @@ function SidebarMenuSubButton({
 }
 
 export {
+  finishSidebarGlide,
   SidebarInput,
   Sidebar,
   SidebarContent,

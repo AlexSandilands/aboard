@@ -2,7 +2,7 @@
 // variables they drive are T3 Code's (packages/contracts/src/settings.ts, apps/web/src/appearanceContrast.ts,
 // appearanceFonts.ts, routes/__root.tsx), MIT — see NOTICE.
 
-import { slideDurationMs } from "~/components/ui/sidebarSlide.logic";
+import { slideDurationMs } from "~/lib/sidebarSlide.logic";
 
 export const CONTRAST = { min: 50, max: 200, step: 5, default: 100 } as const;
 export const GLASS_OPACITY = { min: 40, max: 100, step: 5, default: 80 } as const;

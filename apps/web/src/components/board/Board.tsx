@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
+import { finishSidebarGlide } from "~/components/ui/sidebar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
@@ -366,6 +367,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    finishSidebarGlide();
     setActiveId(String(event.active.id));
     // A card lifted out of the stuck lane is one line, so the lifted copy is too.
     const node = document.querySelector(`[data-task-card="${CSS.escape(String(event.active.id))}"]`);

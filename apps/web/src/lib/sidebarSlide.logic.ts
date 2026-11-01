@@ -31,3 +31,11 @@ export function glideStartOffset(input: {
   const towardSidebar = input.side === "left" ? -1 : 1;
   return input.current + (input.opening ? towardSidebar : -towardSidebar) * input.width;
 }
+
+/**
+ * How long a glide that starts `from` px from rest runs. A reversal mid-slide restarts the sidebar's CSS transition with
+ * its duration scaled by the share of the distance still to cover; the glide gets the same, so both finish together.
+ */
+export function glideDurationMs(durationMs: number, from: number, width: number): number {
+  return width > 0 ? durationMs * Math.min(1, Math.abs(from) / width) : durationMs;
+}
