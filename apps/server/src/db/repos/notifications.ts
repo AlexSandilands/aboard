@@ -22,6 +22,23 @@ const toNotification = (r: NotificationRow): InboxNotification => ({
   readAt: r.read_at,
 });
 
+const RESOLVED_MARK = "#resolved:";
+
+/** Reads and frees the key of every matching row not yet resolved; returns how many of them were unread. */
+function resolveWhere(sql: Sql, where: string, args: string[], at: string): number {
+  const open = `${where} AND instr(dedupe_key, '${RESOLVED_MARK}') = 0`;
+  const unread =
+    sql.get<{ n: number }>(`SELECT COUNT(*) AS n FROM notifications WHERE ${open} AND read_at IS NULL`, ...args)?.n ??
+    0;
+  sql.run(
+    `UPDATE notifications SET read_at = COALESCE(read_at, ?), dedupe_key = dedupe_key || '${RESOLVED_MARK}' || id
+     WHERE ${open}`,
+    at,
+    ...args,
+  );
+  return unread;
+}
+
 /** Typed access to notifications, the attention inbox. */
 export function createNotificationsRepo(sql: Sql) {
   return {
@@ -96,31 +113,16 @@ export function createNotificationsRepo(sql: Sql) {
       );
     },
     /**
-     * Marks a task's unread notifications of one kind resolved: read, and their dedupe key freed (the row keeps a
-     * key of its own), so the same state arising again, a re-run that fails or a reopened round, notifies again.
+     * Marks a task's notifications of one kind resolved: read (if they weren't), and their dedupe key freed (the row
+     * keeps a key of its own), so the same state arising again, a re-run that fails again or a reopened round, notifies
+     * again, even when the user had already read the first. Returns how many were unread.
      */
     markTaskKindRead(taskId: string, kind: NotificationKind, at: string): number {
-      return Number(
-        sql.run(
-          `UPDATE notifications SET read_at = ?, dedupe_key = dedupe_key || '#resolved:' || id
-           WHERE task_id = ? AND kind = ? AND read_at IS NULL`,
-          at,
-          taskId,
-          kind,
-        ).changes,
-      );
+      return resolveWhere(sql, "task_id = ? AND kind = ?", [taskId, kind], at);
     },
-    /** Like `markTaskKindRead`, for the unread notifications whose dedupe key starts with `prefix`. */
+    /** Like `markTaskKindRead`, for the notifications whose dedupe key starts with `prefix`. */
     markKeyPrefixRead(prefix: string, at: string): number {
-      return Number(
-        sql.run(
-          `UPDATE notifications SET read_at = ?, dedupe_key = dedupe_key || '#resolved:' || id
-           WHERE substr(dedupe_key, 1, length(?)) = ? AND read_at IS NULL`,
-          at,
-          prefix,
-          prefix,
-        ).changes,
-      );
+      return resolveWhere(sql, "substr(dedupe_key, 1, length(?)) = ?", [prefix, prefix], at);
     },
     prune(before: string): void {
       sql.run("DELETE FROM notifications WHERE created_at < ?", before);

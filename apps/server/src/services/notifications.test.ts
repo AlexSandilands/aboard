@@ -405,6 +405,12 @@ describe("clearing what is resolved", () => {
     s.links.setSnapshot(prLink.id, pr({ checks: "failing", headOid: "bbb" }));
     expect(inbox().map((n) => n.readAt === null)).toEqual([true, false]);
 
+    // Also when the user had read the first one by then (opening the task's panel does).
+    s.notifications.markTaskRead(task.id);
+    s.links.setSnapshot(prLink.id, pr({ checks: "pending", headOid: "bbb" }));
+    s.links.setSnapshot(prLink.id, pr({ checks: "failing", headOid: "bbb" }));
+    expect(inbox().filter((n) => n.readAt === null)).toHaveLength(1);
+
     // A failed round that is reopened and fails again.
     const round = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
     s.reviews.setRoundStatus(round.id, "failed", { actor: "board", error: "boom" });

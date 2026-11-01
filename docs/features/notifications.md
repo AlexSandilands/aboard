@@ -47,7 +47,7 @@ producer's own write:
 | Any of a task's        | The task is Done or archived: `core.write` does it once for every task a write moved, closed or archived (the `status_changed`, `closed` and `archived` log entries), whichever route got it there. A task notified in that same write is skipped, and a later touch of a Done task reads nothing |
 
 Matching uses the dedupe key's prefix (`thread:<linkId>:`, `checks:<linkId>:`, `changes:<linkId>:`) or task and
-kind. A resolved row keeps a key of its own, so the same state arising again (a CI re-run failing again, a reopened
+kind. A resolved row (read or not) keeps a key of its own, so the same state arising again (a CI re-run failing again, a reopened
 round failing again) notifies again. A new failing head reads the older head's notification before its own is made. A notification that was already read is untouched.
 
 `notify()` returns null, and nothing is stored, when the kind's switch is off or the dedupe key already has a
